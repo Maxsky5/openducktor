@@ -53,7 +53,7 @@ export function useAgentChatTurnStaging({
   const completedSessionIdsRef = useRef<Set<string>>(new Set());
   const previousSessionIdRef = useRef<string | null>(activeSessionId);
   const previousSessionId = previousSessionIdRef.current;
-  const switchedSessions =
+  const renderSwitchedSessions =
     previousSessionId !== null && activeSessionId !== null && previousSessionId !== activeSessionId;
 
   useEffect(() => {
@@ -67,9 +67,14 @@ export function useAgentChatTurnStaging({
       frameRef.current = null;
     }
 
+    const effectPreviousSessionId = previousSessionIdRef.current;
+    const effectSwitchedSessions =
+      effectPreviousSessionId !== null &&
+      activeSessionId !== null &&
+      effectPreviousSessionId !== activeSessionId;
     previousSessionIdRef.current = activeSessionId;
 
-    if (switchedSessions && activeSessionId !== null) {
+    if (effectSwitchedSessions && activeSessionId !== null) {
       completedSessionIdsRef.current.delete(activeSessionId);
     }
 
@@ -83,7 +88,7 @@ export function useAgentChatTurnStaging({
       activeSessionId,
       completedSessionIds: completedSessionIdsRef.current,
       disabled,
-      forceStage: switchedSessions,
+      forceStage: effectSwitchedSessions,
       turnCount: turns.length,
       windowStart,
     });
@@ -136,7 +141,7 @@ export function useAgentChatTurnStaging({
         frameRef.current = null;
       }
     };
-  }, [activeSessionId, disabled, onBeforePrepend, switchedSessions, turns.length, windowStart]);
+  }, [activeSessionId, disabled, onBeforePrepend, turns.length, windowStart]);
 
   return useMemo(() => {
     if (
@@ -145,7 +150,7 @@ export function useAgentChatTurnStaging({
         activeSessionId,
         completedSessionIds: completedSessionIdsRef.current,
         disabled,
-        forceStage: switchedSessions,
+        forceStage: renderSwitchedSessions,
         turnCount: turns.length,
         windowStart,
       })
@@ -154,7 +159,7 @@ export function useAgentChatTurnStaging({
     }
 
     const effectiveCount =
-      switchedSessions && activeSessionRef.current !== activeSessionId
+      renderSwitchedSessions && activeSessionRef.current !== activeSessionId
         ? Math.min(turns.length, STAGE_INIT)
         : count;
 
@@ -163,5 +168,5 @@ export function useAgentChatTurnStaging({
     }
 
     return turns.slice(Math.max(0, turns.length - effectiveCount));
-  }, [activeSessionId, count, disabled, switchedSessions, turns, windowStart]);
+  }, [activeSessionId, count, disabled, renderSwitchedSessions, turns, windowStart]);
 }

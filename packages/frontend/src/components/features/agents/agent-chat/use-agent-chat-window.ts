@@ -193,9 +193,6 @@ export function useAgentChatWindow({
     userScrollIntentVersionRef,
   ]);
 
-  // Intentionally runs after every commit: staged transcript prepends happen in sibling hooks
-  // after this hook has already computed its window, so the window key can remain unchanged while
-  // the rendered DOM grows above the viewport.
   useLayoutEffect(() => {
     void visibleWindowKey;
 
@@ -207,23 +204,34 @@ export function useAgentChatWindow({
     forceScrollToBottom();
   }, [forceScrollToBottom, visibleWindowKey]);
 
+  // Intentionally checks staged prepends after every commit: staging happens in sibling hooks after
+  // this hook computes its window, so the window key can remain unchanged while the DOM grows above
+  // the viewport. The expensive scroll-state refresh stays gated in the next effect.
   useLayoutEffect(() => {
-    void visibleWindowKey;
-
     const pendingStagedPrepend = stagedPrependScrollSnapshotRef.current;
     const container = messagesContainerRef.current;
+    let restoredStagedPrepend = false;
     if (pendingStagedPrepend && pendingStagedPrepend.sessionId === activeSessionId && container) {
       stagedPrependScrollSnapshotRef.current = null;
       const scrollHeightDelta = container.scrollHeight - pendingStagedPrepend.beforeScrollHeight;
       if (scrollHeightDelta !== 0) {
         container.scrollTop = pendingStagedPrepend.beforeScrollTop + scrollHeightDelta;
+        restoredStagedPrepend = true;
       }
     } else if (pendingStagedPrepend) {
       stagedPrependScrollSnapshotRef.current = null;
     }
 
-    refreshScrollState();
+    if (restoredStagedPrepend) {
+      refreshScrollState();
+    }
   });
+
+  useLayoutEffect(() => {
+    void visibleWindowKey;
+
+    refreshScrollState();
+  }, [refreshScrollState, visibleWindowKey]);
 
   return {
     windowedRows,

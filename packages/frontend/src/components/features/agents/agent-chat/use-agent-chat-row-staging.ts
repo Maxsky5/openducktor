@@ -55,7 +55,7 @@ export function useAgentChatRowStaging({
   const completedSessionIdsRef = useRef<Set<string>>(new Set());
   const previousSessionIdRef = useRef<string | null>(activeSessionId);
   const previousSessionId = previousSessionIdRef.current;
-  const switchedSessions =
+  const renderSwitchedSessions =
     previousSessionId !== null && activeSessionId !== null && previousSessionId !== activeSessionId;
 
   useEffect(() => {
@@ -69,9 +69,14 @@ export function useAgentChatRowStaging({
       frameRef.current = null;
     }
 
+    const effectPreviousSessionId = previousSessionIdRef.current;
+    const effectSwitchedSessions =
+      effectPreviousSessionId !== null &&
+      activeSessionId !== null &&
+      effectPreviousSessionId !== activeSessionId;
     previousSessionIdRef.current = activeSessionId;
 
-    if (switchedSessions && activeSessionId !== null) {
+    if (effectSwitchedSessions && activeSessionId !== null) {
       completedSessionIdsRef.current.delete(activeSessionId);
     }
 
@@ -85,7 +90,7 @@ export function useAgentChatRowStaging({
       activeSessionId,
       completedSessionIds: completedSessionIdsRef.current,
       disabled,
-      forceStage: switchedSessions,
+      forceStage: effectSwitchedSessions,
       rowCount: rows.length,
     });
 
@@ -137,7 +142,7 @@ export function useAgentChatRowStaging({
         frameRef.current = null;
       }
     };
-  }, [activeSessionId, disabled, onBeforePrepend, rows.length, switchedSessions]);
+  }, [activeSessionId, disabled, onBeforePrepend, rows.length]);
 
   return useMemo(() => {
     if (
@@ -146,7 +151,7 @@ export function useAgentChatRowStaging({
         activeSessionId,
         completedSessionIds: completedSessionIdsRef.current,
         disabled,
-        forceStage: switchedSessions,
+        forceStage: renderSwitchedSessions,
         rowCount: rows.length,
       })
     ) {
@@ -154,7 +159,7 @@ export function useAgentChatRowStaging({
     }
 
     const effectiveRowCount =
-      switchedSessions && activeSessionRef.current !== activeSessionId
+      renderSwitchedSessions && activeSessionRef.current !== activeSessionId
         ? Math.min(rows.length, ROW_STAGE_INIT)
         : rowCount;
 
@@ -173,5 +178,5 @@ export function useAgentChatRowStaging({
           end: turn.end - rowStart,
         })),
     };
-  }, [activeSessionId, disabled, rowCount, rows, switchedSessions, turns]);
+  }, [activeSessionId, disabled, rowCount, rows, renderSwitchedSessions, turns]);
 }

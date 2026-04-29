@@ -54,13 +54,12 @@ describe("agent-runtime-registry", () => {
     const loadSessionTodos = mock(async () => []);
     const listLiveAgentSessionSnapshots = mock(async () => []);
 
-    OpencodeSdkAdapter.prototype.listAvailableModels = listAvailableModels;
-    OpencodeSdkAdapter.prototype.loadSessionTodos = loadSessionTodos;
-    OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = listLiveAgentSessionSnapshots;
-
-    const engine = createAgentRuntimeRegistry().createAgentEngine();
-
     try {
+      OpencodeSdkAdapter.prototype.listAvailableModels = listAvailableModels;
+      OpencodeSdkAdapter.prototype.loadSessionTodos = loadSessionTodos;
+      OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = listLiveAgentSessionSnapshots;
+
+      const engine = createAgentRuntimeRegistry().createAgentEngine();
       const {
         listAvailableModels: readModels,
         loadSessionTodos: readTodos,
