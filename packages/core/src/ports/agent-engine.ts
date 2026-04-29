@@ -184,7 +184,6 @@ export type ReplyPermissionInput = {
 export type ReplyRuntimeSessionPermissionInput = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
-  externalSessionId: string;
   requestId: string;
   reply: "once" | "always" | "reject";
   message?: string;

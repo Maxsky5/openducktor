@@ -58,8 +58,8 @@ import {
   loadSessionHistory,
   loadSessionTodos,
   replyPermission,
+  replyPermissionToTarget,
   replyQuestion,
-  replyRuntimeSessionPermission,
 } from "./message-ops";
 import { toOpencodeRuntimeClientInput } from "./runtime-connection";
 import {
@@ -682,12 +682,21 @@ export class OpencodeSdkAdapter
   }
 
   async replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void> {
-    await replyRuntimeSessionPermission(this.createClient, {
-      ...toOpencodeRuntimeClientInput(input.runtimeConnection, "reply runtime session permission"),
-      requestId: input.requestId,
-      reply: input.reply,
-      ...(input.message ? { message: input.message } : {}),
-    });
+    const runtimeClientInput = toOpencodeRuntimeClientInput(
+      input.runtimeConnection,
+      "reply runtime session permission",
+    );
+    await replyPermissionToTarget(
+      {
+        client: this.createClient(runtimeClientInput),
+        workingDirectory: runtimeClientInput.workingDirectory,
+      },
+      {
+        requestId: input.requestId,
+        reply: input.reply,
+        ...(input.message ? { message: input.message } : {}),
+      },
+    );
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {

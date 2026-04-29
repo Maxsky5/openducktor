@@ -218,16 +218,22 @@ export function useAgentOrchestratorOperations({
     async (input: {
       runtimeKind: RuntimeKind;
       runtimeConnection: AgentRuntimeConnection;
-      externalSessionId: string;
+      targetSessionId: string;
       requestId: string;
       reply: "once" | "always" | "reject";
       message?: string;
     }) => {
-      await agentEngine.replyRuntimeSessionPermission(input);
+      await agentEngine.replyRuntimeSessionPermission({
+        runtimeKind: input.runtimeKind,
+        runtimeConnection: input.runtimeConnection,
+        requestId: input.requestId,
+        reply: input.reply,
+        ...(input.message ? { message: input.message } : {}),
+      });
       clearSubagentPendingPermissionFromSessions({
         sessionsRef,
         updateSession,
-        targetSessionId: input.externalSessionId,
+        targetSessionId: input.targetSessionId,
         requestId: input.requestId,
       });
     },

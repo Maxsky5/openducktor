@@ -471,7 +471,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
         await replyRuntimeSessionPermission({
           runtimeKind: source.runtimeKind,
           runtimeConnection: resolvedSource.runtimeConnection,
-          externalSessionId,
+          targetSessionId,
           requestId,
           reply,
         });

@@ -110,7 +110,6 @@ describe("agent-runtime-registry", () => {
           endpoint: "http://127.0.0.1:1",
           workingDirectory: "/tmp/repo",
         },
-        externalSessionId: "external-1",
         requestId: "permission-1",
         reply: "once",
       });

@@ -275,7 +275,7 @@ export type AgentStateContextValue = {
   replyRuntimeSessionPermission: (input: {
     runtimeKind: RuntimeKind;
     runtimeConnection: AgentRuntimeConnection;
-    externalSessionId: string;
+    targetSessionId: string;
     requestId: string;
     reply: "once" | "always" | "reject";
     message?: string;

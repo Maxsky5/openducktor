@@ -546,7 +546,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           endpoint: "http://127.0.0.1:4096",
           workingDirectory: "/repo-a",
         },
-        externalSessionId: "session-subagent-1",
+        targetSessionId: "session-subagent-1",
         requestId: "permission-1",
         reply: "once",
       });
