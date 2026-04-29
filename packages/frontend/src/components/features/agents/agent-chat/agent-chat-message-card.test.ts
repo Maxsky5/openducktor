@@ -872,7 +872,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         isStreamingAssistantMessage: true,
-        sessionRole: "planner",
         sessionSelectedModel: null,
         sessionAgentColors: {},
       }),

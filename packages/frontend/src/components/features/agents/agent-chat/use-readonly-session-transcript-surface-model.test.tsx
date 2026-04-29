@@ -32,11 +32,12 @@ let runtimeList: RuntimeInstanceSummary[] = [];
 let runtimeListError: Error | null = null;
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>;
+let actualHostOperations: Awaited<typeof import("@/state/operations/host")>;
 let actualWorkspaceQueries: Awaited<typeof import("@/state/queries/workspace")>;
-let actualRuntimeQueries: Awaited<typeof import("@/state/queries/runtime")>;
 let actualRepoRuntimeReadiness: Awaited<typeof import("./use-repo-runtime-readiness")>;
 let actualRuntimeData: Awaited<typeof import("./use-agent-chat-session-runtime-data")>;
 let actualSurfaceModel: Awaited<typeof import("./use-agent-chat-surface-model")>;
+let originalHostRuntimeList: typeof import("@/state/operations/host").host.runtimeList;
 
 const transcriptSource: RuntimeSessionTranscriptSource = {
   runtimeKind: "opencode",
@@ -125,20 +126,21 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     [
       actualAppStateProvider,
       actualAppStateContexts,
+      actualHostOperations,
       actualWorkspaceQueries,
-      actualRuntimeQueries,
       actualRepoRuntimeReadiness,
       actualRuntimeData,
       actualSurfaceModel,
     ] = await Promise.all([
       import("@/state/app-state-provider"),
       import("@/state/app-state-contexts"),
+      import("@/state/operations/host"),
       import("@/state/queries/workspace"),
-      import("@/state/queries/runtime"),
       import("./use-repo-runtime-readiness"),
       import("./use-agent-chat-session-runtime-data"),
       import("./use-agent-chat-surface-model"),
     ]);
+    originalHostRuntimeList = actualHostOperations.host.runtimeList;
   });
 
   beforeEach(() => {
@@ -169,6 +171,12 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     latestSurfaceModelArgs = null;
     runtimeList = [runtime];
     runtimeListError = null;
+    actualHostOperations.host.runtimeList = async () => {
+      if (runtimeListError) {
+        throw runtimeListError;
+      }
+      return runtimeList;
+    };
 
     mock.module("@/state/app-state-provider", () => ({
       useAgentOperations: () => ({
@@ -207,18 +215,6 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
             showThinkingMessages: false,
           },
         }),
-      }),
-    }));
-
-    mock.module("@/state/queries/runtime", () => ({
-      runtimeListQueryOptions: () => ({
-        queryKey: ["runtime", "list", "opencode", "/repo-a"],
-        queryFn: async () => {
-          if (runtimeListError) {
-            throw runtimeListError;
-          }
-          return runtimeList;
-        },
       }),
     }));
 
@@ -284,11 +280,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       ["@/state/app-state-provider", () => Promise.resolve(actualAppStateProvider)],
       ["@/state/app-state-contexts", () => Promise.resolve(actualAppStateContexts)],
       ["@/state/queries/workspace", () => Promise.resolve(actualWorkspaceQueries)],
-      ["@/state/queries/runtime", () => Promise.resolve(actualRuntimeQueries)],
       ["./use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
       ["./use-agent-chat-session-runtime-data", () => Promise.resolve(actualRuntimeData)],
       ["./use-agent-chat-surface-model", () => Promise.resolve(actualSurfaceModel)],
     ]);
+    actualHostOperations.host.runtimeList = originalHostRuntimeList;
   });
 
   test("loads a runtime transcript without task-owned session records", async () => {
