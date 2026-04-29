@@ -1104,8 +1104,8 @@ describe("load-sessions-stages", () => {
   test("preserves transcript-purpose sessions on non-requested loads", async () => {
     const existingSession = createSession({
       purpose: "transcript",
-      role: null,
-      scenario: null,
+      role: "spec",
+      scenario: "spec_initial",
     });
     const stateHarness = createStateHarness({ "session-1": existingSession });
 
@@ -1123,8 +1123,8 @@ describe("load-sessions-stages", () => {
 
     const nextSession = stateHarness.getState()["session-1"];
     expect(nextSession?.purpose).toBe("transcript");
-    expect(nextSession?.role).toBeNull();
-    expect(nextSession?.scenario).toBeNull();
+    expect(nextSession?.role).toBe("spec");
+    expect(nextSession?.scenario).toBe("spec_initial");
   });
 
   test("keeps requested-history persisted workflow records as primary sessions", async () => {

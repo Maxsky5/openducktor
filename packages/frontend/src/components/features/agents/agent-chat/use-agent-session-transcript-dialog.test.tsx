@@ -117,7 +117,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
   });
 
   test("removes transcript-only sessions when the dialog closes", async () => {
-    agentSessionState = { purpose: "transcript", role: null, scenario: null };
+    agentSessionState = {
+      purpose: "transcript",
+      role: "build",
+      scenario: "build_implementation_start",
+    };
 
     const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
       "./use-agent-session-transcript-dialog"

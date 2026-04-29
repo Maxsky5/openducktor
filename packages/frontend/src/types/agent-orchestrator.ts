@@ -203,8 +203,6 @@ export type WorkflowAgentSessionState = AgentSessionState & {
 
 export type TranscriptAgentSessionState = AgentSessionState & {
   purpose: "transcript";
-  role: null;
-  scenario: null;
 };
 
 export type AgentSessionLoadMode =

@@ -23,13 +23,9 @@ export const resolveAgentSessionPurposeForLoad = (_input: {
 };
 
 export const isTranscriptAgentSession = (
-  session: Pick<AgentSessionState, "purpose" | "role" | "scenario"> | null | undefined,
+  session: Pick<AgentSessionState, "purpose"> | null | undefined,
 ): session is TranscriptAgentSessionState => {
-  return (
-    resolveAgentSessionPurpose(session?.purpose) === "transcript" &&
-    session?.role === null &&
-    session?.scenario === null
-  );
+  return resolveAgentSessionPurpose(session?.purpose) === "transcript";
 };
 
 export const isWorkflowAgentSession = (
