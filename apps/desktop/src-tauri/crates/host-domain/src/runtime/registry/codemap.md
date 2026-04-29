@@ -14,4 +14,4 @@ Runtime registry contracts and built-in runtime definitions.
 - `tests.rs`: registry, descriptor, fixture parity, and validation tests.
 
 ## Integration
-The parent runtime module re-exports the public registry surface for host-domain consumers. Keep submodules private and preserve serialized descriptor shape when changing this module.
+The parent runtime module re-exports the public registry surface for host-domain consumers. Keep submodules private, preserve serialized descriptor shape, and avoid duplicating live runtime-instance fields here.

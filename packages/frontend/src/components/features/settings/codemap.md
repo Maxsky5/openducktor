@@ -1,7 +1,7 @@
 # packages/frontend/src/components/features/settings/
 
 ## Responsibility
-Settings modal, repository configuration sections, prompt override editing, kanban/autopilot settings, and validation helpers.
+Settings modal, repository runtime/prompt defaults, configuration sections, kanban/autopilot settings, and validation helpers.
 
 ## Design Patterns
 Form sections are broken into focused models and normalization helpers so the modal can edit durable repo settings without mutating host state directly.

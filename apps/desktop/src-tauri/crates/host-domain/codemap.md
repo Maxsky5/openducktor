@@ -1,10 +1,10 @@
 # apps/desktop/src-tauri/crates/host-domain/
 
 ## Responsibility
-Shared host contracts for tasks, workflow documents, git records, runtime state, and system health.
+Shared host contracts for tasks, workflow documents, git records, runtime definitions/routes, live runtime state, and system health.
 
 ## Design
-This crate stays pure and serde-friendly: enums, value objects, trait ports, and round-trip helpers live here, with no filesystem or process side effects.
+This crate stays pure and serde-friendly: enums, value objects, trait ports, and round-trip helpers live here, with no filesystem or process side effects. Runtime capability definitions belong in descriptor contracts, while live runtime summaries stay metadata-only.
 
 ## Flow
 Infra adapters read/write these types, `AppService` shapes them into workflow responses, and Tauri/headless commands serialize them over IPC.

@@ -1,23 +1,17 @@
 # packages/adapters-tauri-host/
 
 ## Responsibility
-
-Tauri IPC adapter that exposes desktop host commands as typed clients for workspace, task, filesystem, system, git, and runtime/build operations.
+Typed Tauri IPC adapter exposing desktop host commands for workspace, task, filesystem, system, git, and runtime/build operations.
 
 ## Design Patterns
-
-- Thin typed client wrappers around `invoke`.
-- Schema-validated request/response translation at every IPC boundary.
-- Shared task metadata cache to dedupe host reads and preserve freshness semantics.
+- Thin `invoke` wrappers with schema-validated inputs/outputs.
+- Domain client composition keeps workspace, runtime, and task reads isolated but exposed through one host client.
+- Task metadata caching dedupes host reads without hiding invalidation events.
 
 ## Data & Control Flow
-
-- `src/index.ts` composes the per-domain clients into a single `TauriHostClient` surface.
-- `src/build-runtime-client.ts` routes runtime/build/task/agent commands into host invocations.
-- `src/task-client.ts` and `src/task-metadata-cache.ts` coordinate task reads, document reads, and invalidation.
+`src/index.ts` composes the host client surface. `src/build-runtime-client.ts` routes runtime/build/task commands, and `src/task-client.ts` plus `src/task-metadata-cache.ts` manage task/document reads and freshness.
 
 ## Integration Points
-
-- Consumes `@openducktor/contracts` schemas for every host payload.
-- Consumes `@openducktor/core` planner tools for the merged host API surface.
-- Expects Tauri `invoke` transport provided by the desktop frontend/host bridge.
+- `@openducktor/contracts` schemas and payload types
+- `@openducktor/core` planner/tool types
+- Tauri `invoke` bridge from the desktop shell/host

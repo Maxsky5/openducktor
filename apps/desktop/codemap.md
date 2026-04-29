@@ -1,13 +1,14 @@
 # apps/desktop/
 
 ## Responsibility
-Tauri desktop workspace for OpenDucktor. The shared browser UI now lives in `packages/frontend`; this workspace owns the thin Tauri shell, desktop shell bridge, Tauri configuration, and package-level scripts that launch or build the desktop app.
+Tauri desktop workspace for OpenDucktor. It owns the thin shell, desktop bridge, Tauri config, CEF packaging helpers, and host/runtime wiring around the shared frontend.
 
 ## Design Patterns
-Thin-shell boundary: `src/main.tsx` configures a Tauri-backed shell bridge and mounts `@openducktor/frontend`; shared routes, components, state, and feature code stay in `packages/frontend/src`.
+- Thin-shell boundary: `src/main.tsx` only configures the shell bridge and mounts the shared frontend.
+- Workspace-local packaging: scripts prepare desktop build inputs, CEF assets, and Tauri release artifacts without mixing UI logic into the host.
 
 ## Data & Control Flow
-`src/main.tsx` creates the desktop shell bridge, registers it with the shared frontend, imports shared styles, and delegates rendering to `mountOpenDucktorApp`.
+`src/main.tsx` registers the desktop shell bridge, loads shared styles, and delegates rendering to `mountOpenDucktorApp`. Build and release scripts shape CEF/Tauri inputs before the host is launched or packaged.
 
 ## Integration Points
-`package.json`, `vite.config.ts`, `src/desktop-shell-bridge.ts`, `src-tauri` command/runtime boundaries, and `scripts/*.ts` build/CEF/Tauri helpers.
+`package.json`, `vite.config.ts`, `src/desktop-shell-bridge.ts`, `src-tauri`, and `scripts/*.ts`.

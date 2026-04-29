@@ -1,18 +1,16 @@
 # apps/
 
 ## Responsibility
-Application workspaces for OpenDucktor. Today this contains the desktop product workspace, which combines the React/Vite frontend and the Tauri v2 host boundary.
+Application workspaces for OpenDucktor, centered on the desktop product shell and its build/runtime helpers.
 
 ## Design Patterns
-- Monorepo application boundary: `apps/desktop` owns product composition while `packages/*` provide contracts, core services, and adapters.
-- Host/UI co-location: frontend source and Rust Tauri host live in one workspace so IPC contracts and desktop packaging evolve together.
-- Generated subdirectory codemaps delegate detailed architecture to the relevant frontend, script, and Rust host folders.
+- Workspace split: `apps/desktop` owns the Tauri shell, scripts, and host runtime while packages own shared contracts, core logic, adapters, and browser launcher code.
+- Thin shell composition: UI and host boundaries stay explicit so contract changes flow through package surfaces first.
 
 ## Data & Control Flow
-Root Bun scripts target `@openducktor/desktop` for development, build, and Tauri commands. The desktop app boots React routes in `apps/desktop/src`, invokes host APIs through adapter packages, and crosses into `apps/desktop/src-tauri` for Rust command execution, Beads task storage, runtime orchestration, and desktop/browser-backend serving.
+Root scripts route desktop development, desktop builds, and host packaging through `apps/desktop`; runtime data then flows from shared contracts/core into the desktop shell and Rust host layers.
 
 ## Integration Points
-- `apps/desktop/codemap.md`: desktop workspace overview.
-- `apps/desktop/src/codemap.md`: React frontend source map.
-- `apps/desktop/src-tauri/codemap.md`: Rust/Tauri host map.
-- `apps/desktop/scripts/codemap.md`: desktop build, CEF, and Tauri helper scripts.
+- `apps/desktop/codemap.md`
+- `apps/desktop/src/codemap.md`
+- `apps/desktop/scripts/codemap.md`

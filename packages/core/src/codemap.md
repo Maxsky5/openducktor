@@ -1,22 +1,16 @@
 # packages/core/src/
 
 ## Responsibility
-
 Core agent workflow logic: ports, runtime guards, role/tool policies, planner helpers, prompt builders, and task/session mapping utilities.
 
 ## Design Patterns
-
-- Domain services are pure and adapter-agnostic.
-- Type aliases mirror contract types to keep runtime and orchestration boundaries aligned.
-- Centralized guards enforce fail-fast runtime connection and workspace assumptions.
+- Pure, adapter-agnostic domain services.
+- Type aliases mirror contract types to keep orchestration boundaries aligned.
+- Centralized guards enforce fail-fast runtime and workspace assumptions.
 
 ## Data & Control Flow
-
-- `ports/agent-engine.ts` defines the operations that adapters must implement for agent sessions and workspace inspection.
-- `services/*` shape workflow tool authorization, runtime connection validation, planner spec persistence, prompt synthesis, and todo mapping.
-- `types/*` define agent orchestrator inputs/outputs plus planning/task action model types.
+`ports/agent-engine.ts` defines the agent-session and workspace-inspection contract. `services/*` shape workflow authorization, runtime-connection validation, planner persistence, prompt synthesis, and todo mapping. `types/*` define orchestrator inputs/outputs and tool-call models.
 
 ## Integration Points
-
-- Used by `packages/adapters-opencode-sdk`, `packages/adapters-tauri-host`, and `packages/openducktor-mcp`.
-- Re-exports form the package API from `src/index.ts`.
+- Used by `packages/adapters-opencode-sdk`, `packages/adapters-tauri-host`, and `packages/openducktor-mcp`
+- Re-exported from `src/index.ts`

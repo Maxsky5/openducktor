@@ -1,20 +1,17 @@
 # packages/openducktor-web/
 
 ## Responsibility
-
-Public local browser runner for OpenDucktor. It provides the `@openducktor/web` CLI that starts the Rust web host, waits for readiness, serves the shared frontend through Vite, and shuts the host down through an explicit control-token endpoint.
+Public local browser runner for OpenDucktor. It starts the Rust web host, waits for readiness, serves the shared frontend, and shuts the host down through a control-token endpoint.
 
 ## Design Patterns
-
-- `src/cli.ts` parses launcher flags and keeps side effects behind `import.meta.main` for testability.
-- `src/launcher.ts` owns process orchestration, readiness polling, Vite startup, signal handling, and fail-fast shutdown behavior.
-- `src/artifact-resolver.ts` resolves either the workspace Cargo binary during development or signed/checksummed packaged macOS host and MCP sidecar binaries for published installs.
-- `src/browser-shell-bridge.ts` and `src/local-host-transport.ts` own the browser runtime config and HTTP/SSE transport; shared frontend code does not import them directly.
+- `src/cli.ts` keeps launcher side effects behind `import.meta.main`.
+- `src/launcher.ts` owns orchestration, readiness polling, Vite startup, and shutdown behavior.
+- `src/artifact-resolver.ts` resolves workspace binaries in development and packaged artifacts for published installs.
 
 ## Data & Control Flow
-
-`bunx @openducktor/web` or the repo-level `browser:dev` shim launches `openducktor-web-host` on loopback, injects `VITE_ODT_BROWSER_BACKEND_URL` and `VITE_ODT_BROWSER_AUTH_TOKEN` into Vite/browser runtime config, configures the shared frontend with `createBrowserShellBridge`, and serves the app on `http://127.0.0.1:<port>`.
+`bunx @openducktor/web` or `browser:dev` launches the loopback host, injects browser runtime config, wires `createBrowserShellBridge`, and serves the app on localhost. `src/browser-shell-bridge.ts` and `src/local-host-transport.ts` keep browser transport isolated from shared frontend code.
 
 ## Integration Points
-
-Integrates with `packages/frontend` for the React app, `packages/adapters-tauri-host` for typed command client construction, and `apps/desktop/src-tauri/src/bin/openducktor_web_host.rs` for the local Rust host binary.
+- `packages/frontend`
+- `packages/adapters-tauri-host`
+- `apps/desktop/src-tauri/src/bin/openducktor_web_host.rs`

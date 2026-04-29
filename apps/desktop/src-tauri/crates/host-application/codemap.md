@@ -4,7 +4,7 @@
 Application service crate that orchestrates OpenDucktor host behavior.
 
 ## Design
-`AppService` is the main coordinator. Supporting modules cover runtime orchestration, task workflows, build orchestration, MCP bridge process/registry management, workspace policy, process tracking, and startup metrics.
+`AppService` is the main coordinator. Supporting modules cover runtime orchestration, task workflows, build orchestration, MCP bridge process/registry management, workspace policy, process tracking, and startup metrics. Runtime setup is resolved through explicit runtime connections/routes rather than repo-default fallbacks.
 
 ## Flow
 Commands and headless handlers call `AppService`; it validates repo/runtime prerequisites, delegates to infra ports, updates task/workspace state, manages runtime and MCP bridge lifecycles, and emits runtime or startup events.

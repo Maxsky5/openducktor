@@ -4,7 +4,7 @@
 Derive repo runtime health and startup status from live runtime, MCP, and host-side state.
 
 ## Design
-`mod.rs` coordinates the workflow, `mcp.rs` handles MCP status and tool ids, `status.rs` maps startup stages to health, and `flights.rs` models health-flight state. The health path now depends on the runtime registry plus the MCP bridge process/registry state.
+`mod.rs` coordinates the workflow, `mcp.rs` handles MCP status and tool ids, `status.rs` maps startup stages to health, and `flights.rs` models health-flight state. The health path depends on the runtime registry plus the MCP bridge process/registry state and does not mask failures with a fallback runtime.
 
 ## Flow
 The orchestrator inspects host startup status, probes runtime health/MCP connectivity, and returns a consolidated `RepoRuntimeHealthCheck` or `RepoRuntimeStartupStatus`.

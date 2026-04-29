@@ -1,24 +1,17 @@
 # packages/adapters-opencode-sdk/
 
 ## Responsibility
-
-OpenCode SDK adapter that implements `AgentCatalogPort`, `AgentSessionPort`, and `AgentWorkspaceInspectionPort` against `@opencode-ai/sdk`.
+OpenCode SDK adapter for `AgentCatalogPort`, `AgentSessionPort`, and `AgentWorkspaceInspectionPort`.
 
 ## Design Patterns
-
-- Fail-fast runtime translation at the adapter boundary.
-- Session registry with event-stream replay and per-session caches.
-- Role-scoped tool/permission synthesis from `@openducktor/core` policies.
-- Adapter-local runtime-connection conversion keeps OpenCode client inputs separate from shared runtime summaries.
+- Fail-fast translation at the adapter boundary.
+- Session registry plus event-stream replay keeps live session state and historical rehydration aligned.
+- Runtime connections are converted locally so shared core types stay transport-agnostic.
 
 ## Data & Control Flow
-
-- `src/opencode-sdk-adapter.ts` orchestrates session lifecycle, message send, history/todo/diff/file-status reads, and live event subscription.
-- `src/event-stream/*` normalizes global/session events into `AgentEvent` emissions.
-- `src/catalog-and-mcp.ts`, `src/message-execution.ts`, `src/workflow-tool-selection.ts`, and runtime-connection helpers convert SDK responses into OpenDucktor catalogs and tool selections.
+`src/opencode-sdk-adapter.ts` drives session lifecycle, workspace reads, and event subscription. `src/event-stream/*` turns OpenCode session/global events into `AgentEvent` emissions, while catalog/tool helpers translate contract/runtime data into OpenCode client calls.
 
 ## Integration Points
-
-- Consumes `@openducktor/contracts` runtime descriptors, MCP schemas, and workflow tool names.
-- Consumes `@openducktor/core` agent ports, runtime-connection guards, and workflow policy helpers.
-- Talks to OpenCode `session`, `tool`, `mcp`, `find`, `command`, and `config` APIs through `buildDefaultFactory()`.
+- `@openducktor/contracts` runtime descriptors, run/session schemas, and workflow tool names
+- `@openducktor/core` port and runtime-connection types
+- `@opencode-ai/sdk` session/tool/mcp/find/command/config APIs

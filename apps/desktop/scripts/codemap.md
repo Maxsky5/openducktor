@@ -1,13 +1,14 @@
 # apps/desktop/scripts/
 
 ## Responsibility
-Build and environment scripts for the desktop workspace: Tauri build wrappers, CEF setup/build helpers, and git-hook test coverage.
+Desktop-workspace scripts for Tauri builds, CEF preparation, release packaging, and guard checks.
 
 ## Design Patterns
-Small Node/Bun entry points that spawn the real command or prepare build inputs. They fail loudly and pass process signals/exit codes through unchanged.
+- Small Bun entrypoints prepare inputs and then hand off to the real build or packaging command.
+- Fail-fast process plumbing preserves the underlying exit code and error source.
 
 ## Data & Control Flow
-Scripts read the current workspace state, prepare sidecar or CEF metadata, and then hand control to `bun run tauri ...` or other child processes.
+Scripts derive workspace/build metadata, prepare CEF or sidecar assets, and then invoke Tauri or release tooling. Guard scripts verify the desktop packaging surface before publish steps proceed.
 
 ## Integration Points
-`package.json` script entries, `src-tauri` build config, patched CEF/Tauri toolchain cache helpers, and `git-hooks.integration.test.ts`.
+`package.json`, `src-tauri` build config, CEF/toolchain helpers, and script-level tests.

@@ -1,7 +1,7 @@
 # packages/frontend/src/state/operations/agent-orchestrator/runtime/
 
 ## Responsibility
-Runtime loading helpers for repo defaults, prompt overrides, task documents, and worktree/runtime attachment.
+Runtime loading helpers for repo defaults, prompt overrides, task documents, runtime catalog lookups, and worktree/runtime attachment.
 
 ## Design Patterns
 This folder isolates runtime resolution from session orchestration so runtime-specific lookups can be reused across loaders and recovery paths.
