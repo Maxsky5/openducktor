@@ -474,7 +474,6 @@ export function useAgentOrchestratorOperations({
         throw new Error("Runtime identity is unavailable for this transcript.");
       }
 
-      const hadLocalSession = existingSession !== undefined;
       const hadRuntimeSession = agentEngine.hasSession(input.sessionId);
       let attachedListener = false;
       const unsubscribeTranscriptListener = (): void => {
@@ -498,16 +497,19 @@ export function useAgentOrchestratorOperations({
           current.runtimeId === input.runtimeId
         );
       };
-      if (hadLocalSession && hadRuntimeSession) {
-        if (!isCurrentTranscriptRequest()) {
-          throw new Error(
-            "Transcript session identity does not match the requested runtime session.",
-          );
-        }
+      const hasMatchingLocalSession = isCurrentTranscriptRequest();
+      const hadLocalSession = hasMatchingLocalSession;
+      if (existingSession && hadRuntimeSession && !hasMatchingLocalSession) {
+        throw new Error(
+          "Transcript session identity does not match the requested runtime session.",
+        );
+      }
+      if (hasMatchingLocalSession && hadRuntimeSession) {
         attachSessionListener(input.repoPath, input.sessionId);
         return;
       }
-      if (!hadLocalSession) {
+      if (!hasMatchingLocalSession) {
+        unsubscribeTranscriptListener();
         const initialSession = createRuntimeTranscriptSession({
           repoPath: input.repoPath,
           sessionId: input.sessionId,

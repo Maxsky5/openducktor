@@ -2693,6 +2693,143 @@ describe("use-agent-orchestrator-operations", () => {
     }
   });
 
+  test("replaces stale local transcript state before attaching a new runtime transcript", async () => {
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
+    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
+    const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
+    const originalDetachSession = OpencodeSdkAdapter.prototype.detachSession;
+    const attachSessionCalls: Parameters<OpencodeSdkAdapter["attachSession"]>[0][] = [];
+    const subscribedSessionIds: string[] = [];
+
+    OpencodeSdkAdapter.prototype.hasSession = () => false;
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => {
+      attachSessionCalls.push(input);
+      return {
+        runtimeKind: input.runtimeKind,
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T09:00:00.000Z",
+        role: input.role,
+        scenario: input.scenario,
+        status: "running",
+      };
+    };
+    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [
+      {
+        messageId: "history-new-subagent",
+        role: "assistant",
+        timestamp: "2026-02-22T09:00:01.000Z",
+        text: "New subagent output",
+        parts: [
+          {
+            kind: "text",
+            messageId: "history-new-subagent",
+            partId: "part-1",
+            text: "New subagent output",
+            completed: true,
+          },
+        ],
+      },
+    ];
+    OpencodeSdkAdapter.prototype.subscribeEvents = (sessionId) => {
+      subscribedSessionIds.push(sessionId);
+      return () => {};
+    };
+    OpencodeSdkAdapter.prototype.detachSession = async () => {
+      throw new Error("stale local transcript replacement should not detach runtime sessions");
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [],
+      refreshTaskData: async () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async () => {
+        harness.getLatest().commitSessions({
+          "session-transcript": {
+            sessionId: "session-transcript",
+            externalSessionId: "stale-external-subagent",
+            taskId: "",
+            repoPath: "/tmp/repo",
+            runtimeKind: "opencode",
+            role: null,
+            scenario: null,
+            status: "idle",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            runtimeId: "stale-runtime",
+            runtimeRoute: null,
+            workingDirectory: "/tmp/repo/old-worktree",
+            historyHydrationState: "hydrated",
+            runtimeRecoveryState: "idle",
+            purpose: "transcript",
+            messages: createSessionMessagesState("session-transcript", []),
+            draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
+            contextUsage: null,
+            pendingPermissions: [],
+            pendingQuestions: [],
+            todos: [],
+            modelCatalog: null,
+            selectedModel: null,
+            isLoadingModelCatalog: false,
+            promptOverrides: {},
+          },
+        });
+      });
+
+      await harness.run(async () => {
+        await harness.getLatest().operations.attachRuntimeTranscriptSession({
+          repoPath: "/tmp/repo",
+          sessionId: "session-transcript",
+          externalSessionId: "external-subagent",
+          runtimeKind: "opencode",
+          runtimeId: "runtime-1",
+          runtimeConnection: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+          },
+        });
+      });
+
+      expect(attachSessionCalls).toHaveLength(1);
+      expect(subscribedSessionIds).toEqual(["session-transcript"]);
+
+      const transcriptSession = harness
+        .getLatest()
+        .sessionStore.getSessionSnapshot("session-transcript");
+      expect(transcriptSession).toMatchObject({
+        purpose: "transcript",
+        sessionId: "session-transcript",
+        externalSessionId: "external-subagent",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo/worktree",
+        status: "running",
+      });
+      expect(
+        transcriptSession
+          ? sessionMessagesToArray(transcriptSession).some(
+              (message) => message.content === "New subagent output",
+            )
+          : false,
+      ).toBe(true);
+    } finally {
+      await harness.unmount();
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
+      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
+      OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
+      OpencodeSdkAdapter.prototype.detachSession = originalDetachSession;
+    }
+  });
+
   test("detaches an in-flight runtime transcript attach when the local transcript closes", async () => {
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
