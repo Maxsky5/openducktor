@@ -393,7 +393,7 @@ export const createAgentSessionActions = ({
     });
 
     const nextStoppedSession = stoppedSessionSnapshot as AgentSessionState | null;
-    if (nextStoppedSession) {
+    if (nextStoppedSession && isWorkflowAgentSession(nextStoppedSession)) {
       await persistSessionRecord(
         nextStoppedSession.taskId,
         toPersistedSessionRecord(nextStoppedSession),

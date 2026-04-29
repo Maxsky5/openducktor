@@ -1102,7 +1102,11 @@ describe("load-sessions-stages", () => {
   });
 
   test("preserves transcript-purpose sessions on non-requested loads", async () => {
-    const existingSession = createSession({ purpose: "transcript" });
+    const existingSession = createSession({
+      purpose: "transcript",
+      role: null,
+      scenario: null,
+    });
     const stateHarness = createStateHarness({ "session-1": existingSession });
 
     await preparePersistedSessionMergeStage({
@@ -1117,11 +1121,20 @@ describe("load-sessions-stages", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    expect(stateHarness.getState()["session-1"]?.purpose).toBe("transcript");
+    const nextSession = stateHarness.getState()["session-1"];
+    expect(nextSession?.purpose).toBe("transcript");
+    expect(nextSession?.role).toBeNull();
+    expect(nextSession?.scenario).toBeNull();
   });
 
   test("keeps requested-history persisted workflow records as primary sessions", async () => {
-    const stateHarness = createStateHarness({});
+    const stateHarness = createStateHarness({
+      "session-1": createSession({
+        purpose: "transcript",
+        role: null,
+        scenario: null,
+      }),
+    });
 
     await preparePersistedSessionMergeStage({
       intent: createIntent({
@@ -1144,7 +1157,13 @@ describe("load-sessions-stages", () => {
   });
 
   test("keeps recovered workflow records primary when runtime attachment is retried", async () => {
-    const stateHarness = createStateHarness({ "session-1": createSession() });
+    const stateHarness = createStateHarness({
+      "session-1": createSession({
+        purpose: "transcript",
+        role: null,
+        scenario: null,
+      }),
+    });
 
     await preparePersistedSessionMergeStage({
       intent: createIntent({

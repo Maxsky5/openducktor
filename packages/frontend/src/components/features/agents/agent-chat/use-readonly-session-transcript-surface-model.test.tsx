@@ -39,83 +39,95 @@ let actualRuntimeData: Awaited<typeof import("./use-agent-chat-session-runtime-d
 let actualSurfaceModel: Awaited<typeof import("./use-agent-chat-surface-model")>;
 let originalHostRuntimeList: typeof import("@/state/operations/host").host.runtimeList;
 
-const transcriptSource: RuntimeSessionTranscriptSource = {
-  runtimeKind: "opencode",
-  runtimeId: "runtime-1",
-  workingDirectory: "/repo-a",
-  runtimeRoute: {
-    type: "local_http",
+function makeRuntimeRoute() {
+  return {
+    type: "local_http" as const,
     endpoint: "http://127.0.0.1:4096",
-  },
-};
+  };
+}
 
-const transcriptSourceWithRuntimeIdOnly: RuntimeSessionTranscriptSource = {
-  runtimeKind: "opencode",
-  runtimeId: "runtime-1",
-  workingDirectory: "/repo-a",
-};
+function makeTranscriptSource(): RuntimeSessionTranscriptSource {
+  return {
+    runtimeKind: "opencode",
+    runtimeId: "runtime-1",
+    workingDirectory: "/repo-a",
+    runtimeRoute: makeRuntimeRoute(),
+  };
+}
 
-const pendingPermission = {
-  requestId: "permission-1",
-  permission: "file.read",
-  patterns: ["src/app.ts"],
-};
+function makeTranscriptSourceWithRuntimeIdOnly(): RuntimeSessionTranscriptSource {
+  return {
+    runtimeKind: "opencode",
+    runtimeId: "runtime-1",
+    workingDirectory: "/repo-a",
+  };
+}
 
-const transcriptSourceWithPendingPermission: RuntimeSessionTranscriptSource = {
-  ...transcriptSource,
-  pendingPermissions: [pendingPermission],
-};
+function makePendingPermission() {
+  return {
+    requestId: "permission-1",
+    permission: "file.read",
+    patterns: ["src/app.ts"],
+  };
+}
 
-const liveTranscriptSource: RuntimeSessionTranscriptSource = {
-  ...transcriptSource,
-  isLive: true,
-};
+function makeTranscriptSourceWithPendingPermission(): RuntimeSessionTranscriptSource {
+  return {
+    ...makeTranscriptSource(),
+    pendingPermissions: [makePendingPermission()],
+  };
+}
 
-const liveTranscriptSession: AgentSessionState = {
-  runtimeKind: "opencode",
-  sessionId: "session-subagent-1",
-  externalSessionId: "session-subagent-1",
-  purpose: "transcript",
-  taskId: "",
-  repoPath: "/repo-a",
-  role: null as unknown as AgentSessionState["role"],
-  scenario: null as unknown as AgentSessionState["scenario"],
-  status: "running",
-  startedAt: "2026-02-22T12:00:00.000Z",
-  runtimeId: "runtime-1",
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:4096",
-  },
-  workingDirectory: "/repo-a",
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  contextUsage: null,
-  pendingPermissions: [pendingPermission],
-  pendingQuestions: [],
-  todos: [],
-  modelCatalog: null,
-  selectedModel: null,
-  isLoadingModelCatalog: false,
-};
+function makeLiveTranscriptSource(): RuntimeSessionTranscriptSource {
+  return {
+    ...makeTranscriptSource(),
+    isLive: true,
+  };
+}
 
-const runtime = {
-  kind: "opencode",
-  runtimeId: "runtime-1",
-  repoPath: "/repo-a",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo-a",
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:4096",
-  },
-  startedAt: "2026-02-22T11:59:00.000Z",
-  descriptor: {} as RuntimeInstanceSummary["descriptor"],
-} satisfies RuntimeInstanceSummary;
+function makeLiveTranscriptSession(): AgentSessionState {
+  return {
+    runtimeKind: "opencode",
+    sessionId: "session-subagent-1",
+    externalSessionId: "session-subagent-1",
+    purpose: "transcript",
+    taskId: "",
+    repoPath: "/repo-a",
+    role: null as unknown as AgentSessionState["role"],
+    scenario: null as unknown as AgentSessionState["scenario"],
+    status: "running",
+    startedAt: "2026-02-22T12:00:00.000Z",
+    runtimeId: "runtime-1",
+    runtimeRoute: makeRuntimeRoute(),
+    workingDirectory: "/repo-a",
+    messages: [],
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+    contextUsage: null,
+    pendingPermissions: [makePendingPermission()],
+    pendingQuestions: [],
+    todos: [],
+    modelCatalog: null,
+    selectedModel: null,
+    isLoadingModelCatalog: false,
+  };
+}
+
+function makeRuntime(): RuntimeInstanceSummary {
+  return {
+    kind: "opencode",
+    runtimeId: "runtime-1",
+    repoPath: "/repo-a",
+    taskId: null,
+    role: "workspace",
+    workingDirectory: "/repo-a",
+    runtimeRoute: makeRuntimeRoute(),
+    startedAt: "2026-02-22T11:59:00.000Z",
+    descriptor: {} as RuntimeInstanceSummary["descriptor"],
+  } satisfies RuntimeInstanceSummary;
+}
 
 const wrapper = ({ children }: PropsWithChildren): ReactElement => (
   <QueryProvider useIsolatedClient>{children}</QueryProvider>
@@ -169,7 +181,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       (_sessionId: string | null): AgentSessionState | null => null,
     );
     latestSurfaceModelArgs = null;
-    runtimeList = [runtime];
+    runtimeList = [makeRuntime()];
     runtimeListError = null;
     actualHostOperations.host.runtimeList = async () => {
       if (runtimeListError) {
@@ -288,6 +300,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   });
 
   test("loads a runtime transcript without task-owned session records", async () => {
+    const transcriptSource = makeTranscriptSource();
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -332,6 +345,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   });
 
   test("does not load history while the dialog is closed", async () => {
+    const transcriptSource = makeTranscriptSource();
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -360,6 +374,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   });
 
   test("attaches live runtime transcripts to the session event stream without polling", async () => {
+    const liveTranscriptSource = makeLiveTranscriptSource();
+    const pendingPermission = makePendingPermission();
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -405,6 +421,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   });
 
   test("does not keep the live transcript loading after the session is visible", async () => {
+    const liveTranscriptSource = makeLiveTranscriptSource();
+    const pendingPermission = makePendingPermission();
+    const liveSession = makeLiveTranscriptSession();
     const resolveAttachCallbacks: Array<() => void> = [];
     attachRuntimeTranscriptSession.mockImplementation(
       () =>
@@ -413,7 +432,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         }),
     );
     useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
-      requestedSessionId === "session-subagent-1" ? liveTranscriptSession : null,
+      requestedSessionId === "session-subagent-1" ? liveSession : null,
     );
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
@@ -440,7 +459,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor(() => attachRuntimeTranscriptSession.mock.calls.length === 1);
 
-      expect(latestSurfaceModelArgs?.session).toEqual(liveTranscriptSession);
+      expect(latestSurfaceModelArgs?.session).toEqual(liveSession);
       expect(latestSurfaceModelArgs?.isTaskHydrating).toBe(false);
       expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
       expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: true });
@@ -451,6 +470,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   });
 
   test("keeps parent-observed subagent permissions on the transcript session", async () => {
+    const transcriptSourceWithPendingPermission = makeTranscriptSourceWithPendingPermission();
+    const pendingPermission = makePendingPermission();
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -485,6 +506,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   });
 
   test("replies to parent-observed permissions through the runtime transcript session", async () => {
+    const transcriptSourceWithPendingPermission = makeTranscriptSourceWithPendingPermission();
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -539,6 +561,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   });
 
   test("surfaces a failed empty state when transcript history cannot load", async () => {
+    const transcriptSource = makeTranscriptSource();
     readSessionHistory.mockImplementationOnce(async () => {
       throw new Error("history unavailable");
     });
@@ -574,6 +597,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   });
 
   test("surfaces an unavailable state when the source runtime is not attached", async () => {
+    const transcriptSourceWithRuntimeIdOnly = makeTranscriptSourceWithRuntimeIdOnly();
     runtimeList = [];
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
@@ -608,6 +632,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   });
 
   test("surfaces runtime list failures without converting them to missing runtimes", async () => {
+    const transcriptSourceWithRuntimeIdOnly = makeTranscriptSourceWithRuntimeIdOnly();
     runtimeListError = new Error("runtime registry unavailable");
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"

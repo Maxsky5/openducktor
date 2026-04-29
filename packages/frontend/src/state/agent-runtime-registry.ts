@@ -90,6 +90,7 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     this.updateSessionModel = this.updateSessionModel.bind(this);
     this.sendUserMessage = this.sendUserMessage.bind(this);
     this.replyPermission = this.replyPermission.bind(this);
+    this.replyRuntimeSessionPermission = this.replyRuntimeSessionPermission.bind(this);
     this.replyQuestion = this.replyQuestion.bind(this);
     this.subscribeEvents = this.subscribeEvents.bind(this);
     this.stopSession = this.stopSession.bind(this);

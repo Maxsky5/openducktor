@@ -3,13 +3,14 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;
 
 const removeAgentSession = mock(async () => {});
-let agentSessionState: { purpose?: "primary" | "transcript" } | null = null;
+let agentSessionState: Pick<AgentSessionState, "purpose" | "role" | "scenario"> | null = null;
 let latestDialogProps: {
   sessionId: string | null;
   source: RuntimeSessionTranscriptSource | null;
@@ -116,7 +117,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
   });
 
   test("removes transcript-only sessions when the dialog closes", async () => {
-    agentSessionState = { purpose: "transcript" };
+    agentSessionState = { purpose: "transcript", role: null, scenario: null };
 
     const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
       "./use-agent-session-transcript-dialog"
@@ -160,7 +161,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
   });
 
   test("keeps regular sessions when the dialog closes", async () => {
-    agentSessionState = { purpose: "primary" };
+    agentSessionState = {
+      purpose: "primary",
+      role: "build",
+      scenario: "build_implementation_start",
+    };
 
     const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
       "./use-agent-session-transcript-dialog"

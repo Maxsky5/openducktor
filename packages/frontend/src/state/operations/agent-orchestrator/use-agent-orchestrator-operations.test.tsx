@@ -1833,8 +1833,8 @@ describe("use-agent-orchestrator-operations", () => {
               taskId: "task-1",
               repoPath: "/tmp/repo",
               runtimeKind: "opencode",
-              role: "build",
-              scenario: "build_implementation_start",
+              role: null,
+              scenario: null,
               status: "idle",
               startedAt: "2026-02-22T08:00:00.000Z",
               runtimeId: null,
@@ -1876,7 +1876,7 @@ describe("use-agent-orchestrator-operations", () => {
     });
   });
 
-  test("removeAgentSessions detaches transcript-purpose attached sessions before bulk local cleanup", async () => {
+  test("removeAgentSessions detaches transcript-purpose attached sessions before task cleanup", async () => {
     await withSuppressedRendererWarning(async () => {
       const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
       const originalDetachSession = OpencodeSdkAdapter.prototype.detachSession;
@@ -1904,8 +1904,8 @@ describe("use-agent-orchestrator-operations", () => {
               taskId: "task-1",
               repoPath: "/tmp/repo",
               runtimeKind: "opencode",
-              role: "build",
-              scenario: "build_implementation_start",
+              role: null,
+              scenario: null,
               status: "idle",
               startedAt: "2026-02-22T08:00:00.000Z",
               runtimeId: null,
@@ -1934,8 +1934,8 @@ describe("use-agent-orchestrator-operations", () => {
               taskId: "task-1",
               repoPath: "/tmp/repo",
               runtimeKind: "opencode",
-              role: "build",
-              scenario: "build_implementation_start",
+              role: null,
+              scenario: null,
               status: "idle",
               startedAt: "2026-02-22T08:00:00.000Z",
               runtimeId: null,
@@ -1962,7 +1962,7 @@ describe("use-agent-orchestrator-operations", () => {
         });
 
         await harness.run(async () => {
-          await harness.getLatest().removeAgentSessions({ taskId: "task-1", roles: ["build"] });
+          await harness.getLatest().removeAgentSessions({ taskId: "task-1" });
         });
 
         expect(detachCalls.sort()).toEqual(["session-transcript-a", "session-transcript-b"]);

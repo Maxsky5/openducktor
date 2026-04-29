@@ -409,16 +409,18 @@ const mergePersistedSessionRecord = (
   repoPath: string,
   promptOverrides: RepoPromptOverrides,
   purpose: AgentSessionPurpose,
+  shouldPreserveTranscriptSession: boolean,
 ): AgentSessionState => {
+  if (shouldPreserveTranscriptSession && isTranscriptAgentSession(current)) {
+    return current;
+  }
+
   const persisted = fromPersistedSessionRecord(record, taskId, repoPath);
   const shouldPreserveCurrentWorkingDirectory = current.runtimeRoute !== null;
-  const nextPurpose: AgentSessionPurpose = isTranscriptAgentSession(current)
-    ? "transcript"
-    : purpose;
 
   return {
     ...current,
-    purpose: nextPurpose,
+    purpose,
     repoPath: persisted.repoPath,
     externalSessionId: persisted.externalSessionId,
     taskId: persisted.taskId,
@@ -532,6 +534,8 @@ export const preparePersistedSessionMergeStage = async ({
           mode: intent.mode,
         });
         const existingSession = next[record.sessionId];
+        const shouldPreserveTranscriptSession =
+          intent.mode !== "requested_history" && intent.mode !== "recover_runtime_attachment";
         if (existingSession) {
           next[record.sessionId] = mergePersistedSessionRecord(
             existingSession,
@@ -540,6 +544,7 @@ export const preparePersistedSessionMergeStage = async ({
             intent.repoPath,
             existingSession.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
             nextPurpose,
+            shouldPreserveTranscriptSession,
           );
           continue;
         }
