@@ -1,21 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentChatWindowRow, AgentChatWindowTurn } from "./agent-chat-thread-windowing";
 
-const ROW_STAGE_INIT = 24;
-const ROW_STAGE_BATCH = 32;
+const ROW_STAGE_INIT = 8;
+const ROW_STAGE_BATCH = 8;
 
 const shouldStageRows = ({
   activeSessionId,
   completedSessionIds,
   disabled,
+  forceStage,
   rowCount,
 }: {
   activeSessionId: string;
   completedSessionIds: Set<string>;
   disabled: boolean;
+  forceStage?: boolean;
   rowCount: number;
 }): boolean => {
-  return !disabled && rowCount > ROW_STAGE_INIT && !completedSessionIds.has(activeSessionId);
+  return (
+    !disabled &&
+    rowCount > ROW_STAGE_INIT &&
+    (forceStage === true || !completedSessionIds.has(activeSessionId))
+  );
 };
 
 type UseAgentChatRowStagingArgs = {
@@ -23,6 +29,7 @@ type UseAgentChatRowStagingArgs = {
   rows: AgentChatWindowRow[];
   turns: AgentChatWindowTurn[];
   disabled?: boolean;
+  onBeforePrepend?: () => void;
 };
 
 type UseAgentChatRowStagingResult = {
@@ -35,13 +42,21 @@ export function useAgentChatRowStaging({
   rows,
   turns,
   disabled = false,
+  onBeforePrepend,
 }: UseAgentChatRowStagingArgs): UseAgentChatRowStagingResult {
-  const [rowCount, setRowCount] = useState(rows.length);
+  const [rowCount, setRowCount] = useState(() =>
+    activeSessionId !== null && !disabled && rows.length > ROW_STAGE_INIT
+      ? ROW_STAGE_INIT
+      : rows.length,
+  );
   const rowCountRef = useRef(rowCount);
   const frameRef = useRef<number | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const completedSessionIdsRef = useRef<Set<string>>(new Set());
   const previousSessionIdRef = useRef<string | null>(activeSessionId);
+  const previousSessionId = previousSessionIdRef.current;
+  const switchedSessions =
+    previousSessionId !== null && activeSessionId !== null && previousSessionId !== activeSessionId;
 
   useEffect(() => {
     const updateRowCount = (nextRowCount: number): void => {
@@ -54,11 +69,6 @@ export function useAgentChatRowStaging({
       frameRef.current = null;
     }
 
-    const previousSessionId = previousSessionIdRef.current;
-    const switchedSessions =
-      previousSessionId !== null &&
-      activeSessionId !== null &&
-      previousSessionId !== activeSessionId;
     previousSessionIdRef.current = activeSessionId;
 
     if (switchedSessions && activeSessionId !== null) {
@@ -75,6 +85,7 @@ export function useAgentChatRowStaging({
       activeSessionId,
       completedSessionIds: completedSessionIdsRef.current,
       disabled,
+      forceStage: switchedSessions,
       rowCount: rows.length,
     });
 
@@ -106,6 +117,7 @@ export function useAgentChatRowStaging({
       }
 
       nextRowCount = Math.min(rows.length, nextRowCount + ROW_STAGE_BATCH);
+      onBeforePrepend?.();
       updateRowCount(nextRowCount);
 
       if (nextRowCount >= rows.length) {
@@ -125,7 +137,7 @@ export function useAgentChatRowStaging({
         frameRef.current = null;
       }
     };
-  }, [activeSessionId, disabled, rows.length]);
+  }, [activeSessionId, disabled, onBeforePrepend, rows.length, switchedSessions]);
 
   return useMemo(() => {
     if (
@@ -134,17 +146,23 @@ export function useAgentChatRowStaging({
         activeSessionId,
         completedSessionIds: completedSessionIdsRef.current,
         disabled,
+        forceStage: switchedSessions,
         rowCount: rows.length,
       })
     ) {
       return { rows, turns };
     }
 
-    if (rowCount >= rows.length) {
+    const effectiveRowCount =
+      switchedSessions && activeSessionRef.current !== activeSessionId
+        ? Math.min(rows.length, ROW_STAGE_INIT)
+        : rowCount;
+
+    if (effectiveRowCount >= rows.length) {
       return { rows, turns };
     }
 
-    const rowStart = Math.max(0, rows.length - rowCount);
+    const rowStart = Math.max(0, rows.length - effectiveRowCount);
     return {
       rows: rows.slice(rowStart),
       turns: turns
@@ -155,5 +173,5 @@ export function useAgentChatRowStaging({
           end: turn.end - rowStart,
         })),
     };
-  }, [activeSessionId, disabled, rowCount, rows, turns]);
+  }, [activeSessionId, disabled, rowCount, rows, switchedSessions, turns]);
 }

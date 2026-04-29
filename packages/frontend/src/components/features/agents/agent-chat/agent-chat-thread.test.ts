@@ -559,6 +559,88 @@ describe("AgentChatThread", () => {
     rendered.unmount();
   });
 
+  test("stages a large attachment transcript on session switch", async () => {
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+    const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
+    let nextAnimationFrameId = 1;
+
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      const frameId = nextAnimationFrameId;
+      nextAnimationFrameId += 1;
+      animationFrameCallbacks.set(frameId, callback);
+      return frameId;
+    }) as typeof requestAnimationFrame;
+    globalThis.cancelAnimationFrame = ((frameId: number) => {
+      animationFrameCallbacks.delete(frameId);
+    }) as typeof cancelAnimationFrame;
+
+    try {
+      const attachmentMessages = Array.from({ length: 80 }, (_, index) =>
+        buildMessage(
+          "user",
+          `Attachment message ${index + 1}`,
+          index === 0
+            ? {
+                id: `attachment-message-${index + 1}`,
+                meta: {
+                  kind: "user",
+                  state: "read",
+                  parts: [
+                    {
+                      kind: "attachment",
+                      attachment: {
+                        id: "attachment-1",
+                        name: "spec.md",
+                        kind: "pdf",
+                        path: "/tmp/spec.md",
+                      },
+                    },
+                  ],
+                },
+              }
+            : {
+                id: `attachment-message-${index + 1}`,
+              },
+        ),
+      );
+
+      const rendered = render(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: buildSession({
+              sessionId: "session-normal",
+              messages: [buildMessage("assistant", "Baseline transcript", { id: "assistant-1" })],
+            }),
+          },
+        }),
+      );
+
+      rendered.rerender(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: buildSession({
+              sessionId: "session-attachments",
+              messages: attachmentMessages,
+            }),
+          },
+        }),
+      );
+
+      expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(1);
+      expect(rendered.queryByText("Attachment message 1")).toBeNull();
+      expect(rendered.queryByText("Attachment message 80")).not.toBeNull();
+      expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
+
+      rendered.unmount();
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
+  });
+
   test("adds bottom spacing before the composer when the last bottom-stack item is a question", async () => {
     const rendered = render(
       createElement(AgentChatThread, {

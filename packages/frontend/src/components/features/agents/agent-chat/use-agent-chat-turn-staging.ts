@@ -2,18 +2,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentChatWindowTurn } from "./agent-chat-thread-windowing";
 
 const STAGE_INIT = 1;
-const STAGE_BATCH = 3;
+const STAGE_BATCH = 1;
 
 const shouldStageTurns = ({
   activeSessionId,
   completedSessionIds,
   disabled,
+  forceStage,
   turnCount,
   windowStart,
 }: {
   activeSessionId: string;
   completedSessionIds: Set<string>;
   disabled: boolean;
+  forceStage?: boolean;
   turnCount: number;
   windowStart: number;
 }): boolean => {
@@ -21,7 +23,7 @@ const shouldStageTurns = ({
     !disabled &&
     windowStart > 0 &&
     turnCount > STAGE_INIT &&
-    !completedSessionIds.has(activeSessionId)
+    (forceStage === true || !completedSessionIds.has(activeSessionId))
   );
 };
 
@@ -30,6 +32,7 @@ type UseAgentChatTurnStagingArgs = {
   windowStart: number;
   turns: AgentChatWindowTurn[];
   disabled?: boolean;
+  onBeforePrepend?: () => void;
 };
 
 export function useAgentChatTurnStaging({
@@ -37,13 +40,21 @@ export function useAgentChatTurnStaging({
   windowStart,
   turns,
   disabled = false,
+  onBeforePrepend,
 }: UseAgentChatTurnStagingArgs): AgentChatWindowTurn[] {
-  const [count, setCount] = useState(turns.length);
+  const [count, setCount] = useState(() =>
+    activeSessionId !== null && !disabled && windowStart > 0 && turns.length > STAGE_INIT
+      ? STAGE_INIT
+      : turns.length,
+  );
   const countRef = useRef(count);
   const frameRef = useRef<number | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const completedSessionIdsRef = useRef<Set<string>>(new Set());
   const previousSessionIdRef = useRef<string | null>(activeSessionId);
+  const previousSessionId = previousSessionIdRef.current;
+  const switchedSessions =
+    previousSessionId !== null && activeSessionId !== null && previousSessionId !== activeSessionId;
 
   useEffect(() => {
     const updateCount = (nextCount: number): void => {
@@ -56,11 +67,6 @@ export function useAgentChatTurnStaging({
       frameRef.current = null;
     }
 
-    const previousSessionId = previousSessionIdRef.current;
-    const switchedSessions =
-      previousSessionId !== null &&
-      activeSessionId !== null &&
-      previousSessionId !== activeSessionId;
     previousSessionIdRef.current = activeSessionId;
 
     if (switchedSessions && activeSessionId !== null) {
@@ -77,6 +83,7 @@ export function useAgentChatTurnStaging({
       activeSessionId,
       completedSessionIds: completedSessionIdsRef.current,
       disabled,
+      forceStage: switchedSessions,
       turnCount: turns.length,
       windowStart,
     });
@@ -109,6 +116,7 @@ export function useAgentChatTurnStaging({
       }
 
       nextCount = Math.min(turns.length, nextCount + STAGE_BATCH);
+      onBeforePrepend?.();
       updateCount(nextCount);
 
       if (nextCount >= turns.length) {
@@ -128,7 +136,7 @@ export function useAgentChatTurnStaging({
         frameRef.current = null;
       }
     };
-  }, [activeSessionId, disabled, turns.length, windowStart]);
+  }, [activeSessionId, disabled, onBeforePrepend, switchedSessions, turns.length, windowStart]);
 
   return useMemo(() => {
     if (
@@ -137,6 +145,7 @@ export function useAgentChatTurnStaging({
         activeSessionId,
         completedSessionIds: completedSessionIdsRef.current,
         disabled,
+        forceStage: switchedSessions,
         turnCount: turns.length,
         windowStart,
       })
@@ -144,10 +153,15 @@ export function useAgentChatTurnStaging({
       return turns;
     }
 
-    if (count >= turns.length) {
+    const effectiveCount =
+      switchedSessions && activeSessionRef.current !== activeSessionId
+        ? Math.min(turns.length, STAGE_INIT)
+        : count;
+
+    if (effectiveCount >= turns.length) {
       return turns;
     }
 
-    return turns.slice(Math.max(0, turns.length - count));
-  }, [activeSessionId, count, disabled, turns, windowStart]);
+    return turns.slice(Math.max(0, turns.length - effectiveCount));
+  }, [activeSessionId, count, disabled, switchedSessions, turns, windowStart]);
 }

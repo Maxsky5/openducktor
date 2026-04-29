@@ -70,7 +70,31 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   constructor(
     private readonly getAdapter: (runtimeKind: RuntimeKind) => RegisteredRuntimeAdapter,
     private readonly registeredRuntimeKinds: RuntimeKind[],
-  ) {}
+  ) {
+    this.startSession = this.startSession.bind(this);
+    this.resumeSession = this.resumeSession.bind(this);
+    this.attachSession = this.attachSession.bind(this);
+    this.detachSession = this.detachSession.bind(this);
+    this.forkSession = this.forkSession.bind(this);
+    this.listRuntimeDefinitions = this.listRuntimeDefinitions.bind(this);
+    this.listAvailableModels = this.listAvailableModels.bind(this);
+    this.listAvailableSlashCommands = this.listAvailableSlashCommands.bind(this);
+    this.searchFiles = this.searchFiles.bind(this);
+    this.listLiveAgentSessions = this.listLiveAgentSessions.bind(this);
+    this.listLiveAgentSessionSnapshots = this.listLiveAgentSessionSnapshots.bind(this);
+    this.hasSession = this.hasSession.bind(this);
+    this.loadSessionHistory = this.loadSessionHistory.bind(this);
+    this.loadSessionTodos = this.loadSessionTodos.bind(this);
+    this.listLiveAgentSessionPendingInput = this.listLiveAgentSessionPendingInput.bind(this);
+    this.updateSessionModel = this.updateSessionModel.bind(this);
+    this.sendUserMessage = this.sendUserMessage.bind(this);
+    this.replyPermission = this.replyPermission.bind(this);
+    this.replyQuestion = this.replyQuestion.bind(this);
+    this.subscribeEvents = this.subscribeEvents.bind(this);
+    this.stopSession = this.stopSession.bind(this);
+    this.loadSessionDiff = this.loadSessionDiff.bind(this);
+    this.loadFileStatus = this.loadFileStatus.bind(this);
+  }
 
   async startSession(input: Parameters<AgentEnginePort["startSession"]>[0]) {
     const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model);

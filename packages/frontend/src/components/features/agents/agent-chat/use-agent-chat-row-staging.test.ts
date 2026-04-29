@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { act } from "react";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentChatWindowRow, AgentChatWindowTurn } from "./agent-chat-thread-windowing";
@@ -78,8 +78,8 @@ describe("useAgentChatRowStaging", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().rows).toHaveLength(24);
-    expect(harness.getLatest().turns).toEqual([{ key: "turn-0", start: 0, end: 23 }]);
+    expect(harness.getLatest().rows).toHaveLength(8);
+    expect(harness.getLatest().turns).toEqual([{ key: "turn-0", start: 0, end: 7 }]);
 
     await harness.unmount();
   });
@@ -127,13 +127,14 @@ describe("useAgentChatRowStaging", () => {
       nextTurns: turns,
     });
 
-    expect(harness.getLatest().rows).toHaveLength(24);
+    expect(harness.getLatest().rows).toHaveLength(8);
     expect(animationFrameCallbacks.size).toBeGreaterThan(0);
 
     await harness.unmount();
   });
 
   test("resumes staging when rows grow for the active session", async () => {
+    const onBeforePrepend = mock(() => {});
     const harness = createHookHarness(
       ({ activeSessionId, nextRows, nextTurns }) =>
         useAgentChatRowStaging({
@@ -141,6 +142,7 @@ describe("useAgentChatRowStaging", () => {
           rows: nextRows,
           turns: nextTurns,
           disabled: false,
+          onBeforePrepend,
         }),
       {
         activeSessionId: "session-1",
@@ -158,7 +160,8 @@ describe("useAgentChatRowStaging", () => {
       await flush();
     });
 
-    expect(harness.getLatest().rows).toHaveLength(56);
+    expect(harness.getLatest().rows).toHaveLength(16);
+    expect(onBeforePrepend).toHaveBeenCalledTimes(1);
 
     await harness.update({
       activeSessionId: "session-1",
