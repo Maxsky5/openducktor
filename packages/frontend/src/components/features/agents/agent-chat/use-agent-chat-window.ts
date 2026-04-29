@@ -21,9 +21,16 @@ type UseAgentChatWindowResult = {
   windowStart: number;
   isNearBottom: boolean;
   isNearTop: boolean;
+  preserveScrollBeforeStagedPrepend: () => void;
   scrollToBottom: () => void;
   scrollToTop: () => void;
   scrollToBottomOnSend: () => void;
+};
+
+type StagedPrependScrollSnapshot = {
+  sessionId: string | null;
+  beforeScrollHeight: number;
+  beforeScrollTop: number;
 };
 
 export function useAgentChatWindow({
@@ -41,6 +48,7 @@ export function useAgentChatWindow({
   const composerLayoutSyncTokenRef = useRef(0);
   const prevSessionIdRef = useRef<string | null>(null);
   const prevIsSessionViewLoadingRef = useRef(isSessionViewLoading);
+  const stagedPrependScrollSnapshotRef = useRef<StagedPrependScrollSnapshot | null>(null);
   const {
     isNearBottom,
     isNearTop,
@@ -76,6 +84,23 @@ export function useAgentChatWindow({
     return !userScrolledRef.current;
   }, [userScrolledRef]);
 
+  const preserveScrollBeforeStagedPrepend = useCallback(() => {
+    if (!userScrolledRef.current || stagedPrependScrollSnapshotRef.current !== null) {
+      return;
+    }
+
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    stagedPrependScrollSnapshotRef.current = {
+      sessionId: activeSessionId,
+      beforeScrollHeight: container.scrollHeight,
+      beforeScrollTop: container.scrollTop,
+    };
+  }, [activeSessionId, messagesContainerRef, userScrolledRef]);
+
   const resetLatestTurnsAndPinBottom = useCallback(() => {
     if (turnStart === latestTurnStart) {
       forceScrollToBottom();
@@ -92,6 +117,7 @@ export function useAgentChatWindow({
     }
 
     prevSessionIdRef.current = activeSessionId;
+    stagedPrependScrollSnapshotRef.current = null;
     resetLatestTurnsAndPinBottom();
   }, [activeSessionId, resetLatestTurnsAndPinBottom]);
 
@@ -178,8 +204,32 @@ export function useAgentChatWindow({
     forceScrollToBottom();
   }, [forceScrollToBottom, visibleWindowKey]);
 
+  // Intentionally checks staged prepends after every commit: staging happens in sibling hooks after
+  // this hook computes its window, so the window key can remain unchanged while the DOM grows above
+  // the viewport. The expensive scroll-state refresh stays gated in the next effect.
+  useLayoutEffect(() => {
+    const pendingStagedPrepend = stagedPrependScrollSnapshotRef.current;
+    const container = messagesContainerRef.current;
+    let restoredStagedPrepend = false;
+    if (pendingStagedPrepend && pendingStagedPrepend.sessionId === activeSessionId && container) {
+      stagedPrependScrollSnapshotRef.current = null;
+      const scrollHeightDelta = container.scrollHeight - pendingStagedPrepend.beforeScrollHeight;
+      if (scrollHeightDelta !== 0) {
+        container.scrollTop = pendingStagedPrepend.beforeScrollTop + scrollHeightDelta;
+        restoredStagedPrepend = true;
+      }
+    } else if (pendingStagedPrepend) {
+      stagedPrependScrollSnapshotRef.current = null;
+    }
+
+    if (restoredStagedPrepend) {
+      refreshScrollState();
+    }
+  });
+
   useLayoutEffect(() => {
     void visibleWindowKey;
+
     refreshScrollState();
   }, [refreshScrollState, visibleWindowKey]);
 
@@ -189,6 +239,7 @@ export function useAgentChatWindow({
     windowStart,
     isNearBottom,
     isNearTop: isNearTop && turnStart === 0,
+    preserveScrollBeforeStagedPrepend,
     scrollToBottom: () => {
       resetLatestTurnsAndPinBottom();
     },

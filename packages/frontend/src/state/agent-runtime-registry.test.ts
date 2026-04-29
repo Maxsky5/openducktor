@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
+import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { createAgentRuntimeRegistry, DEFAULT_RUNTIME_KIND } from "./agent-runtime-registry";
 
 describe("agent-runtime-registry", () => {
@@ -39,5 +40,69 @@ describe("agent-runtime-registry", () => {
     await expect(engine.startSession(missingRuntimeInput)).rejects.toThrow(
       "Runtime kind is required to select an agent runtime adapter.",
     );
+  });
+
+  test("keeps runtime engine methods bound when passed as callbacks", async () => {
+    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
+    const originalListLiveAgentSessionSnapshots =
+      OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
+    const listAvailableModels = mock(async () => ({
+      models: [],
+      defaultModelsByProvider: {},
+    }));
+    const loadSessionTodos = mock(async () => []);
+    const listLiveAgentSessionSnapshots = mock(async () => []);
+
+    try {
+      OpencodeSdkAdapter.prototype.listAvailableModels = listAvailableModels;
+      OpencodeSdkAdapter.prototype.loadSessionTodos = loadSessionTodos;
+      OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = listLiveAgentSessionSnapshots;
+
+      const engine = createAgentRuntimeRegistry().createAgentEngine();
+      const {
+        listAvailableModels: readModels,
+        loadSessionTodos: readTodos,
+        listLiveAgentSessionSnapshots: readSnapshots,
+      } = engine;
+
+      await readModels({
+        runtimeKind: "opencode",
+        runtimeConnection: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:1",
+          workingDirectory: "/tmp/repo",
+        },
+      });
+
+      await readTodos({
+        runtimeKind: "opencode",
+        runtimeConnection: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:1",
+          workingDirectory: "/tmp/repo",
+        },
+        externalSessionId: "external-1",
+      });
+
+      await readSnapshots({
+        runtimeKind: "opencode",
+        runtimeConnection: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:1",
+          workingDirectory: "/tmp/repo",
+        },
+        directories: ["/tmp/repo"],
+      });
+
+      expect(listAvailableModels).toHaveBeenCalledTimes(1);
+      expect(loadSessionTodos).toHaveBeenCalledTimes(1);
+      expect(listLiveAgentSessionSnapshots).toHaveBeenCalledTimes(1);
+    } finally {
+      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+      OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
+        originalListLiveAgentSessionSnapshots;
+    }
   });
 });

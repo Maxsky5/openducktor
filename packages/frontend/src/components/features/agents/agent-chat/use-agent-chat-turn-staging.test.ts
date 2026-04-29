@@ -1,14 +1,12 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { act } from "react";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentChatWindowTurn } from "./agent-chat-thread-windowing";
 import { useAgentChatTurnStaging } from "./use-agent-chat-turn-staging";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+const reactActGlobal = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT?: boolean;
+};
 
 const buildTurns = (count: number): AgentChatWindowTurn[] =>
   Array.from({ length: count }, (_, index) => ({
@@ -27,8 +25,11 @@ describe("useAgentChatTurnStaging", () => {
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
   const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
   let nextAnimationFrameId = 1;
+  let originalIsReactActEnvironment: boolean | undefined;
 
   beforeEach(() => {
+    originalIsReactActEnvironment = reactActGlobal.IS_REACT_ACT_ENVIRONMENT;
+    reactActGlobal.IS_REACT_ACT_ENVIRONMENT = true;
     animationFrameCallbacks.clear();
     nextAnimationFrameId = 1;
     globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
@@ -43,6 +44,11 @@ describe("useAgentChatTurnStaging", () => {
   });
 
   afterEach(() => {
+    if (typeof originalIsReactActEnvironment === "undefined") {
+      delete reactActGlobal.IS_REACT_ACT_ENVIRONMENT;
+    } else {
+      reactActGlobal.IS_REACT_ACT_ENVIRONMENT = originalIsReactActEnvironment;
+    }
     globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
   });
@@ -174,6 +180,7 @@ describe("useAgentChatTurnStaging", () => {
   });
 
   test("resumes staging when turns grow for the active session", async () => {
+    const onBeforePrepend = mock(() => {});
     const harness = createHookHarness(
       ({ activeSessionId, windowStart, nextTurns }) =>
         useAgentChatTurnStaging({
@@ -181,6 +188,7 @@ describe("useAgentChatTurnStaging", () => {
           windowStart,
           turns: nextTurns,
           disabled: false,
+          onBeforePrepend,
         }),
       {
         activeSessionId: "session-1",
@@ -199,11 +207,10 @@ describe("useAgentChatTurnStaging", () => {
     });
 
     expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual([
-      "turn-2",
-      "turn-3",
       "turn-4",
       "turn-5",
     ]);
+    expect(onBeforePrepend).toHaveBeenCalledTimes(1);
 
     await harness.update({
       activeSessionId: "session-1",

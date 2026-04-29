@@ -524,6 +524,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottom,
     scrollToTop,
     scrollToBottomOnSend,
+    preserveScrollBeforeStagedPrepend,
   } = useAgentChatWindow({
     rows,
     turns: transcriptTurns,
@@ -556,19 +557,20 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     return resolveAgentAccentColor(profileId, sessionAgentColors[profileId]);
   }, [sessionAgentColors, sessionSelectedModel?.profileId]);
   const sessionWorkingDirectory = session?.workingDirectory ?? null;
-  // Attachment-bearing sessions are kept fully materialized because staged turn reveal and
-  // containment can under-measure transcript height during hydration and break bottom pinning.
+  // Attachment-bearing sessions keep containment disabled because intrinsic-size estimates can
+  // under-measure rich attachment rows and break bottom pinning. Row/turn staging still applies so
+  // cached large transcripts do not remount hundreds of rows in one synchronous session switch.
   const stagedTurns = useAgentChatTurnStaging({
     activeSessionId,
     windowStart,
     turns: windowedTurns,
-    disabled: hasAttachmentMessages,
+    onBeforePrepend: preserveScrollBeforeStagedPrepend,
   });
   const stagedTranscript = useAgentChatRowStaging({
     activeSessionId,
     rows: windowedRows,
     turns: stagedTurns,
-    disabled: hasAttachmentMessages,
+    onBeforePrepend: preserveScrollBeforeStagedPrepend,
   });
   const stagedRows = stagedTranscript.rows;
   const stagedWindowTurns = stagedTranscript.turns;

@@ -755,6 +755,83 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("preserves the visible anchor when staged history prepends while scrolled", async () => {
+    const rows = createTurnRows(8);
+    const extraContentHeightPx = { current: 0 };
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: false,
+      },
+      { attachDom: true, extraContentHeightPx },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = 120;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    harness.getLatestResult().preserveScrollBeforeStagedPrepend();
+    extraContentHeightPx.current = 200;
+    await harness.update({
+      rows,
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+      isSessionWorking: false,
+    });
+
+    expect(container.scrollTop).toBe(320);
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("does not delta-preserve staged prepends while following the transcript", async () => {
+    const rows = createTurnRows(8);
+    const extraContentHeightPx = { current: 0 };
+    const harness = await mountHarness(
+      {
+        rows,
+        activeSessionId: "session-1",
+        isSessionViewLoading: false,
+        isSessionWorking: false,
+      },
+      { attachDom: true, extraContentHeightPx },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    container.scrollTop = getMaxScrollTop(container);
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+
+    harness.getLatestResult().preserveScrollBeforeStagedPrepend();
+    extraContentHeightPx.current = 200;
+    await harness.update({
+      rows,
+      activeSessionId: "session-1",
+      isSessionViewLoading: false,
+      isSessionWorking: false,
+    });
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container) - 200);
+
+    await harness.unmount();
+  });
+
   test("keeps the bottom locked while streaming when the user stays pinned", async () => {
     const rows = createTurnRows(4);
     const extraContentHeightPx = { current: 0 };
