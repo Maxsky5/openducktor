@@ -28,9 +28,14 @@ describe("agent-chat-code-fence-healing", () => {
       marker: "~~~",
       char: "~",
       size: 3,
-      closePattern: expect.any(RegExp),
     });
     expect(findUnclosedCodeFence("~~~sh\necho hi\n~~~")).toBeNull();
+  });
+
+  test("matches very long closing fences without dynamic regex construction", () => {
+    const marker = "`".repeat(10_000);
+
+    expect(findUnclosedCodeFence(`${marker}markdown\ncontent\n${marker}`)).toBeNull();
   });
 
   test("rejects backtick fences when the info string contains backticks", () => {

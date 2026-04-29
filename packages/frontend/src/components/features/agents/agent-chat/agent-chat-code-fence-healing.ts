@@ -2,14 +2,9 @@ type OpenCodeFence = {
   marker: string;
   char: "`" | "~";
   size: number;
-  closePattern: RegExp;
 };
 
 const FENCE_START_PATTERN = /^[\t ]{0,3}(`{3,}|~{3,})(.*)$/;
-
-const createFenceClosePattern = (fence: Pick<OpenCodeFence, "char" | "size">): RegExp => {
-  return new RegExp(`^[\\t ]{0,3}${fence.char}{${fence.size},}[\\t ]*$`);
-};
 
 const readFenceStart = (line: string): OpenCodeFence | null => {
   const match = FENCE_START_PATTERN.exec(line);
@@ -31,12 +26,37 @@ const readFenceStart = (line: string): OpenCodeFence | null => {
     marker,
     char,
     size: marker.length,
-    closePattern: createFenceClosePattern({ char, size: marker.length }),
   };
 };
 
 const isFenceClose = (line: string, fence: OpenCodeFence): boolean => {
-  return fence.closePattern.test(line);
+  let cursor = 0;
+
+  while (cursor < line.length && (line[cursor] === " " || line[cursor] === "\t")) {
+    cursor += 1;
+  }
+
+  if (cursor > 3) {
+    return false;
+  }
+
+  let markerSize = 0;
+  while (line[cursor + markerSize] === fence.char) {
+    markerSize += 1;
+  }
+
+  if (markerSize < fence.size) {
+    return false;
+  }
+
+  for (let index = cursor + markerSize; index < line.length; index += 1) {
+    const char = line[index];
+    if (char !== " " && char !== "\t") {
+      return false;
+    }
+  }
+
+  return true;
 };
 
 export const findUnclosedCodeFence = (markdown: string): OpenCodeFence | null => {
