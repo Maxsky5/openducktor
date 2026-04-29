@@ -203,5 +203,5 @@ export function useAgentStudioRuntimeAttachmentRetry({
 export const refreshRuntimeAttachmentSources = async (
   refetchRuntimeLists: Array<() => Promise<unknown>>,
 ): Promise<void> => {
-  await Promise.all(refetchRuntimeLists.map((refetch) => refetch()));
+  await Promise.all(Array.from(new Set(refetchRuntimeLists)).map((refetch) => refetch()));
 };

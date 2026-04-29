@@ -5,11 +5,7 @@ import type {
   RuntimeKind,
   TaskCard,
 } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentRuntimeConnection,
-  LiveAgentSessionSnapshot,
-} from "@openducktor/core";
+import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { errorMessage } from "@/lib/errors";
 import { appQueryClient } from "@/lib/query-client";
@@ -57,13 +53,17 @@ import {
   createHydrationRuntimeResolver,
   type ResolvedHydrationRuntime,
 } from "./hydration-runtime-resolution";
-import {
-  LiveAgentSessionCache,
-  liveAgentSessionLookupKey,
-  RuntimeConnectionPreloadIndex,
-} from "./live-agent-session-cache";
+import { LiveAgentSessionCache, RuntimeConnectionPreloadIndex } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createReattachLiveSession } from "./reattach-live-session";
+import {
+  canUseRuntimeForRouteOnlyHydration,
+  createRouteOnlyHydrationLookupKey,
+  createRouteOnlyHydrationRuntimeConnection,
+  hasExactNonRepoRootRuntime,
+  recordRouteOnlyHydrationPreload,
+  scanRouteOnlyHydrationDirectory,
+} from "./route-only-hydration";
 
 export type UpdateSession = (
   sessionId: string,
@@ -183,51 +183,26 @@ const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
 const EMPTY_PROMPT_OVERRIDES: RepoPromptOverrides = {};
 
-type VerifiedWorktreeRuntimeTarget = {
+type RouteProbedWorktreeRuntimeTarget = {
   workingDirectory: string;
-  externalSessionIds: Set<string>;
 };
 
-const isRepoRootWorkspaceRuntime = (
-  runtime: RuntimeInstanceSummary,
-  normalizedRepoPath: string,
-): boolean =>
-  runtime.role === "workspace" &&
-  normalizeWorkingDirectory(runtime.workingDirectory) === normalizedRepoPath;
-
-const hasExactNonRepoRootWorkspaceRuntime = ({
-  runtimes,
-  workingDirectory,
-  normalizedRepoPath,
-}: {
-  runtimes: RuntimeInstanceSummary[];
-  workingDirectory: string;
-  normalizedRepoPath: string;
-}): boolean => {
-  const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
-  return runtimes.some(
-    (runtime) =>
-      normalizeWorkingDirectory(runtime.workingDirectory) === normalizedWorkingDirectory &&
-      !isRepoRootWorkspaceRuntime(runtime, normalizedRepoPath),
-  );
-};
-
-const getOrCreateVerifiedWorktreeRuntimeTarget = (
-  targetsByWorkingDirectory: Map<string, VerifiedWorktreeRuntimeTarget>,
+const getOrCreateRouteProbedWorktreeRuntimeTarget = (
+  targetsByWorkingDirectory: Map<string, RouteProbedWorktreeRuntimeTarget>,
   workingDirectory: string,
-): VerifiedWorktreeRuntimeTarget => {
+): RouteProbedWorktreeRuntimeTarget => {
   const key = normalizeWorkingDirectory(workingDirectory);
   const existing = targetsByWorkingDirectory.get(key);
   if (existing) {
     return existing;
   }
 
-  const created = { workingDirectory: key, externalSessionIds: new Set<string>() };
+  const created = { workingDirectory: key };
   targetsByWorkingDirectory.set(key, created);
   return created;
 };
 
-const preloadVerifiedRepoRootRuntimeConnectionsForWorktreeSessions = async ({
+const preloadRouteProbedRepoRootRuntimeConnectionsForWorktreeSessions = async ({
   adapter,
   records,
   repoPath,
@@ -247,7 +222,10 @@ const preloadVerifiedRepoRootRuntimeConnectionsForWorktreeSessions = async ({
   }
 
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-  const targetsByRuntimeKind = new Map<RuntimeKind, Map<string, VerifiedWorktreeRuntimeTarget>>();
+  const targetsByRuntimeKind = new Map<
+    RuntimeKind,
+    Map<string, RouteProbedWorktreeRuntimeTarget>
+  >();
   for (const record of records) {
     const externalSessionId = record.externalSessionId ?? record.sessionId;
     const normalizedWorkingDirectory = normalizeWorkingDirectory(record.workingDirectory);
@@ -262,56 +240,66 @@ const preloadVerifiedRepoRootRuntimeConnectionsForWorktreeSessions = async ({
     const runtimeKind = readPersistedRuntimeKind(record);
     const runtimes = runtimesByKind.get(runtimeKind) ?? [];
     if (
-      hasExactNonRepoRootWorkspaceRuntime({
+      hasExactNonRepoRootRuntime({
         runtimes,
         workingDirectory: record.workingDirectory,
-        normalizedRepoPath,
+        repoPath,
       })
     ) {
       continue;
     }
 
     const targetsByWorkingDirectory =
-      targetsByRuntimeKind.get(runtimeKind) ?? new Map<string, VerifiedWorktreeRuntimeTarget>();
-    const target = getOrCreateVerifiedWorktreeRuntimeTarget(
-      targetsByWorkingDirectory,
-      record.workingDirectory,
-    );
-    target.externalSessionIds.add(externalSessionId);
+      targetsByRuntimeKind.get(runtimeKind) ?? new Map<string, RouteProbedWorktreeRuntimeTarget>();
+    getOrCreateRouteProbedWorktreeRuntimeTarget(targetsByWorkingDirectory, record.workingDirectory);
     targetsByRuntimeKind.set(runtimeKind, targetsByWorkingDirectory);
   }
 
   for (const [runtimeKind, targetsByWorkingDirectory] of targetsByRuntimeKind) {
     const repoRootWorkspaceRuntimes = (runtimesByKind.get(runtimeKind) ?? []).filter((runtime) =>
-      isRepoRootWorkspaceRuntime(runtime, normalizedRepoPath),
+      canUseRuntimeForRouteOnlyHydration(runtime, normalizedRepoPath),
     );
     for (const runtime of repoRootWorkspaceRuntimes) {
       for (const target of targetsByWorkingDirectory.values()) {
-        const runtimeConnection: AgentRuntimeConnection = runtimeRouteToConnection(
-          runtime.runtimeRoute,
+        const runtimeConnection = createRouteOnlyHydrationRuntimeConnection(
+          runtime,
           target.workingDirectory,
         );
-        const liveSessions = await adapter.listLiveAgentSessionSnapshots({
+        const lookupKey = createRouteOnlyHydrationLookupKey({
           runtimeKind,
           runtimeConnection,
-          directories: [target.workingDirectory],
+          workingDirectory: target.workingDirectory,
         });
-        const liveSessionsForDirectory = liveSessions.filter(
-          (session) =>
-            normalizeWorkingDirectory(session.workingDirectory) === target.workingDirectory,
-        );
-        const hasMatchingSession = liveSessionsForDirectory.some((session) =>
-          target.externalSessionIds.has(session.externalSessionId),
-        );
-        if (!hasMatchingSession) {
+        const cachedLiveSessionsForDirectory = preloadedLiveAgentSessionsByKey.get(lookupKey);
+        if (cachedLiveSessionsForDirectory) {
+          recordRouteOnlyHydrationPreload({
+            runtimeKind,
+            runtimeConnection,
+            workingDirectory: target.workingDirectory,
+            preloadedRuntimeConnections,
+            preloadedLiveAgentSessionsByKey,
+            liveSessionsForDirectory: cachedLiveSessionsForDirectory,
+          });
           continue;
         }
-
-        preloadedRuntimeConnections.add(runtimeKind, runtimeConnection);
-        preloadedLiveAgentSessionsByKey.set(
-          liveAgentSessionLookupKey(runtimeKind, runtimeConnection, target.workingDirectory),
-          liveSessionsForDirectory,
-        );
+        const result = await scanRouteOnlyHydrationDirectory({
+          scanner: { listLiveAgentSessionSnapshots: adapter.listLiveAgentSessionSnapshots },
+          runtimeKind,
+          runtime,
+          repoPath,
+          workingDirectory: target.workingDirectory,
+        });
+        if (!result) {
+          continue;
+        }
+        recordRouteOnlyHydrationPreload({
+          runtimeKind,
+          runtimeConnection: result.runtimeConnection,
+          workingDirectory: target.workingDirectory,
+          preloadedRuntimeConnections,
+          preloadedLiveAgentSessionsByKey,
+          liveSessionsForDirectory: result.liveSessionsForDirectory,
+        });
       }
     }
   }
@@ -675,7 +663,7 @@ export const createRuntimeResolutionPlannerStage = async ({
   const preloadedLiveAgentSessionsByKey =
     options?.preloadedLiveAgentSessionsByKey ?? new Map<string, LiveAgentSessionSnapshot[]>();
 
-  await preloadVerifiedRepoRootRuntimeConnectionsForWorktreeSessions({
+  await preloadRouteProbedRepoRootRuntimeConnectionsForWorktreeSessions({
     adapter,
     records: recordsNeedingRuntimeResolution,
     repoPath: intent.repoPath,

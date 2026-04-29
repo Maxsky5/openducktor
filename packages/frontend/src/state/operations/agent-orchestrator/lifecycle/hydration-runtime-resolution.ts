@@ -256,7 +256,6 @@ export const createHydrationRuntimeResolver = ({
       if (snapshotMatch.runtimeConnection) {
         return { ok: true, runtimeConnection: snapshotMatch.runtimeConnection };
       }
-      return { ok: true, runtimeConnection: null };
     }
 
     if (candidatesByTransportKey.size > 1) {

@@ -1971,6 +1971,202 @@ describe("load-sessions-stages", () => {
     expect(snapshotLoads).toBe(0);
   });
 
+  test("runtime planner route-hydrates inactive worktree sessions through a verified repo-root HTTP runtime", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const snapshotRequests: Array<{ directories?: string[] }> = [];
+
+    const planner = await createRuntimeResolutionPlannerStage({
+      intent: createIntent({
+        mode: "recover_runtime_attachment",
+        requestedSessionId: "session-1",
+        shouldReconcileLiveSessions: true,
+        historyPolicy: "none",
+      }),
+      options: {
+        preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+          ["opencode", [createRuntime("/tmp/repo")]],
+        ]),
+        allowRuntimeEnsure: false,
+      },
+      adapter: {
+        hasSession: () => false,
+        loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+        resumeSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+        listLiveAgentSessionSnapshots: async (input) => {
+          snapshotRequests.push(input.directories ? { directories: input.directories } : {});
+          return [];
+        },
+      },
+      sessionsRef: createStateHarness({}).sessionsRef,
+      recordsToHydrate: [createRecord({ workingDirectory })],
+      historyHydrationSessionIds: new Set(),
+    });
+
+    const resolution = await planner.resolveHydrationRuntime(createRecord({ workingDirectory }));
+
+    expect(snapshotRequests).toEqual([{ directories: [workingDirectory] }]);
+    expect(resolution).toEqual({
+      ok: true,
+      runtimeKind: "opencode",
+      runtimeId: null,
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+      runtimeConnection: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4444",
+        workingDirectory,
+      },
+    });
+  });
+
+  test("runtime planner records cached route-only snapshots without re-scanning", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const runtimeConnection = {
+      type: "local_http" as const,
+      endpoint: "http://127.0.0.1:4444",
+      workingDirectory,
+    };
+    const preloadedLiveAgentSessionsByKey = new Map([
+      [liveAgentSessionLookupKey("opencode", runtimeConnection, workingDirectory), []],
+    ]);
+    const preloadedRuntimeConnections = new RuntimeConnectionPreloadIndex();
+    const snapshotRequests: Array<{ directories?: string[] }> = [];
+
+    const planner = await createRuntimeResolutionPlannerStage({
+      intent: createIntent({
+        mode: "recover_runtime_attachment",
+        requestedSessionId: "session-1",
+        shouldReconcileLiveSessions: true,
+        historyPolicy: "none",
+      }),
+      options: {
+        preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+          ["opencode", [createRuntime("/tmp/repo")]],
+        ]),
+        preloadedRuntimeConnections,
+        preloadedLiveAgentSessionsByKey,
+        allowRuntimeEnsure: false,
+      },
+      adapter: {
+        hasSession: () => false,
+        loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+        resumeSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+        listLiveAgentSessionSnapshots: async (input) => {
+          snapshotRequests.push(input.directories ? { directories: input.directories } : {});
+          return [];
+        },
+      },
+      sessionsRef: createStateHarness({}).sessionsRef,
+      recordsToHydrate: [createRecord({ workingDirectory })],
+      historyHydrationSessionIds: new Set(),
+    });
+
+    const resolution = await planner.resolveHydrationRuntime(createRecord({ workingDirectory }));
+
+    expect(snapshotRequests).toEqual([]);
+    expect(preloadedRuntimeConnections.findCandidates("opencode", workingDirectory)).toEqual([
+      runtimeConnection,
+    ]);
+    expect(resolution).toEqual({
+      ok: true,
+      runtimeKind: "opencode",
+      runtimeId: null,
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+      runtimeConnection,
+    });
+  });
+
+  test("runtime planner does not route-hydrate inactive worktree sessions through repo-root stdio runtimes", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const snapshotRequests: Array<{ directories?: string[] }> = [];
+
+    const planner = await createRuntimeResolutionPlannerStage({
+      intent: createIntent({
+        mode: "recover_runtime_attachment",
+        requestedSessionId: "session-1",
+        shouldReconcileLiveSessions: true,
+        historyPolicy: "none",
+      }),
+      options: {
+        preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+          ["opencode", [createStdioRuntime("runtime-stdio-root", "/tmp/repo")]],
+        ]),
+        allowRuntimeEnsure: false,
+      },
+      adapter: {
+        hasSession: () => false,
+        loadSessionHistory: async () => [],
+        attachSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+        resumeSession: async (input) => ({
+          sessionId: input.sessionId,
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          scenario: input.scenario,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+        listLiveAgentSessionSnapshots: async (input) => {
+          snapshotRequests.push(input.directories ? { directories: input.directories } : {});
+          return [];
+        },
+      },
+      sessionsRef: createStateHarness({}).sessionsRef,
+      recordsToHydrate: [createRecord({ workingDirectory })],
+      historyHydrationSessionIds: new Set(),
+    });
+
+    const resolution = await planner.resolveHydrationRuntime(createRecord({ workingDirectory }));
+
+    expect(snapshotRequests).toEqual([]);
+    expect(resolution).toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: "No live runtime found for working directory /tmp/repo/worktree.",
+    });
+  });
+
   test("runtime planner reads preloaded live snapshots without a scan adapter", async () => {
     const workingDirectory = "/tmp/repo/worktree";
     const runtimeConnection = {

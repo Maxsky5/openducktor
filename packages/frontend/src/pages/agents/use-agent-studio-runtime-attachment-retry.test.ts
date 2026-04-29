@@ -161,4 +161,12 @@ describe("selectRuntimeAttachmentCandidates", () => {
 
     expect(refetchRuntimeList).toHaveBeenCalledTimes(1);
   });
+
+  test("deduplicates shared runtime list refetchers", async () => {
+    const refetchRuntimeList = mock(async () => []);
+
+    await refreshRuntimeAttachmentSources([refetchRuntimeList, refetchRuntimeList]);
+
+    expect(refetchRuntimeList).toHaveBeenCalledTimes(1);
+  });
 });
