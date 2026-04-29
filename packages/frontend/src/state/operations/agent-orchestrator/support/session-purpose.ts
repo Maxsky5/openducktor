@@ -13,7 +13,7 @@ export const resolveAgentSessionPurpose = (
   return purpose ?? DEFAULT_AGENT_SESSION_PURPOSE;
 };
 
-export const resolveAgentSessionPurposeForLoad = (input: {
+export const resolveAgentSessionPurposeForLoad = (_input: {
   requestedSessionId?: string | null;
   sessionId: string;
   shouldHydrateRequestedSession: boolean;

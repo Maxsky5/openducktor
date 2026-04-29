@@ -42,10 +42,7 @@ const SHARED_COMPONENTS: Components = {
 const COMPACT_COMPONENTS: Components = {
   ...SHARED_COMPONENTS,
   pre: ({ node: _node, className, ...props }) => (
-    <pre
-      {...props}
-      className={cn("overflow-x-auto bg-transparent p-0", className)}
-    />
+    <pre {...props} className={cn("overflow-x-auto bg-transparent p-0", className)} />
   ),
 };
 
