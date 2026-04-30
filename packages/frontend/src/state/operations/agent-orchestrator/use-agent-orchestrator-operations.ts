@@ -788,14 +788,13 @@ export function useAgentOrchestratorOperations({
   const repoSessionHydrationService = useMemo(
     () =>
       createRepoSessionHydrationService({
-        agentEngine,
         sessionHydration,
         liveAgentSessionStore,
         onRetryRequested: () => {
           setSessionRetryTick((current) => current + 1);
         },
       }),
-    [agentEngine, liveAgentSessionStore, sessionHydration],
+    [liveAgentSessionStore, sessionHydration],
   );
 
   const isCurrentActiveRepo = useCallback(

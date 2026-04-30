@@ -83,15 +83,6 @@ export const requireSessionRuntimeKindForPersistence = (
   ) as NonNullable<AgentSessionState["runtimeKind"]>;
 };
 
-export const requireSessionRuntimeKind = (
-  session: Pick<AgentSessionState, "externalSessionId" | "runtimeKind" | "selectedModel">,
-): NonNullable<AgentSessionState["runtimeKind"]> => {
-  return requireRuntimeKindMetadata(
-    session.runtimeKind ?? session.selectedModel?.runtimeKind,
-    missingSessionRuntimeKindMessage(session.externalSessionId),
-  ) as NonNullable<AgentSessionState["runtimeKind"]>;
-};
-
 export const requireSelectedModelRuntimeKindForStart = (
   role: AgentSessionState["role"],
   selectedModel: Pick<NonNullable<AgentSessionState["selectedModel"]>, "runtimeKind">,

@@ -49,14 +49,6 @@ export const createHydrationRuntimeResolver = ({
         reason: `No live repo runtime found for repo ${repoPath} and runtime ${runtimeKind}.`,
       };
     }
-    if (normalizeWorkingDirectory(runtime.repoPath) !== normalizedRepoPath) {
-      return {
-        ok: false,
-        runtimeKind,
-        reason: `Resolved runtime belongs to repo ${runtime.repoPath}, not requested repo ${repoPath}.`,
-      };
-    }
-
     return {
       ok: true,
       runtimeKind,

@@ -61,25 +61,13 @@ impl TaskRuntimeRouteIndex {
         Ok(Self { routes_by_kind })
     }
 
-    fn route_for_session(
-        &self,
-        service: &AppService,
-        session: &AgentSessionDocument,
-    ) -> Result<Option<(AgentRuntimeKind, RuntimeRoute)>> {
-        let runtime_kind = parse_runtime_kind_from_session(service, session)?;
-        let Some(runtime_route) = self.routes_by_kind.get(&runtime_kind) else {
-            return Ok(None);
-        };
-
-        Ok(Some((runtime_kind, runtime_route.clone())))
-    }
-
     pub(super) fn probe_target_resolution_for_session(
         &self,
         service: &AppService,
         session: &AgentSessionDocument,
     ) -> Result<Option<RuntimeSessionStatusProbeTargetResolution>> {
-        let Some((runtime_kind, runtime_route)) = self.route_for_session(service, session)? else {
+        let runtime_kind = parse_runtime_kind_from_session(service, session)?;
+        let Some(runtime_route) = self.routes_by_kind.get(&runtime_kind) else {
             return Ok(None);
         };
 
@@ -87,7 +75,7 @@ impl TaskRuntimeRouteIndex {
             service
                 .runtime_registry
                 .runtime(&runtime_kind)?
-                .session_status_probe_target(&runtime_route, session.working_directory.as_str())?,
+                .session_status_probe_target(runtime_route, session.working_directory.as_str())?,
         ))
     }
 }
@@ -287,11 +275,13 @@ mod tests {
 
         let runtime_route_index =
             TaskRuntimeRouteIndex::collect(&service, repo_path_string.as_str())?;
-        let (runtime_kind, runtime_route) = runtime_route_index
-            .route_for_session(&service, &sessions[0])?
-            .expect("live runtime route should resolve");
-        assert_eq!(runtime_kind, AgentRuntimeKind::opencode());
-        assert_eq!(runtime_route, builtin_opencode_runtime_route(port));
+        let probe_target_resolution = runtime_route_index
+            .probe_target_resolution_for_session(&service, &sessions[0])?
+            .expect("live runtime probe target should resolve");
+        assert!(matches!(
+            probe_target_resolution,
+            RuntimeSessionStatusProbeTargetResolution::Target(_)
+        ));
 
         let evidence = TaskActiveWorkEvidence {
             active_session_roles: vec!["build".to_string()],

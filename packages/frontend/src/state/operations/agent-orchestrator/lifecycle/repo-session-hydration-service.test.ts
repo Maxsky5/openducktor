@@ -1,14 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  type AgentSessionRecord,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeInstanceSummary,
-  type RuntimeKind,
-  type TaskCard,
-} from "@openducktor/contracts";
-import type { QueryClient } from "@tanstack/react-query";
-import { createQueryClient } from "@/lib/query-client";
-import { runtimeQueryKeys } from "@/state/queries/runtime";
+import { describe, expect, test } from "bun:test";
+import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createRepoSessionHydrationService } from "./repo-session-hydration-service";
 
@@ -81,29 +72,6 @@ const taskWithSessionAt = (
   return task;
 };
 
-const createRuntimeInstance = ({
-  runtimeId = "runtime-1",
-  workingDirectory = worktreePath,
-  runtimeRoute = {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:4555",
-  } as RuntimeInstanceSummary["runtimeRoute"],
-}: {
-  runtimeId?: string;
-  workingDirectory?: string;
-  runtimeRoute?: RuntimeInstanceSummary["runtimeRoute"];
-} = {}): RuntimeInstanceSummary => ({
-  kind: "opencode",
-  runtimeId,
-  repoPath,
-  taskId: null,
-  role: "workspace",
-  workingDirectory,
-  runtimeRoute,
-  startedAt: "2026-02-22T08:00:00.000Z",
-  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-});
-
 const withSuppressedExpectedConsoleErrors = async ({
   expectedCount,
   isExpected,
@@ -132,49 +100,14 @@ const withSuppressedExpectedConsoleErrors = async ({
   }
 };
 
-type RuntimeEnsure = (
-  nextRepoPath: string,
-  nextRuntimeKind: RuntimeKind,
-) => Promise<RuntimeInstanceSummary>;
-
 describe("repo-session-hydration-service", () => {
-  let queryClient: QueryClient;
-  let runtimeEnsure: RuntimeEnsure;
-
-  const setRuntimeList = (runtimes: RuntimeInstanceSummary[]) => {
-    queryClient.setQueryData(runtimeQueryKeys.list("opencode", repoPath), runtimes);
-  };
-
-  const createTestRepoSessionHydrationService = (
-    options: Omit<
-      Parameters<typeof createRepoSessionHydrationService>[0],
-      "queryClient" | "runtimeEnsure"
-    >,
-  ) =>
-    createRepoSessionHydrationService({
-      ...options,
-      queryClient,
-      runtimeEnsure,
-    });
-
-  beforeEach(() => {
-    queryClient = createQueryClient();
-    setRuntimeList([]);
-    runtimeEnsure = async () => {
-      throw new Error("runtimeEnsure should not be called in this test");
-    };
-  });
-
   test("does not start bootstrap twice while the first bootstrap is still in flight", async () => {
     const deferred = createDeferred<void>();
     let bootstrapCalls = 0;
     let retryRequests = 0;
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
-    const service = createTestRepoSessionHydrationService({
-      agentEngine: {
-        listLiveAgentSessionSnapshots: async () => [],
-      },
+    const service = createRepoSessionHydrationService({
       sessionHydration: {
         bootstrapTaskSessions: async () => {
           bootstrapCalls += 1;
@@ -211,18 +144,11 @@ describe("repo-session-hydration-service", () => {
   });
 
   test("reconcile delegates repo-scoped persisted records without pre-scanning runtimes", async () => {
-    let liveSnapshotCalls = 0;
-    let runtimeEnsureCalls = 0;
     const reconcileCalls: Array<{
       taskId: string;
       persistedRecords: AgentSessionRecord[];
     }> = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
-
-    runtimeEnsure = async () => {
-      runtimeEnsureCalls += 1;
-      return createRuntimeInstance();
-    };
 
     const mixedTask = taskWithSessionAt("task-mixed", "external-repo", repoPath);
     const firstSession = mixedTask.agentSessions?.[0];
@@ -241,13 +167,7 @@ describe("repo-session-hydration-service", () => {
     const emptyTask = taskWithSessionAt("task-empty", "external-empty", repoPath);
     emptyTask.agentSessions = [];
 
-    const service = createTestRepoSessionHydrationService({
-      agentEngine: {
-        listLiveAgentSessionSnapshots: async () => {
-          liveSnapshotCalls += 1;
-          return [];
-        },
-      },
+    const service = createRepoSessionHydrationService({
       sessionHydration: {
         bootstrapTaskSessions: async () => {},
         reconcileLiveTaskSessions: async (input) => {
@@ -270,8 +190,6 @@ describe("repo-session-hydration-service", () => {
       isCurrentRepo: () => true,
     });
 
-    expect(liveSnapshotCalls).toBe(0);
-    expect(runtimeEnsureCalls).toBe(0);
     expect(reconcileCalls).toEqual([
       {
         taskId: "task-mixed",
@@ -298,10 +216,7 @@ describe("repo-session-hydration-service", () => {
     const liveAgentSessionStore = new LiveAgentSessionStore();
     const retryTriggered = createDeferred<void>();
 
-    const service = createTestRepoSessionHydrationService({
-      agentEngine: {
-        listLiveAgentSessionSnapshots: async () => [],
-      },
+    const service = createRepoSessionHydrationService({
       sessionHydration: {
         bootstrapTaskSessions: async () => {},
         reconcileLiveTaskSessions: async ({ taskId }) => {
@@ -340,9 +255,5 @@ describe("repo-session-hydration-service", () => {
     expect(retryRequests).toBe(1);
     expect(retryResult).toBe("retried");
     service.dispose();
-  });
-
-  afterEach(() => {
-    queryClient.clear();
   });
 });

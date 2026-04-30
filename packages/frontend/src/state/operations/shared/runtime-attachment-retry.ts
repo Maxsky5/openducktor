@@ -1,4 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
+import { useEffect, useRef } from "react";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 
 export type RuntimeAttachmentSource = {
@@ -85,3 +86,120 @@ export const refreshRuntimeAttachmentSources = async (
 ): Promise<void> => {
   await Promise.all(Array.from(new Set(refetchRuntimeLists)).map((refetch) => refetch()));
 };
+
+export type RuntimeAttachmentRetryEnsureInput<RepoReadinessState> = {
+  taskId: string;
+  externalSessionId: string;
+  repoReadinessState: RepoReadinessState;
+  recoveryDedupKey?: string | null;
+};
+
+export function useRuntimeAttachmentRetry<
+  RepoReadinessState,
+  ExtraEnsureInput extends object = Record<string, never>,
+>({
+  activeTaskId,
+  activeExternalSessionId,
+  shouldWaitForSessionRuntime,
+  activeRuntimeAttachmentKey,
+  runtimeAttachmentCandidates,
+  ensureSessionReadyForView,
+  refreshRuntimeAttachmentSources,
+  repoReadinessState,
+  buildEnsureInputExtras,
+}: {
+  activeTaskId: string;
+  activeExternalSessionId: string | null;
+  shouldWaitForSessionRuntime: boolean;
+  activeRuntimeAttachmentKey: string | null;
+  runtimeAttachmentCandidates: RuntimeAttachmentCandidate[];
+  ensureSessionReadyForView: (
+    input: RuntimeAttachmentRetryEnsureInput<RepoReadinessState> & ExtraEnsureInput,
+  ) => Promise<boolean>;
+  refreshRuntimeAttachmentSources: () => Promise<void>;
+  repoReadinessState: RepoReadinessState;
+  buildEnsureInputExtras?: () => ExtraEnsureInput;
+}): void {
+  const lastAttachmentAttemptRef = useRef<{
+    externalSessionId: string;
+    attachmentKey: string;
+    candidates: RuntimeAttachmentCandidate[];
+  } | null>(null);
+  const attachmentAttemptCounterRef = useRef(0);
+
+  useEffect(() => {
+    if (!activeExternalSessionId) {
+      attachmentAttemptCounterRef.current = 0;
+      lastAttachmentAttemptRef.current = null;
+      return;
+    }
+
+    if (lastAttachmentAttemptRef.current?.externalSessionId !== activeExternalSessionId) {
+      attachmentAttemptCounterRef.current = 0;
+      lastAttachmentAttemptRef.current = null;
+    }
+
+    if (!shouldWaitForSessionRuntime || !activeRuntimeAttachmentKey) {
+      return;
+    }
+
+    const lastAttachmentAttempt = lastAttachmentAttemptRef.current;
+    if (
+      lastAttachmentAttempt?.attachmentKey === activeRuntimeAttachmentKey &&
+      haveSameRuntimeAttachmentCandidates(
+        lastAttachmentAttempt.candidates,
+        runtimeAttachmentCandidates,
+      )
+    ) {
+      return;
+    }
+
+    attachmentAttemptCounterRef.current += 1;
+    const recoveryDedupKey = `${activeRuntimeAttachmentKey}::attempt:${attachmentAttemptCounterRef.current}`;
+
+    lastAttachmentAttemptRef.current = {
+      externalSessionId: activeExternalSessionId,
+      attachmentKey: activeRuntimeAttachmentKey,
+      candidates: cloneRuntimeAttachmentCandidates(runtimeAttachmentCandidates),
+    };
+
+    void ensureSessionReadyForView({
+      taskId: activeTaskId,
+      externalSessionId: activeExternalSessionId,
+      repoReadinessState,
+      recoveryDedupKey,
+      ...(buildEnsureInputExtras?.() ?? ({} as ExtraEnsureInput)),
+    }).catch(() => {
+      // The operation layer surfaces actionable errors.
+    });
+  }, [
+    activeRuntimeAttachmentKey,
+    activeExternalSessionId,
+    activeTaskId,
+    buildEnsureInputExtras,
+    ensureSessionReadyForView,
+    repoReadinessState,
+    runtimeAttachmentCandidates,
+    shouldWaitForSessionRuntime,
+  ]);
+
+  useEffect(() => {
+    if (!activeExternalSessionId || !shouldWaitForSessionRuntime) {
+      return;
+    }
+
+    void refreshRuntimeAttachmentSources().catch(() => {
+      // The refresh path is best-effort; attachment attempts surface actionable failures.
+    });
+
+    const intervalId = window.setInterval(() => {
+      void refreshRuntimeAttachmentSources().catch(() => {
+        // The refresh path is best-effort; attachment attempts surface actionable failures.
+      });
+    }, 2_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeExternalSessionId, refreshRuntimeAttachmentSources, shouldWaitForSessionRuntime]);
+}

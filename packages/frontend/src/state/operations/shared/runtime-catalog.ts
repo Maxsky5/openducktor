@@ -160,23 +160,6 @@ const buildFrontendObservationTimeoutHealthCheck = async (
 export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies) => {
   const runtimeHealthTimeoutMs = deps.runtimeHealthTimeoutMs ?? RUNTIME_HEALTH_TIMEOUT_MS;
 
-  const fetchCatalog = async (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ): Promise<AgentModelCatalog> => {
-    const existingRuntime = selectCatalogRuntime(
-      await deps.listRuntimesForRepo(runtimeKind, repoPath),
-      repoPath,
-      runtimeKind,
-    );
-    if (!existingRuntime) {
-      throw new Error(
-        `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'.`,
-      );
-    }
-    return deps.listAvailableModels(toRuntimeInput(repoPath, runtimeKind));
-  };
-
   const resolveCatalogInput = async (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -197,7 +180,9 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
   const loadRepoRuntimeCatalog = async (
     repoPath: string,
     runtimeKind: RuntimeKind,
-  ): Promise<AgentModelCatalog> => fetchCatalog(repoPath, runtimeKind);
+  ): Promise<AgentModelCatalog> => {
+    return deps.listAvailableModels(await resolveCatalogInput(repoPath, runtimeKind));
+  };
 
   const loadRepoRuntimeSlashCommands = async (
     repoPath: string,

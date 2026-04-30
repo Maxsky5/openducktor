@@ -1,7 +1,4 @@
-import type { AgentSessionRecord, RuntimeKind, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
-import type { QueryClient } from "@tanstack/react-query";
-import type { host } from "../../shared/host";
+import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
 
@@ -16,18 +13,12 @@ export const createRepoSessionHydrationService = ({
   liveAgentSessionStore,
   onRetryRequested,
 }: {
-  agentEngine: Pick<AgentEnginePort, "listLiveAgentSessionSnapshots">;
   sessionHydration: Pick<
     SessionHydrationOperations,
     "bootstrapTaskSessions" | "reconcileLiveTaskSessions"
   >;
   liveAgentSessionStore: LiveAgentSessionStore;
   onRetryRequested: () => void;
-  queryClient?: QueryClient;
-  runtimeEnsure?: (
-    nextRepoPath: string,
-    nextRuntimeKind: RuntimeKind,
-  ) => ReturnType<typeof host.runtimeEnsure>;
 }) => {
   const bootstrappedTasksByRepo: Record<string, Set<string>> = {};
   const inFlightReconcileTasksByRepo: Record<string, Set<string>> = {};
