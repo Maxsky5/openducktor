@@ -6,10 +6,11 @@ import {
   someSessionMessage,
 } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import { TEST_EXTERNAL_SESSION_IDS } from "./shared-test-fixtures";
 
 export const createSessionMessageOwner = (
   messages: AgentSessionState["messages"],
-  externalSessionId = "session-1",
+  externalSessionId = TEST_EXTERNAL_SESSION_IDS.default,
 ): SessionMessageOwner => ({
   externalSessionId,
   messages,

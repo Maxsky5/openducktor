@@ -4,6 +4,7 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { withCapturedConsole } from "@/test-utils/console-capture";
 import {
   sessionMessageAt,
   sessionMessagesToArray,
@@ -50,21 +51,6 @@ const continuationTarget = (
   workingDirectory,
   source,
 });
-
-const withCapturedConsoleError = async (
-  run: (calls: unknown[][]) => Promise<void>,
-): Promise<void> => {
-  const originalError = console.error;
-  const calls: unknown[][] = [];
-  console.error = (...args: unknown[]) => {
-    calls.push(args);
-  };
-  try {
-    await run(calls);
-  } finally {
-    console.error = originalError;
-  }
-};
 
 const setPersistedSessionListFixture = (
   repoPath: string,
@@ -561,17 +547,22 @@ describe("agent-orchestrator/handlers/start-session", () => {
       sendAgentMessage: async () => {},
     });
 
-    await expect(
-      start({
-        taskId: "task-1",
-        role: "planner",
-        scenario: "planner_initial",
-        startMode: "fresh",
-        selectedModel: PLANNER_SELECTION,
-      }),
-    ).rejects.toThrow(
-      'Failed to persist started session "external-session-persist-fail": persist failed. The started session was stopped and removed locally.',
-    );
+    await withCapturedConsole("error", async (calls) => {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "planner",
+          scenario: "planner_initial",
+          startMode: "fresh",
+          selectedModel: PLANNER_SELECTION,
+        }),
+      ).rejects.toThrow(
+        'Failed to persist started session "external-session-persist-fail": persist failed. The started session was stopped and removed locally.',
+      );
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.[0]).toBe("[agent-orchestrator]");
+      expect(calls[0]?.[1]).toBe("start-session-persist-initial-session");
+    });
 
     expect(stoppedSessionIds).toEqual(["external-session-persist-fail"]);
     expect(attachedSessionIds).toEqual([]);
@@ -3150,7 +3141,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      await withCapturedConsoleError(async (calls) => {
+      await withCapturedConsole("error", async (calls) => {
         await expect(
           start({
             taskId: "task-1",

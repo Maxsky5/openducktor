@@ -1,13 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  createDeferred,
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createDeferred, TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
 
-enableReactActEnvironment();
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 type HookArgs = Parameters<typeof useAgentSessionPermissionActions>[0];
 
@@ -21,7 +20,7 @@ const createPermissionRequest = (requestId: string): AgentPermissionRequest => (
 });
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeExternalSessionId: "session-1",
+  activeExternalSessionId: TEST_EXTERNAL_SESSION_IDS.default,
   pendingPermissions: [createPermissionRequest("req-1")],
   agentStudioReady: true,
   replyAgentPermission: async () => {},
@@ -66,7 +65,11 @@ describe("useAgentSessionPermissionActions", () => {
       });
 
       await harness.waitFor((state) => state.isSubmittingPermissionByRequestId["req-1"] === true);
-      expect(replyAgentPermission).toHaveBeenCalledWith("session-1", "req-1", "once");
+      expect(replyAgentPermission).toHaveBeenCalledWith(
+        TEST_EXTERNAL_SESSION_IDS.default,
+        "req-1",
+        "once",
+      );
 
       await harness.run(async () => {
         deferredReply.resolve(undefined);
@@ -93,7 +96,11 @@ describe("useAgentSessionPermissionActions", () => {
         await state.onReplyPermission("req-1", "reject");
       });
 
-      expect(replyAgentPermission).toHaveBeenCalledWith("session-1", "req-1", "reject");
+      expect(replyAgentPermission).toHaveBeenCalledWith(
+        TEST_EXTERNAL_SESSION_IDS.default,
+        "req-1",
+        "reject",
+      );
       expect(harness.getLatest().permissionReplyErrorByRequestId["req-1"]).toBe(
         "permission denied",
       );
@@ -172,7 +179,7 @@ describe("useAgentSessionPermissionActions", () => {
 
       await harness.update({
         ...baseArgs,
-        activeExternalSessionId: "session-2",
+        activeExternalSessionId: TEST_EXTERNAL_SESSION_IDS.secondary,
       });
 
       await harness.waitFor(

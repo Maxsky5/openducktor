@@ -3,6 +3,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { withCapturedConsole } from "@/test-utils/console-capture";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
@@ -157,12 +158,20 @@ describe("AgentChatMessageCard assistant copy", () => {
       );
 
       try {
-        fireEvent.click(rendered.getByTestId("copy-assistant-message-content"));
+        await withCapturedConsole("error", async (consoleCalls) => {
+          fireEvent.click(rendered.getByTestId("copy-assistant-message-content"));
 
-        await waitFor(() => {
-          expect(toastErrorMock).toHaveBeenCalledWith(
-            "Permission denied: clipboard access not allowed",
+          await waitFor(() => {
+            expect(toastErrorMock).toHaveBeenCalledWith(
+              "Permission denied: clipboard access not allowed",
+            );
+          });
+
+          expect(consoleCalls).toHaveLength(1);
+          expect(consoleCalls[0]?.[0]).toBe(
+            "[AgentChatMessageCardContent] Clipboard write failed:",
           );
+          expect(consoleCalls[0]?.[1]).toBe(error);
         });
       } finally {
         rendered.unmount();

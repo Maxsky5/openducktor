@@ -75,8 +75,14 @@ const BASE_TASK_CARD_FIXTURE: TaskCard = {
   createdAt: "2026-02-22T08:00:00.000Z",
 };
 
+export const TEST_EXTERNAL_SESSION_IDS = {
+  default: "external-1",
+  secondary: "external-2",
+  chatDefault: "ext-1",
+} as const;
+
 const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
-  externalSessionId: "external-1",
+  externalSessionId: TEST_EXTERNAL_SESSION_IDS.default,
   taskId: "task-1",
   repoPath: "/repo",
   role: "spec",

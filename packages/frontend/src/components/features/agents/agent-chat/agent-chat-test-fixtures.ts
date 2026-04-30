@@ -7,6 +7,7 @@ import type {
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
+import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type {
   AgentChatMessage,
@@ -90,7 +91,7 @@ const baseMessage: AgentChatMessage = {
 };
 
 const baseSession: AgentSessionState = {
-  externalSessionId: "ext-1",
+  externalSessionId: TEST_EXTERNAL_SESSION_IDS.chatDefault,
   taskId: "task-1",
   repoPath: "/repo",
   role: "spec",

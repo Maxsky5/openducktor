@@ -542,7 +542,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       const permissions = latestSurfaceModelArgs?.permissions as {
         onReply: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
       };
-      await permissions.onReply("permission-1", "once");
+      await harness.run(async () => {
+        await permissions.onReply("permission-1", "once");
+      });
 
       expect(replyRuntimeSessionPermission).toHaveBeenCalledWith({
         runtimeKind: "opencode",
