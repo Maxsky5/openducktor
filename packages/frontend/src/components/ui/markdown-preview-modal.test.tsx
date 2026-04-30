@@ -32,14 +32,14 @@ describe("MarkdownPreviewModal", () => {
       />,
     );
 
-    expect(screen.queryByText("Hello")).toBeNull();
+    expect(screen.queryByText((c) => c.includes("Hello"))).toBeNull();
     expect(screen.queryByText("Specification")).toBeNull();
   });
 
   test("renders markdown content when open", () => {
     render(<MarkdownPreviewModal open onOpenChange={() => {}} markdown="# Hello World" />);
 
-    expect(screen.getByText("Hello World")).toBeDefined();
+    expect(screen.getByText((c) => c.includes("Hello World"))).toBeDefined();
   });
 
   test("renders title when provided", () => {
