@@ -4,17 +4,14 @@
     "clean-ddd-hexagonal": {
       "source": "ccheney/robust-skills",
       "sourceType": "github",
+      "skillPath": "skills/clean-ddd-hexagonal/SKILL.md",
       "computedHash": "b9a54e257685086d0034bd8277964452b7208e2f18bf68d158996936ce667b6a"
     },
     "shadcn": {
       "source": "shadcn/ui",
       "sourceType": "github",
-      "computedHash": "91c02eb706f046fb9d6a061efbb96496e4be751b5b14c283cf82baaa50f3a985"
-    },
-    "vitest": {
-      "source": "antfu/skills",
-      "sourceType": "github",
-      "computedHash": "669c7275f7e1379b06b2bcfa593603aead4c983b951c7e8edbc09640aa38d0a1"
+      "skillPath": "skills/shadcn/SKILL.md",
+      "computedHash": "80a6226e78f6d1fe464214ae0ef449d49d8ffaa3e7704f011e9b418c678ad4d1"
     }
   }
 }
