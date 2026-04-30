@@ -1,11 +1,11 @@
 use anyhow::Result;
-use host_domain::{GitCurrentBranch, TaskStatus};
+use host_domain::{GitCurrentBranch, QaWorkflowVerdict, TaskStatus};
 use host_infra_system::{AppConfigStore, HookSet, RepoConfig};
 use std::fs;
 
 use crate::app_service::test_support::{
-    build_service_with_store, init_git_repo, lock_env, make_task, unique_temp_path,
-    workspace_update_repo_config_by_repo_path,
+    build_service_with_git_state, build_service_with_store, init_git_repo, lock_env, make_task,
+    unique_temp_path, workspace_update_repo_config_by_repo_path,
 };
 
 fn main_branch() -> GitCurrentBranch {
@@ -275,6 +275,10 @@ fn build_completed_from_blocked_blocks_task_when_post_complete_hook_fails() -> R
     assert!(message.contains("cleanup failed"));
 
     let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state
+        .updated_patches
+        .iter()
+        .any(|(_, patch)| patch.status == Some(TaskStatus::Blocked)));
     assert!(task_state.updated_patches.iter().all(|(_, patch)| {
         patch.status != Some(TaskStatus::HumanReview) && patch.status != Some(TaskStatus::AiReview)
     }));
@@ -331,4 +335,157 @@ fn build_completed_blocks_task_when_post_complete_hooks_have_no_worktree() -> Re
 
     let _ = fs::remove_dir_all(root);
     Ok(())
+}
+
+// --- Integration tests for blocked→review routing and review no-ops ---
+
+#[test]
+fn build_completed_from_blocked_routes_to_ai_review_when_enabled_without_approved_qa()
+-> Result<()> {
+    let root = unique_temp_path("build-completed-blocked-to-ai");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let mut task = make_task("task-1", "task", TaskStatus::Blocked);
+    task.document_summary.qa_report.has = false;
+    task.document_summary.qa_report.verdict = QaWorkflowVerdict::NotReviewed;
+    let (service, task_state, _git_state) =
+        build_service_with_store(vec![task], vec![], main_branch(), config_store);
+    service.workspace_add(repo_path.as_str())?;
+
+    let task = service.build_completed(repo_path.as_str(), "task-1", Some("done"))?;
+    assert_eq!(task.status, TaskStatus::AiReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state
+        .updated_patches
+        .iter()
+        .any(|(_, patch)| patch.status == Some(TaskStatus::AiReview)));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn build_completed_from_blocked_routes_to_human_review_when_ai_is_disabled() -> Result<()> {
+    let root = unique_temp_path("build-completed-blocked-to-human");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let mut task = make_task("task-1", "task", TaskStatus::Blocked);
+    task.ai_review_enabled = false;
+    let (service, task_state, _git_state) =
+        build_service_with_store(vec![task], vec![], main_branch(), config_store);
+    service.workspace_add(repo_path.as_str())?;
+
+    let task = service.build_completed(repo_path.as_str(), "task-1", None)?;
+    assert_eq!(task.status, TaskStatus::HumanReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state
+        .updated_patches
+        .iter()
+        .any(|(_, patch)| patch.status == Some(TaskStatus::HumanReview)));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn build_completed_from_blocked_routes_to_human_review_when_last_qa_was_approved() -> Result<()> {
+    let root = unique_temp_path("build-completed-blocked-to-human-approved-qa");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let mut task = make_task("task-1", "task", TaskStatus::Blocked);
+    task.ai_review_enabled = true;
+    task.document_summary.qa_report.has = true;
+    task.document_summary.qa_report.verdict = QaWorkflowVerdict::Approved;
+    let (service, task_state, _git_state) =
+        build_service_with_store(vec![task], vec![], main_branch(), config_store);
+    service.workspace_add(repo_path.as_str())?;
+
+    let task = service.build_completed(repo_path.as_str(), "task-1", None)?;
+    assert_eq!(task.status, TaskStatus::HumanReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state
+        .updated_patches
+        .iter()
+        .any(|(_, patch)| patch.status == Some(TaskStatus::HumanReview)));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn build_completed_from_ai_review_is_no_op() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-build-ai-review-no-op";
+    let mut task = make_task("task-1", "task", TaskStatus::AiReview);
+    task.ai_review_enabled = true;
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        vec![],
+        main_branch(),
+    );
+
+    let task = service.build_completed(repo_path, "task-1", None)?;
+    assert_eq!(task.status, TaskStatus::AiReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state.updated_patches.is_empty());
+    Ok(())
+}
+
+#[test]
+fn build_completed_from_human_review_is_no_op() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-build-human-review-no-op";
+    let mut task = make_task("task-1", "task", TaskStatus::HumanReview);
+    task.ai_review_enabled = false;
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        vec![],
+        main_branch(),
+    );
+
+    let task = service.build_completed(repo_path, "task-1", None)?;
+    assert_eq!(task.status, TaskStatus::HumanReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state.updated_patches.is_empty());
+    Ok(())
+}
+
+#[test]
+fn build_completed_rejects_disallowed_statuses_with_clear_error() {
+    let disallowed: &[(TaskStatus, &str)] = &[
+        (TaskStatus::Open, "open"),
+        (TaskStatus::SpecReady, "spec_ready"),
+        (TaskStatus::ReadyForDev, "ready_for_dev"),
+        (TaskStatus::Deferred, "deferred"),
+        (TaskStatus::Closed, "closed"),
+    ];
+    for (status, label) in disallowed {
+        let repo_path = format!("/tmp/odt-repo-build-reject-{label}");
+        let task = make_task("task-1", "task", status.clone());
+        let (service, _task_state, _git_state) = build_service_with_git_state(
+            vec![task],
+            vec![],
+            main_branch(),
+        );
+
+        let error = service
+            .build_completed(repo_path.as_str(), "task-1", None)
+            .expect_err(&format!("build_completed should reject {label}"));
+        let msg = error.to_string();
+        assert!(
+            msg.contains(
+                "build_completed is only allowed from in_progress, blocked, ai_review, or human_review"
+            ),
+            "unexpected error for status {label}: {msg}"
+        );
+    }
 }

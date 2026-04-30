@@ -1534,6 +1534,39 @@ fn build_completed_from_human_review_is_no_op() -> Result<()> {
 }
 
 #[test]
+fn build_completed_rejects_disallowed_statuses_with_clear_error() {
+    let disallowed: &[(TaskStatus, &str)] = &[
+        (TaskStatus::Open, "open"),
+        (TaskStatus::SpecReady, "spec_ready"),
+        (TaskStatus::ReadyForDev, "ready_for_dev"),
+        (TaskStatus::Deferred, "deferred"),
+        (TaskStatus::Closed, "closed"),
+    ];
+    for (status, label) in disallowed {
+        let repo_path = format!("/tmp/odt-repo-build-reject-{label}");
+        let task = make_task("task-1", "task", status.clone());
+        let (service, _task_state, _git_state) = build_service_with_git_state(
+            vec![task],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+
+        let error = service
+            .build_completed(repo_path.as_str(), "task-1", None)
+            .expect_err(&format!("build_completed should reject {label}"));
+        let msg = error.to_string();
+        assert!(
+            msg.contains("build_completed is only allowed from in_progress, blocked, ai_review, or human_review"),
+            "unexpected error for status {label}: {msg}"
+        );
+    }
+}
+
+#[test]
 fn task_defer_rejects_subtasks() {
     let repo_path = "/tmp/odt-repo-defer-subtask";
     let mut subtask = make_task("task-1", "task", TaskStatus::Open);

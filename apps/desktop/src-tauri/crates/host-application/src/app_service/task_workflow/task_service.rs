@@ -255,12 +255,33 @@ impl AppService {
                     "Worktree cleanup scripts require a builder worktree for task {}. Start Builder first.",
                     context.task.id
                 );
-                self.task_transition(
-                    context.repo.repo_path.as_str(),
-                    context.task.id.as_str(),
-                    TaskStatus::Blocked,
-                    Some(message.as_str()),
-                )?;
+                if context.task.status == TaskStatus::Blocked {
+                    // Already blocked: force-record the failure without changing status.
+                    self.task_store.update_task(
+                        context.repo_dir(),
+                        context.task.id.as_str(),
+                        UpdateTaskPatch {
+                            status: Some(TaskStatus::Blocked),
+                            title: None,
+                            description: None,
+                            notes: None,
+                            priority: None,
+                            issue_type: None,
+                            ai_review_enabled: None,
+                            labels: None,
+                            assignee: None,
+                            parent_id: None,
+                            target_branch: None,
+                        },
+                    )?;
+                } else {
+                    self.task_transition(
+                        context.repo.repo_path.as_str(),
+                        context.task.id.as_str(),
+                        TaskStatus::Blocked,
+                        Some(message.as_str()),
+                    )?;
+                }
                 return Err(anyhow!(message));
             }
         };
@@ -272,12 +293,33 @@ impl AppService {
                 "Worktree cleanup script command failed: {}\n{}",
                 failure.hook, failure.stderr
             );
-            self.task_transition(
-                context.repo.repo_path.as_str(),
-                context.task.id.as_str(),
-                TaskStatus::Blocked,
-                Some(message.as_str()),
-            )?;
+            if context.task.status == TaskStatus::Blocked {
+                // Already blocked: force-record the failure without changing status.
+                self.task_store.update_task(
+                    context.repo_dir(),
+                    context.task.id.as_str(),
+                    UpdateTaskPatch {
+                        status: Some(TaskStatus::Blocked),
+                        title: None,
+                        description: None,
+                        notes: None,
+                        priority: None,
+                        issue_type: None,
+                        ai_review_enabled: None,
+                        labels: None,
+                        assignee: None,
+                        parent_id: None,
+                        target_branch: None,
+                    },
+                )?;
+            } else {
+                self.task_transition(
+                    context.repo.repo_path.as_str(),
+                    context.task.id.as_str(),
+                    TaskStatus::Blocked,
+                    Some(message.as_str()),
+                )?;
+            }
             return Err(anyhow!(message));
         }
 
