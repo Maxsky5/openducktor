@@ -18,6 +18,7 @@ import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { findFirstChangedSessionMessageIndex } from "@/state/operations/agent-orchestrator/support/messages";
+import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import {
   sessionFileSearchQueryOptions,
   sessionSlashCommandsQueryOptions,
@@ -29,7 +30,6 @@ import {
 } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
-import { resolveAttachedSessionRuntimeQueryState } from "./agent-studio-session-runtime";
 import {
   coerceVisibleSelectionToCatalog,
   emptyDraftSelections,

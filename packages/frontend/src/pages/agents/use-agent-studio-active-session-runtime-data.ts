@@ -5,6 +5,7 @@ import {
   type AgentSessionViewLifecyclePhase,
   deriveAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import {
   SESSION_MODEL_CATALOG_STALE_TIME_MS,
   SESSION_TODOS_STALE_TIME_MS,
@@ -12,7 +13,6 @@ import {
   sessionTodosQueryOptions,
 } from "@/state/queries/agent-session-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { resolveAttachedSessionRuntimeQueryState } from "./agent-studio-session-runtime";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 
 type UseAgentStudioActiveSessionRuntimeDataArgs = {
