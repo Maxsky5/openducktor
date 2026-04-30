@@ -64,6 +64,7 @@ export function TaskDetailsCollapsibleCard({
           <CollapsibleTrigger asChild>
             <button
               type="button"
+              aria-label={isExpanded ? "Collapse section" : "Expand section"}
               className="rounded-sm p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <ChevronDown

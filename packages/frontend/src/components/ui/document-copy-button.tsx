@@ -36,7 +36,7 @@ export function DocumentCopyButton({
       ariaLabel="Copy document content"
       dataTestId={dataTestId}
       onClick={handleCopy}
-      {...(className ? { className } : {})}
+      {...(className && { className })}
     />
   );
 }
