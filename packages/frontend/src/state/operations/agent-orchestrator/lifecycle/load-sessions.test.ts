@@ -3398,7 +3398,7 @@ describe("agent-orchestrator-load-sessions", () => {
     }
   });
 
-  test("route-hydrates qa worktree sessions through a probed shared HTTP workspace runtime", async () => {
+  test("hydrates qa worktree sessions through the shared repo runtime", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     let observedRuntimeEndpoint: string | null = null;
@@ -3710,7 +3710,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["external-1"]?.historyHydrationState).toBe("failed");
   });
 
-  test("route-hydrates build worktree sessions through a probed shared HTTP workspace runtime", async () => {
+  test("hydrates build worktree sessions through the shared repo runtime", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     const ensuredRuntimeKinds: string[] = [];

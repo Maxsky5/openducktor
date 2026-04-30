@@ -153,10 +153,11 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(session ? getSessionMessageCount(session) : null).toBe(0);
   });
 
-  test("dedupes in-flight model catalog loads for the same repo-scoped runtime", async () => {
+  test("dedupes in-flight model catalog loads for the same repo-scoped runtime across worktrees", async () => {
     const deferredCatalog = createDeferred<AgentModelCatalog>();
     const harness = createStateHarness(createSession());
     let catalogLoads = 0;
+    const otherWorkingDirectory = "/tmp/repo/other-worktree";
     const loadSessionModelCatalog = createLoadSessionModelCatalog({
       adapter: {
         listAvailableModels: async () => {
@@ -173,7 +174,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       "external-1",
       repoPath,
       "opencode",
-      workingDirectory,
+      otherWorkingDirectory,
     );
 
     deferredCatalog.resolve(catalogFixture);

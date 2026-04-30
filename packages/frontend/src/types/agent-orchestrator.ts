@@ -16,9 +16,6 @@ import type {
   AgentUserMessageState,
   LiveAgentSessionSnapshot,
 } from "@openducktor/core";
-import type { RuntimeWorktreePreloadIndex } from "@/state/operations/agent-orchestrator/lifecycle/live-agent-session-cache";
-
-export type { RuntimeWorktreePreloadIndex };
 
 export type AgentChatMessageMeta =
   | {
@@ -220,7 +217,5 @@ export type AgentSessionLoadOptions = {
   allowLiveSessionResume?: boolean;
   persistedRecords?: AgentSessionRecord[];
   preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-  preloadedRuntimeWorktrees?: RuntimeWorktreePreloadIndex;
   preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
-  allowRuntimeEnsure?: boolean;
 };

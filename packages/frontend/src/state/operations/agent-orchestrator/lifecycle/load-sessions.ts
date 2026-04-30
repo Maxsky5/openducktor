@@ -195,10 +195,8 @@ export const createLoadAgentSessions = ({
         intent,
         ...(options ? { options } : {}),
         adapter,
-        sessionsRef,
         ...(liveAgentSessionStore ? { liveAgentSessionStore } : {}),
         recordsToHydrate,
-        historyHydrationSessionIds,
       });
       const promptAssembler = createHydrationPromptAssemblerStage({
         taskId,

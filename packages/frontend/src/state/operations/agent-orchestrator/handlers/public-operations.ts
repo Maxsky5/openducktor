@@ -20,7 +20,6 @@ import type { SessionRepoReadinessState } from "@/state/operations/agent-orchest
 import type {
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadOptions,
-  RuntimeWorktreePreloadIndex,
 } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
@@ -68,9 +67,7 @@ type CreatePublicOperationsArgs = {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedRuntimeWorktrees?: RuntimeWorktreePreloadIndex;
     preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
-    allowRuntimeEnsure?: boolean;
   }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (

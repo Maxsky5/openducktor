@@ -12,6 +12,7 @@ import type {
 import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import { appQueryClient } from "@/lib/query-client";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { DiagnosticsQueryTimeoutError } from "@/state/queries/checks";
 import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -61,8 +62,17 @@ const toRuntimeInput = (repoPath: string, runtimeKind: RuntimeKind): ListCatalog
 const selectCatalogRuntime = (
   runtimes: RuntimeInstanceSummary[],
   repoPath: string,
-): RuntimeInstanceSummary | null =>
-  runtimes.find((runtime) => runtime.workingDirectory === repoPath) ?? runtimes[0] ?? null;
+  runtimeKind: RuntimeKind,
+): RuntimeInstanceSummary | null => {
+  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+  return (
+    runtimes.find(
+      (runtime) =>
+        runtime.kind === runtimeKind &&
+        normalizeWorkingDirectory(runtime.repoPath) === normalizedRepoPath,
+    ) ?? null
+  );
+};
 
 const withRuntimeHealthTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
   let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
@@ -154,8 +164,11 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     repoPath: string,
     runtimeKind: RuntimeKind,
   ): Promise<AgentModelCatalog> => {
-    const existingRuntime =
-      selectCatalogRuntime(await deps.listRuntimesForRepo(runtimeKind, repoPath), repoPath) ?? null;
+    const existingRuntime = selectCatalogRuntime(
+      await deps.listRuntimesForRepo(runtimeKind, repoPath),
+      repoPath,
+      runtimeKind,
+    );
     if (!existingRuntime) {
       throw new Error(
         `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'.`,
@@ -168,8 +181,11 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     repoPath: string,
     runtimeKind: RuntimeKind,
   ): Promise<ListCatalogInput> => {
-    const existingRuntime =
-      selectCatalogRuntime(await deps.listRuntimesForRepo(runtimeKind, repoPath), repoPath) ?? null;
+    const existingRuntime = selectCatalogRuntime(
+      await deps.listRuntimesForRepo(runtimeKind, repoPath),
+      repoPath,
+      runtimeKind,
+    );
     if (!existingRuntime) {
       throw new Error(
         `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'.`,

@@ -10,7 +10,7 @@ import type { LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { liveAgentSessionLookupKey, RuntimeWorktreePreloadIndex } from "./live-agent-session-cache";
+import { liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import {
   createHydrationPromptAssemblerStage,
   createRuntimeResolutionPlannerStage,
@@ -1245,7 +1245,6 @@ describe("load-sessions-stages", () => {
         recordsToHydrate: [createRecord()],
         historyHydrationSessionIds: new Set(["external-1"]),
         runtimePlanner: {
-          readCurrentHydratedRuntimeResolution: () => null,
           resolveHydrationRuntime: async () => ({
             ok: false,
             runtimeKind: "opencode",
@@ -1307,7 +1306,6 @@ describe("load-sessions-stages", () => {
         historyHydrationSessionIds: new Set(),
         failOnRuntimeResolutionError: true,
         runtimePlanner: {
-          readCurrentHydratedRuntimeResolution: () => null,
           resolveHydrationRuntime: async () => ({
             ok: false,
             runtimeKind: "opencode",
@@ -1368,7 +1366,6 @@ describe("load-sessions-stages", () => {
         recordsToHydrate: [createRecord()],
         historyHydrationSessionIds: new Set(["external-1"]),
         runtimePlanner: {
-          readCurrentHydratedRuntimeResolution: () => null,
           resolveHydrationRuntime: async () => ({
             ok: true,
             runtimeKind: "opencode",
@@ -1432,7 +1429,6 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
-        readCurrentHydratedRuntimeResolution: () => null,
         resolveHydrationRuntime: async () => {
           stale = true;
           return {
@@ -1487,7 +1483,6 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(),
       runtimePlanner: {
-        readCurrentHydratedRuntimeResolution: () => null,
         resolveHydrationRuntime: async () => {
           stale = true;
           return {
@@ -1546,7 +1541,6 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
-        readCurrentHydratedRuntimeResolution: () => null,
         resolveHydrationRuntime: async () => ({
           ok: true,
           runtimeKind: "opencode",
@@ -1634,7 +1628,6 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
-        readCurrentHydratedRuntimeResolution: () => null,
         resolveHydrationRuntime: async () => ({
           ok: true,
           runtimeKind: "opencode",
@@ -1747,7 +1740,6 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
-        readCurrentHydratedRuntimeResolution: () => null,
         resolveHydrationRuntime: async () => ({
           ok: true,
           runtimeKind: "opencode",
@@ -1862,7 +1854,6 @@ describe("load-sessions-stages", () => {
         recordsToHydrate: [createRecord()],
         historyHydrationSessionIds: new Set(["external-1"]),
         runtimePlanner: {
-          readCurrentHydratedRuntimeResolution: () => null,
           resolveHydrationRuntime: async () => ({
             ok: true,
             runtimeKind: "opencode",
@@ -1906,13 +1897,6 @@ describe("load-sessions-stages", () => {
 
   test("runtime planner ignores stale hydrated runtime state and reuses preloaded live snapshots", async () => {
     const workingDirectory = "/tmp/repo/worktree";
-    const stateHarness = createStateHarness({
-      "external-1": createSession({
-        runtimeKind: "opencode",
-        runtimeId: "runtime-current",
-        workingDirectory,
-      }),
-    });
     const liveSnapshot = {
       externalSessionId: "external-1",
       title: "Builder Session",
@@ -1925,9 +1909,6 @@ describe("load-sessions-stages", () => {
       workingDirectory,
     };
     let snapshotLoads = 0;
-    const preloadedRuntimeWorktrees = new RuntimeWorktreePreloadIndex();
-    preloadedRuntimeWorktrees.add("/tmp/repo", "opencode", workingDirectory);
-
     const planner = await createRuntimeResolutionPlannerStage({
       intent: createIntent({
         mode: "requested_history",
@@ -1940,11 +1921,9 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createRuntime(workingDirectory)]],
         ]),
-        preloadedRuntimeWorktrees,
         preloadedLiveAgentSessionsByKey: new Map([
           [liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory), [liveSnapshot]],
         ]),
-        allowRuntimeEnsure: false,
       },
       adapter: {
         hasSession: () => false,
@@ -1970,16 +1949,8 @@ describe("load-sessions-stages", () => {
           return [];
         },
       },
-      sessionsRef: stateHarness.sessionsRef,
       recordsToHydrate: [createRecord({ role: "planner", workingDirectory })],
-      historyHydrationSessionIds: new Set(["external-1"]),
     });
-
-    const reusedResolution = planner.readCurrentHydratedRuntimeResolution(
-      createRecord({ role: "planner", workingDirectory }),
-    );
-
-    expect(reusedResolution).toBeNull();
 
     const snapshot = await planner.loadLiveAgentSessionSnapshot(
       createRecord({ role: "planner", workingDirectory }),
@@ -1995,7 +1966,7 @@ describe("load-sessions-stages", () => {
     expect(snapshotLoads).toBe(0);
   });
 
-  test("runtime planner route-hydrates inactive worktree sessions through a verified repo-root HTTP runtime", async () => {
+  test("runtime planner hydrates inactive worktree sessions through the repo runtime", async () => {
     const workingDirectory = "/tmp/repo/worktree";
     const snapshotRequests: Array<{ directories?: string[] }> = [];
 
@@ -2010,7 +1981,6 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createRuntime("/tmp/repo")]],
         ]),
-        allowRuntimeEnsure: false,
       },
       adapter: {
         hasSession: () => false,
@@ -2036,9 +2006,7 @@ describe("load-sessions-stages", () => {
           return [];
         },
       },
-      sessionsRef: createStateHarness({}).sessionsRef,
       recordsToHydrate: [createRecord({ workingDirectory })],
-      historyHydrationSessionIds: new Set(),
     });
 
     const resolution = await planner.resolveHydrationRuntime(createRecord({ workingDirectory }));
@@ -2052,12 +2020,11 @@ describe("load-sessions-stages", () => {
     });
   });
 
-  test("runtime planner records cached route-only snapshots without re-scanning", async () => {
+  test("runtime planner reuses cached live snapshots without re-scanning", async () => {
     const workingDirectory = "/tmp/repo/worktree";
     const preloadedLiveAgentSessionsByKey = new Map([
       [liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory), []],
     ]);
-    const preloadedRuntimeWorktrees = new RuntimeWorktreePreloadIndex();
     const snapshotRequests: Array<{ directories?: string[] }> = [];
 
     const planner = await createRuntimeResolutionPlannerStage({
@@ -2071,9 +2038,7 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createRuntime("/tmp/repo")]],
         ]),
-        preloadedRuntimeWorktrees,
         preloadedLiveAgentSessionsByKey,
-        allowRuntimeEnsure: false,
       },
       adapter: {
         hasSession: () => false,
@@ -2099,9 +2064,7 @@ describe("load-sessions-stages", () => {
           return [];
         },
       },
-      sessionsRef: createStateHarness({}).sessionsRef,
       recordsToHydrate: [createRecord({ workingDirectory })],
-      historyHydrationSessionIds: new Set(),
     });
 
     const resolution = await planner.resolveHydrationRuntime(createRecord({ workingDirectory }));
@@ -2130,7 +2093,6 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createStdioRuntime("runtime-stdio-root", "/tmp/repo")]],
         ]),
-        allowRuntimeEnsure: false,
       },
       adapter: {
         hasSession: () => false,
@@ -2156,9 +2118,7 @@ describe("load-sessions-stages", () => {
           return [];
         },
       },
-      sessionsRef: createStateHarness({}).sessionsRef,
       recordsToHydrate: [createRecord({ workingDirectory })],
-      historyHydrationSessionIds: new Set(),
     });
 
     const resolution = await planner.resolveHydrationRuntime(createRecord({ workingDirectory }));
@@ -2193,7 +2153,6 @@ describe("load-sessions-stages", () => {
         preloadedLiveAgentSessionsByKey: new Map([
           [liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory), [liveSnapshot]],
         ]),
-        allowRuntimeEnsure: false,
       },
       adapter: {
         hasSession: () => false,
@@ -2215,9 +2174,7 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
       },
-      sessionsRef: createStateHarness({}).sessionsRef,
       recordsToHydrate: [createRecord({ workingDirectory })],
-      historyHydrationSessionIds: new Set(),
     });
 
     const snapshot = await planner.loadLiveAgentSessionSnapshot(
@@ -2235,9 +2192,6 @@ describe("load-sessions-stages", () => {
 
   test("runtime planner uses preloaded snapshots to disambiguate same-directory stdio runtimes", async () => {
     const workingDirectory = "/tmp/repo/worktree";
-    const preloadedRuntimeWorktrees = new RuntimeWorktreePreloadIndex();
-    preloadedRuntimeWorktrees.add("/tmp/repo", "opencode", workingDirectory);
-
     const planner = await createRuntimeResolutionPlannerStage({
       intent: createIntent(),
       options: {
@@ -2250,7 +2204,6 @@ describe("load-sessions-stages", () => {
             ],
           ],
         ]),
-        preloadedRuntimeWorktrees,
         preloadedLiveAgentSessionsByKey: new Map([
           [
             liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory),
@@ -2267,7 +2220,6 @@ describe("load-sessions-stages", () => {
             ],
           ],
         ]),
-        allowRuntimeEnsure: false,
       },
       adapter: {
         hasSession: () => false,
@@ -2289,9 +2241,7 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
       },
-      sessionsRef: createStateHarness({}).sessionsRef,
       recordsToHydrate: [createRecord({ role: "planner", workingDirectory })],
-      historyHydrationSessionIds: new Set(),
     });
 
     const result = await planner.resolveHydrationRuntime(

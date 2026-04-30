@@ -1,10 +1,4 @@
-import type {
-  AgentSessionRecord,
-  RepoPromptOverrides,
-  RuntimeInstanceSummary,
-  RuntimeKind,
-  TaskCard,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord, RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { errorMessage } from "@/lib/errors";
@@ -49,7 +43,7 @@ import {
   createHydrationRuntimeResolver,
   type ResolvedHydrationRuntime,
 } from "./hydration-runtime-resolution";
-import { LiveAgentSessionCache, RuntimeWorktreePreloadIndex } from "./live-agent-session-cache";
+import { LiveAgentSessionCache } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createReattachLiveSession } from "./reattach-live-session";
 
@@ -98,9 +92,6 @@ export type PersistedSessionMergeStageOutput = {
 };
 
 export type HydrationRuntimePlanner = {
-  readCurrentHydratedRuntimeResolution: (
-    record: AgentSessionRecord,
-  ) => Extract<ResolvedHydrationRuntime, { ok: true }> | null;
   resolveHydrationRuntime: (record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>;
   loadLiveAgentSessionSnapshot: (
     record: AgentSessionRecord,
@@ -112,10 +103,8 @@ export type RuntimeResolutionPlannerStageInput = {
   intent: SessionLoadIntent;
   options?: AgentSessionLoadOptions;
   adapter: SessionLifecycleAdapter;
-  sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   liveAgentSessionStore?: LiveAgentSessionStore;
   recordsToHydrate: AgentSessionRecord[];
-  historyHydrationSessionIds: Set<string>;
 };
 
 export type HydrationPromptAssembler = {
@@ -173,18 +162,6 @@ const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
 const EMPTY_PROMPT_OVERRIDES: RepoPromptOverrides = {};
 
-const preloadRouteProbedRepoRootRuntimeWorktreesForWorktreeSessions = async (_input: {
-  adapter: Pick<SessionLifecycleAdapter, "listLiveAgentSessionSnapshots">;
-  records: AgentSessionRecord[];
-  repoPath: string;
-  runtimesByKind: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-  preloadedRuntimeWorktrees: RuntimeWorktreePreloadIndex;
-  preloadedLiveAgentSessionsByKey: Map<string, LiveAgentSessionSnapshot[]>;
-}): Promise<void> => {
-  // Route-only hydration probes were removed as part of the repo-scoped runtime
-  // refactor. Hydration now resolves the repo runtime by (repoPath, runtimeKind)
-  // and passes each session's workingDirectory only as client cwd.
-};
 const normalizeLiveSessionTitle = (title: string | undefined): string | undefined => {
   const trimmed = title?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
@@ -476,16 +453,9 @@ export const createRuntimeResolutionPlannerStage = async ({
   intent,
   options,
   adapter,
-  sessionsRef: _sessionsRef,
   liveAgentSessionStore,
   recordsToHydrate,
-  historyHydrationSessionIds: _historyHydrationSessionIds,
 }: RuntimeResolutionPlannerStageInput): Promise<HydrationRuntimePlanner> => {
-  const readCurrentHydratedRuntimeResolution = (): Extract<
-    ResolvedHydrationRuntime,
-    { ok: true }
-  > | null => null;
-
   const recordsNeedingRuntimeResolution = recordsToHydrate;
 
   const runtimeKindsToInspect = Array.from(
@@ -506,19 +476,8 @@ export const createRuntimeResolutionPlannerStage = async ({
       ),
     );
 
-  const preloadedRuntimeWorktrees =
-    options?.preloadedRuntimeWorktrees ?? new RuntimeWorktreePreloadIndex();
   const preloadedLiveAgentSessionsByKey =
     options?.preloadedLiveAgentSessionsByKey ?? new Map<string, LiveAgentSessionSnapshot[]>();
-
-  await preloadRouteProbedRepoRootRuntimeWorktreesForWorktreeSessions({
-    adapter,
-    records: recordsNeedingRuntimeResolution,
-    repoPath: intent.repoPath,
-    runtimesByKind,
-    preloadedRuntimeWorktrees,
-    preloadedLiveAgentSessionsByKey,
-  });
 
   const resolveHydrationRuntime = createHydrationRuntimeResolver({
     repoPath: intent.repoPath,
@@ -569,7 +528,6 @@ export const createRuntimeResolutionPlannerStage = async ({
   };
 
   return {
-    readCurrentHydratedRuntimeResolution,
     resolveHydrationRuntime,
     loadLiveAgentSessionSnapshot,
   };
@@ -816,9 +774,7 @@ export const hydrateSessionRecordsStage = async ({
     }
 
     const shouldHydrateHistory = historyHydrationSessionIds.has(record.externalSessionId);
-    const runtimeResolution =
-      (shouldHydrateHistory ? runtimePlanner.readCurrentHydratedRuntimeResolution(record) : null) ??
-      (await runtimePlanner.resolveHydrationRuntime(record));
+    const runtimeResolution = await runtimePlanner.resolveHydrationRuntime(record);
     if (isStaleRepoOperation()) {
       return;
     }

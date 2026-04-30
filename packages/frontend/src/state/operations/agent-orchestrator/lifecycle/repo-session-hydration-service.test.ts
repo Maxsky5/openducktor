@@ -216,7 +216,6 @@ describe("repo-session-hydration-service", () => {
     const reconcileCalls: Array<{
       taskId: string;
       persistedRecords: AgentSessionRecord[];
-      allowRuntimeEnsure: boolean;
     }> = [];
     const liveAgentSessionStore = new LiveAgentSessionStore();
 
@@ -256,7 +255,6 @@ describe("repo-session-hydration-service", () => {
             input as {
               taskId: string;
               persistedRecords: AgentSessionRecord[];
-              allowRuntimeEnsure: boolean;
             },
           );
         },
@@ -289,7 +287,6 @@ describe("repo-session-hydration-service", () => {
             workingDirectory: worktreePath,
           },
         ],
-        allowRuntimeEnsure: false,
       },
     ]);
     service.dispose();

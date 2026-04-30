@@ -168,6 +168,53 @@ describe("runtime-catalog", () => {
     });
   });
 
+  test("fails fast when no runtime matches the requested repo path", async () => {
+    const listRuntimesForRepo = mock(async () => [
+      {
+        ...runtimeFixture,
+        repoPath: "/tmp/other-repo",
+        workingDirectory: "/tmp/other-repo",
+      },
+    ]);
+    const listAvailableModels = mock(async () => catalogFixture);
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        listRuntimesForRepo,
+        listAvailableModels,
+      }),
+    );
+
+    await expect(operations.loadRepoRuntimeCatalog("/tmp/repo", "opencode")).rejects.toThrow(
+      "No live repo runtime found for repo '/tmp/repo' and runtime 'opencode'.",
+    );
+    expect(listAvailableModels).not.toHaveBeenCalled();
+  });
+
+  test("fails fast when returned runtimes do not match the requested runtime kind", async () => {
+    const listRuntimesForRepo = mock(async () => [
+      {
+        ...runtimeFixture,
+        kind: "other-runtime" as RuntimeInstanceSummary["kind"],
+        descriptor: {
+          ...runtimeFixture.descriptor,
+          kind: "other-runtime" as RuntimeInstanceSummary["descriptor"]["kind"],
+        },
+      },
+    ]);
+    const listAvailableModels = mock(async () => catalogFixture);
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        listRuntimesForRepo,
+        listAvailableModels,
+      }),
+    );
+
+    await expect(operations.loadRepoRuntimeCatalog("/tmp/repo", "opencode")).rejects.toThrow(
+      "No live repo runtime found for repo '/tmp/repo' and runtime 'opencode'.",
+    );
+    expect(listAvailableModels).not.toHaveBeenCalled();
+  });
+
   test("requires an existing live repo runtime for slash commands", async () => {
     const listRuntimesForRepo = mock(async () => [runtimeFixture]);
     const listAvailableSlashCommands = mock(async () => slashCommandCatalogFixture);

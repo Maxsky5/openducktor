@@ -5,8 +5,6 @@ import {
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
   liveAgentSessionLookupKey,
-  RuntimeWorktreePreloadIndex,
-  runtimeWorkingDirectoryKey,
 } from "./live-agent-session-cache";
 
 const createSnapshot = (externalSessionId: string): LiveAgentSessionSnapshot =>
@@ -15,34 +13,9 @@ const createSnapshot = (externalSessionId: string): LiveAgentSessionSnapshot =>
 describe("live-agent-session-cache", () => {
   test("builds cache keys from repo path, runtime kind, and normalized working directories", () => {
     expect(getLiveAgentSessionCacheKey("/tmp/repo/", "opencode")).toBe("/tmp/repo::opencode");
-    expect(runtimeWorkingDirectoryKey("/tmp/repo/", "opencode", "/tmp/repo/worktree/")).toBe(
-      "/tmp/repo::opencode::/tmp/repo/worktree",
-    );
-    const preloadIndex = new RuntimeWorktreePreloadIndex();
-    preloadIndex.add("/tmp/repo", "opencode", "/tmp/runtime-root/");
-    expect(preloadIndex.hasAny("/tmp/repo", "opencode", "/tmp/runtime-root/")).toBe(true);
-    expect(preloadIndex.hasAny("/tmp/repo", "opencode", "/tmp/other")).toBe(false);
-    expect(preloadIndex.findCandidates("/tmp/repo", "opencode", "/tmp/runtime-root/")).toEqual([
-      {
-        repoPath: "/tmp/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/runtime-root/",
-      },
-    ]);
     expect(liveAgentSessionLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree/")).toBe(
       "/tmp/repo::opencode::/tmp/repo/worktree",
     );
-  });
-
-  test("indexes distinct repo-scoped runtime directories sharing a working directory", () => {
-    const preloadIndex = new RuntimeWorktreePreloadIndex();
-    preloadIndex.add("/tmp/repo-a", "opencode", "/tmp/runtime-root");
-    preloadIndex.add("/tmp/repo-b", "opencode", "/tmp/runtime-root");
-
-    expect(preloadIndex.size).toBe(2);
-    expect(preloadIndex.findCandidates("/tmp/repo-a", "opencode", "/tmp/runtime-root/")).toEqual([
-      { repoPath: "/tmp/repo-a", runtimeKind: "opencode", workingDirectory: "/tmp/runtime-root" },
-    ]);
   });
 
   test("reuses preloaded single-directory snapshots without scanning", async () => {

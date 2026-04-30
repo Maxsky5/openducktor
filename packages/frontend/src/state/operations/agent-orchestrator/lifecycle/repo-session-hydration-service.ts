@@ -162,7 +162,6 @@ export const createRepoSessionHydrationService = ({
             await sessionHydration.reconcileLiveTaskSessions({
               taskId: task.id,
               persistedRecords: getTaskRecords(task),
-              allowRuntimeEnsure: false,
             });
             return task.id;
           }),

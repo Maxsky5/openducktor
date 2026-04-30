@@ -85,8 +85,8 @@ export const createLoadSessionModelCatalog = ({
 
     let catalog: AgentModelCatalog | null = null;
     try {
-      const normalizedWorkingDirectory = validateWorkingDirectory(workingDirectory);
-      const runtimeKey = toSessionLoadKey(repoPath, runtimeKind, normalizedWorkingDirectory);
+      validateWorkingDirectory(workingDirectory);
+      const runtimeKey = toRuntimeLoadKey(repoPath, runtimeKind);
       const cachedCatalog = catalogByRuntimeKey.get(runtimeKey);
       if (cachedCatalog) {
         catalog = cachedCatalog;
