@@ -104,6 +104,7 @@ type AgentStudioModelSelectionState = {
 
 type ActiveSessionSelectionState = {
   externalSessionId: string | null;
+  repoPath: string;
   status: AgentSessionState["status"] | null;
   selectedModel: AgentModelSelection | null;
   modelCatalog: AgentSessionState["modelCatalog"] | null;
@@ -125,6 +126,7 @@ export const resolveActiveSessionSelectionState = (
 
   return {
     externalSessionId,
+    repoPath: activeSession?.repoPath?.trim() ?? activeSessionSummary?.repoPath?.trim() ?? "",
     status: activeSession?.status ?? activeSessionSummary?.status ?? null,
     selectedModel,
     modelCatalog: activeSession?.modelCatalog ?? null,
@@ -202,6 +204,7 @@ export function useAgentStudioModelSelection({
   const activeSessionSelectedModel = activeSessionSelection.selectedModel;
   const activeSessionModelCatalog = activeSessionSelection.modelCatalog;
   const activeSessionRuntimeKind = activeSessionSelection.runtimeKind;
+  const activeSessionRepoPath = activeSessionSelection.repoPath;
   const activeSessionWorkingDirectory = activeSessionSelection.workingDirectory;
   const activeSessionIsLoadingModelCatalog = activeSessionSelection.isLoadingModelCatalog;
   const activeSessionLiveContextUsage = activeSessionSelection.liveContextUsage ?? null;
@@ -233,14 +236,14 @@ export function useAgentStudioModelSelection({
       resolveAttachedSessionRuntimeQueryState(
         hasActiveSession
           ? {
-              repoPath: activeWorkspace?.repoPath ?? "",
+              repoPath: activeSessionRepoPath,
               runtimeKind: activeSessionRuntimeKind,
               workingDirectory: activeSessionWorkingDirectory,
             }
           : null,
       ),
     [
-      activeWorkspace?.repoPath,
+      activeSessionRepoPath,
       activeSessionRuntimeKind,
       activeSessionWorkingDirectory,
       hasActiveSession,

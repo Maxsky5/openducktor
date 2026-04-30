@@ -2091,7 +2091,13 @@ describe("load-sessions-stages", () => {
       }),
       options: {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
-          ["opencode", [createStdioRuntime("runtime-stdio-root", "/tmp/repo")]],
+          [
+            "opencode",
+            [
+              createStdioRuntime("runtime-stdio-root", "/tmp/repo"),
+              createStdioRuntime("runtime-stdio-other", "/tmp/repo"),
+            ],
+          ],
         ]),
       },
       adapter: {

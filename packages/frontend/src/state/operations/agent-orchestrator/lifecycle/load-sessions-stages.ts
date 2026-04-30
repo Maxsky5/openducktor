@@ -274,6 +274,9 @@ const mergePersistedSessionRecord = (
   }
 
   const persisted = fromPersistedSessionRecord(record, taskId, repoPath);
+  const currentWorkingDirectory = current.workingDirectory.trim();
+  const shouldKeepLiveWorkingDirectory =
+    current.runtimeId !== null && currentWorkingDirectory.length > 0;
   return {
     ...current,
     purpose,
@@ -283,7 +286,9 @@ const mergePersistedSessionRecord = (
     role: persisted.role,
     scenario: persisted.scenario,
     startedAt: persisted.startedAt,
-    workingDirectory: persisted.workingDirectory,
+    workingDirectory: shouldKeepLiveWorkingDirectory
+      ? current.workingDirectory
+      : persisted.workingDirectory,
     pendingPermissions: current.pendingPermissions,
     pendingQuestions: current.pendingQuestions,
     selectedModel: mergeModelSelection(current.selectedModel, persisted.selectedModel ?? undefined),
@@ -422,11 +427,26 @@ export const preparePersistedSessionMergeStage = async ({
     };
   }
 
-  const recordsToHydrate =
+  const recordsToHydrateSource =
     intent.requestedSessionId !== null &&
     (intent.shouldHydrateRequestedSession || intent.mode === "recover_runtime_attachment")
       ? persistedRecords.filter((record) => record.externalSessionId === intent.requestedSessionId)
       : persistedRecords;
+  const recordsToHydrate = recordsToHydrateSource.map((record) => {
+    const existingSession = sessionsRef.current[record.externalSessionId];
+    const existingWorkingDirectory = existingSession?.workingDirectory.trim() ?? "";
+    if (
+      existingSession &&
+      existingSession.runtimeId !== null &&
+      existingWorkingDirectory.length > 0
+    ) {
+      return {
+        ...record,
+        workingDirectory: existingSession.workingDirectory,
+      };
+    }
+    return record;
+  });
   const historyHydrationSessionIds = new Set(
     recordsToHydrate
       .filter((record) => {
@@ -818,6 +838,7 @@ export const hydrateSessionRecordsStage = async ({
           record.externalSessionId,
           (current) => ({
             ...current,
+            status: current.status === "running" ? "idle" : current.status,
             runtimeKind,
             runtimeId: null,
             workingDirectory,

@@ -490,6 +490,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       current: {
         "session-1": buildSession({
           status: "error",
+          runtimeId: "runtime-1",
           pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
           pendingQuestions: [
             {
@@ -594,7 +595,7 @@ describe("agent-orchestrator-ensure-ready", () => {
 
     const sessionsRef = {
       current: {
-        "session-1": buildSession({ status: "error" }),
+        "session-1": buildSession({ status: "error", runtimeId: "runtime-1" }),
       },
     };
     const unsubscribersRef = {

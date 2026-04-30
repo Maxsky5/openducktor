@@ -8,6 +8,16 @@ const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500
 
 const getTaskRecords = (task: TaskCard): AgentSessionRecord[] => task.agentSessions ?? [];
 
+const toTaskRecordKey = (taskId: string, records: AgentSessionRecord[]): string => {
+  const recordKeys = records
+    .map(
+      (record) =>
+        `${record.externalSessionId}::${record.runtimeKind}::${record.workingDirectory}::${record.startedAt}`,
+    )
+    .sort();
+  return `${taskId}::${recordKeys.join("|")}`;
+};
+
 export const createRepoSessionHydrationService = ({
   sessionHydration,
   liveAgentSessionStore,
@@ -21,6 +31,7 @@ export const createRepoSessionHydrationService = ({
   onRetryRequested: () => void;
 }) => {
   const bootstrappedTasksByRepo: Record<string, Set<string>> = {};
+  const reconciledRecordKeysByRepo: Record<string, Set<string>> = {};
   const inFlightReconcileTasksByRepo: Record<string, Set<string>> = {};
   const retryAttemptsByKey: Record<string, number> = {};
   const retryTimeoutsByKey: Record<string, ReturnType<typeof setTimeout>> = {};
@@ -74,6 +85,7 @@ export const createRepoSessionHydrationService = ({
     resetRepo(repoPath: string): void {
       liveAgentSessionStore.clearRepo(repoPath);
       getOrCreateRepoSet(bootstrappedTasksByRepo, repoPath).clear();
+      getOrCreateRepoSet(reconciledRecordKeysByRepo, repoPath).clear();
       getOrCreateRepoSet(inFlightReconcileTasksByRepo, repoPath).clear();
     },
 
@@ -101,7 +113,9 @@ export const createRepoSessionHydrationService = ({
       isCurrentRepo: (repoPath: string) => boolean;
     }): Promise<void> {
       const bootstrappedTasks = getOrCreateRepoSet(bootstrappedTasksByRepo, repoPath);
-      const pendingTasks = tasks.filter((task) => !bootstrappedTasks.has(task.id));
+      const pendingTasks = tasks.filter(
+        (task) => !bootstrappedTasks.has(task.id) && getTaskRecords(task).length > 0,
+      );
       for (const task of pendingTasks) {
         bootstrappedTasks.add(task.id);
       }
@@ -141,39 +155,46 @@ export const createRepoSessionHydrationService = ({
       isCurrentRepo: (repoPath: string) => boolean;
     }): Promise<void> {
       const inFlight = getOrCreateRepoSet(inFlightReconcileTasksByRepo, repoPath);
-      const pendingTasks = tasks.filter(
-        (task) => !inFlight.has(task.id) && getTaskRecords(task).length > 0,
-      );
-      for (const task of pendingTasks) {
-        inFlight.add(task.id);
+      const reconciledRecordKeys = getOrCreateRepoSet(reconciledRecordKeysByRepo, repoPath);
+      const pendingTaskEntries = tasks.flatMap((task) => {
+        const records = getTaskRecords(task);
+        const recordKey = toTaskRecordKey(task.id, records);
+        if (records.length === 0 || inFlight.has(task.id) || reconciledRecordKeys.has(recordKey)) {
+          return [];
+        }
+        return [{ task, records, recordKey }];
+      });
+      for (const entry of pendingTaskEntries) {
+        inFlight.add(entry.task.id);
       }
       try {
         const results = await Promise.allSettled(
-          pendingTasks.map(async (task) => {
+          pendingTaskEntries.map(async ({ task, records, recordKey }) => {
             await sessionHydration.reconcileLiveTaskSessions({
               taskId: task.id,
-              persistedRecords: getTaskRecords(task),
+              persistedRecords: records,
             });
-            return task.id;
+            return { taskId: task.id, recordKey };
           }),
         );
         if (isCancelled() || !isCurrentRepo(repoPath)) {
           return;
         }
         for (const [index, result] of results.entries()) {
-          const taskId = pendingTasks[index]?.id;
-          if (!taskId) {
+          const entry = pendingTaskEntries[index];
+          if (!entry) {
             continue;
           }
           if (result.status === "fulfilled") {
-            clearRetry("reconcile", repoPath, taskId);
+            reconciledRecordKeys.add(result.value.recordKey);
+            clearRetry("reconcile", repoPath, result.value.taskId);
             continue;
           }
-          scheduleRetry("reconcile", repoPath, taskId, result.reason);
+          scheduleRetry("reconcile", repoPath, entry.task.id, result.reason);
         }
       } finally {
-        for (const task of pendingTasks) {
-          inFlight.delete(task.id);
+        for (const entry of pendingTaskEntries) {
+          inFlight.delete(entry.task.id);
         }
       }
     },

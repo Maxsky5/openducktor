@@ -5,20 +5,25 @@ import {
 } from "./use-agent-chat-runtime-attachment-retry";
 
 describe("selectRuntimeAttachmentCandidates", () => {
-  test("uses repo and runtime kind as attachment readiness identity", () => {
+  test("uses repo, runtime kind, and working directory as attachment readiness identity", () => {
     const candidates = selectRuntimeAttachmentCandidates({
       repoPath: "/repo",
       session: {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
       },
       runtimeSources: [
         {
           kind: "opencode",
           repoPath: "/repo",
+          workingDirectory: "/repo",
+          runtimeId: "runtime-1",
         },
         {
           kind: "opencode",
           repoPath: "/other-repo",
+          workingDirectory: "/other-repo/worktree",
+          runtimeId: "runtime-other",
         },
       ],
     });
@@ -27,21 +32,51 @@ describe("selectRuntimeAttachmentCandidates", () => {
       {
         runtimeKind: "opencode",
         repoPath: "/repo",
+        workingDirectory: "/repo/worktree",
+        runtimeId: "runtime-1",
       },
     ]);
   });
 
-  test("compares attachment candidates without runtime instance details", () => {
+  test("compares attachment candidates with runtime instance details", () => {
     expect(
       haveSameRuntimeAttachmentCandidates(
-        [{ runtimeKind: "opencode", repoPath: "/repo" }],
-        [{ runtimeKind: "opencode", repoPath: "/repo" }],
+        [
+          {
+            runtimeKind: "opencode",
+            repoPath: "/repo",
+            workingDirectory: "/repo/worktree",
+            runtimeId: "runtime-1",
+          },
+        ],
+        [
+          {
+            runtimeKind: "opencode",
+            repoPath: "/repo",
+            workingDirectory: "/repo/worktree",
+            runtimeId: "runtime-1",
+          },
+        ],
       ),
     ).toBe(true);
     expect(
       haveSameRuntimeAttachmentCandidates(
-        [{ runtimeKind: "opencode", repoPath: "/repo" }],
-        [{ runtimeKind: "test-runtime", repoPath: "/repo" }],
+        [
+          {
+            runtimeKind: "opencode",
+            repoPath: "/repo",
+            workingDirectory: "/repo/worktree",
+            runtimeId: "runtime-1",
+          },
+        ],
+        [
+          {
+            runtimeKind: "opencode",
+            repoPath: "/repo",
+            workingDirectory: "/repo/worktree",
+            runtimeId: "runtime-2",
+          },
+        ],
       ),
     ).toBe(false);
   });
@@ -51,13 +86,31 @@ describe("selectRuntimeAttachmentCandidates", () => {
       repoPath: "/repo",
       session: {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
       },
       runtimeSources: [
-        { kind: "opencode", repoPath: "/repo" },
-        { kind: "opencode", repoPath: "/repo/" },
+        {
+          kind: "opencode",
+          repoPath: "/repo",
+          workingDirectory: "/repo",
+          runtimeId: "runtime-1",
+        },
+        {
+          kind: "opencode",
+          repoPath: "/repo/",
+          workingDirectory: "/repo/",
+          runtimeId: "runtime-1",
+        },
       ],
     });
 
-    expect(candidates).toEqual([{ runtimeKind: "opencode", repoPath: "/repo" }]);
+    expect(candidates).toEqual([
+      {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+        workingDirectory: "/repo/worktree",
+        runtimeId: "runtime-1",
+      },
+    ]);
   });
 });

@@ -210,6 +210,76 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
+  test("does not reconcile unchanged persisted records more than once", async () => {
+    const reconcileCalls: string[] = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const task = taskWithSession("task-1", "external-1");
+
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId }) => {
+          reconcileCalls.push(taskId);
+        },
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(reconcileCalls).toEqual(["task-1"]);
+    service.dispose();
+  });
+
+  test("does not mark empty-session tasks as bootstrapped", async () => {
+    const bootstrapCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const emptyTask = taskWithSession("task-1", "external-1");
+    emptyTask.agentSessions = [];
+    const taskWithLaterSession = taskWithSession("task-1", "external-1");
+
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions: async (taskId, records) => {
+          bootstrapCalls.push({ taskId, records: records ?? [] });
+        },
+        reconcileLiveTaskSessions: async () => {},
+      },
+      liveAgentSessionStore,
+      onRetryRequested: () => {},
+    });
+
+    await service.bootstrapPendingTasks({
+      repoPath,
+      tasks: [emptyTask],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+    await service.bootstrapPendingTasks({
+      repoPath,
+      tasks: [taskWithLaterSession],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(bootstrapCalls).toEqual([
+      { taskId: "task-1", records: taskWithLaterSession.agentSessions ?? [] },
+    ]);
+    service.dispose();
+  });
+
   test("reconcile schedules retries when reconciliation throws", async () => {
     let retryRequests = 0;
     const reconcileCalls: string[] = [];

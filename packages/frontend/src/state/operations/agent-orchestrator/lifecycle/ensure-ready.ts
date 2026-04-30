@@ -177,41 +177,60 @@ export const createEnsureSessionReady = ({
           externalSessionId: session.externalSessionId,
         });
         assertNotStale();
-        const pendingPermissions = liveSnapshot?.pendingPermissions ?? [];
-        const pendingQuestions = liveSnapshot?.pendingQuestions ?? [];
-        const liveSessionTitle = normalizeLiveSessionTitle(liveSnapshot?.title);
-        updateSession(
-          externalSessionId,
-          (current) => ({
-            ...current,
-            status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : current.status,
-            runtimeId: attachedRuntimeId,
-            workingDirectory: attachedWorkingDirectory,
-            ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
-            pendingPermissions,
-            pendingQuestions,
-            runtimeKind: attachedRuntimeKind,
-          }),
-          { persist: false },
-        );
-        if (!allowPendingInput && hasPendingInput({ pendingPermissions, pendingQuestions })) {
-          throw new Error(PENDING_INPUT_NOT_READY_ERROR);
+        if (liveSnapshot) {
+          const pendingPermissions = liveSnapshot.pendingPermissions;
+          const pendingQuestions = liveSnapshot.pendingQuestions;
+          const liveSessionTitle = normalizeLiveSessionTitle(liveSnapshot.title);
+          updateSession(
+            externalSessionId,
+            (current) => ({
+              ...current,
+              status: toLiveSessionState(liveSnapshot.status),
+              runtimeId: attachedRuntimeId,
+              workingDirectory: attachedWorkingDirectory,
+              ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
+              pendingPermissions,
+              pendingQuestions,
+              runtimeKind: attachedRuntimeKind,
+            }),
+            { persist: false },
+          );
+          if (!allowPendingInput && hasPendingInput({ pendingPermissions, pendingQuestions })) {
+            throw new Error(PENDING_INPUT_NOT_READY_ERROR);
+          }
+          return;
         }
-        return;
+        if (attachedRuntimeId === null || !adapter.listLiveAgentSessionSnapshots) {
+          updateSession(
+            externalSessionId,
+            (current) => ({
+              ...current,
+              runtimeId: attachedRuntimeId,
+              workingDirectory: attachedWorkingDirectory,
+              pendingPermissions: [],
+              pendingQuestions: [],
+              runtimeKind: attachedRuntimeKind,
+            }),
+            { persist: false },
+          );
+          return;
+        }
       }
-      const existingUnsubscriber = unsubscribersRef.current.get(externalSessionId);
-      await stopSessionOrThrow({
-        operation: "ensure-ready-stop-attached-error-session",
-        cleanupErrorMessage: `Failed to stop attached error session '${externalSessionId}' before preparing it`,
-        externalSessionId,
-        taskId: session.taskId,
-        role: session.role,
-      });
-      if (existingUnsubscriber) {
-        existingUnsubscriber();
-        unsubscribersRef.current.delete(externalSessionId);
+      if (session.runtimeId !== null) {
+        const existingUnsubscriber = unsubscribersRef.current.get(externalSessionId);
+        await stopSessionOrThrow({
+          operation: "ensure-ready-stop-attached-error-session",
+          cleanupErrorMessage: `Failed to stop attached error session '${externalSessionId}' before preparing it`,
+          externalSessionId,
+          taskId: session.taskId,
+          role: session.role,
+        });
+        if (existingUnsubscriber) {
+          existingUnsubscriber();
+          unsubscribersRef.current.delete(externalSessionId);
+        }
+        assertNotStale();
       }
-      assertNotStale();
     }
 
     const task = taskRef.current.find((entry) => entry.id === session.taskId);

@@ -2473,8 +2473,8 @@ describe("agent-orchestrator-load-sessions", () => {
       ],
     });
 
-    expect(observedSnapshotDirectories).toEqual(["/tmp/repo/stale-worktree"]);
-    expect(state["external-1"]?.workingDirectory).toBe("/tmp/repo/stale-worktree");
+    expect(observedSnapshotDirectories).toEqual(["/tmp/repo/resolved-worktree"]);
+    expect(state["external-1"]?.workingDirectory).toBe("/tmp/repo/resolved-worktree");
   });
 
   test("preserves canonical live messages that arrive during requested-history hydration", async () => {

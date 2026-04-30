@@ -1180,8 +1180,10 @@ describe("use-agent-orchestrator-operations", () => {
 
       const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
       const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
+      const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
       const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
       const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
+      const originalStopSession = OpencodeSdkAdapter.prototype.stopSession;
       const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
       const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
@@ -1224,6 +1226,15 @@ describe("use-agent-orchestrator-operations", () => {
       };
       OpencodeSdkAdapter.prototype.subscribeEvents = (_externalSessionId, _listener) => () => {};
       OpencodeSdkAdapter.prototype.sendUserMessage = async () => {};
+      OpencodeSdkAdapter.prototype.stopSession = async () => {};
+      OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+        runtimeKind: input.runtimeKind,
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: input.role,
+        scenario: input.scenario,
+        status: "idle",
+      });
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
@@ -1270,8 +1281,10 @@ describe("use-agent-orchestrator-operations", () => {
 
         OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
         OpencodeSdkAdapter.prototype.startSession = originalStartSession;
+        OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
         OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
         OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
+        OpencodeSdkAdapter.prototype.stopSession = originalStopSession;
         OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
         OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       }
@@ -2203,6 +2216,7 @@ describe("use-agent-orchestrator-operations", () => {
 
     host.runtimeList = async () => [];
     OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = async () => [];
+    let attachCalls = 0;
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [
       {
         messageId: "history-1",
@@ -2220,22 +2234,27 @@ describe("use-agent-orchestrator-operations", () => {
         ],
       },
     ];
-    OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-      runtimeKind: input.runtimeKind,
-      externalSessionId: input.externalSessionId,
-      startedAt: "2026-02-22T08:00:00.000Z",
-      role: input.role,
-      scenario: input.scenario,
-      status: "running",
-    });
-    OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
-      runtimeKind: input.runtimeKind,
-      externalSessionId: input.externalSessionId,
-      startedAt: "2026-02-22T08:00:00.000Z",
-      role: input.role,
-      scenario: input.scenario,
-      status: "running",
-    });
+    OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
+      return {
+        runtimeKind: input.runtimeKind,
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: input.role,
+        scenario: input.scenario,
+        status: "running",
+      };
+    };
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => {
+      attachCalls += 1;
+      return {
+        runtimeKind: input.runtimeKind,
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: input.role,
+        scenario: input.scenario,
+        status: "running",
+      };
+    };
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
@@ -2297,6 +2316,7 @@ describe("use-agent-orchestrator-operations", () => {
         },
       ];
       await clearAppQueryClient();
+      attachCalls = 0;
 
       await harness.run(async () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
@@ -2307,6 +2327,7 @@ describe("use-agent-orchestrator-operations", () => {
       });
 
       const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("external-1");
+      expect(attachCalls).toBe(1);
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
       expect(recoveredSession?.historyHydrationState).toBe("hydrated");
       expect(

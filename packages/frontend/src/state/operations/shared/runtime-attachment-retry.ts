@@ -5,15 +5,20 @@ import { normalizeWorkingDirectory } from "@/lib/working-directory";
 export type RuntimeAttachmentSource = {
   kind: RuntimeKind;
   repoPath: string;
+  workingDirectory: string;
+  runtimeId: string | null;
 };
 
 export type RuntimeAttachmentCandidate = {
   runtimeKind: RuntimeKind;
   repoPath: string;
+  workingDirectory: string;
+  runtimeId: string | null;
 };
 
 type RuntimeAttachmentSession = {
   runtimeKind?: RuntimeKind | null;
+  workingDirectory?: string | null;
 };
 
 const compareRuntimeAttachmentCandidates = (
@@ -24,7 +29,14 @@ const compareRuntimeAttachmentCandidates = (
     return left.runtimeKind.localeCompare(right.runtimeKind);
   }
 
-  return left.repoPath.localeCompare(right.repoPath);
+  if (left.repoPath !== right.repoPath) {
+    return left.repoPath.localeCompare(right.repoPath);
+  }
+  if (left.workingDirectory !== right.workingDirectory) {
+    return left.workingDirectory.localeCompare(right.workingDirectory);
+  }
+
+  return (left.runtimeId ?? "").localeCompare(right.runtimeId ?? "");
 };
 
 export const cloneRuntimeAttachmentCandidates = (
@@ -44,7 +56,9 @@ export const haveSameRuntimeAttachmentCandidates = (
     return (
       other !== undefined &&
       candidate.runtimeKind === other.runtimeKind &&
-      candidate.repoPath === other.repoPath
+      candidate.repoPath === other.repoPath &&
+      candidate.workingDirectory === other.workingDirectory &&
+      candidate.runtimeId === other.runtimeId
     );
   });
 };
@@ -63,6 +77,12 @@ export const selectRuntimeAttachmentCandidates = ({
   }
 
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+  const normalizedSessionWorkingDirectory = normalizeWorkingDirectory(
+    session.workingDirectory ?? "",
+  );
+  if (!normalizedSessionWorkingDirectory) {
+    return [];
+  }
   const candidatesByKey = new Map<string, RuntimeAttachmentCandidate>();
 
   for (const runtimeSource of runtimeSources) {
@@ -74,8 +94,13 @@ export const selectRuntimeAttachmentCandidates = ({
     const candidate: RuntimeAttachmentCandidate = {
       runtimeKind: runtimeSource.kind,
       repoPath: sourceRepoPath,
+      workingDirectory: normalizedSessionWorkingDirectory,
+      runtimeId: runtimeSource.runtimeId,
     };
-    candidatesByKey.set(`${candidate.runtimeKind}::${candidate.repoPath}`, candidate);
+    candidatesByKey.set(
+      `${candidate.runtimeKind}::${candidate.repoPath}::${candidate.workingDirectory}::${candidate.runtimeId ?? ""}`,
+      candidate,
+    );
   }
 
   return Array.from(candidatesByKey.values()).sort(compareRuntimeAttachmentCandidates);
@@ -139,7 +164,13 @@ export function useRuntimeAttachmentRetry<
       lastAttachmentAttemptRef.current = null;
     }
 
-    if (!shouldWaitForSessionRuntime || !activeRuntimeAttachmentKey) {
+    if (!shouldWaitForSessionRuntime) {
+      attachmentAttemptCounterRef.current = 0;
+      lastAttachmentAttemptRef.current = null;
+      return;
+    }
+
+    if (!activeRuntimeAttachmentKey) {
       return;
     }
 

@@ -106,7 +106,9 @@ describe("createHydrationRuntimeResolver", () => {
   test("returns an error when a runtime exists for a different repo", async () => {
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
-      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+        ["opencode", [createRuntime({ runtimeId: "wrong-repo-runtime", repoPath: "/tmp/other" })]],
+      ]),
     });
 
     const result = await resolveHydrationRuntime(createRecord("opencode", "planner", "/tmp/repo"));

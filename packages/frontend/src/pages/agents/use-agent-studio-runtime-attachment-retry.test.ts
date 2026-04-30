@@ -11,11 +11,14 @@ describe("selectRuntimeAttachmentCandidates", () => {
       repoPath: "/repo",
       session: {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
       },
       runtimeSources: [
         {
           kind: "opencode",
           repoPath: "/repo",
+          workingDirectory: "/repo",
+          runtimeId: "runtime-1",
         },
       ],
     });
@@ -24,6 +27,8 @@ describe("selectRuntimeAttachmentCandidates", () => {
       {
         runtimeKind: "opencode",
         repoPath: "/repo",
+        workingDirectory: "/repo/worktree",
+        runtimeId: "runtime-1",
       },
     ]);
   });
@@ -33,11 +38,14 @@ describe("selectRuntimeAttachmentCandidates", () => {
       repoPath: "/repo",
       session: {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
       },
       runtimeSources: [
         {
           kind: "opencode",
           repoPath: "/repo",
+          workingDirectory: "/repo",
+          runtimeId: "runtime-1",
         },
       ],
     });
@@ -46,19 +54,26 @@ describe("selectRuntimeAttachmentCandidates", () => {
       repoPath: "/repo",
       session: {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
       },
       runtimeSources: [
         {
           kind: "opencode",
           repoPath: "/repo",
+          workingDirectory: "/repo",
+          runtimeId: "runtime-1",
         },
         {
           kind: "opencode",
           repoPath: "/unrelated-repo",
+          workingDirectory: "/unrelated-repo/worktree",
+          runtimeId: "runtime-unrelated",
         },
         {
           kind: "test-runtime",
           repoPath: "/repo",
+          workingDirectory: "/repo",
+          runtimeId: "runtime-test",
         },
       ],
     });
@@ -71,11 +86,14 @@ describe("selectRuntimeAttachmentCandidates", () => {
       repoPath: "/repo",
       session: {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
       },
       runtimeSources: [
         {
           kind: "opencode",
           repoPath: "/repo",
+          workingDirectory: "/repo",
+          runtimeId: "runtime-1",
         },
       ],
     });
@@ -84,11 +102,14 @@ describe("selectRuntimeAttachmentCandidates", () => {
       repoPath: "/repo/",
       session: {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree/",
       },
       runtimeSources: [
         {
           kind: "opencode",
           repoPath: "/repo/",
+          workingDirectory: "/repo/",
+          runtimeId: "runtime-1",
         },
       ],
     });
@@ -101,10 +122,21 @@ describe("selectRuntimeAttachmentCandidates", () => {
       repoPath: "/repo",
       session: {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
       },
       runtimeSources: [
-        { kind: "opencode", repoPath: "/repo" },
-        { kind: "opencode", repoPath: "/repo/" },
+        {
+          kind: "opencode",
+          repoPath: "/repo",
+          workingDirectory: "/repo",
+          runtimeId: "runtime-1",
+        },
+        {
+          kind: "opencode",
+          repoPath: "/repo/",
+          workingDirectory: "/repo/",
+          runtimeId: "runtime-1",
+        },
       ],
     });
 
@@ -112,6 +144,8 @@ describe("selectRuntimeAttachmentCandidates", () => {
       {
         runtimeKind: "opencode",
         repoPath: "/repo",
+        workingDirectory: "/repo/worktree",
+        runtimeId: "runtime-1",
       },
     ]);
   });
@@ -123,12 +157,16 @@ describe("selectRuntimeAttachmentCandidates", () => {
           {
             runtimeKind: "opencode",
             repoPath: "/repo",
+            workingDirectory: "/repo/worktree",
+            runtimeId: "runtime-1",
           },
         ],
         [
           {
             runtimeKind: "opencode",
             repoPath: "/repo",
+            workingDirectory: "/repo/worktree",
+            runtimeId: "runtime-1",
           },
         ],
       ),
@@ -139,12 +177,16 @@ describe("selectRuntimeAttachmentCandidates", () => {
           {
             runtimeKind: "opencode",
             repoPath: "/repo",
+            workingDirectory: "/repo/worktree",
+            runtimeId: "runtime-1",
           },
         ],
         [
           {
             runtimeKind: "opencode",
             repoPath: "/other-repo",
+            workingDirectory: "/repo/worktree",
+            runtimeId: "runtime-1",
           },
         ],
       ),

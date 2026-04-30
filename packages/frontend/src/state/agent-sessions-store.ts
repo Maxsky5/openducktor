@@ -5,6 +5,7 @@ export type AgentSessionsById = Record<string, AgentSessionState>;
 export type AgentSessionSummary = Pick<
   AgentSessionState,
   | "externalSessionId"
+  | "repoPath"
   | "taskId"
   | "role"
   | "scenario"
@@ -57,6 +58,7 @@ const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState):
 
 export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionSummary => ({
   externalSessionId: session.externalSessionId,
+  repoPath: session.repoPath,
   taskId: session.taskId,
   role: session.role,
   scenario: session.scenario,
