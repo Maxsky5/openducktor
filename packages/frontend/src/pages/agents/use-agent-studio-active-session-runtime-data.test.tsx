@@ -34,6 +34,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       session: createAgentSessionFixture({
         externalSessionId: "external-1",
         runtimeKind: "opencode",
+        runtimeId: "runtime-1",
         workingDirectory: "/repo",
         status: "starting",
         modelCatalog: null,
@@ -64,6 +65,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       session: createAgentSessionFixture({
         externalSessionId: "external-1",
         runtimeKind: "opencode",
+        runtimeId: "runtime-1",
         workingDirectory: "/repo",
         modelCatalog: null,
         isLoadingModelCatalog: true,
@@ -98,6 +100,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
     const session = createAgentSessionFixture({
       externalSessionId: "external-1",
       runtimeKind: "opencode",
+      runtimeId: "runtime-1",
       workingDirectory: "/repo",
       modelCatalog: null,
       isLoadingModelCatalog: true,
@@ -148,6 +151,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       session: createAgentSessionFixture({
         externalSessionId: "external-1",
         runtimeKind: "opencode",
+        runtimeId: "runtime-1",
         workingDirectory: "/repo",
         modelCatalog: null,
         isLoadingModelCatalog: false,
@@ -185,6 +189,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       session: createAgentSessionFixture({
         externalSessionId: "external-1",
         runtimeKind: "opencode",
+        runtimeId: "runtime-1",
         workingDirectory: "/repo",
         modelCatalog: null,
         isLoadingModelCatalog: true,

@@ -630,7 +630,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   }, [isSessionWorking, session, transcriptState.lastUserMessageId]);
   const activeStreamingAssistantMessageId = transcriptState.activeStreamingAssistantMessageId;
   const showSessionLoadingOverlay = useAgentChatLoadingOverlay({
-    externalSessionId: activeStreamingAssistantMessageId,
+    externalSessionId: activeExternalSessionId,
     isSessionViewLoading: statusOverlay?.kind === "session_loading",
   });
   const renderedTurns = useMemo(() => {

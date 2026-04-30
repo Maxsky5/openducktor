@@ -119,7 +119,7 @@ describe("deriveAgentStudioTaskHydrationState", () => {
         status: "idle",
         startedAt: "2026-02-22T08:00:00.000Z",
         runtimeKind: "opencode",
-        runtimeId: null,
+        runtimeId: "runtime-1",
         workingDirectory: "/repo-a/worktree",
         messages: [],
         draftAssistantText: "",
