@@ -696,7 +696,7 @@ function RepositoryWorktreeFileCopiesSection({
 }): ReactElement {
   return (
     <div className="grid gap-2">
-      <Label htmlFor="repo-worktree-file-copies">Worktree file copies (one path per line)</Label>
+      <Label htmlFor="repo-worktree-file-copies">Worktree copies (one path per line)</Label>
       <Textarea
         id="repo-worktree-file-copies"
         rows={4}

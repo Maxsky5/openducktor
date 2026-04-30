@@ -610,7 +610,7 @@ impl AppService {
                 create_branch,
             );
             return Err(anyhow!(
-                "Configured worktree file copy failed: {error}{}",
+                "Configured worktree copy failed: {error}{}",
                 cleanup_error
             ));
         }

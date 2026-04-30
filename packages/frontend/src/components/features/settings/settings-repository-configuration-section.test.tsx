@@ -206,6 +206,8 @@ describe("RepositoryConfigurationSection", () => {
     const { rendered, getLatestRepoConfig } = renderStatefulSection(baseRepoConfig);
 
     try {
+      expect(screen.getByLabelText("Worktree copies (one path per line)")).toBeTruthy();
+
       const worktreeFileCopiesTextarea = rendered.container.querySelector(
         "#repo-worktree-file-copies",
       );

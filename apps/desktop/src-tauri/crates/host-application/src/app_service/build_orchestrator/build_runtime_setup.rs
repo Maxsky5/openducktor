@@ -392,7 +392,7 @@ impl AppService {
                 upstream_setup.created_tracking_ref.as_deref(),
             );
             return Err(anyhow!(
-                "Configured worktree file copy failed: {error}{}",
+                "Configured worktree copy failed: {error}{}",
                 cleanup_error
             ));
         }
