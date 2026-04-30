@@ -8,16 +8,12 @@ const RUNTIME_ATTACHMENT_POLLING_INTERVAL_MS = 2_000;
 
 export type RuntimeAttachmentSource = {
   kind: RuntimeKind;
-  runtimeId: string;
-  workingDirectory: string;
-  route: string;
+  repoPath: string;
 };
 
 export type RuntimeAttachmentCandidate = {
   runtimeKind: RuntimeKind;
-  runtimeId: string;
-  workingDirectory: string;
-  route: string;
+  repoPath: string;
 };
 
 const compareRuntimeAttachmentCandidates = (
@@ -27,13 +23,10 @@ const compareRuntimeAttachmentCandidates = (
   if (left.runtimeKind !== right.runtimeKind) {
     return left.runtimeKind.localeCompare(right.runtimeKind);
   }
-  if (left.runtimeId !== right.runtimeId) {
-    return left.runtimeId.localeCompare(right.runtimeId);
+  if (left.repoPath !== right.repoPath) {
+    return left.repoPath.localeCompare(right.repoPath);
   }
-  if (left.workingDirectory !== right.workingDirectory) {
-    return left.workingDirectory.localeCompare(right.workingDirectory);
-  }
-  return left.route.localeCompare(right.route);
+  return 0;
 };
 
 const cloneRuntimeAttachmentCandidates = (
@@ -53,9 +46,7 @@ export const haveSameRuntimeAttachmentCandidates = (
     return (
       other !== undefined &&
       candidate.runtimeKind === other.runtimeKind &&
-      candidate.runtimeId === other.runtimeId &&
-      candidate.workingDirectory === other.workingDirectory &&
-      candidate.route === other.route
+      candidate.repoPath === other.repoPath
     );
   });
 };
@@ -66,30 +57,23 @@ export const selectRuntimeAttachmentCandidates = ({
   runtimeSources,
 }: {
   repoPath: string;
-  session: Pick<AgentSessionState, "runtimeKind" | "workingDirectory"> | null;
+  session: Pick<AgentSessionState, "runtimeKind"> | null;
   runtimeSources: RuntimeAttachmentSource[];
 }): RuntimeAttachmentCandidate[] => {
   if (!session?.runtimeKind) {
     return [];
   }
 
-  const sessionWorkingDirectory = normalizeWorkingDirectory(session.workingDirectory);
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
 
   return runtimeSources
     .filter((runtimeSource) => {
-      const sourceWorkingDirectory = normalizeWorkingDirectory(runtimeSource.workingDirectory);
-      return (
-        runtimeSource.kind === session.runtimeKind &&
-        (sourceWorkingDirectory === sessionWorkingDirectory ||
-          sourceWorkingDirectory === normalizedRepoPath)
-      );
+      const sourceRepoPath = normalizeWorkingDirectory(runtimeSource.repoPath);
+      return runtimeSource.kind === session.runtimeKind && sourceRepoPath === normalizedRepoPath;
     })
     .map((runtimeSource) => ({
       runtimeKind: runtimeSource.kind,
-      runtimeId: runtimeSource.runtimeId,
-      workingDirectory: normalizeWorkingDirectory(runtimeSource.workingDirectory),
-      route: runtimeSource.route,
+      repoPath: normalizeWorkingDirectory(runtimeSource.repoPath),
     }))
     .sort(compareRuntimeAttachmentCandidates);
 };

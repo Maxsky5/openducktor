@@ -123,7 +123,11 @@ mod tests {
         );
         runtimes.insert(
             "runtime-opencode".to_string(),
-            runtime_process(runtime_summary("runtime-opencode", opencode.clone(), repo_path)),
+            runtime_process(runtime_summary(
+                "runtime-opencode",
+                opencode.clone(),
+                repo_path,
+            )),
         );
 
         let found = AppService::find_existing_runtime(

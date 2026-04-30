@@ -243,12 +243,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       runtimeListQueries.flatMap((query) =>
         (query.data ?? []).map((runtime) => ({
           kind: runtime.kind,
-          runtimeId: runtime.runtimeId,
-          workingDirectory: runtime.workingDirectory,
-          route:
-            runtime.runtimeRoute.type === "local_http"
-              ? runtime.runtimeRoute.endpoint
-              : runtime.runtimeRoute.type,
+          repoPath: runtime.repoPath,
         })),
       ),
     [runtimeListQueries],

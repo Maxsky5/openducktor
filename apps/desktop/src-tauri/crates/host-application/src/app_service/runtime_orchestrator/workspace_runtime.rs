@@ -27,8 +27,7 @@ impl AppService {
                 role: Self::WORKSPACE_RUNTIME_ROLE,
                 task_id: None,
             },
-        )
-        )
+        ))
     }
 
     pub(in crate::app_service::runtime_orchestrator) fn ensure_workspace_runtime(
