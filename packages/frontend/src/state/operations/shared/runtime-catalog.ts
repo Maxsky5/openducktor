@@ -16,7 +16,6 @@ import { DiagnosticsQueryTimeoutError } from "@/state/queries/checks";
 import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
-import { ensureRuntimeAndInvalidateReadinessQueries } from "./runtime-readiness-publication";
 
 type ListCatalogInput = {
   repoPath: string;
@@ -40,7 +39,6 @@ type RuntimeCatalogDependencies = {
     runtimeKind: RuntimeKind,
     repoPath: string,
   ) => Promise<RepoRuntimeHealthCheck>;
-  ensureRuntime: (runtimeKind: RuntimeKind, repoPath: string) => Promise<RuntimeInstanceSummary>;
   listRuntimesForRepo: (
     runtimeKind: RuntimeKind,
     repoPath: string,
@@ -158,7 +156,11 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
   ): Promise<AgentModelCatalog> => {
     const existingRuntime =
       selectCatalogRuntime(await deps.listRuntimesForRepo(runtimeKind, repoPath), repoPath) ?? null;
-    existingRuntime ?? (await deps.ensureRuntime(runtimeKind, repoPath));
+    if (!existingRuntime) {
+      throw new Error(
+        `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'.`,
+      );
+    }
     return deps.listAvailableModels(toRuntimeInput(repoPath, runtimeKind));
   };
 
@@ -168,7 +170,11 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
   ): Promise<ListCatalogInput> => {
     const existingRuntime =
       selectCatalogRuntime(await deps.listRuntimesForRepo(runtimeKind, repoPath), repoPath) ?? null;
-    existingRuntime ?? (await deps.ensureRuntime(runtimeKind, repoPath));
+    if (!existingRuntime) {
+      throw new Error(
+        `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'.`,
+      );
+    }
     return toRuntimeInput(repoPath, runtimeKind);
   };
 
@@ -241,13 +247,6 @@ export const createHostRuntimeCatalogOperations = (
     repoRuntimeHealth: (runtimeKind, repoPath) => host.repoRuntimeHealth(repoPath, runtimeKind),
     repoRuntimeHealthStatus: (runtimeKind, repoPath) =>
       host.repoRuntimeHealthStatus(repoPath, runtimeKind),
-    ensureRuntime: (runtimeKind, repoPath) =>
-      ensureRuntimeAndInvalidateReadinessQueries({
-        repoPath,
-        runtimeKind,
-        ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-          host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
-      }),
     listRuntimesForRepo: (runtimeKind, repoPath) =>
       ensureRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
     listAvailableModels: (input) =>

@@ -39,6 +39,20 @@ const OpencodeSdkAdapter = class extends BaseOpencodeSdkAdapter {
           startedAt: "2026-02-17T12:00:00Z",
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         }),
+        requireRepoRuntime: async ({ repoPath, runtimeKind }) => ({
+          kind: runtimeKind,
+          runtimeId: "runtime-opencode-1",
+          repoPath,
+          taskId: null,
+          role: "workspace",
+          workingDirectory: defaultRuntimeConnection.workingDirectory,
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: defaultRuntimeConnection.endpoint,
+          },
+          startedAt: "2026-02-17T12:00:00Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        }),
       },
       ...options,
     });

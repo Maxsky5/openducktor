@@ -68,7 +68,6 @@ export const createBuildSessionFixture = (overrides = {}) =>
       startedAt: "2026-02-22T08:20:00.000Z",
       runtimeKind: "opencode",
       runtimeId: null,
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/tmp/repo/worktree",
       selectedModel: null,
       promptOverrides: {},

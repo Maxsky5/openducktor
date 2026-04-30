@@ -14,7 +14,6 @@ type AgentChatWindowRowProps = {
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind?: AgentSessionState["runtimeKind"] | null | undefined;
   sessionRuntimeId?: AgentSessionState["runtimeId"] | null | undefined;
-  sessionRuntimeRoute?: AgentSessionState["runtimeRoute"] | null | undefined;
   subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
   subagentPendingPermissionCount?: number;
 };
@@ -27,7 +26,6 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
-  sessionRuntimeRoute,
   subagentPendingPermissions,
   subagentPendingPermissionCount = 0,
 }: AgentChatWindowRowProps): ReactElement {
@@ -47,7 +45,6 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
             sessionWorkingDirectory={sessionWorkingDirectory}
             sessionRuntimeKind={sessionRuntimeKind}
             sessionRuntimeId={sessionRuntimeId}
-            sessionRuntimeRoute={sessionRuntimeRoute}
             subagentPendingPermissions={subagentPendingPermissions}
             subagentPendingPermissionCount={subagentPendingPermissionCount}
           />

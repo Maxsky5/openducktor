@@ -41,10 +41,32 @@ const defaultRepoRuntimeResolver = {
     repoPath,
     kind: runtimeKind,
   }),
+  requireRepoRuntime: async ({
+    repoPath,
+    runtimeKind,
+  }: {
+    repoPath: string;
+    runtimeKind: RuntimeKind;
+  }) => ({
+    ...makeRuntimeSummary("local_http"),
+    repoPath,
+    kind: runtimeKind,
+  }),
 };
 
 const makeRepoRuntimeResolver = (routeType: "local_http" | "stdio") => ({
   ensureRepoRuntime: async ({
+    repoPath,
+    runtimeKind,
+  }: {
+    repoPath: string;
+    runtimeKind: RuntimeKind;
+  }) => ({
+    ...makeRuntimeSummary(routeType),
+    repoPath,
+    kind: runtimeKind,
+  }),
+  requireRepoRuntime: async ({
     repoPath,
     runtimeKind,
   }: {
@@ -67,6 +89,7 @@ const makeMockClient = (): {
   client: OpencodeClient;
   createCalls: unknown[];
   abortCalls: unknown[];
+  getCalls: unknown[];
   listCalls: unknown[];
   statusCalls: unknown[];
   permissionListCalls: unknown[];
@@ -74,6 +97,7 @@ const makeMockClient = (): {
 } => {
   const createCalls: unknown[] = [];
   const abortCalls: unknown[] = [];
+  const getCalls: unknown[] = [];
   const listCalls: unknown[] = [];
   const statusCalls: unknown[] = [];
   const permissionListCalls: unknown[] = [];
@@ -88,6 +112,18 @@ const makeMockClient = (): {
       abort: async (input: unknown) => {
         abortCalls.push(input);
         return { data: true, error: undefined };
+      },
+      get: async (input: unknown) => {
+        getCalls.push(input);
+        return {
+          data: {
+            id: "external-session-1",
+            time: {
+              created: Date.parse("2026-02-22T12:00:00.000Z"),
+            },
+          },
+          error: undefined,
+        };
       },
       list: async (input?: unknown) => {
         listCalls.push(input);
@@ -215,6 +251,7 @@ const makeMockClient = (): {
     client,
     createCalls,
     abortCalls,
+    getCalls,
     listCalls,
     statusCalls,
     permissionListCalls,
@@ -223,6 +260,86 @@ const makeMockClient = (): {
 };
 
 describe("opencode-sdk-adapter", () => {
+  test("startSession ensures the repo runtime before creating a new session", async () => {
+    const mockClient = makeMockClient();
+    const ensureRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
+    const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mockClient.client,
+      now: () => "2026-02-22T12:00:00.000Z",
+      repoRuntimeResolver: {
+        ensureRepoRuntime,
+        requireRepoRuntime,
+      },
+    });
+
+    await adapter.startSession({
+      repoPath: defaultRepoPath,
+      workingDirectory: defaultWorkingDirectory,
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "spec",
+      scenario: "spec_initial",
+      systemPrompt: "system",
+    });
+
+    expect(ensureRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(requireRepoRuntime).not.toHaveBeenCalled();
+  });
+
+  test("resumeSession requires an existing repo runtime instead of ensuring one", async () => {
+    const mockClient = makeMockClient();
+    const ensureRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
+    const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mockClient.client,
+      now: () => "2026-02-22T12:00:00.000Z",
+      repoRuntimeResolver: {
+        ensureRepoRuntime,
+        requireRepoRuntime,
+      },
+    });
+
+    await adapter.resumeSession({
+      repoPath: defaultRepoPath,
+      workingDirectory: defaultWorkingDirectory,
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      scenario: "build_implementation_start",
+      systemPrompt: "system",
+      externalSessionId: "external-session-1",
+    });
+
+    expect(ensureRepoRuntime).not.toHaveBeenCalled();
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(mockClient.getCalls).toEqual([
+      { directory: defaultWorkingDirectory, sessionID: "external-session-1" },
+    ]);
+  });
+
+  test("live session reads require an existing repo runtime instead of ensuring one", async () => {
+    const mockClient = makeMockClient();
+    const ensureRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
+    const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mockClient.client,
+      now: () => "2026-02-22T12:00:00.000Z",
+      repoRuntimeResolver: {
+        ensureRepoRuntime,
+        requireRepoRuntime,
+      },
+    });
+
+    await adapter.listLiveAgentSessionSnapshots({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+    });
+
+    expect(ensureRepoRuntime).not.toHaveBeenCalled();
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+  });
+
   test("startSession registers and stopSession tears down the session", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({
@@ -374,6 +491,7 @@ describe("opencode-sdk-adapter", () => {
       now: () => "2026-02-22T12:00:00.000Z",
       repoRuntimeResolver: {
         ensureRepoRuntime: async () => makeRuntimeSummary("local_http"),
+        requireRepoRuntime: async () => makeRuntimeSummary("local_http"),
       },
     });
 

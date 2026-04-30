@@ -90,6 +90,7 @@ export type ClientFactory = (input: {
 
 export type RepoRuntimeResolverPort = {
   ensureRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
+  requireRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
 };
 
 export type OpencodeStreamEventLog = {

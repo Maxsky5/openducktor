@@ -57,7 +57,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   status: "idle",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
-  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "",
@@ -103,7 +102,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         kind: "opencode",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadRepoPromptOverrides: async () => ({}),
@@ -173,7 +171,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         kind: "opencode",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadRepoPromptOverrides: async () => ({}),
@@ -202,7 +199,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       current: {
         "session-1": buildSession({
           runtimeKind: "claude-code",
-          runtimeRoute: null,
           selectedModel: null,
           status: "idle",
         }),
@@ -235,7 +231,6 @@ describe("agent-orchestrator-ensure-ready", () => {
           kind: "claude-code",
           runtimeKind: "claude-code",
           runtimeId: "runtime-claude",
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
           workingDirectory: "/tmp/repo/worktree",
         };
       },
@@ -263,7 +258,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       current: {
         "session-1": buildSession({
           runtimeKind: "claude-code",
-          runtimeRoute: null,
           selectedModel: {
             runtimeKind: "opencode",
             providerId: "openai",
@@ -296,7 +290,6 @@ describe("agent-orchestrator-ensure-ready", () => {
           kind: "opencode",
           runtimeKind: "opencode",
           runtimeId: null,
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
         };
       },
@@ -355,7 +348,6 @@ describe("agent-orchestrator-ensure-ready", () => {
           kind: "opencode",
           runtimeKind: "opencode",
           runtimeId: null,
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
         };
       },
@@ -446,7 +438,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         kind: "opencode",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadRepoPromptOverrides: async () => ({}),
@@ -555,7 +546,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         kind: "opencode",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadRepoPromptOverrides: async () => ({}),
@@ -642,7 +632,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         kind: "opencode",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadRepoPromptOverrides: async () => ({}),
@@ -720,7 +709,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         kind: "opencode",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadRepoPromptOverrides: async () => ({}),
@@ -791,7 +779,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         kind: "opencode",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadRepoPromptOverrides: async () => ({}),
@@ -884,7 +871,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         kind: "opencode",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadRepoPromptOverrides: async () => ({}),
@@ -935,7 +921,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       current: {
         "session-1": buildSession({
           runtimeKind: "claude-code",
-          runtimeRoute: null,
           selectedModel: null,
           status: "idle",
         }),
@@ -968,7 +953,6 @@ describe("agent-orchestrator-ensure-ready", () => {
           kind: "claude-code",
           runtimeKind: "claude-code",
           runtimeId: "runtime-claude",
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:5555" },
           workingDirectory: "/tmp/repo/worktree",
         };
       },
@@ -1023,7 +1007,6 @@ describe("agent-orchestrator-ensure-ready", () => {
           kind: "opencode",
           runtimeKind: "opencode",
           runtimeId: null,
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
         };
       },
@@ -1074,7 +1057,6 @@ describe("agent-orchestrator-ensure-ready", () => {
           kind: "opencode",
           runtimeKind: "opencode",
           runtimeId: null,
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
           workingDirectory: "/tmp/repo/worktree",
         };
       },

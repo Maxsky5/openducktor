@@ -4,7 +4,6 @@ import type {
   RepoConfig,
   RepoPromptOverrides,
   RuntimeKind,
-  RuntimeRoute,
   SettingsSnapshot,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
@@ -21,7 +20,6 @@ export type RuntimeInfo = {
   runtimeKind?: RuntimeKind;
   kind?: string;
   runtimeId: string | null;
-  runtimeRoute?: RuntimeRoute | null;
   workingDirectory: string;
 };
 

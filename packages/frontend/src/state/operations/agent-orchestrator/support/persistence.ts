@@ -104,7 +104,6 @@ export const fromPersistedSessionRecord = (
       startedAt: session.startedAt,
       runtimeKind,
       runtimeId: null,
-      runtimeRoute: null,
       workingDirectory: session.workingDirectory,
       historyHydrationState: "not_requested",
       runtimeRecoveryState: "idle",

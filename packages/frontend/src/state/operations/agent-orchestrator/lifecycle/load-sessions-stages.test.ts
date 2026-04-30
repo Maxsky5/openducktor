@@ -30,7 +30,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeKind: "opencode",
   runtimeId: null,
-  runtimeRoute: null,
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "",
@@ -1063,9 +1062,7 @@ describe("load-sessions-stages", () => {
   });
 
   test("uses the in-memory requested session record without reloading persisted sessions", async () => {
-    const existingSession = createSession({
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-    });
+    const existingSession = createSession();
     const stateHarness = createStateHarness({ "external-1": existingSession });
     let persistedLoads = 0;
     let setCalls = 0;
@@ -1907,13 +1904,12 @@ describe("load-sessions-stages", () => {
     expect(warnings[0]?.[0]).toContain("child snapshot unavailable");
   });
 
-  test("runtime planner reuses current hydrated runtime and preloaded live snapshots", async () => {
+  test("runtime planner ignores stale hydrated runtime state and reuses preloaded live snapshots", async () => {
     const workingDirectory = "/tmp/repo/worktree";
     const stateHarness = createStateHarness({
       "external-1": createSession({
         runtimeKind: "opencode",
         runtimeId: "runtime-current",
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory,
       }),
     });
@@ -1983,12 +1979,7 @@ describe("load-sessions-stages", () => {
       createRecord({ role: "planner", workingDirectory }),
     );
 
-    expect(reusedResolution).toEqual({
-      ok: true,
-      runtimeKind: "opencode",
-      runtimeId: "runtime-current",
-      workingDirectory,
-    });
+    expect(reusedResolution).toBeNull();
 
     const snapshot = await planner.loadLiveAgentSessionSnapshot(
       createRecord({ role: "planner", workingDirectory }),

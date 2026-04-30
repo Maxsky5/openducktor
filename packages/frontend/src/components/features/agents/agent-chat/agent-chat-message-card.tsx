@@ -1,4 +1,4 @@
-import type { RuntimeKind, RuntimeRoute } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { memo, type ReactElement, useContext } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
@@ -17,7 +17,6 @@ type AgentChatMessageCardProps = {
   sessionWorkingDirectory?: string | null | undefined;
   sessionRuntimeKind?: RuntimeKind | null | undefined;
   sessionRuntimeId?: string | null | undefined;
-  sessionRuntimeRoute?: RuntimeRoute | null | undefined;
   subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
   subagentPendingPermissionCount?: number;
   subagentPendingPermissionCountByExternalSessionId?: Record<string, number>;
@@ -31,7 +30,6 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
-  sessionRuntimeRoute,
   subagentPendingPermissions,
   subagentPendingPermissionCount,
   subagentPendingPermissionCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
@@ -66,7 +64,6 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
         message={message}
         sessionRuntimeKind={sessionRuntimeKind ?? null}
         sessionRuntimeId={sessionRuntimeId ?? null}
-        sessionRuntimeRoute={sessionRuntimeRoute ?? null}
         assistantAccentColor={vm.assistantAccentColor}
         isStreamingAssistantMessage={isStreamingAssistantMessage}
         timeLabel={vm.timeLabel}

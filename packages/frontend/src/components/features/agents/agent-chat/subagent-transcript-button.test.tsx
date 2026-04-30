@@ -28,7 +28,6 @@ describe("SubagentTranscriptButton", () => {
       <SubagentTranscriptButton
         sessionRuntimeKind="opencode"
         sessionRuntimeId="runtime-1"
-        sessionRuntimeRoute={{ type: "local_http", endpoint: "http://127.0.0.1:4096" }}
         sessionWorkingDirectory="/repo-a"
         pendingPermissions={[pendingPermission]}
         meta={createSubagentMeta()}
@@ -49,7 +48,6 @@ describe("SubagentTranscriptButton", () => {
       source: {
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
         workingDirectory: "/repo-a",
         pendingPermissions: [pendingPermission],
       },
@@ -116,7 +114,6 @@ describe("SubagentTranscriptButton", () => {
       <SubagentTranscriptButton
         sessionRuntimeKind="opencode"
         sessionRuntimeId="runtime-1"
-        sessionRuntimeRoute={{ type: "local_http", endpoint: "http://127.0.0.1:4096" }}
         sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
@@ -130,7 +127,6 @@ describe("SubagentTranscriptButton", () => {
       <SubagentTranscriptButton
         sessionRuntimeKind="opencode"
         sessionRuntimeId="runtime-1"
-        sessionRuntimeRoute={{ type: "local_http", endpoint: "http://127.0.0.1:4096" }}
         sessionWorkingDirectory="/repo-a"
         meta={metaWithoutSessionId}
         onOpenTranscript={() => {}}
@@ -169,7 +165,6 @@ describe("SubagentTranscriptButton", () => {
         <SubagentTranscriptButton
           sessionRuntimeKind="opencode"
           sessionRuntimeId="runtime-1"
-          sessionRuntimeRoute={{ type: "local_http", endpoint: "http://127.0.0.1:4096" }}
           sessionWorkingDirectory="/repo-a"
           meta={createSubagentMeta()}
           onOpenTranscript={onOpenTranscript}
@@ -190,7 +185,6 @@ describe("SubagentTranscriptButton", () => {
       <SubagentTranscriptButton
         sessionRuntimeKind="opencode"
         sessionRuntimeId="runtime-1"
-        sessionRuntimeRoute={{ type: "local_http", endpoint: "http://127.0.0.1:4096" }}
         sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}

@@ -22,13 +22,9 @@ export type ResolvedHydrationRuntime =
 export const createHydrationRuntimeResolver = ({
   repoPath,
   runtimesByKind,
-  ensureWorkspaceRuntime,
 }: {
   repoPath: string;
   runtimesByKind: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-  preloadedRuntimeWorktrees?: unknown;
-  preloadedLiveAgentSessionsByKey?: unknown;
-  ensureWorkspaceRuntime: (runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary | null>;
 }): ((record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>) => {
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
 
@@ -45,7 +41,7 @@ export const createHydrationRuntimeResolver = ({
 
   return async (record: AgentSessionRecord): Promise<ResolvedHydrationRuntime> => {
     const runtimeKind = readPersistedRuntimeKind(record);
-    const runtime = findRepoRuntime(runtimeKind) ?? (await ensureWorkspaceRuntime(runtimeKind));
+    const runtime = findRepoRuntime(runtimeKind);
     if (!runtime) {
       return {
         ok: false,

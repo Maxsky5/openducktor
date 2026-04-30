@@ -338,7 +338,19 @@ describe("use-agent-orchestrator-operations", () => {
       workspaces: {},
       globalPromptOverrides: {},
     });
-    host.runtimeList = async () => [];
+    host.runtimeList = async () => [
+      {
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo/worktree",
+        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      },
+    ];
     host.runtimeEnsure = async (repoPath, runtimeKind) => ({
       kind: runtimeKind,
       runtimeId: "runtime-1",
@@ -1827,7 +1839,6 @@ describe("use-agent-orchestrator-operations", () => {
               status: "idle",
               startedAt: "2026-02-22T08:00:00.000Z",
               runtimeId: null,
-              runtimeRoute: null,
               workingDirectory: "/tmp/repo/worktree",
               historyHydrationState: "hydrated",
               runtimeRecoveryState: "idle",
@@ -1897,7 +1908,6 @@ describe("use-agent-orchestrator-operations", () => {
               status: "idle",
               startedAt: "2026-02-22T08:00:00.000Z",
               runtimeId: null,
-              runtimeRoute: null,
               workingDirectory: "/tmp/repo/worktree",
               historyHydrationState: "hydrated",
               runtimeRecoveryState: "idle",
@@ -1926,7 +1936,6 @@ describe("use-agent-orchestrator-operations", () => {
               status: "idle",
               startedAt: "2026-02-22T08:00:00.000Z",
               runtimeId: null,
-              runtimeRoute: null,
               workingDirectory: "/tmp/repo/worktree",
               historyHydrationState: "hydrated",
               runtimeRecoveryState: "idle",
@@ -2246,17 +2255,22 @@ describe("use-agent-orchestrator-operations", () => {
         harness.getLatest().sessionStore.getSessionSnapshot("external-1")?.runtimeRecoveryState,
       ).toBe("idle");
 
-      await harness.run(async () => {
-        await harness.getLatest().retrySessionRuntimeAttachment({
-          taskId: "task-1",
-          externalSessionId: "external-1",
-          persistedRecords: [persistedBuildSessionFixture],
-        });
-      });
+      host.runtimeList = async () => [];
+      await clearAppQueryClient();
+
+      await expect(
+        harness.run(async () => {
+          await harness.getLatest().retrySessionRuntimeAttachment({
+            taskId: "task-1",
+            externalSessionId: "external-1",
+            persistedRecords: [persistedBuildSessionFixture],
+          });
+        }),
+      ).rejects.toThrow("No live repo runtime found");
 
       expect(
         harness.getLatest().sessionStore.getSessionSnapshot("external-1")?.runtimeRecoveryState,
-      ).toBe("waiting_for_runtime");
+      ).toBe("failed");
 
       host.runtimeList = async () => [
         {
@@ -2729,7 +2743,6 @@ describe("use-agent-orchestrator-operations", () => {
             status: "idle",
             startedAt: "2026-02-22T08:00:00.000Z",
             runtimeId: "stale-runtime",
-            runtimeRoute: null,
             workingDirectory: "/tmp/repo/old-worktree",
             historyHydrationState: "hydrated",
             runtimeRecoveryState: "idle",
@@ -3077,7 +3090,7 @@ describe("use-agent-orchestrator-operations", () => {
       const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("external-1");
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
       expect(recoveredSession?.historyHydrationState).toBe("failed");
-      expect(recoveredSession?.runtimeRoute).toBeNull();
+      expect(recoveredSession?.runtimeId).toBe("runtime-1");
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;

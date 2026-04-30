@@ -60,9 +60,6 @@ describe("createHydrationRuntimeResolver", () => {
           ],
         ],
       ]),
-      ensureWorkspaceRuntime: async () => {
-        throw new Error("ensureWorkspaceRuntime should not be called");
-      },
     });
 
     const result = await resolveHydrationRuntime(record);
@@ -75,48 +72,26 @@ describe("createHydrationRuntimeResolver", () => {
     });
   });
 
-  test("uses the persisted runtime kind when resolving and returns the ensured runtime", async () => {
+  test("returns an error when no live runtime exists for the persisted runtime kind", async () => {
     const record = createRecord("custom-runtime", "planner", "/tmp/repo/worktree");
-    let ensureCalls = 0;
-    let receivedRuntimeKind: RuntimeKind | null = null;
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
       runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["custom-runtime", []]]),
-      ensureWorkspaceRuntime: async (runtimeKind) => {
-        ensureCalls += 1;
-        receivedRuntimeKind = runtimeKind;
-        return createRuntime({
-          runtimeKind,
-          runtimeId: "ensured-runtime",
-          repoPath: "/tmp/repo",
-        });
-      },
     });
 
     const result = await resolveHydrationRuntime(record);
 
     expect(result).toEqual({
-      ok: true,
+      ok: false,
       runtimeKind: "custom-runtime",
-      runtimeId: "ensured-runtime",
-      workingDirectory: record.workingDirectory,
+      reason: "No live repo runtime found for repo /tmp/repo and runtime custom-runtime.",
     });
-    expect(ensureCalls).toBe(1);
-    if (receivedRuntimeKind === null) {
-      throw new Error("Expected the runtime resolver to receive the persisted runtime kind.");
-    }
-    expect(receivedRuntimeKind as string).toBe("custom-runtime");
   });
 
-  test("returns an error when ensureWorkspaceRuntime cannot provide a runtime", async () => {
-    let ensureCalls = 0;
+  test("returns an error when no runtime exists for the requested repo", async () => {
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
       runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
-      ensureWorkspaceRuntime: async () => {
-        ensureCalls += 1;
-        return null;
-      },
     });
 
     const result = await resolveHydrationRuntime(createRecord("opencode", "build", "/tmp/repo"));
@@ -126,22 +101,12 @@ describe("createHydrationRuntimeResolver", () => {
       runtimeKind: "opencode",
       reason: "No live repo runtime found for repo /tmp/repo and runtime opencode.",
     });
-    expect(ensureCalls).toBe(1);
   });
 
-  test("fails fast when an ensured runtime belongs to a different repo", async () => {
-    let ensureCalls = 0;
+  test("returns an error when a runtime exists for a different repo", async () => {
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
       runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
-      ensureWorkspaceRuntime: async (runtimeKind) => {
-        ensureCalls += 1;
-        return createRuntime({
-          runtimeKind,
-          runtimeId: "wrong-repo-runtime",
-          repoPath: "/tmp/other",
-        });
-      },
     });
 
     const result = await resolveHydrationRuntime(createRecord("opencode", "planner", "/tmp/repo"));
@@ -149,9 +114,8 @@ describe("createHydrationRuntimeResolver", () => {
     expect(result).toEqual({
       ok: false,
       runtimeKind: "opencode",
-      reason: "Resolved runtime belongs to repo /tmp/other, not requested repo /tmp/repo.",
+      reason: "No live repo runtime found for repo /tmp/repo and runtime opencode.",
     });
-    expect(ensureCalls).toBe(1);
   });
 
   test("passes through the record working directory", async () => {
@@ -161,9 +125,6 @@ describe("createHydrationRuntimeResolver", () => {
       runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
         ["opencode", [createRuntime({ runtimeId: "repo-runtime", repoPath: "/tmp/repo" })]],
       ]),
-      ensureWorkspaceRuntime: async () => {
-        throw new Error("ensureWorkspaceRuntime should not be called");
-      },
     });
 
     const result = await resolveHydrationRuntime(record);

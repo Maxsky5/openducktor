@@ -246,7 +246,7 @@ export const createLoadAgentSessions = ({
         isStaleRepoOperation,
         recordsToHydrate,
         historyHydrationSessionIds: effectiveHistoryHydrationSessionIds,
-        failOnRuntimeResolutionError: false,
+        failOnRuntimeResolutionError: true,
         runtimePlanner,
         promptAssembler,
         getRepoPromptOverrides,

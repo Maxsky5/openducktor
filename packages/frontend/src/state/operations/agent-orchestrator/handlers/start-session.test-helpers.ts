@@ -12,7 +12,6 @@ const ensureRuntimeWithKind = async (
     kind: runtimeKind,
     runtimeKind,
     runtimeId: "runtime-1",
-    runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
     workingDirectory,
   };
 };

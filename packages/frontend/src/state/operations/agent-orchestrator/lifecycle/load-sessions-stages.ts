@@ -18,8 +18,6 @@ import type {
   AgentSessionPurpose,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import { host } from "../../shared/host";
-import { ensureRuntimeAndInvalidateReadinessQueries } from "../../shared/runtime-readiness-publication";
 import { DEFAULT_AGENT_SESSION_HISTORY_HYDRATION_STATE } from "../support/history-hydration";
 import { mergeHydratedMessages } from "../support/hydrated-message-merge";
 import {
@@ -299,8 +297,6 @@ const mergePersistedSessionRecord = (
   }
 
   const persisted = fromPersistedSessionRecord(record, taskId, repoPath);
-  const shouldPreserveCurrentWorkingDirectory = current.runtimeRoute !== null;
-
   return {
     ...current,
     purpose,
@@ -310,9 +306,7 @@ const mergePersistedSessionRecord = (
     role: persisted.role,
     scenario: persisted.scenario,
     startedAt: persisted.startedAt,
-    workingDirectory: shouldPreserveCurrentWorkingDirectory
-      ? current.workingDirectory
-      : persisted.workingDirectory,
+    workingDirectory: persisted.workingDirectory,
     pendingPermissions: current.pendingPermissions,
     pendingQuestions: current.pendingQuestions,
     selectedModel: mergeModelSelection(current.selectedModel, persisted.selectedModel ?? undefined),
@@ -482,37 +476,17 @@ export const createRuntimeResolutionPlannerStage = async ({
   intent,
   options,
   adapter,
-  sessionsRef,
+  sessionsRef: _sessionsRef,
   liveAgentSessionStore,
   recordsToHydrate,
-  historyHydrationSessionIds,
+  historyHydrationSessionIds: _historyHydrationSessionIds,
 }: RuntimeResolutionPlannerStageInput): Promise<HydrationRuntimePlanner> => {
-  const readCurrentHydratedRuntimeResolution = (
-    record: AgentSessionRecord,
-  ): Extract<ResolvedHydrationRuntime, { ok: true }> | null => {
-    const currentSession = sessionsRef.current[record.externalSessionId];
-    const runtimeKind = currentSession?.runtimeKind ?? null;
-    const runtimeId = currentSession?.runtimeId ?? null;
-    const workingDirectory =
-      currentSession?.workingDirectory.trim() || record.workingDirectory.trim();
-    if (!runtimeKind || !runtimeId || workingDirectory.length === 0) {
-      return null;
-    }
+  const readCurrentHydratedRuntimeResolution = (): Extract<
+    ResolvedHydrationRuntime,
+    { ok: true }
+  > | null => null;
 
-    return {
-      ok: true,
-      runtimeKind,
-      runtimeId,
-      workingDirectory,
-    };
-  };
-
-  const recordsNeedingRuntimeResolution = recordsToHydrate.filter((record) => {
-    if (!historyHydrationSessionIds.has(record.externalSessionId)) {
-      return true;
-    }
-    return readCurrentHydratedRuntimeResolution(record) === null;
-  });
+  const recordsNeedingRuntimeResolution = recordsToHydrate;
 
   const runtimeKindsToInspect = Array.from(
     new Set(recordsNeedingRuntimeResolution.map((record) => readPersistedRuntimeKind(record))),
@@ -532,26 +506,6 @@ export const createRuntimeResolutionPlannerStage = async ({
       ),
     );
 
-  const ensuredWorkspaceRuntimes = new Map<RuntimeKind, RuntimeInstanceSummary | null>();
-
-  const ensureWorkspaceRuntime = async (
-    runtimeKind: RuntimeKind,
-  ): Promise<RuntimeInstanceSummary | null> => {
-    if (options?.allowRuntimeEnsure === false) {
-      return null;
-    }
-    if (ensuredWorkspaceRuntimes.has(runtimeKind)) {
-      return ensuredWorkspaceRuntimes.get(runtimeKind) ?? null;
-    }
-    const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
-      repoPath: intent.repoPath,
-      runtimeKind,
-      ensureRuntime: (repoPath, nextRuntimeKind) => host.runtimeEnsure(repoPath, nextRuntimeKind),
-    });
-    ensuredWorkspaceRuntimes.set(runtimeKind, runtime);
-    return runtime;
-  };
-
   const preloadedRuntimeWorktrees =
     options?.preloadedRuntimeWorktrees ?? new RuntimeWorktreePreloadIndex();
   const preloadedLiveAgentSessionsByKey =
@@ -569,9 +523,6 @@ export const createRuntimeResolutionPlannerStage = async ({
   const resolveHydrationRuntime = createHydrationRuntimeResolver({
     repoPath: intent.repoPath,
     runtimesByKind,
-    ...(preloadedRuntimeWorktrees.size > 0 ? { preloadedRuntimeWorktrees } : {}),
-    ...(preloadedLiveAgentSessionsByKey.size > 0 ? { preloadedLiveAgentSessionsByKey } : {}),
-    ensureWorkspaceRuntime,
   });
   const liveAgentSessionScanCache =
     adapter.listLiveAgentSessionSnapshots || preloadedLiveAgentSessionsByKey.size > 0
@@ -892,7 +843,6 @@ export const hydrateSessionRecordsStage = async ({
           ...current,
           runtimeKind: readPersistedRuntimeKind(record),
           runtimeId: null,
-          runtimeRoute: null,
           workingDirectory: record.workingDirectory,
           promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
         }),
@@ -914,7 +864,6 @@ export const hydrateSessionRecordsStage = async ({
             ...current,
             runtimeKind,
             runtimeId: null,
-            runtimeRoute: null,
             workingDirectory,
             promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
           }),
@@ -929,7 +878,6 @@ export const hydrateSessionRecordsStage = async ({
           ...current,
           runtimeKind,
           runtimeId,
-          runtimeRoute: null,
           workingDirectory,
           promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
         }),
@@ -991,7 +939,6 @@ export const hydrateSessionRecordsStage = async ({
           ...current,
           runtimeKind,
           runtimeId,
-          runtimeRoute: null,
           status: liveSessionStatus ?? current.status,
           workingDirectory,
           historyHydrationState: "hydrated",

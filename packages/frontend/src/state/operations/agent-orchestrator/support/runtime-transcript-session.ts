@@ -57,7 +57,6 @@ export const createRuntimeTranscriptSession = ({
     status: isLive ? "running" : "idle",
     startedAt,
     runtimeId,
-    runtimeRoute: null,
     workingDirectory,
     historyHydrationState: "hydrated",
     runtimeRecoveryState: "idle",

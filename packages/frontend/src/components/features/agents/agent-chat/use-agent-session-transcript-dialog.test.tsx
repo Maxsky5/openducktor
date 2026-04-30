@@ -22,10 +22,6 @@ const transcriptSource: RuntimeSessionTranscriptSource = {
   runtimeKind: "opencode",
   runtimeId: "runtime-1",
   workingDirectory: "/repo-a",
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:4096",
-  },
 };
 
 describe("AgentSessionTranscriptDialogHost", () => {

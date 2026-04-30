@@ -41,19 +41,11 @@ let actualRuntimeData: Awaited<typeof import("./use-agent-chat-session-runtime-d
 let actualSurfaceModel: Awaited<typeof import("./use-agent-chat-surface-model")>;
 let originalHostRuntimeList: typeof import("@/state/operations/host").host.runtimeList;
 
-function makeRuntimeRoute() {
-  return {
-    type: "local_http" as const,
-    endpoint: "http://127.0.0.1:4096",
-  };
-}
-
 function makeTranscriptSource(): RuntimeSessionTranscriptSource {
   return {
     runtimeKind: "opencode",
     runtimeId: "runtime-1",
     workingDirectory: "/repo-a",
-    runtimeRoute: makeRuntimeRoute(),
   };
 }
 
@@ -99,7 +91,6 @@ function makeLiveTranscriptSession(): AgentSessionState {
     status: "running",
     startedAt: "2026-02-22T12:00:00.000Z",
     runtimeId: "runtime-1",
-    runtimeRoute: makeRuntimeRoute(),
     workingDirectory: "/repo-a",
     messages: [],
     draftAssistantText: "",
@@ -124,7 +115,7 @@ function makeRuntime(): RuntimeInstanceSummary {
     taskId: null,
     role: "workspace",
     workingDirectory: "/repo-a",
-    runtimeRoute: makeRuntimeRoute(),
+    runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
     startedAt: "2026-02-22T11:59:00.000Z",
     descriptor: {} as RuntimeInstanceSummary["descriptor"],
   } satisfies RuntimeInstanceSummary;

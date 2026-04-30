@@ -280,7 +280,6 @@ describe("useAgentStudioSelectionController", () => {
     const hydrateRequestedTaskSessionHistory = mock(async () => {});
     const staleSession = createSession("task-1", "session-1", {
       runtimeKind: "opencode",
-      runtimeRoute: { type: "local_http", endpoint: "http://runtime" },
       workingDirectory: "/repo-a",
       role: "build",
       scenario: "build_implementation_start",

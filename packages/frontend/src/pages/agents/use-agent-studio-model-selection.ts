@@ -108,7 +108,6 @@ type ActiveSessionSelectionState = {
   selectedModel: AgentModelSelection | null;
   modelCatalog: AgentSessionState["modelCatalog"] | null;
   runtimeKind: AgentSessionState["runtimeKind"] | null;
-  runtimeRoute: AgentSessionState["runtimeRoute"] | null;
   workingDirectory: string;
   isLoadingModelCatalog: boolean;
   liveContextUsage: AgentSessionState["contextUsage"] | null;
@@ -130,7 +129,6 @@ export const resolveActiveSessionSelectionState = (
     selectedModel,
     modelCatalog: activeSession?.modelCatalog ?? null,
     runtimeKind: activeSession?.runtimeKind ?? activeSessionSummary?.runtimeKind ?? null,
-    runtimeRoute: activeSession?.runtimeRoute ?? null,
     workingDirectory:
       activeSession?.workingDirectory?.trim() ??
       activeSessionSummary?.workingDirectory?.trim() ??

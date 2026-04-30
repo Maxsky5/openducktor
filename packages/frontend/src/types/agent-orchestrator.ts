@@ -3,7 +3,6 @@ import type {
   RepoPromptOverrides,
   RuntimeInstanceSummary,
   RuntimeKind,
-  RuntimeRoute,
 } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
@@ -173,7 +172,6 @@ export type AgentSessionState = {
   status: "starting" | "running" | "idle" | "error" | "stopped";
   startedAt: string;
   runtimeId: string | null;
-  runtimeRoute: RuntimeRoute | null;
   workingDirectory: string;
   historyHydrationState?: AgentSessionHistoryHydrationState;
   runtimeRecoveryState?: AgentSessionRuntimeRecoveryState;
