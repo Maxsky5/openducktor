@@ -631,6 +631,14 @@ export const runtimeRefSchema = z.object({
 });
 export type RuntimeRef = z.infer<typeof runtimeRefSchema>;
 
+export const repoRuntimeRefSchema = z
+  .object({
+    repoPath: z.string().trim().min(1),
+    runtimeKind: runtimeKindSchema,
+  })
+  .strict();
+export type RepoRuntimeRef = z.infer<typeof repoRuntimeRefSchema>;
+
 export const stdioRuntimeIdentitySchema = z.string().trim().min(1);
 export type StdioRuntimeIdentity = z.infer<typeof stdioRuntimeIdentitySchema>;
 

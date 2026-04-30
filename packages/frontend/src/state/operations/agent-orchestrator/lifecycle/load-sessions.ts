@@ -238,13 +238,15 @@ export const createLoadAgentSessions = ({
       }
 
       await hydrateSessionRecordsStage({
+        loadMode: intent.mode,
+        repoPath: intent.repoPath,
         adapter,
         setSessionsById,
         updateSession,
         isStaleRepoOperation,
         recordsToHydrate,
         historyHydrationSessionIds: effectiveHistoryHydrationSessionIds,
-        failOnRuntimeResolutionError: intent.mode === "reconcile_live",
+        failOnRuntimeResolutionError: false,
         runtimePlanner,
         promptAssembler,
         getRepoPromptOverrides,

@@ -1,7 +1,67 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { AgentEvent } from "@openducktor/core";
-import { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { AgentEvent, RuntimeKind } from "@openducktor/core";
+import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
+import type { OpencodeSdkAdapterOptions } from "./types";
+
+const defaultRepoPath = "/repo";
+const defaultWorkingDirectory = "/repo";
+
+const makeRuntimeSummary = (routeType: "local_http" | "stdio"): RuntimeInstanceSummary => ({
+  kind: "opencode",
+  runtimeId: "runtime-opencode-1",
+  repoPath: defaultRepoPath,
+  taskId: null,
+  role: "workspace",
+  workingDirectory: defaultWorkingDirectory,
+  runtimeRoute:
+    routeType === "local_http"
+      ? {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:12345",
+        }
+      : {
+          type: "stdio",
+          identity: "runtime-stdio",
+        },
+  startedAt: "2026-02-22T12:00:00.000Z",
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+});
+
+const defaultRepoRuntimeResolver = {
+  ensureRepoRuntime: async ({
+    repoPath,
+    runtimeKind,
+  }: {
+    repoPath: string;
+    runtimeKind: RuntimeKind;
+  }) => ({
+    ...makeRuntimeSummary("local_http"),
+    repoPath,
+    kind: runtimeKind,
+  }),
+};
+
+const makeRepoRuntimeResolver = (routeType: "local_http" | "stdio") => ({
+  ensureRepoRuntime: async ({
+    repoPath,
+    runtimeKind,
+  }: {
+    repoPath: string;
+    runtimeKind: RuntimeKind;
+  }) => ({
+    ...makeRuntimeSummary(routeType),
+    repoPath,
+    kind: runtimeKind,
+  }),
+});
+
+const OpencodeSdkAdapter = class extends BaseOpencodeSdkAdapter {
+  constructor(options: OpencodeSdkAdapterOptions = {}) {
+    super({ repoRuntimeResolver: defaultRepoRuntimeResolver, ...options });
+  }
+};
 
 const makeMockClient = (): {
   client: OpencodeClient;
@@ -183,11 +243,6 @@ describe("opencode-sdk-adapter", () => {
       role: "spec",
       scenario: "spec_initial",
       systemPrompt: "system",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12345",
-        workingDirectory: "/repo",
-      },
     });
 
     expect(summary.externalSessionId).toBe("external-session-1");
@@ -221,11 +276,6 @@ describe("opencode-sdk-adapter", () => {
         role: "spec",
         scenario: "spec_initial",
         systemPrompt: "system",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:12345",
-          workingDirectory: "/repo",
-        },
       }),
     ).rejects.toThrow("client.global.event()");
     expect(adapter.hasSession("external-session-1")).toBe(false);
@@ -239,12 +289,8 @@ describe("opencode-sdk-adapter", () => {
     });
 
     const sessions = await adapter.listLiveAgentSessions({
+      repoPath: defaultRepoPath,
       runtimeKind: "opencode",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12345",
-        workingDirectory: "/repo",
-      },
     });
 
     expect(mock.listCalls).toHaveLength(1);
@@ -283,12 +329,8 @@ describe("opencode-sdk-adapter", () => {
     const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
 
     const catalog = await adapter.listAvailableSlashCommands({
+      repoPath: defaultRepoPath,
       runtimeKind: "opencode",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12345",
-        workingDirectory: "/repo",
-      },
     });
 
     expect(createClient).toHaveBeenCalledWith({
@@ -318,31 +360,49 @@ describe("opencode-sdk-adapter", () => {
 
     await expect(
       adapter.listAvailableSlashCommands({
+        repoPath: defaultRepoPath,
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:12345",
-          workingDirectory: "/repo",
-        },
       }),
     ).rejects.toThrow("OpenCode runtime does not expose the command listing API.");
   });
 
+  test("accepts equivalent repo paths when validating resolved runtimes", async () => {
+    const list = mock(async () => ({ data: [], error: undefined }));
+    const createClient = mock(() => ({ command: { list } })) as () => OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+      repoRuntimeResolver: {
+        ensureRepoRuntime: async () => makeRuntimeSummary("local_http"),
+      },
+    });
+
+    await adapter.listAvailableSlashCommands({
+      repoPath: `${defaultRepoPath}/`,
+      runtimeKind: "opencode",
+    });
+
+    expect(createClient).toHaveBeenCalledWith({
+      runtimeEndpoint: "http://127.0.0.1:12345",
+      workingDirectory: "/repo/",
+    });
+  });
+
   test("listAvailableSlashCommands rejects stdio runtime connections before creating a client", async () => {
     const createClient = mock(() => ({}) as OpencodeClient);
-    const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
+    const adapter = new OpencodeSdkAdapter({
+      createClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+      repoRuntimeResolver: makeRepoRuntimeResolver("stdio"),
+    });
 
     await expect(
       adapter.listAvailableSlashCommands({
+        repoPath: defaultRepoPath,
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "stdio",
-          identity: "runtime-stdio",
-          workingDirectory: "/repo",
-        },
       }),
     ).rejects.toThrow(
-      "Runtime connection type 'stdio' is unsupported for list available slash commands; local_http is required.",
+      "OpenCode runtime route 'stdio' is unsupported for list available slash commands; local_http is required for repo '/repo'.",
     );
 
     expect(createClient).not.toHaveBeenCalled();
@@ -357,12 +417,9 @@ describe("opencode-sdk-adapter", () => {
     const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
 
     const results = await adapter.searchFiles({
+      repoPath: defaultRepoPath,
       runtimeKind: "opencode",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12345",
-        workingDirectory: "/repo",
-      },
+      workingDirectory: defaultWorkingDirectory,
       query: "src",
     });
 
@@ -400,12 +457,9 @@ describe("opencode-sdk-adapter", () => {
 
     await expect(
       adapter.searchFiles({
+        repoPath: defaultRepoPath,
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:12345",
-          workingDirectory: "/repo",
-        },
+        workingDirectory: defaultWorkingDirectory,
         query: "src",
       }),
     ).rejects.toThrow("OpenCode runtime does not expose the file search API.");
@@ -419,12 +473,8 @@ describe("opencode-sdk-adapter", () => {
     });
 
     const snapshots = await adapter.listLiveAgentSessionSnapshots({
+      repoPath: defaultRepoPath,
       runtimeKind: "opencode",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12345",
-        workingDirectory: "/repo",
-      },
     });
 
     expect(mock.listCalls).toHaveLength(1);
@@ -502,12 +552,8 @@ describe("opencode-sdk-adapter", () => {
 
     await expect(
       adapter.listLiveAgentSessions({
+        repoPath: defaultRepoPath,
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:12345",
-          workingDirectory: "/repo",
-        },
       }),
     ).rejects.toThrow("Unsupported Opencode live agent session status type");
   });
@@ -531,12 +577,8 @@ describe("opencode-sdk-adapter", () => {
 
     await expect(
       adapter.listLiveAgentSessions({
+        repoPath: defaultRepoPath,
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:12345",
-          workingDirectory: "/repo",
-        },
       }),
     ).rejects.toThrow("Malformed Opencode session status response for directory '/repo'");
   });
@@ -569,12 +611,8 @@ describe("opencode-sdk-adapter", () => {
     });
 
     const sessions = await adapter.listLiveAgentSessions({
+      repoPath: defaultRepoPath,
       runtimeKind: "opencode",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12345",
-        workingDirectory: "/repo",
-      },
     });
 
     expect(mock.statusCalls).toEqual([{ directory: "/repo" }]);
@@ -623,12 +661,8 @@ describe("opencode-sdk-adapter", () => {
 
     await expect(
       adapter.listLiveAgentSessions({
+        repoPath: defaultRepoPath,
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:12345",
-          workingDirectory: "/repo",
-        },
       }),
     ).rejects.toThrow(
       "Malformed Opencode session payload for 'external-session-1': missing directory.",
@@ -643,12 +677,9 @@ describe("opencode-sdk-adapter", () => {
     });
 
     const pending = await adapter.listLiveAgentSessionPendingInput({
+      repoPath: defaultRepoPath,
       runtimeKind: "opencode",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12345",
-        workingDirectory: "/repo",
-      },
+      workingDirectory: defaultWorkingDirectory,
     });
 
     expect(mock.permissionListCalls).toEqual([{ directory: "/repo" }]);

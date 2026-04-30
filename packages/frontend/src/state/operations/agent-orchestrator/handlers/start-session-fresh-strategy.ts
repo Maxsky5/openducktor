@@ -1,4 +1,3 @@
-import { resolveRuntimeConnection } from "../runtime/runtime";
 import {
   assertSelectedModelRuntimeKindMatchesEnsuredRuntime,
   requireSelectedModelRuntimeKindForStart,
@@ -65,7 +64,6 @@ export const executeFreshStart = async ({
   const summary = await deps.runtime.adapter.startSession({
     repoPath: ctx.repoPath,
     runtimeKind,
-    runtimeConnection: resolveRuntimeConnection(resolved.runtime),
     workingDirectory: resolved.runtime.workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,

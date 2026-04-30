@@ -1,6 +1,5 @@
-import type { AgentRuntimeConnection, AgentSessionHistoryMessage } from "@openducktor/core";
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { runtimeConnectionToRoute } from "../runtime/runtime";
 import { createSessionMessagesState } from "./messages";
 import { historyToChatMessages } from "./persistence";
 
@@ -9,7 +8,7 @@ export type RuntimeTranscriptSessionInput = {
   externalSessionId: string;
   runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
   runtimeId: string | null;
-  runtimeConnection: AgentRuntimeConnection;
+  workingDirectory: string;
   history: AgentSessionHistoryMessage[];
   isLive?: boolean;
   pendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
@@ -40,7 +39,7 @@ export const createRuntimeTranscriptSession = ({
   externalSessionId,
   runtimeKind,
   runtimeId,
-  runtimeConnection,
+  workingDirectory,
   history,
   isLive = false,
   pendingPermissions = [],
@@ -58,8 +57,8 @@ export const createRuntimeTranscriptSession = ({
     status: isLive ? "running" : "idle",
     startedAt,
     runtimeId,
-    runtimeRoute: runtimeConnectionToRoute(runtimeConnection),
-    workingDirectory: runtimeConnection.workingDirectory,
+    runtimeRoute: null,
+    workingDirectory,
     historyHydrationState: "hydrated",
     runtimeRecoveryState: "idle",
     messages: createSessionMessagesState(

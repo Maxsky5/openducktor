@@ -86,41 +86,27 @@ describe("agent-runtime-registry", () => {
 
       await readModels({
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:1",
-          workingDirectory: "/tmp/repo",
-        },
+        repoPath: "/repo",
       });
 
       await readTodos({
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:1",
-          workingDirectory: "/tmp/repo",
-        },
+        repoPath: "/repo",
+        workingDirectory: "/tmp/repo",
         externalSessionId: "external-1",
       });
 
       await replyRuntimePermission({
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:1",
-          workingDirectory: "/tmp/repo",
-        },
+        repoPath: "/repo",
+        workingDirectory: "/tmp/repo",
         requestId: "permission-1",
         reply: "once",
       });
 
       await readSnapshots({
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:1",
-          workingDirectory: "/tmp/repo",
-        },
+        repoPath: "/repo",
         directories: ["/tmp/repo"],
       });
 
@@ -172,11 +158,6 @@ describe("agent-runtime-registry", () => {
         taskId: "",
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4444",
-          workingDirectory: "/repo/worktree",
-        },
         role: "build",
         scenario: "build_implementation_start",
         systemPrompt: "",

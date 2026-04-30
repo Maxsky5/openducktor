@@ -2186,6 +2186,7 @@ describe("use-agent-orchestrator-operations", () => {
 
   test("tracks explicit runtime recovery state while reattaching a restored session runtime", async () => {
     const originalRuntimeList = host.runtimeList;
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
     const originalListLiveAgentSessionSnapshots =
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
@@ -2211,6 +2212,14 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
+      runtimeKind: input.runtimeKind,
+      externalSessionId: input.externalSessionId,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      role: input.role,
+      scenario: input.scenario,
+      status: "running",
+    });
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
       runtimeKind: input.runtimeKind,
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
@@ -2296,6 +2305,7 @@ describe("use-agent-orchestrator-operations", () => {
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
         originalListLiveAgentSessionSnapshots;
@@ -2479,11 +2489,7 @@ describe("use-agent-orchestrator-operations", () => {
             externalSessionId: "external-subagent",
             runtimeKind: "opencode",
             runtimeId: "runtime-1",
-            runtimeConnection: {
-              type: "local_http",
-              endpoint: "http://127.0.0.1:4444",
-              workingDirectory: "/tmp/repo/worktree",
-            },
+            workingDirectory: "/tmp/repo/worktree",
           });
         }),
       ).rejects.toThrow("attach unavailable");
@@ -2496,11 +2502,7 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: "external-subagent",
           runtimeKind: "opencode",
           runtimeId: "runtime-1",
-          runtimeConnection: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:4444",
-            workingDirectory: "/tmp/repo/worktree",
-          },
+          workingDirectory: "/tmp/repo/worktree",
         });
       });
 
@@ -2587,11 +2589,7 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: "external-subagent",
           runtimeKind: "opencode",
           runtimeId: "runtime-1",
-          runtimeConnection: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:4444",
-            workingDirectory: "/tmp/repo/worktree",
-          },
+          workingDirectory: "/tmp/repo/worktree",
         });
         await Promise.resolve();
       });
@@ -2621,11 +2619,6 @@ describe("use-agent-orchestrator-operations", () => {
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4444",
-          workingDirectory: "/tmp/repo/worktree",
-        },
         workingDirectory: "/tmp/repo/worktree",
         systemPrompt: "",
       });
@@ -2764,11 +2757,7 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: "external-subagent",
           runtimeKind: "opencode",
           runtimeId: "runtime-1",
-          runtimeConnection: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:4444",
-            workingDirectory: "/tmp/repo/worktree",
-          },
+          workingDirectory: "/tmp/repo/worktree",
         });
       });
 
@@ -2849,11 +2838,7 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: "external-subagent",
           runtimeKind: "opencode",
           runtimeId: "runtime-1",
-          runtimeConnection: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:4444",
-            workingDirectory: "/tmp/repo/worktree",
-          },
+          workingDirectory: "/tmp/repo/worktree",
         });
         await Promise.resolve();
       });
@@ -3092,10 +3077,7 @@ describe("use-agent-orchestrator-operations", () => {
       const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("external-1");
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
       expect(recoveredSession?.historyHydrationState).toBe("failed");
-      expect(recoveredSession?.runtimeRoute).toEqual({
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-      });
+      expect(recoveredSession?.runtimeRoute).toBeNull();
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
@@ -3304,7 +3286,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = async (input) => {
         listLiveAgentSessionSnapshotsCalls += 1;
         scannedEndpoints.push(
-          input.runtimeConnection.type === "local_http" ? input.runtimeConnection.endpoint : "",
+          `${input.repoPath}:${input.runtimeKind}:${input.directories?.join(",") ?? ""}`,
         );
         return [
           {
@@ -3347,7 +3329,9 @@ describe("use-agent-orchestrator-operations", () => {
             (session) => session.externalSessionId === "external-1" && session.status === "running",
           ),
         );
-        expect(new Set(scannedEndpoints)).toEqual(new Set(["http://127.0.0.1:4444"]));
+        expect(new Set(scannedEndpoints)).toEqual(
+          new Set(["/tmp/repo:opencode:/tmp/repo/worktree"]),
+        );
         expect(listLiveAgentSessionSnapshotsCalls).toBeLessThan(3);
       } finally {
         await harness.unmount();
@@ -3464,7 +3448,7 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.run(async () => {
           await runtimeSessionsDeferred.promise;
         });
-        expect(listLiveAgentSessionSnapshotsCalls).toBe(1);
+        expect(listLiveAgentSessionSnapshotsCalls).toBe(2);
       } finally {
         runtimeSessionsDeferred.resolve([]);
         await harness.unmount();

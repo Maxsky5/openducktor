@@ -10,10 +10,7 @@ import type { LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  liveAgentSessionLookupKey,
-  RuntimeConnectionPreloadIndex,
-} from "./live-agent-session-cache";
+import { liveAgentSessionLookupKey, RuntimeWorktreePreloadIndex } from "./live-agent-session-cache";
 import {
   createHydrationPromptAssemblerStage,
   createRuntimeResolutionPlannerStage,
@@ -1223,6 +1220,7 @@ describe("load-sessions-stages", () => {
 
     await expect(
       hydrateSessionRecordsStage({
+        repoPath: "/tmp/repo",
         adapter: {
           hasSession: () => false,
           listLiveAgentSessionSnapshots: async () => [],
@@ -1280,6 +1278,7 @@ describe("load-sessions-stages", () => {
 
     await expect(
       hydrateSessionRecordsStage({
+        repoPath: "/tmp/repo",
         adapter: {
           hasSession: () => false,
           listLiveAgentSessionSnapshots: async () => [],
@@ -1340,6 +1339,7 @@ describe("load-sessions-stages", () => {
 
     await expect(
       hydrateSessionRecordsStage({
+        repoPath: "/tmp/repo",
         adapter: {
           hasSession: () => false,
           listLiveAgentSessionSnapshots: async () => [],
@@ -1376,12 +1376,7 @@ describe("load-sessions-stages", () => {
             ok: true,
             runtimeKind: "opencode",
             runtimeId: "runtime-stdio",
-            runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
-            runtimeConnection: {
-              type: "stdio",
-              identity: "runtime-stdio",
-              workingDirectory: "/tmp/repo/worktree",
-            },
+            workingDirectory: "/tmp/repo/worktree",
           }),
           loadLiveAgentSessionSnapshot: async () => null,
         },
@@ -1396,12 +1391,9 @@ describe("load-sessions-stages", () => {
     expect(historyLoads).toBe(1);
     expect(historyInputs).toEqual([
       {
+        repoPath: "/tmp/repo",
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "stdio",
-          identity: "runtime-stdio",
-          workingDirectory: "/tmp/repo/worktree",
-        },
+        workingDirectory: "/tmp/repo/worktree",
         externalSessionId: "external-1",
         limit: 600,
       },
@@ -1415,6 +1407,7 @@ describe("load-sessions-stages", () => {
     const stateHarness = createStateHarness({ "external-1": initialSession });
 
     await hydrateSessionRecordsStage({
+      repoPath: "/tmp/repo",
       adapter: {
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [],
@@ -1469,6 +1462,7 @@ describe("load-sessions-stages", () => {
     const stateHarness = createStateHarness({ "external-1": initialSession });
 
     await hydrateSessionRecordsStage({
+      repoPath: "/tmp/repo",
       adapter: {
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [],
@@ -1503,12 +1497,7 @@ describe("load-sessions-stages", () => {
             ok: true,
             runtimeKind: "opencode",
             runtimeId: "runtime-1",
-            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-            runtimeConnection: {
-              type: "local_http",
-              endpoint: "http://127.0.0.1:4444",
-              workingDirectory: "/tmp/repo/worktree",
-            },
+            workingDirectory: "/tmp/repo/worktree",
           };
         },
         loadLiveAgentSessionSnapshot: async () => null,
@@ -1532,6 +1521,7 @@ describe("load-sessions-stages", () => {
     });
 
     await hydrateSessionRecordsStage({
+      repoPath: "/tmp/repo",
       adapter: {
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [],
@@ -1564,12 +1554,7 @@ describe("load-sessions-stages", () => {
           ok: true,
           runtimeKind: "opencode",
           runtimeId: "runtime-1",
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-          runtimeConnection: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:4444",
-            workingDirectory: "/tmp/repo/worktree",
-          },
+          workingDirectory: "/tmp/repo/worktree",
         }),
         loadLiveAgentSessionSnapshot: async () => ({
           externalSessionId: "external-1",
@@ -1605,6 +1590,7 @@ describe("load-sessions-stages", () => {
     const loadedSnapshotSessionIds: string[] = [];
 
     await hydrateSessionRecordsStage({
+      repoPath: "/tmp/repo",
       adapter: {
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [],
@@ -1656,12 +1642,7 @@ describe("load-sessions-stages", () => {
           ok: true,
           runtimeKind: "opencode",
           runtimeId: "runtime-1",
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-          runtimeConnection: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:4444",
-            workingDirectory: "/tmp/repo/worktree",
-          },
+          workingDirectory: "/tmp/repo/worktree",
         }),
         loadLiveAgentSessionSnapshot: async (record) => {
           const externalSessionId = record.externalSessionId;
@@ -1722,6 +1703,7 @@ describe("load-sessions-stages", () => {
     });
 
     await hydrateSessionRecordsStage({
+      repoPath: "/tmp/repo",
       adapter: {
         hasSession: () => false,
         listLiveAgentSessionSnapshots: async () => [],
@@ -1773,12 +1755,7 @@ describe("load-sessions-stages", () => {
           ok: true,
           runtimeKind: "opencode",
           runtimeId: "runtime-1",
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-          runtimeConnection: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:4444",
-            workingDirectory: "/tmp/repo/worktree",
-          },
+          workingDirectory: "/tmp/repo/worktree",
         }),
         loadLiveAgentSessionSnapshot: async (record) => {
           const externalSessionId = record.externalSessionId;
@@ -1841,6 +1818,7 @@ describe("load-sessions-stages", () => {
 
     try {
       await hydrateSessionRecordsStage({
+        repoPath: "/tmp/repo",
         adapter: {
           hasSession: () => false,
           listLiveAgentSessionSnapshots: async () => [],
@@ -1892,12 +1870,7 @@ describe("load-sessions-stages", () => {
             ok: true,
             runtimeKind: "opencode",
             runtimeId: "runtime-1",
-            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-            runtimeConnection: {
-              type: "local_http",
-              endpoint: "http://127.0.0.1:4444",
-              workingDirectory: "/tmp/repo/worktree",
-            },
+            workingDirectory: "/tmp/repo/worktree",
           }),
           loadLiveAgentSessionSnapshot: async (record) => {
             const externalSessionId = record.externalSessionId;
@@ -1956,12 +1929,8 @@ describe("load-sessions-stages", () => {
       workingDirectory,
     };
     let snapshotLoads = 0;
-    const preloadedRuntimeConnections = new RuntimeConnectionPreloadIndex();
-    preloadedRuntimeConnections.add("opencode", {
-      type: "local_http",
-      endpoint: "http://127.0.0.1:4444",
-      workingDirectory,
-    });
+    const preloadedRuntimeWorktrees = new RuntimeWorktreePreloadIndex();
+    preloadedRuntimeWorktrees.add("/tmp/repo", "opencode", workingDirectory);
 
     const planner = await createRuntimeResolutionPlannerStage({
       intent: createIntent({
@@ -1975,16 +1944,9 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createRuntime(workingDirectory)]],
         ]),
-        preloadedRuntimeConnections,
+        preloadedRuntimeWorktrees,
         preloadedLiveAgentSessionsByKey: new Map([
-          [
-            liveAgentSessionLookupKey(
-              "opencode",
-              { type: "local_http", endpoint: "http://127.0.0.1:4444", workingDirectory },
-              workingDirectory,
-            ),
-            [liveSnapshot],
-          ],
+          [liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory), [liveSnapshot]],
         ]),
         allowRuntimeEnsure: false,
       },
@@ -2025,12 +1987,7 @@ describe("load-sessions-stages", () => {
       ok: true,
       runtimeKind: "opencode",
       runtimeId: "runtime-current",
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-        workingDirectory,
-      },
+      workingDirectory,
     });
 
     const snapshot = await planner.loadLiveAgentSessionSnapshot(
@@ -2039,12 +1996,7 @@ describe("load-sessions-stages", () => {
         ok: true,
         runtimeKind: "opencode",
         runtimeId: "runtime-current",
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4444",
-          workingDirectory,
-        },
+        workingDirectory,
       },
     );
 
@@ -2100,31 +2052,21 @@ describe("load-sessions-stages", () => {
 
     const resolution = await planner.resolveHydrationRuntime(createRecord({ workingDirectory }));
 
-    expect(snapshotRequests).toEqual([{ directories: [workingDirectory] }]);
+    expect(snapshotRequests).toEqual([]);
     expect(resolution).toEqual({
       ok: true,
       runtimeKind: "opencode",
-      runtimeId: null,
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-        workingDirectory,
-      },
+      runtimeId: "runtime-1",
+      workingDirectory,
     });
   });
 
   test("runtime planner records cached route-only snapshots without re-scanning", async () => {
     const workingDirectory = "/tmp/repo/worktree";
-    const runtimeConnection = {
-      type: "local_http" as const,
-      endpoint: "http://127.0.0.1:4444",
-      workingDirectory,
-    };
     const preloadedLiveAgentSessionsByKey = new Map([
-      [liveAgentSessionLookupKey("opencode", runtimeConnection, workingDirectory), []],
+      [liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory), []],
     ]);
-    const preloadedRuntimeConnections = new RuntimeConnectionPreloadIndex();
+    const preloadedRuntimeWorktrees = new RuntimeWorktreePreloadIndex();
     const snapshotRequests: Array<{ directories?: string[] }> = [];
 
     const planner = await createRuntimeResolutionPlannerStage({
@@ -2138,7 +2080,7 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createRuntime("/tmp/repo")]],
         ]),
-        preloadedRuntimeConnections,
+        preloadedRuntimeWorktrees,
         preloadedLiveAgentSessionsByKey,
         allowRuntimeEnsure: false,
       },
@@ -2174,19 +2116,15 @@ describe("load-sessions-stages", () => {
     const resolution = await planner.resolveHydrationRuntime(createRecord({ workingDirectory }));
 
     expect(snapshotRequests).toEqual([]);
-    expect(preloadedRuntimeConnections.findCandidates("opencode", workingDirectory)).toEqual([
-      runtimeConnection,
-    ]);
     expect(resolution).toEqual({
       ok: true,
       runtimeKind: "opencode",
-      runtimeId: null,
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-      runtimeConnection,
+      runtimeId: "runtime-1",
+      workingDirectory,
     });
   });
 
-  test("runtime planner does not route-hydrate inactive worktree sessions through repo-root stdio runtimes", async () => {
+  test("runtime planner prefers the first repo runtime when multiple stdio runtimes share a worktree", async () => {
     const workingDirectory = "/tmp/repo/worktree";
     const snapshotRequests: Array<{ directories?: string[] }> = [];
 
@@ -2236,19 +2174,15 @@ describe("load-sessions-stages", () => {
 
     expect(snapshotRequests).toEqual([]);
     expect(resolution).toEqual({
-      ok: false,
+      ok: true,
       runtimeKind: "opencode",
-      reason: "No live runtime found for working directory /tmp/repo/worktree.",
+      runtimeId: "runtime-stdio-root",
+      workingDirectory,
     });
   });
 
   test("runtime planner reads preloaded live snapshots without a scan adapter", async () => {
     const workingDirectory = "/tmp/repo/worktree";
-    const runtimeConnection = {
-      type: "local_http" as const,
-      endpoint: "http://127.0.0.1:4444",
-      workingDirectory,
-    };
     const liveSnapshot = {
       externalSessionId: "external-1",
       title: "Builder Session",
@@ -2266,10 +2200,7 @@ describe("load-sessions-stages", () => {
           ["opencode", [createRuntime(workingDirectory)]],
         ]),
         preloadedLiveAgentSessionsByKey: new Map([
-          [
-            liveAgentSessionLookupKey("opencode", runtimeConnection, workingDirectory),
-            [liveSnapshot],
-          ],
+          [liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory), [liveSnapshot]],
         ]),
         allowRuntimeEnsure: false,
       },
@@ -2304,8 +2235,7 @@ describe("load-sessions-stages", () => {
         ok: true,
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-        runtimeConnection,
+        workingDirectory,
       },
     );
 
@@ -2314,19 +2244,8 @@ describe("load-sessions-stages", () => {
 
   test("runtime planner uses preloaded snapshots to disambiguate same-directory stdio runtimes", async () => {
     const workingDirectory = "/tmp/repo/worktree";
-    const runtimeConnectionA = {
-      type: "stdio" as const,
-      identity: "runtime-stdio-a",
-      workingDirectory,
-    };
-    const runtimeConnectionB = {
-      type: "stdio" as const,
-      identity: "runtime-stdio-b",
-      workingDirectory,
-    };
-    const preloadedRuntimeConnections = new RuntimeConnectionPreloadIndex();
-    preloadedRuntimeConnections.add("opencode", runtimeConnectionA);
-    preloadedRuntimeConnections.add("opencode", runtimeConnectionB);
+    const preloadedRuntimeWorktrees = new RuntimeWorktreePreloadIndex();
+    preloadedRuntimeWorktrees.add("/tmp/repo", "opencode", workingDirectory);
 
     const planner = await createRuntimeResolutionPlannerStage({
       intent: createIntent(),
@@ -2340,10 +2259,10 @@ describe("load-sessions-stages", () => {
             ],
           ],
         ]),
-        preloadedRuntimeConnections,
+        preloadedRuntimeWorktrees,
         preloadedLiveAgentSessionsByKey: new Map([
           [
-            liveAgentSessionLookupKey("opencode", runtimeConnectionB, workingDirectory),
+            liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory),
             [
               {
                 externalSessionId: "external-1",
@@ -2391,9 +2310,8 @@ describe("load-sessions-stages", () => {
       throw new Error("Expected runtime resolution to succeed");
     }
 
-    expect(result.runtimeId).toBe("runtime-stdio-b");
-    expect(result.runtimeRoute).toEqual({ type: "stdio", identity: "runtime-stdio-b" });
-    expect(result.runtimeConnection).toEqual(runtimeConnectionB);
+    expect(result.runtimeId).toBe("runtime-stdio-a");
+    expect(result.workingDirectory).toBe(workingDirectory);
   });
 
   test("prompt assembler omits system prompt when the task is unavailable", async () => {

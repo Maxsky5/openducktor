@@ -526,12 +526,9 @@ describe("useAgentStudioModelSelection", () => {
 
       expect(results).toEqual(FILE_SEARCH_RESULTS);
       expect(readSessionFileSearch).toHaveBeenCalledWith(
+        "/repo",
         "opencode",
-        {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4444",
-          workingDirectory: "/repo/session-worktree",
-        },
+        "/repo/session-worktree",
         "",
       );
     } finally {
@@ -562,11 +559,7 @@ describe("useAgentStudioModelSelection", () => {
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
       expect(readSessionSlashCommands).toHaveBeenCalledTimes(1);
-      expect(readSessionSlashCommands).toHaveBeenCalledWith("opencode", {
-        type: "stdio",
-        identity: "runtime-stdio",
-        workingDirectory: "/repo/session-worktree",
-      });
+      expect(readSessionSlashCommands).toHaveBeenCalledWith("/repo", "opencode");
       expect(harness.getLatest().slashCommandsError).toBeNull();
     } finally {
       await harness.unmount();
@@ -597,7 +590,7 @@ describe("useAgentStudioModelSelection", () => {
     try {
       await harness.mount();
       await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
-        "Active session file search is unavailable until the session runtime connection is ready.",
+        "Active session file search is unavailable until the session runtime is ready.",
       );
       expect(readSessionFileSearch).not.toHaveBeenCalled();
     } finally {
@@ -630,12 +623,9 @@ describe("useAgentStudioModelSelection", () => {
       );
       expect(readSessionFileSearch).toHaveBeenCalledTimes(1);
       expect(readSessionFileSearch).toHaveBeenCalledWith(
+        "/repo",
         "opencode",
-        {
-          type: "stdio",
-          identity: "runtime-stdio",
-          workingDirectory: "/repo/session-worktree",
-        },
+        "/repo/session-worktree",
         "src",
       );
     } finally {

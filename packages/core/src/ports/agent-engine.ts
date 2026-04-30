@@ -7,7 +7,6 @@ import type {
   AgentPendingPermissionRequest,
   AgentPendingQuestionRequest,
   AgentRole,
-  AgentRuntimeConnection,
   AgentScenario,
   AgentSessionContext,
   AgentSessionTodoItem,
@@ -21,6 +20,15 @@ import type {
   RuntimeKind,
   RuntimePendingInputRequestId,
 } from "../types/agent-orchestrator";
+
+type RepoRuntimeOperationInput = {
+  repoPath: string;
+  runtimeKind: RuntimeKind;
+};
+
+type RepoRuntimeSessionOperationInput = RepoRuntimeOperationInput & {
+  workingDirectory: string;
+};
 
 export type StartAgentSessionInput = AgentSessionContext;
 
@@ -38,8 +46,7 @@ export type AttachAgentSessionInput =
       externalSessionId: ExternalSessionId;
       repoPath: string;
       runtimeKind: RuntimeKind;
-      runtimeId: string;
-      runtimeConnection: AgentRuntimeConnection;
+      runtimeId?: string;
       workingDirectory: string;
       taskId: "";
       role: null;
@@ -63,23 +70,16 @@ export type UpdateAgentSessionModelInput = {
   model: AgentModelSelection | null;
 };
 
-export type LoadAgentSessionHistoryInput = {
-  runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
+export type LoadAgentSessionHistoryInput = RepoRuntimeSessionOperationInput & {
   externalSessionId: ExternalSessionId;
   limit?: number;
 };
 
-export type LoadAgentSessionTodosInput = {
-  runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
+export type LoadAgentSessionTodosInput = RepoRuntimeSessionOperationInput & {
   externalSessionId: ExternalSessionId;
 };
 
-export type ListLiveAgentSessionPendingInput = {
-  runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
-};
+export type ListLiveAgentSessionPendingInput = RepoRuntimeSessionOperationInput;
 
 export type LiveAgentSessionPendingInputByExternalSessionId = Record<
   ExternalSessionId,
@@ -89,39 +89,24 @@ export type LiveAgentSessionPendingInputByExternalSessionId = Record<
   }
 >;
 
-export type ListAgentModelsInput = {
-  runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
-};
+export type ListAgentModelsInput = RepoRuntimeOperationInput;
 
-export type ListAgentSlashCommandsInput = {
-  runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
-};
+export type ListAgentSlashCommandsInput = RepoRuntimeOperationInput;
 
-export type SearchAgentFilesInput = {
-  runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
+export type SearchAgentFilesInput = RepoRuntimeSessionOperationInput & {
   query: string;
 };
 
-export type ListLiveAgentSessionsInput = {
-  runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
+export type ListLiveAgentSessionsInput = RepoRuntimeOperationInput & {
   directories?: string[];
 };
 
-export type LoadAgentSessionDiffInput = {
-  runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
+export type LoadAgentSessionDiffInput = RepoRuntimeSessionOperationInput & {
   externalSessionId: ExternalSessionId;
   runtimeHistoryAnchor?: RuntimeHistoryAnchor;
 };
 
-export type LoadAgentFileStatusInput = {
-  runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
-};
+export type LoadAgentFileStatusInput = RepoRuntimeSessionOperationInput;
 
 export type AgentSessionHistoryMessage =
   | {
@@ -178,9 +163,7 @@ export type ReplyPermissionInput = {
   message?: string;
 };
 
-export type ReplyRuntimeSessionPermissionInput = {
-  runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
+export type ReplyRuntimeSessionPermissionInput = RepoRuntimeSessionOperationInput & {
   requestId: RuntimePendingInputRequestId;
   reply: "once" | "always" | "reject";
   message?: string;

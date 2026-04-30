@@ -1,8 +1,6 @@
-import type { AgentRuntimeConnection } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo } from "../runtime/runtime";
-import { resolveRuntimeConnection } from "../runtime/runtime";
-import { throwIfRepoStale } from "../support/core";
+import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import { createSessionMessagesState, getSessionMessagesSlice } from "../support/messages";
 import { historyToChatMessages } from "../support/persistence";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
@@ -37,7 +35,7 @@ const requireForkSourceRuntime = (
   sourceSession: AgentSessionState,
 ): {
   runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
-  runtimeConnection: AgentRuntimeConnection;
+  workingDirectory: string;
 } => {
   const sourceRuntimeKind = sourceSession.runtimeKind;
   if (!sourceRuntimeKind) {
@@ -46,24 +44,14 @@ const requireForkSourceRuntime = (
     );
   }
 
-  const sourceRuntime: RuntimeInfo = {
-    runtimeKind: sourceRuntimeKind,
-    runtimeId: sourceSession.runtimeId,
-    runtimeRoute: sourceSession.runtimeRoute,
-    workingDirectory: sourceSession.workingDirectory,
-  };
-
-  try {
-    return {
-      runtimeKind: sourceRuntimeKind,
-      runtimeConnection: resolveRuntimeConnection(sourceRuntime),
-    };
-  } catch (error) {
+  const sourceWorkingDirectory = normalizeWorkingDirectory(sourceSession.workingDirectory);
+  if (!sourceWorkingDirectory) {
     throw new Error(
-      `Session "${sourceExternalSessionId}" is missing live runtime context required for forking.`,
-      { cause: error },
+      `Session "${sourceExternalSessionId}" is missing working directory metadata required for forking.`,
     );
   }
+
+  return { runtimeKind: sourceRuntimeKind, workingDirectory: sourceWorkingDirectory };
 };
 
 export const executeForkStart = async ({
@@ -76,8 +64,10 @@ export const executeForkStart = async ({
     deps,
     sourceExternalSessionId: input.sourceExternalSessionId,
   });
-  const { runtimeKind: sourceRuntimeKind, runtimeConnection: sourceRuntimeConnection } =
-    requireForkSourceRuntime(input.sourceExternalSessionId, sourceSession);
+  const { runtimeKind: sourceRuntimeKind, workingDirectory } = requireForkSourceRuntime(
+    input.sourceExternalSessionId,
+    sourceSession,
+  );
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
 
@@ -105,8 +95,7 @@ export const executeForkStart = async ({
   const summary = await deps.runtime.adapter.forkSession({
     repoPath: ctx.repoPath,
     runtimeKind,
-    runtimeConnection: sourceRuntimeConnection,
-    workingDirectory: sourceSession.workingDirectory,
+    workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
     scenario: promptContext.resolvedScenario,
@@ -132,8 +121,9 @@ export const executeForkStart = async ({
 
   const forkHistory = await deps.runtime.adapter
     .loadSessionHistory({
+      repoPath: ctx.repoPath,
       runtimeKind,
-      runtimeConnection: sourceRuntimeConnection,
+      workingDirectory,
       externalSessionId: summary.externalSessionId,
       limit: FORK_START_HISTORY_LIMIT,
     })
@@ -182,9 +172,7 @@ export const executeForkStart = async ({
   const forkedRuntime: RuntimeInfo = {
     runtimeKind,
     runtimeId: sourceSession.runtimeId,
-    runtimeRoute: sourceSession.runtimeRoute,
-    runtimeConnection: sourceRuntimeConnection,
-    workingDirectory: sourceSession.workingDirectory,
+    workingDirectory,
   };
 
   return registerStartedSession({

@@ -1,18 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 import { createReattachLiveSession } from "./reattach-live-session";
 
-const localHttpRuntimeResolution = {
-  ok: true as const,
-  runtimeKind: "opencode" as const,
+const localHttpRuntimeResolution: ResolvedHydrationRuntime = {
+  ok: true,
+  runtimeKind: "opencode",
   runtimeId: "runtime-1",
-  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" } as const,
-  runtimeConnection: {
-    type: "local_http" as const,
-    endpoint: "http://127.0.0.1:4444",
-    workingDirectory: "/tmp/repo/worktree",
-  },
+  workingDirectory: "/tmp/repo/worktree",
+};
+
+const stdioRuntimeResolution: ResolvedHydrationRuntime = {
+  ok: true,
+  runtimeKind: "opencode",
+  runtimeId: "runtime-stdio",
+  workingDirectory: "/tmp/repo/worktree",
 };
 
 const sessionRecordFixture: AgentSessionRecord = {
@@ -345,17 +348,7 @@ describe("reattach-live-session", () => {
         throw new Error("should not attach unsupported session");
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => ({
-        ok: true,
-        runtimeKind: "opencode",
-        runtimeId: "runtime-stdio",
-        runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
-        runtimeConnection: {
-          type: "stdio",
-          identity: "runtime-stdio",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      }),
+      resolveHydrationRuntime: async () => stdioRuntimeResolution,
       attachMissingLiveSession: async () => {
         resumeCalls += 1;
       },
@@ -387,17 +380,7 @@ describe("reattach-live-session", () => {
         throw new Error("should not attach failed session");
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => ({
-        ok: true,
-        runtimeKind: "opencode",
-        runtimeId: "runtime-stdio",
-        runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
-        runtimeConnection: {
-          type: "stdio",
-          identity: "runtime-stdio",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      }),
+      resolveHydrationRuntime: async () => stdioRuntimeResolution,
       attachMissingLiveSession: async () => {},
       listLiveAgentSessions: async () => {
         throw new Error("live lookup failed");

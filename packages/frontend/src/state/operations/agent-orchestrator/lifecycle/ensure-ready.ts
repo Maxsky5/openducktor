@@ -4,18 +4,14 @@ import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
-import {
-  type RuntimeInfo,
-  resolveRuntimeConnection,
-  runtimeRouteToConnection,
-} from "../runtime/runtime";
+import type { RuntimeInfo } from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import { shouldReattachListenerForAttachedSession, throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import { isWorkflowAgentSession } from "../support/session-purpose";
 import {
   assertSessionRuntimeKindMatchesEnsuredRuntime,
-  requireSessionRuntimeKind,
+  requireSessionRuntimeKindForPersistence,
 } from "../support/session-runtime-metadata";
 
 type EnsureSessionReadyDependencies = {
@@ -130,22 +126,22 @@ export const createEnsureSessionReady = ({
     };
 
     const loadLiveSnapshot = async ({
+      repoPath,
       runtimeKind,
-      runtimeConnection,
       workingDirectory,
       externalSessionId,
     }: {
+      repoPath: string;
       runtimeKind: AgentSessionState["runtimeKind"];
-      runtimeConnection: import("@openducktor/core").AgentRuntimeConnection | null;
       workingDirectory: string;
       externalSessionId: string;
     }) => {
-      if (!runtimeKind || runtimeConnection === null || workingDirectory.trim().length === 0) {
+      if (!runtimeKind || workingDirectory.trim().length === 0) {
         return null;
       }
       const snapshots = await adapter.listLiveAgentSessionSnapshots({
+        repoPath,
         runtimeKind,
-        runtimeConnection,
         directories: [workingDirectory],
       });
       return snapshots.find((entry) => entry.externalSessionId === externalSessionId) ?? null;
@@ -170,49 +166,13 @@ export const createEnsureSessionReady = ({
         attachSessionListener(repoPath, externalSessionId);
       }
       if (session.status !== "error") {
-        let attachedRuntimeKind: NonNullable<AgentSessionState["runtimeKind"]> =
-          session.runtimeKind ?? requireSessionRuntimeKind(session);
-        let attachedRuntimeId = session.runtimeId;
-        let attachedRuntimeRoute = session.runtimeRoute;
-        let attachedWorkingDirectory = session.workingDirectory;
-
-        if (!attachedRuntimeKind || attachedRuntimeRoute === null) {
-          const requestedRuntimeKind = requireSessionRuntimeKind(session);
-          const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
-            workspaceId,
-            targetWorkingDirectory: session.workingDirectory,
-            runtimeKind: requestedRuntimeKind,
-          });
-          assertNotStale();
-          attachedRuntimeKind = assertSessionRuntimeKindMatchesEnsuredRuntime({
-            externalSessionId: session.externalSessionId,
-            requestedRuntimeKind,
-            ensuredRuntimeKind: runtime.runtimeKind,
-          });
-
-          attachedRuntimeId = runtime.runtimeId;
-          attachedRuntimeRoute = runtime.runtimeRoute;
-          attachedWorkingDirectory = runtime.workingDirectory;
-
-          updateSession(
-            externalSessionId,
-            (current) => ({
-              ...current,
-              runtimeId: attachedRuntimeId,
-              runtimeRoute: attachedRuntimeRoute,
-              workingDirectory: attachedWorkingDirectory,
-              runtimeKind: attachedRuntimeKind,
-            }),
-            { persist: false },
-          );
-        }
+        const attachedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
+        const attachedRuntimeId = session.runtimeId;
+        const attachedWorkingDirectory = session.workingDirectory;
 
         const liveSnapshot = await loadLiveSnapshot({
+          repoPath,
           runtimeKind: attachedRuntimeKind,
-          runtimeConnection:
-            attachedRuntimeRoute === null
-              ? null
-              : runtimeRouteToConnection(attachedRuntimeRoute, attachedWorkingDirectory),
           workingDirectory: attachedWorkingDirectory,
           externalSessionId: session.externalSessionId,
         });
@@ -226,7 +186,7 @@ export const createEnsureSessionReady = ({
             ...current,
             status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : current.status,
             runtimeId: attachedRuntimeId,
-            runtimeRoute: attachedRuntimeRoute,
+            runtimeRoute: current.runtimeRoute ?? null,
             workingDirectory: attachedWorkingDirectory,
             ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
             pendingPermissions,
@@ -268,7 +228,7 @@ export const createEnsureSessionReady = ({
       loadRepoPromptOverrides,
     });
     assertNotStale();
-    const requestedRuntimeKind = requireSessionRuntimeKind(session);
+    const requestedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
     const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
       workspaceId,
       targetWorkingDirectory: session.workingDirectory,
@@ -280,12 +240,10 @@ export const createEnsureSessionReady = ({
       requestedRuntimeKind,
       ensuredRuntimeKind: runtime.runtimeKind,
     });
-    const runtimeConnection = resolveRuntimeConnection(runtime);
     await adapter.resumeSession({
       externalSessionId: session.externalSessionId,
       repoPath,
       runtimeKind: resolvedRuntimeKind,
-      runtimeConnection,
       workingDirectory: runtime.workingDirectory,
       taskId: session.taskId,
       role: session.role,
@@ -312,8 +270,8 @@ export const createEnsureSessionReady = ({
     assertNotStale();
 
     const liveSnapshot = await loadLiveSnapshot({
+      repoPath,
       runtimeKind: resolvedRuntimeKind,
-      runtimeConnection,
       workingDirectory: runtime.workingDirectory,
       externalSessionId: session.externalSessionId,
     });
@@ -327,7 +285,7 @@ export const createEnsureSessionReady = ({
       status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : "idle",
       runtimeKind: resolvedRuntimeKind,
       runtimeId: runtime.runtimeId,
-      runtimeRoute: runtime.runtimeRoute,
+      runtimeRoute: current.runtimeRoute ?? null,
       workingDirectory: runtime.workingDirectory,
       ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
       promptOverrides: promptContext.promptOverrides,

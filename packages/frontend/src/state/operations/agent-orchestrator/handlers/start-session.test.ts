@@ -1568,11 +1568,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(input.role).toBe("build");
       expect(input.scenario).toBe("build_pull_request_generation");
       expect(input.parentExternalSessionId).toBe("external-source-build");
-      expect(input.runtimeConnection).toEqual({
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-        workingDirectory: "/tmp/repo/worktree",
-      });
+      expect(input.repoPath).toBe("/tmp/repo");
+      expect(input.runtimeKind).toBe("opencode");
+      expect(input.workingDirectory).toBe("/tmp/repo/worktree");
       return {
         runtimeKind: "opencode",
         externalSessionId: "external-forked-pr-session",
@@ -1583,12 +1581,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       };
     };
     adapter.loadSessionHistory = async (input) => {
+      expect(input.repoPath).toBe("/tmp/repo");
       expect(input.runtimeKind).toBe("opencode");
-      expect(input.runtimeConnection).toEqual({
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-        workingDirectory: "/tmp/repo/worktree",
-      });
+      expect(input.workingDirectory).toBe("/tmp/repo/worktree");
       expect(input.externalSessionId).toBe("external-forked-pr-session");
       return [
         {
@@ -1656,10 +1651,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(sessionsById["external-forked-pr-session"]?.workingDirectory).toBe(
         "/tmp/repo/worktree",
       );
-      expect(sessionsById["external-forked-pr-session"]?.runtimeRoute).toEqual({
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-      });
+      expect(sessionsById["external-forked-pr-session"]?.runtimeRoute).toBeNull();
       expect(
         sessionsById["external-forked-pr-session"]
           ? sessionMessagesToArray(sessionsById["external-forked-pr-session"])
@@ -1864,7 +1856,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("fails when the hydrated source session has no live runtime context even if ensureRuntime resolves one", async () => {
+  test("forks from a hydrated source session without live runtime transport", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const forkCalls: unknown[] = [];
@@ -1906,6 +1898,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
         status: "idle",
       };
     };
+    adapter.loadSessionHistory = async (input) => {
+      expect(input.repoPath).toBe("/tmp/repo");
+      expect(input.runtimeKind).toBe("opencode");
+      expect(input.workingDirectory).toBe("/tmp/repo/worktree");
+      return [];
+    };
 
     const sessionsRef = { current: sessionsById };
     const start = createStartAgentSessionWithFlatDeps({
@@ -1925,11 +1923,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         kind: "opencode",
         runtimeId: "runtime-1",
         runtimeRoute: null,
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:5555",
-          workingDirectory: "/tmp/repo/worktree",
-        },
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -1951,23 +1944,20 @@ describe("agent-orchestrator/handlers/start-session", () => {
           selectedModel: BUILD_SELECTION,
           sourceExternalSessionId: "external-source-build",
         }),
-      ).rejects.toThrow(
-        'Session "external-source-build" is missing live runtime context required for forking.',
-      );
-      expect(forkCalls).toHaveLength(0);
+      ).resolves.toBe("external-forked-from-runtime-connection");
+      expect(forkCalls).toHaveLength(1);
     } finally {
       adapter.forkSession = originalForkSession;
     }
   });
 
-  test("fails explicitly when fork source runtime context cannot be resolved", async () => {
+  test("fails explicitly when fork source runtime kind metadata is missing", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const forkCalls: unknown[] = [];
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "external-source-build": {
-          runtimeKind: "opencode",
           externalSessionId: "external-source-build",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2040,7 +2030,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceExternalSessionId: "external-source-build",
         }),
       ).rejects.toThrow(
-        'Session "external-source-build" is missing live runtime context required for forking.',
+        'Session "external-source-build" is missing runtime kind metadata required for forking.',
       );
       expect(forkCalls).toHaveLength(0);
     } finally {

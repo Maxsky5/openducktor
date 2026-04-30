@@ -1,8 +1,4 @@
-import type {
-  AgentModelCatalog,
-  AgentRuntimeConnection,
-  AgentSessionTodoItem,
-} from "@openducktor/core";
+import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
@@ -23,12 +19,13 @@ type UseAgentStudioActiveSessionRuntimeDataArgs = {
   session: AgentSessionState | null;
   agentStudioReadinessState: AgentStudioReadinessState;
   readSessionModelCatalog: (
+    repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentModelCatalog>;
   readSessionTodos: (
+    repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
 };
@@ -66,19 +63,16 @@ export const useAgentStudioActiveSessionRuntimeData = ({
     queryKey:
       shouldHydrateRuntimeData && runtimeQueryInput
         ? sessionModelCatalogQueryOptions(
+            runtimeQueryInput.repoPath,
             runtimeQueryInput.runtimeKind,
-            runtimeQueryInput.runtimeConnection,
             readSessionModelCatalog,
           ).queryKey
-        : (["agent-session-runtime", "model-catalog", "", "", ""] as const),
+        : (["agent-session-runtime", "model-catalog", "", ""] as const),
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!runtimeQueryInput) {
         throw new Error("Session runtime catalog query is disabled.");
       }
-      return readSessionModelCatalog(
-        runtimeQueryInput.runtimeKind,
-        runtimeQueryInput.runtimeConnection,
-      );
+      return readSessionModelCatalog(runtimeQueryInput.repoPath, runtimeQueryInput.runtimeKind);
     },
     enabled: shouldHydrateRuntimeData,
     staleTime: SESSION_MODEL_CATALOG_STALE_TIME_MS,
@@ -87,8 +81,9 @@ export const useAgentStudioActiveSessionRuntimeData = ({
     queryKey:
       shouldHydrateRuntimeData && runtimeQueryInput && session
         ? sessionTodosQueryOptions(
+            runtimeQueryInput.repoPath,
             runtimeQueryInput.runtimeKind,
-            runtimeQueryInput.runtimeConnection,
+            runtimeQueryInput.workingDirectory,
             session.externalSessionId,
             readSessionTodos,
           ).queryKey
@@ -98,8 +93,9 @@ export const useAgentStudioActiveSessionRuntimeData = ({
         throw new Error("Session todos query is disabled.");
       }
       return readSessionTodos(
+        runtimeQueryInput.repoPath,
         runtimeQueryInput.runtimeKind,
-        runtimeQueryInput.runtimeConnection,
+        runtimeQueryInput.workingDirectory,
         session.externalSessionId,
       );
     },

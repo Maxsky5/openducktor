@@ -1,69 +1,37 @@
 import { describe, expect, test } from "bun:test";
-import {
-  requireLocalHttpRuntimeConnection,
-  requireRuntimeConnection,
-  requireRuntimeWorkingDirectory,
-} from "./runtime-connections";
+import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "./runtime-connections";
 
 describe("runtime-connections", () => {
-  test("requireRuntimeConnection returns the provided connection", () => {
-    const connection = {
-      type: "stdio",
-      identity: "runtime-stdio",
-      workingDirectory: "/repo",
-    } as const;
-
-    expect(requireRuntimeConnection(connection, "list models")).toEqual(connection);
-  });
-
-  test("requireRuntimeConnection rejects missing connections", () => {
-    expect(() => requireRuntimeConnection(null, "list models")).toThrow(
-      "Runtime connection is required to list models.",
-    );
-  });
-
-  test("requireRuntimeWorkingDirectory trims and validates the directory", () => {
+  test("requireRepoRuntimeRef trims and validates logical runtime identity", () => {
     expect(
-      requireRuntimeWorkingDirectory(
+      requireRepoRuntimeRef(
         {
-          type: "stdio",
-          identity: "runtime-stdio",
-          workingDirectory: " /repo ",
-        },
-        "list models",
-      ),
-    ).toBe("/repo");
-  });
-
-  test("requireLocalHttpRuntimeConnection returns trimmed local_http transport data", () => {
-    expect(
-      requireLocalHttpRuntimeConnection(
-        {
-          type: "local_http",
-          endpoint: " http://127.0.0.1:4444 ",
-          workingDirectory: "/repo",
+          repoPath: " /repo ",
+          runtimeKind: "opencode",
         },
         "list models",
       ),
     ).toEqual({
-      type: "local_http",
-      endpoint: "http://127.0.0.1:4444",
-      workingDirectory: "/repo",
+      repoPath: "/repo",
+      runtimeKind: "opencode",
     });
   });
 
-  test("requireLocalHttpRuntimeConnection rejects unsupported transports", () => {
+  test("requireRepoRuntimeRef rejects missing repo path", () => {
     expect(() =>
-      requireLocalHttpRuntimeConnection(
-        {
-          type: "stdio",
-          identity: "runtime-stdio",
-          workingDirectory: "/repo",
-        },
-        "list models",
-      ),
-    ).toThrow(
-      "Runtime connection type 'stdio' is unsupported for list models; local_http is required.",
+      requireRepoRuntimeRef({ repoPath: " ", runtimeKind: "opencode" }, "list models"),
+    ).toThrow("Repository path is required to list models.");
+  });
+
+  test("requireSessionWorkingDirectory trims and validates the session cwd", () => {
+    expect(requireSessionWorkingDirectory(" /repo/worktree ", "load history")).toBe(
+      "/repo/worktree",
+    );
+  });
+
+  test("requireSessionWorkingDirectory rejects missing session cwd", () => {
+    expect(() => requireSessionWorkingDirectory(" ", "load history")).toThrow(
+      "Session workingDirectory is required to load history.",
     );
   });
 });

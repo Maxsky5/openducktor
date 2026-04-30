@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
+import type { LiveAgentSessionSnapshot } from "@openducktor/core";
 import {
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
@@ -27,27 +27,6 @@ export const withTimeout = async <T>(
 
 export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCard =>
   createSharedTaskCardFixture(ORCHESTRATOR_TASK_CARD_DEFAULTS, overrides);
-
-export const createLocalHttpRuntimeConnection = ({
-  endpoint = "http://127.0.0.1:4444",
-  workingDirectory = "/tmp/runtime-root",
-}: {
-  endpoint?: string;
-  workingDirectory?: string;
-} = {}): AgentRuntimeConnection => ({
-  type: "local_http",
-  endpoint,
-  workingDirectory,
-});
-
-export const createStdioRuntimeConnection = (
-  workingDirectory = "/tmp/runtime-root",
-  { identity = "runtime-stdio" }: { identity?: string } = {},
-): AgentRuntimeConnection => ({
-  type: "stdio",
-  identity,
-  workingDirectory,
-});
 
 export const createLiveAgentSessionSnapshotFixture = (
   overrides: Partial<LiveAgentSessionSnapshot> = {},

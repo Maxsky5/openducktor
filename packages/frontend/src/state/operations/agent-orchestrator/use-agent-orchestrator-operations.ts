@@ -1,5 +1,5 @@
 import type { AgentSessionRecord, RuntimeKind, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentRole, AgentRuntimeConnection } from "@openducktor/core";
+import type { AgentEnginePort, AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
@@ -48,13 +48,13 @@ import { isTranscriptAgentSession } from "./support/session-purpose";
 import { clearSubagentPendingPermissionFromSessions } from "./support/subagent-permission-overlay";
 
 const hasAttachedRuntime = (
-  session: Pick<AgentSessionState, "runtimeId" | "runtimeRoute"> | null | undefined,
+  session: Pick<AgentSessionState, "runtimeId"> | null | undefined,
 ): boolean => {
   if (!session) {
     return false;
   }
 
-  return session.runtimeId !== null || session.runtimeRoute !== null;
+  return session.runtimeId !== null;
 };
 
 const withRuntimeRecoveryState = (
@@ -217,16 +217,18 @@ export function useAgentOrchestratorOperations({
 
   const replyRuntimeSessionPermission = useCallback(
     async (input: {
+      repoPath: string;
       runtimeKind: RuntimeKind;
-      runtimeConnection: AgentRuntimeConnection;
+      workingDirectory: string;
       targetExternalSessionId: string;
       requestId: string;
       reply: "once" | "always" | "reject";
       message?: string;
     }) => {
       await agentEngine.replyRuntimeSessionPermission({
+        repoPath: input.repoPath,
         runtimeKind: input.runtimeKind,
-        runtimeConnection: input.runtimeConnection,
+        workingDirectory: input.workingDirectory,
         requestId: input.requestId,
         reply: input.reply,
         ...(input.message ? { message: input.message } : {}),
@@ -290,23 +292,25 @@ export function useAgentOrchestratorOperations({
   );
 
   const readSessionModelCatalog = useCallback(
-    (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection) =>
+    (repoPath: string, runtimeKind: RuntimeKind) =>
       agentEngine.listAvailableModels({
+        repoPath,
         runtimeKind,
-        runtimeConnection,
       }),
     [agentEngine],
   );
 
   const readSessionTodos = useCallback(
     (
+      repoPath: string,
       runtimeKind: RuntimeKind,
-      runtimeConnection: AgentRuntimeConnection,
+      workingDirectory: string,
       externalSessionId: string,
     ) =>
       agentEngine.loadSessionTodos({
+        repoPath,
         runtimeKind,
-        runtimeConnection,
+        workingDirectory,
         externalSessionId,
       }),
     [agentEngine],
@@ -314,32 +318,35 @@ export function useAgentOrchestratorOperations({
 
   const readSessionHistory = useCallback(
     (
+      repoPath: string,
       runtimeKind: RuntimeKind,
-      runtimeConnection: AgentRuntimeConnection,
+      workingDirectory: string,
       externalSessionId: string,
     ) =>
       agentEngine.loadSessionHistory({
+        repoPath,
         runtimeKind,
-        runtimeConnection,
+        workingDirectory,
         externalSessionId,
       }),
     [agentEngine],
   );
 
   const readSessionSlashCommands = useCallback(
-    (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection) =>
+    (repoPath: string, runtimeKind: RuntimeKind) =>
       agentEngine.listAvailableSlashCommands({
+        repoPath,
         runtimeKind,
-        runtimeConnection,
       }),
     [agentEngine],
   );
 
   const readSessionFileSearch = useCallback(
-    (runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection, query: string) =>
+    (repoPath: string, runtimeKind: RuntimeKind, workingDirectory: string, query: string) =>
       agentEngine.searchFiles({
+        repoPath,
         runtimeKind,
-        runtimeConnection,
+        workingDirectory,
         query,
       }),
     [agentEngine],
@@ -483,7 +490,8 @@ export function useAgentOrchestratorOperations({
           `Session ${input.externalSessionId} is already active and is not a transcript.`,
         );
       }
-      if (!input.runtimeId.trim()) {
+      const runtimeId = input.runtimeId?.trim() || null;
+      if (!runtimeId) {
         throw new Error("Runtime identity is unavailable for this transcript.");
       }
 
@@ -507,7 +515,7 @@ export function useAgentOrchestratorOperations({
           isTranscriptAgentSession(current) &&
           current.externalSessionId === input.externalSessionId &&
           current.runtimeKind === input.runtimeKind &&
-          current.runtimeId === input.runtimeId
+          current.runtimeId === runtimeId
         );
       };
       const hasMatchingLocalSession = isCurrentTranscriptRequest();
@@ -527,8 +535,8 @@ export function useAgentOrchestratorOperations({
           repoPath: input.repoPath,
           externalSessionId: input.externalSessionId,
           runtimeKind: input.runtimeKind,
-          runtimeId: input.runtimeId,
-          runtimeConnection: input.runtimeConnection,
+          runtimeId,
+          workingDirectory: input.workingDirectory,
           history: [],
           isLive: true,
           pendingPermissions: input.pendingPermissions ?? [],
@@ -546,9 +554,8 @@ export function useAgentOrchestratorOperations({
               externalSessionId: input.externalSessionId,
               repoPath: input.repoPath,
               runtimeKind: input.runtimeKind,
-              runtimeId: input.runtimeId,
-              runtimeConnection: input.runtimeConnection,
-              workingDirectory: input.runtimeConnection.workingDirectory,
+              runtimeId,
+              workingDirectory: input.workingDirectory,
               purpose: "transcript",
               taskId: "",
               role: null,
@@ -565,8 +572,9 @@ export function useAgentOrchestratorOperations({
         }
 
         const history = await agentEngine.loadSessionHistory({
+          repoPath: input.repoPath,
           runtimeKind: input.runtimeKind,
-          runtimeConnection: input.runtimeConnection,
+          workingDirectory: input.workingDirectory,
           externalSessionId: input.externalSessionId,
         });
         if (!isCurrentTranscriptRequest()) {
@@ -577,8 +585,8 @@ export function useAgentOrchestratorOperations({
           repoPath: input.repoPath,
           externalSessionId: input.externalSessionId,
           runtimeKind: input.runtimeKind,
-          runtimeId: input.runtimeId,
-          runtimeConnection: input.runtimeConnection,
+          runtimeId,
+          workingDirectory: input.workingDirectory,
           history,
           isLive: true,
           pendingPermissions: input.pendingPermissions ?? [],
@@ -601,9 +609,8 @@ export function useAgentOrchestratorOperations({
               startedAt: summary?.startedAt ?? hydratedSession.startedAt,
               status: summary?.status ?? current.status,
               runtimeKind: input.runtimeKind,
-              runtimeId: input.runtimeId,
-              runtimeRoute: hydratedSession.runtimeRoute,
-              workingDirectory: input.runtimeConnection.workingDirectory,
+              runtimeId,
+              workingDirectory: input.workingDirectory,
               historyHydrationState: "hydrated",
               runtimeRecoveryState: "idle",
               pendingPermissions: hydratedSession.pendingPermissions,

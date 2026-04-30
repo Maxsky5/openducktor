@@ -8,10 +8,10 @@ import type {
   RuntimeSubagentExecutionMode as ContractsRuntimeSubagentExecutionMode,
   SlashCommandCatalog as ContractsSlashCommandCatalog,
   SlashCommandDescriptor as ContractsSlashCommandDescriptor,
+  RepoRuntimeRef,
   RuntimeCapabilities,
   RuntimeDescriptor,
   RuntimeKind,
-  RuntimeTransport,
   TaskPriority,
 } from "@openducktor/contracts";
 import {
@@ -23,7 +23,7 @@ import {
   isScenarioStartModeAllowed as isContractsScenarioStartModeAllowed,
 } from "@openducktor/contracts";
 
-export type { RuntimeKind } from "@openducktor/contracts";
+export type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 
 export type AgentRole = ContractsAgentRole;
 export type AgentScenario = ContractsAgentScenario;
@@ -85,7 +85,6 @@ export type AgentModelCatalog = {
 };
 
 export type AgentRuntimeCapabilities = RuntimeCapabilities;
-export type AgentRuntimeConnection = RuntimeTransport;
 export type AgentRuntimeDefinition = RuntimeDescriptor;
 export type AgentSlashCommand = ContractsSlashCommandDescriptor;
 export type AgentSlashCommandCatalog = ContractsSlashCommandCatalog;
@@ -96,8 +95,8 @@ export type RuntimeHistoryAnchor = string;
 export type RuntimePendingInputRequestId = string;
 export type RuntimeSessionRef = {
   externalSessionId: ExternalSessionId;
+  repoPath: string;
   runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
   workingDirectory: string;
 };
 
@@ -279,11 +278,8 @@ export type AgentToolCall =
       };
     };
 
-export type AgentSessionContext = {
-  repoPath: string;
-  runtimeKind: RuntimeKind;
+export type AgentSessionContext = RepoRuntimeRef & {
   runtimeId?: string;
-  runtimeConnection?: AgentRuntimeConnection;
   workingDirectory: string;
   taskId: string;
   role: AgentRole;

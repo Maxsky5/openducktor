@@ -1,85 +1,81 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentRuntimeConnection,
-  LiveAgentSessionSnapshot,
-} from "@openducktor/core";
-import { runtimeConnectionTransportKey } from "../runtime/runtime";
+import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
 import { normalizeWorkingDirectory } from "../support/core";
 
-export const getLiveAgentSessionCacheKey = (
-  runtimeKind: string,
-  runtimeConnection: AgentRuntimeConnection,
-): string => {
-  const connectionKey =
-    runtimeConnection.type === "stdio"
-      ? `${runtimeConnectionTransportKey(runtimeConnection)}::${normalizeWorkingDirectory(runtimeConnection.workingDirectory)}`
-      : runtimeConnectionTransportKey(runtimeConnection);
-  return `${runtimeKind}::${connectionKey}`;
-};
+export const getLiveAgentSessionCacheKey = (repoPath: string, runtimeKind: string): string =>
+  `${normalizeWorkingDirectory(repoPath)}::${runtimeKind}`;
 
-export const runtimeWorkingDirectoryKey = (runtimeKind: string, workingDirectory: string): string =>
-  `${runtimeKind}::${normalizeWorkingDirectory(workingDirectory)}`;
-
-const runtimeConnectionPreloadKey = (
+export const runtimeWorkingDirectoryKey = (
+  repoPath: string,
   runtimeKind: string,
-  runtimeConnection: AgentRuntimeConnection,
+  workingDirectory: string,
 ): string =>
-  `${runtimeKind}::${runtimeConnectionTransportKey(runtimeConnection)}::${normalizeWorkingDirectory(
-    runtimeConnection.workingDirectory,
-  )}`;
+  `${getLiveAgentSessionCacheKey(repoPath, runtimeKind)}::${normalizeWorkingDirectory(workingDirectory)}`;
 
-const runtimeConnectionPreloadDirectoryKey = (
+const runtimeWorktreePreloadKey = (
+  repoPath: string,
+  runtimeKind: string,
+  workingDirectory: string,
+): string => runtimeWorkingDirectoryKey(repoPath, runtimeKind, workingDirectory);
+
+const runtimeWorktreePreloadDirectoryKey = (
+  repoPath: string,
   runtimeKind: RuntimeKind,
   workingDirectory: string,
-): string => `${runtimeKind}::${normalizeWorkingDirectory(workingDirectory)}`;
+): string => runtimeWorkingDirectoryKey(repoPath, runtimeKind, workingDirectory);
 
-export class RuntimeConnectionPreloadIndex {
-  private readonly connectionsByKey = new Map<string, AgentRuntimeConnection>();
-  private readonly connectionsByDirectoryKey = new Map<
+export class RuntimeWorktreePreloadIndex {
+  private readonly worktreesByKey = new Map<
     string,
-    Map<string, AgentRuntimeConnection>
+    { repoPath: string; runtimeKind: RuntimeKind; workingDirectory: string }
+  >();
+  private readonly worktreesByDirectoryKey = new Map<
+    string,
+    Map<string, { repoPath: string; runtimeKind: RuntimeKind; workingDirectory: string }>
   >();
 
   get size(): number {
-    return this.connectionsByKey.size;
+    return this.worktreesByKey.size;
   }
 
-  add(runtimeKind: RuntimeKind, runtimeConnection: AgentRuntimeConnection): void {
-    const connectionKey = runtimeConnectionPreloadKey(runtimeKind, runtimeConnection);
-    this.connectionsByKey.set(connectionKey, runtimeConnection);
+  add(repoPath: string, runtimeKind: RuntimeKind, workingDirectory: string): void {
+    const worktree = { repoPath, runtimeKind, workingDirectory };
+    const worktreeKey = runtimeWorktreePreloadKey(repoPath, runtimeKind, workingDirectory);
+    this.worktreesByKey.set(worktreeKey, worktree);
 
-    const directoryKey = runtimeConnectionPreloadDirectoryKey(
+    const directoryKey = runtimeWorktreePreloadDirectoryKey(
+      repoPath,
       runtimeKind,
-      runtimeConnection.workingDirectory,
+      workingDirectory,
     );
-    const connectionsForDirectory =
-      this.connectionsByDirectoryKey.get(directoryKey) ?? new Map<string, AgentRuntimeConnection>();
-    connectionsForDirectory.set(connectionKey, runtimeConnection);
-    this.connectionsByDirectoryKey.set(directoryKey, connectionsForDirectory);
+    const worktreesForDirectory =
+      this.worktreesByDirectoryKey.get(directoryKey) ??
+      new Map<string, { repoPath: string; runtimeKind: RuntimeKind; workingDirectory: string }>();
+    worktreesForDirectory.set(worktreeKey, worktree);
+    this.worktreesByDirectoryKey.set(directoryKey, worktreesForDirectory);
   }
 
-  hasAny(runtimeKind: RuntimeKind, workingDirectory: string): boolean {
-    return this.connectionsByDirectoryKey.has(
-      runtimeConnectionPreloadDirectoryKey(runtimeKind, workingDirectory),
+  hasAny(repoPath: string, runtimeKind: RuntimeKind, workingDirectory: string): boolean {
+    return this.worktreesByDirectoryKey.has(
+      runtimeWorktreePreloadDirectoryKey(repoPath, runtimeKind, workingDirectory),
     );
   }
 
-  findCandidates(runtimeKind: RuntimeKind, workingDirectory: string): AgentRuntimeConnection[] {
+  findCandidates(repoPath: string, runtimeKind: RuntimeKind, workingDirectory: string) {
     return Array.from(
-      this.connectionsByDirectoryKey
-        .get(runtimeConnectionPreloadDirectoryKey(runtimeKind, workingDirectory))
+      this.worktreesByDirectoryKey
+        .get(runtimeWorktreePreloadDirectoryKey(repoPath, runtimeKind, workingDirectory))
         ?.values() ?? [],
     );
   }
 }
 
 export const liveAgentSessionLookupKey = (
+  repoPath: string,
   runtimeKind: string,
-  runtimeConnection: AgentRuntimeConnection,
   workingDirectory: string,
 ): string =>
-  `${getLiveAgentSessionCacheKey(runtimeKind, runtimeConnection)}::${normalizeWorkingDirectory(workingDirectory)}`;
+  `${getLiveAgentSessionCacheKey(repoPath, runtimeKind)}::${normalizeWorkingDirectory(workingDirectory)}`;
 
 type LiveAgentSessionScanner = Pick<AgentEnginePort, "listLiveAgentSessionSnapshots">;
 
@@ -92,8 +88,8 @@ export class LiveAgentSessionCache {
   ) {}
 
   async load(input: {
+    repoPath: string;
     runtimeKind: RuntimeKind;
-    runtimeConnection: AgentRuntimeConnection;
     directories: string[];
   }): Promise<LiveAgentSessionSnapshot[]> {
     const normalizedDirectories = Array.from(
@@ -103,7 +99,7 @@ export class LiveAgentSessionCache {
           .filter((directory) => directory.length > 0),
       ),
     ).sort();
-    const key = `${getLiveAgentSessionCacheKey(input.runtimeKind, input.runtimeConnection)}::${normalizedDirectories.join("|")}`;
+    const key = `${getLiveAgentSessionCacheKey(input.repoPath, input.runtimeKind)}::${normalizedDirectories.join("|")}`;
     const cached = this.scansByKey.get(key);
     if (cached) {
       return cached;
@@ -112,7 +108,7 @@ export class LiveAgentSessionCache {
     const [singleDirectory] = normalizedDirectories;
     if (singleDirectory && this.preloadedByKey) {
       const preloaded = this.preloadedByKey.get(
-        liveAgentSessionLookupKey(input.runtimeKind, input.runtimeConnection, singleDirectory),
+        liveAgentSessionLookupKey(input.repoPath, input.runtimeKind, singleDirectory),
       );
       if (preloaded) {
         this.scansByKey.set(key, preloaded);
@@ -121,8 +117,8 @@ export class LiveAgentSessionCache {
     }
 
     const sessions = await this.adapter.listLiveAgentSessionSnapshots({
+      repoPath: input.repoPath,
       runtimeKind: input.runtimeKind,
-      runtimeConnection: input.runtimeConnection,
       ...(normalizedDirectories.length > 0 ? { directories: normalizedDirectories } : {}),
     });
     this.scansByKey.set(key, sessions);

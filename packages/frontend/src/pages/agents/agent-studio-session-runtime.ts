@@ -1,17 +1,16 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentRuntimeConnection } from "@openducktor/core";
-import { runtimeRouteToConnection } from "@/state/operations/agent-orchestrator/runtime/runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type SessionRuntimeAccessState = {
+  repoPath?: string | null;
   runtimeKind?: AgentSessionState["runtimeKind"] | null;
-  runtimeRoute: AgentSessionState["runtimeRoute"];
   workingDirectory: string;
 };
 
 export type AgentStudioSessionRuntimeQueryInput = {
+  repoPath: string;
   runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
+  workingDirectory: string;
 };
 
 export type AgentStudioSessionRuntimeQueryState = {
@@ -19,44 +18,22 @@ export type AgentStudioSessionRuntimeQueryState = {
   runtimeQueryError: string | null;
 };
 
-export const toAttachedSessionRuntimeConnection = (
-  session:
-    | Pick<AgentSessionState, "runtimeRoute" | "workingDirectory">
-    | { runtimeRoute: AgentSessionState["runtimeRoute"]; workingDirectory: string }
-    | null
-    | undefined,
-) => {
-  if (!session?.runtimeRoute) {
-    return null;
-  }
-
-  return runtimeRouteToConnection(session.runtimeRoute, session.workingDirectory);
-};
-
-export const getAttachedSessionRuntimeConnectionError = (
-  _session:
-    | Pick<AgentSessionState, "runtimeRoute" | "workingDirectory">
-    | { runtimeRoute: AgentSessionState["runtimeRoute"]; workingDirectory: string }
-    | null
-    | undefined,
-): string | null => {
-  return null;
-};
-
 export const resolveAttachedSessionRuntimeQueryState = (
   session: SessionRuntimeAccessState | null | undefined,
 ): AgentStudioSessionRuntimeQueryState => {
-  const runtimeConnection = toAttachedSessionRuntimeConnection(session);
   const runtimeKind = session?.runtimeKind ?? null;
+  const repoPath = session?.repoPath?.trim() ?? "";
+  const workingDirectory = session?.workingDirectory?.trim() ?? "";
 
   return {
     runtimeQueryInput:
-      runtimeKind && runtimeConnection
+      runtimeKind && repoPath && workingDirectory
         ? {
+            repoPath,
             runtimeKind,
-            runtimeConnection,
+            workingDirectory,
           }
         : null,
-    runtimeQueryError: getAttachedSessionRuntimeConnectionError(session),
+    runtimeQueryError: null,
   };
 };

@@ -4,7 +4,6 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
-  AgentRuntimeConnection,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -69,12 +68,13 @@ type UseAgentStudioModelSelectionArgs = {
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
   readSessionSlashCommands?: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentSlashCommandCatalog>;
   readSessionFileSearch?: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
 };
@@ -204,7 +204,6 @@ export function useAgentStudioModelSelection({
   const activeSessionSelectedModel = activeSessionSelection.selectedModel;
   const activeSessionModelCatalog = activeSessionSelection.modelCatalog;
   const activeSessionRuntimeKind = activeSessionSelection.runtimeKind;
-  const activeSessionRuntimeRoute = activeSessionSelection.runtimeRoute;
   const activeSessionWorkingDirectory = activeSessionSelection.workingDirectory;
   const activeSessionIsLoadingModelCatalog = activeSessionSelection.isLoadingModelCatalog;
   const activeSessionLiveContextUsage = activeSessionSelection.liveContextUsage ?? null;
@@ -236,15 +235,15 @@ export function useAgentStudioModelSelection({
       resolveAttachedSessionRuntimeQueryState(
         hasActiveSession
           ? {
+              repoPath: activeWorkspace?.repoPath ?? "",
               runtimeKind: activeSessionRuntimeKind,
-              runtimeRoute: activeSessionRuntimeRoute,
               workingDirectory: activeSessionWorkingDirectory,
             }
           : null,
       ),
     [
+      activeWorkspace?.repoPath,
       activeSessionRuntimeKind,
-      activeSessionRuntimeRoute,
       activeSessionWorkingDirectory,
       hasActiveSession,
     ],
@@ -328,12 +327,12 @@ export function useAgentStudioModelSelection({
   const activeSessionSlashCommandsQuery = useQuery({
     ...(activeSessionRuntimeQueryInput && readSessionSlashCommands
       ? sessionSlashCommandsQueryOptions(
+          activeSessionRuntimeQueryInput.repoPath,
           activeSessionRuntimeQueryInput.runtimeKind,
-          activeSessionRuntimeQueryInput.runtimeConnection,
           readSessionSlashCommands,
         )
       : {
-          queryKey: ["agent-session-runtime", "slash-commands", "", "", ""] as const,
+          queryKey: ["agent-session-runtime", "slash-commands", "", ""] as const,
           queryFn: async (): Promise<AgentSlashCommandCatalog> => {
             throw new Error("Session slash commands query is disabled.");
           },
@@ -472,13 +471,14 @@ export function useAgentStudioModelSelection({
         }
         if (activeSessionRuntimeQueryInput == null || readSessionFileSearch == null) {
           throw new Error(
-            "Active session file search is unavailable until the session runtime connection is ready.",
+            "Active session file search is unavailable until the session runtime is ready.",
           );
         }
         return queryClient.fetchQuery(
           sessionFileSearchQueryOptions(
+            activeSessionRuntimeQueryInput.repoPath,
             activeSessionRuntimeQueryInput.runtimeKind,
-            activeSessionRuntimeQueryInput.runtimeConnection,
+            activeSessionRuntimeQueryInput.workingDirectory,
             query,
             readSessionFileSearch,
           ),

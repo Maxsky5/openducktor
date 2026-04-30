@@ -306,7 +306,10 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   });
 
   test("loads a runtime transcript without task-owned session records", async () => {
-    const transcriptSource = makeTranscriptSource();
+    const transcriptSource = {
+      ...makeTranscriptSource(),
+      workingDirectory: "/repo-a/worktree",
+    };
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -334,12 +337,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       });
 
       expect(readSessionHistory).toHaveBeenCalledWith(
+        "/repo-a",
         "opencode",
-        {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4096",
-          workingDirectory: "/repo-a",
-        },
+        "/repo-a/worktree",
         "session-subagent-1",
       );
       const session = latestSurfaceModelArgs?.session as AgentSessionState;
@@ -412,12 +412,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         externalSessionId: "session-subagent-1",
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4096",
-          workingDirectory: "/repo-a",
-        },
         pendingPermissions: [pendingPermission],
+        workingDirectory: "/repo-a",
       });
       expect(readSessionHistory).not.toHaveBeenCalled();
     } finally {
@@ -547,12 +543,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       });
 
       expect(replyRuntimeSessionPermission).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4096",
-          workingDirectory: "/repo-a",
-        },
+        workingDirectory: "/repo-a",
         targetExternalSessionId: "session-subagent-1",
         requestId: "permission-1",
         reply: "once",
@@ -631,7 +624,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       expect(readSessionHistory).not.toHaveBeenCalled();
       expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
       expect(harness.getLatest().model.thread.emptyState).toEqual({
-        title: "Failed to load conversation: No opencode runtime is attached for /repo-a.",
+        title: "Failed to load conversation: No opencode runtime is attached for runtime-1.",
       });
     } finally {
       await harness.unmount();

@@ -1,16 +1,11 @@
 import type { RuntimeInstanceSummary } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import {
   useChecksOperationsContext,
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
-import {
-  resolveRuntimeRouteConnection,
-  runtimeConnectionTransportKey,
-} from "@/state/operations/agent-orchestrator/runtime/runtime";
 import { createRuntimeTranscriptSession } from "@/state/operations/agent-orchestrator/support/runtime-transcript-session";
 import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-runtime";
 import { runtimeListQueryOptions } from "@/state/queries/runtime";
@@ -48,17 +43,10 @@ const matchesSourceRuntime = (
   runtime: RuntimeInstanceSummary,
   source: RuntimeSessionTranscriptSource,
 ): boolean => {
-  const sourceRuntimeId = source.runtimeId?.trim() || null;
   if (runtime.kind !== source.runtimeKind) {
     return false;
   }
-  if (!sourceRuntimeId || runtime.runtimeId !== sourceRuntimeId) {
-    return false;
-  }
-  return (
-    normalizeWorkingDirectory(runtime.workingDirectory) ===
-    normalizeWorkingDirectory(source.workingDirectory)
-  );
+  return runtime.runtimeId === source.runtimeId;
 };
 
 export function useReadonlySessionTranscriptSurfaceModel({
@@ -106,9 +94,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     ...(source && workspaceRepoPath
       ? runtimeListQueryOptions(source.runtimeKind, workspaceRepoPath)
       : runtimeListQueryOptions("opencode", "")),
-    enabled: Boolean(
-      isOpen && workspaceRepoPath && source && !source.runtimeRoute && source.runtimeId?.trim(),
-    ),
+    enabled: Boolean(isOpen && workspaceRepoPath && source),
   });
 
   useEffect(() => {
@@ -140,30 +126,10 @@ export function useReadonlySessionTranscriptSurfaceModel({
 
   const resolvedSource = useMemo(() => {
     if (!source) {
-      return { isPending: false, error: null, runtimeId: null, runtimeConnection: null };
-    }
-    if (source.runtimeRoute) {
-      return {
-        isPending: false,
-        error: null,
-        runtimeId: source.runtimeId,
-        runtimeConnection: resolveRuntimeRouteConnection(
-          source.runtimeRoute,
-          source.workingDirectory,
-        ).runtimeConnection,
-      };
-    }
-    const sourceRuntimeId = source.runtimeId?.trim() || null;
-    if (!sourceRuntimeId) {
-      return {
-        isPending: false,
-        error: "Runtime identity is unavailable for this transcript.",
-        runtimeId: null,
-        runtimeConnection: null,
-      };
+      return { isPending: false, error: null, runtimeId: null };
     }
     if (runtimeListQuery.isPending) {
-      return { isPending: true, error: null, runtimeId: null, runtimeConnection: null };
+      return { isPending: true, error: null, runtimeId: null };
     }
     if (runtimeListQuery.error) {
       return {
@@ -173,7 +139,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
           `Failed to load ${source.runtimeKind} runtimes.`,
         ),
         runtimeId: null,
-        runtimeConnection: null,
       };
     }
 
@@ -184,9 +149,8 @@ export function useReadonlySessionTranscriptSurfaceModel({
       const errorPrefix = matches.length === 0 ? "No" : "Multiple";
       return {
         isPending: false,
-        error: `${errorPrefix} ${source.runtimeKind} runtime is attached for ${source.workingDirectory}.`,
+        error: `${errorPrefix} ${source.runtimeKind} runtime is attached for ${source.runtimeId}.`,
         runtimeId: null,
-        runtimeConnection: null,
       };
     }
 
@@ -194,19 +158,14 @@ export function useReadonlySessionTranscriptSurfaceModel({
     if (!runtime) {
       return {
         isPending: false,
-        error: `No ${source.runtimeKind} runtime is attached for ${source.workingDirectory}.`,
+        error: `No ${source.runtimeKind} runtime is attached for ${source.runtimeId}.`,
         runtimeId: null,
-        runtimeConnection: null,
       };
     }
     return {
       isPending: false,
       error: null,
       runtimeId: runtime.runtimeId,
-      runtimeConnection: resolveRuntimeRouteConnection(
-        runtime.runtimeRoute,
-        runtime.workingDirectory,
-      ).runtimeConnection,
     };
   }, [runtimeListQuery.data, runtimeListQuery.error, runtimeListQuery.isPending, source]);
   const externalSessionId = source?.externalSessionId ?? requestedExternalSessionId ?? null;
@@ -249,7 +208,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
       !externalSessionId ||
       !source ||
       source.isLive !== true ||
-      !resolvedSource.runtimeConnection ||
       resolvedSource.error ||
       resolvedSource.isPending
     ) {
@@ -261,8 +219,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       externalSessionId,
       source.runtimeKind,
       resolvedSource.runtimeId ?? "",
-      runtimeConnectionTransportKey(resolvedSource.runtimeConnection),
-      resolvedSource.runtimeConnection.workingDirectory,
+      source.workingDirectory,
     ].join("\u0000");
   }, [
     activeWorkspace,
@@ -270,7 +227,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
     isOpen,
     resolvedSource.error,
     resolvedSource.isPending,
-    resolvedSource.runtimeConnection,
     resolvedSource.runtimeId,
     source,
   ]);
@@ -290,10 +246,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
     if (!activeWorkspace || !externalSessionId || !source) {
       return;
     }
-    const runtimeConnection = resolvedSource.runtimeConnection;
-    if (!runtimeConnection) {
-      return;
-    }
     if (attachLiveTranscriptKeyRef.current === liveTranscriptAttachKey) {
       return;
     }
@@ -306,8 +258,8 @@ export function useReadonlySessionTranscriptSurfaceModel({
       repoPath: activeWorkspace.repoPath,
       externalSessionId,
       runtimeKind: source.runtimeKind,
-      runtimeId: resolvedSource.runtimeId ?? source.runtimeId,
-      runtimeConnection,
+      ...(resolvedSource.runtimeId ? { runtimeId: resolvedSource.runtimeId } : {}),
+      workingDirectory: source.workingDirectory,
       pendingPermissions: visiblePendingPermissionsRef.current,
     })
       .catch((error: unknown) => {
@@ -336,7 +288,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
     attachRuntimeTranscriptSession,
     externalSessionId,
     liveTranscriptAttachKey,
-    resolvedSource.runtimeConnection,
     resolvedSource.runtimeId,
     source,
   ]);
@@ -347,22 +298,25 @@ export function useReadonlySessionTranscriptSurfaceModel({
       externalSessionId &&
       source &&
       source.isLive !== true &&
-      resolvedSource.runtimeConnection &&
+      !resolvedSource.error &&
+      !resolvedSource.isPending &&
       liveSession === null,
   );
 
   const historyQuery = useQuery({
-    ...(source && externalSessionId && resolvedSource.runtimeConnection
+    ...(source && activeWorkspace && externalSessionId
       ? sessionHistoryQueryOptions(
+          activeWorkspace.repoPath,
           source.runtimeKind,
-          resolvedSource.runtimeConnection,
+          source.workingDirectory,
           externalSessionId,
           readSessionHistory,
         )
       : sessionHistoryQueryOptions(
+          activeWorkspace?.repoPath ?? "",
           "opencode",
-          { type: "local_http", endpoint: "disabled", workingDirectory: "" },
-          "disabled",
+          source?.workingDirectory ?? "",
+          externalSessionId ?? "disabled",
           readSessionHistory,
         )),
     enabled: historyQueryEnabled,
@@ -378,13 +332,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     if (source?.isLive === true) {
       return null;
     }
-    if (
-      !activeWorkspace ||
-      !source ||
-      !externalSessionId ||
-      !resolvedSource.runtimeConnection ||
-      !historyQuery.data
-    ) {
+    if (!activeWorkspace || !source || !externalSessionId || !historyQuery.data) {
       return null;
     }
 
@@ -393,7 +341,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       externalSessionId,
       runtimeKind: source.runtimeKind,
       runtimeId: resolvedSource.runtimeId,
-      runtimeConnection: resolvedSource.runtimeConnection,
+      workingDirectory: source.workingDirectory,
       history: historyQuery.data,
       isLive: false,
       pendingPermissions: visiblePendingPermissions,
@@ -458,10 +406,11 @@ export function useReadonlySessionTranscriptSurfaceModel({
       requestId: string,
       reply: "once" | "always" | "reject",
     ): Promise<void> => {
-      if (source && externalSessionId && resolvedSource.runtimeConnection) {
+      if (source && activeWorkspace && externalSessionId) {
         await replyRuntimeSessionPermission({
+          repoPath: activeWorkspace.repoPath,
           runtimeKind: source.runtimeKind,
-          runtimeConnection: resolvedSource.runtimeConnection,
+          workingDirectory: source.workingDirectory,
           targetExternalSessionId,
           requestId,
           reply,
@@ -485,11 +434,11 @@ export function useReadonlySessionTranscriptSurfaceModel({
       throw new Error("Runtime transcript permission target is unavailable.");
     },
     [
+      activeWorkspace,
       externalSessionId,
       liveSession,
       replyAgentPermission,
       replyRuntimeSessionPermission,
-      resolvedSource.runtimeConnection,
       source,
     ],
   );

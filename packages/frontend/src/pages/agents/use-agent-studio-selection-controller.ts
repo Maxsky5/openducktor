@@ -2,7 +2,6 @@ import type { TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentRole,
-  AgentRuntimeConnection,
   AgentScenario,
   AgentSessionTodoItem,
 } from "@openducktor/core";
@@ -57,12 +56,13 @@ type UseAgentStudioSelectionControllerArgs = {
   runtimeAttachmentSources: RuntimeAttachmentSource[];
   refreshRuntimeAttachmentSources: () => Promise<void>;
   readSessionModelCatalog: (
+    repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentModelCatalog>;
   readSessionTodos: (
+    repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
   clearComposerInput: () => void;
