@@ -501,8 +501,8 @@ describe("MCP server tool results", () => {
       ).tools?.find((entry) => entry.name === "odt_set_plan");
       expect(setPlanTool).toBeTruthy();
 
-      expect(setPlanTool!.description).not.toContain("subtask");
-      expect(setPlanTool!.description).not.toContain("priority");
+      expect(setPlanTool?.description).not.toContain("subtask");
+      expect(setPlanTool?.description).not.toContain("priority");
 
       expect(readToolInputProperties(tools, "odt_set_plan")).not.toHaveProperty("subtasks");
     } finally {
