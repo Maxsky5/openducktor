@@ -706,7 +706,8 @@ describe("useAgentChatWindow", () => {
       throw new Error("Expected messages container");
     }
 
-    container.scrollTop = Math.floor(getMaxScrollTop(container) / 2);
+    // Small layout-shift drift near bottom should be auto-corrected
+    container.scrollTop = getMaxScrollTop(container) - 50;
     await act(async () => {
       await dispatchScroll(container);
     });
@@ -1083,5 +1084,104 @@ describe("useAgentChatWindow", () => {
   test("exports the expected turn window constants", () => {
     expect(CHAT_TURN_WINDOW_INIT).toBe(10);
     expect(CHAT_TURN_WINDOW_BATCH).toBe(8);
+  });
+
+  test("resets scroll intent when the user returns to bottom so small layout shifts do not break following", async () => {
+    const rows = createTurnRows(12);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeExternalSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    // User scrolls up to show intent
+    container.scrollTop = 120;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    // User scrolls back to bottom
+    container.scrollTop = getMaxScrollTop(container);
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    // Simulate a small layout-shift drift (e.g. message height change on agent completion)
+    container.scrollTop = getMaxScrollTop(container) - 50;
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    // Should auto-scroll back to bottom because scroll intent was reset and drift is small
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("preserves scroll position after a large scroll jump when following (scrollbar track click)", async () => {
+    const rows = createTurnRows(12);
+    const harness = await mountHarness(
+      {
+        rows,
+        activeExternalSessionId: "session-1",
+        isSessionViewLoading: false,
+      },
+      { attachDom: true },
+    );
+
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    // User scrolls up to show intent
+    container.scrollTop = 120;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    // User scrolls back to bottom
+    container.scrollTop = getMaxScrollTop(container);
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    expect(harness.getLatestResult().isNearBottom).toBe(true);
+
+    // Simulate a large scroll jump (e.g. scrollbar track click) — should be treated as user-initiated
+    const largeJumpScrollTop = Math.floor(getMaxScrollTop(container) / 2);
+    container.scrollTop = largeJumpScrollTop;
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    await flushAnimationFrames();
+
+    // Should NOT auto-scroll back to bottom because the jump is too large
+    expect(container.scrollTop).toBe(largeJumpScrollTop);
+    expect(harness.getLatestResult().isNearBottom).toBe(false);
+
+    await harness.unmount();
   });
 });

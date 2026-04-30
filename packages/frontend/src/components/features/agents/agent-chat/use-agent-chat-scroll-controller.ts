@@ -1,6 +1,9 @@
 import type { MutableRefObject, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
+import {
+  CHAT_SCROLL_EDGE_THRESHOLD_PX,
+  CHAT_SCROLL_MAX_LAYOUT_SHIFT_PX,
+} from "./agent-chat-window-shared";
 
 type UseAgentChatScrollControllerInput = {
   activeExternalSessionId: string | null;
@@ -49,6 +52,9 @@ export function useAgentChatScrollController({
 
   const setUserScrolledState = useCallback((nextValue: boolean) => {
     userScrolledRef.current = nextValue;
+    if (!nextValue) {
+      userScrollIntentVersionRef.current = 0;
+    }
     setUserScrolled(nextValue);
   }, []);
 
@@ -114,7 +120,6 @@ export function useAgentChatScrollController({
     }
 
     activeExternalSessionIdRef.current = activeExternalSessionId;
-    userScrollIntentVersionRef.current = 0;
     autoScrollRef.current = null;
     if (autoScrollTimerRef.current !== null) {
       clearTimeout(autoScrollTimerRef.current);
@@ -242,7 +247,13 @@ export function useAgentChatScrollController({
       }
 
       if (!userScrolledRef.current && userScrollIntentVersionRef.current === 0) {
-        scrollToBottomNow(false);
+        const dist = distanceFromBottom(container);
+        if (dist < CHAT_SCROLL_MAX_LAYOUT_SHIFT_PX) {
+          scrollToBottomNow(false);
+        } else {
+          setUserScrolledState(true);
+          updateOverflowAnchor();
+        }
         return;
       }
 
