@@ -1,50 +1,10 @@
 import { type TaskMetadataPayload, taskMetadataPayloadSchema } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 
-type MetadataIssue = {
-  path: Array<string | number>;
-  message: string;
-};
-
 export type ParsedTaskMetadata = TaskMetadataPayload;
 
 export type TaskMetadataReadOptions = {
   forceFresh?: boolean;
-};
-
-const isAgentSessionIssue = (issue: MetadataIssue): boolean => issue.path[0] === "agentSessions";
-
-const toMetadataIssue = (issue: { path: PropertyKey[]; message: string }): MetadataIssue => ({
-  path: issue.path.map((segment) =>
-    typeof segment === "string" || typeof segment === "number" ? segment : String(segment),
-  ),
-  message: issue.message,
-});
-
-const formatAgentSessionIssue = (issue: MetadataIssue): string => {
-  const path = issue.path.length > 1 ? issue.path.slice(1) : ["unknown"];
-  const [index, ...rest] = path;
-  const suffix = rest.length > 0 ? `.${rest.join(".")}` : "";
-  return `agentSessions[${String(index)}]${suffix}: ${issue.message}`;
-};
-
-const parseTaskMetadataPayload = (payload: unknown, taskId: string): TaskMetadataPayload => {
-  const parsed = taskMetadataPayloadSchema.safeParse(payload);
-  if (parsed.success) {
-    return parsed.data;
-  }
-
-  const metadataIssues = parsed.error.issues.map(toMetadataIssue);
-
-  if (!metadataIssues.every(isAgentSessionIssue)) {
-    throw parsed.error;
-  }
-
-  throw new Error(
-    `Task metadata for ${taskId} contains invalid persisted agent sessions: ${metadataIssues
-      .map(formatAgentSessionIssue)
-      .join(" | ")}`,
-  );
 };
 
 export class TaskMetadataCache {
@@ -121,7 +81,7 @@ export class TaskMetadataCache {
 
     const next = invokeFn("task_metadata_get", { repoPath, taskId })
       .then((payload) => {
-        const parsed = parseTaskMetadataPayload(payload, taskId);
+        const parsed = taskMetadataPayloadSchema.parse(payload);
         const metadata: ParsedTaskMetadata = parsed;
 
         if (this.latestFetchTokenByKey.get(cacheKey) === fetchToken) {

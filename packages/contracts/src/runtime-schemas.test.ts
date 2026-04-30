@@ -1586,7 +1586,7 @@ describe("runtime schemas", () => {
   test("agent session record rejects missing runtime metadata", () => {
     expect(() =>
       agentSessionRecordSchema.parse({
-        sessionId: "obp-session-3",
+        externalSessionId: "obp-session-3",
         role: "planner",
         scenario: "planner_initial",
         startedAt: "2026-02-18T17:11:00.000Z",
@@ -1596,7 +1596,7 @@ describe("runtime schemas", () => {
 
     expect(() =>
       agentSessionRecordSchema.parse({
-        sessionId: "obp-session-4",
+        externalSessionId: "obp-session-4",
         role: "planner",
         scenario: "planner_initial",
         startedAt: "2026-02-18T17:11:00.000Z",

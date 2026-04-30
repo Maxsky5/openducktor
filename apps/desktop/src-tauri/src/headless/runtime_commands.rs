@@ -412,26 +412,6 @@ mod tests {
     }
 
     #[test]
-    fn agent_session_upsert_args_ignores_unknown_legacy_session_id() {
-        let parsed = deserialize_args::<AgentSessionUpsertArgs>(json!({
-            "repoPath": "/repo",
-            "taskId": "task-1",
-            "session": {
-                "sessionId": "local-session-1",
-                "externalSessionId": "external-session-1",
-                "role": "build",
-                "scenario": "build_default",
-                "startedAt": "2026-02-20T12:00:00Z",
-                "runtimeKind": "opencode",
-                "workingDirectory": "/repo/worktree/task-1"
-            }
-        }))
-        .expect("unknown legacy session id should be ignored when externalSessionId is present");
-
-        assert_eq!(parsed.session.external_session_id, "external-session-1");
-    }
-
-    #[test]
     fn agent_session_upsert_args_reject_missing_session() {
         let error = deserialize_args::<AgentSessionUpsertArgs>(json!({
             "repoPath": "/repo",

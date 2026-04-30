@@ -64,7 +64,6 @@ describe("document contracts", () => {
       },
       agentSessions: [
         {
-          sessionId: "session-1",
           externalSessionId: "session-1",
           role: "build",
           scenario: "build_implementation_start",
@@ -84,7 +83,6 @@ describe("document contracts", () => {
         scenario: "build_implementation_start",
       }),
     );
-    expect("sessionId" in (parsed.agentSessions[0] ?? {})).toBe(false);
   });
 
   test("task metadata payload normalizes missing top-level delivery fields independently", () => {
