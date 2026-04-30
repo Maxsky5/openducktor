@@ -340,8 +340,8 @@ fn build_completed_blocks_task_when_post_complete_hooks_have_no_worktree() -> Re
 // --- Integration tests for blocked→review routing and review no-ops ---
 
 #[test]
-fn build_completed_from_blocked_routes_to_ai_review_when_enabled_without_approved_qa()
--> Result<()> {
+fn build_completed_from_blocked_routes_to_ai_review_when_enabled_without_approved_qa() -> Result<()>
+{
     let root = unique_temp_path("build-completed-blocked-to-ai");
     let repo = root.join("repo");
     init_git_repo(&repo)?;
@@ -426,11 +426,8 @@ fn build_completed_from_ai_review_is_no_op() -> Result<()> {
     let repo_path = "/tmp/odt-repo-build-ai-review-no-op";
     let mut task = make_task("task-1", "task", TaskStatus::AiReview);
     task.ai_review_enabled = true;
-    let (service, task_state, _git_state) = build_service_with_git_state(
-        vec![task],
-        vec![],
-        main_branch(),
-    );
+    let (service, task_state, _git_state) =
+        build_service_with_git_state(vec![task], vec![], main_branch());
 
     let task = service.build_completed(repo_path, "task-1", None)?;
     assert_eq!(task.status, TaskStatus::AiReview);
@@ -445,11 +442,8 @@ fn build_completed_from_human_review_is_no_op() -> Result<()> {
     let repo_path = "/tmp/odt-repo-build-human-review-no-op";
     let mut task = make_task("task-1", "task", TaskStatus::HumanReview);
     task.ai_review_enabled = false;
-    let (service, task_state, _git_state) = build_service_with_git_state(
-        vec![task],
-        vec![],
-        main_branch(),
-    );
+    let (service, task_state, _git_state) =
+        build_service_with_git_state(vec![task], vec![], main_branch());
 
     let task = service.build_completed(repo_path, "task-1", None)?;
     assert_eq!(task.status, TaskStatus::HumanReview);
@@ -471,11 +465,8 @@ fn build_completed_rejects_disallowed_statuses_with_clear_error() {
     for (status, label) in disallowed {
         let repo_path = format!("/tmp/odt-repo-build-reject-{label}");
         let task = make_task("task-1", "task", status.clone());
-        let (service, _task_state, _git_state) = build_service_with_git_state(
-            vec![task],
-            vec![],
-            main_branch(),
-        );
+        let (service, _task_state, _git_state) =
+            build_service_with_git_state(vec![task], vec![], main_branch());
 
         let error = service
             .build_completed(repo_path.as_str(), "task-1", None)
