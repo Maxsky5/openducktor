@@ -1,4 +1,4 @@
-import { Maximize2 } from "lucide-react";
+import { Expand } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useState } from "react";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
@@ -115,30 +115,30 @@ export function AgentStudioWorkspaceSidebar({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <div className="space-y-1 border-b border-border p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-2">
-            <h2 className="text-lg font-semibold leading-none tracking-tight">
-              {activeDocument.title}
-            </h2>
-            {canExpand ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0"
-                aria-label={`Open ${activeDocument.title} in fullscreen`}
-                data-testid="expand-agent-studio-document"
-                onClick={openModal}
-              >
-                <Maximize2 className="size-3.5" />
-              </Button>
-            ) : null}
-          </div>
+      <div className="space-y-2 border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold leading-none tracking-tight">
+            {activeDocument.title}
+          </h2>
+          {canExpand ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0"
+              aria-label={`Open ${activeDocument.title} in fullscreen`}
+              data-testid="expand-agent-studio-document"
+              onClick={openModal}
+            >
+              <Expand className="size-3.5" />
+            </Button>
+          ) : null}
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground">{activeDocument.description}</p>
           <p className="shrink-0 text-right text-xs text-muted-foreground">
             {formatDocumentUpdatedAt(activeDocument.document.updatedAt) ?? "Not set"}
           </p>
         </div>
-        <p className="text-sm text-muted-foreground">{activeDocument.description}</p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <DocumentSection

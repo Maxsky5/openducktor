@@ -1,4 +1,4 @@
-import { Maximize2 } from "lucide-react";
+import { Expand } from "lucide-react";
 import { lazy, memo, type ReactElement, Suspense, useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -140,7 +140,7 @@ export const TaskDetailsAsyncDocumentSection = memo(function TaskDetailsAsyncDoc
               data-testid={`expand-${title.toLowerCase().replace(/\s+/g, "-")}`}
               onClick={openModal}
             >
-              <Maximize2 className="size-3.5" />
+              <Expand className="size-3.5" />
             </Button>
           }
         />
