@@ -15,6 +15,7 @@ export type MarkdownPreviewModalProps = {
   markdown: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Display title shown in the modal header. Enrichted with task context by callers. */
   title?: string;
 };
 
@@ -26,17 +27,17 @@ export function MarkdownPreviewModal({
 }: MarkdownPreviewModalProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className={title ? undefined : "sr-only"}>
+      <DialogContent className="flex flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
+          <DialogTitle className={title ? "text-xl font-semibold" : "sr-only"}>
             {title ?? "Document Preview"}
           </DialogTitle>
           <DialogDescription className="sr-only">
             Fullscreen markdown document preview.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody>
-          <div className="relative">
+        <DialogBody className="min-h-0 flex-1 overflow-hidden">
+          <div className="relative h-full overflow-y-auto px-6 pt-4 pb-6">
             <MarkdownRenderer
               markdown={markdown}
               variant="document"
@@ -46,7 +47,7 @@ export function MarkdownPreviewModal({
               markdown={markdown}
               dataTestId="markdown-preview-modal-copy"
               errorLogContext="MarkdownPreviewModal"
-              className="absolute top-2 right-2 z-10"
+              className="absolute top-4 right-6 z-10"
             />
           </div>
         </DialogBody>

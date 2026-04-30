@@ -56,6 +56,7 @@ export function TaskDetailsSheetBody({
         updatedAt={null}
         empty="No description yet."
         defaultExpanded
+        taskId={task.id}
       />
       <TaskDetailsAsyncDocumentSection
         key={`${task.id}:spec`}
@@ -66,6 +67,7 @@ export function TaskDetailsSheetBody({
         hasDocument={hasSpecDocument}
         summaryUpdatedAt={specSummaryUpdatedAt}
         onLoad={loadSpecDocumentSection}
+        taskId={task.id}
       />
 
       <TaskDetailsAsyncDocumentSection
@@ -77,6 +79,7 @@ export function TaskDetailsSheetBody({
         hasDocument={hasPlanDocument}
         summaryUpdatedAt={planSummaryUpdatedAt}
         onLoad={loadPlanDocumentSection}
+        taskId={task.id}
       />
 
       <TaskDetailsAsyncDocumentSection
@@ -88,6 +91,7 @@ export function TaskDetailsSheetBody({
         hasDocument={hasQaDocument}
         summaryUpdatedAt={qaSummaryUpdatedAt}
         onLoad={loadQaDocumentSection}
+        taskId={task.id}
       />
       <TaskDetailsMetadata key={`${task.id}:metadata`} task={task} />
       {shouldRenderSubtasks ? <TaskDetailsSubtasks subtasks={subtasks} /> : null}

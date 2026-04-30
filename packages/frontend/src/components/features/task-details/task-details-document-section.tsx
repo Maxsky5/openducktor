@@ -18,6 +18,8 @@ type TaskDetailsDocumentSectionProps = {
   updatedAt: string | null;
   empty: string;
   defaultExpanded?: boolean;
+  /** Task ID used to enrich the fullscreen modal title. */
+  taskId?: string;
 };
 
 export const TaskDetailsDocumentSection = memo(
@@ -28,6 +30,7 @@ export const TaskDetailsDocumentSection = memo(
     updatedAt,
     empty,
     defaultExpanded = false,
+    taskId,
   }: TaskDetailsDocumentSectionProps): ReactElement {
     const [modalSnapshot, setModalSnapshot] = useState<{
       markdown: string;
@@ -35,8 +38,9 @@ export const TaskDetailsDocumentSection = memo(
     } | null>(null);
 
     const openModal = useCallback(() => {
-      setModalSnapshot({ markdown, title });
-    }, [markdown, title]);
+      const modalTitle = taskId ? `${taskId} - ${title}` : title;
+      setModalSnapshot({ markdown, title: modalTitle });
+    }, [markdown, title, taskId]);
 
     const closeModal = useCallback(() => {
       setModalSnapshot(null);
@@ -116,5 +120,6 @@ export const TaskDetailsDocumentSection = memo(
     previous.markdown === next.markdown &&
     previous.updatedAt === next.updatedAt &&
     previous.empty === next.empty &&
-    previous.defaultExpanded === next.defaultExpanded,
+    previous.defaultExpanded === next.defaultExpanded &&
+    previous.taskId === next.taskId,
 );
