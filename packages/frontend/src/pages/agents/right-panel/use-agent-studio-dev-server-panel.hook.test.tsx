@@ -59,7 +59,7 @@ const repoSettings: RepoSettingsInput = {
   preStartHooks: [],
   postCompleteHooks: [],
   devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   agentDefaults: {
     spec: null,
     planner: null,

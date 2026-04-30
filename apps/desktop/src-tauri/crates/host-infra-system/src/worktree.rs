@@ -68,7 +68,7 @@ fn resolve_worktree_cleanup_path(repo_path: &Path, worktree_path: &Path) -> Path
     repo_path.join(worktree_path)
 }
 
-pub fn copy_configured_worktree_files(
+pub fn copy_configured_worktree_paths(
     repo_path: &Path,
     worktree_path: &Path,
     configured_files: &[String],
@@ -78,7 +78,7 @@ pub fn copy_configured_worktree_files(
         .with_context(|| format!("Failed resolving repository path: {}", repo_path.display()))?;
     let worktree_root = worktree_path.canonicalize().with_context(|| {
         format!(
-            "Failed resolving worktree path before copying configured files: {}",
+            "Failed resolving worktree path before copying configured paths: {}",
             worktree_path.display()
         )
     })?;
@@ -275,6 +275,21 @@ fn validate_worktree_copy_path(path: &Path, original: &str) -> Result<()> {
         ));
     }
 
+    let mut normal_components = path.components().filter_map(|component| match component {
+        Component::Normal(segment) => Some(segment),
+        _ => None,
+    });
+    let Some(first_normal_component) = normal_components.next() else {
+        return Err(anyhow!(
+            "Configured worktree copy path cannot be the repository root: {original}"
+        ));
+    };
+    if first_normal_component == ".git" {
+        return Err(anyhow!(
+            "Configured worktree copy path cannot include the repository metadata directory: {original}"
+        ));
+    }
+
     for component in path.components() {
         match component {
             Component::ParentDir => {
@@ -374,7 +389,7 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_branch_name, copy_configured_worktree_files, pick_free_port, remove_worktree,
+        build_branch_name, copy_configured_worktree_paths, pick_free_port, remove_worktree,
         remove_worktree_path_if_present, slugify_title,
     };
     use host_domain::DEFAULT_BRANCH_PREFIX;
@@ -468,7 +483,7 @@ mod tests {
     }
 
     #[test]
-    fn copy_configured_worktree_files_copies_hidden_and_nested_files() {
+    fn copy_configured_worktree_paths_copies_hidden_and_nested_files() {
         let root = unique_temp_path("copy-configured-files");
         let repo = root.join("repo");
         let worktree = root.join("worktree");
@@ -478,12 +493,12 @@ mod tests {
         fs::write(repo.join("config").join("local.json"), "{}\n")
             .expect("nested file should write");
 
-        copy_configured_worktree_files(
+        copy_configured_worktree_paths(
             &repo,
             &worktree,
             &[".env".to_string(), "config/local.json".to_string()],
         )
-        .expect("configured files should copy");
+        .expect("configured paths should copy");
 
         assert_eq!(
             fs::read_to_string(worktree.join(".env")).expect("copied hidden file should exist"),
@@ -499,7 +514,7 @@ mod tests {
     }
 
     #[test]
-    fn copy_configured_worktree_files_copies_directory_recursively() {
+    fn copy_configured_worktree_paths_copies_directory_recursively() {
         let root = unique_temp_path("copy-configured-directory");
         let repo = root.join("repo");
         let worktree = root.join("worktree");
@@ -519,7 +534,7 @@ mod tests {
         fs::write(repo.join(".vscode").join(".hidden"), "hidden\n")
             .expect("hidden nested file should write");
 
-        copy_configured_worktree_files(&repo, &worktree, &[".vscode".to_string()])
+        copy_configured_worktree_paths(&repo, &worktree, &[".vscode".to_string()])
             .expect("configured directory should copy");
 
         assert_eq!(
@@ -542,7 +557,7 @@ mod tests {
     }
 
     #[test]
-    fn copy_configured_worktree_files_copies_empty_directory() {
+    fn copy_configured_worktree_paths_copies_empty_directory() {
         let root = unique_temp_path("copy-configured-empty-directory");
         let repo = root.join("repo");
         let worktree = root.join("worktree");
@@ -550,7 +565,7 @@ mod tests {
             .expect("repo empty directory should exist");
         fs::create_dir_all(&worktree).expect("worktree directory should exist");
 
-        copy_configured_worktree_files(&repo, &worktree, &["scripts/local".to_string()])
+        copy_configured_worktree_paths(&repo, &worktree, &["scripts/local".to_string()])
             .expect("configured empty directory should copy");
 
         let copied_directory = worktree.join("scripts").join("local");
@@ -570,7 +585,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn copy_configured_worktree_files_rejects_symlink_inside_directory() {
+    fn copy_configured_worktree_paths_rejects_symlink_inside_directory() {
         let root = unique_temp_path("copy-configured-directory-symlink");
         let repo = root.join("repo");
         let worktree = root.join("worktree");
@@ -586,7 +601,7 @@ mod tests {
         )
         .expect("nested symlink should exist");
 
-        let error = copy_configured_worktree_files(&repo, &worktree, &[".vscode".to_string()])
+        let error = copy_configured_worktree_paths(&repo, &worktree, &[".vscode".to_string()])
             .expect_err("nested symlink should be rejected");
         let message = error.to_string();
         assert!(
@@ -602,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn copy_configured_worktree_files_handles_mixed_files_and_directories() {
+    fn copy_configured_worktree_paths_handles_mixed_files_and_directories() {
         let root = unique_temp_path("copy-configured-mixed");
         let repo = root.join("repo");
         let worktree = root.join("worktree");
@@ -616,12 +631,12 @@ mod tests {
         )
         .expect("script file should write");
 
-        copy_configured_worktree_files(
+        copy_configured_worktree_paths(
             &repo,
             &worktree,
             &[".env".to_string(), "scripts".to_string()],
         )
-        .expect("configured file and directory should copy");
+        .expect("configured file and directory paths should copy");
 
         assert_eq!(
             fs::read_to_string(worktree.join(".env")).expect("copied env file should exist"),
@@ -637,14 +652,14 @@ mod tests {
     }
 
     #[test]
-    fn copy_configured_worktree_files_rejects_parent_traversal() {
+    fn copy_configured_worktree_paths_rejects_parent_traversal() {
         let root = unique_temp_path("copy-configured-parent");
         let repo = root.join("repo");
         let worktree = root.join("worktree");
         fs::create_dir_all(&repo).expect("repo directory should exist");
         fs::create_dir_all(&worktree).expect("worktree directory should exist");
 
-        let error = copy_configured_worktree_files(&repo, &worktree, &["../.env".to_string()])
+        let error = copy_configured_worktree_paths(&repo, &worktree, &["../.env".to_string()])
             .expect_err("parent traversal should be rejected");
         assert!(
             error
@@ -656,9 +671,67 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn copy_configured_worktree_paths_rejects_repository_root() {
+        let root = unique_temp_path("copy-configured-root");
+        let repo = root.join("repo");
+        let worktree = root.join("worktree");
+        fs::create_dir_all(&repo).expect("repo directory should exist");
+        fs::create_dir_all(&worktree).expect("worktree directory should exist");
+
+        let error = copy_configured_worktree_paths(&repo, &worktree, &[".".to_string()])
+            .expect_err("repository root should be rejected");
+        assert!(
+            error.to_string().contains("cannot be the repository root"),
+            "unexpected copy error: {error}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn copy_configured_worktree_paths_rejects_git_metadata_directory() {
+        let root = unique_temp_path("copy-configured-git-metadata");
+        let repo = root.join("repo");
+        let worktree = root.join("worktree");
+        fs::create_dir_all(repo.join(".git").join("refs")).expect("repo metadata should exist");
+        fs::create_dir_all(&worktree).expect("worktree directory should exist");
+
+        let error = copy_configured_worktree_paths(&repo, &worktree, &[".git/refs".to_string()])
+            .expect_err("git metadata directory should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("cannot include the repository metadata directory"),
+            "unexpected copy error: {error}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn copy_configured_worktree_paths_rejects_git_metadata_root() {
+        let root = unique_temp_path("copy-configured-git-metadata-root");
+        let repo = root.join("repo");
+        let worktree = root.join("worktree");
+        fs::create_dir_all(repo.join(".git")).expect("repo metadata should exist");
+        fs::create_dir_all(&worktree).expect("worktree directory should exist");
+
+        let error = copy_configured_worktree_paths(&repo, &worktree, &[".git".to_string()])
+            .expect_err("git metadata root should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("cannot include the repository metadata directory"),
+            "unexpected copy error: {error}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
     #[cfg(unix)]
     #[test]
-    fn copy_configured_worktree_files_rejects_symlinked_source_components() {
+    fn copy_configured_worktree_paths_rejects_symlinked_source_components() {
         let root = unique_temp_path("copy-configured-source-symlink");
         let repo = root.join("repo");
         let worktree = root.join("worktree");
@@ -670,7 +743,7 @@ mod tests {
         symlink(&outside, repo.join("config")).expect("repo config symlink should exist");
 
         let error =
-            copy_configured_worktree_files(&repo, &worktree, &["config/secret.env".to_string()])
+            copy_configured_worktree_paths(&repo, &worktree, &["config/secret.env".to_string()])
                 .expect_err("symlinked source component should be rejected");
         assert!(
             error
@@ -684,7 +757,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn copy_configured_worktree_files_rejects_symlinked_destination_components() {
+    fn copy_configured_worktree_paths_rejects_symlinked_destination_components() {
         let root = unique_temp_path("copy-configured-destination-symlink");
         let repo = root.join("repo");
         let worktree = root.join("worktree");
@@ -696,7 +769,7 @@ mod tests {
         symlink(&outside, worktree.join("config")).expect("worktree config symlink should exist");
 
         let error =
-            copy_configured_worktree_files(&repo, &worktree, &["config/local.json".to_string()])
+            copy_configured_worktree_paths(&repo, &worktree, &["config/local.json".to_string()])
                 .expect_err("symlinked destination component should be rejected");
         assert!(
             error

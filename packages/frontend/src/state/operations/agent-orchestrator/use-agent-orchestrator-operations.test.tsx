@@ -316,7 +316,7 @@ describe("use-agent-orchestrator-operations", () => {
         git: { providers: {} },
         hooks: { preStart: [], postComplete: [] },
         devServers: [],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
@@ -704,7 +704,7 @@ describe("use-agent-orchestrator-operations", () => {
           postComplete: [],
         },
         devServers: [],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
       });
@@ -840,7 +840,7 @@ describe("use-agent-orchestrator-operations", () => {
           postComplete: [],
         },
         devServers: [],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
       });
@@ -1123,7 +1123,7 @@ describe("use-agent-orchestrator-operations", () => {
             postComplete: [],
           },
           devServers: [],
-          worktreeFileCopies: [],
+          worktreeCopyPaths: [],
           promptOverrides: {},
           agentDefaults: {},
         });
@@ -1193,7 +1193,7 @@ describe("use-agent-orchestrator-operations", () => {
           postComplete: [],
         },
         devServers: [],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
       });
@@ -1489,7 +1489,7 @@ describe("use-agent-orchestrator-operations", () => {
           postComplete: [],
         },
         devServers: [],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
       });
@@ -3509,7 +3509,7 @@ describe("use-agent-orchestrator-operations", () => {
             postComplete: [],
           },
           devServers: [],
-          worktreeFileCopies: [],
+          worktreeCopyPaths: [],
           promptOverrides: {},
           agentDefaults: {},
         };

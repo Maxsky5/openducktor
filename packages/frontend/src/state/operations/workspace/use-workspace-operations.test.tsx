@@ -303,7 +303,7 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot => ({
           postComplete: [],
         },
         devServers: [],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
       },
@@ -602,7 +602,7 @@ describe("use-workspace-operations", () => {
         postComplete: [],
       },
       devServers: [],
-      worktreeFileCopies: [],
+      worktreeCopyPaths: [],
       promptOverrides: {},
       agentDefaults: {},
     }));
@@ -703,7 +703,7 @@ describe("use-workspace-operations", () => {
         postComplete: [],
       },
       devServers: [],
-      worktreeFileCopies: [],
+      worktreeCopyPaths: [],
       promptOverrides: {},
       agentDefaults: {},
     }));
@@ -792,7 +792,7 @@ describe("use-workspace-operations", () => {
         postComplete: [],
       },
       devServers: [],
-      worktreeFileCopies: [],
+      worktreeCopyPaths: [],
       promptOverrides: {},
       agentDefaults: {},
     }));
@@ -844,7 +844,7 @@ describe("use-workspace-operations", () => {
     let latestActiveRepo: string | null = null;
 
     const Harness = () => {
-      const [activeWorkspace, setActiveWorkspace] = useState<ActiveWorkspace | null>(
+      const [activeWorkspace, setActiveWorkspace] = useState<ActiveWorkspace | null>(() =>
         createActiveWorkspace("/repo-old"),
       );
       const value = useWorkspaceOperations({
@@ -1071,7 +1071,7 @@ describe("use-workspace-operations", () => {
         postComplete: [],
       },
       devServers: [],
-      worktreeFileCopies: [],
+      worktreeCopyPaths: [],
       promptOverrides: {},
       agentDefaults: {},
     }));
@@ -1127,7 +1127,7 @@ describe("use-workspace-operations", () => {
     let latestActiveRepo: string | null = null;
 
     const Harness = () => {
-      const [activeWorkspace, setActiveWorkspace] = useState<ActiveWorkspace | null>(
+      const [activeWorkspace, setActiveWorkspace] = useState<ActiveWorkspace | null>(() =>
         createActiveWorkspace("/repo-old"),
       );
       const value = useWorkspaceOperations({

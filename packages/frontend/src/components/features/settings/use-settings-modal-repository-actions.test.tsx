@@ -27,7 +27,7 @@ const createRepoConfig = (): RepoConfig => ({
   },
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
 });

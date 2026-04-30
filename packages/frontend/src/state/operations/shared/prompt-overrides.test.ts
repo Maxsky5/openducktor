@@ -25,7 +25,7 @@ const createRepoConfig = (): RepoConfig => ({
       enabled: true,
     },
   },
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   agentDefaults: {},
 });
 

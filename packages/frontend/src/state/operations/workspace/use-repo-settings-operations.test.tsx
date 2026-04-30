@@ -95,7 +95,7 @@ const createRepoConfig = () => ({
   git: { providers: {} },
   hooks: { preStart: ["a"], postComplete: ["b"] },
   devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {
     spec: { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" },
@@ -123,7 +123,7 @@ const inputFixture: RepoSettingsInput = {
   preStartHooks: ["echo pre"],
   postCompleteHooks: ["echo post"],
   devServers: [{ id: "frontend", name: "Frontend", command: " bun run dev " }],
-  worktreeFileCopies: ["  .env  ", "  .env.local  "],
+  worktreeCopyPaths: ["  .env  ", "  .env.local  "],
   agentDefaults: {
     spec: {
       runtimeKind: "opencode",
@@ -245,7 +245,7 @@ describe("use-repo-settings-operations", () => {
         preStartHooks: ["a"],
         postCompleteHooks: ["b"],
         devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         agentDefaults: {
           spec: {
             runtimeKind: "opencode",
@@ -321,7 +321,7 @@ describe("use-repo-settings-operations", () => {
           postComplete: ["echo post"],
         },
         devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-        worktreeFileCopies: [".env", ".env.local"],
+        worktreeCopyPaths: [".env", ".env.local"],
         agentDefaults: {
           spec: {
             runtimeKind: "claude-code",
@@ -416,7 +416,7 @@ describe("use-repo-settings-operations", () => {
           postComplete: ["echo post"],
         },
         devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-        worktreeFileCopies: [".env", ".env.local"],
+        worktreeCopyPaths: [".env", ".env.local"],
         agentDefaults: {
           spec: {
             runtimeKind: "opencode",
@@ -740,7 +740,7 @@ describe("use-repo-settings-operations", () => {
           },
           hooks: { preStart: [], postComplete: [] },
           devServers: [],
-          worktreeFileCopies: [],
+          worktreeCopyPaths: [],
           promptOverrides: repoPromptOverrides,
           agentDefaults: {},
         },

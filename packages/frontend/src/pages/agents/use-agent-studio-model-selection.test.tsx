@@ -128,7 +128,7 @@ const createRepoSettings = (
   preStartHooks: [],
   postCompleteHooks: [],
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   agentDefaults: {
     spec: specDefault,
     planner: null,

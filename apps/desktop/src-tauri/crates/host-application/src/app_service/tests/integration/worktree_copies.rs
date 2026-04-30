@@ -37,7 +37,7 @@ fn assert_branch_missing(repo_path: &Path, branch: &str) -> Result<()> {
 fn make_service(
     root: &Path,
     repo_path: &str,
-    worktree_file_copies: Vec<String>,
+    worktree_copy_paths: Vec<String>,
 ) -> Result<AppService> {
     let task_state = Arc::new(Mutex::new(TaskStoreState::default()));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore { state: task_state });
@@ -57,7 +57,7 @@ fn make_service(
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies,
+            worktree_copy_paths,
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()

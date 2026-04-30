@@ -176,7 +176,7 @@ const createRepoSettingsFixture = (): RepoSettingsInput => ({
   preStartHooks: [],
   postCompleteHooks: [],
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   agentDefaults: {
     spec: {
       runtimeKind: "opencode",
@@ -213,7 +213,7 @@ const createRepoConfigFixture = (promptOverrides: RepoPromptOverrides = {}): Rep
     postComplete: [],
   },
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   promptOverrides,
   agentDefaults: {
     spec: {

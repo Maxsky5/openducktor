@@ -16,7 +16,7 @@ pub struct RepoConfigUpdate {
     pub default_target_branch: Option<GitTargetBranch>,
     pub git: Option<RepoGitConfig>,
     pub dev_servers: Option<Vec<RepoDevServerScript>>,
-    pub worktree_file_copies: Option<Vec<String>>,
+    pub worktree_copy_paths: Option<Vec<String>>,
     pub prompt_overrides: Option<PromptOverrides>,
     pub agent_defaults: Option<AgentDefaults>,
 }
@@ -30,7 +30,7 @@ pub struct RepoSettingsUpdate {
     pub git: Option<RepoGitConfig>,
     pub hooks: Option<HookSet>,
     pub dev_servers: Option<Vec<RepoDevServerScript>>,
-    pub worktree_file_copies: Option<Vec<String>>,
+    pub worktree_copy_paths: Option<Vec<String>>,
     pub prompt_overrides: Option<PromptOverrides>,
     pub agent_defaults: Option<AgentDefaults>,
 }
@@ -106,12 +106,12 @@ impl AppService {
                 .map(|entry| entry.hooks.clone())
                 .unwrap_or_default(),
             dev_servers,
-            worktree_file_copies: update
-                .worktree_file_copies
+            worktree_copy_paths: update
+                .worktree_copy_paths
                 .or_else(|| {
                     existing
                         .as_ref()
-                        .map(|entry| entry.worktree_file_copies.clone())
+                        .map(|entry| entry.worktree_copy_paths.clone())
                 })
                 .unwrap_or_default(),
             prompt_overrides: update
@@ -162,9 +162,9 @@ impl AppService {
             git: settings.git.unwrap_or(existing.git),
             hooks: normalized_hooks,
             dev_servers: normalized_dev_servers,
-            worktree_file_copies: settings
-                .worktree_file_copies
-                .unwrap_or(existing.worktree_file_copies),
+            worktree_copy_paths: settings
+                .worktree_copy_paths
+                .unwrap_or(existing.worktree_copy_paths),
             prompt_overrides: settings
                 .prompt_overrides
                 .unwrap_or(existing.prompt_overrides),
@@ -358,7 +358,7 @@ mod tests {
                     git: None,
                     hooks: None,
                     dev_servers: None,
-                    worktree_file_copies: None,
+                    worktree_copy_paths: None,
                     prompt_overrides: None,
                     agent_defaults: None,
                 },
@@ -397,7 +397,7 @@ mod tests {
                             command: "bun run api".to_string(),
                         },
                     ]),
-                    worktree_file_copies: None,
+                    worktree_copy_paths: None,
                     prompt_overrides: None,
                     agent_defaults: None,
                 },
@@ -423,7 +423,7 @@ mod tests {
                 git: None,
                 hooks: None,
                 dev_servers: None,
-                worktree_file_copies: None,
+                worktree_copy_paths: None,
                 prompt_overrides: None,
                 agent_defaults: None,
             },

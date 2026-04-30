@@ -240,7 +240,7 @@ fn workspace_update_repo_config_cannot_register_new_allowlist_entries() {
                 git: Default::default(),
                 hooks: HookSet::default(),
                 dev_servers: Vec::new(),
-                worktree_file_copies: Vec::new(),
+                worktree_copy_paths: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
             },

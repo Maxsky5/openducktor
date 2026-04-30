@@ -70,7 +70,7 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
     git: repo.git,
     hooks,
     devServers,
-    worktreeFileCopies: repo.worktreeFileCopies.map((entry) => entry.trim()).filter(Boolean),
+    worktreeCopyPaths: repo.worktreeCopyPaths.map((entry) => entry.trim()).filter(Boolean),
     promptOverrides: normalizePromptOverridesForSave(repo.promptOverrides),
     agentDefaults: {
       ...(spec ? { spec } : {}),

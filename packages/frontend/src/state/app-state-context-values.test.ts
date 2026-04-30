@@ -52,7 +52,7 @@ describe("app-state-context-values", () => {
         preStartHooks: [],
         postCompleteHooks: [],
         devServers: [],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         agentDefaults: { spec: null, planner: null, build: null, qa: null },
       }),
       saveRepoSettings: async () => {},

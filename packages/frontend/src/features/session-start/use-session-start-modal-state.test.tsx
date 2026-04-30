@@ -68,7 +68,7 @@ const createRepoSettings = (
   preStartHooks: [],
   postCompleteHooks: [],
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   agentDefaults: {
     spec: {
       runtimeKind: "opencode",

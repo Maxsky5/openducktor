@@ -34,7 +34,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   git: { providers: {} },
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
   ...overrides,
@@ -69,7 +69,7 @@ describe("useAgentStudioRepoSettings", () => {
       preStartHooks: [],
       postCompleteHooks: [],
       devServers: [],
-      worktreeFileCopies: [],
+      worktreeCopyPaths: [],
       agentDefaults: {
         spec: null,
         planner: null,

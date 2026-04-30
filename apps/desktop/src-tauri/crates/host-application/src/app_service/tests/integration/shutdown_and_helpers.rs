@@ -113,7 +113,7 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
                 git: Default::default(),
                 hooks: HookSet::default(),
                 dev_servers: Vec::new(),
-                worktree_file_copies: Vec::new(),
+                worktree_copy_paths: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
                 ..Default::default()
@@ -329,7 +329,7 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
                 git: Default::default(),
                 hooks: HookSet::default(),
                 dev_servers: Vec::new(),
-                worktree_file_copies: Vec::new(),
+                worktree_copy_paths: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
                 ..Default::default()

@@ -212,7 +212,7 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) -> Result<()> {
     normalize_git_provider_configs(&mut repo.git.providers);
     repo.hooks = normalize_hook_set(std::mem::take(&mut repo.hooks));
     normalize_repo_dev_servers(&mut repo.dev_servers)?;
-    normalize_hook_commands(&mut repo.worktree_file_copies);
+    normalize_hook_commands(&mut repo.worktree_copy_paths);
     normalize_prompt_overrides(&mut repo.prompt_overrides);
     normalize_agent_model_default(&mut repo.agent_defaults.spec, "Specification agent default")?;
     normalize_agent_model_default(&mut repo.agent_defaults.planner, "Planner agent default")?;

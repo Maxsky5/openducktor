@@ -119,18 +119,21 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
       createElement(
         QueryProvider,
         { useIsolatedClient: true },
-        createElement(RuntimeDefinitionsContext.Provider, {
-          value: {
-            runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-            isLoadingRuntimeDefinitions: false,
-            runtimeDefinitionsError: null,
-            refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-            loadRepoRuntimeCatalog: async () => createModalCatalog(),
-            loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-            loadRepoRuntimeFileSearch: async () => [],
+        createElement(
+          RuntimeDefinitionsContext.Provider,
+          {
+            value: {
+              runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+              isLoadingRuntimeDefinitions: false,
+              runtimeDefinitionsError: null,
+              refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+              loadRepoRuntimeCatalog: async () => createModalCatalog(),
+              loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+              loadRepoRuntimeFileSearch: async () => [],
+            },
           },
           children,
-        }),
+        ),
       ),
     );
 
@@ -155,7 +158,7 @@ const REPO_SETTINGS = {
   preStartHooks: [],
   postCompleteHooks: [],
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   agentDefaults: {
     spec: null,
     planner: null,
@@ -297,7 +300,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         git: { providers: {} },
         hooks: { preStart: [], postComplete: [] },
         devServers: [],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         agentDefaults: {
           spec: undefined,
           planner: undefined,

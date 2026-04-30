@@ -5,7 +5,7 @@ use crate::app_service::task_workflow::builder_branch_service::BuilderBranchServ
 use anyhow::{anyhow, Context, Result};
 use host_domain::{GitTargetBranch, TaskStatus};
 use host_infra_system::{
-    build_branch_name, copy_configured_worktree_files,
+    build_branch_name, copy_configured_worktree_paths,
     resolve_effective_worktree_base_dir_for_workspace, run_command, RepoConfig,
 };
 use std::fs;
@@ -380,10 +380,10 @@ impl AppService {
             }
         };
 
-        if let Err(error) = copy_configured_worktree_files(
+        if let Err(error) = copy_configured_worktree_paths(
             repo_path_ref,
             worktree_dir.as_path(),
-            prerequisites.repo_config.worktree_file_copies.as_slice(),
+            prerequisites.repo_config.worktree_copy_paths.as_slice(),
         ) {
             let cleanup_error = self.rollback_failed_build_worktree(
                 repo_path_ref,

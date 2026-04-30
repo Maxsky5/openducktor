@@ -54,7 +54,7 @@ const createRepoConfig = (): RepoConfig => ({
   git: { providers: {} },
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {
     spec: undefined,

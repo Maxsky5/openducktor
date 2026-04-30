@@ -63,7 +63,7 @@ fn workspace_add_select_and_update_persist_state() {
                 git: Default::default(),
                 hooks: Default::default(),
                 dev_servers: Vec::new(),
-                worktree_file_copies: Vec::new(),
+                worktree_copy_paths: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
             },

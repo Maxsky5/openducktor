@@ -128,7 +128,7 @@ export const repoConfigSchema = z.object({
       }
     })
     .default([]),
-  worktreeFileCopies: z.array(z.string()).default([]),
+  worktreeCopyPaths: z.array(z.string()).default([]),
   promptOverrides: repoPromptOverridesSchema.default({}),
   agentDefaults: repoAgentDefaultsSchema.default({
     spec: undefined,
