@@ -170,7 +170,8 @@ impl Serialize for AgentSessionDocument {
         S: Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("AgentSessionDocument", 6)?;
+        let field_count = if self.selected_model.is_some() { 7 } else { 6 };
+        let mut state = serializer.serialize_struct("AgentSessionDocument", field_count)?;
         state.serialize_field("externalSessionId", &self.external_session_id)?;
         state.serialize_field("role", &self.role)?;
         state.serialize_field("scenario", &self.scenario)?;
