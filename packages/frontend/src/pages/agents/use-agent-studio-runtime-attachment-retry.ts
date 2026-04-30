@@ -1,81 +1,20 @@
-import type { RuntimeKind } from "@openducktor/contracts";
 import { useEffect, useRef } from "react";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import { normalizeWorkingDirectory } from "@/state/operations/agent-orchestrator/support/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  cloneRuntimeAttachmentCandidates,
+  haveSameRuntimeAttachmentCandidates,
+  type RuntimeAttachmentCandidate,
+  type RuntimeAttachmentSource,
+  refreshRuntimeAttachmentSources,
+  selectRuntimeAttachmentCandidates,
+} from "@/state/operations/shared/runtime-attachment-retry";
 
 const RUNTIME_ATTACHMENT_POLLING_INTERVAL_MS = 2_000;
 
-export type RuntimeAttachmentSource = {
-  kind: RuntimeKind;
-  repoPath: string;
-};
-
-export type RuntimeAttachmentCandidate = {
-  runtimeKind: RuntimeKind;
-  repoPath: string;
-};
-
-const compareRuntimeAttachmentCandidates = (
-  left: RuntimeAttachmentCandidate,
-  right: RuntimeAttachmentCandidate,
-): number => {
-  if (left.runtimeKind !== right.runtimeKind) {
-    return left.runtimeKind.localeCompare(right.runtimeKind);
-  }
-  if (left.repoPath !== right.repoPath) {
-    return left.repoPath.localeCompare(right.repoPath);
-  }
-  return 0;
-};
-
-const cloneRuntimeAttachmentCandidates = (
-  candidates: RuntimeAttachmentCandidate[],
-): RuntimeAttachmentCandidate[] => candidates.map((candidate) => ({ ...candidate }));
-
-export const haveSameRuntimeAttachmentCandidates = (
-  left: RuntimeAttachmentCandidate[],
-  right: RuntimeAttachmentCandidate[],
-): boolean => {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((candidate, index) => {
-    const other = right[index];
-    return (
-      other !== undefined &&
-      candidate.runtimeKind === other.runtimeKind &&
-      candidate.repoPath === other.repoPath
-    );
-  });
-};
-
-export const selectRuntimeAttachmentCandidates = ({
-  repoPath,
-  session,
-  runtimeSources,
-}: {
-  repoPath: string;
-  session: Pick<AgentSessionState, "runtimeKind"> | null;
-  runtimeSources: RuntimeAttachmentSource[];
-}): RuntimeAttachmentCandidate[] => {
-  if (!session?.runtimeKind) {
-    return [];
-  }
-
-  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-
-  return runtimeSources
-    .filter((runtimeSource) => {
-      const sourceRepoPath = normalizeWorkingDirectory(runtimeSource.repoPath);
-      return runtimeSource.kind === session.runtimeKind && sourceRepoPath === normalizedRepoPath;
-    })
-    .map((runtimeSource) => ({
-      runtimeKind: runtimeSource.kind,
-      repoPath: normalizeWorkingDirectory(runtimeSource.repoPath),
-    }))
-    .sort(compareRuntimeAttachmentCandidates);
+export {
+  haveSameRuntimeAttachmentCandidates,
+  refreshRuntimeAttachmentSources,
+  selectRuntimeAttachmentCandidates,
 };
 
 export function useAgentStudioRuntimeAttachmentRetry({
@@ -184,8 +123,4 @@ export function useAgentStudioRuntimeAttachmentRetry({
   }, [activeExternalSessionId, refreshRuntimeAttachmentSources, shouldWaitForSessionRuntime]);
 }
 
-export const refreshRuntimeAttachmentSources = async (
-  refetchRuntimeLists: Array<() => Promise<unknown>>,
-): Promise<void> => {
-  await Promise.all(Array.from(new Set(refetchRuntimeLists)).map((refetch) => refetch()));
-};
+export type { RuntimeAttachmentCandidate, RuntimeAttachmentSource };

@@ -45,4 +45,19 @@ describe("selectRuntimeAttachmentCandidates", () => {
       ),
     ).toBe(false);
   });
+
+  test("deduplicates duplicate runtime summaries", () => {
+    const candidates = selectRuntimeAttachmentCandidates({
+      repoPath: "/repo",
+      session: {
+        runtimeKind: "opencode",
+      },
+      runtimeSources: [
+        { kind: "opencode", repoPath: "/repo" },
+        { kind: "opencode", repoPath: "/repo/" },
+      ],
+    });
+
+    expect(candidates).toEqual([{ runtimeKind: "opencode", repoPath: "/repo" }]);
+  });
 });

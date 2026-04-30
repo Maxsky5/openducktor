@@ -202,8 +202,7 @@ mod tests {
     use super::*;
     use crate::app_service::test_support::{
         build_service_with_git_state, builtin_opencode_runtime_descriptor,
-        builtin_opencode_runtime_route, spawn_opencode_session_status_server, spawn_sleep_process,
-        unique_temp_path,
+        builtin_opencode_runtime_route, spawn_opencode_session_status_server, unique_temp_path,
     };
     use crate::app_service::AgentRuntimeProcess;
     use host_domain::{AgentRuntimeKind, GitCurrentBranch, RuntimeInstanceSummary, RuntimeRole};
@@ -242,7 +241,7 @@ mod tests {
                 runtime_id.to_string(),
                 AgentRuntimeProcess {
                     summary,
-                    child: Some(spawn_sleep_process(30)),
+                    child: None,
                     _runtime_process_guard: None,
                     cleanup_target: None,
                 },
