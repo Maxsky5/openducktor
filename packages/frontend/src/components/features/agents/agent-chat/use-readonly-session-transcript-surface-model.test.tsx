@@ -26,7 +26,9 @@ const readSessionTodos = mock(async () => []);
 const attachRuntimeTranscriptSession = mock(async () => {});
 const replyAgentPermission = mock(async () => {});
 const replyRuntimeSessionPermission = mock(async () => {});
-const useAgentSessionMock = mock((_sessionId: string | null): AgentSessionState | null => null);
+const useAgentSessionMock = mock(
+  (_externalSessionId: string | null): AgentSessionState | null => null,
+);
 let latestSurfaceModelArgs: Record<string, unknown> | null = null;
 let runtimeList: RuntimeInstanceSummary[] = [];
 let runtimeListError: Error | null = null;
@@ -88,7 +90,6 @@ function makeLiveTranscriptSource(): RuntimeSessionTranscriptSource {
 function makeLiveTranscriptSession(): AgentSessionState {
   return {
     runtimeKind: "opencode",
-    sessionId: "session-subagent-1",
     externalSessionId: "session-subagent-1",
     purpose: "transcript",
     taskId: "",
@@ -178,7 +179,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     replyRuntimeSessionPermission.mockClear();
     useAgentSessionMock.mockClear();
     useAgentSessionMock.mockImplementation(
-      (_sessionId: string | null): AgentSessionState | null => null,
+      (_externalSessionId: string | null): AgentSessionState | null => null,
     );
     latestSurfaceModelArgs = null;
     runtimeList = [makeRuntime()];
@@ -191,6 +192,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     };
 
     mock.module("@/state/app-state-provider", () => ({
+      useActiveWorkspace: () => ({
+        workspaceId: "workspace-a",
+        workspaceName: "Workspace A",
+        repoPath: "/repo-a",
+      }),
       useAgentOperations: () => ({
         readSessionHistory,
         attachRuntimeTranscriptSession,
@@ -313,7 +319,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        sessionId: "session-subagent-1",
+        externalSessionId: "session-subagent-1",
         source: transcriptSource,
       },
       { wrapper },
@@ -324,7 +330,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
       await harness.waitFor(() => {
         const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
-        return session?.sessionId === "session-subagent-1";
+        return session?.externalSessionId === "session-subagent-1";
       });
 
       expect(readSessionHistory).toHaveBeenCalledWith(
@@ -358,7 +364,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: false,
-        sessionId: "session-subagent-1",
+        externalSessionId: "session-subagent-1",
         source: transcriptSource,
       },
       { wrapper },
@@ -388,7 +394,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        sessionId: "session-subagent-1",
+        externalSessionId: "session-subagent-1",
         source: {
           ...liveTranscriptSource,
           pendingPermissions: [pendingPermission],
@@ -403,7 +409,6 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
       expect(attachRuntimeTranscriptSession).toHaveBeenCalledWith({
         repoPath: "/repo-a",
-        sessionId: "session-subagent-1",
         externalSessionId: "session-subagent-1",
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
@@ -446,7 +451,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        sessionId: "session-subagent-1",
+        externalSessionId: "session-subagent-1",
         source: {
           ...liveTranscriptSource,
           pendingPermissions: [pendingPermission],
@@ -484,7 +489,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        sessionId: "session-subagent-1",
+        externalSessionId: "session-subagent-1",
         source: transcriptSourceWithPendingPermission,
       },
       { wrapper },
@@ -519,7 +524,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        sessionId: "session-subagent-1",
+        externalSessionId: "session-subagent-1",
         source: transcriptSourceWithPendingPermission,
       },
       { wrapper },
@@ -537,7 +542,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       const permissions = latestSurfaceModelArgs?.permissions as {
         onReply: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
       };
-      await permissions.onReply("permission-1", "once");
+      await harness.run(async () => {
+        await permissions.onReply("permission-1", "once");
+      });
 
       expect(replyRuntimeSessionPermission).toHaveBeenCalledWith({
         runtimeKind: "opencode",
@@ -546,7 +553,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           endpoint: "http://127.0.0.1:4096",
           workingDirectory: "/repo-a",
         },
-        targetSessionId: "session-subagent-1",
+        targetExternalSessionId: "session-subagent-1",
         requestId: "permission-1",
         reply: "once",
       });
@@ -577,7 +584,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        sessionId: "session-subagent-1",
+        externalSessionId: "session-subagent-1",
         source: transcriptSource,
       },
       { wrapper },
@@ -611,7 +618,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        sessionId: "session-subagent-1",
+        externalSessionId: "session-subagent-1",
         source: transcriptSourceWithRuntimeIdOnly,
       },
       { wrapper },
@@ -646,7 +653,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        sessionId: "session-subagent-1",
+        externalSessionId: "session-subagent-1",
         source: transcriptSourceWithRuntimeIdOnly,
       },
       { wrapper },

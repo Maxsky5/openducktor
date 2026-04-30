@@ -11,7 +11,6 @@ import {
 
 const recordFixture: AgentSessionRecord = {
   runtimeKind: "opencode",
-  sessionId: "session-1",
   externalSessionId: "external-1",
   role: "build",
   scenario: "build_implementation_start",
@@ -112,7 +111,7 @@ describe("agent-orchestrator/support/persistence", () => {
         "task-1",
         repoPathFixture,
       ),
-    ).toThrow("Persisted session 'session-1' is missing runtime kind metadata.");
+    ).toThrow("Persisted session 'external-1' is missing runtime kind metadata.");
   });
 
   test("rejects persisted session records with blank top-level runtime kind", () => {
@@ -122,7 +121,7 @@ describe("agent-orchestrator/support/persistence", () => {
     };
 
     expect(() => fromPersistedSessionRecord(invalidRecord, "task-1", repoPathFixture)).toThrow(
-      "Persisted session 'session-1' is missing runtime kind metadata.",
+      "Persisted session 'external-1' is missing runtime kind metadata.",
     );
   });
 
@@ -136,7 +135,7 @@ describe("agent-orchestrator/support/persistence", () => {
     };
 
     expect(() => fromPersistedSessionRecord(invalidRecord, "task-1", repoPathFixture)).toThrow(
-      "Persisted session 'session-1' selected model is missing runtime kind metadata.",
+      "Persisted session 'external-1' selected model is missing runtime kind metadata.",
     );
   });
 
@@ -151,7 +150,7 @@ describe("agent-orchestrator/support/persistence", () => {
     };
 
     expect(() => fromPersistedSessionRecord(invalidRecord, "task-1", repoPathFixture)).toThrow(
-      "Persisted session 'session-1' selected model is missing runtime kind metadata.",
+      "Persisted session 'external-1' selected model is missing runtime kind metadata.",
     );
   });
 
@@ -170,7 +169,7 @@ describe("agent-orchestrator/support/persistence", () => {
         repoPathFixture,
       ),
     ).toThrow(
-      "Persisted session 'session-1' selected model runtime kind does not match session runtime kind.",
+      "Persisted session 'external-1' selected model runtime kind does not match session runtime kind.",
     );
   });
 
@@ -181,7 +180,7 @@ describe("agent-orchestrator/support/persistence", () => {
     delete session.runtimeKind;
 
     expect(() => toPersistedSessionRecord(session as unknown as AgentSessionState)).toThrow(
-      "Session 'session-1' is missing runtime kind metadata.",
+      "Session 'external-1' is missing runtime kind metadata.",
     );
   });
 
@@ -192,7 +191,7 @@ describe("agent-orchestrator/support/persistence", () => {
     };
 
     expect(() => toPersistedSessionRecord(session)).toThrow(
-      "Session 'session-1' is missing runtime kind metadata.",
+      "Session 'external-1' is missing runtime kind metadata.",
     );
   });
 
@@ -206,7 +205,7 @@ describe("agent-orchestrator/support/persistence", () => {
     };
 
     expect(() => toPersistedSessionRecord(session)).toThrow(
-      "Session 'session-1' selected model is missing runtime kind metadata.",
+      "Session 'external-1' selected model is missing runtime kind metadata.",
     );
   });
 
@@ -221,7 +220,7 @@ describe("agent-orchestrator/support/persistence", () => {
     };
 
     expect(() => toPersistedSessionRecord(session)).toThrow(
-      "Session 'session-1' selected model is missing runtime kind metadata.",
+      "Session 'external-1' selected model is missing runtime kind metadata.",
     );
   });
 
@@ -236,7 +235,7 @@ describe("agent-orchestrator/support/persistence", () => {
     } as NonNullable<AgentSessionState>;
 
     expect(() => toPersistedSessionRecord(session)).toThrow(
-      "Session 'session-1' selected model runtime kind does not match session runtime kind.",
+      "Session 'external-1' selected model runtime kind does not match session runtime kind.",
     );
   });
 
@@ -385,7 +384,7 @@ describe("agent-orchestrator/support/persistence", () => {
               agent: "build",
               prompt: "Implement",
               description: "Did work",
-              sessionId: "session-child-1",
+              externalSessionId: "session-child-1",
               startedAtMs: 300,
               endedAtMs: 450,
             },
@@ -427,7 +426,7 @@ describe("agent-orchestrator/support/persistence", () => {
       throw new Error("Expected subagent message with subagent meta");
     }
     expect(subagent.meta.status).toBe("completed");
-    expect(subagent.meta.sessionId).toBe("session-child-1");
+    expect(subagent.meta.externalSessionId).toBe("session-child-1");
     expect(subagent.meta.correlationKey).toBe("spawn:m-assistant:build:Implement:Did work");
 
     const assistant = messages.find(
@@ -519,7 +518,7 @@ describe("agent-orchestrator/support/persistence", () => {
               agent: "build",
               prompt: "Do work",
               description: "Finished work",
-              sessionId: "session-child-1",
+              externalSessionId: "session-child-1",
               startedAtMs: 120,
               endedAtMs: 300,
             },
@@ -545,7 +544,7 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(subagent.id).toBe("subagent:spawn:m-assistant:build:Do work");
     expect(subagent.meta.correlationKey).toBe("spawn:m-assistant:build:Do work");
     expect(subagent.meta.status).toBe("completed");
-    expect(subagent.meta.sessionId).toBe("session-child-1");
+    expect(subagent.meta.externalSessionId).toBe("session-child-1");
     expect(subagent.meta.startedAtMs).toBe(100);
     expect(subagent.meta.endedAtMs).toBe(300);
     expect(subagent.content).toContain("Finished work");
@@ -580,7 +579,7 @@ describe("agent-orchestrator/support/persistence", () => {
               agent: "build",
               prompt: "Do work",
               description: "Cancelled by user",
-              sessionId: "session-child-1",
+              externalSessionId: "session-child-1",
               startedAtMs: 120,
               endedAtMs: 300,
             },
@@ -605,7 +604,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
     expect(subagent.id).toBe("subagent:spawn:m-assistant:build:Do work");
     expect(subagent.meta.status).toBe("cancelled");
-    expect(subagent.meta.sessionId).toBe("session-child-1");
+    expect(subagent.meta.externalSessionId).toBe("session-child-1");
     expect(subagent.meta.startedAtMs).toBe(100);
     expect(subagent.meta.endedAtMs).toBe(300);
     expect(subagent.content).toContain("Cancelled by user");
@@ -640,7 +639,7 @@ describe("agent-orchestrator/support/persistence", () => {
               agent: "build",
               prompt: "Review changes",
               description: "Review completed",
-              sessionId: "session-child-1",
+              externalSessionId: "session-child-1",
               startedAtMs: 120,
               endedAtMs: 300,
             },
@@ -663,7 +662,7 @@ describe("agent-orchestrator/support/persistence", () => {
         kind: "subagent",
         correlationKey: "session:m-assistant:session-child-1",
         status: "completed",
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
       },
     });
   });
@@ -686,7 +685,7 @@ describe("agent-orchestrator/support/persistence", () => {
               agent: "build",
               prompt: "Review changes",
               description: "Review completed",
-              sessionId: "session-child-1",
+              externalSessionId: "session-child-1",
               startedAtMs: 120,
               endedAtMs: 300,
             },
@@ -720,7 +719,7 @@ describe("agent-orchestrator/support/persistence", () => {
         kind: "subagent",
         correlationKey: "session:m-assistant:session-child-1",
         status: "completed",
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
       },
     });
   });
@@ -754,7 +753,7 @@ describe("agent-orchestrator/support/persistence", () => {
               agent: "build",
               prompt: "Review changes",
               description: "Review completed",
-              sessionId: "session-child-1",
+              externalSessionId: "session-child-1",
               startedAtMs: 120,
               endedAtMs: 300,
             },
@@ -777,7 +776,7 @@ describe("agent-orchestrator/support/persistence", () => {
         kind: "subagent",
         correlationKey: "session:m-assistant:session-child-1",
         status: "completed",
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
       },
     });
   });
@@ -936,7 +935,7 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     );
 
-    const assistant = sessionMessageAt({ sessionId: "session-1", messages }, 0);
+    const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 0);
     if (!assistant || assistant.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
@@ -984,7 +983,7 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     );
 
-    const assistant = sessionMessageAt({ sessionId: "session-1", messages }, 0);
+    const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 0);
     if (!assistant || assistant.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
@@ -1101,8 +1100,8 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     );
 
-    const firstAssistant = sessionMessageAt({ sessionId: "session-1", messages }, 1);
-    const secondAssistant = sessionMessageAt({ sessionId: "session-1", messages }, 2);
+    const firstAssistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 1);
+    const secondAssistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 2);
     if (!firstAssistant || firstAssistant.meta?.kind !== "assistant") {
       throw new Error("Expected first assistant message with assistant meta");
     }

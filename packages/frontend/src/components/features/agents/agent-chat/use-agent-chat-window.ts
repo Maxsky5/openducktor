@@ -7,7 +7,7 @@ import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller
 type UseAgentChatWindowInput = {
   rows: AgentChatWindowRow[];
   turns?: AgentChatWindowTurn[];
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   isSessionViewLoading: boolean;
   isSessionWorking?: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
@@ -28,7 +28,7 @@ type UseAgentChatWindowResult = {
 };
 
 type StagedPrependScrollSnapshot = {
-  sessionId: string | null;
+  externalSessionId: string | null;
   beforeScrollHeight: number;
   beforeScrollTop: number;
 };
@@ -36,7 +36,7 @@ type StagedPrependScrollSnapshot = {
 export function useAgentChatWindow({
   rows,
   turns,
-  activeSessionId,
+  activeExternalSessionId,
   isSessionViewLoading,
   isSessionWorking = false,
   messagesContainerRef,
@@ -57,7 +57,7 @@ export function useAgentChatWindow({
     forceScrollToBottom,
     refreshScrollState,
   } = useAgentChatScrollController({
-    activeSessionId,
+    activeExternalSessionId,
     messagesContainerRef,
     messagesContentRef,
     isSessionWorking,
@@ -73,7 +73,7 @@ export function useAgentChatWindow({
   } = useAgentChatHistoryWindow({
     rows,
     isSessionViewLoading,
-    activeSessionId,
+    activeExternalSessionId,
     messagesContainerRef,
     userScrolledRef,
     ...(turns ? { turns } : {}),
@@ -95,11 +95,11 @@ export function useAgentChatWindow({
     }
 
     stagedPrependScrollSnapshotRef.current = {
-      sessionId: activeSessionId,
+      externalSessionId: activeExternalSessionId,
       beforeScrollHeight: container.scrollHeight,
       beforeScrollTop: container.scrollTop,
     };
-  }, [activeSessionId, messagesContainerRef, userScrolledRef]);
+  }, [activeExternalSessionId, messagesContainerRef, userScrolledRef]);
 
   const resetLatestTurnsAndPinBottom = useCallback(() => {
     if (turnStart === latestTurnStart) {
@@ -112,14 +112,14 @@ export function useAgentChatWindow({
   }, [forceScrollToBottom, latestTurnStart, resetToLatestTurns, turnStart]);
 
   useLayoutEffect(() => {
-    if (prevSessionIdRef.current === activeSessionId) {
+    if (prevSessionIdRef.current === activeExternalSessionId) {
       return;
     }
 
-    prevSessionIdRef.current = activeSessionId;
+    prevSessionIdRef.current = activeExternalSessionId;
     stagedPrependScrollSnapshotRef.current = null;
     resetLatestTurnsAndPinBottom();
-  }, [activeSessionId, resetLatestTurnsAndPinBottom]);
+  }, [activeExternalSessionId, resetLatestTurnsAndPinBottom]);
 
   useLayoutEffect(() => {
     const finishedLoading = prevIsSessionViewLoadingRef.current && !isSessionViewLoading;
@@ -211,7 +211,11 @@ export function useAgentChatWindow({
     const pendingStagedPrepend = stagedPrependScrollSnapshotRef.current;
     const container = messagesContainerRef.current;
     let restoredStagedPrepend = false;
-    if (pendingStagedPrepend && pendingStagedPrepend.sessionId === activeSessionId && container) {
+    if (
+      pendingStagedPrepend &&
+      pendingStagedPrepend.externalSessionId === activeExternalSessionId &&
+      container
+    ) {
       stagedPrependScrollSnapshotRef.current = null;
       const scrollHeightDelta = container.scrollHeight - pendingStagedPrepend.beforeScrollHeight;
       if (scrollHeightDelta !== 0) {

@@ -5,31 +5,31 @@ export type SessionEventListeners = Map<string, Set<SessionEventListener>>;
 
 export const subscribeSessionEvents = (
   listenersBySession: SessionEventListeners,
-  sessionId: string,
+  externalSessionId: string,
   listener: SessionEventListener,
 ): EventUnsubscribe => {
-  const listeners = listenersBySession.get(sessionId) ?? new Set<SessionEventListener>();
+  const listeners = listenersBySession.get(externalSessionId) ?? new Set<SessionEventListener>();
   listeners.add(listener);
-  listenersBySession.set(sessionId, listeners);
+  listenersBySession.set(externalSessionId, listeners);
 
   return () => {
-    const active = listenersBySession.get(sessionId);
+    const active = listenersBySession.get(externalSessionId);
     if (!active) {
       return;
     }
     active.delete(listener);
     if (active.size === 0) {
-      listenersBySession.delete(sessionId);
+      listenersBySession.delete(externalSessionId);
     }
   };
 };
 
 export const emitSessionEvent = (
   listenersBySession: SessionEventListeners,
-  sessionId: string,
+  externalSessionId: string,
   event: AgentEvent,
 ): void => {
-  const listeners = listenersBySession.get(sessionId);
+  const listeners = listenersBySession.get(externalSessionId);
   if (!listeners || listeners.size === 0) {
     return;
   }
@@ -41,7 +41,7 @@ export const emitSessionEvent = (
 
 export const clearSessionListeners = (
   listenersBySession: SessionEventListeners,
-  sessionId: string,
+  externalSessionId: string,
 ): void => {
-  listenersBySession.delete(sessionId);
+  listenersBySession.delete(externalSessionId);
 };

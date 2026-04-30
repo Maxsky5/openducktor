@@ -33,7 +33,7 @@ const buildBaseModel = () => ({
   syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
 });
 
-const buildLongSession = (sessionId: string, count = 80) => {
+const buildLongSession = (externalSessionId: string, count = 80) => {
   const messages = Array.from({ length: count }, (_, index) =>
     buildMessage("user", `Message ${index + 1}`, {
       id: `message-${index + 1}`,
@@ -41,7 +41,7 @@ const buildLongSession = (sessionId: string, count = 80) => {
   );
 
   return buildSession({
-    sessionId,
+    externalSessionId,
     messages,
     status: "idle",
     pendingQuestions: [],

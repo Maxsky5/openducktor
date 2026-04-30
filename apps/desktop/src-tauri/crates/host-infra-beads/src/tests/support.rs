@@ -269,8 +269,7 @@ pub(super) fn write_attachment_metadata(beads_dir: &Path, repo_path: &Path, port
 
 pub(super) fn make_session(session_id: &str, started_at: &str) -> AgentSessionDocument {
     AgentSessionDocument {
-        session_id: session_id.to_string(),
-        external_session_id: Some(format!("external-{session_id}")),
+        external_session_id: session_id.to_string(),
         role: "build".to_string(),
         scenario: "build_default".to_string(),
         started_at: started_at.to_string(),

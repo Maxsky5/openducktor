@@ -579,7 +579,7 @@ describe("useSessionStartModalState", () => {
             description: "First session",
           },
         ],
-        initialSourceSessionId: "session-1",
+        initialSourceExternalSessionId: "session-1",
         postStartAction: "kickoff",
         title: "Start QA Session",
       });
@@ -617,7 +617,7 @@ describe("useSessionStartModalState", () => {
             },
           },
         ],
-        initialSourceSessionId: "missing-session",
+        initialSourceExternalSessionId: "missing-session",
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -701,7 +701,7 @@ describe("useSessionStartModalState", () => {
             },
           },
         ],
-        initialSourceSessionId: "session-older",
+        initialSourceExternalSessionId: "session-older",
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -774,7 +774,7 @@ describe("useSessionStartModalState", () => {
             },
           },
         ],
-        initialSourceSessionId: "session-pr-1",
+        initialSourceExternalSessionId: "session-pr-1",
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -869,7 +869,7 @@ describe("useSessionStartModalState", () => {
             selectedModel: null,
           },
         ],
-        initialSourceSessionId: "session-with-model",
+        initialSourceExternalSessionId: "session-with-model",
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });

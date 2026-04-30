@@ -8,10 +8,10 @@ const reactActGlobal = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
 
-const buildRows = (count: number, sessionId = "session-1"): AgentChatWindowRow[] =>
+const buildRows = (count: number, externalSessionId = "session-1"): AgentChatWindowRow[] =>
   Array.from({ length: count }, (_, index) => ({
     kind: "message" as const,
-    key: `${sessionId}:row-${index}`,
+    key: `${externalSessionId}:row-${index}`,
     message: {
       id: `row-${index}`,
       role: "assistant" as const,
@@ -62,15 +62,15 @@ describe("useAgentChatRowStaging", () => {
     const rows = buildRows(80);
     const turns: AgentChatWindowTurn[] = [{ key: "turn-0", start: 0, end: 79 }];
     const harness = createHookHarness(
-      ({ activeSessionId, nextRows, nextTurns }) =>
+      ({ activeExternalSessionId, nextRows, nextTurns }) =>
         useAgentChatRowStaging({
-          activeSessionId,
+          activeExternalSessionId,
           rows: nextRows,
           turns: nextTurns,
           disabled: false,
         }),
       {
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         nextRows: rows,
         nextTurns: turns,
       },
@@ -88,15 +88,15 @@ describe("useAgentChatRowStaging", () => {
     const rows = buildRows(80);
     const turns: AgentChatWindowTurn[] = [{ key: "turn-0", start: 0, end: 79 }];
     const harness = createHookHarness(
-      ({ activeSessionId, nextRows, nextTurns }) =>
+      ({ activeExternalSessionId, nextRows, nextTurns }) =>
         useAgentChatRowStaging({
-          activeSessionId,
+          activeExternalSessionId,
           rows: nextRows,
           turns: nextTurns,
           disabled: false,
         }),
       {
-        activeSessionId: "session-a",
+        activeExternalSessionId: "session-a",
         nextRows: rows,
         nextTurns: turns,
       },
@@ -116,13 +116,13 @@ describe("useAgentChatRowStaging", () => {
     });
 
     await harness.update({
-      activeSessionId: "session-b",
+      activeExternalSessionId: "session-b",
       nextRows: buildRows(12, "session-b"),
       nextTurns: [{ key: "turn-b", start: 0, end: 11 }],
     });
 
     await harness.update({
-      activeSessionId: "session-a",
+      activeExternalSessionId: "session-a",
       nextRows: rows,
       nextTurns: turns,
     });
@@ -136,16 +136,16 @@ describe("useAgentChatRowStaging", () => {
   test("resumes staging when rows grow for the active session", async () => {
     const onBeforePrepend = mock(() => {});
     const harness = createHookHarness(
-      ({ activeSessionId, nextRows, nextTurns }) =>
+      ({ activeExternalSessionId, nextRows, nextTurns }) =>
         useAgentChatRowStaging({
-          activeSessionId,
+          activeExternalSessionId,
           rows: nextRows,
           turns: nextTurns,
           disabled: false,
           onBeforePrepend,
         }),
       {
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         nextRows: buildRows(80),
         nextTurns: [{ key: "turn-0", start: 0, end: 79 }],
       },
@@ -164,7 +164,7 @@ describe("useAgentChatRowStaging", () => {
     expect(onBeforePrepend).toHaveBeenCalledTimes(1);
 
     await harness.update({
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       nextRows: buildRows(96),
       nextTurns: [{ key: "turn-0", start: 0, end: 95 }],
     });
@@ -188,15 +188,15 @@ describe("useAgentChatRowStaging", () => {
 
   test("returns all rows immediately when a small active transcript grows", async () => {
     const harness = createHookHarness(
-      ({ activeSessionId, nextRows, nextTurns }) =>
+      ({ activeExternalSessionId, nextRows, nextTurns }) =>
         useAgentChatRowStaging({
-          activeSessionId,
+          activeExternalSessionId,
           rows: nextRows,
           turns: nextTurns,
           disabled: false,
         }),
       {
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         nextRows: buildRows(1),
         nextTurns: [{ key: "turn-0", start: 0, end: 0 }],
       },
@@ -204,7 +204,7 @@ describe("useAgentChatRowStaging", () => {
 
     await harness.mount();
     await harness.update({
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       nextRows: buildRows(2),
       nextTurns: [{ key: "turn-0", start: 0, end: 1 }],
     });

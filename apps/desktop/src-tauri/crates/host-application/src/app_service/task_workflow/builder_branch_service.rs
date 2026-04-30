@@ -251,7 +251,7 @@ impl<'a> BuilderBranchService<'a> {
             let right_key = right.started_at.as_str();
             left_key
                 .cmp(right_key)
-                .then_with(|| left.session_id.cmp(&right.session_id))
+                .then_with(|| left.external_session_id.cmp(&right.external_session_id))
         });
         builder_sessions.reverse();
 

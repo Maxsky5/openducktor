@@ -29,7 +29,6 @@ export const buildInitialSession = ({
 }): AgentSessionState =>
   createRepoScopedAgentSessionState(
     {
-      sessionId: startedCtx.summary.sessionId,
       externalSessionId: startedCtx.summary.externalSessionId,
       taskId: startedCtx.taskId,
       runtimeKind: requireConfiguredRuntimeKind(
@@ -48,7 +47,7 @@ export const buildInitialSession = ({
       messages:
         initialMessages ??
         buildSessionHeaderMessages({
-          sessionId: startedCtx.summary.sessionId,
+          externalSessionId: startedCtx.summary.externalSessionId,
           role: startedCtx.role,
           scenario: startedCtx.resolvedScenario,
           systemPrompt,

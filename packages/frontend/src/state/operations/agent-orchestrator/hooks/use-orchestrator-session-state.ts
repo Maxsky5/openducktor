@@ -130,7 +130,7 @@ const createAssistantTurnTimingFieldBridge = <K extends keyof AssistantTurnTimin
         ownKeys: () =>
           Object.entries(stateRef.current.assistantTurnTimingBySession)
             .filter(([, timing]) => timing[field] !== undefined)
-            .map(([sessionId]) => sessionId),
+            .map(([externalSessionId]) => externalSessionId),
         getOwnPropertyDescriptor: (_target, property) => {
           if (typeof property !== "string") {
             return undefined;
@@ -152,22 +152,22 @@ const createAssistantTurnTimingFieldBridge = <K extends keyof AssistantTurnTimin
     },
     set current(value) {
       const nextTimingBySession: Record<string, AssistantTurnTimingState> = {};
-      for (const [sessionId, timing] of Object.entries(
+      for (const [externalSessionId, timing] of Object.entries(
         stateRef.current.assistantTurnTimingBySession,
       )) {
-        nextTimingBySession[sessionId] = { ...timing };
+        nextTimingBySession[externalSessionId] = { ...timing };
       }
       for (const timing of Object.values(nextTimingBySession)) {
         delete timing[field];
       }
-      for (const sessionId of Object.keys(nextTimingBySession)) {
-        if (Object.keys(nextTimingBySession[sessionId] ?? {}).length === 0) {
-          delete nextTimingBySession[sessionId];
+      for (const externalSessionId of Object.keys(nextTimingBySession)) {
+        if (Object.keys(nextTimingBySession[externalSessionId] ?? {}).length === 0) {
+          delete nextTimingBySession[externalSessionId];
         }
       }
-      for (const [sessionId, fieldValue] of Object.entries(value)) {
-        nextTimingBySession[sessionId] = {
-          ...(nextTimingBySession[sessionId] ?? {}),
+      for (const [externalSessionId, fieldValue] of Object.entries(value)) {
+        nextTimingBySession[externalSessionId] = {
+          ...(nextTimingBySession[externalSessionId] ?? {}),
           [field]: fieldValue,
         };
       }

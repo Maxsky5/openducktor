@@ -29,7 +29,7 @@ type LoadSessionPromptInputsInput = {
 type CreateSessionPromptContextInput = SessionPromptInput;
 
 type SessionHeaderInput = {
-  sessionId: string;
+  externalSessionId: string;
   role: AgentRole;
   scenario: AgentScenario;
   systemPrompt: string;
@@ -111,7 +111,7 @@ export const loadSessionPromptContext = async ({
 };
 
 export const buildSessionHeaderMessages = ({
-  sessionId,
+  externalSessionId,
   role,
   scenario,
   systemPrompt,
@@ -122,7 +122,7 @@ export const buildSessionHeaderMessages = ({
   const eventId = eventLabel === "started" ? "start" : eventLabel;
   const messages: AgentSessionState["messages"] = [
     {
-      id: `history:session-${eventId}:${sessionId}`,
+      id: `history:session-${eventId}:${externalSessionId}`,
       role: "system",
       content: `Session ${eventLabel} (${role} - ${scenario})`,
       timestamp: startedAt,
@@ -136,7 +136,7 @@ export const buildSessionHeaderMessages = ({
   return [
     ...messages,
     {
-      id: `history:system-prompt:${sessionId}`,
+      id: `history:system-prompt:${externalSessionId}`,
       role: "system",
       content: `System prompt:\n\n${systemPrompt}`,
       timestamp: startedAt,
@@ -144,21 +144,21 @@ export const buildSessionHeaderMessages = ({
   ];
 };
 
-export const isSessionHeaderMessageId = (messageId: string, sessionId: string): boolean => {
+export const isSessionHeaderMessageId = (messageId: string, externalSessionId: string): boolean => {
   return (
-    messageId === `history:session-start:${sessionId}` ||
-    messageId === `history:session-forked:${sessionId}` ||
-    messageId === `history:system-prompt:${sessionId}`
+    messageId === `history:session-start:${externalSessionId}` ||
+    messageId === `history:session-forked:${externalSessionId}` ||
+    messageId === `history:system-prompt:${externalSessionId}`
   );
 };
 
 export const hasOnlySessionHeaderMessages = (
-  session: Pick<AgentSessionState, "sessionId" | "messages">,
+  session: Pick<AgentSessionState, "externalSessionId" | "messages">,
 ): boolean => {
   return (
     getSessionMessageCount(session) > 0 &&
     everySessionMessage(session, (message) =>
-      isSessionHeaderMessageId(message.id, session.sessionId),
+      isSessionHeaderMessageId(message.id, session.externalSessionId),
     )
   );
 };

@@ -70,7 +70,7 @@ type StartSessionWorkflowFn = typeof startSessionWorkflow;
 
 type ResolvedAutopilotStart = {
   startMode: "fresh" | "reuse" | "fork";
-  sourceSessionId?: string | null;
+  sourceExternalSessionId?: string | null;
   targetWorkingDirectory?: string | null;
   preferredSelection?: AgentModelSelection | null;
 };
@@ -223,7 +223,7 @@ const resolveAutopilotStart = async ({
   if (actionId === "startGeneratePullRequest") {
     return {
       startMode: "fork",
-      sourceSessionId: latestRoleSession?.sessionId ?? null,
+      sourceExternalSessionId: latestRoleSession?.externalSessionId ?? null,
       preferredSelection: toAgentModelSelection(latestRoleSession?.selectedModel ?? null),
     };
   }
@@ -247,7 +247,7 @@ const resolveAutopilotStart = async ({
   ) {
     return {
       startMode: "reuse",
-      sourceSessionId: latestRoleSession.sessionId,
+      sourceExternalSessionId: latestRoleSession.externalSessionId,
       targetWorkingDirectory: continuationTarget.workingDirectory,
     };
   }
@@ -295,8 +295,8 @@ export const executeAutopilotAction = async ({
         role: action.role,
         scenario: action.scenario,
         startMode: resolvedStart.startMode,
-        ...(resolvedStart.sourceSessionId
-          ? { sourceSessionId: resolvedStart.sourceSessionId }
+        ...(resolvedStart.sourceExternalSessionId
+          ? { sourceExternalSessionId: resolvedStart.sourceExternalSessionId }
           : {}),
         ...(resolvedStart.targetWorkingDirectory !== undefined
           ? { targetWorkingDirectory: resolvedStart.targetWorkingDirectory }

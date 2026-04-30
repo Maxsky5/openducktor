@@ -1,11 +1,11 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { SystemOpenInToolInfo } from "@openducktor/contracts";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { act } from "react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "@/lib/query-provider";
 import { toRightPanelStorageKey } from "@/pages/agents/agents-page-selection";
 import { host } from "@/state/operations/host";
+import { withCapturedConsole } from "@/test-utils/console-capture";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { OpenInMenu } from "./open-in-menu";
 
@@ -13,12 +13,30 @@ import { OpenInMenu } from "./open-in-menu";
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+const REACT_ACT_ENVIRONMENT_WARNING =
+  "The current testing environment is not configured to support act";
+
+const runWithReactAct = async (run: () => void | Promise<void>): Promise<void> => {
+  await withCapturedConsole("error", async (calls) => {
+    await act(run);
+    for (const call of calls) {
+      expect(String(call[0] ?? "")).toContain(REACT_ACT_ENVIRONMENT_WARNING);
+    }
+  });
+};
+
 describe("OpenInMenu", () => {
   let rendered: ReturnType<typeof render> | null = null;
 
+  beforeEach(() => {
+    (
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
   afterEach(async () => {
     if (rendered) {
-      await act(async () => {
+      await runWithReactAct(async () => {
         rendered?.unmount();
       });
       rendered = null;
@@ -59,7 +77,7 @@ describe("OpenInMenu", () => {
         "Finder",
       );
 
-      await act(async () => {
+      await runWithReactAct(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
       });
 
@@ -74,7 +92,7 @@ describe("OpenInMenu", () => {
         (screen.getByTestId("agent-studio-git-open-in-icon-zed") as HTMLImageElement).tagName,
       ).toBe("IMG");
 
-      await act(async () => {
+      await runWithReactAct(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-item-ghostty"));
       });
 
@@ -183,7 +201,7 @@ describe("OpenInMenu", () => {
         );
 
         await screen.findByTestId("agent-studio-git-open-in-icon-zed");
-        await act(async () => {
+        await runWithReactAct(async () => {
           fireEvent.click(screen.getByTestId("agent-studio-git-open-in-default-button"));
           await Promise.resolve();
         });
@@ -230,13 +248,13 @@ describe("OpenInMenu", () => {
         "Zed",
       );
 
-      await act(async () => {
+      await runWithReactAct(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-default-button"));
       });
 
       expect(onOpenInTool).toHaveBeenCalledWith("zed");
 
-      await act(async () => {
+      await runWithReactAct(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
       });
 
@@ -275,13 +293,13 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
 
-      await act(async () => {
+      await runWithReactAct(async () => {
         fireEvent.click(await screen.findByTestId("agent-studio-git-open-in-trigger"));
       });
 
       expect(await screen.findByTestId("agent-studio-git-open-in-error")).toBeTruthy();
 
-      await act(async () => {
+      await runWithReactAct(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
         await Promise.resolve();
         await Promise.resolve();
@@ -317,13 +335,13 @@ describe("OpenInMenu", () => {
           </QueryProvider>,
         );
 
-        await act(async () => {
+        await runWithReactAct(async () => {
           fireEvent.click(await screen.findByTestId("agent-studio-git-open-in-trigger"));
         });
 
         expect(await screen.findByTestId("agent-studio-git-open-in-error")).toBeTruthy();
 
-        await act(async () => {
+        await runWithReactAct(async () => {
           fireEvent.click(screen.getByRole("button", { name: "Retry" }));
           await Promise.resolve();
           await Promise.resolve();

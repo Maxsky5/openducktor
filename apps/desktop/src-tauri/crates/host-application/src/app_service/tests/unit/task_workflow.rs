@@ -100,8 +100,7 @@ fn assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_rea
         let mut state = task_state.lock().expect("task store lock poisoned");
         state.agent_sessions = vec![
             AgentSessionDocument {
-                session_id: "spec-session".to_string(),
-                external_session_id: None,
+                external_session_id: "spec-session".to_string(),
                 role: "spec".to_string(),
                 scenario: "spec_initial".to_string(),
                 started_at: "2026-03-17T10:00:00Z".to_string(),
@@ -110,8 +109,7 @@ fn assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_rea
                 selected_model: None,
             },
             AgentSessionDocument {
-                session_id: "build-session".to_string(),
-                external_session_id: None,
+                external_session_id: "build-session".to_string(),
                 role: "build".to_string(),
                 scenario: "build_implementation_start".to_string(),
                 started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -120,8 +118,7 @@ fn assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_rea
                 selected_model: None,
             },
             AgentSessionDocument {
-                session_id: "qa-session".to_string(),
-                external_session_id: None,
+                external_session_id: "qa-session".to_string(),
                 role: "qa".to_string(),
                 scenario: "qa_review".to_string(),
                 started_at: "2026-03-17T12:00:00Z".to_string(),
@@ -336,8 +333,7 @@ fn task_reset_implementation_ignores_stale_persisted_build_session_without_live_
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -377,8 +373,7 @@ fn task_reset_implementation_ignores_stale_qa_sessions_with_persisted_external_i
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "qa-session".to_string(),
-        external_session_id: Some("external-qa-session".to_string()),
+        external_session_id: "external-qa-session".to_string(),
         role: "qa".to_string(),
         scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -427,8 +422,7 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
         .expect("task store lock poisoned")
         .agent_sessions = vec![
         AgentSessionDocument {
-            session_id: "spec-session".to_string(),
-            external_session_id: Some("external-spec-session".to_string()),
+            external_session_id: "external-spec-session".to_string(),
             role: "spec".to_string(),
             scenario: "spec_authoring".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -437,8 +431,7 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
             selected_model: None,
         },
         AgentSessionDocument {
-            session_id: "planner-session".to_string(),
-            external_session_id: Some("external-planner-session".to_string()),
+            external_session_id: "external-planner-session".to_string(),
             role: "planner".to_string(),
             scenario: "plan_authoring".to_string(),
             started_at: "2026-03-17T11:00:01Z".to_string(),
@@ -447,8 +440,7 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
             selected_model: None,
         },
         AgentSessionDocument {
-            session_id: "build-session".to_string(),
-            external_session_id: Some("external-build-session".to_string()),
+            external_session_id: "external-build-session".to_string(),
             role: "build".to_string(),
             scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:02Z".to_string(),
@@ -457,8 +449,7 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
             selected_model: None,
         },
         AgentSessionDocument {
-            session_id: "qa-session".to_string(),
-            external_session_id: Some("external-qa-session".to_string()),
+            external_session_id: "external-qa-session".to_string(),
             role: "qa".to_string(),
             scenario: "qa_review".to_string(),
             started_at: "2026-03-17T11:00:03Z".to_string(),
@@ -685,8 +676,7 @@ fn assert_task_reset_rejects_live_session_status(
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: format!("{role}-session"),
-        external_session_id: Some(format!("external-{role}-session")),
+        external_session_id: format!("external-{role}-session"),
         role: role.to_string(),
         scenario: scenario.to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -870,8 +860,7 @@ fn task_reset_removes_task_managed_worktrees_for_spec_and_planner_sessions() -> 
         .expect("task store lock poisoned")
         .agent_sessions = vec![
         AgentSessionDocument {
-            session_id: "spec-session".to_string(),
-            external_session_id: None,
+            external_session_id: "spec-session".to_string(),
             role: "spec".to_string(),
             scenario: "spec_authoring".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -880,8 +869,7 @@ fn task_reset_removes_task_managed_worktrees_for_spec_and_planner_sessions() -> 
             selected_model: None,
         },
         AgentSessionDocument {
-            session_id: "planner-session".to_string(),
-            external_session_id: None,
+            external_session_id: "planner-session".to_string(),
             role: "planner".to_string(),
             scenario: "plan_authoring".to_string(),
             started_at: "2026-03-17T12:00:00Z".to_string(),
@@ -890,8 +878,7 @@ fn task_reset_removes_task_managed_worktrees_for_spec_and_planner_sessions() -> 
             selected_model: None,
         },
         AgentSessionDocument {
-            session_id: "build-session".to_string(),
-            external_session_id: None,
+            external_session_id: "build-session".to_string(),
             role: "build".to_string(),
             scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T13:00:00Z".to_string(),
@@ -972,8 +959,7 @@ fn task_reset_removes_stranded_task_managed_worktrees_when_branch_inspection_fai
         .expect("task store lock poisoned")
         .agent_sessions = vec![
         AgentSessionDocument {
-            session_id: "spec-session".to_string(),
-            external_session_id: None,
+            external_session_id: "spec-session".to_string(),
             role: "spec".to_string(),
             scenario: "spec_authoring".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -982,8 +968,7 @@ fn task_reset_removes_stranded_task_managed_worktrees_when_branch_inspection_fai
             selected_model: None,
         },
         AgentSessionDocument {
-            session_id: "planner-session".to_string(),
-            external_session_id: None,
+            external_session_id: "planner-session".to_string(),
             role: "planner".to_string(),
             scenario: "plan_authoring".to_string(),
             started_at: "2026-03-17T12:00:00Z".to_string(),
@@ -1053,8 +1038,7 @@ fn task_reset_propagates_non_worktree_branch_errors_for_task_managed_worktrees()
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "spec-session".to_string(),
-        external_session_id: None,
+        external_session_id: "spec-session".to_string(),
         role: "spec".to_string(),
         scenario: "spec_authoring".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1107,8 +1091,7 @@ fn task_delete_reports_qa_specific_message_when_session_role_has_trailing_whites
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "qa-session".to_string(),
-        external_session_id: Some("external-qa-session".to_string()),
+        external_session_id: "external-qa-session".to_string(),
         role: "qa ".to_string(),
         scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1219,8 +1202,7 @@ fn task_reset_implementation_rejects_live_qa_session_status_with_task_runtime_wi
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "qa-session".to_string(),
-        external_session_id: Some("external-qa-session".to_string()),
+        external_session_id: "external-qa-session".to_string(),
         role: "qa".to_string(),
         scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1278,8 +1260,7 @@ fn task_delete_ignores_stale_persisted_build_session_without_live_runtime() -> R
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1321,8 +1302,7 @@ fn task_reset_fails_when_persisted_session_runtime_kind_is_unknown() -> Result<(
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1369,8 +1349,7 @@ fn task_delete_rejects_live_build_session_status() -> Result<()> {
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1456,8 +1435,7 @@ fn task_delete_rejects_live_build_session_status_with_task_runtime_without_run()
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1519,8 +1497,7 @@ fn task_delete_rejects_live_build_session_status_with_workspace_runtime_without_
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1573,8 +1550,7 @@ fn task_delete_rejects_live_qa_session_status_with_qa_specific_message() -> Resu
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "qa-session".to_string(),
-        external_session_id: Some("external-qa-session".to_string()),
+        external_session_id: "external-qa-session".to_string(),
         role: "qa".to_string(),
         scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1635,8 +1611,7 @@ fn task_delete_rejects_live_qa_session_status_with_workspace_runtime() -> Result
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "qa-session".to_string(),
-        external_session_id: Some("external-qa-session".to_string()),
+        external_session_id: "external-qa-session".to_string(),
         role: "qa".to_string(),
         scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1690,8 +1665,7 @@ fn task_delete_rejects_live_build_session_when_stale_run_route_has_workspace_run
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1783,8 +1757,7 @@ fn task_delete_clears_stale_runs_after_successful_delete() -> Result<()> {
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1881,8 +1854,7 @@ fn assert_task_reset_implementation_rejects_live_build_session_status(
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1969,8 +1941,7 @@ fn task_reset_implementation_rejects_live_build_session_when_stale_run_route_has
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -2088,8 +2059,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -2205,8 +2175,7 @@ fn task_reset_implementation_fails_when_status_endpoint_is_unreachable() -> Resu
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -2331,8 +2300,7 @@ fn task_reset_implementation_only_removes_task_managed_worktrees() -> Result<()>
         .expect("task store lock poisoned")
         .agent_sessions = vec![
         AgentSessionDocument {
-            session_id: "build-session".to_string(),
-            external_session_id: None,
+            external_session_id: "build-session".to_string(),
             role: "build".to_string(),
             scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -2341,8 +2309,7 @@ fn task_reset_implementation_only_removes_task_managed_worktrees() -> Result<()>
             selected_model: None,
         },
         AgentSessionDocument {
-            session_id: "qa-session".to_string(),
-            external_session_id: None,
+            external_session_id: "qa-session".to_string(),
             role: "qa".to_string(),
             scenario: "qa_review".to_string(),
             started_at: "2026-03-17T12:00:00Z".to_string(),
@@ -2415,8 +2382,7 @@ fn task_reset_implementation_removes_stranded_managed_worktree_when_branch_inspe
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: None,
+        external_session_id: "build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -2483,8 +2449,7 @@ fn task_reset_implementation_propagates_non_worktree_branch_errors_for_managed_w
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: None,
+        external_session_id: "build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -2564,8 +2529,7 @@ fn task_reset_implementation_fails_when_branch_remains_checked_out_in_repo_workt
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: None,
+        external_session_id: "build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -2647,8 +2611,7 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_branch_delete
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: None,
+        external_session_id: "build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -2720,8 +2683,7 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_store_cleanup
         let mut state = task_state.lock().expect("task store lock poisoned");
         state.clear_agent_sessions_error = Some("clear sessions failed".to_string());
         state.agent_sessions = vec![AgentSessionDocument {
-            session_id: "build-session".to_string(),
-            external_session_id: None,
+            external_session_id: "build-session".to_string(),
             role: "build".to_string(),
             scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -2796,8 +2758,7 @@ fn task_reset_implementation_rejects_branch_still_checked_out_in_remaining_workt
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: None,
+        external_session_id: "build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -2885,8 +2846,7 @@ fn task_reset_implementation_removes_recorded_builder_worktree_outside_current_e
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: None,
+        external_session_id: "build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),

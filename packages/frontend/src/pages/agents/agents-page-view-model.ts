@@ -51,7 +51,7 @@ export const buildAgentStudioHeaderModel = (args: {
   workflowStateByRole: Record<AgentRole, AgentWorkflowStepState>;
   selectedRole: AgentRole | null;
   workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
-  onWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
+  onWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
   onSessionSelectionChange: (value: string) => void;
   sessionSelectorAutofocusByValue: Record<string, boolean>;
   sessionSelectorValue: string;
@@ -76,7 +76,7 @@ export const buildAgentStudioHeaderModel = (args: {
       label: entry.label,
       icon: entry.icon,
       state: args.workflowStateByRole[entry.role],
-      sessionId: workflowSession?.sessionId ?? null,
+      externalSessionId: workflowSession?.externalSessionId ?? null,
     };
   }),
   onWorkflowStepSelect: args.onWorkflowStepSelect,

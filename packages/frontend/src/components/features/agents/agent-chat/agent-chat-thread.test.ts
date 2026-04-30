@@ -143,7 +143,7 @@ const triggerResizeObservers = (heightByElement = new Map<Element, number>()): v
   }
 };
 
-const buildLongSession = (sessionId: string, count = 80) => {
+const buildLongSession = (externalSessionId: string, count = 80) => {
   const messages = Array.from({ length: count }, (_, index) =>
     buildMessage("user", `Message ${index + 1}`, {
       id: `message-${index + 1}`,
@@ -151,7 +151,7 @@ const buildLongSession = (sessionId: string, count = 80) => {
   );
 
   return buildSession({
-    sessionId,
+    externalSessionId,
     messages,
     status: "idle",
     pendingQuestions: [],
@@ -610,7 +610,7 @@ describe("AgentChatThread", () => {
           model: {
             ...buildBaseModel(),
             session: buildSession({
-              sessionId: "session-normal",
+              externalSessionId: "session-normal",
               messages: [buildMessage("assistant", "Baseline transcript", { id: "assistant-1" })],
             }),
           },
@@ -622,7 +622,7 @@ describe("AgentChatThread", () => {
           model: {
             ...buildBaseModel(),
             session: buildSession({
-              sessionId: "session-attachments",
+              externalSessionId: "session-attachments",
               messages: attachmentMessages,
             }),
           },
@@ -762,7 +762,7 @@ describe("AgentChatThread", () => {
     expect(rendered.container.textContent).toContain("Message 80");
 
     const nextSession = buildSession({
-      sessionId: session.sessionId,
+      externalSessionId: session.externalSessionId,
       messages: Array.from({ length: 81 }, (_, index) =>
         buildMessage("user", `Message ${index + 1}`, {
           id: `message-${index + 1}`,
@@ -794,7 +794,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           isSessionViewLoading: true,
           session: buildSession({
-            sessionId: "session-loading",
+            externalSessionId: "session-loading",
             messages: [buildMessage("assistant", "Loading", { id: "assistant-1" })],
           }),
         },
@@ -812,7 +812,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           isSessionHistoryLoading: true,
           session: buildSession({
-            sessionId: "session-hydrating",
+            externalSessionId: "session-hydrating",
             messages: [buildMessage("assistant", "Old cached message", { id: "assistant-old-1" })],
           }),
         },
@@ -840,7 +840,7 @@ describe("AgentChatThread", () => {
       }),
     ];
     const session = buildSession({
-      sessionId: "session-tool-hydrating",
+      externalSessionId: "session-tool-hydrating",
       messages,
     });
     const model = {
@@ -970,7 +970,7 @@ describe("AgentChatThread", () => {
         model: {
           ...model,
           session: buildSession({
-            sessionId: model.session?.sessionId,
+            externalSessionId: model.session?.externalSessionId,
             pendingQuestions: [],
             pendingPermissions: [],
             todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],

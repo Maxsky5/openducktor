@@ -6,7 +6,6 @@ import { historyToChatMessages } from "./persistence";
 
 export type RuntimeTranscriptSessionInput = {
   repoPath: string;
-  sessionId: string;
   externalSessionId: string;
   runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
   runtimeId: string | null;
@@ -38,7 +37,6 @@ const runtimeTranscriptHistoryVersion = (history: AgentSessionHistoryMessage[]):
 
 export const createRuntimeTranscriptSession = ({
   repoPath,
-  sessionId,
   externalSessionId,
   runtimeKind,
   runtimeId,
@@ -50,7 +48,6 @@ export const createRuntimeTranscriptSession = ({
   const startedAt = history[0]?.timestamp ?? new Date(0).toISOString();
 
   return {
-    sessionId,
     externalSessionId,
     purpose: "transcript",
     taskId: "",
@@ -66,7 +63,7 @@ export const createRuntimeTranscriptSession = ({
     historyHydrationState: "hydrated",
     runtimeRecoveryState: "idle",
     messages: createSessionMessagesState(
-      sessionId,
+      externalSessionId,
       historyToChatMessages(history, {
         role: null,
         selectedModel: null,

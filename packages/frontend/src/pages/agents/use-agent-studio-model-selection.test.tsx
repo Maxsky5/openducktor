@@ -230,7 +230,6 @@ describe("useAgentStudioModelSelection", () => {
       workingDirectory: "/repo/session-worktree",
     });
     const summary = {
-      sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
       role: "spec" as const,
@@ -251,7 +250,7 @@ describe("useAgentStudioModelSelection", () => {
 
     const state = resolveActiveSessionSelectionState(hydratedSession, summary);
 
-    expect(state.sessionId).toBe("session-1");
+    expect(state.externalSessionId).toBe("external-1");
     expect(state.selectedModel).toEqual(hydratedSession.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.runtimeRoute).toEqual({
@@ -265,7 +264,6 @@ describe("useAgentStudioModelSelection", () => {
 
   test("keeps summary selection available while the hydrated session is missing", () => {
     const summary = {
-      sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
       role: "spec" as const,
@@ -286,7 +284,7 @@ describe("useAgentStudioModelSelection", () => {
 
     const state = resolveActiveSessionSelectionState(null, summary);
 
-    expect(state.sessionId).toBe("session-1");
+    expect(state.externalSessionId).toBe("external-1");
     expect(state.selectedModel).toEqual(summary.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.workingDirectory).toBe("/repo");
@@ -409,7 +407,6 @@ describe("useAgentStudioModelSelection", () => {
       createBaseProps({
         activeSession: null,
         activeSessionSummary: {
-          sessionId: "session-1",
           externalSessionId: "external-1",
           taskId: "task-1",
           role: "spec",
@@ -701,7 +698,7 @@ describe("useAgentStudioModelSelection", () => {
       harness.getLatest().handleSelectVariant("high");
     });
 
-    expect(updateAgentSessionModel).toHaveBeenCalledWith("session-1", {
+    expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
       runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",

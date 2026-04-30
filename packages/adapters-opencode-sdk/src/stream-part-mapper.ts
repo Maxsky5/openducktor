@@ -277,11 +277,16 @@ const resolveSubagentExecutionMode = (
   return undefined;
 };
 
-const resolveSubagentSessionId = (...sources: unknown[]): string | undefined => {
+const resolveSubagentExternalSessionId = (...sources: unknown[]): string | undefined => {
   for (const source of sources) {
-    const sessionId = readTrimmedString(source, ["sessionId", "sessionID", "session_id"]);
-    if (sessionId) {
-      return sessionId;
+    const externalSessionId = readTrimmedString(source, [
+      "externalSessionId",
+      "sessionID",
+      "sessionId",
+      "session_id",
+    ]);
+    if (externalSessionId) {
+      return externalSessionId;
     }
   }
 
@@ -291,7 +296,7 @@ const resolveSubagentSessionId = (...sources: unknown[]): string | undefined => 
 const resolveSubagentCorrelationKey = (input: {
   messageId: string;
   partId: string;
-  sessionId?: string;
+  externalSessionId?: string;
   agent?: string;
   prompt?: string;
 }): string => {
@@ -302,8 +307,8 @@ const resolveSubagentCorrelationKey = (input: {
     return ["spawn", input.messageId, agent, prompt].join(":");
   }
 
-  if (input.sessionId) {
-    return ["session", input.messageId, input.sessionId].join(":");
+  if (input.externalSessionId) {
+    return ["session", input.messageId, input.externalSessionId].join(":");
   }
 
   return ["part", input.messageId, input.partId].join(":");
@@ -316,7 +321,7 @@ const buildSubagentStreamPart = (input: {
   agent?: string;
   prompt?: string;
   description?: string;
-  sessionId?: string;
+  externalSessionId?: string;
   executionMode?: SubagentStreamPart["executionMode"];
   metadata?: Record<string, unknown>;
   startedAtMs?: number;
@@ -325,7 +330,7 @@ const buildSubagentStreamPart = (input: {
   const correlationKey = resolveSubagentCorrelationKey({
     messageId: input.messageId,
     partId: input.partId,
-    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : {}),
     ...(input.agent ? { agent: input.agent } : {}),
     ...(input.prompt ? { prompt: input.prompt } : {}),
   });
@@ -339,7 +344,7 @@ const buildSubagentStreamPart = (input: {
     ...(input.agent ? { agent: input.agent } : {}),
     ...(input.prompt ? { prompt: input.prompt } : {}),
     ...(input.description ? { description: input.description } : {}),
-    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : {}),
     ...(input.executionMode ? { executionMode: input.executionMode } : {}),
     ...(input.metadata ? { metadata: input.metadata } : {}),
     ...(typeof input.startedAtMs === "number" ? { startedAtMs: input.startedAtMs } : {}),
@@ -392,7 +397,8 @@ const buildSubagentFromToolPart = (
   const rawOutput = readUnknownProp(toolState, "output");
   const input = asUnknownRecord(rawInput);
   const output = asUnknownRecord(rawOutput) ?? parseStructuredTextObject(rawOutput);
-  const sessionId = resolveSubagentSessionId(metadata, input, output);
+  const outputIdentity = asUnknownRecord(readUnknownProp(output, "metadata")) ?? output;
+  const externalSessionId = resolveSubagentExternalSessionId(metadata, input, outputIdentity);
   const agent = resolveSubagentAgent(input, metadata, output);
   const prompt = resolveSubagentPrompt(input, metadata, output);
   const description =
@@ -412,7 +418,7 @@ const buildSubagentFromToolPart = (
     ...(agent ? { agent } : {}),
     ...(prompt ? { prompt } : {}),
     ...(description ? { description } : {}),
-    ...(sessionId ? { sessionId } : {}),
+    ...(externalSessionId ? { externalSessionId } : {}),
     executionMode: resolveSubagentExecutionMode(metadata, input, output),
     ...(metadata ? { metadata } : {}),
     ...timing,

@@ -46,7 +46,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
 
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeSession: createSession({
-    sessionId: "session-a",
     externalSessionId: "external-a",
     role: "spec",
     scenario: "spec_initial",
@@ -106,13 +105,11 @@ describe("useAgentChatThreadContext", () => {
 
   test("displays an already hydrated existing session without a switch flicker", async () => {
     const sessionA = createSession({
-      sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",
       scenario: "spec_initial",
     });
     const sessionB = createSession({
-      sessionId: "session-b",
       externalSessionId: "external-b",
       role: "planner",
       scenario: "planner_initial",
@@ -123,25 +120,23 @@ describe("useAgentChatThreadContext", () => {
     );
 
     await harness.mount();
-    expect(harness.getLatest().threadSession?.sessionId).toBe("session-a");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("external-a");
     expect(harness.getLatest().isContextSwitching).toBe(false);
 
     await harness.update(createHookArgs({ activeSession: sessionB, contextSwitchVersion: 1 }));
-    expect(harness.getLatest().threadSession?.sessionId).toBe("session-b");
-    expect(harness.getLatest().activeSessionId).toBe("session-b");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("external-b");
+    expect(harness.getLatest().activeExternalSessionId).toBe("external-b");
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });
 
   test("clears the visible thread immediately when the target session cannot render yet", async () => {
     const sessionA = createSession({
-      sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",
       scenario: "spec_initial",
     });
     const sessionB = createSession({
-      sessionId: "session-b",
       externalSessionId: "external-b",
       role: "planner",
       scenario: "planner_initial",
@@ -161,14 +156,13 @@ describe("useAgentChatThreadContext", () => {
       }),
     );
     expect(harness.getLatest().threadSession).toBeNull();
-    expect(harness.getLatest().activeSessionId).toBeNull();
+    expect(harness.getLatest().activeExternalSessionId).toBeNull();
     expect(harness.getLatest().isContextSwitching).toBe(true);
     await harness.unmount();
   });
 
   test("keeps the thread cleared while task hydration is running", async () => {
     const session = createSession({
-      sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",
       scenario: "spec_initial",
@@ -205,7 +199,7 @@ describe("useAgentChatThreadContext", () => {
     await harness.run(() => {
       flushRafFrames(1);
     });
-    expect(harness.getLatest().threadSession?.sessionId).toBe("session-a");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("external-a");
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });

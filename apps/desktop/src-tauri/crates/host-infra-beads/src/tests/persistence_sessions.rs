@@ -34,7 +34,7 @@ fn list_tasks_parses_agent_sessions_for_multiple_tasks_in_single_list_call() -> 
         tasks[0]
             .agent_sessions
             .iter()
-            .map(|session| session.session_id.as_str())
+            .map(|session| session.external_session_id.as_str())
             .collect::<Vec<_>>(),
         vec!["session-new", "session-old"]
     );
@@ -66,8 +66,8 @@ fn list_agent_sessions_is_sorted_descending_by_started_at() -> Result<()> {
 
     let sessions = store.list_agent_sessions(repo.path(), "task-1")?;
     assert_eq!(sessions.len(), 2);
-    assert_eq!(sessions[0].session_id, "session-new");
-    assert_eq!(sessions[1].session_id, "session-old");
+    assert_eq!(sessions[0].external_session_id, "session-new");
+    assert_eq!(sessions[1].external_session_id, "session-old");
     Ok(())
 }
 
@@ -104,13 +104,14 @@ fn upsert_agent_session_updates_existing_session_without_duplication() -> Result
     assert_eq!(sessions.len(), 2);
     let session_1 = sessions
         .iter()
-        .find(|entry| entry["sessionId"] == Value::String("session-1".to_string()))
+        .find(|entry| entry["externalSessionId"] == Value::String("session-1".to_string()))
         .expect("session-1 missing");
     assert!(session_1.get("status").is_none());
     assert_eq!(
         session_1.get("externalSessionId").and_then(Value::as_str),
-        Some("external-session-1")
+        Some("session-1")
     );
+    assert!(session_1.get("sessionId").is_none());
     assert_eq!(
         session_1.get("scenario").and_then(Value::as_str),
         Some("build_default")
@@ -159,7 +160,7 @@ fn upsert_agent_session_truncates_to_latest_100_entries() -> Result<()> {
     assert_eq!(sessions.len(), 100);
     assert!(sessions
         .iter()
-        .any(|entry| entry["sessionId"] == Value::String("session-newest".to_string())));
+        .any(|entry| entry["externalSessionId"] == Value::String("session-newest".to_string())));
     Ok(())
 }
 
@@ -180,7 +181,6 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
                     "qaReports": [{"markdown": "# QA Report", "verdict": "approved", "updatedAt": "2026-02-20T12:00:00Z", "updatedBy": "qa-agent", "sourceTool": ODT_QA_APPROVED_SOURCE_TOOL, "revision": 1}]
                 },
                 "agentSessions": [{
-                    "sessionId": "session-1",
                     "externalSessionId": "ext-1",
                 "taskId": "task-1",
                 "role": "build",
@@ -222,7 +222,7 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
     assert_eq!(qa.revision, Some(1));
     assert!(qa.error.is_none());
     assert_eq!(metadata.agent_sessions.len(), 1);
-    assert_eq!(metadata.agent_sessions[0].session_id, "session-1");
+    assert_eq!(metadata.agent_sessions[0].external_session_id, "ext-1");
     assert_eq!(metadata.agent_sessions[0].role, "build");
 
     let calls = runner.take_calls();

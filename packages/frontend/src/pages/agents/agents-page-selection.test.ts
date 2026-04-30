@@ -168,7 +168,7 @@ describe("agents-page-selection", () => {
   test("prefers explicit task id over session-derived task id", () => {
     const session = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       taskId: "task-from-session",
     });
 
@@ -204,13 +204,13 @@ describe("agents-page-selection", () => {
   test("keeps active session unresolved when explicit session param does not belong to active task", () => {
     const plannerSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "planner-1",
+      externalSessionId: "planner-1",
       taskId: "task-1",
       role: "planner",
     });
     const buildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-1",
+      externalSessionId: "build-1",
       taskId: "task-1",
       role: "build",
     });
@@ -229,13 +229,13 @@ describe("agents-page-selection", () => {
   test("falls back by role when no explicit session param is present", () => {
     const plannerSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "planner-1",
+      externalSessionId: "planner-1",
       taskId: "task-1",
       role: "planner",
     });
     const buildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-1",
+      externalSessionId: "build-1",
       taskId: "task-1",
       role: "build",
     });
@@ -248,13 +248,13 @@ describe("agents-page-selection", () => {
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
     });
 
-    expect(resolved?.sessionId).toBe("planner-1");
+    expect(resolved?.externalSessionId).toBe("planner-1");
   });
 
   test("prioritizes active running session over status defaults", () => {
     const olderBuildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-older",
+      externalSessionId: "build-older",
       taskId: "task-1",
       role: "build",
       status: "idle",
@@ -262,7 +262,7 @@ describe("agents-page-selection", () => {
     });
     const runningSpecSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "spec-running",
+      externalSessionId: "spec-running",
       taskId: "task-1",
       role: "spec",
       status: "running",
@@ -277,13 +277,13 @@ describe("agents-page-selection", () => {
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
     });
 
-    expect(resolved?.sessionId).toBe("spec-running");
+    expect(resolved?.externalSessionId).toBe("spec-running");
   });
 
   test("chooses the most recent running/starting session when multiple active sessions exist", () => {
     const olderRunningSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "planner-running-older",
+      externalSessionId: "planner-running-older",
       taskId: "task-1",
       role: "planner",
       status: "running",
@@ -291,7 +291,7 @@ describe("agents-page-selection", () => {
     });
     const newerStartingSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "qa-starting-newer",
+      externalSessionId: "qa-starting-newer",
       taskId: "task-1",
       role: "qa",
       status: "starting",
@@ -306,20 +306,20 @@ describe("agents-page-selection", () => {
       selectedTask: createTaskCardFixture({ id: "task-1", status: "human_review" }),
     });
 
-    expect(resolved?.sessionId).toBe("qa-starting-newer");
+    expect(resolved?.externalSessionId).toBe("qa-starting-newer");
   });
 
   test("selects required+available role for open tasks", () => {
     const specSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "spec-1",
+      externalSessionId: "spec-1",
       taskId: "task-1",
       role: "spec",
       startedAt: "2026-02-22T11:00:00.000Z",
     });
     const buildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-1",
+      externalSessionId: "build-1",
       taskId: "task-1",
       role: "build",
       startedAt: "2026-02-22T10:00:00.000Z",
@@ -342,13 +342,13 @@ describe("agents-page-selection", () => {
       }),
     });
 
-    expect(resolved?.sessionId).toBe("spec-1");
+    expect(resolved?.externalSessionId).toBe("spec-1");
   });
 
   test("returns null for open tasks when no required+available role exists", () => {
     const buildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-1",
+      externalSessionId: "build-1",
       taskId: "task-1",
       role: "build",
     });
@@ -376,14 +376,14 @@ describe("agents-page-selection", () => {
   test("selects latest spec session for spec_ready tasks", () => {
     const olderSpecSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "spec-older",
+      externalSessionId: "spec-older",
       taskId: "task-1",
       role: "spec",
       startedAt: "2026-02-22T09:00:00.000Z",
     });
     const latestSpecSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "spec-latest",
+      externalSessionId: "spec-latest",
       taskId: "task-1",
       role: "spec",
       startedAt: "2026-02-22T11:00:00.000Z",
@@ -397,20 +397,20 @@ describe("agents-page-selection", () => {
       selectedTask: createTaskCardFixture({ id: "task-1", status: "spec_ready" }),
     });
 
-    expect(resolved?.sessionId).toBe("spec-latest");
+    expect(resolved?.externalSessionId).toBe("spec-latest");
   });
 
   test("selects latest planner session for ready_for_dev tasks and falls back to spec", () => {
     const latestSpecSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "spec-latest",
+      externalSessionId: "spec-latest",
       taskId: "task-1",
       role: "spec",
       startedAt: "2026-02-22T11:00:00.000Z",
     });
     const latestPlannerSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "planner-latest",
+      externalSessionId: "planner-latest",
       taskId: "task-1",
       role: "planner",
       startedAt: "2026-02-22T12:00:00.000Z",
@@ -432,21 +432,21 @@ describe("agents-page-selection", () => {
       selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
     });
 
-    expect(resolvedWithPlanner?.sessionId).toBe("planner-latest");
-    expect(resolvedWithFallback?.sessionId).toBe("spec-latest");
+    expect(resolvedWithPlanner?.externalSessionId).toBe("planner-latest");
+    expect(resolvedWithFallback?.externalSessionId).toBe("spec-latest");
   });
 
   test("selects latest build session for in_progress, ai_review, and human_review tasks", () => {
     const olderBuildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-older",
+      externalSessionId: "build-older",
       taskId: "task-1",
       role: "build",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
     const latestBuildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-latest",
+      externalSessionId: "build-latest",
       taskId: "task-1",
       role: "build",
       startedAt: "2026-02-22T12:00:00.000Z",
@@ -467,21 +467,21 @@ describe("agents-page-selection", () => {
         selectedTask: createTaskCardFixture({ id: "task-1", status }),
       });
 
-      expect(resolved?.sessionId).toBe("build-latest");
+      expect(resolved?.externalSessionId).toBe("build-latest");
     }
   });
 
   test("selects latest build session for blocked/deferred/closed and falls back to latest overall", () => {
     const latestSpecSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "spec-latest",
+      externalSessionId: "spec-latest",
       taskId: "task-1",
       role: "spec",
       startedAt: "2026-02-22T13:00:00.000Z",
     });
     const latestBuildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-latest",
+      externalSessionId: "build-latest",
       taskId: "task-1",
       role: "build",
       startedAt: "2026-02-22T12:00:00.000Z",
@@ -506,15 +506,15 @@ describe("agents-page-selection", () => {
         selectedTask: createTaskCardFixture({ id: "task-1", status }),
       });
 
-      expect(resolvedWithBuild?.sessionId).toBe("build-latest");
-      expect(resolvedFallback?.sessionId).toBe("spec-latest");
+      expect(resolvedWithBuild?.externalSessionId).toBe("build-latest");
+      expect(resolvedFallback?.externalSessionId).toBe("spec-latest");
     }
   });
 
   test("returns null when no selected task is available", () => {
     const buildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-1",
+      externalSessionId: "build-1",
       taskId: "task-1",
       role: "build",
     });
@@ -548,7 +548,7 @@ describe("agents-page-selection", () => {
   test("keeps explicit session authority over task-status defaults", () => {
     const qaSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "qa-1",
+      externalSessionId: "qa-1",
       taskId: "task-1",
       role: "qa",
       scenario: "qa_review",
@@ -564,7 +564,7 @@ describe("agents-page-selection", () => {
       fallbackRole: "build",
     });
 
-    expect(selection.activeSession?.sessionId).toBe("qa-1");
+    expect(selection.activeSession?.externalSessionId).toBe("qa-1");
     expect(selection.role).toBe("qa");
     expect(selection.scenario).toBe("qa_review");
   });
@@ -572,7 +572,7 @@ describe("agents-page-selection", () => {
   test("prioritizes explicit scenario for explicit role selection", () => {
     const buildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-1",
+      externalSessionId: "build-1",
       taskId: "task-1",
       role: "build",
       scenario: "build_implementation_start",
@@ -589,7 +589,7 @@ describe("agents-page-selection", () => {
       scenarioFromQuery: "build_after_qa_rejected",
     });
 
-    expect(selection.activeSession?.sessionId).toBe("build-1");
+    expect(selection.activeSession?.externalSessionId).toBe("build-1");
     expect(selection.role).toBe("build");
     expect(selection.scenario).toBe("build_after_qa_rejected");
   });
@@ -597,14 +597,14 @@ describe("agents-page-selection", () => {
   test("uses most recent overall session for blocked fallback even with unsorted input", () => {
     const olderSpecSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "spec-older",
+      externalSessionId: "spec-older",
       taskId: "task-1",
       role: "spec",
       startedAt: "2026-02-22T09:00:00.000Z",
     });
     const newerQaSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "qa-newer",
+      externalSessionId: "qa-newer",
       taskId: "task-1",
       role: "qa",
       startedAt: "2026-02-22T13:00:00.000Z",
@@ -620,7 +620,7 @@ describe("agents-page-selection", () => {
       scenarioFromQuery: null,
     });
 
-    expect(selection.activeSession?.sessionId).toBe("qa-newer");
+    expect(selection.activeSession?.externalSessionId).toBe("qa-newer");
     expect(selection.role).toBe("qa");
     expect(selection.scenario).toBe("qa_review");
   });
@@ -628,13 +628,13 @@ describe("agents-page-selection", () => {
   test("prefers the current build session when resolving conflict reuse", () => {
     const activeBuildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-active",
+      externalSessionId: "build-active",
       taskId: "task-1",
       role: "build",
     });
     const olderBuildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-older",
+      externalSessionId: "build-older",
       taskId: "task-1",
       role: "build",
     });
@@ -648,19 +648,19 @@ describe("agents-page-selection", () => {
       sessionsForTask: [],
     });
 
-    expect(resolved?.sessionId).toBe("build-active");
+    expect(resolved?.externalSessionId).toBe("build-active");
   });
 
   test("falls back to any existing build session for the viewed task", () => {
     const buildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-1",
+      externalSessionId: "build-1",
       taskId: "task-1",
       role: "build",
     });
     const otherTaskBuildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-2",
+      externalSessionId: "build-2",
       taskId: "task-2",
       role: "build",
     });
@@ -674,25 +674,25 @@ describe("agents-page-selection", () => {
       sessionsForTask: [buildSession, otherTaskBuildSession],
     });
 
-    expect(resolved?.sessionId).toBe("build-1");
+    expect(resolved?.externalSessionId).toBe("build-1");
   });
 
   test("returns a deduplicated ordered list of build sessions for the viewed task", () => {
     const activeBuildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-active",
+      externalSessionId: "build-active",
       taskId: "task-1",
       role: "build",
     });
     const duplicateBuildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-active",
+      externalSessionId: "build-active",
       taskId: "task-1",
       role: "build",
     });
     const secondaryBuildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "build-secondary",
+      externalSessionId: "build-secondary",
       taskId: "task-1",
       role: "build",
     });
@@ -706,7 +706,7 @@ describe("agents-page-selection", () => {
       sessionsForTask: [activeBuildSession, secondaryBuildSession],
     });
 
-    expect(sessions.map((session) => session.sessionId)).toEqual([
+    expect(sessions.map((session) => session.externalSessionId)).toEqual([
       "build-active",
       "build-secondary",
     ]);

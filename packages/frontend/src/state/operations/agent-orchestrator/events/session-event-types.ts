@@ -8,18 +8,18 @@ export type DraftSource = "delta" | "part";
 export type DraftChannelValueMap<T> = Partial<Record<DraftChannel, T>>;
 
 export type UpdateSession = (
-  sessionId: string,
+  externalSessionId: string,
   updater: (current: AgentSessionState) => AgentSessionState,
   options?: { persist?: boolean },
 ) => void;
 
 export type ResolveTurnDuration = (
-  sessionId: string,
+  externalSessionId: string,
   timestamp: string,
   messages?: AgentSessionState["messages"],
 ) => number | undefined;
 
-export type RecordTurnTimestamp = (sessionId: string, timestamp: string | number) => void;
+export type RecordTurnTimestamp = (externalSessionId: string, timestamp: string | number) => void;
 
 export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyPermission">;
 
@@ -30,7 +30,7 @@ export type SessionPart = SessionPartEvent["part"];
 export type AttachAgentSessionListenerParams = {
   adapter: SessionEventAdapter;
   repoPath: string;
-  sessionId: string;
+  externalSessionId: string;
   eventBatchWindowMs?: number;
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   draftRawBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
@@ -43,23 +43,23 @@ export type AttachAgentSessionListenerParams = {
   turnModelBySessionRef?: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
   contextUsageMessageIdBySessionRef?: MutableRefObject<Record<string, string>>;
   updateSession: UpdateSession;
-  isSessionListenerAttached?: (sessionId: string) => boolean;
+  isSessionListenerAttached?: (externalSessionId: string) => boolean;
   recordTurnActivityTimestamp?: RecordTurnTimestamp;
   recordTurnUserMessageTimestamp?: RecordTurnTimestamp;
   resolveTurnDurationMs: ResolveTurnDuration;
-  clearTurnDuration: (sessionId: string, completedTimestamp?: string) => void;
+  clearTurnDuration: (externalSessionId: string, completedTimestamp?: string) => void;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   resolveRuntimeDefinition?: (runtimeKind: RuntimeKind) => RuntimeDescriptor | null;
 };
 
 export type SessionStoreContext = Pick<
   AttachAgentSessionListenerParams,
-  "sessionId" | "sessionsRef" | "updateSession" | "isSessionListenerAttached"
+  "externalSessionId" | "sessionsRef" | "updateSession" | "isSessionListenerAttached"
 >;
 
 export type SessionDraftContext = Pick<
   AttachAgentSessionListenerParams,
-  | "sessionId"
+  | "externalSessionId"
   | "draftRawBySessionRef"
   | "draftSourceBySessionRef"
   | "draftMessageIdBySessionRef"
@@ -68,7 +68,7 @@ export type SessionDraftContext = Pick<
 
 export type SessionTurnContext = Pick<
   AttachAgentSessionListenerParams,
-  | "sessionId"
+  | "externalSessionId"
   | "turnStartedAtBySessionRef"
   | "turnModelBySessionRef"
   | "contextUsageMessageIdBySessionRef"
@@ -111,7 +111,7 @@ export const createSessionEventHandlerContext = (
 ): SessionEventHandlerContext => ({
   lifecycle: {
     store: {
-      sessionId: context.sessionId,
+      externalSessionId: context.externalSessionId,
       sessionsRef: context.sessionsRef,
       updateSession: context.updateSession,
       ...(context.isSessionListenerAttached
@@ -119,7 +119,7 @@ export const createSessionEventHandlerContext = (
         : {}),
     },
     drafts: {
-      sessionId: context.sessionId,
+      externalSessionId: context.externalSessionId,
       draftRawBySessionRef: context.draftRawBySessionRef,
       draftSourceBySessionRef: context.draftSourceBySessionRef,
       ...(context.draftMessageIdBySessionRef
@@ -130,7 +130,7 @@ export const createSessionEventHandlerContext = (
         : {}),
     },
     turn: {
-      sessionId: context.sessionId,
+      externalSessionId: context.externalSessionId,
       turnStartedAtBySessionRef: context.turnStartedAtBySessionRef,
       ...(context.turnModelBySessionRef
         ? { turnModelBySessionRef: context.turnModelBySessionRef }
@@ -153,12 +153,12 @@ export const createSessionEventHandlerContext = (
   },
   parts: {
     store: {
-      sessionId: context.sessionId,
+      externalSessionId: context.externalSessionId,
       sessionsRef: context.sessionsRef,
       updateSession: context.updateSession,
     },
     drafts: {
-      sessionId: context.sessionId,
+      externalSessionId: context.externalSessionId,
       draftRawBySessionRef: context.draftRawBySessionRef,
       draftSourceBySessionRef: context.draftSourceBySessionRef,
       ...(context.draftMessageIdBySessionRef
@@ -169,7 +169,7 @@ export const createSessionEventHandlerContext = (
         : {}),
     },
     turn: {
-      sessionId: context.sessionId,
+      externalSessionId: context.externalSessionId,
       turnStartedAtBySessionRef: context.turnStartedAtBySessionRef,
       ...(context.turnModelBySessionRef
         ? { turnModelBySessionRef: context.turnModelBySessionRef }

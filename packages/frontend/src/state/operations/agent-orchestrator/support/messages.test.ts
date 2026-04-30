@@ -14,7 +14,7 @@ import {
 } from "./messages";
 
 const createSession = (messages: AgentSessionState["messages"]) => ({
-  sessionId: "session-1",
+  externalSessionId: "session-1",
   messages,
 });
 

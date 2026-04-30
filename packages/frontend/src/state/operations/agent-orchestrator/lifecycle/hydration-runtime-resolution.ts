@@ -274,7 +274,7 @@ export const createHydrationRuntimeResolver = ({
   return async (record: AgentSessionRecord): Promise<ResolvedHydrationRuntime> => {
     const runtimeKind = readPersistedRuntimeKind(record);
     const workingDirectory = record.workingDirectory;
-    const externalSessionId = record.externalSessionId ?? record.sessionId;
+    const externalSessionId = record.externalSessionId;
     const canUseWorkspaceRuntime = canUseWorkspaceRuntimeForHydration(record, repoPath);
 
     const runtimeForDirectory = findRuntimeByWorkingDirectory(

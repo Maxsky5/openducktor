@@ -10,7 +10,6 @@ describe("toAgentSessionSummary", () => {
     });
 
     expect(toAgentSessionSummary(session)).toMatchObject({
-      sessionId: session.sessionId,
       externalSessionId: session.externalSessionId,
       role: "build",
       workingDirectory: "/repo",
@@ -22,12 +21,12 @@ describe("createAgentSessionsStore activity snapshots", () => {
   test("reuses the activity snapshot when only non-activity fields change", () => {
     const store = createAgentSessionsStore();
     const baseSession = createAgentSessionFixture({
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       taskId: "task-1",
       status: "running",
     });
 
-    store.setSessionsById({ [baseSession.sessionId]: baseSession });
+    store.setSessionsById({ [baseSession.externalSessionId]: baseSession });
 
     const initialSnapshot = store.getActivitySessionsSnapshot();
     const updatedSession = {
@@ -44,7 +43,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       ],
     };
 
-    store.setSessionsById({ [updatedSession.sessionId]: updatedSession });
+    store.setSessionsById({ [updatedSession.externalSessionId]: updatedSession });
 
     expect(store.getActivitySessionsSnapshot()).toBe(initialSnapshot);
   });
@@ -52,13 +51,13 @@ describe("createAgentSessionsStore activity snapshots", () => {
   test("publishes a new activity snapshot when pending input visibility changes", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       taskId: "task-1",
       status: "running",
       pendingPermissions: [],
     });
 
-    store.setSessionsById({ [session.sessionId]: session });
+    store.setSessionsById({ [session.externalSessionId]: session });
 
     const initialSnapshot = store.getActivitySessionsSnapshot();
     const updatedSession = {
@@ -66,12 +65,12 @@ describe("createAgentSessionsStore activity snapshots", () => {
       pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["**/*"] }],
     };
 
-    store.setSessionsById({ [updatedSession.sessionId]: updatedSession });
+    store.setSessionsById({ [updatedSession.externalSessionId]: updatedSession });
 
     const nextSnapshot = store.getActivitySessionsSnapshot();
     expect(nextSnapshot).not.toBe(initialSnapshot);
     expect(nextSnapshot[0]).toMatchObject({
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       hasPendingPermissions: true,
       hasPendingQuestions: false,
     });
@@ -80,7 +79,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
   test("omits transcript-only sessions from activity snapshots", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       taskId: "task-1",
       status: "running",
       purpose: "transcript",
@@ -88,7 +87,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       scenario: "build_implementation_start",
     });
 
-    store.setSessionsById({ [session.sessionId]: session });
+    store.setSessionsById({ [session.externalSessionId]: session });
 
     expect(store.getActivitySessionsSnapshot()).toEqual([]);
   });

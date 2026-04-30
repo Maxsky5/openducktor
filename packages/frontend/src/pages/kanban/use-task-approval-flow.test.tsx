@@ -82,7 +82,7 @@ const buildMockedHost = () => ({
   agentSessionsList: async () => [
     {
       ...createAgentSessionFixture({
-        sessionId: "builder-session-old",
+        externalSessionId: "builder-session-old",
         taskId: "TASK-1",
         role: "build",
         scenario: "build_implementation_start",
@@ -91,7 +91,7 @@ const buildMockedHost = () => ({
     },
     {
       ...createAgentSessionFixture({
-        sessionId: "builder-session",
+        externalSessionId: "builder-session",
         taskId: "TASK-1",
         role: "build",
         scenario: "build_implementation_start",

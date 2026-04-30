@@ -51,12 +51,11 @@ type HydratedSubagentMessage = SubagentMessage;
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
   if (!isWorkflowAgentSession(session)) {
-    throw new Error(`Session '${session.sessionId}' is not a workflow session.`);
+    throw new Error(`Session '${session.externalSessionId}' is not a workflow session.`);
   }
   const runtimeKind = requireSessionRuntimeKindForPersistence(session);
 
   return {
-    sessionId: session.sessionId,
     externalSessionId: session.externalSessionId,
     role: session.role,
     scenario: session.scenario,
@@ -66,7 +65,7 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
     selectedModel: session.selectedModel
       ? {
           runtimeKind: requireSelectedModelRuntimeKindForPersistence(
-            session.sessionId,
+            session.externalSessionId,
             runtimeKind,
             session.selectedModel,
           ),
@@ -94,8 +93,7 @@ export const fromPersistedSessionRecord = (
 
   return createRepoScopedAgentSessionState(
     {
-      sessionId: session.sessionId,
-      externalSessionId: session.externalSessionId ?? session.sessionId,
+      externalSessionId: session.externalSessionId,
       purpose: "primary",
       taskId: fallbackTaskId,
       role: session.role,
@@ -124,7 +122,7 @@ export const fromPersistedSessionRecord = (
         ? normalizePersistedSelection({
             ...session.selectedModel,
             runtimeKind: requirePersistedSelectedModelRuntimeKind(
-              session.sessionId,
+              session.externalSessionId,
               runtimeKind,
               session.selectedModel,
             ),
@@ -252,7 +250,7 @@ const historyPartToChatMessage = (
           ...(part.agent ? { agent: part.agent } : {}),
           ...(part.prompt ? { prompt: part.prompt } : {}),
           ...(part.description ? { description: part.description } : {}),
-          ...(part.sessionId ? { sessionId: part.sessionId } : {}),
+          ...(part.externalSessionId ? { externalSessionId: part.externalSessionId } : {}),
           ...(part.executionMode ? { executionMode: part.executionMode } : {}),
           ...(part.metadata ? { metadata: part.metadata } : {}),
           ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
@@ -312,8 +310,8 @@ const matchesHydratedSubagentMessage = (
     return true;
   }
 
-  const existingSessionId = existingMessage.meta.sessionId;
-  const incomingSessionId = incomingMessage.meta.sessionId;
+  const existingSessionId = existingMessage.meta.externalSessionId;
+  const incomingSessionId = incomingMessage.meta.externalSessionId;
   if (existingSessionId && incomingSessionId) {
     return existingSessionId === incomingSessionId;
   }
@@ -375,7 +373,7 @@ export const historyToChatMessages = (
       const partMessage = historyPartToChatMessage(message, part);
       if (partMessage) {
         if (isSubagentMessage(partMessage)) {
-          if (!partMessage.meta.sessionId) {
+          if (!partMessage.meta.externalSessionId) {
             hiddenSubagentsByCorrelationKey.set(partMessage.meta.correlationKey, partMessage);
             continue;
           }

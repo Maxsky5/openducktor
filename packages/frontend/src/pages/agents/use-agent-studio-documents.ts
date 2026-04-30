@@ -98,7 +98,7 @@ export function useAgentStudioDocuments({
         ?.workflowToolAliasesByCanonical
     : undefined;
 
-  const documentContextKey = `${taskId}:${activeSession?.sessionId ?? ""}`;
+  const documentContextKey = `${taskId}:${activeSession?.externalSessionId ?? ""}`;
   const processedDocumentToolEventsRef = useRef(new Set<string>());
   const refreshedTaskVersionsRef = useRef(new Set<string>());
   const previousSessionIdRef = useRef<string | null>(null);
@@ -166,24 +166,24 @@ export function useAgentStudioDocuments({
     }
 
     if (activeSession.role === "build") {
-      previousSessionIdRef.current = activeSession.sessionId;
+      previousSessionIdRef.current = activeSession.externalSessionId;
       previousMessagesRef.current = activeSession.messages;
       return;
     }
 
     const firstChangedMessageIndex =
-      previousSessionIdRef.current !== activeSession.sessionId
+      previousSessionIdRef.current !== activeSession.externalSessionId
         ? 0
         : findFirstChangedMessageIndex(previousMessagesRef.current, activeSession);
 
     if (firstChangedMessageIndex < 0) {
-      previousSessionIdRef.current = activeSession.sessionId;
+      previousSessionIdRef.current = activeSession.externalSessionId;
       previousMessagesRef.current = activeSession.messages;
       return;
     }
 
     forEachSessionMessageFrom(activeSession, firstChangedMessageIndex, (message) => {
-      const eventKey = `${activeSession.sessionId}:${message.id}`;
+      const eventKey = `${activeSession.externalSessionId}:${message.id}`;
       if (processedDocumentToolEventsRef.current.has(eventKey)) {
         return;
       }
@@ -237,7 +237,7 @@ export function useAgentStudioDocuments({
       }
     });
 
-    previousSessionIdRef.current = activeSession.sessionId;
+    previousSessionIdRef.current = activeSession.externalSessionId;
     previousMessagesRef.current = activeSession.messages;
   }, [
     workspaceRepoPath,

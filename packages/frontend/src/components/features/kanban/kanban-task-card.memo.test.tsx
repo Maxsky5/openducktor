@@ -24,7 +24,7 @@ describe("KanbanTaskCard rerender behavior", () => {
     const taskSessions = [
       {
         runtimeKind: "opencode" as const,
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         role: "build" as const,
         scenario: "build_implementation_start" as const,
         status: "running" as const,
@@ -130,7 +130,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           taskSessions={[
             {
               runtimeKind: "opencode",
-              sessionId: "session-1",
+              externalSessionId: "session-1",
               role: "build",
               scenario: "build_implementation_start",
               status: "running",
@@ -155,7 +155,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           taskSessions={[
             {
               runtimeKind: "opencode",
-              sessionId: "session-1",
+              externalSessionId: "session-1",
               role: "build",
               scenario: "build_implementation_start",
               status: "running",

@@ -13,7 +13,7 @@ describe("use-agent-studio-session-action-helpers", () => {
     expect(
       buildAgentStudioSelectionQueryUpdate({
         taskId: "task-1",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         role: "spec",
       }),
     ).toEqual({
@@ -34,7 +34,7 @@ describe("use-agent-studio-session-action-helpers", () => {
       },
       {
         taskId: "task-1",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         role: "build",
       },
     );
@@ -53,7 +53,7 @@ describe("use-agent-studio-session-action-helpers", () => {
   test("buildPreviousSelectionQueryUpdate keeps query contracts", () => {
     const activeSession = createAgentSessionFixture({
       taskId: "task-existing",
-      sessionId: "session-existing",
+      externalSessionId: "session-existing",
       role: "build",
       scenario: "build_implementation_start",
     });
@@ -85,7 +85,7 @@ describe("use-agent-studio-session-action-helpers", () => {
 
     expect(
       shouldTriggerContextSwitchIntent({
-        currentSessionId: "session-1",
+        currentExternalSessionId: "session-1",
         currentRole: "spec",
         nextSessionId: "session-1",
         nextRole: "spec",
@@ -94,7 +94,7 @@ describe("use-agent-studio-session-action-helpers", () => {
 
     expect(
       shouldTriggerContextSwitchIntent({
-        currentSessionId: "session-1",
+        currentExternalSessionId: "session-1",
         currentRole: "spec",
         nextSessionId: "session-2",
         nextRole: "spec",

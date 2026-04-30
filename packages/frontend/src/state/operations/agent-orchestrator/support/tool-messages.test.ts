@@ -8,7 +8,7 @@ import {
 } from "./tool-messages";
 
 const createSession = (messages: AgentChatMessage[]) => ({
-  sessionId: "session-1",
+  externalSessionId: "session-1",
   messages,
 });
 

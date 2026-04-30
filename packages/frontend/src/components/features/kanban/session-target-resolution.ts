@@ -6,12 +6,12 @@ import type {
 } from "@/components/features/kanban/kanban-task-activity";
 
 export type SessionTargetOptions = {
-  sessionId?: string | null;
+  externalSessionId?: string | null;
   scenario?: AgentScenario | null;
 };
 
 type PrimarySessionOrderingCandidate = {
-  sessionId: string;
+  externalSessionId: string;
   status: KanbanTaskSession["status"];
   presentationState: KanbanSessionPresentationState;
   startedAt?: string;
@@ -50,11 +50,11 @@ export const compareActiveSessionForPrimary = (
     return left.startedAt > right.startedAt ? -1 : 1;
   }
 
-  if (left.sessionId === right.sessionId) {
+  if (left.externalSessionId === right.externalSessionId) {
     return 0;
   }
 
-  return left.sessionId > right.sessionId ? -1 : 1;
+  return left.externalSessionId > right.externalSessionId ? -1 : 1;
 };
 
 export const resolvePreferredActiveSession = (
@@ -105,15 +105,16 @@ export const resolveSessionTargetOptions = (
 ): SessionTargetOptions | undefined => {
   const activeSession = resolvePreferredActiveSession(taskSessions, role);
   const historicalSession = resolveLatestHistoricalSessionByRole(task, role);
-  const sessionId = activeSession?.sessionId ?? historicalSession?.sessionId;
+  const externalSessionId =
+    activeSession?.externalSessionId ?? historicalSession?.externalSessionId;
   const scenario = activeSession?.scenario ?? historicalSession?.scenario;
 
-  if (!sessionId && !scenario) {
+  if (!externalSessionId && !scenario) {
     return undefined;
   }
 
   return {
-    ...(sessionId ? { sessionId } : {}),
+    ...(externalSessionId ? { externalSessionId } : {}),
     ...(scenario ? { scenario } : {}),
   };
 };

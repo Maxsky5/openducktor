@@ -454,7 +454,7 @@ const SubagentMessage = ({
   const summary = readSubagentSummary(meta);
   const isRunning = meta.status === "running";
   const isWaitingForPermission = Boolean(
-    meta.sessionId &&
+    meta.externalSessionId &&
       (meta.status === "pending" || meta.status === "running") &&
       subagentPendingPermissionCount > 0,
   );

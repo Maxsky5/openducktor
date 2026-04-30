@@ -54,7 +54,7 @@ const makeClientWithEvents = (events: Event[]): OpencodeClient => {
 };
 
 const makeSessionInput = (): SessionInput => ({
-  sessionId: "local-session-1",
+  externalSessionId: "external-session-1",
   repoPath: "/repo",
   runtimeKind: "opencode",
   runtimeConnection: {
@@ -71,7 +71,6 @@ const makeSessionInput = (): SessionInput => ({
 
 const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   summary: {
-    sessionId: "local-session-1",
     externalSessionId: "external-session-1",
     role: "spec",
     scenario: "spec_initial",
@@ -94,11 +93,11 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   messageMetadataById: new Map(),
   pendingDeltasByPartId: new Map(),
   subagentCorrelationKeyByPartId: new Map(),
-  subagentCorrelationKeyBySessionId: new Map(),
+  subagentCorrelationKeyByExternalSessionId: new Map(),
   pendingSubagentCorrelationKeysBySignature: new Map(),
   pendingSubagentCorrelationKeys: [],
-  pendingSubagentSessionsById: new Map(),
-  pendingSubagentPartEmissionsBySessionId: new Map(),
+  pendingSubagentSessionsByExternalSessionId: new Map(),
+  pendingSubagentPartEmissionsByExternalSessionId: new Map(),
 });
 
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
@@ -118,7 +117,6 @@ const runEventStreamWithSession = async (
 
   await subscribeOpencodeEvents({
     context: {
-      sessionId: "local-session-1",
       externalSessionId: "external-session-1",
       input: makeSessionInput(),
     },
@@ -285,7 +283,7 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
 
 const makeChildSessionCreatedEvent = (input: {
   childSessionId: string;
-  parentSessionId: string;
+  parentExternalSessionId: string;
 }): Event =>
   ({
     type: "session.created",
@@ -298,7 +296,7 @@ const makeChildSessionCreatedEvent = (input: {
         directory: "/repo",
         title: input.childSessionId,
         version: "1",
-        parentID: input.parentSessionId,
+        parentID: input.parentExternalSessionId,
         time: {
           created: Date.parse("2026-02-22T12:00:10.000Z"),
           updated: Date.parse("2026-02-22T12:00:10.000Z"),
@@ -1646,11 +1644,11 @@ describe("event-stream", () => {
       }),
       makeChildSessionCreatedEvent({
         childSessionId: "child-a",
-        parentSessionId: "external-session-1",
+        parentExternalSessionId: "external-session-1",
       }),
       makeChildSessionCreatedEvent({
         childSessionId: "child-b",
-        parentSessionId: "external-session-1",
+        parentExternalSessionId: "external-session-1",
       }),
       {
         type: "message.part.updated",
@@ -1670,7 +1668,7 @@ describe("event-stream", () => {
               },
               output: {
                 result: "Finished A",
-                sessionId: "child-a",
+                externalSessionId: "child-a",
               },
             },
           },
@@ -1694,7 +1692,7 @@ describe("event-stream", () => {
               },
               output: {
                 result: "Finished B",
-                sessionId: "child-b",
+                externalSessionId: "child-b",
               },
             },
           },
@@ -1736,7 +1734,7 @@ describe("event-stream", () => {
       "part:assistant-subagent-collision:subtask-a",
       "part:assistant-subagent-collision:subtask-b",
     ]);
-    expect(completedParts.map((part) => part.sessionId)).toEqual(["child-a", "child-b"]);
+    expect(completedParts.map((part) => part.externalSessionId)).toEqual(["child-a", "child-b"]);
     expect(completedParts.map((part) => part.description)).toEqual(["Finished A", "Finished B"]);
   });
 
@@ -1759,11 +1757,11 @@ describe("event-stream", () => {
       }),
       makeChildSessionCreatedEvent({
         childSessionId: "child-a",
-        parentSessionId: "external-session-1",
+        parentExternalSessionId: "external-session-1",
       }),
       makeChildSessionCreatedEvent({
         childSessionId: "child-b",
-        parentSessionId: "external-session-1",
+        parentExternalSessionId: "external-session-1",
       }),
       {
         type: "message.part.updated",
@@ -1783,7 +1781,7 @@ describe("event-stream", () => {
               },
               output: {
                 result: "Finished B",
-                sessionId: "child-b",
+                externalSessionId: "child-b",
               },
             },
           },
@@ -1807,7 +1805,7 @@ describe("event-stream", () => {
               },
               output: {
                 result: "Finished A",
-                sessionId: "child-a",
+                externalSessionId: "child-a",
               },
             },
           },
@@ -1843,7 +1841,7 @@ describe("event-stream", () => {
       "part:assistant-subagent-out-of-order:subtask-b",
       "part:assistant-subagent-out-of-order:subtask-a",
     ]);
-    expect(completedParts.map((part) => part.sessionId)).toEqual(["child-b", "child-a"]);
+    expect(completedParts.map((part) => part.externalSessionId)).toEqual(["child-b", "child-a"]);
     expect(completedParts.map((part) => part.description)).toEqual(["Finished B", "Finished A"]);
   });
 
@@ -1875,7 +1873,7 @@ describe("event-stream", () => {
                 description: "Starting A",
               },
               metadata: {
-                sessionId: "child-a",
+                externalSessionId: "child-a",
               },
             },
           },
@@ -1903,7 +1901,7 @@ describe("event-stream", () => {
       "part:assistant-task-tool-running:subtask-a",
       "part:assistant-task-tool-running:subtask-a",
     ]);
-    expect(subagentParts.map((part) => part.sessionId)).toEqual([undefined, "child-a"]);
+    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([undefined, "child-a"]);
     expect(subagentParts.map((part) => part.agent)).toEqual(["build", "build"]);
   });
 
@@ -1935,7 +1933,7 @@ describe("event-stream", () => {
                 description: "Starting A",
               },
               metadata: {
-                sessionId: "child-a",
+                externalSessionId: "child-a",
               },
             },
           },
@@ -1943,7 +1941,7 @@ describe("event-stream", () => {
       } as unknown as Event,
     ]);
 
-    expect(sessionRecord.subagentCorrelationKeyBySessionId.get("child-a")).toBe(
+    expect(sessionRecord.subagentCorrelationKeyByExternalSessionId.get("child-a")).toBe(
       "part:assistant-task-tool-running:subtask-a",
     );
     expect(sessionRecord.pendingSubagentCorrelationKeys).toEqual([]);
@@ -2005,7 +2003,7 @@ describe("event-stream", () => {
               },
               output: {
                 result: "Finished A",
-                sessionId: "child-a",
+                externalSessionId: "child-a",
               },
             },
           },
@@ -2029,7 +2027,7 @@ describe("event-stream", () => {
               },
               output: {
                 result: "Finished B",
-                sessionId: "child-b",
+                externalSessionId: "child-b",
               },
             },
           },
@@ -2048,7 +2046,7 @@ describe("event-stream", () => {
       "part:assistant-subagent-created-order:subtask-a",
       "part:assistant-subagent-created-order:subtask-b",
     ]);
-    expect(completedSubagentParts.map((event) => event.part.sessionId)).toEqual([
+    expect(completedSubagentParts.map((event) => event.part.externalSessionId)).toEqual([
       "child-a",
       "child-b",
     ]);
@@ -2086,7 +2084,7 @@ describe("event-stream", () => {
               metadata: {
                 agent: "build",
                 prompt: "Inspect repo",
-                sessionId: "child-b",
+                externalSessionId: "child-b",
               },
             },
           },
@@ -2130,7 +2128,7 @@ describe("event-stream", () => {
       "running",
       "completed",
     ]);
-    expect(subagentParts.map((event) => event.part.sessionId)).toEqual([
+    expect(subagentParts.map((event) => event.part.externalSessionId)).toEqual([
       undefined,
       undefined,
       "child-b",
@@ -2217,7 +2215,6 @@ describe("event-stream", () => {
 
     await subscribeOpencodeEvents({
       context: {
-        sessionId: "local-session-1",
         externalSessionId: "external-session-1",
         input: makeSessionInput(),
       },
@@ -2258,7 +2255,6 @@ describe("event-stream", () => {
       },
     } as unknown as Event;
     const parentSubscriber = {
-      sessionId: "local-parent-session",
       externalSessionId: "external-parent-session",
       input: makeSessionInput(),
     };
@@ -2266,12 +2262,14 @@ describe("event-stream", () => {
     expect(isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent)).toBe(false);
     expect(
       isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent, {
-        isKnownChildSessionId: (sessionId) => sessionId === "external-child-session",
+        isKnownChildExternalSessionId: (externalSessionId) =>
+          externalSessionId === "external-child-session",
       }),
     ).toBe(true);
     expect(
       isRelevantSubscriberEvent(parentSubscriber, childMessageEvent, {
-        isKnownChildSessionId: (sessionId) => sessionId === "external-child-session",
+        isKnownChildExternalSessionId: (externalSessionId) =>
+          externalSessionId === "external-child-session",
       }),
     ).toBe(false);
   });
@@ -2614,7 +2612,7 @@ describe("event-stream", () => {
     }
     expect(permissionEvents[0].metadata).toEqual({ reason: "Need file write" });
     expect(permissionEvents[0].childExternalSessionId).toBe("external-session-1");
-    expect(permissionEvents[0].parentSessionId).toBeUndefined();
+    expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
     expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
     expect(permissionEvents[0].subagentCorrelationKey).toBeUndefined();
     expect(questionEvents[0].questions).toHaveLength(1);
@@ -2638,7 +2636,6 @@ describe("event-stream", () => {
       (childExternalSessionId) =>
         childExternalSessionId === "external-child-session"
           ? {
-              parentSessionId: "local-session-1",
               parentExternalSessionId: "external-session-1",
               childExternalSessionId,
               subagentCorrelationKey: "part:assistant-1:subtask-1",
@@ -2650,10 +2647,9 @@ describe("event-stream", () => {
     expect(permissionEvents).toHaveLength(1);
     expect(permissionEvents[0]).toMatchObject({
       type: "permission_required",
-      sessionId: "local-session-1",
+      externalSessionId: "external-session-1",
       requestId: "perm-child-1",
       childExternalSessionId: "external-child-session",
-      parentSessionId: "local-session-1",
       parentExternalSessionId: "external-session-1",
       subagentCorrelationKey: "part:assistant-1:subtask-1",
     });
@@ -2676,7 +2672,6 @@ describe("event-stream", () => {
       (childExternalSessionId) =>
         childExternalSessionId === "external-child-session"
           ? {
-              parentSessionId: "other-local-parent",
               parentExternalSessionId: "other-external-parent",
               childExternalSessionId,
               subagentCorrelationKey: "part:assistant-1:subtask-1",
@@ -2694,7 +2689,6 @@ describe("event-stream", () => {
 
     processOpencodeEvent({
       context: {
-        sessionId: "local-child-session",
         externalSessionId: "external-child-session",
         input: makeSessionInput(),
       },
@@ -2713,7 +2707,6 @@ describe("event-stream", () => {
       resolveSubagentSessionLink: (childExternalSessionId) =>
         childExternalSessionId === "external-child-session"
           ? {
-              parentSessionId: "local-parent-session",
               parentExternalSessionId: "external-parent-session",
               childExternalSessionId,
               subagentCorrelationKey: "part:assistant-1:subtask-1",
@@ -2727,10 +2720,9 @@ describe("event-stream", () => {
       throw new Error("Expected permission_required event");
     }
     expect(permissionEvent).toMatchObject({
-      sessionId: "local-child-session",
+      externalSessionId: "external-child-session",
       requestId: "perm-child-1",
       childExternalSessionId: "external-child-session",
-      parentSessionId: "local-parent-session",
       parentExternalSessionId: "external-parent-session",
       subagentCorrelationKey: "part:assistant-1:subtask-1",
     });
@@ -2794,7 +2786,7 @@ describe("event-stream", () => {
         } as unknown as Event,
       ],
       (record) => {
-        record.pendingSubagentPartEmissionsBySessionId.set("child-session-1", [
+        record.pendingSubagentPartEmissionsByExternalSessionId.set("child-session-1", [
           {
             part: {
               id: "subtask-part-1",
@@ -2810,7 +2802,7 @@ describe("event-stream", () => {
                   prompt: "Review changes",
                 },
                 metadata: {
-                  sessionId: "child-session-1",
+                  externalSessionId: "child-session-1",
                 },
               },
             } as unknown as Event["properties"],
@@ -2820,7 +2812,7 @@ describe("event-stream", () => {
       },
     );
 
-    expect(sessionRecord.pendingSubagentPartEmissionsBySessionId.size).toBe(0);
+    expect(sessionRecord.pendingSubagentPartEmissionsByExternalSessionId.size).toBe(0);
   });
 
   test("normalizes unknown session error payload", async () => {

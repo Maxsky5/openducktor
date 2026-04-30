@@ -3,7 +3,6 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { deriveAgentSessionViewLifecycle } from "./session-view-lifecycle";
 
 const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: "/tmp/repo",

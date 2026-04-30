@@ -46,7 +46,7 @@ export function useAgentStudioQuerySync({
 
   return {
     taskIdParam: navigation.taskId,
-    sessionParam: navigation.sessionId,
+    sessionParam: navigation.externalSessionId,
     hasExplicitRoleParam,
     roleFromQuery,
     scenarioFromQuery: navigation.scenario,

@@ -13,10 +13,9 @@ type HookArgs = Parameters<typeof useAgentStudioQuerySessionSync>[0];
 
 const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 
-const createSession = (taskId: string, sessionId: string) =>
+const createSession = (taskId: string, externalSessionId: string) =>
   createAgentSessionFixture({
-    sessionId,
-    externalSessionId: `ext-${sessionId}`,
+    externalSessionId: `ext-${externalSessionId}`,
     taskId,
   });
 
@@ -168,7 +167,6 @@ describe("useAgentStudioQuerySessionSync", () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const activeSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "session-1",
       externalSessionId: "ext-session-1",
       taskId: "task-1",
       role: "planner",
@@ -192,7 +190,7 @@ describe("useAgentStudioQuerySessionSync", () => {
       expect(scheduleQueryUpdate).toHaveBeenCalledTimes(1);
       expect(scheduleQueryUpdate.mock.calls[0]).toEqual([
         {
-          session: "session-1",
+          session: "ext-session-1",
           agent: "planner",
           scenario: undefined,
         },
@@ -206,7 +204,6 @@ describe("useAgentStudioQuerySessionSync", () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const activeSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "session-1",
       externalSessionId: "ext-session-1",
       taskId: "task-1",
       role: "spec",
@@ -235,7 +232,6 @@ describe("useAgentStudioQuerySessionSync", () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const activeSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "session-build",
       externalSessionId: "ext-session-build",
       taskId: "task-1",
       role: "build",

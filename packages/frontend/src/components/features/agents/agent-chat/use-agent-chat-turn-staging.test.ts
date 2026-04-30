@@ -56,15 +56,15 @@ describe("useAgentChatTurnStaging", () => {
   test("shows only the latest turn first when history is windowed", async () => {
     const turns = buildTurns(6);
     const harness = createHookHarness(
-      ({ activeSessionId, windowStart, nextTurns }) =>
+      ({ activeExternalSessionId, windowStart, nextTurns }) =>
         useAgentChatTurnStaging({
-          activeSessionId,
+          activeExternalSessionId,
           windowStart,
           turns: nextTurns,
           disabled: false,
         }),
       {
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         windowStart: 10,
         nextTurns: turns,
       },
@@ -95,15 +95,15 @@ describe("useAgentChatTurnStaging", () => {
   test("does not restage once a session has completed staging", async () => {
     const turns = buildTurns(6);
     const harness = createHookHarness(
-      ({ activeSessionId, windowStart, nextTurns }) =>
+      ({ activeExternalSessionId, windowStart, nextTurns }) =>
         useAgentChatTurnStaging({
-          activeSessionId,
+          activeExternalSessionId,
           windowStart,
           turns: nextTurns,
           disabled: false,
         }),
       {
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         windowStart: 10,
         nextTurns: turns,
       },
@@ -124,7 +124,7 @@ describe("useAgentChatTurnStaging", () => {
 
     const expandedTurns = buildTurns(8);
     await harness.update({
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       windowStart: 12,
       nextTurns: expandedTurns,
     });
@@ -139,15 +139,15 @@ describe("useAgentChatTurnStaging", () => {
   test("stages turns again when switching back to another session", async () => {
     const turns = buildTurns(6);
     const harness = createHookHarness(
-      ({ activeSessionId, windowStart, nextTurns }) =>
+      ({ activeExternalSessionId, windowStart, nextTurns }) =>
         useAgentChatTurnStaging({
-          activeSessionId,
+          activeExternalSessionId,
           windowStart,
           turns: nextTurns,
           disabled: false,
         }),
       {
-        activeSessionId: "session-qa",
+        activeExternalSessionId: "session-qa",
         windowStart: 10,
         nextTurns: turns,
       },
@@ -168,7 +168,7 @@ describe("useAgentChatTurnStaging", () => {
 
     const builderTurns = buildTurns(8);
     await harness.update({
-      activeSessionId: "session-builder",
+      activeExternalSessionId: "session-builder",
       windowStart: 14,
       nextTurns: builderTurns,
     });
@@ -182,16 +182,16 @@ describe("useAgentChatTurnStaging", () => {
   test("resumes staging when turns grow for the active session", async () => {
     const onBeforePrepend = mock(() => {});
     const harness = createHookHarness(
-      ({ activeSessionId, windowStart, nextTurns }) =>
+      ({ activeExternalSessionId, windowStart, nextTurns }) =>
         useAgentChatTurnStaging({
-          activeSessionId,
+          activeExternalSessionId,
           windowStart,
           turns: nextTurns,
           disabled: false,
           onBeforePrepend,
         }),
       {
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         windowStart: 10,
         nextTurns: buildTurns(6),
       },
@@ -213,7 +213,7 @@ describe("useAgentChatTurnStaging", () => {
     expect(onBeforePrepend).toHaveBeenCalledTimes(1);
 
     await harness.update({
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       windowStart: 12,
       nextTurns: buildTurns(8),
     });
@@ -238,15 +238,15 @@ describe("useAgentChatTurnStaging", () => {
 
   test("returns all turns immediately when an unwindowed active transcript grows", async () => {
     const harness = createHookHarness(
-      ({ activeSessionId, windowStart, nextTurns }) =>
+      ({ activeExternalSessionId, windowStart, nextTurns }) =>
         useAgentChatTurnStaging({
-          activeSessionId,
+          activeExternalSessionId,
           windowStart,
           turns: nextTurns,
           disabled: false,
         }),
       {
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         windowStart: 0,
         nextTurns: buildTurns(1),
       },
@@ -254,7 +254,7 @@ describe("useAgentChatTurnStaging", () => {
 
     await harness.mount();
     await harness.update({
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       windowStart: 0,
       nextTurns: buildTurns(2),
     });
@@ -271,15 +271,15 @@ describe("useAgentChatTurnStaging", () => {
   test("returns all turns immediately when staging is disabled", async () => {
     const turns = buildTurns(6);
     const harness = createHookHarness(
-      ({ activeSessionId, windowStart, nextTurns, disabled }) =>
+      ({ activeExternalSessionId, windowStart, nextTurns, disabled }) =>
         useAgentChatTurnStaging({
-          activeSessionId,
+          activeExternalSessionId,
           windowStart,
           turns: nextTurns,
           disabled,
         }),
       {
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         windowStart: 10,
         nextTurns: turns,
         disabled: true,

@@ -47,16 +47,20 @@ const createTask = () =>
   });
 
 const createSession = (
-  sessionId = "session-1",
   externalSessionId = "external-1",
-  overrides: Partial<AgentSessionState> = {},
-): AgentSessionState =>
-  createAgentSessionFixture({
-    sessionId,
+  legacyExternalSessionIdOrOverrides: string | Partial<AgentSessionState> = {},
+  maybeOverrides: Partial<AgentSessionState> = {},
+): AgentSessionState => {
+  const overrides =
+    typeof legacyExternalSessionIdOrOverrides === "string"
+      ? { ...maybeOverrides, externalSessionId: legacyExternalSessionIdOrOverrides }
+      : legacyExternalSessionIdOrOverrides;
+  return createAgentSessionFixture({
     externalSessionId,
     status: "running",
     ...overrides,
   });
+};
 
 const createDocumentState = (markdown: string): TaskDocumentState => ({
   markdown,
@@ -780,10 +784,9 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     expect(
-      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId,
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountByExternalSessionId,
     ).toEqual({
       "external-child-1": 2,
-      "session-child-1": 2,
     });
 
     await harness.unmount();
@@ -811,8 +814,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const counts =
-      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId ?? {};
-    expect(counts["session-child-internal"]).toBe(1);
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountByExternalSessionId ??
+      {};
     expect(counts["session-child-runtime"]).toBe(1);
 
     await harness.unmount();
@@ -820,7 +823,7 @@ describe("useAgentStudioPageModels", () => {
 
   test("derives subagent pending permission counts from parent live event overlay", async () => {
     const parentSession = createSession("session-parent", "external-parent", {
-      subagentPendingPermissionsBySessionId: {
+      subagentPendingPermissionsByExternalSessionId: {
         "external-child-session": [
           { requestId: "perm-1", permission: "external_directory", patterns: ["/tmp/*"] },
         ],
@@ -844,9 +847,9 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const counts =
-      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId ?? {};
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountByExternalSessionId ??
+      {};
     expect(counts["external-child-session"]).toBe(1);
-    expect(counts["internal-child-session"]).toBe(1);
 
     await harness.unmount();
   });
@@ -872,7 +875,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const initialCounts =
-      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId;
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountByExternalSessionId;
 
     await harness.update(
       createHookArgs({
@@ -894,7 +897,7 @@ describe("useAgentStudioPageModels", () => {
     );
 
     expect(
-      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountBySessionId,
+      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountByExternalSessionId,
     ).toBe(initialCounts);
 
     await harness.unmount();

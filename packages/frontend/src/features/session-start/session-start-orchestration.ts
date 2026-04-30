@@ -37,7 +37,7 @@ type SessionStartModalRunRequest = SessionStartModalOpenRequest & {
 };
 
 type SessionStartContextSession = {
-  sessionId: string;
+  externalSessionId: string;
   taskId: string;
   role: AgentSessionSummary["role"];
 };
@@ -100,17 +100,17 @@ const resolveInitialSourceSessionId = ({
   existingSessionOptions: ReturnType<typeof resolveExistingSessionOptions>;
   activeSession?: SessionStartContextSession | null | undefined;
 }): string | null => {
-  if (request.initialSourceSessionId !== undefined) {
-    return request.initialSourceSessionId;
+  if (request.initialSourceExternalSessionId !== undefined) {
+    return request.initialSourceExternalSessionId;
   }
 
   if (
     activeSession &&
     activeSession.taskId === request.taskId &&
     activeSession.role === request.role &&
-    existingSessionOptions.some((option) => option.value === activeSession.sessionId)
+    existingSessionOptions.some((option) => option.value === activeSession.externalSessionId)
   ) {
-    return activeSession.sessionId;
+    return activeSession.externalSessionId;
   }
 
   return existingSessionOptions[0]?.value ?? null;
@@ -125,7 +125,7 @@ export const buildSessionStartModalRequest = ({
   selectedTask,
 }: BuildSessionStartModalRequestArgs): SessionStartModalRunRequest => {
   const existingSessionOptions = resolveExistingSessionOptions(request, taskSessions);
-  const initialSourceSessionId = resolveInitialSourceSessionId({
+  const initialSourceExternalSessionId = resolveInitialSourceSessionId({
     request,
     existingSessionOptions,
     activeSession,
@@ -148,7 +148,7 @@ export const buildSessionStartModalRequest = ({
       : {}),
     ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
     ...(existingSessionOptions.length > 0 ? { existingSessionOptions } : {}),
-    ...(initialSourceSessionId !== undefined ? { initialSourceSessionId } : {}),
+    ...(initialSourceExternalSessionId !== undefined ? { initialSourceExternalSessionId } : {}),
   };
 };
 
@@ -184,7 +184,7 @@ export const executeSessionStartFromDecision = async ({
       ...(request.message ? { message: request.message } : {}),
       ...(request.beforeStartAction ? { beforeStartAction: request.beforeStartAction } : {}),
       ...(decision.startMode === "reuse" || decision.startMode === "fork"
-        ? { sourceSessionId: decision.sourceSessionId }
+        ? { sourceExternalSessionId: decision.sourceExternalSessionId }
         : {}),
     },
     selection: decision.startMode === "reuse" ? null : decision.selectedModel,

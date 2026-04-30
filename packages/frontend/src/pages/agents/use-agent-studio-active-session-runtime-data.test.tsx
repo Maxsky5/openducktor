@@ -32,7 +32,6 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
     const readSessionTodos = mock(async () => []);
     const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
       session: createAgentSessionFixture({
-        sessionId: "session-1",
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
@@ -64,7 +63,6 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
     const readSessionTodos = mock(async () => []);
     const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
       session: createAgentSessionFixture({
-        sessionId: "session-1",
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
@@ -100,7 +98,6 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
     const readSessionModelCatalog = mock(async () => CATALOG);
     const readSessionTodos = mock(async () => []);
     const session = createAgentSessionFixture({
-      sessionId: "session-1",
       externalSessionId: "external-1",
       runtimeKind: "opencode",
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
@@ -152,7 +149,6 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
     });
     const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
       session: createAgentSessionFixture({
-        sessionId: "session-1",
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
@@ -191,7 +187,6 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
     });
     const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
       session: createAgentSessionFixture({
-        sessionId: "session-1",
         externalSessionId: "external-1",
         runtimeKind: "opencode",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },

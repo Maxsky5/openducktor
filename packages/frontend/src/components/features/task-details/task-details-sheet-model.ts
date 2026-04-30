@@ -12,7 +12,7 @@ type TaskWorkflowCallbacks = {
     | ((
         taskId: string,
         role: AgentRole,
-        options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+        options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
       ) => void)
     | undefined;
   onDelegate: ((taskId: string) => void) | undefined;
@@ -29,7 +29,7 @@ type TaskWorkflowActionContext = {
   resolveSessionOptions?:
     | ((
         role: AgentRole,
-      ) => { sessionId?: string | null; scenario?: AgentScenario | null } | undefined)
+      ) => { externalSessionId?: string | null; scenario?: AgentScenario | null } | undefined)
     | undefined;
 };
 

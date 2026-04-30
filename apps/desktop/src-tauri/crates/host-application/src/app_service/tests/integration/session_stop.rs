@@ -37,30 +37,27 @@ fn create_session_stop_service(
 
 fn make_agent_session_stop_request(
     repo_path: &str,
-    session_id: &str,
     working_directory: &str,
-    external_session_id: Option<&str>,
+    external_session_id: &str,
 ) -> AgentSessionStopRequest {
     AgentSessionStopRequest {
         repo_path: repo_path.to_string(),
         task_id: TEST_TASK_ID.to_string(),
-        session_id: session_id.to_string(),
+        external_session_id: external_session_id.to_string(),
         runtime_kind: AgentRuntimeKind::opencode(),
         working_directory: working_directory.to_string(),
-        external_session_id: external_session_id.map(str::to_string),
     }
 }
 
 fn start_build_session(
     service: &AppService,
     repo_path: &str,
-    external_session_id: Option<&str>,
+    external_session_id: &str,
 ) -> Result<BuildSessionBootstrap> {
     let bootstrap = service.build_start(repo_path, TEST_TASK_ID, TEST_RUNTIME_KIND)?;
-    let mut session = make_session(TEST_TASK_ID, "build-session");
+    let mut session = make_session(TEST_TASK_ID, external_session_id);
     session.role = "build".to_string();
     session.working_directory = bootstrap.working_directory.clone();
-    session.external_session_id = external_session_id.map(str::to_string);
     assert!(service.agent_session_upsert(repo_path, TEST_TASK_ID, session)?);
     Ok(bootstrap)
 }
@@ -86,14 +83,12 @@ fn agent_session_stop_aborts_builder_session_via_repo_runtime_probe() -> Result<
     );
 
     let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
-    let bootstrap =
-        start_build_session(&service, repo_path.as_str(), Some("external-build-session"))?;
+    let bootstrap = start_build_session(&service, repo_path.as_str(), "external-build-session")?;
 
     let stopped = service.agent_session_stop(make_agent_session_stop_request(
         repo_path.as_str(),
-        "build-session",
         bootstrap.working_directory.as_str(),
-        Some("external-build-session"),
+        "external-build-session",
     ))?;
 
     assert!(stopped);
@@ -113,7 +108,7 @@ fn agent_session_stop_aborts_builder_session_via_repo_runtime_probe() -> Result<
 }
 
 #[test]
-fn agent_session_stop_rejects_sessions_without_external_runtime_id() -> Result<()> {
+fn agent_session_stop_rejects_sessions_with_mismatched_external_runtime_id() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("agent-session-stop-missing-external-id");
     let repo = root.join("repo");
@@ -124,20 +119,19 @@ fn agent_session_stop_rejects_sessions_without_external_runtime_id() -> Result<(
     let _runtime_binary_guards = set_fake_opencode_and_bridge_binaries(fake_opencode.as_path());
 
     let (service, repo_path) = create_session_stop_service(&root, "builder-worktrees")?;
-    let bootstrap = start_build_session(&service, repo_path.as_str(), None)?;
+    let bootstrap = start_build_session(&service, repo_path.as_str(), "external-build-session")?;
 
     let error = service
         .agent_session_stop(make_agent_session_stop_request(
             repo_path.as_str(),
-            "build-session",
             bootstrap.working_directory.as_str(),
-            None,
+            "mismatched-external-session",
         ))
         .expect_err("missing external session id should fail fast");
 
     assert!(error
         .to_string()
-        .contains("Session build-session is missing an external runtime session id"));
+        .contains("Agent session with externalSessionId mismatched-external-session was not found for task task-1"));
 
     let runtime = service.runtime_list(TEST_RUNTIME_KIND, Some(repo_path.as_str()))?;
     assert_eq!(runtime.len(), 1);

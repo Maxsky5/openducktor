@@ -41,14 +41,14 @@ const installFakeTimers = () => {
 describe("useAgentChatLoadingOverlay", () => {
   test("keeps the overlay visible until session loading settles", async () => {
     const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       isSessionViewLoading: true,
     });
 
     await harness.mount();
     expect(harness.getLatest()).toBe(true);
 
-    await harness.update({ sessionId: "session-1", isSessionViewLoading: false });
+    await harness.update({ externalSessionId: "session-1", isSessionViewLoading: false });
     expect(harness.getLatest()).toBe(false);
 
     await harness.unmount();
@@ -56,14 +56,14 @@ describe("useAgentChatLoadingOverlay", () => {
 
   test("does not re-show the overlay for same-session steady state updates", async () => {
     const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       isSessionViewLoading: false,
     });
 
     await harness.mount();
     expect(harness.getLatest()).toBe(false);
 
-    await harness.update({ sessionId: "session-1", isSessionViewLoading: false });
+    await harness.update({ externalSessionId: "session-1", isSessionViewLoading: false });
     expect(harness.getLatest()).toBe(false);
 
     await harness.unmount();
@@ -71,17 +71,17 @@ describe("useAgentChatLoadingOverlay", () => {
 
   test("starts a new loading cycle when the selected session changes", async () => {
     const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       isSessionViewLoading: false,
     });
 
     await harness.mount();
     expect(harness.getLatest()).toBe(false);
 
-    await harness.update({ sessionId: "session-2", isSessionViewLoading: true });
+    await harness.update({ externalSessionId: "session-2", isSessionViewLoading: true });
     expect(harness.getLatest()).toBe(true);
 
-    await harness.update({ sessionId: "session-2", isSessionViewLoading: false });
+    await harness.update({ externalSessionId: "session-2", isSessionViewLoading: false });
     expect(harness.getLatest()).toBe(false);
 
     await harness.unmount();
@@ -89,14 +89,14 @@ describe("useAgentChatLoadingOverlay", () => {
 
   test("does not show the overlay when switching to an already ready session", async () => {
     const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       isSessionViewLoading: false,
     });
 
     await harness.mount();
     expect(harness.getLatest()).toBe(false);
 
-    await harness.update({ sessionId: "session-2", isSessionViewLoading: false });
+    await harness.update({ externalSessionId: "session-2", isSessionViewLoading: false });
     expect(harness.getLatest()).toBe(false);
 
     await harness.unmount();
@@ -106,7 +106,7 @@ describe("useAgentChatLoadingOverlay", () => {
     const { timeoutCallbacks, restore } = installFakeTimers();
 
     const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       isSessionViewLoading: false,
     });
 
@@ -114,10 +114,10 @@ describe("useAgentChatLoadingOverlay", () => {
       await harness.mount();
       expect(harness.getLatest()).toBe(false);
 
-      await harness.update({ sessionId: "session-1", isSessionViewLoading: true });
+      await harness.update({ externalSessionId: "session-1", isSessionViewLoading: true });
       expect(harness.getLatest()).toBe(false);
 
-      await harness.update({ sessionId: "session-1", isSessionViewLoading: false });
+      await harness.update({ externalSessionId: "session-1", isSessionViewLoading: false });
       expect(harness.getLatest()).toBe(false);
       expect(timeoutCallbacks.size).toBe(0);
     } finally {
@@ -130,7 +130,7 @@ describe("useAgentChatLoadingOverlay", () => {
     const { timeoutCallbacks, restore } = installFakeTimers();
 
     const harness = createSharedHookHarness(useAgentChatLoadingOverlay, {
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       isSessionViewLoading: false,
     });
 
@@ -138,7 +138,7 @@ describe("useAgentChatLoadingOverlay", () => {
       await harness.mount();
       expect(harness.getLatest()).toBe(false);
 
-      await harness.update({ sessionId: "session-1", isSessionViewLoading: true });
+      await harness.update({ externalSessionId: "session-1", isSessionViewLoading: true });
       expect(harness.getLatest()).toBe(false);
 
       const [timeoutId] = [...timeoutCallbacks.keys()];
@@ -147,7 +147,7 @@ describe("useAgentChatLoadingOverlay", () => {
       });
       await harness.waitFor((value) => value === true);
 
-      await harness.update({ sessionId: "session-1", isSessionViewLoading: false });
+      await harness.update({ externalSessionId: "session-1", isSessionViewLoading: false });
       expect(harness.getLatest()).toBe(false);
     } finally {
       restore();

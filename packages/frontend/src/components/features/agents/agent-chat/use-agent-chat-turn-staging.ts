@@ -5,14 +5,14 @@ const STAGE_INIT = 1;
 const STAGE_BATCH = 1;
 
 const shouldStageTurns = ({
-  activeSessionId,
+  activeExternalSessionId,
   completedSessionIds,
   disabled,
   forceStage,
   turnCount,
   windowStart,
 }: {
-  activeSessionId: string;
+  activeExternalSessionId: string;
   completedSessionIds: Set<string>;
   disabled: boolean;
   forceStage?: boolean;
@@ -23,12 +23,12 @@ const shouldStageTurns = ({
     !disabled &&
     windowStart > 0 &&
     turnCount > STAGE_INIT &&
-    (forceStage === true || !completedSessionIds.has(activeSessionId))
+    (forceStage === true || !completedSessionIds.has(activeExternalSessionId))
   );
 };
 
 type UseAgentChatTurnStagingArgs = {
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   windowStart: number;
   turns: AgentChatWindowTurn[];
   disabled?: boolean;
@@ -36,14 +36,14 @@ type UseAgentChatTurnStagingArgs = {
 };
 
 export function useAgentChatTurnStaging({
-  activeSessionId,
+  activeExternalSessionId,
   windowStart,
   turns,
   disabled = false,
   onBeforePrepend,
 }: UseAgentChatTurnStagingArgs): AgentChatWindowTurn[] {
   const [count, setCount] = useState(() =>
-    activeSessionId !== null && !disabled && windowStart > 0 && turns.length > STAGE_INIT
+    activeExternalSessionId !== null && !disabled && windowStart > 0 && turns.length > STAGE_INIT
       ? STAGE_INIT
       : turns.length,
   );
@@ -51,10 +51,12 @@ export function useAgentChatTurnStaging({
   const frameRef = useRef<number | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const completedSessionIdsRef = useRef<Set<string>>(new Set());
-  const previousSessionIdRef = useRef<string | null>(activeSessionId);
+  const previousSessionIdRef = useRef<string | null>(activeExternalSessionId);
   const previousSessionId = previousSessionIdRef.current;
   const renderSwitchedSessions =
-    previousSessionId !== null && activeSessionId !== null && previousSessionId !== activeSessionId;
+    previousSessionId !== null &&
+    activeExternalSessionId !== null &&
+    previousSessionId !== activeExternalSessionId;
 
   useEffect(() => {
     const updateCount = (nextCount: number): void => {
@@ -70,22 +72,22 @@ export function useAgentChatTurnStaging({
     const effectPreviousSessionId = previousSessionIdRef.current;
     const effectSwitchedSessions =
       effectPreviousSessionId !== null &&
-      activeSessionId !== null &&
-      effectPreviousSessionId !== activeSessionId;
-    previousSessionIdRef.current = activeSessionId;
+      activeExternalSessionId !== null &&
+      effectPreviousSessionId !== activeExternalSessionId;
+    previousSessionIdRef.current = activeExternalSessionId;
 
-    if (effectSwitchedSessions && activeSessionId !== null) {
-      completedSessionIdsRef.current.delete(activeSessionId);
+    if (effectSwitchedSessions && activeExternalSessionId !== null) {
+      completedSessionIdsRef.current.delete(activeExternalSessionId);
     }
 
-    if (activeSessionId === null) {
+    if (activeExternalSessionId === null) {
       activeSessionRef.current = null;
       updateCount(turns.length);
       return;
     }
 
     const shouldStage = shouldStageTurns({
-      activeSessionId,
+      activeExternalSessionId,
       completedSessionIds: completedSessionIdsRef.current,
       disabled,
       forceStage: effectSwitchedSessions,
@@ -99,9 +101,9 @@ export function useAgentChatTurnStaging({
       return;
     }
 
-    const sessionId = activeSessionId;
-    const isContinuingActiveSession = activeSessionRef.current === activeSessionId;
-    activeSessionRef.current = sessionId;
+    const externalSessionId = activeExternalSessionId;
+    const isContinuingActiveSession = activeSessionRef.current === activeExternalSessionId;
+    activeSessionRef.current = externalSessionId;
     let nextCount = Math.min(
       turns.length,
       isContinuingActiveSession ? countRef.current : STAGE_INIT,
@@ -110,12 +112,12 @@ export function useAgentChatTurnStaging({
 
     if (nextCount >= turns.length) {
       activeSessionRef.current = null;
-      completedSessionIdsRef.current.add(sessionId);
+      completedSessionIdsRef.current.add(externalSessionId);
       return;
     }
 
     const step = () => {
-      if (activeSessionRef.current !== sessionId) {
+      if (activeSessionRef.current !== externalSessionId) {
         frameRef.current = null;
         return;
       }
@@ -127,7 +129,7 @@ export function useAgentChatTurnStaging({
       if (nextCount >= turns.length) {
         frameRef.current = null;
         activeSessionRef.current = null;
-        completedSessionIdsRef.current.add(sessionId);
+        completedSessionIdsRef.current.add(externalSessionId);
         return;
       }
 
@@ -141,13 +143,13 @@ export function useAgentChatTurnStaging({
         frameRef.current = null;
       }
     };
-  }, [activeSessionId, disabled, onBeforePrepend, turns.length, windowStart]);
+  }, [activeExternalSessionId, disabled, onBeforePrepend, turns.length, windowStart]);
 
   return useMemo(() => {
     if (
-      activeSessionId === null ||
+      activeExternalSessionId === null ||
       !shouldStageTurns({
-        activeSessionId,
+        activeExternalSessionId,
         completedSessionIds: completedSessionIdsRef.current,
         disabled,
         forceStage: renderSwitchedSessions,
@@ -159,7 +161,7 @@ export function useAgentChatTurnStaging({
     }
 
     const effectiveCount =
-      renderSwitchedSessions && activeSessionRef.current !== activeSessionId
+      renderSwitchedSessions && activeSessionRef.current !== activeExternalSessionId
         ? Math.min(turns.length, STAGE_INIT)
         : count;
 
@@ -168,5 +170,5 @@ export function useAgentChatTurnStaging({
     }
 
     return turns.slice(Math.max(0, turns.length - effectiveCount));
-  }, [activeSessionId, count, disabled, renderSwitchedSessions, turns, windowStart]);
+  }, [activeExternalSessionId, count, disabled, renderSwitchedSessions, turns, windowStart]);
 }

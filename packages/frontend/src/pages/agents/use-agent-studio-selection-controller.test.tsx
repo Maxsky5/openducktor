@@ -36,12 +36,11 @@ const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 
 const createSession = (
   taskId: string,
-  sessionId: string,
+  externalSessionId: string,
   overrides: Partial<ReturnType<typeof createAgentSessionFixture>> = {},
 ) =>
   createAgentSessionFixture({
-    sessionId,
-    externalSessionId: `ext-${sessionId}`,
+    externalSessionId,
     taskId,
     ...overrides,
   });
@@ -50,7 +49,7 @@ const syncSessionLookup = (sessions: HookArgs["sessions"]): void => {
   sessionByIdRef.current = Object.fromEntries(
     sessions
       .filter((session): session is AgentSessionState => "messages" in session)
-      .map((session) => [session.sessionId, session]),
+      .map((session) => [session.externalSessionId, session]),
   );
 };
 
@@ -95,6 +94,7 @@ describe("useAgentStudioSelectionController", () => {
   beforeEach(async () => {
     mock.module("@/state/app-state-provider", () => ({
       AppStateProvider: ({ children }: { children: unknown }) => children,
+      useActiveWorkspace: () => null,
       useAgentState: () => {
         throw new Error("useAgentState is not used in this test");
       },
@@ -122,8 +122,8 @@ describe("useAgentStudioSelectionController", () => {
       useSpecState: () => {
         throw new Error("useSpecState is not used in this test");
       },
-      useAgentSession: (sessionId: string | null) =>
-        sessionId ? (sessionByIdRef.current[sessionId] ?? null) : null,
+      useAgentSession: (externalSessionId: string | null) =>
+        externalSessionId ? (sessionByIdRef.current[externalSessionId] ?? null) : null,
     }));
 
     ({ buildSessionsByTaskIdWithCache, useAgentStudioSelectionController } = await import(
@@ -153,10 +153,9 @@ describe("useAgentStudioSelectionController", () => {
       new Map(),
     );
 
-    expect(first.sessionsByTaskId.get("task-1")?.map((session) => session.sessionId)).toEqual([
-      "session-new",
-      "session-old",
-    ]);
+    expect(
+      first.sessionsByTaskId.get("task-1")?.map((session) => session.externalSessionId),
+    ).toEqual(["session-new", "session-old"]);
 
     const secondTaskOneOld = createSession("task-1", "session-old", {
       startedAt: "2026-02-22T10:00:00.000Z",
@@ -175,13 +174,12 @@ describe("useAgentStudioSelectionController", () => {
       first.nextCache,
     );
 
-    expect(second.sessionsByTaskId.get("task-1")?.map((session) => session.sessionId)).toEqual([
-      "session-new",
-      "session-old",
-    ]);
-    expect(second.sessionsByTaskId.get("task-2")?.map((session) => session.sessionId)).toEqual([
-      "session-2-new",
-    ]);
+    expect(
+      second.sessionsByTaskId.get("task-1")?.map((session) => session.externalSessionId),
+    ).toEqual(["session-new", "session-old"]);
+    expect(
+      second.sessionsByTaskId.get("task-2")?.map((session) => session.externalSessionId),
+    ).toEqual(["session-2-new"]);
   });
 
   test("keeps cache signature stable when task sessions arrive in a different order", () => {
@@ -204,10 +202,9 @@ describe("useAgentStudioSelectionController", () => {
     expect(second.nextCache.get("task-1")?.inputSignature).toBe(
       first.nextCache.get("task-1")?.inputSignature,
     );
-    expect(second.sessionsByTaskId.get("task-1")?.map((session) => session.sessionId)).toEqual([
-      "session-new",
-      "session-old",
-    ]);
+    expect(
+      second.sessionsByTaskId.get("task-1")?.map((session) => session.externalSessionId),
+    ).toEqual(["session-new", "session-old"]);
   });
 
   test("resolves task context from selected session when task param is missing", async () => {
@@ -226,9 +223,9 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(latest.taskId).toBe("task-2");
       expect(latest.selectedTask?.id).toBe("task-2");
-      expect(latest.activeSession?.sessionId).toBe("session-2");
+      expect(latest.activeSession?.externalSessionId).toBe("session-2");
       expect(latest.viewTaskId).toBe("task-2");
-      expect(latest.viewActiveSession?.sessionId).toBe("session-2");
+      expect(latest.viewActiveSession?.externalSessionId).toBe("session-2");
     } finally {
       await harness.unmount();
     }
@@ -257,7 +254,7 @@ describe("useAgentStudioSelectionController", () => {
         scenarioFromQuery: "spec_initial",
         selectionIntent: {
           taskId: "task-1",
-          sessionId: "session-planner",
+          externalSessionId: "session-planner",
           role: "planner",
           scenario: "planner_initial",
         },
@@ -270,8 +267,8 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(latest.viewRole).toBe("planner");
       expect(latest.viewScenario).toBe("planner_initial");
-      expect(latest.viewActiveSession?.sessionId).toBe("session-planner");
-      expect(latest.activeSession?.sessionId).toBe("session-planner");
+      expect(latest.viewActiveSession?.externalSessionId).toBe("session-planner");
+      expect(latest.activeSession?.externalSessionId).toBe("session-planner");
     } finally {
       await harness.unmount();
     }
@@ -384,7 +381,7 @@ describe("useAgentStudioSelectionController", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-1");
+      expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-1");
 
       await harness.run((state) => {
         state.handleSelectTab("task-2");
@@ -392,7 +389,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.viewTaskId).toBe("task-2");
-      expect(latest.viewActiveSession?.sessionId).toBe("session-2");
+      expect(latest.viewActiveSession?.externalSessionId).toBe("session-2");
       expect(latest.viewRole).toBe("qa");
       expect(latest.viewScenario).toBe("qa_review");
     } finally {
@@ -534,7 +531,7 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().viewRole).toBe("build");
 
       await harness.update(
@@ -547,7 +544,7 @@ describe("useAgentStudioSelectionController", () => {
         }),
       );
 
-      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().viewRole).toBe("build");
       expect(harness.getLatest().viewScenario).toBe("build_implementation_start");
     } finally {
@@ -587,7 +584,7 @@ describe("useAgentStudioSelectionController", () => {
 
     try {
       await harness.mount();
-      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().viewRole).toBe("build");
 
       await harness.update(
@@ -601,7 +598,7 @@ describe("useAgentStudioSelectionController", () => {
         }),
       );
 
-      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().viewRole).toBe("build");
       expect(harness.getLatest().viewScenario).toBe("build_implementation_start");
     } finally {
@@ -650,7 +647,7 @@ describe("useAgentStudioSelectionController", () => {
       });
 
       expect(harness.getLatest().viewTaskId).toBe("task-2");
-      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().viewRole).toBe("build");
       expect(updateQuery).toHaveBeenCalledWith({
         task: "task-2",
@@ -674,7 +671,7 @@ describe("useAgentStudioSelectionController", () => {
       );
 
       expect(harness.getLatest().viewTaskId).toBe("task-2");
-      expect(harness.getLatest().viewActiveSession?.sessionId).toBe("session-build");
+      expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().viewRole).toBe("build");
       expect(harness.getLatest().viewScenario).toBe("build_implementation_start");
     } finally {

@@ -179,7 +179,7 @@ export const upsertAgentSessionInRepoTaskData = (
 
       const currentAgentSessions = task.agentSessions ?? [];
       const existingIndex = currentAgentSessions.findIndex(
-        (entry) => entry.sessionId === session.sessionId,
+        (entry) => entry.externalSessionId === session.externalSessionId,
       );
       const existingSession =
         existingIndex === -1 ? null : (currentAgentSessions[existingIndex] ?? null);

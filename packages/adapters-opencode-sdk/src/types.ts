@@ -19,8 +19,7 @@ import type {
  */
 export const WORKFLOW_TOOL_CACHE_TTL_MS = 5 * 60 * 1000;
 
-export type SessionInput = Omit<StartAgentSessionInput, "sessionId" | "role" | "scenario"> & {
-  sessionId: string;
+export type SessionInput = Omit<StartAgentSessionInput, "role" | "scenario"> & {
   role: AgentRole | null;
   scenario: AgentScenario | null;
 };
@@ -59,11 +58,11 @@ export type SessionRecord = {
   messageMetadataById: Map<string, SessionMessageMetadata>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
   subagentCorrelationKeyByPartId: Map<string, string>;
-  subagentCorrelationKeyBySessionId: Map<string, string>;
+  subagentCorrelationKeyByExternalSessionId: Map<string, string>;
   pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
   pendingSubagentCorrelationKeys: string[];
-  pendingSubagentSessionsById: Map<string, PendingSubagentSessionBinding>;
-  pendingSubagentPartEmissionsBySessionId: Map<string, PendingSubagentPartEmission[]>;
+  pendingSubagentSessionsByExternalSessionId: Map<string, PendingSubagentSessionBinding>;
+  pendingSubagentPartEmissionsByExternalSessionId: Map<string, PendingSubagentPartEmission[]>;
   /** Cached workflow tool selection (toolId -> enabled). */
   workflowToolSelectionCache?: Record<string, boolean>;
   /** Timestamp when cache was last populated. */
@@ -71,7 +70,6 @@ export type SessionRecord = {
 };
 
 export type EventStreamSubscriber = {
-  sessionId: string;
   externalSessionId: string;
   input: SessionInput;
 };
@@ -90,7 +88,6 @@ export type ClientFactory = (input: {
 }) => OpencodeClient;
 
 export type OpencodeStreamEventLog = {
-  sessionId: string;
   externalSessionId: string;
   relevant: boolean;
   event: Event;

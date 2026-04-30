@@ -54,7 +54,10 @@ type UseAgentStudioModelSelectionArgs = {
   activeSessionSummary: AgentSessionSummary | null;
   role: AgentRole;
   repoSettings: RepoSettingsInput | null;
-  updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
+  updateAgentSessionModel: (
+    externalSessionId: string,
+    selection: AgentModelSelection | null,
+  ) => void;
   loadCatalog?: (repoPath: string, runtimeKind: RuntimeKind) => Promise<AgentModelCatalog>;
   loadSlashCommands?: (
     repoPath: string,
@@ -100,7 +103,7 @@ type AgentStudioModelSelectionState = {
 };
 
 type ActiveSessionSelectionState = {
-  sessionId: string | null;
+  externalSessionId: string | null;
   status: AgentSessionState["status"] | null;
   selectedModel: AgentModelSelection | null;
   modelCatalog: AgentSessionState["modelCatalog"] | null;
@@ -117,11 +120,12 @@ export const resolveActiveSessionSelectionState = (
   activeSession: AgentSessionState | null,
   activeSessionSummary: AgentSessionSummary | null,
 ): ActiveSessionSelectionState => {
-  const sessionId = activeSession?.sessionId ?? activeSessionSummary?.sessionId ?? null;
+  const externalSessionId =
+    activeSession?.externalSessionId ?? activeSessionSummary?.externalSessionId ?? null;
   const selectedModel = activeSession?.selectedModel ?? activeSessionSummary?.selectedModel ?? null;
 
   return {
-    sessionId,
+    externalSessionId,
     status: activeSession?.status ?? activeSessionSummary?.status ?? null,
     selectedModel,
     modelCatalog: activeSession?.modelCatalog ?? null,
@@ -136,7 +140,7 @@ export const resolveActiveSessionSelectionState = (
       (activeSession == null && activeSessionSummary != null),
     liveContextUsage: activeSession?.contextUsage ?? null,
     messages: activeSession?.messages ?? null,
-    hasSelection: sessionId !== null,
+    hasSelection: externalSessionId !== null,
   };
 };
 
@@ -175,7 +179,7 @@ export function useAgentStudioModelSelection({
   const previousWorkspaceRepoPathForDefaultsRef = useRef<string | null>(workspaceRepoPath);
   const previousRepoSettingsRef = useRef<RepoSettingsInput | null>(repoSettings);
   const activeSessionContextUsageCacheRef = useRef<{
-    sessionId: string;
+    externalSessionId: string;
     messages: AgentSessionState["messages"];
     sourceIndex: number;
     metadataKey: string;
@@ -195,7 +199,7 @@ export function useAgentStudioModelSelection({
     () => resolveActiveSessionSelectionState(activeSession, activeSessionSummary),
     [activeSession, activeSessionSummary],
   );
-  const activeSessionId = activeSessionSelection.sessionId;
+  const activeExternalSessionId = activeSessionSelection.externalSessionId;
   const activeSessionStatus = activeSessionSelection.status;
   const activeSessionSelectedModel = activeSessionSelection.selectedModel;
   const activeSessionModelCatalog = activeSessionSelection.modelCatalog;
@@ -305,7 +309,10 @@ export function useAgentStudioModelSelection({
       composerRuntimeKind ?? "",
       loadCatalogForRepo,
     ),
-    enabled: workspaceRepoPath !== null && activeSessionId === null && composerRuntimeKind !== null,
+    enabled:
+      workspaceRepoPath !== null &&
+      activeExternalSessionId === null &&
+      composerRuntimeKind !== null,
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!workspaceRepoPath) {
         throw new Error("No repository selected.");
@@ -348,7 +355,7 @@ export function useAgentStudioModelSelection({
     enabled:
       supportsSlashCommands &&
       workspaceRepoPath !== null &&
-      activeSessionId === null &&
+      activeExternalSessionId === null &&
       composerRuntimeKind !== null,
   });
   const hasDraftSelectionForWorkspaceRepoPath =
@@ -400,7 +407,7 @@ export function useAgentStudioModelSelection({
   }, [composerCatalog, hasActiveSession, isDraftSelectionTouched, role, roleDefaultSelection]);
 
   useEffect(() => {
-    if (!activeSessionId) {
+    if (!activeExternalSessionId) {
       return;
     }
     const preferredSelection = resolveSessionSelection({
@@ -411,9 +418,9 @@ export function useAgentStudioModelSelection({
     if (!preferredSelection || isSameSelection(activeSessionSelectedModel, preferredSelection)) {
       return;
     }
-    updateAgentSessionModel(activeSessionId, preferredSelection);
+    updateAgentSessionModel(activeExternalSessionId, preferredSelection);
   }, [
-    activeSessionId,
+    activeExternalSessionId,
     activeSessionModelCatalog,
     activeSessionSelectedModel,
     roleDefaultSelection,
@@ -531,8 +538,8 @@ export function useAgentStudioModelSelection({
 
   const applySelection = useCallback(
     (selection: AgentModelSelection | null): void => {
-      if (activeSessionId) {
-        updateAgentSessionModel(activeSessionId, selection);
+      if (activeExternalSessionId) {
+        updateAgentSessionModel(activeExternalSessionId, selection);
         return;
       }
       setDraftSelectionByRole((current) => ({
@@ -544,7 +551,7 @@ export function useAgentStudioModelSelection({
         [role]: true,
       }));
     },
-    [activeSessionId, role, updateAgentSessionModel],
+    [activeExternalSessionId, role, updateAgentSessionModel],
   );
 
   const selectionForNewSession = useMemo(
@@ -648,17 +655,17 @@ export function useAgentStudioModelSelection({
     return map;
   }, [selectionCatalog]);
 
-  const activeSessionIdForContextUsage = activeSession?.sessionId ?? null;
+  const activeExternalSessionIdForContextUsage = activeSession?.externalSessionId ?? null;
   const activeSessionMessagesForContextUsage = activeSessionMessages;
   const activeSessionMessageOwnerForContextUsage = useMemo(
     () =>
-      activeSessionIdForContextUsage && activeSessionMessagesForContextUsage
+      activeExternalSessionIdForContextUsage && activeSessionMessagesForContextUsage
         ? {
-            sessionId: activeSessionIdForContextUsage,
+            externalSessionId: activeExternalSessionIdForContextUsage,
             messages: activeSessionMessagesForContextUsage,
           }
         : null,
-    [activeSessionIdForContextUsage, activeSessionMessagesForContextUsage],
+    [activeExternalSessionIdForContextUsage, activeSessionMessagesForContextUsage],
   );
   const activeSessionModelDescriptorByKey = useMemo(() => {
     return toModelDescriptorByKey(activeSessionModelCatalog ?? null);
@@ -672,7 +679,7 @@ export function useAgentStudioModelSelection({
     const fallbackOutputLimit =
       typeof selectedModelEntry?.outputLimit === "number" ? selectedModelEntry.outputLimit : null;
     const metadataKey = [
-      activeSessionIdForContextUsage ?? "",
+      activeExternalSessionIdForContextUsage ?? "",
       selectedModelSelection?.providerId ?? "",
       selectedModelSelection?.modelId ?? "",
       selectedModelEntry?.contextWindow ?? "",
@@ -687,7 +694,7 @@ export function useAgentStudioModelSelection({
       const cached = activeSessionContextUsageCacheRef.current;
       if (cached?.key === nextKey && cached.metadataKey === metadataKey) {
         activeSessionContextUsageCacheRef.current = {
-          sessionId: activeSessionIdForContextUsage ?? cached.sessionId,
+          externalSessionId: activeExternalSessionIdForContextUsage ?? cached.externalSessionId,
           messages,
           sourceIndex,
           metadataKey,
@@ -698,7 +705,7 @@ export function useAgentStudioModelSelection({
       }
 
       activeSessionContextUsageCacheRef.current = {
-        sessionId: activeSessionIdForContextUsage ?? "",
+        externalSessionId: activeExternalSessionIdForContextUsage ?? "",
         messages,
         sourceIndex,
         metadataKey,
@@ -733,8 +740,8 @@ export function useAgentStudioModelSelection({
       const cached = activeSessionContextUsageCacheRef.current;
       if (
         cached &&
-        activeSessionIdForContextUsage !== null &&
-        cached.sessionId === activeSessionIdForContextUsage &&
+        activeExternalSessionIdForContextUsage !== null &&
+        cached.externalSessionId === activeExternalSessionIdForContextUsage &&
         cached.metadataKey === metadataKey
       ) {
         const firstChangedMessageIndex = findFirstChangedSessionMessageIndex(
@@ -793,7 +800,7 @@ export function useAgentStudioModelSelection({
     );
   }, [
     activeSessionLiveContextUsage,
-    activeSessionIdForContextUsage,
+    activeExternalSessionIdForContextUsage,
     activeSessionMessages,
     activeSessionMessageOwnerForContextUsage,
     activeSessionModelDescriptorByKey,

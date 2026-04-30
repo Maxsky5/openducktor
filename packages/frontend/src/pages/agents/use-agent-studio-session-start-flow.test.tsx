@@ -210,14 +210,14 @@ const confirmSessionStartModal = async ({
   modelId,
   variant,
   startMode = "fresh",
-  sourceSessionId = null,
+  sourceExternalSessionId = null,
 }: {
   harness: ReturnType<typeof createHookHarness>;
   agent: string;
   modelId: string;
   variant: string;
   startMode?: "fresh" | "reuse" | "fork";
-  sourceSessionId?: string | null;
+  sourceExternalSessionId?: string | null;
 }): Promise<void> => {
   await waitForSessionStartModal(harness);
 
@@ -227,8 +227,8 @@ const confirmSessionStartModal = async ({
       state.sessionStartModal?.onSelectModel(modelId);
       state.sessionStartModal?.onSelectVariant(variant);
     }
-    if (startMode !== "fresh" && sourceSessionId) {
-      state.sessionStartModal?.onSelectSourceSession(sourceSessionId);
+    if (startMode !== "fresh" && sourceExternalSessionId) {
+      state.sessionStartModal?.onSelectSourceSession(sourceExternalSessionId);
     }
   });
 
@@ -238,7 +238,9 @@ const confirmSessionStartModal = async ({
       return false;
     }
     if (startMode === "reuse") {
-      return sourceSessionId ? modal.selectedSourceSessionId === sourceSessionId : true;
+      return sourceExternalSessionId
+        ? modal.selectedSourceSessionId === sourceExternalSessionId
+        : true;
     }
 
     const selection = modal.selectedModelSelection;
@@ -253,7 +255,7 @@ const confirmSessionStartModal = async ({
     state.sessionStartModal?.onConfirm({
       runInBackground: false,
       startMode,
-      sourceSessionId,
+      sourceExternalSessionId,
     });
   });
 };
@@ -343,7 +345,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const activeSession = createSession({
       taskId: "task-1",
-      sessionId: "session-active",
+      externalSessionId: "session-active",
       role: "spec",
       scenario: "spec_initial",
     });
@@ -368,8 +370,8 @@ describe("useAgentStudioSessionStartFlow", () => {
       variant: "default",
     });
     await harness.run(async () => {
-      const sessionId = await startPromise;
-      expect(sessionId).toBe("session-new");
+      const externalSessionId = await startPromise;
+      expect(externalSessionId).toBe("session-new");
     });
 
     expect(updateCalls).toContainEqual({
@@ -489,7 +491,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "spec",
       scenario: "spec_initial",
-      activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
+      activeSession: createSession({ externalSessionId: "session-spec", role: "spec" }),
       selectedTask: createPromptTask({
         agentWorkflows: {
           spec: { required: true, canSkip: false, available: true, completed: true },
@@ -559,7 +561,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       activeSession: createSession({
         taskId: "task-1",
-        sessionId: "session-spec",
+        externalSessionId: "session-spec",
         role: "spec",
         scenario: "spec_initial",
       }),
@@ -659,7 +661,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       scenario: "qa_review",
       activeSession: createSession({
         taskId: "task-1",
-        sessionId: "session-qa",
+        externalSessionId: "session-qa",
         role: "qa",
         scenario: "qa_review",
       }),
@@ -728,9 +730,9 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("handleCreateSession for human changes opens the feedback modal before model selection", async () => {
     const startAgentSession = mock(
-      async (input: { startMode: string; sourceSessionId?: string }) =>
+      async (input: { startMode: string; sourceExternalSessionId?: string }) =>
         input.startMode === "reuse"
-          ? (input.sourceSessionId ?? "session-build-latest")
+          ? (input.sourceExternalSessionId ?? "session-build-latest")
           : "session-build-human",
     );
     const harness = createHookHarness({
@@ -741,7 +743,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
-          sessionId: "session-build-latest",
+          externalSessionId: "session-build-latest",
           role: "build",
           scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",
@@ -781,7 +783,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
-          sessionId: "session-build-existing",
+          externalSessionId: "session-build-existing",
           role: "build",
           scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",
@@ -823,7 +825,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
-          sessionId: "session-build-existing",
+          externalSessionId: "session-build-existing",
           role: "build",
           scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",
@@ -859,7 +861,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
-          sessionId: "session-build-existing",
+          externalSessionId: "session-build-existing",
           role: "build",
           scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",
@@ -890,13 +892,13 @@ describe("useAgentStudioSessionStartFlow", () => {
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
-          sessionId: "session-build-latest",
+          externalSessionId: "session-build-latest",
           role: "build",
           scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
         createSession({
-          sessionId: "session-build-older",
+          externalSessionId: "session-build-older",
           role: "build",
           scenario: "build_implementation_start",
           startedAt: "2026-02-22T11:00:00.000Z",
@@ -946,7 +948,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
-          sessionId: "session-build-latest",
+          externalSessionId: "session-build-latest",
           role: "build",
           scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",

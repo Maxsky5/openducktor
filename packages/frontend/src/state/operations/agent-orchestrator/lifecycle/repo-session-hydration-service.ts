@@ -107,8 +107,8 @@ const persistedSessionRecordKey = (taskId: string, record: AgentSessionRecord): 
   tupleKey([
     taskId,
     readPersistedRuntimeKind(record),
-    record.sessionId,
-    record.externalSessionId ?? record.sessionId,
+    record.externalSessionId,
+    record.externalSessionId,
     normalizeWorkingDirectory(record.workingDirectory),
   ]);
 
@@ -190,7 +190,7 @@ const hasMatchingPreloadedLiveSession = ({
   runtimeConnections: RuntimeConnectionPreloadIndex;
   preloadedLiveSessionKeys: Set<string>;
 }): boolean => {
-  const externalSessionId = record.externalSessionId ?? record.sessionId;
+  const externalSessionId = record.externalSessionId;
   if (!externalSessionId) {
     return false;
   }
@@ -242,7 +242,7 @@ const buildReconcileTargets = ({
     }
 
     const recordsToReconcile = records.filter((record) => {
-      const externalSessionId = record.externalSessionId ?? record.sessionId;
+      const externalSessionId = record.externalSessionId;
       if (!externalSessionId) {
         return false;
       }
@@ -302,7 +302,7 @@ const collectRepoRootWorktreeScanDirectories = ({
   const directories = new Set<string>();
 
   for (const record of records) {
-    const externalSessionId = record.externalSessionId ?? record.sessionId;
+    const externalSessionId = record.externalSessionId;
     const workingDirectory = normalizeWorkingDirectory(record.workingDirectory);
     if (
       !externalSessionId ||
@@ -351,7 +351,7 @@ const collectReconcilePreloadMetadata = ({
     try {
       for (const record of records) {
         const runtimeKind = readPersistedRuntimeKind(record);
-        const externalSessionId = record.externalSessionId ?? record.sessionId;
+        const externalSessionId = record.externalSessionId;
         if (!externalSessionId) {
           continue;
         }

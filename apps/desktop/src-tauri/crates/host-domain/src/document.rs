@@ -1,5 +1,5 @@
 use crate::git::{DirectMergeRecord, GitTargetBranch, PullRequestRecord};
-use serde::{Deserialize, Serialize};
+use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize, Serializer};
 
 pub const ODT_SET_SPEC_SOURCE_TOOL: &str = "odt_set_spec";
 pub const ODT_SET_PLAN_SOURCE_TOOL: &str = "odt_set_plan";
@@ -140,19 +140,84 @@ pub struct AgentSessionModelSelection {
     pub profile_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct AgentSessionDocument {
-    pub session_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub external_session_id: Option<String>,
+    pub external_session_id: String,
     pub role: String,
     pub scenario: String,
     pub started_at: String,
     pub runtime_kind: String,
     pub working_directory: String,
-    #[serde(default)]
     pub selected_model: Option<AgentSessionModelSelection>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentSessionDocumentSerde {
+    external_session_id: String,
+    role: String,
+    scenario: String,
+    started_at: String,
+    runtime_kind: String,
+    working_directory: String,
+    #[serde(default)]
+    selected_model: Option<AgentSessionModelSelection>,
+}
+
+impl Serialize for AgentSessionDocument {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let field_count = if self.selected_model.is_some() { 7 } else { 6 };
+        let mut state = serializer.serialize_struct("AgentSessionDocument", field_count)?;
+        state.serialize_field("externalSessionId", &self.external_session_id)?;
+        state.serialize_field("role", &self.role)?;
+        state.serialize_field("scenario", &self.scenario)?;
+        state.serialize_field("startedAt", &self.started_at)?;
+        state.serialize_field("runtimeKind", &self.runtime_kind)?;
+        state.serialize_field("workingDirectory", &self.working_directory)?;
+        if let Some(selected_model) = &self.selected_model {
+            state.serialize_field("selectedModel", selected_model)?;
+        }
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for AgentSessionDocument {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let input = AgentSessionDocumentSerde::deserialize(deserializer)?;
+        let AgentSessionDocumentSerde {
+            external_session_id,
+            role,
+            scenario,
+            started_at,
+            runtime_kind,
+            working_directory,
+            selected_model,
+        } = input;
+
+        let external_session_id = external_session_id.trim().to_string();
+        if external_session_id.is_empty() {
+            return Err(D::Error::custom(
+                "Agent session externalSessionId is required",
+            ));
+        }
+
+        Ok(Self {
+            external_session_id,
+            role,
+            scenario,
+            started_at,
+            runtime_kind,
+            working_directory,
+            selected_model,
+        })
+    }
 }
 
 /// Consolidated task metadata returned in a single CLI call.

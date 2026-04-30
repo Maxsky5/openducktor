@@ -26,7 +26,7 @@ export type SessionStartWorkflowIntent = {
   role: AgentRole;
   scenario: AgentScenario;
   startMode: AgentSessionStartMode;
-  sourceSessionId?: string | null;
+  sourceExternalSessionId?: string | null;
   targetBranch?: GitTargetBranch;
   targetWorkingDirectory?: string | null;
   postStartAction: SessionStartPostAction;
@@ -35,7 +35,7 @@ export type SessionStartWorkflowIntent = {
 };
 
 export type SessionStartWorkflowResult = {
-  sessionId: string;
+  externalSessionId: string;
   postStartActionError: Error | null;
 };
 
@@ -66,11 +66,11 @@ const requireSelectedModel = (
 };
 
 const requireSourceSessionId = (
-  sourceSessionId: string | null | undefined,
+  sourceExternalSessionId: string | null | undefined,
   startMode: "reuse" | "fork",
 ): string => {
-  if (sourceSessionId) {
-    return sourceSessionId;
+  if (sourceExternalSessionId) {
+    return sourceExternalSessionId;
   }
   throw new Error(
     `${startMode === "fork" ? "Fork" : "Reuse"} session start requires a source session.`,
@@ -195,14 +195,14 @@ export const startSessionWorkflow = async ({
     ...(humanRequestChangesTask ? { humanRequestChangesTask } : {}),
   });
 
-  const sessionId =
+  const externalSessionId =
     intent.startMode === "reuse"
       ? await executeSessionStart({
           taskId: intent.taskId,
           role: intent.role,
           scenario: intent.scenario,
           startMode: "reuse",
-          sourceSessionId: requireSourceSessionId(intent.sourceSessionId, "reuse"),
+          sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "reuse"),
           ...(intent.targetBranch !== undefined
             ? { kickoffTargetBranch: intent.targetBranch }
             : {}),
@@ -215,7 +215,7 @@ export const startSessionWorkflow = async ({
             scenario: intent.scenario,
             startMode: "fork",
             selectedModel: requireSelectedModel(selection, "fork"),
-            sourceSessionId: requireSourceSessionId(intent.sourceSessionId, "fork"),
+            sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "fork"),
             ...(intent.targetBranch !== undefined
               ? { kickoffTargetBranch: intent.targetBranch }
               : {}),
@@ -238,7 +238,7 @@ export const startSessionWorkflow = async ({
 
   if (intent.postStartAction === "none") {
     return {
-      sessionId,
+      externalSessionId,
       postStartActionError: null,
     };
   }
@@ -248,7 +248,7 @@ export const startSessionWorkflow = async ({
 
   const runPostStartAction = async (): Promise<Error | null> => {
     try {
-      await sendAgentMessage(sessionId, [
+      await sendAgentMessage(externalSessionId, [
         {
           kind: "text",
           text: await buildPostStartMessage({
@@ -272,13 +272,13 @@ export const startSessionWorkflow = async ({
       }
     });
     return {
-      sessionId,
+      externalSessionId,
       postStartActionError: null,
     };
   }
 
   return {
-    sessionId,
+    externalSessionId,
     postStartActionError: await runPostStartAction(),
   };
 };

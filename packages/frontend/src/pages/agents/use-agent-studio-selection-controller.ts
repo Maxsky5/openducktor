@@ -39,18 +39,18 @@ type UseAgentStudioSelectionControllerArgs = {
   scenarioFromQuery: AgentScenario | null;
   selectionIntent: {
     taskId: string;
-    sessionId: string | null;
+    externalSessionId: string | null;
     role: AgentRole;
     scenario: AgentScenario | null;
   } | null;
   updateQuery: (updates: QueryUpdate) => void;
   hydrateRequestedTaskSessionHistory: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
   }) => Promise<void>;
   ensureSessionReadyForView: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
     repoReadinessState: AgentStudioReadinessState;
     recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
@@ -115,10 +115,10 @@ const compareSessionsByRecency = (
   if (left.startedAt !== right.startedAt) {
     return left.startedAt > right.startedAt ? -1 : 1;
   }
-  if (left.sessionId === right.sessionId) {
+  if (left.externalSessionId === right.externalSessionId) {
     return 0;
   }
-  return left.sessionId > right.sessionId ? -1 : 1;
+  return left.externalSessionId > right.externalSessionId ? -1 : 1;
 };
 
 type SessionsByTaskSortCacheEntry = {
@@ -130,7 +130,7 @@ type SessionsByTaskSortCache = Map<string, SessionsByTaskSortCacheEntry>;
 
 const toTaskInputSignature = (taskSessions: AgentSessionSummary[]): string =>
   taskSessions
-    .map((session) => `${session.sessionId}:${session.startedAt}`)
+    .map((session) => `${session.externalSessionId}:${session.startedAt}`)
     .sort()
     .join("|");
 
@@ -152,12 +152,14 @@ export const buildSessionsByTaskIdWithCache = (
   for (const [taskId, taskSessions] of grouped) {
     const inputSignature = toTaskInputSignature(taskSessions);
     const previous = previousCache.get(taskId);
-    const sessionsById = new Map(taskSessions.map((session) => [session.sessionId, session]));
+    const sessionsById = new Map(
+      taskSessions.map((session) => [session.externalSessionId, session]),
+    );
 
     let sortedSessions: AgentSessionSummary[];
     if (previous && previous.inputSignature === inputSignature) {
       sortedSessions = previous.sortedSessionIds
-        .map((sessionId) => sessionsById.get(sessionId))
+        .map((externalSessionId) => sessionsById.get(externalSessionId))
         .filter((session): session is AgentSessionSummary => session !== undefined);
 
       if (sortedSessions.length !== taskSessions.length) {
@@ -170,7 +172,7 @@ export const buildSessionsByTaskIdWithCache = (
     grouped.set(taskId, sortedSessions);
     nextCache.set(taskId, {
       inputSignature,
-      sortedSessionIds: sortedSessions.map((session) => session.sessionId),
+      sortedSessionIds: sortedSessions.map((session) => session.externalSessionId),
     });
   }
 
@@ -216,7 +218,7 @@ export function useAgentStudioSelectionController({
   const effectiveScenarioFromQuery = isRepoNavigationBoundaryPending ? null : scenarioFromQuery;
   const effectiveSelectionIntent = isRepoNavigationBoundaryPending ? null : selectionIntent;
   const selectedTaskIdParam = effectiveSelectionIntent?.taskId ?? effectiveTaskIdParam;
-  const selectedSessionParam = effectiveSelectionIntent?.sessionId ?? effectiveSessionParam;
+  const selectedSessionParam = effectiveSelectionIntent?.externalSessionId ?? effectiveSessionParam;
   const selectedHasExplicitRoleParam =
     effectiveSelectionIntent !== null ? true : effectiveHasExplicitRoleParam;
   const selectedRoleFromQuery = effectiveSelectionIntent?.role ?? effectiveRoleFromQuery;
@@ -228,7 +230,7 @@ export function useAgentStudioSelectionController({
   }, [tasks]);
 
   const sessionSummariesById = useMemo(() => {
-    return new Map(sessions.map((session) => [session.sessionId, session]));
+    return new Map(sessions.map((session) => [session.externalSessionId, session]));
   }, [sessions]);
 
   const sessionsByTaskId = useMemo(() => {
@@ -280,7 +282,7 @@ export function useAgentStudioSelectionController({
     selectedTask,
     sessionsForTask,
   ]);
-  const activeSession = useAgentSession(activeSessionSummary?.sessionId ?? null);
+  const activeSession = useAgentSession(activeSessionSummary?.externalSessionId ?? null);
   const activeSessionRuntimeData = useAgentChatSessionRuntimeData({
     session: activeSession,
     repoReadinessState: agentStudioReadinessState,
@@ -354,7 +356,7 @@ export function useAgentStudioSelectionController({
     }
 
     const belongsToViewTask = viewSessionsForTask.some(
-      (session) => session.sessionId === effectiveSessionParam,
+      (session) => session.externalSessionId === effectiveSessionParam,
     );
     return belongsToViewTask ? effectiveSessionParam : null;
   }, [effectiveSessionParam, viewSessionsForTask]);
@@ -368,7 +370,7 @@ export function useAgentStudioSelectionController({
   const viewHasExplicitRoleSelection = viewSelectionIntent !== null ? true : hasViewRoleSelection;
   const viewRoleFromSelection = viewSelectionIntent?.role ?? effectiveRoleFromQuery;
   const viewScenarioFromSelection = viewSelectionIntent?.scenario ?? effectiveScenarioFromQuery;
-  const viewSessionParamFromSelection = viewSelectionIntent?.sessionId ?? viewSessionParam;
+  const viewSessionParamFromSelection = viewSelectionIntent?.externalSessionId ?? viewSessionParam;
 
   const viewSelection = useMemo(() => {
     return resolveAgentStudioSessionSelection({
@@ -389,7 +391,7 @@ export function useAgentStudioSelectionController({
     viewSessionParamFromSelection,
     viewSessionsForTask,
   ]);
-  const viewActiveSession = useAgentSession(viewSelection.activeSession?.sessionId ?? null);
+  const viewActiveSession = useAgentSession(viewSelection.activeSession?.externalSessionId ?? null);
   const viewSessionRuntimeData = useAgentChatSessionRuntimeData({
     session: viewActiveSession,
     repoReadinessState: agentStudioReadinessState,

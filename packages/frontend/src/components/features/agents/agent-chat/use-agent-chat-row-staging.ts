@@ -5,13 +5,13 @@ const ROW_STAGE_INIT = 8;
 const ROW_STAGE_BATCH = 8;
 
 const shouldStageRows = ({
-  activeSessionId,
+  activeExternalSessionId,
   completedSessionIds,
   disabled,
   forceStage,
   rowCount,
 }: {
-  activeSessionId: string;
+  activeExternalSessionId: string;
   completedSessionIds: Set<string>;
   disabled: boolean;
   forceStage?: boolean;
@@ -20,12 +20,12 @@ const shouldStageRows = ({
   return (
     !disabled &&
     rowCount > ROW_STAGE_INIT &&
-    (forceStage === true || !completedSessionIds.has(activeSessionId))
+    (forceStage === true || !completedSessionIds.has(activeExternalSessionId))
   );
 };
 
 type UseAgentChatRowStagingArgs = {
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   rows: AgentChatWindowRow[];
   turns: AgentChatWindowTurn[];
   disabled?: boolean;
@@ -38,14 +38,14 @@ type UseAgentChatRowStagingResult = {
 };
 
 export function useAgentChatRowStaging({
-  activeSessionId,
+  activeExternalSessionId,
   rows,
   turns,
   disabled = false,
   onBeforePrepend,
 }: UseAgentChatRowStagingArgs): UseAgentChatRowStagingResult {
   const [rowCount, setRowCount] = useState(() =>
-    activeSessionId !== null && !disabled && rows.length > ROW_STAGE_INIT
+    activeExternalSessionId !== null && !disabled && rows.length > ROW_STAGE_INIT
       ? ROW_STAGE_INIT
       : rows.length,
   );
@@ -53,10 +53,12 @@ export function useAgentChatRowStaging({
   const frameRef = useRef<number | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const completedSessionIdsRef = useRef<Set<string>>(new Set());
-  const previousSessionIdRef = useRef<string | null>(activeSessionId);
+  const previousSessionIdRef = useRef<string | null>(activeExternalSessionId);
   const previousSessionId = previousSessionIdRef.current;
   const renderSwitchedSessions =
-    previousSessionId !== null && activeSessionId !== null && previousSessionId !== activeSessionId;
+    previousSessionId !== null &&
+    activeExternalSessionId !== null &&
+    previousSessionId !== activeExternalSessionId;
 
   useEffect(() => {
     const updateRowCount = (nextRowCount: number): void => {
@@ -72,22 +74,22 @@ export function useAgentChatRowStaging({
     const effectPreviousSessionId = previousSessionIdRef.current;
     const effectSwitchedSessions =
       effectPreviousSessionId !== null &&
-      activeSessionId !== null &&
-      effectPreviousSessionId !== activeSessionId;
-    previousSessionIdRef.current = activeSessionId;
+      activeExternalSessionId !== null &&
+      effectPreviousSessionId !== activeExternalSessionId;
+    previousSessionIdRef.current = activeExternalSessionId;
 
-    if (effectSwitchedSessions && activeSessionId !== null) {
-      completedSessionIdsRef.current.delete(activeSessionId);
+    if (effectSwitchedSessions && activeExternalSessionId !== null) {
+      completedSessionIdsRef.current.delete(activeExternalSessionId);
     }
 
-    if (activeSessionId === null) {
+    if (activeExternalSessionId === null) {
       activeSessionRef.current = null;
       updateRowCount(rows.length);
       return;
     }
 
     const shouldStage = shouldStageRows({
-      activeSessionId,
+      activeExternalSessionId,
       completedSessionIds: completedSessionIdsRef.current,
       disabled,
       forceStage: effectSwitchedSessions,
@@ -100,9 +102,9 @@ export function useAgentChatRowStaging({
       return;
     }
 
-    const sessionId = activeSessionId;
-    const isContinuingActiveSession = activeSessionRef.current === activeSessionId;
-    activeSessionRef.current = sessionId;
+    const externalSessionId = activeExternalSessionId;
+    const isContinuingActiveSession = activeSessionRef.current === activeExternalSessionId;
+    activeSessionRef.current = externalSessionId;
     let nextRowCount = Math.min(
       rows.length,
       isContinuingActiveSession ? rowCountRef.current : ROW_STAGE_INIT,
@@ -111,12 +113,12 @@ export function useAgentChatRowStaging({
 
     if (nextRowCount >= rows.length) {
       activeSessionRef.current = null;
-      completedSessionIdsRef.current.add(sessionId);
+      completedSessionIdsRef.current.add(externalSessionId);
       return;
     }
 
     const step = () => {
-      if (activeSessionRef.current !== sessionId) {
+      if (activeSessionRef.current !== externalSessionId) {
         frameRef.current = null;
         return;
       }
@@ -128,7 +130,7 @@ export function useAgentChatRowStaging({
       if (nextRowCount >= rows.length) {
         frameRef.current = null;
         activeSessionRef.current = null;
-        completedSessionIdsRef.current.add(sessionId);
+        completedSessionIdsRef.current.add(externalSessionId);
         return;
       }
 
@@ -142,13 +144,13 @@ export function useAgentChatRowStaging({
         frameRef.current = null;
       }
     };
-  }, [activeSessionId, disabled, onBeforePrepend, rows.length]);
+  }, [activeExternalSessionId, disabled, onBeforePrepend, rows.length]);
 
   return useMemo(() => {
     if (
-      activeSessionId === null ||
+      activeExternalSessionId === null ||
       !shouldStageRows({
-        activeSessionId,
+        activeExternalSessionId,
         completedSessionIds: completedSessionIdsRef.current,
         disabled,
         forceStage: renderSwitchedSessions,
@@ -159,7 +161,7 @@ export function useAgentChatRowStaging({
     }
 
     const effectiveRowCount =
-      renderSwitchedSessions && activeSessionRef.current !== activeSessionId
+      renderSwitchedSessions && activeSessionRef.current !== activeExternalSessionId
         ? Math.min(rows.length, ROW_STAGE_INIT)
         : rowCount;
 
@@ -178,5 +180,5 @@ export function useAgentChatRowStaging({
           end: turn.end - rowStart,
         })),
     };
-  }, [activeSessionId, disabled, rowCount, rows, renderSwitchedSessions, turns]);
+  }, [activeExternalSessionId, disabled, rowCount, rows, renderSwitchedSessions, turns]);
 }

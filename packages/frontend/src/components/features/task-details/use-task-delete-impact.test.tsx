@@ -8,7 +8,7 @@ import {
 
 const makeSession = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord => ({
   runtimeKind: "opencode",
-  sessionId: overrides.sessionId ?? "session-1",
+  externalSessionId: overrides.externalSessionId ?? "session-1",
   role: overrides.role ?? "build",
   scenario: overrides.scenario ?? "build_implementation_start",
   startedAt: overrides.startedAt ?? "2026-03-06T10:00:00.000Z",
@@ -22,31 +22,31 @@ describe("getManagedTaskDeleteImpact", () => {
     const impact = getManagedTaskDeleteImpact("/repo", [
       makeSession({
         runtimeKind: "opencode",
-        sessionId: "build-1",
+        externalSessionId: "build-1",
         role: "build",
         workingDirectory: "/repo/worktrees/task-1",
       }),
       makeSession({
         runtimeKind: "opencode",
-        sessionId: "qa-1",
+        externalSessionId: "qa-1",
         role: "qa",
         scenario: "qa_review",
         workingDirectory: "/repo/worktrees/task-1",
       }),
       makeSession({
         runtimeKind: "opencode",
-        sessionId: "build-2",
+        externalSessionId: "build-2",
         role: "build",
         workingDirectory: "/repo/worktrees/task-2",
       }),
       makeSession({
         runtimeKind: "opencode",
-        sessionId: "planner-1",
+        externalSessionId: "planner-1",
         role: "planner",
         scenario: "planner_initial",
         workingDirectory: "/repo/worktrees/task-3",
       }),
-      makeSession({ sessionId: "build-root", role: "build", workingDirectory: "/repo" }),
+      makeSession({ externalSessionId: "build-root", role: "build", workingDirectory: "/repo" }),
     ]);
 
     expect(impact).toEqual({
@@ -59,10 +59,10 @@ describe("getManagedTaskDeleteImpact", () => {
 
   test("normalizes trailing separators when comparing against the repo root", () => {
     const impact = getManagedTaskDeleteImpact("/repo/", [
-      makeSession({ sessionId: "build-root", workingDirectory: "/repo" }),
+      makeSession({ externalSessionId: "build-root", workingDirectory: "/repo" }),
       makeSession({
         runtimeKind: "opencode",
-        sessionId: "qa-root",
+        externalSessionId: "qa-root",
         role: "qa",
         scenario: "qa_review",
         workingDirectory: "/repo///",
@@ -79,8 +79,8 @@ describe("getManagedTaskDeleteImpact", () => {
 
   test("aggregates managed worktrees across multiple task session lists", () => {
     const impact = getManagedTaskDeleteImpactFromTasks("/repo", [
-      [makeSession({ sessionId: "parent", workingDirectory: "/repo" })],
-      [makeSession({ sessionId: "child", workingDirectory: "/repo/worktrees/task-2" })],
+      [makeSession({ externalSessionId: "parent", workingDirectory: "/repo" })],
+      [makeSession({ externalSessionId: "child", workingDirectory: "/repo/worktrees/task-2" })],
     ]);
 
     expect(impact).toEqual({

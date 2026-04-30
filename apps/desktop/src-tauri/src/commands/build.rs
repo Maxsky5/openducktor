@@ -189,7 +189,6 @@ mod tests {
             "request": {
                 "repoPath": "/repo",
                 "taskId": "task-1",
-                "sessionId": "session-1",
                 "runtimeKind": "opencode",
                 "workingDirectory": "/repo/worktrees/task-1",
                 "externalSessionId": "external-session-1"
@@ -199,7 +198,7 @@ mod tests {
 
         assert_eq!(parsed.request.repo_path, "/repo");
         assert_eq!(parsed.request.task_id, "task-1");
-        assert_eq!(parsed.request.session_id, "session-1");
+        assert_eq!(parsed.request.external_session_id, "external-session-1");
     }
 
     #[test]

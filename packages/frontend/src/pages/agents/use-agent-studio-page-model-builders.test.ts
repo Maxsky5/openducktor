@@ -87,7 +87,7 @@ describe("use-agent-studio-page-model-builders", () => {
   test("buildWorkflowModelContext derives role availability and fallback session selector", () => {
     const plannerSession = createSession({
       runtimeKind: "opencode",
-      sessionId: "planner-session",
+      externalSessionId: "planner-session",
       role: "planner",
       scenario: "planner_initial",
     });
@@ -113,20 +113,20 @@ describe("use-agent-studio-page-model-builders", () => {
     expect(context.selectedRoleAvailable).toBe(false);
     expect(context.selectedRoleReadOnlyReason).toContain("Planner is unavailable");
     expect(context.sessionSelectorValue).toBe("planner-session");
-    expect(context.sessionSelectorAutofocusByValue[plannerSession.sessionId]).toBe(false);
+    expect(context.sessionSelectorAutofocusByValue[plannerSession.externalSessionId]).toBe(false);
     expect(context.createSessionDisabled).toBe(false);
   });
 
   test("buildWorkflowModelContext marks only immediately interactive sessions for header autofocus", () => {
     const specSession = createSession({
       runtimeKind: "opencode",
-      sessionId: "spec-session",
+      externalSessionId: "spec-session",
       role: "spec",
       scenario: "spec_initial",
     });
     const qaWaitingSession = createSession({
       runtimeKind: "opencode",
-      sessionId: "qa-session",
+      externalSessionId: "qa-session",
       role: "qa",
       scenario: "qa_review",
       pendingQuestions: [{ requestId: "q-1", questions: [] }],
@@ -150,15 +150,15 @@ describe("use-agent-studio-page-model-builders", () => {
     });
 
     expect(context.sessionSelectorAutofocusByValue).toEqual({
-      [specSession.sessionId]: true,
-      [qaWaitingSession.sessionId]: false,
+      [specSession.externalSessionId]: true,
+      [qaWaitingSession.externalSessionId]: false,
     });
   });
 
   test("buildWorkflowModelContext includes follow-up build scenario from human feedback", () => {
     const activeSession = createSession({
       runtimeKind: "opencode",
-      sessionId: "spec-session",
+      externalSessionId: "spec-session",
       role: "spec",
       scenario: "spec_initial",
     });

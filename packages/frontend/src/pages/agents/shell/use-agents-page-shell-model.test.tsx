@@ -16,7 +16,7 @@ enableReactActEnvironment();
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const createSession = () =>
   createAgentSessionFixture({
-    sessionId: "session-1",
+    externalSessionId: "session-1",
     taskId: "task-1",
     role: "planner",
     scenario: "planner_initial",
@@ -332,7 +332,7 @@ const registerModuleMocks = (): void => {
     useAgentSessions: () => agentSessions,
     useAgentSessionSummaries: () =>
       agentSessions.map((entry) => ({
-        sessionId: entry.sessionId,
+        externalSessionId: entry.externalSessionId,
         taskId: entry.taskId,
         role: entry.role,
         scenario: entry.scenario,
@@ -344,8 +344,10 @@ const registerModuleMocks = (): void => {
         selectedModel: entry.selectedModel,
         runtimeKind: entry.runtimeKind,
       })),
-    useAgentSession: (sessionId: string | null) =>
-      sessionId ? (agentSessions.find((entry) => entry.sessionId === sessionId) ?? null) : null,
+    useAgentSession: (externalSessionId: string | null) =>
+      externalSessionId
+        ? (agentSessions.find((entry) => entry.externalSessionId === externalSessionId) ?? null)
+        : null,
     useAgentState: () => ({ sessions: agentSessions, ...agentOperations }),
     useSpecState: () => {
       throw new Error("useSpecState is not used in this test");

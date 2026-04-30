@@ -13,12 +13,15 @@ import { toOpenCodeRequestError } from "./request-errors";
  */
 export const loadSessionDiff = async (
   runtimeEndpoint: string,
-  sessionId: string,
-  messageId?: string,
+  externalSessionId: string,
+  runtimeHistoryAnchor?: string,
 ): Promise<FileDiff[]> => {
-  const url = new URL(`/api/session/${sessionId}/diff`, normalizeRuntimeEndpoint(runtimeEndpoint));
-  if (messageId) {
-    url.searchParams.set("messageID", messageId);
+  const url = new URL(
+    `/api/session/${externalSessionId}/diff`,
+    normalizeRuntimeEndpoint(runtimeEndpoint),
+  );
+  if (runtimeHistoryAnchor) {
+    url.searchParams.set("messageID", runtimeHistoryAnchor);
   }
 
   try {

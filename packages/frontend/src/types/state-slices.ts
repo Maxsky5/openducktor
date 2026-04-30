@@ -171,14 +171,14 @@ export type AgentStateContextValue = {
   bootstrapTaskSessions: (taskId: string, persistedRecords?: AgentSessionRecord[]) => Promise<void>;
   hydrateRequestedTaskSessionHistory: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
     historyPreludeMode?: import("./agent-orchestrator").AgentSessionHistoryPreludeMode;
     allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
   ensureSessionReadyForView: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
     repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
     historyPreludeMode?: import("./agent-orchestrator").AgentSessionHistoryPreludeMode;
@@ -210,7 +210,6 @@ export type AgentStateContextValue = {
   ) => Promise<AgentSessionHistoryMessage[]>;
   attachRuntimeTranscriptSession: (input: {
     repoPath: string;
-    sessionId: string;
     externalSessionId: string;
     runtimeKind: RuntimeKind;
     runtimeId: string;
@@ -226,7 +225,7 @@ export type AgentStateContextValue = {
     runtimeConnection: AgentRuntimeConnection,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
-  removeAgentSession: (sessionId: string) => Promise<void>;
+  removeAgentSession: (externalSessionId: string) => Promise<void>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => Promise<void>;
   startAgentSession: (
     input:
@@ -238,7 +237,7 @@ export type AgentStateContextValue = {
           sendKickoff?: boolean;
           kickoffTargetBranch?: GitTargetBranch | null;
           startMode: "reuse";
-          sourceSessionId: string;
+          sourceExternalSessionId: string;
         }
       | {
           taskId: string;
@@ -260,14 +259,17 @@ export type AgentStateContextValue = {
           sendKickoff?: boolean;
           kickoffTargetBranch?: GitTargetBranch | null;
           startMode: "fork";
-          sourceSessionId: string;
+          sourceExternalSessionId: string;
         },
   ) => Promise<string>;
-  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
-  stopAgentSession: (sessionId: string) => Promise<void>;
-  updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
+  sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
+  stopAgentSession: (externalSessionId: string) => Promise<void>;
+  updateAgentSessionModel: (
+    externalSessionId: string,
+    selection: AgentModelSelection | null,
+  ) => void;
   replyAgentPermission: (
-    sessionId: string,
+    externalSessionId: string,
     requestId: string,
     reply: "once" | "always" | "reject",
     message?: string,
@@ -275,12 +277,16 @@ export type AgentStateContextValue = {
   replyRuntimeSessionPermission: (input: {
     runtimeKind: RuntimeKind;
     runtimeConnection: AgentRuntimeConnection;
-    targetSessionId: string;
+    targetExternalSessionId: string;
     requestId: string;
     reply: "once" | "always" | "reject";
     message?: string;
   }) => Promise<void>;
-  answerAgentQuestion: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>;
+  answerAgentQuestion: (
+    externalSessionId: string,
+    requestId: string,
+    answers: string[][],
+  ) => Promise<void>;
 };
 
 export type AgentOperationsContextValue = Omit<AgentStateContextValue, "sessions">;

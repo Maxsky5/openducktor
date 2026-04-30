@@ -31,7 +31,7 @@ describe("KanbanColumn", () => {
         [
           {
             runtimeKind: "opencode",
-            sessionId: "session-waiting",
+            externalSessionId: "session-waiting",
             role: "build",
             scenario: "build_implementation_start",
             status: "running",
@@ -44,7 +44,7 @@ describe("KanbanColumn", () => {
         [
           {
             runtimeKind: "opencode",
-            sessionId: "session-active",
+            externalSessionId: "session-active",
             role: "build",
             scenario: "build_implementation_start",
             status: "running",

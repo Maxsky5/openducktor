@@ -79,7 +79,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     workflowSessionByRole: {
       spec: {
         role: "spec",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         scenario: "spec_initial",
         startedAt: "2026-02-22T12:00:00.000Z",
         status: "running",
@@ -119,7 +119,7 @@ describe("useAgentStudioHeaderModel", () => {
     const model = harness.getLatest();
     expect(model.taskTitle).toBe("Task 1");
     expect(model.selectedRole).toBe("spec");
-    expect(model.workflowSteps[0]?.sessionId).toBe("session-1");
+    expect(model.workflowSteps[0]?.externalSessionId).toBe("session-1");
     expect(model.sessionSelector.disabled).toBe(false);
     expect(model.sessionSelector.shouldAutofocusComposerForValue("session-1")).toBe(true);
 

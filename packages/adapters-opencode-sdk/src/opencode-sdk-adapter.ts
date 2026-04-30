@@ -15,7 +15,7 @@ import type {
   ListAgentModelsInput,
   ListLiveAgentSessionPendingInput,
   ListLiveAgentSessionsInput,
-  LiveAgentSessionPendingInputBySession,
+  LiveAgentSessionPendingInputByExternalSessionId,
   LiveAgentSessionSnapshot,
   LiveAgentSessionSummary,
   LoadAgentFileStatusInput,
@@ -164,13 +164,15 @@ const requireWorkflowRole = (session: SessionRecord): AgentRole => {
   if (session.input.role !== null) {
     return session.input.role;
   }
-  throw new Error(`Session ${session.summary.sessionId} is a transcript and cannot send messages.`);
+  throw new Error(
+    `Session ${session.summary.externalSessionId} is a transcript and cannot send messages.`,
+  );
 };
 
 const mergeLiveAgentSessionPendingInput = (
-  entries: LiveAgentSessionPendingInputBySession[],
-): LiveAgentSessionPendingInputBySession => {
-  const merged: LiveAgentSessionPendingInputBySession = {};
+  entries: LiveAgentSessionPendingInputByExternalSessionId[],
+): LiveAgentSessionPendingInputByExternalSessionId => {
+  const merged: LiveAgentSessionPendingInputByExternalSessionId = {};
 
   for (const entry of entries) {
     for (const [sessionId, pendingInput] of Object.entries(entry)) {
@@ -226,18 +228,13 @@ export class OpencodeSdkAdapter
     });
     const createdData = unwrapData(created, "create session");
     const externalSessionId = createdData.id;
-    const sessionId = input.sessionId?.trim() ? input.sessionId : externalSessionId;
-    const sessionInput = toSessionInput({
-      ...input,
-      sessionId,
-    });
+    const sessionInput = toSessionInput(input);
 
     return registerSession({
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
-      sessionId,
       externalSessionId,
       sessionInput,
       client,
@@ -250,7 +247,7 @@ export class OpencodeSdkAdapter
   }
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
-    const existing = this.sessions.get(input.sessionId);
+    const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
       return existing.summary;
     }
@@ -270,17 +267,13 @@ export class OpencodeSdkAdapter
       this.now,
     );
     const runtimeEndpoint = runtimeClientInput.runtimeEndpoint;
-    const sessionInput = toSessionInput({
-      ...input,
-      sessionId: input.sessionId,
-    });
+    const sessionInput = toSessionInput(input);
 
     return registerSession({
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
       runtimeEndpoint,
-      sessionId: input.sessionId,
       externalSessionId: input.externalSessionId,
       sessionInput,
       client,
@@ -293,7 +286,7 @@ export class OpencodeSdkAdapter
   }
 
   async attachSession(input: AttachAgentSessionInput): Promise<AgentSessionSummary> {
-    const existing = this.sessions.get(input.sessionId);
+    const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
       return existing.summary;
     }
@@ -313,17 +306,13 @@ export class OpencodeSdkAdapter
       this.now,
     );
     const runtimeEndpoint = runtimeClientInput.runtimeEndpoint;
-    const sessionInput = toSessionInput({
-      ...input,
-      sessionId: input.sessionId,
-    });
+    const sessionInput = toSessionInput(input);
 
     const summary = registerSession({
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
       runtimeEndpoint,
-      sessionId: input.sessionId,
       externalSessionId: input.externalSessionId,
       sessionInput,
       client,
@@ -340,13 +329,12 @@ export class OpencodeSdkAdapter
     });
 
     try {
-      const session = requireSession(this.sessions, input.sessionId);
+      const session = requireSession(this.sessions, input.externalSessionId);
       attachSessionToRuntimeEvents({
         sessions: this.sessions,
         runtimeEventTransports: this.runtimeEventTransports,
         createClient: this.createClient,
         runtimeEndpoint,
-        sessionId: input.sessionId,
         externalSessionId: input.externalSessionId,
         sessionInput,
         now: this.now,
@@ -360,7 +348,7 @@ export class OpencodeSdkAdapter
         session,
       });
     } catch (error) {
-      const session = this.sessions.get(input.sessionId);
+      const session = this.sessions.get(input.externalSessionId);
       if (session) {
         await detachSessionRuntime(session, this.sessions, this.runtimeEventTransports);
       }
@@ -370,15 +358,15 @@ export class OpencodeSdkAdapter
     return summary;
   }
 
-  async detachSession(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
+  async detachSession(externalSessionId: string): Promise<void> {
+    const session = this.sessions.get(externalSessionId);
     if (!session) {
-      clearSessionListeners(this.listeners, sessionId);
+      clearSessionListeners(this.listeners, externalSessionId);
       return;
     }
 
     await detachSessionRuntime(session, this.sessions, this.runtimeEventTransports);
-    clearSessionListeners(this.listeners, sessionId);
+    clearSessionListeners(this.listeners, externalSessionId);
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
@@ -390,22 +378,17 @@ export class OpencodeSdkAdapter
     const forked = await client.session.fork({
       directory: input.workingDirectory,
       sessionID: input.parentExternalSessionId,
-      ...(input.messageId ? { messageID: input.messageId } : {}),
+      ...(input.runtimeHistoryAnchor ? { messageID: input.runtimeHistoryAnchor } : {}),
     });
     const forkedData = unwrapData(forked, "fork session");
     const externalSessionId = forkedData.id;
-    const sessionId = input.sessionId?.trim() ? input.sessionId : externalSessionId;
-    const sessionInput = toSessionInput({
-      ...input,
-      sessionId,
-    });
+    const sessionInput = toSessionInput(input);
 
     return registerSession({
       sessions: this.sessions,
       runtimeEventTransports: this.runtimeEventTransports,
       createClient: this.createClient,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
-      sessionId,
       externalSessionId,
       sessionInput,
       client,
@@ -494,8 +477,8 @@ export class OpencodeSdkAdapter
     });
   }
 
-  hasSession(sessionId: string): boolean {
-    return hasSession(this.sessions, sessionId);
+  hasSession(externalSessionId: string): boolean {
+    return hasSession(this.sessions, externalSessionId);
   }
 
   async loadSessionHistory(
@@ -549,8 +532,11 @@ export class OpencodeSdkAdapter
       for (const [partId, correlationKey] of primarySession.subagentCorrelationKeyByPartId) {
         session.subagentCorrelationKeyByPartId.set(partId, correlationKey);
       }
-      for (const [sessionId, correlationKey] of primarySession.subagentCorrelationKeyBySessionId) {
-        session.subagentCorrelationKeyBySessionId.set(sessionId, correlationKey);
+      for (const [
+        externalSessionId,
+        correlationKey,
+      ] of primarySession.subagentCorrelationKeyByExternalSessionId) {
+        session.subagentCorrelationKeyByExternalSessionId.set(externalSessionId, correlationKey);
       }
       session.pendingSubagentCorrelationKeys.splice(
         0,
@@ -575,7 +561,7 @@ export class OpencodeSdkAdapter
 
   async listLiveAgentSessionPendingInput(
     input: ListLiveAgentSessionPendingInput,
-  ): Promise<LiveAgentSessionPendingInputBySession> {
+  ): Promise<LiveAgentSessionPendingInputByExternalSessionId> {
     return listLiveAgentSessionPendingInput(
       this.createClient,
       toOpencodeRuntimeClientInput(
@@ -638,11 +624,11 @@ export class OpencodeSdkAdapter
   }
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
-    const session = requireSession(this.sessions, input.sessionId);
+    const session = requireSession(this.sessions, input.externalSessionId);
     const tools = await this.resolveSessionToolSelection(session);
-    this.emit(input.sessionId, {
+    this.emit(input.externalSessionId, {
       type: "session_status",
-      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
       timestamp: this.now(),
       status: { type: "busy" },
     });
@@ -654,9 +640,9 @@ export class OpencodeSdkAdapter
       });
     } catch (error) {
       setSessionIdle(session);
-      this.emit(input.sessionId, {
+      this.emit(input.externalSessionId, {
         type: "session_idle",
-        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
         timestamp: this.now(),
       });
       throw error;
@@ -664,7 +650,7 @@ export class OpencodeSdkAdapter
   }
 
   updateSessionModel(input: UpdateAgentSessionModelInput): void {
-    const session = requireSession(this.sessions, input.sessionId);
+    const session = requireSession(this.sessions, input.externalSessionId);
     session.input = {
       ...session.input,
       ...(input.model ? { model: input.model } : {}),
@@ -677,7 +663,7 @@ export class OpencodeSdkAdapter
   }
 
   async replyPermission(input: ReplyPermissionInput): Promise<void> {
-    const session = requireSession(this.sessions, input.sessionId);
+    const session = requireSession(this.sessions, input.externalSessionId);
     await replyPermission(session, input);
   }
 
@@ -700,25 +686,28 @@ export class OpencodeSdkAdapter
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
-    const session = requireSession(this.sessions, input.sessionId);
+    const session = requireSession(this.sessions, input.externalSessionId);
     await replyQuestion(session, input);
   }
 
-  subscribeEvents(sessionId: string, listener: (event: AgentEvent) => void): EventUnsubscribe {
-    return subscribeSessionEvents(this.listeners, sessionId, listener);
+  subscribeEvents(
+    externalSessionId: string,
+    listener: (event: AgentEvent) => void,
+  ): EventUnsubscribe {
+    return subscribeSessionEvents(this.listeners, externalSessionId, listener);
   }
 
-  async stopSession(sessionId: string): Promise<void> {
-    const session = requireSession(this.sessions, sessionId);
+  async stopSession(externalSessionId: string): Promise<void> {
+    const session = requireSession(this.sessions, externalSessionId);
     await stopSessionRuntime(session, this.sessions, this.runtimeEventTransports);
 
-    this.emit(sessionId, {
+    this.emit(externalSessionId, {
       type: "session_finished",
-      sessionId,
+      externalSessionId,
       timestamp: this.now(),
       message: "Session stopped",
     });
-    clearSessionListeners(this.listeners, sessionId);
+    clearSessionListeners(this.listeners, externalSessionId);
   }
 
   async loadSessionDiff(
@@ -726,8 +715,8 @@ export class OpencodeSdkAdapter
   ): Promise<import("@openducktor/contracts").FileDiff[]> {
     return loadSessionDiffOp(
       toOpencodeRuntimeClientInput(input.runtimeConnection, "load session diff").runtimeEndpoint,
-      input.sessionId,
-      input.messageId,
+      input.externalSessionId,
+      input.runtimeHistoryAnchor,
     );
   }
 
@@ -739,8 +728,8 @@ export class OpencodeSdkAdapter
     );
   }
 
-  private emit(sessionId: string, event: AgentEvent): void {
-    emitSessionEvent(this.listeners, sessionId, event);
+  private emit(externalSessionId: string, event: AgentEvent): void {
+    emitSessionEvent(this.listeners, externalSessionId, event);
   }
 
   private async resolveSessionToolSelection(

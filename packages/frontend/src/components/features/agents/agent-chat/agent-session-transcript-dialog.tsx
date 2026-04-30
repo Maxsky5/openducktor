@@ -14,7 +14,7 @@ import { useReadonlySessionTranscriptSurfaceModel } from "./use-readonly-session
 
 type AgentSessionTranscriptDialogProps = {
   activeWorkspace: ActiveWorkspace | null;
-  sessionId: string | null;
+  externalSessionId: string | null;
   source: RuntimeSessionTranscriptSource | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -24,7 +24,7 @@ type AgentSessionTranscriptDialogProps = {
 
 export function AgentSessionTranscriptDialog({
   activeWorkspace,
-  sessionId,
+  externalSessionId,
   source,
   open,
   onOpenChange,
@@ -34,7 +34,7 @@ export function AgentSessionTranscriptDialog({
   const { model } = useReadonlySessionTranscriptSurfaceModel({
     isOpen: open,
     activeWorkspace,
-    sessionId,
+    externalSessionId,
     source,
   });
   const resolvedTitle = resolveAgentSessionDialogTitle(title, model.thread.session?.title);

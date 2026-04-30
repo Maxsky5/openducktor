@@ -13,17 +13,18 @@ const DRAFT_FLUSH_DELAY_MS = 100;
 export const clearDraftBuffers = (
   context: Pick<SessionLifecycleEventContext, "drafts" | "store">,
 ): void => {
-  const timeoutId = context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.sessionId];
+  const timeoutId =
+    context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.externalSessionId];
   if (timeoutId !== undefined) {
     clearTimeout(timeoutId);
   }
   if (context.drafts.draftFlushTimeoutBySessionRef) {
-    delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.sessionId];
+    delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.externalSessionId];
   }
-  delete context.drafts.draftRawBySessionRef.current[context.store.sessionId];
-  delete context.drafts.draftSourceBySessionRef.current[context.store.sessionId];
+  delete context.drafts.draftRawBySessionRef.current[context.store.externalSessionId];
+  delete context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId];
   if (context.drafts.draftMessageIdBySessionRef) {
-    delete context.drafts.draftMessageIdBySessionRef.current[context.store.sessionId];
+    delete context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId];
   }
 };
 
@@ -46,21 +47,22 @@ const resolveDraftFieldState = (
 export const flushDraftBuffers = (
   context: Pick<SessionLifecycleEventContext, "drafts" | "store">,
 ): void => {
-  const timeoutId = context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.sessionId];
+  const timeoutId =
+    context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.externalSessionId];
   if (timeoutId !== undefined) {
     clearTimeout(timeoutId);
     if (context.drafts.draftFlushTimeoutBySessionRef) {
-      delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.sessionId];
+      delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.externalSessionId];
     }
   }
 
-  const rawByChannel = context.drafts.draftRawBySessionRef.current[context.store.sessionId];
+  const rawByChannel = context.drafts.draftRawBySessionRef.current[context.store.externalSessionId];
   const messageIdByChannel =
-    context.drafts.draftMessageIdBySessionRef?.current[context.store.sessionId];
+    context.drafts.draftMessageIdBySessionRef?.current[context.store.externalSessionId];
   const reasoningDraft = resolveDraftFieldState("reasoning", rawByChannel, messageIdByChannel);
 
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => ({
       ...current,
       draftAssistantText: "",
@@ -81,13 +83,13 @@ export const scheduleDraftFlush = (
     return;
   }
 
-  const existingTimeoutId = draftFlushTimeoutBySessionRef.current[context.store.sessionId];
+  const existingTimeoutId = draftFlushTimeoutBySessionRef.current[context.store.externalSessionId];
   if (existingTimeoutId !== undefined) {
     clearTimeout(existingTimeoutId);
   }
 
-  draftFlushTimeoutBySessionRef.current[context.store.sessionId] = setTimeout(() => {
-    delete draftFlushTimeoutBySessionRef.current[context.store.sessionId];
+  draftFlushTimeoutBySessionRef.current[context.store.externalSessionId] = setTimeout(() => {
+    delete draftFlushTimeoutBySessionRef.current[context.store.externalSessionId];
     flushDraftBuffers(context);
   }, DRAFT_FLUSH_DELAY_MS);
 };
@@ -128,11 +130,15 @@ export const settleDraftToIdle = (
   timestamp: string,
 ): boolean => {
   let shouldClear = false;
-  context.store.updateSession(context.store.sessionId, (current) => {
+  context.store.updateSession(context.store.externalSessionId, (current) => {
     const finalized = finalizeDraftAssistantMessage(
       current,
       timestamp,
-      context.turn.resolveTurnDurationMs(context.store.sessionId, timestamp, current.messages),
+      context.turn.resolveTurnDurationMs(
+        context.store.externalSessionId,
+        timestamp,
+        current.messages,
+      ),
     );
     shouldClear = shouldClearTurnFromCurrentState(current);
     return {

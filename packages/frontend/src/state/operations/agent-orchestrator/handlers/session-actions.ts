@@ -49,18 +49,18 @@ type SessionActionsDependencies = {
   turnUserAnchorAtBySessionRef?: { current: Record<string, number> };
   turnModelBySessionRef?: { current: Record<string, AgentSessionState["selectedModel"]> };
   updateSession: (
-    sessionId: string,
+    externalSessionId: string,
     updater: (current: AgentSessionState) => AgentSessionState,
     options?: { persist?: boolean },
   ) => void;
-  attachSessionListener: (repoPath: string, sessionId: string) => void;
+  attachSessionListener: (repoPath: string, externalSessionId: string) => void;
   resolveTaskWorktree?: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadRepoDefaultTargetBranch?: (workspaceId: string) => Promise<GitTargetBranch | null>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
-  clearTurnDuration: (sessionId: string, completedTimestamp?: string) => void;
+  clearTurnDuration: (externalSessionId: string, completedTimestamp?: string) => void;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   stopAuthoritativeSession?: (target: AgentSessionStopTarget) => Promise<void>;
@@ -77,14 +77,14 @@ const markTurnUserAnchorIfMissing = (
     | { current: Record<string, AgentSessionState["selectedModel"]> }
     | undefined,
   sessionsRef: { current: Record<string, AgentSessionState> },
-  sessionId: string,
+  externalSessionId: string,
 ): void => {
-  if (turnUserAnchorAtBySessionRef.current[sessionId] === undefined) {
-    turnUserAnchorAtBySessionRef.current[sessionId] = Date.now();
+  if (turnUserAnchorAtBySessionRef.current[externalSessionId] === undefined) {
+    turnUserAnchorAtBySessionRef.current[externalSessionId] = Date.now();
   }
   if (turnModelBySessionRef) {
-    turnModelBySessionRef.current[sessionId] =
-      sessionsRef.current[sessionId]?.selectedModel ?? null;
+    turnModelBySessionRef.current[externalSessionId] =
+      sessionsRef.current[externalSessionId]?.selectedModel ?? null;
   }
 };
 
@@ -165,7 +165,7 @@ export const createAgentSessionActions = ({
   });
 
   const sendAgentMessage = async (
-    sessionId: string,
+    externalSessionId: string,
     parts: AgentUserMessagePart[],
   ): Promise<void> => {
     const normalizedParts = normalizeAgentUserMessageParts(parts);
@@ -173,10 +173,10 @@ export const createAgentSessionActions = ({
       return;
     }
 
-    const currentSession = sessionsRef.current[sessionId];
+    const currentSession = sessionsRef.current[externalSessionId];
     if (currentSession) {
       if (!isWorkflowAgentSession(currentSession)) {
-        throw new Error(`Session '${sessionId}' is not a workflow session.`);
+        throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
       }
       const task = taskRef.current.find((entry) => entry.id === currentSession.taskId);
       if (task && !isRoleAvailableForTask(task, currentSession.role)) {
@@ -187,9 +187,9 @@ export const createAgentSessionActions = ({
       }
     }
 
-    await ensureSessionReady(sessionId);
+    await ensureSessionReady(externalSessionId);
 
-    const readySession = sessionsRef.current[sessionId];
+    const readySession = sessionsRef.current[externalSessionId];
     if (!readySession || isAgentSessionWaitingInput(readySession)) {
       return;
     }
@@ -197,13 +197,13 @@ export const createAgentSessionActions = ({
     const selectedModel = readySession.selectedModel ?? undefined;
     const isBusyQueuedSend = readySession.status === "running";
     if (!isBusyQueuedSend) {
-      turnUserAnchorAtBySessionRef.current[sessionId] = Date.now();
+      turnUserAnchorAtBySessionRef.current[externalSessionId] = Date.now();
       if (turnModelBySessionRef) {
-        turnModelBySessionRef.current[sessionId] = selectedModel ?? null;
+        turnModelBySessionRef.current[externalSessionId] = selectedModel ?? null;
       }
 
       updateSession(
-        sessionId,
+        externalSessionId,
         (current) => ({
           ...current,
           status: "running",
@@ -218,13 +218,13 @@ export const createAgentSessionActions = ({
 
     try {
       await adapter.sendUserMessage({
-        sessionId,
+        externalSessionId,
         parts: normalizedParts,
         ...(selectedModel ? { model: selectedModel } : {}),
       });
     } catch (error) {
       updateSession(
-        sessionId,
+        externalSessionId,
         (current) => ({
           ...current,
           status: isBusyQueuedSend ? current.status : "error",
@@ -240,7 +240,7 @@ export const createAgentSessionActions = ({
         { persist: false },
       );
       updateSession(
-        sessionId,
+        externalSessionId,
         (current) => ({
           ...current,
           messages: appendSessionMessage(current, {
@@ -259,9 +259,9 @@ export const createAgentSessionActions = ({
         { persist: false },
       );
       if (!isBusyQueuedSend) {
-        clearTurnDuration(sessionId);
+        clearTurnDuration(externalSessionId);
         if (turnModelBySessionRef) {
-          delete turnModelBySessionRef.current[sessionId];
+          delete turnModelBySessionRef.current[externalSessionId];
         }
       }
     }
@@ -303,15 +303,15 @@ export const createAgentSessionActions = ({
     },
   });
 
-  const stopAgentSession = async (sessionId: string): Promise<void> => {
-    const session = sessionsRef.current[sessionId];
+  const stopAgentSession = async (externalSessionId: string): Promise<void> => {
+    const session = sessionsRef.current[externalSessionId];
     if (!session) {
       return;
     }
     let stopRepoPath: string | null = null;
 
     updateSession(
-      sessionId,
+      externalSessionId,
       (current) => ({
         ...current,
         stopRequestedAt: now(),
@@ -319,7 +319,7 @@ export const createAgentSessionActions = ({
       { persist: false },
     );
 
-    const hasLocalRuntimeSession = adapter.hasSession(sessionId);
+    const hasLocalRuntimeSession = adapter.hasSession(externalSessionId);
 
     try {
       stopRepoPath = workspaceRepoPath ?? currentWorkspaceRepoPathRef.current;
@@ -334,7 +334,7 @@ export const createAgentSessionActions = ({
       await stopAuthoritativeSession({
         repoPath: stopRepoPath,
         taskId: session.taskId,
-        sessionId: session.sessionId,
+        externalSessionId: session.externalSessionId,
         runtimeKind: session.runtimeKind,
         workingDirectory: session.workingDirectory,
         ...(session.externalSessionId.trim().length > 0
@@ -343,7 +343,7 @@ export const createAgentSessionActions = ({
       });
     } catch (error) {
       updateSession(
-        sessionId,
+        externalSessionId,
         (current) => ({
           ...current,
           stopRequestedAt: null,
@@ -351,32 +351,32 @@ export const createAgentSessionActions = ({
         { persist: false },
       );
       throw new Error(
-        `Failed to stop ${session.role} session '${sessionId}': ${errorMessage(error)}`,
+        `Failed to stop ${session.role} session '${externalSessionId}': ${errorMessage(error)}`,
       );
     }
 
     if (hasLocalRuntimeSession) {
       try {
-        await adapter.stopSession(sessionId);
+        await adapter.stopSession(externalSessionId);
       } catch (error) {
         console.warn(
           "[agent-orchestrator] local session stop failed after host stop",
-          sessionId,
+          externalSessionId,
           errorMessage(error),
         );
       }
     }
 
-    const unsubscribe = unsubscribersRef.current.get(sessionId);
+    const unsubscribe = unsubscribersRef.current.get(externalSessionId);
     unsubscribe?.();
-    unsubscribersRef.current.delete(sessionId);
-    clearTurnDuration(sessionId);
+    unsubscribersRef.current.delete(externalSessionId);
+    clearTurnDuration(externalSessionId);
     if (turnModelBySessionRef) {
-      delete turnModelBySessionRef.current[sessionId];
+      delete turnModelBySessionRef.current[externalSessionId];
     }
 
     let stoppedSessionSnapshot: AgentSessionState | null = null;
-    updateSession(sessionId, (current) => {
+    updateSession(externalSessionId, (current) => {
       const nextSession: AgentSessionState = {
         ...current,
         status: "stopped",
@@ -414,18 +414,18 @@ export const createAgentSessionActions = ({
   };
 
   const updateAgentSessionModel = (
-    sessionId: string,
+    externalSessionId: string,
     selection: AgentModelSelection | null,
   ): void => {
-    if (adapter.hasSession(sessionId)) {
+    if (adapter.hasSession(externalSessionId)) {
       adapter.updateSessionModel({
-        sessionId,
+        externalSessionId,
         model: selection,
       });
     }
 
     updateSession(
-      sessionId,
+      externalSessionId,
       (current) => ({
         ...current,
         selectedModel: selection,
@@ -435,29 +435,29 @@ export const createAgentSessionActions = ({
   };
 
   const replyAgentPermission = async (
-    sessionId: string,
+    externalSessionId: string,
     requestId: string,
     reply: "once" | "always" | "reject",
     message?: string,
   ): Promise<void> => {
-    if (!adapter.hasSession(sessionId)) {
-      await ensureSessionReady(sessionId, { allowPendingInput: true });
+    if (!adapter.hasSession(externalSessionId)) {
+      await ensureSessionReady(externalSessionId, { allowPendingInput: true });
     }
     markTurnUserAnchorIfMissing(
       turnUserAnchorAtBySessionRef,
       turnModelBySessionRef,
       sessionsRef,
-      sessionId,
+      externalSessionId,
     );
     await adapter.replyPermission({
-      sessionId,
+      externalSessionId,
       requestId,
       reply,
       ...(message ? { message } : {}),
     });
 
     updateSession(
-      sessionId,
+      externalSessionId,
       (current) => ({
         ...current,
         pendingPermissions: current.pendingPermissions.filter(
@@ -469,28 +469,28 @@ export const createAgentSessionActions = ({
     clearSubagentPendingPermissionFromSessions({
       sessionsRef,
       updateSession,
-      targetSessionId: sessionId,
+      targetExternalSessionId: externalSessionId,
       requestId,
     });
   };
 
   const answerAgentQuestion = async (
-    sessionId: string,
+    externalSessionId: string,
     requestId: string,
     answers: string[][],
   ): Promise<void> => {
-    if (!adapter.hasSession(sessionId)) {
-      await ensureSessionReady(sessionId, { allowPendingInput: true });
+    if (!adapter.hasSession(externalSessionId)) {
+      await ensureSessionReady(externalSessionId, { allowPendingInput: true });
     }
     markTurnUserAnchorIfMissing(
       turnUserAnchorAtBySessionRef,
       turnModelBySessionRef,
       sessionsRef,
-      sessionId,
+      externalSessionId,
     );
-    await adapter.replyQuestion({ sessionId, requestId, answers });
+    await adapter.replyQuestion({ externalSessionId, requestId, answers });
     updateSession(
-      sessionId,
+      externalSessionId,
       (current) => {
         const { pendingQuestions, messages } = applyQuestionAnswerToSession(
           current,

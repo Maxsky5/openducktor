@@ -63,7 +63,7 @@ type UseKanbanSessionStartFlowResult = {
   onOpenSession: (
     taskId: string,
     role: AgentRole,
-    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
   ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
@@ -92,7 +92,7 @@ const findPreferredSessionByRoleForTask = (
 
   const preferredSession = resolvePreferredActiveSession(
     matchingSessions.map((session) => ({
-      sessionId: session.sessionId,
+      externalSessionId: session.externalSessionId,
       role: session.role,
       scenario: session.scenario,
       status: session.status,
@@ -107,7 +107,9 @@ const findPreferredSessionByRoleForTask = (
   }
 
   return (
-    matchingSessions.find((session) => session.sessionId === preferredSession.sessionId) ?? null
+    matchingSessions.find(
+      (session) => session.externalSessionId === preferredSession.externalSessionId,
+    ) ?? null
   );
 };
 
@@ -200,10 +202,10 @@ export function useKanbanSessionStartFlow({
   );
 
   const openSessionInAgentStudio = useCallback(
-    (intent: KanbanSessionStartIntent, sessionId: string): void => {
+    (intent: KanbanSessionStartIntent, externalSessionId: string): void => {
       const params = new URLSearchParams({
         task: intent.taskId,
-        session: sessionId,
+        session: externalSessionId,
         agent: intent.role,
       });
       if (intent.scenario) {
@@ -229,7 +231,7 @@ export function useKanbanSessionStartFlow({
           selectedTask,
         }),
         async ({ decision, runInBackground }) => {
-          const sessionId = await startKanbanSessionFlow({
+          const externalSessionId = await startKanbanSessionFlow({
             activeWorkspace,
             request: intent,
             decision,
@@ -243,7 +245,7 @@ export function useKanbanSessionStartFlow({
             openSessionInAgentStudio,
             sendAgentMessage,
           });
-          return sessionId;
+          return externalSessionId;
         },
       );
     },
@@ -278,7 +280,7 @@ export function useKanbanSessionStartFlow({
         taskId,
         role: "build",
         scenario: "build_pull_request_generation",
-        initialSourceSessionId: builderSessions[0]?.sessionId ?? null,
+        initialSourceExternalSessionId: builderSessions[0]?.externalSessionId ?? null,
         existingSessionOptions: buildReusableSessionOptions({
           sessions: builderSessions,
           role: "build",
@@ -305,14 +307,14 @@ export function useKanbanSessionStartFlow({
     (
       taskId: string,
       role: AgentRole,
-      options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+      options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
     ): void => {
-      if (options?.sessionId) {
+      if (options?.externalSessionId) {
         const explicitSession = sessionsRef.current.find(
           (session) =>
             session.taskId === taskId &&
             session.role === role &&
-            session.sessionId === options.sessionId,
+            session.externalSessionId === options.externalSessionId,
         );
 
         openSessionInAgentStudio(
@@ -322,7 +324,7 @@ export function useKanbanSessionStartFlow({
             scenario: explicitSession?.scenario ?? options.scenario ?? firstScenario(role),
             postStartAction: "none",
           },
-          options.sessionId,
+          options.externalSessionId,
         );
         return;
       }
@@ -346,7 +348,7 @@ export function useKanbanSessionStartFlow({
             scenario: sessionToOpen.scenario,
             postStartAction: "none",
           },
-          sessionToOpen.sessionId,
+          sessionToOpen.externalSessionId,
         );
         return;
       }
@@ -432,8 +434,8 @@ export function useKanbanSessionStartFlow({
             scenario: request.scenario,
             ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.initialSourceSessionId !== undefined
-              ? { initialSourceSessionId: request.initialSourceSessionId }
+            ...(request.initialSourceExternalSessionId !== undefined
+              ? { initialSourceExternalSessionId: request.initialSourceExternalSessionId }
               : {}),
             postStartAction: request.postStartAction,
             message: request.message,

@@ -6,13 +6,12 @@ import { BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO } from "./constants";
 import { useGitConflictResolution } from "./use-git-conflict-resolution";
 
 const buildSession = (
-  overrides: Partial<AgentSessionState> & { sessionId: string; workingDirectory: string },
+  overrides: Partial<AgentSessionState> & { externalSessionId: string; workingDirectory: string },
 ): AgentSessionState => {
-  const { sessionId, workingDirectory, ...rest } = overrides;
+  const { externalSessionId, workingDirectory, ...rest } = overrides;
   return {
     ...rest,
-    sessionId,
-    externalSessionId: `external-${sessionId}`,
+    externalSessionId: `external-${externalSessionId}`,
     taskId: "task-1",
     repoPath: rest.repoPath ?? "/repo",
     runtimeKind: "opencode",
@@ -50,7 +49,7 @@ const createConflict = (overrides: Record<string, unknown> = {}) => ({
 
 describe("useGitConflictResolution", () => {
   test("filters reusable Builder sessions to the conflicted worktree", async () => {
-    const startConflictResolutionSession = mock(async () => "build-1");
+    const startConflictResolutionSession = mock(async () => "external-build-1");
     const harness = createHookHarness(useGitConflictResolution, {
       activeWorkspace: {
         workspaceId: "workspace-repo",
@@ -65,11 +64,11 @@ describe("useGitConflictResolution", () => {
       await harness.mount();
 
       const wrongWorktreeSession = buildSession({
-        sessionId: "build-other",
+        externalSessionId: "build-other",
         workingDirectory: "/repo/worktrees/other",
       });
       const matchingWorktreeSession = buildSession({
-        sessionId: "build-1",
+        externalSessionId: "build-1",
         workingDirectory: "/repo/worktrees/task-1",
       });
       const openedSessions: string[] = [];
@@ -79,8 +78,8 @@ describe("useGitConflictResolution", () => {
         task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
         builderSessions: [wrongWorktreeSession, matchingWorktreeSession],
         currentViewSessionId: "build-other",
-        onOpenSession: (sessionId) => {
-          openedSessions.push(sessionId);
+        onOpenSession: (externalSessionId) => {
+          openedSessions.push(externalSessionId);
         },
       });
 
@@ -93,14 +92,14 @@ describe("useGitConflictResolution", () => {
           message: expect.any(String),
           existingSessionOptions: [
             expect.objectContaining({
-              value: "build-1",
+              value: "external-build-1",
             }),
           ],
           initialStartMode: "reuse",
-          initialSourceSessionId: "build-1",
+          initialSourceExternalSessionId: "external-build-1",
         }),
       );
-      expect(openedSessions).toEqual(["build-1"]);
+      expect(openedSessions).toEqual(["external-build-1"]);
     } finally {
       await harness.unmount();
     }
@@ -126,7 +125,7 @@ describe("useGitConflictResolution", () => {
         task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
         builderSessions: [
           buildSession({
-            sessionId: "build-1",
+            externalSessionId: "build-1",
             workingDirectory: "/repo/worktrees/task-1",
             selectedModel: null,
           }),
@@ -139,7 +138,7 @@ describe("useGitConflictResolution", () => {
       expect(startConflictResolutionSession).toHaveBeenCalledWith(
         expect.objectContaining({
           initialStartMode: "reuse",
-          initialSourceSessionId: "build-1",
+          initialSourceExternalSessionId: "external-build-1",
           targetWorkingDirectory: "/repo/worktrees/task-1",
           scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
         }),

@@ -21,7 +21,7 @@ type StartKanbanSessionFlowInput = {
   startAgentSession: AgentStateContextValue["startAgentSession"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  openSessionInAgentStudio: (intent: KanbanSessionStartIntent, sessionId: string) => void;
+  openSessionInAgentStudio: (intent: KanbanSessionStartIntent, externalSessionId: string) => void;
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
 };
 
@@ -72,17 +72,17 @@ export const startKanbanSessionFlow = async ({
       duration: 10000,
       description: renderSessionStartedToastAction(
         request,
-        workflow.sessionId,
+        workflow.externalSessionId,
         openSessionInAgentStudio,
       ),
     });
   } else {
-    openSessionInAgentStudio(request, workflow.sessionId);
+    openSessionInAgentStudio(request, workflow.externalSessionId);
   }
 
   if (effectivePostStartAction === "none") {
-    return workflow.sessionId;
+    return workflow.externalSessionId;
   }
 
-  return workflow.sessionId;
+  return workflow.externalSessionId;
 };

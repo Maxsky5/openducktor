@@ -54,9 +54,9 @@ describe("agent-chat-thread windowing helpers", () => {
     const rows = buildAgentChatWindowRows(session, { showThinkingMessages: true });
 
     expect(rows.map((row) => row.key)).toEqual([
-      "session-1:assistant-1:duration",
-      "session-1:assistant-1",
-      "session-1:user-1",
+      "ext-1:assistant-1:duration",
+      "ext-1:assistant-1",
+      "ext-1:user-1",
     ]);
     expect(rows.map((row) => row.kind)).toEqual(["turn_duration", "message", "message"]);
   });
@@ -78,17 +78,17 @@ describe("agent-chat-thread windowing helpers", () => {
 
     expect(turns).toEqual([
       {
-        key: "session-1:assistant-0:duration",
+        key: "ext-1:assistant-0:duration",
         start: 0,
         end: 1,
       },
       {
-        key: "session-1:user-1",
+        key: "ext-1:user-1",
         start: 2,
         end: 4,
       },
       {
-        key: "session-1:user-2",
+        key: "ext-1:user-2",
         start: 5,
         end: 7,
       },
@@ -97,7 +97,7 @@ describe("agent-chat-thread windowing helpers", () => {
 
   test("resolveAgentChatWindowRowsState reuses cached rows when switching back to a previously built session", () => {
     const firstSession = buildSession({
-      sessionId: "session-a",
+      externalSessionId: "session-a",
       messages: [
         buildMessage("assistant", "Prelude", { id: "assistant-a-0" }),
         buildMessage("user", "Question A", { id: "user-a-1" }),
@@ -106,7 +106,7 @@ describe("agent-chat-thread windowing helpers", () => {
       pendingQuestions: [],
     });
     const secondSession = buildSession({
-      sessionId: "session-b",
+      externalSessionId: "session-b",
       messages: [
         buildMessage("assistant", "Prelude", { id: "assistant-b-0" }),
         buildMessage("user", "Question B", { id: "user-b-1" }),
@@ -141,7 +141,7 @@ describe("agent-chat-thread windowing helpers", () => {
   test("resolveAgentChatWindowRowsState invalidates cached rows when a raw message array is mutated in place", () => {
     const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
     const session = buildSession({
-      sessionId: "session-mutable-array",
+      externalSessionId: "session-mutable-array",
       messages,
     });
     const cache = new Map();
@@ -170,13 +170,13 @@ describe("agent-chat-thread windowing helpers", () => {
   test("buildAgentChatWindowRows keeps row keys distinct across sessions with repeated message ids", () => {
     const firstSession = buildSession({
       runtimeKind: "opencode",
-      sessionId: "session-a",
+      externalSessionId: "session-a",
       messages: [buildMessage("assistant", "A", { id: "message-1" })],
       pendingQuestions: [],
     });
     const secondSession = buildSession({
       runtimeKind: "opencode",
-      sessionId: "session-b",
+      externalSessionId: "session-b",
       messages: [buildMessage("assistant", "B", { id: "message-1" })],
       pendingQuestions: [],
     });
@@ -286,15 +286,15 @@ describe("agent-chat-thread windowing helpers", () => {
     const hiddenRows = buildAgentChatWindowRows(session, { showThinkingMessages: false });
 
     expect(visibleRows.map((row) => row.key)).toEqual([
-      "session-1:user-1",
-      "session-1:thinking-1",
-      "session-1:assistant-1:duration",
-      "session-1:assistant-1",
+      "ext-1:user-1",
+      "ext-1:thinking-1",
+      "ext-1:assistant-1:duration",
+      "ext-1:assistant-1",
     ]);
     expect(hiddenRows.map((row) => row.key)).toEqual([
-      "session-1:user-1",
-      "session-1:assistant-1:duration",
-      "session-1:assistant-1",
+      "ext-1:user-1",
+      "ext-1:assistant-1:duration",
+      "ext-1:assistant-1",
     ]);
     expect(
       hiddenRows.some((row) => row.kind === "message" && row.message.role === "thinking"),
@@ -349,7 +349,7 @@ describe("agent-chat-thread windowing helpers", () => {
     const rows = buildAgentChatWindowRows(session, { showThinkingMessages: true });
 
     expect(rows.map((row) => row.kind)).toEqual(["message"]);
-    expect(rows[0]?.key).toBe("session-1:assistant-live");
+    expect(rows[0]?.key).toBe("ext-1:assistant-live");
   });
 
   test("resolveAgentChatWindowRowsState clears cached streaming state when only session status changes", () => {
@@ -365,7 +365,7 @@ describe("agent-chat-thread windowing helpers", () => {
       }),
     ];
     const runningSession = buildSession({
-      sessionId: "session-status",
+      externalSessionId: "session-status",
       role: "build",
       status: "running",
       messages: sharedMessages,
@@ -431,7 +431,7 @@ describe("agent-chat-thread windowing helpers", () => {
       throw new Error("Expected prefix messages to exist");
     }
     const initialSession = buildSession({
-      sessionId: "session-incremental",
+      externalSessionId: "session-incremental",
       role: "build",
       status: "running",
       messages: baseMessages,
@@ -483,7 +483,7 @@ describe("agent-chat-thread windowing helpers", () => {
 
   test("resolveAgentChatWindowRowsState rebases cached suffix metadata arrays with prefix state", () => {
     const initialSession = buildSession({
-      sessionId: "session-rebased-metadata",
+      externalSessionId: "session-rebased-metadata",
       role: "build",
       status: "running",
       messages: [

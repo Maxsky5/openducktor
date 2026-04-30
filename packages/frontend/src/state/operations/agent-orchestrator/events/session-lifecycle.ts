@@ -33,10 +33,10 @@ import {
 
 const clearTurnTracking = (context: Pick<SessionLifecycleEventContext, "turn" | "store">): void => {
   if (context.turn.turnModelBySessionRef) {
-    delete context.turn.turnModelBySessionRef.current[context.store.sessionId];
+    delete context.turn.turnModelBySessionRef.current[context.store.externalSessionId];
   }
   if (context.turn.contextUsageMessageIdBySessionRef) {
-    delete context.turn.contextUsageMessageIdBySessionRef.current[context.store.sessionId];
+    delete context.turn.contextUsageMessageIdBySessionRef.current[context.store.externalSessionId];
   }
 };
 
@@ -45,7 +45,8 @@ const nextContextUsageWasEstablishedForMessage = (
   messageId: string,
 ): boolean => {
   return (
-    context.turn.contextUsageMessageIdBySessionRef?.current[context.store.sessionId] === messageId
+    context.turn.contextUsageMessageIdBySessionRef?.current[context.store.externalSessionId] ===
+    messageId
   );
 };
 
@@ -59,8 +60,8 @@ const toPendingPermission = (event: PermissionRequiredEvent) => ({
   ...(event.metadata ? { metadata: event.metadata } : {}),
 });
 
-const normalizeSessionId = (sessionId: string | undefined): string | null => {
-  const trimmed = sessionId?.trim();
+const normalizeSessionId = (externalSessionId: string | undefined): string | null => {
+  const trimmed = externalSessionId?.trim();
   return trimmed ? trimmed : null;
 };
 
@@ -70,10 +71,10 @@ const resolveLocalSessionIdByExternalId = (
 ): string | null => {
   for (const session of Object.values(sessions)) {
     if (
-      session.sessionId === externalSessionId ||
+      session.externalSessionId === externalSessionId ||
       session.externalSessionId === externalSessionId
     ) {
-      return session.sessionId;
+      return session.externalSessionId;
     }
   }
 
@@ -84,21 +85,21 @@ const resolvePermissionPolicyRole = (
   context: Pick<SessionLifecycleEventContext, "store">,
   event: PermissionRequiredEvent,
 ): AgentRole | undefined => {
-  if (event.parentSessionId) {
-    const parentRole = context.store.sessionsRef.current[event.parentSessionId]?.role;
+  if (event.parentExternalSessionId) {
+    const parentRole = context.store.sessionsRef.current[event.parentExternalSessionId]?.role;
     if (parentRole) {
       return parentRole;
     }
   }
 
-  return context.store.sessionsRef.current[context.store.sessionId]?.role ?? undefined;
+  return context.store.sessionsRef.current[context.store.externalSessionId]?.role ?? undefined;
 };
 
 const patchParentSubagentSessionLink = (
   context: SessionLifecycleEventContext,
   event: PermissionRequiredEvent,
 ): void => {
-  if (!event.parentSessionId || !event.subagentCorrelationKey) {
+  if (!event.parentExternalSessionId || !event.subagentCorrelationKey) {
     return;
   }
   const childExternalSessionId = event.childExternalSessionId?.trim();
@@ -107,7 +108,7 @@ const patchParentSubagentSessionLink = (
   }
 
   context.store.updateSession(
-    event.parentSessionId,
+    event.parentExternalSessionId,
     (current) => {
       const subagentMessage = findLastSessionMessageByRole(
         current,
@@ -119,13 +120,13 @@ const patchParentSubagentSessionLink = (
       if (subagentMessage?.meta?.kind !== "subagent") {
         return current;
       }
-      if (subagentMessage.meta.sessionId === childExternalSessionId) {
+      if (subagentMessage.meta.externalSessionId === childExternalSessionId) {
         return current;
       }
 
       const nextMeta = {
         ...subagentMessage.meta,
-        sessionId: childExternalSessionId,
+        externalSessionId: childExternalSessionId,
       };
       return {
         ...current,
@@ -147,8 +148,8 @@ const isLinkedChildPermissionObservedByParent = (
   const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
   return Boolean(
     childExternalSessionId &&
-      event.parentSessionId === context.store.sessionId &&
-      childExternalSessionId !== context.store.sessionId,
+      event.parentExternalSessionId === context.store.externalSessionId &&
+      childExternalSessionId !== context.store.externalSessionId,
   );
 };
 
@@ -156,7 +157,7 @@ const recordParentSubagentPendingPermission = (
   context: SessionLifecycleEventContext,
   event: PermissionRequiredEvent,
 ): void => {
-  if (!event.parentSessionId) {
+  if (!event.parentExternalSessionId) {
     return;
   }
 
@@ -167,9 +168,9 @@ const recordParentSubagentPendingPermission = (
 
   const pendingPermission = toPendingPermission(event);
   context.store.updateSession(
-    event.parentSessionId,
+    event.parentExternalSessionId,
     (current) => {
-      const currentMap = current.subagentPendingPermissionsBySessionId ?? {};
+      const currentMap = current.subagentPendingPermissionsByExternalSessionId ?? {};
       const currentEntries = currentMap[childExternalSessionId] ?? [];
       const nextEntries = [
         ...currentEntries.filter((entry) => entry.requestId !== event.requestId),
@@ -177,7 +178,7 @@ const recordParentSubagentPendingPermission = (
       ];
       return {
         ...current,
-        subagentPendingPermissionsBySessionId: {
+        subagentPendingPermissionsByExternalSessionId: {
           ...currentMap,
           [childExternalSessionId]: nextEntries,
         },
@@ -232,12 +233,13 @@ const autoRejectMutatingPermission = (
   context: SessionLifecycleEventContext,
   event: PermissionRequiredEvent,
   role: AgentRole,
-  replySessionId = context.store.sessionId,
+  replySessionId = context.store.externalSessionId,
   overlaySessionId = replySessionId,
 ): void => {
   const pendingPermission = toPendingPermission(event);
   const promptOverrides =
-    context.store.sessionsRef.current[event.parentSessionId ?? replySessionId]?.promptOverrides;
+    context.store.sessionsRef.current[event.parentExternalSessionId ?? replySessionId]
+      ?.promptOverrides;
   const markManualResponseRequired = (error: unknown): void => {
     context.store.updateSession(
       replySessionId,
@@ -272,7 +274,7 @@ const autoRejectMutatingPermission = (
 
   void context.permissions.adapter
     .replyPermission({
-      sessionId: replySessionId,
+      externalSessionId: replySessionId,
       requestId: event.requestId,
       reply: "reject",
       message: rejectionMessage,
@@ -297,7 +299,7 @@ const autoRejectMutatingPermission = (
       clearSubagentPendingPermissionFromSessions({
         sessionsRef: context.store.sessionsRef,
         updateSession: context.store.updateSession,
-        targetSessionId: overlaySessionId,
+        targetExternalSessionId: overlaySessionId,
         requestId: event.requestId,
       });
     })
@@ -353,7 +355,7 @@ export const handleSessionStarted = (
   context: Pick<SessionLifecycleEventContext, "store">,
   event: Extract<SessionEvent, { type: "session_started" }>,
 ): void => {
-  context.store.updateSession(context.store.sessionId, (current) => ({
+  context.store.updateSession(context.store.externalSessionId, (current) => ({
     ...current,
     status: "running",
     messages: appendSessionMessage(current, {
@@ -371,10 +373,10 @@ export const handleAssistantMessage = (
 ): void => {
   flushDraftBuffers(context);
   clearDraftBuffers(context);
-  context.store.updateSession(context.store.sessionId, (current) => {
+  context.store.updateSession(context.store.externalSessionId, (current) => {
     const settledMessages = settleDanglingTodoToolMessages(current, event.timestamp);
     const durationMs = context.turn.resolveTurnDurationMs(
-      context.store.sessionId,
+      context.store.externalSessionId,
       event.timestamp,
       settledMessages,
     );
@@ -396,14 +398,14 @@ export const handleAssistantMessage = (
       contextUsage: nextSnapshot.contextUsage,
       messages: upsertSessionMessage(
         {
-          sessionId: current.sessionId,
+          externalSessionId: current.externalSessionId,
           messages: settledMessages,
         },
         nextSnapshot.assistantMessage,
       ),
     };
   });
-  context.turn.clearTurnDuration(context.store.sessionId, event.timestamp);
+  context.turn.clearTurnDuration(context.store.externalSessionId, event.timestamp);
   clearTurnTracking(context);
 };
 
@@ -411,9 +413,9 @@ export const handleUserMessage = (
   context: Pick<SessionLifecycleEventContext, "store" | "turn">,
   event: Extract<SessionEvent, { type: "user_message" }>,
 ): void => {
-  context.turn.recordTurnUserMessageTimestamp?.(context.store.sessionId, event.timestamp);
+  context.turn.recordTurnUserMessageTimestamp?.(context.store.externalSessionId, event.timestamp);
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => {
       return {
         ...current,
@@ -437,17 +439,16 @@ export const handleSessionStatus = (
   const status = event.status;
 
   if (status.type === "busy") {
-    context.turn.recordTurnActivityTimestamp?.(context.store.sessionId, event.timestamp);
+    context.turn.recordTurnActivityTimestamp?.(context.store.externalSessionId, event.timestamp);
     if (
       context.turn.recordTurnActivityTimestamp === undefined &&
-      context.turn.turnStartedAtBySessionRef.current[context.store.sessionId] === undefined
+      context.turn.turnStartedAtBySessionRef.current[context.store.externalSessionId] === undefined
     ) {
-      context.turn.turnStartedAtBySessionRef.current[context.store.sessionId] = eventTimestampMs(
-        event.timestamp,
-      );
+      context.turn.turnStartedAtBySessionRef.current[context.store.externalSessionId] =
+        eventTimestampMs(event.timestamp);
     }
     context.store.updateSession(
-      context.store.sessionId,
+      context.store.externalSessionId,
       (current) =>
         current.status === "error"
           ? current
@@ -463,7 +464,7 @@ export const handleSessionStatus = (
   if (status.type === "retry") {
     const retryMessage = normalizeRetryStatusMessage(status.message);
     context.store.updateSession(
-      context.store.sessionId,
+      context.store.externalSessionId,
       (current) =>
         current.status === "error"
           ? current
@@ -483,7 +484,7 @@ export const handleSessionStatus = (
   }
 
   if (settleDraftToIdle(context, event.timestamp)) {
-    context.turn.clearTurnDuration(context.store.sessionId, event.timestamp);
+    context.turn.clearTurnDuration(context.store.externalSessionId, event.timestamp);
     clearTurnTracking(context);
   }
 };
@@ -509,7 +510,7 @@ export const handlePermissionRequired = (
           context,
           event,
           role,
-          context.store.sessionId,
+          context.store.externalSessionId,
           childExternalSessionId,
         );
       }
@@ -525,7 +526,7 @@ export const handlePermissionRequired = (
   }
 
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => ({
       ...current,
       pendingPermissions: [
@@ -545,7 +546,7 @@ export const handleQuestionRequired = (
 ): void => {
   flushDraftBuffers(context);
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => ({
       ...current,
       pendingQuestions: [
@@ -565,7 +566,7 @@ export const handleSessionTodosUpdated = (
   event: Extract<SessionEvent, { type: "session_todos_updated" }>,
 ): void => {
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => ({
       ...current,
       todos: mergeTodoListPreservingOrder(current.todos, event.todos),
@@ -632,7 +633,7 @@ const buildSessionErrorNoticeMessage = (timestamp: string, message: string) =>
 const settleTerminalMessages = (
   session: Pick<
     SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string],
-    "sessionId" | "messages"
+    "externalSessionId" | "messages"
   >,
   timestamp: string,
   options?: {
@@ -651,7 +652,7 @@ const settleTerminalMessages = (
   }
 
   return appendSessionMessage(
-    { sessionId: session.sessionId, messages: settledMessages },
+    { externalSessionId: session.externalSessionId, messages: settledMessages },
     buildUserStoppedNoticeMessage(timestamp),
   );
 };
@@ -664,13 +665,13 @@ export const handleSessionError = (
   clearDraftBuffers(context);
   const sessionErrorMessage = normalizeSessionErrorMessage(event.message);
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => {
       const finalized = finalizeDraftAssistantMessage(
         current,
         event.timestamp,
         context.turn.resolveTurnDurationMs(
-          context.store.sessionId,
+          context.store.externalSessionId,
           event.timestamp,
           current.messages,
         ),
@@ -691,7 +692,7 @@ export const handleSessionError = (
             })
           : appendSessionMessage(
               {
-                sessionId: finalized.sessionId,
+                externalSessionId: finalized.externalSessionId,
                 messages: settleTerminalMessages(finalized, event.timestamp, {
                   outcome: "error",
                   errorMessage: sessionErrorMessage,
@@ -703,7 +704,7 @@ export const handleSessionError = (
     },
     { persist: true },
   );
-  context.turn.clearTurnDuration(context.store.sessionId, event.timestamp);
+  context.turn.clearTurnDuration(context.store.externalSessionId, event.timestamp);
   clearTurnTracking(context);
 };
 
@@ -714,7 +715,7 @@ export const handleSessionIdle = (
   flushDraftBuffers(context);
   clearDraftBuffers(context);
   if (settleDraftToIdle(context, event.timestamp)) {
-    context.turn.clearTurnDuration(context.store.sessionId, event.timestamp);
+    context.turn.clearTurnDuration(context.store.externalSessionId, event.timestamp);
     clearTurnTracking(context);
   }
 };
@@ -726,13 +727,13 @@ export const handleSessionFinished = (
   flushDraftBuffers(context);
   clearDraftBuffers(context);
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => {
       const finalized = finalizeDraftAssistantMessage(
         current,
         event.timestamp,
         context.turn.resolveTurnDurationMs(
-          context.store.sessionId,
+          context.store.externalSessionId,
           event.timestamp,
           current.messages,
         ),
@@ -757,6 +758,6 @@ export const handleSessionFinished = (
     },
     { persist: true },
   );
-  context.turn.clearTurnDuration(context.store.sessionId, event.timestamp);
+  context.turn.clearTurnDuration(context.store.externalSessionId, event.timestamp);
   clearTurnTracking(context);
 };

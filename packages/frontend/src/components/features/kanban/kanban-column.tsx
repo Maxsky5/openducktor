@@ -34,7 +34,7 @@ type KanbanColumnProps = {
   onOpenSession: (
     taskId: string,
     role: AgentRole,
-    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
   ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart?: (taskId: string) => void;
@@ -119,7 +119,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
     taskSessions
       ?.map(
         (session) =>
-          `${session.sessionId}:${session.role}:${session.scenario}:${session.status}:${session.presentationState}`,
+          `${session.externalSessionId}:${session.role}:${session.scenario}:${session.status}:${session.presentationState}`,
       )
       .join("|") ?? "";
   const measurementTrigger = [

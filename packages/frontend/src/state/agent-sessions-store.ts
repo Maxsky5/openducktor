@@ -4,7 +4,6 @@ import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestr
 export type AgentSessionsById = Record<string, AgentSessionState>;
 export type AgentSessionSummary = Pick<
   AgentSessionState,
-  | "sessionId"
   | "externalSessionId"
   | "taskId"
   | "role"
@@ -34,7 +33,7 @@ export const isWorkflowAgentSessionSummary = (
 
 export type AgentActivitySessionSummary = Pick<
   WorkflowAgentSessionState,
-  "sessionId" | "taskId" | "role" | "scenario" | "status" | "startedAt"
+  "externalSessionId" | "taskId" | "role" | "scenario" | "status" | "startedAt"
 > & {
   repoPath: string;
   hasPendingPermissions: boolean;
@@ -49,7 +48,7 @@ export type AgentSessionsStore = {
   getSessionSummariesSnapshot: () => AgentSessionSummary[];
   getActivitySessionsSnapshot: () => AgentActivitySessionSummary[];
   getSessionsByIdSnapshot: () => AgentSessionsById;
-  getSessionSnapshot: (sessionId: string | null) => AgentSessionState | null;
+  getSessionSnapshot: (externalSessionId: string | null) => AgentSessionState | null;
   setSessionsById: (nextSessionsById: AgentSessionsById) => void;
 };
 
@@ -57,7 +56,6 @@ const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState):
   left.startedAt > right.startedAt ? -1 : left.startedAt < right.startedAt ? 1 : 0;
 
 export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionSummary => ({
-  sessionId: session.sessionId,
   externalSessionId: session.externalSessionId,
   taskId: session.taskId,
   role: session.role,
@@ -75,11 +73,11 @@ export const toAgentActivitySessionSummary = (
   session: AgentSessionState,
 ): AgentActivitySessionSummary => {
   if (!shouldIncludeAgentSessionInActivity(session)) {
-    throw new Error(`Session '${session.sessionId}' is not a workflow session`);
+    throw new Error(`Session '${session.externalSessionId}' is not a workflow session`);
   }
 
   return {
-    sessionId: session.sessionId,
+    externalSessionId: session.externalSessionId,
     taskId: session.taskId,
     repoPath: session.repoPath,
     role: session.role,
@@ -96,8 +94,7 @@ const areSummariesEquivalent = (
   right: AgentSessionSummary,
 ): boolean => {
   return (
-    left?.sessionId === right.sessionId &&
-    left.externalSessionId === right.externalSessionId &&
+    left?.externalSessionId === right.externalSessionId &&
     left.taskId === right.taskId &&
     left.role === right.role &&
     left.scenario === right.scenario &&
@@ -116,7 +113,7 @@ const areActivitySummariesEquivalent = (
   right: AgentActivitySessionSummary,
 ): boolean => {
   return (
-    left?.sessionId === right.sessionId &&
+    left?.externalSessionId === right.externalSessionId &&
     left.taskId === right.taskId &&
     left.repoPath === right.repoPath &&
     left.role === right.role &&
@@ -191,17 +188,18 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
     getSessionSummariesSnapshot: () => sessionSummaries,
     getActivitySessionsSnapshot: () => activitySessionSummaries,
     getSessionsByIdSnapshot: () => sessionsById,
-    getSessionSnapshot: (sessionId) => (sessionId ? (sessionsById[sessionId] ?? null) : null),
+    getSessionSnapshot: (externalSessionId) =>
+      externalSessionId ? (sessionsById[externalSessionId] ?? null) : null,
     setSessionsById: (nextSessionsById) => {
       if (nextSessionsById === sessionsById) {
         return;
       }
 
       const previousSummaryById = new Map(
-        sessionSummaries.map((summary) => [summary.sessionId, summary]),
+        sessionSummaries.map((summary) => [summary.externalSessionId, summary]),
       );
       const previousActivitySummaryById = new Map(
-        activitySessionSummaries.map((summary) => [summary.sessionId, summary]),
+        activitySessionSummaries.map((summary) => [summary.externalSessionId, summary]),
       );
       const nextSessions = Object.values(nextSessionsById).sort(sortByStartedAtDesc);
       const nextSessionSummaries = nextSessions.flatMap((session) => {
@@ -209,7 +207,7 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
           return [];
         }
         const nextSummary = toAgentSessionSummary(session);
-        const previousSummary = previousSummaryById.get(session.sessionId);
+        const previousSummary = previousSummaryById.get(session.externalSessionId);
         return areSummariesEquivalent(previousSummary, nextSummary) && previousSummary
           ? [previousSummary]
           : [nextSummary];
@@ -219,7 +217,7 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
           return [];
         }
         const nextSummary = toAgentActivitySessionSummary(session);
-        const previousSummary = previousActivitySummaryById.get(session.sessionId);
+        const previousSummary = previousActivitySummaryById.get(session.externalSessionId);
         return areActivitySummariesEquivalent(previousSummary, nextSummary) && previousSummary
           ? [previousSummary]
           : [nextSummary];

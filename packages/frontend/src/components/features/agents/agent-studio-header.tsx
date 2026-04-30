@@ -35,7 +35,7 @@ type AgentWorkflowStep = {
   label: string;
   icon: AgentRoleOption["icon"];
   state: AgentWorkflowStepState;
-  sessionId: string | null;
+  externalSessionId: string | null;
 };
 
 type WorkflowStepAttentionVariant = "none" | "session_waiting_input" | "blocked_task";
@@ -64,7 +64,7 @@ export type AgentStudioHeaderModel = {
   sessionStatus: "starting" | "running" | "idle" | "error" | "stopped" | null;
   selectedRole: AgentRole | null;
   workflowSteps: AgentWorkflowStep[];
-  onWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
+  onWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
   sessionSelector: AgentStudioSessionSelectorModel;
   sessionCreateOptions: AgentSessionCreateOption[];
   onCreateSession: (option: AgentSessionCreateOption) => void;
@@ -180,7 +180,7 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
     return "Latest session failed";
   }
   if (entry.state.tone === "failed") {
-    if (entry.sessionId) {
+    if (entry.externalSessionId) {
       return "Open latest failed session for this role";
     }
     return "Step failed before a session could start";
@@ -188,7 +188,7 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   if (entry.state.completion === "rejected") {
     return "Latest review rejected this task";
   }
-  if (entry.sessionId) {
+  if (entry.externalSessionId) {
     return "Open latest relevant session for this role";
   }
   if (entry.state.tone === "available") {
@@ -457,7 +457,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   disabled={!agentStudioReady}
                   title={workflowStepHint(entry)}
                   onClick={() => {
-                    onWorkflowStepSelect(entry.role, entry.sessionId);
+                    onWorkflowStepSelect(entry.role, entry.externalSessionId);
                   }}
                 >
                   <Icon className="size-4" />

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
-import { createAgentSessionFixture, createTaskCardFixture } from "./shared-test-fixtures";
+import {
+  createAgentSessionFixture,
+  createTaskCardFixture,
+  TEST_EXTERNAL_SESSION_IDS,
+} from "./shared-test-fixtures";
 
 describe("shared test fixtures", () => {
   test("createTaskCardFixture returns isolated nested objects", () => {
@@ -42,5 +46,9 @@ describe("shared test fixtures", () => {
     const session = createAgentSessionFixture({}, { repoPath: "/repo-b" });
 
     expect(session.repoPath).toBe("/repo-b");
+  });
+
+  test("createAgentSessionFixture uses the canonical external id by default", () => {
+    expect(createAgentSessionFixture().externalSessionId).toBe(TEST_EXTERNAL_SESSION_IDS.default);
   });
 });

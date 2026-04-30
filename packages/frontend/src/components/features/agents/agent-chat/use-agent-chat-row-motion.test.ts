@@ -10,7 +10,7 @@ import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 type HarnessProps = {
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   rowKeys: string[];
   windowStart: number;
 };
@@ -24,9 +24,9 @@ describe("useAgentChatRowMotion", () => {
   const originalWindow = (globalThis as { window?: unknown }).window;
   const originalAnimate = HTMLElement.prototype.animate;
 
-  const Harness = ({ activeSessionId, rowKeys, windowStart }: HarnessProps) => {
+  const Harness = ({ activeExternalSessionId, rowKeys, windowStart }: HarnessProps) => {
     const { registerRowElement } = useAgentChatRowMotion({
-      activeSessionId,
+      activeExternalSessionId,
       rowKeys,
       windowStart,
     });
@@ -63,7 +63,7 @@ describe("useAgentChatRowMotion", () => {
   test("does not animate newly appended rows", async () => {
     const rendered = render(
       createElement(Harness, {
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         rowKeys: ["row-a"],
         windowStart: 20,
       }),
@@ -73,7 +73,7 @@ describe("useAgentChatRowMotion", () => {
     await act(async () => {
       rendered.rerender(
         createElement(Harness, {
-          activeSessionId: "session-1",
+          activeExternalSessionId: "session-1",
           rowKeys: ["row-a", "row-b"],
           windowStart: 20,
         }),
@@ -92,7 +92,7 @@ describe("useAgentChatRowMotion", () => {
   test("does not animate newly seen rows when history is prepended", async () => {
     const rendered = render(
       createElement(Harness, {
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         rowKeys: ["row-b", "row-c"],
         windowStart: 20,
       }),
@@ -102,7 +102,7 @@ describe("useAgentChatRowMotion", () => {
     await act(async () => {
       rendered.rerender(
         createElement(Harness, {
-          activeSessionId: "session-1",
+          activeExternalSessionId: "session-1",
           rowKeys: ["row-a", "row-b", "row-c"],
           windowStart: 0,
         }),
@@ -121,7 +121,7 @@ describe("useAgentChatRowMotion", () => {
   test("does not animate the first populated render after a deferred empty session frame", async () => {
     const rendered = render(
       createElement(Harness, {
-        activeSessionId: "session-2",
+        activeExternalSessionId: "session-2",
         rowKeys: [],
         windowStart: 0,
       }),
@@ -131,7 +131,7 @@ describe("useAgentChatRowMotion", () => {
     await act(async () => {
       rendered.rerender(
         createElement(Harness, {
-          activeSessionId: "session-2",
+          activeExternalSessionId: "session-2",
           rowKeys: ["row-a", "row-b"],
           windowStart: 20,
         }),

@@ -8,7 +8,7 @@ describe("session-event-batching", () => {
     const prepared = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_delta",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         channel: "text",
         messageId: "assistant-1",
         delta: "Hello",
@@ -16,7 +16,7 @@ describe("session-event-batching", () => {
       },
       {
         type: "assistant_delta",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         channel: "text",
         messageId: "assistant-1",
         delta: " world",
@@ -27,7 +27,7 @@ describe("session-event-batching", () => {
     expect(prepared.readyEvents).toEqual([
       {
         type: "assistant_delta",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         channel: "text",
         messageId: "assistant-1",
         delta: "Hello world",
@@ -41,7 +41,7 @@ describe("session-event-batching", () => {
     const prepared = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_delta",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         channel: "text",
         messageId: "assistant-1",
         delta: "Draft",
@@ -49,7 +49,7 @@ describe("session-event-batching", () => {
       },
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:02.000Z",
         part: {
           kind: "text",
@@ -61,7 +61,7 @@ describe("session-event-batching", () => {
       },
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:02.500Z",
         part: {
           kind: "reasoning",
@@ -73,7 +73,7 @@ describe("session-event-batching", () => {
       },
       {
         type: "assistant_message",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         messageId: "assistant-1",
         timestamp: "2026-02-22T08:00:03.000Z",
         message: "Final answer",
@@ -83,7 +83,7 @@ describe("session-event-batching", () => {
     expect(prepared.readyEvents).toEqual([
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:02.500Z",
         part: {
           kind: "reasoning",
@@ -95,7 +95,7 @@ describe("session-event-batching", () => {
       },
       {
         type: "assistant_message",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         messageId: "assistant-1",
         timestamp: "2026-02-22T08:00:03.000Z",
         message: "Final answer",
@@ -110,7 +110,7 @@ describe("session-event-batching", () => {
     const first = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.000Z",
         part: {
           kind: "tool",
@@ -128,7 +128,7 @@ describe("session-event-batching", () => {
     const second = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.050Z",
         part: {
           kind: "tool",
@@ -156,14 +156,14 @@ describe("session-event-batching", () => {
     const firstPrepared = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_message",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         messageId: "assistant-1",
         timestamp: "2026-02-22T08:00:01.000Z",
         message: "First",
       },
       {
         type: "tool_call",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.000Z",
         call: {
           tool: "odt_set_plan",
@@ -178,14 +178,14 @@ describe("session-event-batching", () => {
     const prepared = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_message",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         messageId: "assistant-1",
         timestamp: "2026-02-22T08:00:01.150Z",
         message: "Second",
       },
       {
         type: "tool_call",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.150Z",
         call: {
           tool: "odt_set_plan",
@@ -203,7 +203,7 @@ describe("session-event-batching", () => {
     expect(
       isImmediateSessionEvent({
         type: "user_message",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         messageId: "user-1",
         timestamp: "2026-02-22T08:00:01.000Z",
         message: "Continue",
@@ -215,7 +215,7 @@ describe("session-event-batching", () => {
     expect(
       isImmediateSessionEvent({
         type: "assistant_delta",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         channel: "text",
         messageId: "assistant-1",
         delta: "Hello",

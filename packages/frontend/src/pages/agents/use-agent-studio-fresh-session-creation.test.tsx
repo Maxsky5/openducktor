@@ -235,8 +235,10 @@ describe("useAgentStudioFreshSessionCreation", () => {
 
   test("reuses an existing session without starting a fresh one", async () => {
     const startAgentSession = mock(
-      async (input: { startMode: string; sourceSessionId?: string }) =>
-        input.startMode === "reuse" ? (input.sourceSessionId ?? "session-existing") : "session-new",
+      async (input: { startMode: string; sourceExternalSessionId?: string }) =>
+        input.startMode === "reuse"
+          ? (input.sourceExternalSessionId ?? "session-existing")
+          : "session-new",
     );
     const sendAgentMessage = mock(async () => {});
     const onContextSwitchIntent = mock(() => {});
@@ -244,7 +246,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
       createBaseArgs({
         role: "build",
         activeSession: createAgentSessionFixture({
-          sessionId: "active-build",
+          externalSessionId: "active-build",
           role: "build",
           scenario: "build_implementation_start",
           taskId: "task-1",
@@ -255,7 +257,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
         executeRequestedSessionStart: async (_request, executeWithDecision) =>
           executeWithDecision({
             startMode: "reuse",
-            sourceSessionId: "session-existing",
+            sourceExternalSessionId: "session-existing",
           }),
       }),
     );
@@ -279,7 +281,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
         role: "build",
         scenario: "build_implementation_start",
         startMode: "reuse",
-        sourceSessionId: "session-existing",
+        sourceExternalSessionId: "session-existing",
       }),
     );
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
@@ -299,7 +301,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
       createBaseArgs({
         role: "build",
         activeSession: createAgentSessionFixture({
-          sessionId: "active-spec",
+          externalSessionId: "active-spec",
           role: "spec",
           scenario: "spec_initial",
           taskId: "task-1",
@@ -309,7 +311,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
         executeRequestedSessionStart: async (_request, executeWithDecision) =>
           executeWithDecision({
             startMode: "reuse",
-            sourceSessionId: "session-existing",
+            sourceExternalSessionId: "session-existing",
           }),
       }),
     );

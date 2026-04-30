@@ -3,16 +3,16 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 const SAME_SESSION_LOADING_OVERLAY_DELAY_MS = 120;
 
 type UseAgentChatLoadingOverlayArgs = {
-  sessionId: string | null;
+  externalSessionId: string | null;
   isSessionViewLoading: boolean;
 };
 
 export function useAgentChatLoadingOverlay({
-  sessionId,
+  externalSessionId,
   isSessionViewLoading,
 }: UseAgentChatLoadingOverlayArgs): boolean {
   const [settledSessionId, setSettledSessionId] = useState<string | null>(() =>
-    !isSessionViewLoading ? sessionId : null,
+    !isSessionViewLoading ? externalSessionId : null,
   );
   const [isSameSessionLoadingVisible, setIsSameSessionLoadingVisible] = useState(false);
   const loadingDelayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -23,7 +23,7 @@ export function useAgentChatLoadingOverlay({
       loadingDelayTimeoutRef.current = null;
     }
 
-    const isSameSessionLoading = isSessionViewLoading && sessionId === settledSessionId;
+    const isSameSessionLoading = isSessionViewLoading && externalSessionId === settledSessionId;
     if (!isSameSessionLoading) {
       setIsSameSessionLoadingVisible(false);
       return;
@@ -40,19 +40,19 @@ export function useAgentChatLoadingOverlay({
         loadingDelayTimeoutRef.current = null;
       }
     };
-  }, [isSessionViewLoading, sessionId, settledSessionId]);
+  }, [isSessionViewLoading, externalSessionId, settledSessionId]);
 
   useLayoutEffect(() => {
     if (isSessionViewLoading) {
       return;
     }
-    if (settledSessionId === sessionId) {
+    if (settledSessionId === externalSessionId) {
       return;
     }
-    setSettledSessionId(sessionId);
-  }, [sessionId, isSessionViewLoading, settledSessionId]);
+    setSettledSessionId(externalSessionId);
+  }, [externalSessionId, isSessionViewLoading, settledSessionId]);
 
-  const isCrossSessionLoading = isSessionViewLoading && sessionId !== settledSessionId;
+  const isCrossSessionLoading = isSessionViewLoading && externalSessionId !== settledSessionId;
 
   return isCrossSessionLoading || isSameSessionLoadingVisible;
 }

@@ -9,7 +9,7 @@ type MessageRole = AgentChatMessage["role"];
 type MessageRoleIndexCache = Partial<Record<MessageRole, number[]>>;
 type MessageLastIndexCache = Partial<Record<MessageRole, number>>;
 
-export type SessionMessageOwner = Pick<AgentSessionState, "sessionId" | "messages">;
+export type SessionMessageOwner = Pick<AgentSessionState, "externalSessionId" | "messages">;
 
 const SESSION_MESSAGES_DATA = Symbol("sessionMessagesData");
 const SESSION_MESSAGES_BY_ID = Symbol("sessionMessagesById");
@@ -41,7 +41,7 @@ const toInternalState = (state: SessionMessagesState): InternalSessionMessagesSt
 };
 
 const createInternalState = (
-  sessionId: string,
+  externalSessionId: string,
   messages: AgentChatMessage[],
   version: number,
   byId?: Map<string, number>,
@@ -49,7 +49,7 @@ const createInternalState = (
   lastIndexByRole?: MessageLastIndexCache,
 ): SessionMessagesState => {
   const state = {
-    sessionId,
+    externalSessionId,
     count: messages.length,
     version,
     [SESSION_MESSAGES_DATA]: messages,
@@ -64,15 +64,15 @@ const createInternalState = (
 const getSessionState = (owner: SessionMessageOwner): InternalSessionMessagesState => {
   if (isSessionMessagesState(owner.messages)) {
     const state = toInternalState(owner.messages);
-    if (state.sessionId === owner.sessionId) {
+    if (state.externalSessionId === owner.externalSessionId) {
       return state;
     }
     return toInternalState(
-      createSessionMessagesState(owner.sessionId, state[SESSION_MESSAGES_DATA]),
+      createSessionMessagesState(owner.externalSessionId, state[SESSION_MESSAGES_DATA]),
     );
   }
 
-  return toInternalState(createSessionMessagesState(owner.sessionId, owner.messages));
+  return toInternalState(createSessionMessagesState(owner.externalSessionId, owner.messages));
 };
 
 const buildIdIndex = (messages: AgentChatMessage[]): Map<string, number> => {
@@ -166,7 +166,7 @@ const createDerivedState = (
   lastIndexByRole?: MessageLastIndexCache,
 ): SessionMessagesState => {
   return createInternalState(
-    previous.sessionId,
+    previous.externalSessionId,
     messages,
     previous.version + 1,
     byId,
@@ -306,11 +306,11 @@ const updateMessageAtIndex = (
 };
 
 export const createSessionMessagesState = (
-  sessionId: string,
+  externalSessionId: string,
   messages: readonly AgentChatMessage[] = [],
   version = 0,
 ): SessionMessagesState => {
-  return createInternalState(sessionId, [...messages], version);
+  return createInternalState(externalSessionId, [...messages], version);
 };
 
 export const getSessionMessageCount = (owner: SessionMessageOwner): number => {
@@ -574,7 +574,7 @@ export const findFirstChangedSessionMessageIndex = (
 
   const previous = isSessionMessagesState(previousMessages)
     ? toInternalState(previousMessages)
-    : toInternalState(createSessionMessagesState(nextOwner.sessionId, previousMessages));
+    : toInternalState(createSessionMessagesState(nextOwner.externalSessionId, previousMessages));
   const next = getSessionState(nextOwner);
   if (previous === next) {
     return -1;

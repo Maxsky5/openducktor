@@ -4,7 +4,6 @@ import { QueryClient } from "@tanstack/react-query";
 import { agentSessionQueryKeys, upsertAgentSessionRecordInQuery } from "./agent-sessions";
 
 const sessionFixture: AgentSessionRecord = {
-  sessionId: "session-1",
   externalSessionId: "external-1",
   role: "build",
   scenario: "build_implementation_start",

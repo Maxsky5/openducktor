@@ -244,9 +244,9 @@ const matchesHydratedSubagent = (
     return false;
   }
 
-  const hydratedSessionId = hydratedMessage.meta.sessionId;
+  const hydratedSessionId = hydratedMessage.meta.externalSessionId;
   if (hydratedSessionId) {
-    return candidate.meta.sessionId === hydratedSessionId;
+    return candidate.meta.externalSessionId === hydratedSessionId;
   }
 
   return false;
@@ -259,7 +259,7 @@ const canAbsorbHydratedPartSubagentIntoCurrentSessionRow = (
   if (!isSubagentMessage(hydratedMessage) || !isSubagentMessage(candidate)) {
     return false;
   }
-  if (hydratedMessage.meta.sessionId || !candidate.meta.sessionId) {
+  if (hydratedMessage.meta.externalSessionId || !candidate.meta.externalSessionId) {
     return false;
   }
   if (!hydratedMessage.meta.correlationKey.startsWith("part:")) {
@@ -287,7 +287,7 @@ const findMatchingCurrentNonSubagentMessages = ({
   sameIdCurrentMessage,
   absorbedCurrentMessageIds,
 }: {
-  currentOwner: Pick<AgentSessionState, "sessionId" | "messages">;
+  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
   hydratedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
   absorbedCurrentMessageIds: ReadonlySet<string>;
@@ -317,7 +317,7 @@ const findMatchingCurrentSubagentMessages = ({
   sameIdCurrentMessage,
   absorbedCurrentMessageIds,
 }: {
-  currentOwner: Pick<AgentSessionState, "sessionId" | "messages">;
+  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
   hydratedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
   absorbedCurrentMessageIds: ReadonlySet<string>;
@@ -362,7 +362,7 @@ const findMatchingCurrentMessages = ({
   sameIdCurrentMessage,
   absorbedCurrentMessageIds,
 }: {
-  currentOwner: Pick<AgentSessionState, "sessionId" | "messages">;
+  currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
   hydratedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
   absorbedCurrentMessageIds: ReadonlySet<string>;
@@ -445,15 +445,15 @@ const mergeSameMessageId = (
 };
 
 export const mergeHydratedMessages = (
-  sessionId: string,
+  externalSessionId: string,
   hydratedMessages: AgentSessionState["messages"],
   currentMessages: AgentSessionState["messages"],
 ): AgentSessionState["messages"] => {
-  const currentOwner = { sessionId, messages: currentMessages };
-  const hydratedOwner = { sessionId, messages: hydratedMessages };
+  const currentOwner = { externalSessionId, messages: currentMessages };
+  const hydratedOwner = { externalSessionId, messages: hydratedMessages };
   const hydratedMessageIds = new Set<string>();
   const absorbedCurrentMessageIds = new Set<string>();
-  let mergedMessages = createSessionMessagesState(sessionId);
+  let mergedMessages = createSessionMessagesState(externalSessionId);
 
   forEachSessionMessage(hydratedOwner, (message) => {
     const sameIdCurrentMessage = findSessionMessageById(currentOwner, message.id);
@@ -472,14 +472,17 @@ export const mergeHydratedMessages = (
         mergeSameMessageId(currentMerged, matchingCurrentMessage),
       message,
     );
-    mergedMessages = appendSessionMessage({ sessionId, messages: mergedMessages }, mergedMessage);
+    mergedMessages = appendSessionMessage(
+      { externalSessionId, messages: mergedMessages },
+      mergedMessage,
+    );
   });
 
   forEachSessionMessage(currentOwner, (message) => {
     if (hydratedMessageIds.has(message.id) || absorbedCurrentMessageIds.has(message.id)) {
       return;
     }
-    mergedMessages = appendSessionMessage({ sessionId, messages: mergedMessages }, message);
+    mergedMessages = appendSessionMessage({ externalSessionId, messages: mergedMessages }, message);
   });
 
   return mergedMessages;

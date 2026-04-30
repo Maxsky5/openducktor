@@ -2,7 +2,7 @@ import { findLastSessionMessageByRole } from "@/state/operations/agent-orchestra
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export const resolveActiveStreamingAssistantMessageId = (
-  session: Pick<AgentSessionState, "sessionId" | "messages" | "status"> | null,
+  session: Pick<AgentSessionState, "externalSessionId" | "messages" | "status"> | null,
 ): string | null => {
   if (!session || session.status !== "running") {
     return null;

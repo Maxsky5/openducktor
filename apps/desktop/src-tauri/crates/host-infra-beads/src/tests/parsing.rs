@@ -150,7 +150,7 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
 
     let session_error = parse_agent_sessions(&json!([
         {
-            "sessionId": "obp-session-1",
+            "sessionId": "session-opencode-1",
             "externalSessionId": "session-opencode-1",
             "role": "spec",
             "scenario": "spec_initial",
@@ -176,7 +176,7 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
 
     let sessions = parse_agent_sessions(&json!([
         {
-            "sessionId": "obp-session-1",
+            "sessionId": "session-opencode-1",
             "externalSessionId": "session-opencode-1",
             "role": "spec",
             "scenario": "spec_initial",
@@ -194,16 +194,11 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
     ]))
     .expect("agent sessions");
     assert_eq!(sessions.len(), 1);
-    assert_eq!(sessions[0].session_id, "obp-session-1");
-    assert_eq!(
-        sessions[0].external_session_id.as_deref(),
-        Some("session-opencode-1")
-    );
+    assert_eq!(sessions[0].external_session_id, "session-opencode-1");
 
-    let legacy_sessions = parse_agent_sessions(&json!([
+    let missing_external_id_error = parse_agent_sessions(&json!([
         {
-            "sessionId": "legacy-planner-session",
-            "externalSessionId": "legacy-opencode-session",
+            "sessionId": "legacy-session-only",
             "role": "planner",
             "scenario": "planner_revision",
             "startedAt": "2026-02-18T17:22:00Z",
@@ -212,9 +207,59 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
             "selectedModel": null
         }
     ]))
-    .expect("legacy agent sessions");
-    assert_eq!(legacy_sessions.len(), 1);
-    assert_eq!(legacy_sessions[0].scenario, "planner_initial");
+    .expect_err("sessions without externalSessionId should fail");
+    assert!(missing_external_id_error
+        .to_string()
+        .contains("missing field `externalSessionId`"));
+
+    let external_session_wins = parse_agent_sessions(&json!([
+        {
+            "sessionId": "legacy-session",
+            "externalSessionId": "other-session",
+            "role": "planner",
+            "scenario": "planner_revision",
+            "startedAt": "2026-02-18T17:22:00Z",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/repo",
+            "selectedModel": null
+        }
+    ]))
+    .expect("sessionId should be ignored when externalSessionId is present");
+    assert_eq!(
+        external_session_wins[0].external_session_id,
+        "other-session"
+    );
+
+    let blank_external_id_error = parse_agent_sessions(&json!([
+        {
+            "externalSessionId": "   ",
+            "role": "planner",
+            "scenario": "planner_initial",
+            "startedAt": "2026-02-18T17:22:00Z",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/repo",
+            "selectedModel": null
+        }
+    ]))
+    .expect_err("blank externalSessionId should fail");
+    assert!(blank_external_id_error
+        .to_string()
+        .contains("externalSessionId is required"));
+
+    let legacy_scenario_sessions = parse_agent_sessions(&json!([
+        {
+            "externalSessionId": "legacy-planner-session",
+            "role": "planner",
+            "scenario": "planner_revision",
+            "startedAt": "2026-02-18T17:22:00Z",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/repo",
+            "selectedModel": null
+        }
+    ]))
+    .expect("legacy scenario agent sessions");
+    assert_eq!(legacy_scenario_sessions.len(), 1);
+    assert_eq!(legacy_scenario_sessions[0].scenario, "planner_initial");
 }
 
 #[test]
@@ -335,7 +380,6 @@ fn metadata_parsing_benchmark_scaffold() {
         (0..200)
             .map(|index| {
                 json!({
-                    "sessionId": format!("obp-session-{index}"),
                     "externalSessionId": format!("session-opencode-{index}"),
                     "role": "build",
                     "scenario": "build_default",

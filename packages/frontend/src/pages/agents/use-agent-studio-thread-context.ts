@@ -10,7 +10,7 @@ type UseAgentStudioThreadContextArgs = {
 
 type AgentStudioThreadContext = {
   threadSession: AgentSessionState | null;
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   isContextSwitching: boolean;
 };
 
@@ -23,7 +23,7 @@ export const useAgentStudioThreadContext = ({
   const [isContextSwitchIntentActive, setIsContextSwitchIntentActive] = useState(false);
   const contextSwitchVersionRef = useRef(contextSwitchVersion);
   const clearIntentRafRef = useRef<number | null>(null);
-  const activeSessionId = activeSession?.sessionId ?? null;
+  const activeExternalSessionId = activeSession?.externalSessionId ?? null;
 
   useEffect(() => {
     if (contextSwitchVersionRef.current === contextSwitchVersion) {
@@ -81,8 +81,8 @@ export const useAgentStudioThreadContext = ({
 
   return {
     threadSession: activeSession,
-    activeSessionId,
+    activeExternalSessionId,
     isContextSwitching:
-      isTaskHydrating || (isContextSwitchIntentActive && activeSessionId === null),
+      isTaskHydrating || (isContextSwitchIntentActive && activeExternalSessionId === null),
   };
 };

@@ -98,7 +98,6 @@ const makeTask = (id: string, status: TaskCard["status"]): TaskCard => ({
 
 const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "A",
   repoPath: overrides.repoPath ?? "/repo",
@@ -1719,7 +1718,7 @@ describe("use-task-operations", () => {
     const runsList = mock(async (): Promise<RunSummary[]> => []);
     const adapterHandlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         adapterHandlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -1746,17 +1745,17 @@ describe("use-task-operations", () => {
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
 
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
@@ -1773,7 +1772,7 @@ describe("use-task-operations", () => {
       const unsubscribe = attachAgentSessionListener({
         adapter,
         repoPath: "/repo",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         sessionsRef,
         draftRawBySessionRef: { current: {} },
         draftSourceBySessionRef: { current: {} },
@@ -1798,7 +1797,7 @@ describe("use-task-operations", () => {
 
         handleEvent({
           type: "assistant_part",
-          sessionId: "session-1",
+          externalSessionId: "session-1",
           timestamp: "2026-02-22T08:00:05.000Z",
           part: {
             kind: "tool",

@@ -14,7 +14,6 @@ describe("session-runtime-utils", () => {
 
   test("toSessionInput preserves required fields and optional model", () => {
     const withModel = toSessionInput({
-      sessionId: "session-1",
       repoPath: "/repo",
       workingDirectory: "/repo",
       taskId: "task-1",
@@ -30,7 +29,6 @@ describe("session-runtime-utils", () => {
     });
 
     const withoutModel = toSessionInput({
-      sessionId: "session-2",
       repoPath: "/repo",
       workingDirectory: "/repo",
       taskId: "task-2",
@@ -40,7 +38,6 @@ describe("session-runtime-utils", () => {
       baseUrl: "http://127.0.0.1:12345",
     });
 
-    expect(withModel.sessionId).toBe("session-1");
     expect(withModel.model?.modelId).toBe("gpt-5");
     expect("model" in withoutModel).toBe(false);
   });

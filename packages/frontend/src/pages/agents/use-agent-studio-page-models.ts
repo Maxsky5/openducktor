@@ -60,8 +60,8 @@ const arePermissionCountMapsEqual = (
 
 const useStablePendingPermissionCounts = (
   sessions: AgentSessionSummary[],
-  subagentPendingPermissionsBySessionId:
-    | AgentSessionState["subagentPendingPermissionsBySessionId"]
+  subagentPendingPermissionsByExternalSessionId:
+    | AgentSessionState["subagentPendingPermissionsByExternalSessionId"]
     | undefined,
 ): Record<string, number> => {
   const previousRef = useRef<Record<string, number>>(EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS);
@@ -70,27 +70,17 @@ const useStablePendingPermissionCounts = (
     for (const session of sessions) {
       const pendingPermissionCount = session.pendingPermissions.length;
       if (pendingPermissionCount > 0) {
-        next[session.sessionId] = pendingPermissionCount;
-        if (session.externalSessionId !== session.sessionId) {
-          next[session.externalSessionId] = pendingPermissionCount;
-        }
+        next[session.externalSessionId] = pendingPermissionCount;
       }
     }
 
-    if (subagentPendingPermissionsBySessionId) {
-      for (const [sessionId, pendingPermissions] of Object.entries(
-        subagentPendingPermissionsBySessionId,
+    if (subagentPendingPermissionsByExternalSessionId) {
+      for (const [externalSessionId, pendingPermissions] of Object.entries(
+        subagentPendingPermissionsByExternalSessionId,
       )) {
         const pendingPermissionCount = pendingPermissions.length;
         if (pendingPermissionCount > 0) {
-          next[sessionId] = pendingPermissionCount;
-          const matchingSession = sessions.find(
-            (session) => session.sessionId === sessionId || session.externalSessionId === sessionId,
-          );
-          if (matchingSession) {
-            next[matchingSession.sessionId] = pendingPermissionCount;
-            next[matchingSession.externalSessionId] = pendingPermissionCount;
-          }
+          next[externalSessionId] = pendingPermissionCount;
         }
       }
     }
@@ -104,7 +94,7 @@ const useStablePendingPermissionCounts = (
 
     previousRef.current = nextCounts;
     return nextCounts;
-  }, [sessions, subagentPendingPermissionsBySessionId]);
+  }, [sessions, subagentPendingPermissionsByExternalSessionId]);
 };
 
 type AgentStudioTaskTabsContext = {
@@ -118,7 +108,7 @@ type AgentStudioTaskTabsContext = {
 };
 
 type AgentStudioSessionActionsContext = {
-  handleWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
+  handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
   openTaskDetails: () => void;
@@ -134,7 +124,7 @@ type AgentStudioSessionActionsContext = {
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
-  stopAgentSession: (sessionId: string) => Promise<void>;
+  stopAgentSession: (externalSessionId: string) => Promise<void>;
 };
 
 type AgentStudioReadinessContext = {
@@ -211,21 +201,21 @@ export function useAgentStudioPageModels({
   agentChatModel: AgentChatModel;
 } {
   const workflowSessionsForTask = core.sessionsForTask;
-  const subagentPendingPermissionCountBySessionId = useStablePendingPermissionCounts(
+  const subagentPendingPermissionCountByExternalSessionId = useStablePendingPermissionCounts(
     core.allSessionSummaries,
-    core.activeSession?.subagentPendingPermissionsBySessionId,
+    core.activeSession?.subagentPendingPermissionsByExternalSessionId,
   );
-  const workflowActiveSessionId = core.activeSession?.sessionId ?? null;
+  const workflowActiveExternalSessionId = core.activeSession?.externalSessionId ?? null;
   const workflowActiveSessionRole = core.activeSession?.role ?? null;
   const workflowActiveSession = useMemo(
     () =>
-      workflowActiveSessionId && workflowActiveSessionRole
+      workflowActiveExternalSessionId && workflowActiveSessionRole
         ? {
-            sessionId: workflowActiveSessionId,
+            externalSessionId: workflowActiveExternalSessionId,
             role: workflowActiveSessionRole,
           }
         : null,
-    [workflowActiveSessionId, workflowActiveSessionRole],
+    [workflowActiveExternalSessionId, workflowActiveSessionRole],
   );
 
   const agentStudioTaskTabsModel = useMemo(
@@ -333,16 +323,16 @@ export function useAgentStudioPageModels({
     [modelSelection.activeSessionContextUsage],
   );
   const canKickoff = sessionActions.canKickoffNewSession && selectedRoleAvailable;
-  const activeComposerSessionId = core.activeSession?.sessionId ?? null;
+  const activeComposerExternalSessionId = core.activeSession?.externalSessionId ?? null;
   const activeComposerSelectedModel = core.activeSession?.selectedModel ?? null;
   const activeComposerIsLoadingModelCatalog = core.activeSession?.isLoadingModelCatalog ?? false;
   const activeComposerPendingPermissions = core.activeSession?.pendingPermissions ?? [];
   const activeComposerPendingQuestions = core.activeSession?.pendingQuestions ?? [];
   const activeComposerSession = useMemo(
     () =>
-      activeComposerSessionId
+      activeComposerExternalSessionId
         ? {
-            sessionId: activeComposerSessionId,
+            externalSessionId: activeComposerExternalSessionId,
             selectedModel: activeComposerSelectedModel,
             isLoadingModelCatalog: activeComposerIsLoadingModelCatalog,
             pendingPermissions: activeComposerPendingPermissions,
@@ -354,7 +344,7 @@ export function useAgentStudioPageModels({
       activeComposerPendingPermissions,
       activeComposerPendingQuestions,
       activeComposerSelectedModel,
-      activeComposerSessionId,
+      activeComposerExternalSessionId,
     ],
   );
 
@@ -519,9 +509,9 @@ export function useAgentStudioPageModels({
     permissions: permissionsModel,
     composer: composerConfig,
     sessionAgentColors: modelSelection.activeSessionAgentColors,
-    subagentPendingPermissionsBySessionId:
-      core.activeSession?.subagentPendingPermissionsBySessionId,
-    subagentPendingPermissionCountBySessionId,
+    subagentPendingPermissionsByExternalSessionId:
+      core.activeSession?.subagentPendingPermissionsByExternalSessionId,
+    subagentPendingPermissionCountByExternalSessionId,
   });
   const composerModel = surfaceModel.composer;
 

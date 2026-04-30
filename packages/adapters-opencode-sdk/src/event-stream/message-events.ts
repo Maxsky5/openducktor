@@ -110,13 +110,14 @@ const peekPendingSubagentCorrelationKeys = (
 
 const queuePendingSubagentPartEmission = (
   runtime: EventStreamRuntime,
-  sessionId: string,
+  externalSessionId: string,
   part: Part,
   roleHint?: string,
 ): void => {
-  const pending = runtime.pendingSubagentPartEmissionsBySessionId.get(sessionId) ?? [];
+  const pending =
+    runtime.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId) ?? [];
   pending.push({ part, ...(roleHint ? { roleHint } : {}) });
-  runtime.pendingSubagentPartEmissionsBySessionId.set(sessionId, pending);
+  runtime.pendingSubagentPartEmissionsByExternalSessionId.set(externalSessionId, pending);
 };
 
 const normalizeLiveSubagentCorrelation = (
@@ -127,8 +128,11 @@ const normalizeLiveSubagentCorrelation = (
 ): MappedSubagentPart | null => {
   const existingCorrelationKey = runtime.subagentCorrelationKeyByPartId.get(rawPart.id);
   if (existingCorrelationKey) {
-    if (part.sessionId) {
-      runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, existingCorrelationKey);
+    if (part.externalSessionId) {
+      runtime.subagentCorrelationKeyByExternalSessionId.set(
+        part.externalSessionId,
+        existingCorrelationKey,
+      );
       removePendingSubagentCorrelationKey(runtime, existingCorrelationKey);
     }
     return {
@@ -148,8 +152,8 @@ const normalizeLiveSubagentCorrelation = (
     if (signature) {
       enqueuePendingSubagentCorrelationKey(runtime, signature, correlationKey);
     }
-    if (part.sessionId) {
-      runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, correlationKey);
+    if (part.externalSessionId) {
+      runtime.subagentCorrelationKeyByExternalSessionId.set(part.externalSessionId, correlationKey);
       removePendingSubagentCorrelationKey(runtime, correlationKey);
     }
 
@@ -159,13 +163,13 @@ const normalizeLiveSubagentCorrelation = (
     };
   }
 
-  const sessionCorrelationKey = part.sessionId
-    ? runtime.subagentCorrelationKeyBySessionId.get(part.sessionId)
+  const sessionCorrelationKey = part.externalSessionId
+    ? runtime.subagentCorrelationKeyByExternalSessionId.get(part.externalSessionId)
     : undefined;
   const pendingCorrelationKeys = signature
     ? peekPendingSubagentCorrelationKeys(runtime, signature)
     : [];
-  const pendingSessionId = part.sessionId;
+  const pendingSessionId = part.externalSessionId;
   const shouldDeferAmbiguousSessionBinding =
     typeof pendingSessionId === "string" &&
     pendingSessionId.length > 0 &&
@@ -182,13 +186,13 @@ const normalizeLiveSubagentCorrelation = (
   const correlationKey =
     sessionCorrelationKey ??
     queuedCorrelationKey ??
-    (part.sessionId
-      ? ["session", part.messageId, part.sessionId].join(":")
+    (part.externalSessionId
+      ? ["session", part.messageId, part.externalSessionId].join(":")
       : buildPartScopedSubagentCorrelationKey(part, rawPart.id));
 
   runtime.subagentCorrelationKeyByPartId.set(rawPart.id, correlationKey);
-  if (part.sessionId) {
-    runtime.subagentCorrelationKeyBySessionId.set(part.sessionId, correlationKey);
+  if (part.externalSessionId) {
+    runtime.subagentCorrelationKeyByExternalSessionId.set(part.externalSessionId, correlationKey);
     removePendingSubagentCorrelationKey(runtime, correlationKey);
   }
 
@@ -203,7 +207,7 @@ const shouldSuppressAssistantStreamingAfterIdle = (
   messageId: string,
   roleHint?: string,
 ): boolean => {
-  const session = runtime.getSession(runtime.sessionId);
+  const session = runtime.getSession(runtime.externalSessionId);
   return Boolean(
     session?.hasIdleSinceActivity &&
       isAssistantMessage(runtime, messageId, roleHint) &&
@@ -242,9 +246,9 @@ const emitAssistantPart = (
     markSessionActive(runtime);
   }
 
-  runtime.emit(runtime.sessionId, {
+  runtime.emit(runtime.externalSessionId, {
     type: "assistant_part",
-    sessionId: runtime.sessionId,
+    externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
     part: nextMapped,
   });
@@ -253,13 +257,13 @@ const emitAssistantPart = (
 
 export const flushPendingSubagentPartEmissionsForSession = (
   runtime: EventStreamRuntime,
-  sessionId: string,
+  externalSessionId: string,
 ): void => {
-  const pending = runtime.pendingSubagentPartEmissionsBySessionId.get(sessionId);
+  const pending = runtime.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId);
   if (!pending || pending.length === 0) {
     return;
   }
-  runtime.pendingSubagentPartEmissionsBySessionId.delete(sessionId);
+  runtime.pendingSubagentPartEmissionsByExternalSessionId.delete(externalSessionId);
   for (const emission of pending) {
     emitAssistantPart(runtime, emission.part, emission.roleHint);
   }
@@ -349,7 +353,7 @@ const updateAssistantMessageCompletionState = (
   messageId: string,
   isCompleted: boolean,
 ): void => {
-  const session = runtime.getSession(runtime.sessionId);
+  const session = runtime.getSession(runtime.externalSessionId);
   if (!session) {
     return;
   }
@@ -386,7 +390,7 @@ const updateMessageMetadata = (
     displayParts?: SessionMessageMetadata["displayParts"];
   },
 ): void => {
-  const session = runtime.getSession(runtime.sessionId);
+  const session = runtime.getSession(runtime.externalSessionId);
   if (!session) {
     return;
   }
@@ -484,7 +488,7 @@ const maybeEmitCompletedAssistantMessage = (
     hasStopSignal?: boolean;
   },
 ): boolean => {
-  const session = runtime.getSession(runtime.sessionId);
+  const session = runtime.getSession(runtime.externalSessionId);
   if (!session || !isAssistantMessage(runtime, input.messageId)) {
     return false;
   }
@@ -528,9 +532,9 @@ const maybeEmitCompletedAssistantMessage = (
     return true;
   }
 
-  runtime.emit(runtime.sessionId, {
+  runtime.emit(runtime.externalSessionId, {
     type: "assistant_message",
-    sessionId: runtime.sessionId,
+    externalSessionId: runtime.externalSessionId,
     timestamp,
     messageId: input.messageId,
     message: visible,
@@ -555,7 +559,7 @@ const emitKnownUserMessage = (
     displayParts?: import("@openducktor/core").AgentUserMessageDisplayPart[];
   },
 ): boolean => {
-  const session = runtime.getSession(runtime.sessionId);
+  const session = runtime.getSession(runtime.externalSessionId);
   const metadata = session?.messageMetadataById.get(input.messageId);
   const knownDisplayParts = normalizeUserMessageDisplayParts(
     getKnownMessageParts(runtime, input.messageId),
@@ -614,15 +618,15 @@ const emitUserMessage = (
     model?: ReturnType<typeof readMessageModelSelection>;
   },
 ): boolean => {
-  const session = runtime.getSession(runtime.sessionId);
+  const session = runtime.getSession(runtime.externalSessionId);
   const signature = buildUserMessageSignature(input);
   if (session?.emittedUserMessageSignatures.get(input.messageId) === signature) {
     return true;
   }
 
-  runtime.emit(runtime.sessionId, {
+  runtime.emit(runtime.externalSessionId, {
     type: "user_message",
-    sessionId: runtime.sessionId,
+    externalSessionId: runtime.externalSessionId,
     timestamp: input.timestamp,
     messageId: input.messageId,
     message: input.message,
@@ -653,7 +657,7 @@ const takeQueuedUserSendMatch = (
   parts: import("@openducktor/core").AgentUserMessageDisplayPart[],
   model: ReturnType<typeof readMessageModelSelection> | undefined,
 ): import("../types").QueuedUserMessageSend | null => {
-  const session = runtime.getSession(runtime.sessionId);
+  const session = runtime.getSession(runtime.externalSessionId);
   if (!session || session.pendingQueuedUserMessages.length === 0) {
     return null;
   }
@@ -703,7 +707,7 @@ const resolveLiveUserMessageState = (
     matchedQueuedSend?: import("../types").QueuedUserMessageSend | null;
   },
 ): AgentUserMessageState => {
-  const session = runtime.getSession(runtime.sessionId);
+  const session = runtime.getSession(runtime.externalSessionId);
   const pendingAssistantState = resolveUserMessageStateFromPendingAssistant(
     session,
     input.messageId,
@@ -722,7 +726,7 @@ const resolveLiveUserMessageState = (
 };
 
 export const reconcileUserMessageQueuedStates = (runtime: EventStreamRuntime): void => {
-  const session = runtime.getSession(runtime.sessionId);
+  const session = runtime.getSession(runtime.externalSessionId);
   if (!session) {
     return;
   }
@@ -792,7 +796,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   })();
   const messageCompletedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
   const messageModel = readMessageModelSelection(infoRecord);
-  const session = runtime.getSession(runtime.sessionId);
+  const session = runtime.getSession(runtime.externalSessionId);
   const previousRole = messageId ? runtime.messageRoleById.get(messageId) : undefined;
   const finish = infoRecord ? readStringProp(infoRecord, ["finish"]) : undefined;
   const rawParts = readRawMessageParts(properties, infoRecord);
@@ -995,9 +999,9 @@ const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime):
 
   markSessionActive(runtime);
 
-  runtime.emit(runtime.sessionId, {
+  runtime.emit(runtime.externalSessionId, {
     type: "assistant_delta",
-    sessionId: runtime.sessionId,
+    externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
     channel,
     messageId,
@@ -1035,7 +1039,7 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
     return true;
   }
   if (role === "user") {
-    const session = runtime.getSession(runtime.sessionId);
+    const session = runtime.getSession(runtime.externalSessionId);
     const metadata = session?.messageMetadataById.get(messageId);
     const normalizedDisplayParts = normalizeUserMessageDisplayParts(
       getKnownMessageParts(runtime, messageId),
@@ -1102,24 +1106,30 @@ const handleMessagePartRemovedEvent = (event: Event, runtime: EventStreamRuntime
 
   runtime.partsById.delete(removedPartId);
   runtime.pendingDeltasByPartId.delete(removedPartId);
-  for (const [sessionId, pending] of runtime.pendingSubagentPartEmissionsBySessionId) {
+  for (const [
+    externalSessionId,
+    pending,
+  ] of runtime.pendingSubagentPartEmissionsByExternalSessionId) {
     const nextPending = pending.filter((emission) => emission.part.id !== removedPartId);
     if (nextPending.length === pending.length) {
       continue;
     }
     if (nextPending.length === 0) {
-      runtime.pendingSubagentPartEmissionsBySessionId.delete(sessionId);
+      runtime.pendingSubagentPartEmissionsByExternalSessionId.delete(externalSessionId);
       continue;
     }
-    runtime.pendingSubagentPartEmissionsBySessionId.set(sessionId, nextPending);
+    runtime.pendingSubagentPartEmissionsByExternalSessionId.set(externalSessionId, nextPending);
   }
   const removedCorrelationKey = runtime.subagentCorrelationKeyByPartId.get(removedPartId);
   runtime.subagentCorrelationKeyByPartId.delete(removedPartId);
   if (removedCorrelationKey) {
     removePendingSubagentCorrelationKey(runtime, removedCorrelationKey);
-    for (const [sessionId, correlationKey] of runtime.subagentCorrelationKeyBySessionId) {
+    for (const [
+      externalSessionId,
+      correlationKey,
+    ] of runtime.subagentCorrelationKeyByExternalSessionId) {
       if (correlationKey === removedCorrelationKey) {
-        runtime.subagentCorrelationKeyBySessionId.delete(sessionId);
+        runtime.subagentCorrelationKeyByExternalSessionId.delete(externalSessionId);
       }
     }
   }

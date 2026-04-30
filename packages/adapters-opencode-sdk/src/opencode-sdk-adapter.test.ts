@@ -171,12 +171,11 @@ describe("opencode-sdk-adapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("external-session-1", (event) => {
       events.push(event);
     });
 
     const summary = await adapter.startSession({
-      sessionId: "session-1",
       repoPath: "/repo",
       workingDirectory: "/repo",
       taskId: "task-1",
@@ -191,15 +190,14 @@ describe("opencode-sdk-adapter", () => {
       },
     });
 
-    expect(summary.sessionId).toBe("session-1");
     expect(summary.externalSessionId).toBe("external-session-1");
-    expect(adapter.hasSession("session-1")).toBe(true);
+    expect(adapter.hasSession("external-session-1")).toBe(true);
     expect(mock.createCalls).toHaveLength(1);
 
-    await adapter.stopSession("session-1");
+    await adapter.stopSession("external-session-1");
 
     expect(mock.abortCalls).toHaveLength(1);
-    expect(adapter.hasSession("session-1")).toBe(false);
+    expect(adapter.hasSession("external-session-1")).toBe(false);
     expect(events.some((event) => event.type === "session_finished")).toBe(true);
   });
 
@@ -216,7 +214,6 @@ describe("opencode-sdk-adapter", () => {
 
     await expect(
       adapter.startSession({
-        sessionId: "session-1",
         repoPath: "/repo",
         workingDirectory: "/repo",
         taskId: "task-1",
@@ -231,7 +228,7 @@ describe("opencode-sdk-adapter", () => {
         },
       }),
     ).rejects.toThrow("client.global.event()");
-    expect(adapter.hasSession("session-1")).toBe(false);
+    expect(adapter.hasSession("external-session-1")).toBe(false);
   });
 
   test("listLiveAgentSessions maps server sessions and statuses", async () => {

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { RepoConfig } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, type ReactNode, useEffect, useState } from "react";
+import { act, createElement, type ReactNode, useEffect, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
@@ -85,16 +85,22 @@ test("RepositoryConfigurationSection applies the confirmed worktree base path", 
   const rendered = render(createElement(Wrapper));
 
   try {
-    fireEvent.click(screen.getByRole("button", { name: /pick worktree base path/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /pick worktree base path/i }));
+    });
     await screen.findByText("/tmp/worktrees");
 
-    fireEvent.click(screen.getByRole("button", { name: /use this path/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /use this path/i }));
+    });
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("/tmp/worktrees")).toBeTruthy();
     });
   } finally {
-    rendered.unmount();
+    await act(async () => {
+      rendered.unmount();
+    });
   }
 });
 
@@ -125,21 +131,29 @@ test("RepositoryConfigurationSection applies the confirmed repository rebind pat
   const rendered = render(createElement(Wrapper));
 
   try {
-    fireEvent.click(screen.getByRole("button", { name: /rebind/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /rebind/i }));
+    });
 
     const manualPathInput = await screen.findByLabelText("Open path");
-    fireEvent.change(manualPathInput, { target: { value: "/tmp/rebound-repo" } });
-    fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+    await act(async () => {
+      fireEvent.change(manualPathInput, { target: { value: "/tmp/rebound-repo" } });
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+    });
 
     await screen.findByText("Git repo");
 
-    fireEvent.click(screen.getByRole("button", { name: /use this repository/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /use this repository/i }));
+    });
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("/tmp/rebound-repo")).toBeTruthy();
     });
   } finally {
-    rendered.unmount();
+    await act(async () => {
+      rendered.unmount();
+    });
   }
 });
 

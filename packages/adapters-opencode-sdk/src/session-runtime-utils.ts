@@ -1,8 +1,7 @@
 import type { AgentRole, AgentScenario, StartAgentSessionInput } from "@openducktor/core";
 import type { SessionInput } from "./types";
 
-type SessionInputSource = Omit<StartAgentSessionInput, "sessionId" | "role" | "scenario"> & {
-  sessionId: string;
+type SessionInputSource = Omit<StartAgentSessionInput, "role" | "scenario"> & {
   role: AgentRole | null;
   scenario: AgentScenario | null;
 };
@@ -27,6 +26,5 @@ export const toSessionInput = (input: SessionInputSource): SessionInput => {
     ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
     ...(input.runtimeConnection ? { runtimeConnection: input.runtimeConnection } : {}),
     ...(input.model ? { model: input.model } : {}),
-    sessionId: input.sessionId,
   };
 };

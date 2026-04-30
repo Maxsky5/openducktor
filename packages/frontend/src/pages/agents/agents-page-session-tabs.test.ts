@@ -24,7 +24,6 @@ import {
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
-  sessionId: "session-1",
   externalSessionId: "ext-session-1",
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
@@ -52,26 +51,38 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 describe("agents-page-session-tabs", () => {
   test("selects latest session per task", () => {
     const map = buildLatestSessionByTaskMap([
-      buildSession({ taskId: "task-1", sessionId: "older", startedAt: "2026-02-20T09:00:00.000Z" }),
-      buildSession({ taskId: "task-1", sessionId: "newer", startedAt: "2026-02-20T11:00:00.000Z" }),
-      buildSession({ taskId: "task-2", sessionId: "task-2-session" }),
+      buildSession({
+        taskId: "task-1",
+        externalSessionId: "older",
+        startedAt: "2026-02-20T09:00:00.000Z",
+      }),
+      buildSession({
+        taskId: "task-1",
+        externalSessionId: "newer",
+        startedAt: "2026-02-20T11:00:00.000Z",
+      }),
+      buildSession({ taskId: "task-2", externalSessionId: "task-2-session" }),
     ]);
 
-    expect(map.get("task-1")?.sessionId).toBe("newer");
-    expect(map.get("task-2")?.sessionId).toBe("task-2-session");
+    expect(map.get("task-1")?.externalSessionId).toBe("newer");
+    expect(map.get("task-2")?.externalSessionId).toBe("task-2-session");
   });
 
   test("uses deterministic tiebreaker when timestamps are equal", () => {
     const map = buildLatestSessionByTaskMap([
-      buildSession({ taskId: "task-1", sessionId: "first", startedAt: "2026-02-20T10:00:00.000Z" }),
       buildSession({
         taskId: "task-1",
-        sessionId: "second",
+        externalSessionId: "first",
+        startedAt: "2026-02-20T10:00:00.000Z",
+      }),
+      buildSession({
+        taskId: "task-1",
+        externalSessionId: "second",
         startedAt: "2026-02-20T10:00:00.000Z",
       }),
     ]);
 
-    expect(map.get("task-1")?.sessionId).toBe("second");
+    expect(map.get("task-1")?.externalSessionId).toBe("second");
   });
 
   test("prioritizes waiting-input status over running", () => {
@@ -821,21 +832,21 @@ describe("agents-page-session-tabs", () => {
     const summaries = buildRoleSessionSummaryMap([
       buildSession({
         role: "spec",
-        sessionId: "session-newer",
+        externalSessionId: "session-newer",
         startedAt: "2026-02-22T11:00:00.000Z",
         status: "idle",
       }),
       buildSession({
         role: "spec",
-        sessionId: "session-waiting",
+        externalSessionId: "session-waiting",
         startedAt: "2026-02-22T10:00:00.000Z",
         status: "running",
         pendingQuestions: [{ requestId: "q-1", questions: [] }],
       }),
     ]);
 
-    expect(summaries.spec.latestSession?.sessionId).toBe("session-newer");
-    expect(summaries.spec.workflowSession?.sessionId).toBe("session-newer");
+    expect(summaries.spec.latestSession?.externalSessionId).toBe("session-newer");
+    expect(summaries.spec.workflowSession?.externalSessionId).toBe("session-newer");
     expect(summaries.spec.liveSession).toBe("idle");
   });
 
@@ -890,21 +901,21 @@ describe("agents-page-session-tabs", () => {
       sessionsForTask: [
         buildSession({
           runtimeKind: "opencode",
-          sessionId: "spec-1",
+          externalSessionId: "spec-1",
           role: "spec",
           scenario: "spec_initial",
           startedAt: "2026-02-22T09:20:00.000Z",
         }),
         buildSession({
           runtimeKind: "opencode",
-          sessionId: "spec-2",
+          externalSessionId: "spec-2",
           role: "spec",
           scenario: "spec_initial",
           startedAt: "2026-02-22T08:20:00.000Z",
         }),
         buildSession({
           runtimeKind: "opencode",
-          sessionId: "planner-1",
+          externalSessionId: "planner-1",
           role: "planner",
           scenario: "planner_initial",
           startedAt: "2026-02-22T10:20:00.000Z",
@@ -936,33 +947,41 @@ describe("agents-page-session-tabs", () => {
 
   test("builds latest session map by role", () => {
     const sessions = [
-      buildSession({ sessionId: "spec-1", role: "spec", startedAt: "2026-02-20T08:00:00.000Z" }),
+      buildSession({
+        externalSessionId: "spec-1",
+        role: "spec",
+        startedAt: "2026-02-20T08:00:00.000Z",
+      }),
       buildSession({
         runtimeKind: "opencode",
-        sessionId: "planner-1",
+        externalSessionId: "planner-1",
         role: "planner",
         startedAt: "2026-02-20T10:00:00.000Z",
       }),
-      buildSession({ sessionId: "build-1", role: "build", startedAt: "2026-02-20T09:00:00.000Z" }),
+      buildSession({
+        externalSessionId: "build-1",
+        role: "build",
+        startedAt: "2026-02-20T09:00:00.000Z",
+      }),
     ];
 
     const latestByRole = buildLatestSessionByRoleMap(sessions);
-    expect(latestByRole.spec?.sessionId).toBe("spec-1");
-    expect(latestByRole.planner?.sessionId).toBe("planner-1");
-    expect(latestByRole.build?.sessionId).toBe("build-1");
+    expect(latestByRole.spec?.externalSessionId).toBe("spec-1");
+    expect(latestByRole.planner?.externalSessionId).toBe("planner-1");
+    expect(latestByRole.build?.externalSessionId).toBe("build-1");
     expect(latestByRole.qa).toBeNull();
   });
 
   test("builds latest session map by role using newest startedAt", () => {
     const sessions = [
       buildSession({
-        sessionId: "build-older",
+        externalSessionId: "build-older",
         role: "build",
         scenario: "build_implementation_start",
         startedAt: "2026-02-20T09:00:00.000Z",
       }),
       buildSession({
-        sessionId: "build-newer",
+        externalSessionId: "build-newer",
         role: "build",
         scenario: "build_after_qa_rejected",
         startedAt: "2026-02-20T11:00:00.000Z",
@@ -971,7 +990,7 @@ describe("agents-page-session-tabs", () => {
 
     const latestByRole = buildLatestSessionByRoleMap(sessions);
 
-    expect(latestByRole.build?.sessionId).toBe("build-newer");
+    expect(latestByRole.build?.externalSessionId).toBe("build-newer");
   });
 
   test("builds session create options without continue actions", () => {

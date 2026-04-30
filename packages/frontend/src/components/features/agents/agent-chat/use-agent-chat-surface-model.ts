@@ -21,13 +21,13 @@ import { useAgentChatThreadContext } from "./use-agent-chat-thread-context";
 
 const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_PERMISSIONS = Object.freeze({}) as NonNullable<
-  AgentSessionState["subagentPendingPermissionsBySessionId"]
+  AgentSessionState["subagentPendingPermissionsByExternalSessionId"]
 >;
 
 const parseDraftStateKey = (draftStateKey: string) => {
-  const [taskId = "", role = "", sessionId = "", contextSwitchVersion = ""] =
+  const [taskId = "", role = "", externalSessionId = "", contextSwitchVersion = ""] =
     draftStateKey.split(":");
-  return { taskId, role, sessionId, contextSwitchVersion };
+  return { taskId, role, externalSessionId, contextSwitchVersion };
 };
 
 const isSessionOnlyDraftStateTransition = (previousKey: string, nextKey: string): boolean => {
@@ -37,7 +37,7 @@ const isSessionOnlyDraftStateTransition = (previousKey: string, nextKey: string)
     previous.taskId === next.taskId &&
     previous.role === next.role &&
     previous.contextSwitchVersion === next.contextSwitchVersion &&
-    previous.sessionId !== next.sessionId
+    previous.externalSessionId !== next.externalSessionId
   );
 };
 
@@ -71,16 +71,16 @@ const missingInteractiveComposerFileSearch = async (): Promise<AgentFileSearchRe
   throw new Error("Interactive composer file search is unavailable.");
 };
 
-type StopAgentSession = (sessionId: string) => Promise<void>;
+type StopAgentSession = (externalSessionId: string) => Promise<void>;
 
 export const invokeStopAgentSession = (
-  sessionId: string | null,
+  externalSessionId: string | null,
   stopAgentSession: StopAgentSession | undefined,
 ): void => {
-  if (!sessionId || !stopAgentSession) {
+  if (!externalSessionId || !stopAgentSession) {
     return;
   }
-  void stopAgentSession(sessionId).catch(() => undefined);
+  void stopAgentSession(externalSessionId).catch(() => undefined);
 };
 
 type AgentChatRuntimeReadiness = {
@@ -108,7 +108,7 @@ type AgentChatComposerConfig = {
   taskId: string;
   activeSession: Pick<
     AgentSessionState,
-    | "sessionId"
+    | "externalSessionId"
     | "selectedModel"
     | "isLoadingModelCatalog"
     | "pendingPermissions"
@@ -118,7 +118,7 @@ type AgentChatComposerConfig = {
   isWaitingInput: boolean;
   busySendBlockedReason: string | null;
   canStopSession: boolean;
-  stopAgentSession: (sessionId: string) => Promise<void>;
+  stopAgentSession: (externalSessionId: string) => Promise<void>;
   isReadOnly: boolean;
   readOnlyReason: string | null;
   draftStateKey: string;
@@ -166,8 +166,8 @@ type UseAgentChatSurfaceModelArgs = {
   permissions: AgentChatPendingPermissionActions;
   composer?: AgentChatComposerConfig;
   sessionAgentColors?: Record<string, string>;
-  subagentPendingPermissionsBySessionId?: AgentSessionState["subagentPendingPermissionsBySessionId"];
-  subagentPendingPermissionCountBySessionId?: Record<string, number>;
+  subagentPendingPermissionsByExternalSessionId?: AgentSessionState["subagentPendingPermissionsByExternalSessionId"];
+  subagentPendingPermissionCountByExternalSessionId?: Record<string, number>;
 };
 
 export function useAgentChatSurfaceModel({
@@ -187,13 +187,13 @@ export function useAgentChatSurfaceModel({
   permissions,
   composer,
   sessionAgentColors,
-  subagentPendingPermissionsBySessionId,
-  subagentPendingPermissionCountBySessionId,
+  subagentPendingPermissionsByExternalSessionId,
+  subagentPendingPermissionCountByExternalSessionId,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
   >({});
-  const { threadSession, activeSessionId, isContextSwitching } = useAgentChatThreadContext({
+  const { threadSession, activeExternalSessionId, isContextSwitching } = useAgentChatThreadContext({
     activeSession: session,
     isTaskHydrating,
     isSessionHistoryHydrated,
@@ -202,7 +202,7 @@ export function useAgentChatSurfaceModel({
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
-      activeSessionId: threadSession?.sessionId ?? null,
+      activeExternalSessionId: threadSession?.externalSessionId ?? null,
       syncBottomAfterComposerLayoutRef,
     });
   const scrollToBottomOnSendRef = useRef<(() => void) | null>(null);
@@ -215,19 +215,19 @@ export function useAgentChatSurfaceModel({
     return buildSessionAgentColors(session?.modelCatalog);
   }, [session?.modelCatalog, sessionAgentColors]);
 
-  const activeTodoPanelCollapsed = activeSessionId
-    ? (todoPanelCollapsedBySession[activeSessionId] ?? true)
+  const activeTodoPanelCollapsed = activeExternalSessionId
+    ? (todoPanelCollapsedBySession[activeExternalSessionId] ?? true)
     : true;
 
   const handleToggleTodoPanel = useCallback((): void => {
-    if (!activeSessionId) {
+    if (!activeExternalSessionId) {
       return;
     }
     setTodoPanelCollapsedBySession((current) => ({
       ...current,
-      [activeSessionId]: !(current[activeSessionId] ?? true),
+      [activeExternalSessionId]: !(current[activeExternalSessionId] ?? true),
     }));
-  }, [activeSessionId]);
+  }, [activeExternalSessionId]);
 
   const isComposerInteractionEnabled = mode === "interactive" && runtimeReadiness.isReady;
   const canReplyToPermissionRequests = runtimeReadiness.isReady && permissions.canReply;
@@ -251,10 +251,11 @@ export function useAgentChatSurfaceModel({
       isStarting: composer?.isStarting ?? false,
       isSending: composer?.isSending ?? false,
       sessionAgentColors: resolvedSessionAgentColors,
-      subagentPendingPermissionsBySessionId:
-        subagentPendingPermissionsBySessionId ?? EMPTY_SUBAGENT_PENDING_PERMISSIONS,
-      subagentPendingPermissionCountBySessionId:
-        subagentPendingPermissionCountBySessionId ?? EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
+      subagentPendingPermissionsByExternalSessionId:
+        subagentPendingPermissionsByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_PERMISSIONS,
+      subagentPendingPermissionCountByExternalSessionId:
+        subagentPendingPermissionCountByExternalSessionId ??
+        EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
       canSubmitQuestionAnswers:
         mode === "interactive" && isComposerInteractionEnabled && pendingQuestions.canSubmit,
       isSubmittingQuestionByRequestId: pendingQuestions.isSubmittingByRequestId,
@@ -290,8 +291,8 @@ export function useAgentChatSurfaceModel({
       runtimeReadiness,
       sessionRuntimeDataError,
       showThinkingMessages,
-      subagentPendingPermissionsBySessionId,
-      subagentPendingPermissionCountBySessionId,
+      subagentPendingPermissionsByExternalSessionId,
+      subagentPendingPermissionCountByExternalSessionId,
       threadSession,
     ],
   );
@@ -399,11 +400,11 @@ export function useAgentChatSurfaceModel({
     [composerOnSend, mode],
   );
 
-  const composerSessionId = composer?.activeSession?.sessionId ?? null;
+  const composerExternalSessionId = composer?.activeSession?.externalSessionId ?? null;
   const stopAgentSession = composer?.stopAgentSession;
   const handleStopSession = useCallback((): void => {
-    invokeStopAgentSession(composerSessionId, stopAgentSession);
-  }, [composerSessionId, stopAgentSession]);
+    invokeStopAgentSession(composerExternalSessionId, stopAgentSession);
+  }, [composerExternalSessionId, stopAgentSession]);
 
   const composerModel = useMemo(() => {
     if (mode !== "interactive" || !hasComposer) {
@@ -416,7 +417,7 @@ export function useAgentChatSurfaceModel({
 
     return {
       taskId: composerTaskId,
-      displayedSessionId: composerSessionId,
+      displayedSessionId: composerExternalSessionId,
       isInteractionEnabled: isComposerInteractionEnabled,
       isReadOnly: composerIsReadOnly,
       readOnlyReason: composerReadOnlyReason,
@@ -492,7 +493,7 @@ export function useAgentChatSurfaceModel({
     composerVariantOptions,
     composerEditorRef,
     composerFormRef,
-    composerSessionId,
+    composerExternalSessionId,
     handleComposerSend,
     handleStopSession,
     hasComposer,

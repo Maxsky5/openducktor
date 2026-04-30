@@ -1,20 +1,57 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  withCapturedConsoleMethods,
+  withCapturedOutputStreams,
+} from "@/test-utils/console-capture";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 let pierreViewerModule: typeof import("./pierre-diff-viewer");
 
 beforeEach(async () => {
-  mock.module("@pierre/diffs/react", () => ({
-    FileDiff: () => null,
-    Virtualizer: ({ children }: { children: React.ReactNode }) => children,
-    useWorkerPool: () => null,
-  }));
+  await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
+    await withCapturedConsoleMethods(
+      ["debug", "error", "info", "log", "warn"],
+      async (consoleCalls) => {
+        mock.module("@pierre/diffs/react", () => ({
+          FileDiff: () => null,
+          Virtualizer: ({ children }: { children: React.ReactNode }) => children,
+          useWorkerPool: () => null,
+        }));
 
-  pierreViewerModule = await import("./pierre-diff-viewer");
+        pierreViewerModule = await import("./pierre-diff-viewer");
+
+        for (const calls of Object.values(consoleCalls)) {
+          for (const call of calls) {
+            expect(call).toEqual([]);
+          }
+        }
+      },
+    );
+
+    for (const chunk of [...chunksByStream.stdout, ...chunksByStream.stderr]) {
+      expect(chunk).toBe("[]\n");
+    }
+  });
 });
 
 afterEach(async () => {
-  await restoreMockedModules([["@pierre/diffs/react", () => import("@pierre/diffs/react")]]);
+  await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
+    await withCapturedConsoleMethods(
+      ["debug", "error", "info", "log", "warn"],
+      async (consoleCalls) => {
+        await restoreMockedModules([["@pierre/diffs/react", () => import("@pierre/diffs/react")]]);
+        for (const calls of Object.values(consoleCalls)) {
+          for (const call of calls) {
+            expect(call).toEqual([]);
+          }
+        }
+      },
+    );
+
+    for (const chunk of [...chunksByStream.stdout, ...chunksByStream.stderr]) {
+      expect(chunk).toBe("[]\n");
+    }
+  });
 });
 
 const requireFileDiff = (
@@ -52,10 +89,29 @@ describe("getRenderableFileDiff", () => {
 
   test("keeps normalized raw diff text when parsing still fails", async () => {
     const { getRenderableFileDiff } = pierreViewerModule;
-    const result = getRenderableFileDiff(
-      "Index: src/app.ts\n=====\ninvalid diff body",
-      "src/app.ts",
-    );
+    const result = await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
+      return await withCapturedConsoleMethods(
+        ["debug", "error", "info", "log", "warn"],
+        async (consoleCalls) => {
+          const parseResult = getRenderableFileDiff(
+            "Index: src/app.ts\n=====\ninvalid diff body",
+            "src/app.ts",
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          for (const calls of Object.values(consoleCalls)) {
+            for (const call of calls) {
+              expect(call).toEqual([[]]);
+            }
+          }
+          for (const chunk of [...chunksByStream.stdout, ...chunksByStream.stderr]) {
+            expect(chunk).toBe("[]\n");
+          }
+
+          return parseResult;
+        },
+      );
+    });
 
     expect(result.fileDiff).toBeNull();
     expect(result.fallbackPatch).toBe("Index: src/app.ts\n=====\ninvalid diff body\n");

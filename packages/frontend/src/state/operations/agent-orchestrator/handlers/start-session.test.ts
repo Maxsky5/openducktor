@@ -4,6 +4,7 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { withCapturedConsole } from "@/test-utils/console-capture";
 import {
   sessionMessageAt,
   sessionMessagesToArray,
@@ -25,7 +26,6 @@ const createStartAgentSessionWithFlatDeps = (deps: FlatStartSessionDependencies)
 
 const persistedSessionRecord = (
   input: {
-    sessionId: string;
     externalSessionId: string;
     role: AgentSessionRecord["role"];
     scenario: AgentSessionRecord["scenario"];
@@ -36,7 +36,6 @@ const persistedSessionRecord = (
   } & Record<string, unknown>,
 ): AgentSessionRecord => ({
   runtimeKind: input.runtimeKind ?? "opencode",
-  sessionId: input.sessionId,
   externalSessionId: input.externalSessionId,
   role: input.role,
   scenario: input.scenario,
@@ -52,21 +51,6 @@ const continuationTarget = (
   workingDirectory,
   source,
 });
-
-const withCapturedConsoleError = async (
-  run: (calls: unknown[][]) => Promise<void>,
-): Promise<void> => {
-  const originalError = console.error;
-  const calls: unknown[][] = [];
-  console.error = (...args: unknown[]) => {
-    calls.push(args);
-  };
-  try {
-    await run(calls);
-  } finally {
-    console.error = originalError;
-  }
-};
 
 const setPersistedSessionListFixture = (
   repoPath: string,
@@ -188,7 +172,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         role: "build",
         scenario: "build_after_human_request_changes",
         startMode: "reuse",
-        sourceSessionId: "session-in-flight",
+        sourceExternalSessionId: "session-in-flight",
       }),
     ).resolves.toBe("session-in-flight");
   });
@@ -211,7 +195,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       }
       return {
         runtimeKind: "opencode",
-        sessionId: `${input.role}-session`,
         externalSessionId: `${input.role}-external`,
         startedAt: "2026-02-22T08:00:10.000Z",
         role: input.role,
@@ -269,8 +252,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(plannerStartResult).toBeUndefined();
 
       startBuildDeferred.resolve();
-      await expect(buildPromise).resolves.toBe("build-session");
-      await expect(plannerPromise).resolves.toBe("planner-session");
+      await expect(buildPromise).resolves.toBe("build-external");
+      await expect(plannerPromise).resolves.toBe("planner-external");
     } finally {
       startBuildDeferred.resolve();
       adapter.startSession = originalStartSession;
@@ -381,8 +364,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalStartSession = adapter.startSession;
     adapter.startSession = async () => ({
       runtimeKind: "opencode",
-      sessionId: "planner-session",
-      externalSessionId: "external-planner-session",
+      externalSessionId: "planner-external",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "planner",
       scenario: "planner_initial",
@@ -441,7 +423,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
       persistDeferred.resolve();
 
-      await expect(startPromise).resolves.toBe("planner-session");
+      await expect(startPromise).resolves.toBe("planner-external");
     } finally {
       persistDeferred.resolve();
       adapter.startSession = originalStartSession;
@@ -466,7 +448,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         adapter: {
           ...new OpencodeSdkAdapter(),
           startSession: async () => ({
-            sessionId: "session-1",
             externalSessionId: "external-1",
             role: "planner",
             scenario: "planner_initial",
@@ -508,7 +489,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
     const persistedSessionRecord = persistedRecord as AgentSessionRecord;
 
-    expect(persistedSessionRecord.sessionId).toBe("session-1");
+    expect(persistedSessionRecord.externalSessionId).toBe("external-1");
     expect("status" in persistedSessionRecord).toBe(false);
     expect("taskId" in persistedSessionRecord).toBe(false);
     expect("runtimeRoute" in persistedSessionRecord).toBe(false);
@@ -524,15 +505,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     adapter.startSession = async () => ({
       runtimeKind: "opencode",
-      sessionId: "session-persist-fail",
       externalSessionId: "external-session-persist-fail",
       role: "planner",
       scenario: "planner_initial",
       status: "running",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
-    adapter.stopSession = async (sessionId) => {
-      stoppedSessionIds.push(sessionId);
+    adapter.stopSession = async (externalSessionId) => {
+      stoppedSessionIds.push(externalSessionId);
     };
 
     const start = createStartAgentSessionWithFlatDeps({
@@ -547,8 +527,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      attachSessionListener: (_repoPath, sessionId) => {
-        attachedSessionIds.push(sessionId);
+      attachSessionListener: (_repoPath, externalSessionId) => {
+        attachedSessionIds.push(externalSessionId);
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -567,21 +547,26 @@ describe("agent-orchestrator/handlers/start-session", () => {
       sendAgentMessage: async () => {},
     });
 
-    await expect(
-      start({
-        taskId: "task-1",
-        role: "planner",
-        scenario: "planner_initial",
-        startMode: "fresh",
-        selectedModel: PLANNER_SELECTION,
-      }),
-    ).rejects.toThrow(
-      'Failed to persist started session "session-persist-fail": persist failed. The started session was stopped and removed locally.',
-    );
+    await withCapturedConsole("error", async (calls) => {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "planner",
+          scenario: "planner_initial",
+          startMode: "fresh",
+          selectedModel: PLANNER_SELECTION,
+        }),
+      ).rejects.toThrow(
+        'Failed to persist started session "external-session-persist-fail": persist failed. The started session was stopped and removed locally.',
+      );
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.[0]).toBe("[agent-orchestrator]");
+      expect(calls[0]?.[1]).toBe("start-session-persist-initial-session");
+    });
 
-    expect(stoppedSessionIds).toEqual(["session-persist-fail"]);
+    expect(stoppedSessionIds).toEqual(["external-session-persist-fail"]);
     expect(attachedSessionIds).toEqual([]);
-    expect(sessionsRef.current["session-persist-fail"]).toBeUndefined();
+    expect(sessionsRef.current["external-session-persist-fail"]).toBeUndefined();
   });
 
   test("reuses most recent in-memory session for same task and role", async () => {
@@ -598,9 +583,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       setSessionsById: () => {},
       sessionsRef: {
         current: {
-          newer: {
+          "external-newer": {
             runtimeKind: "opencode",
-            sessionId: "newer",
             externalSessionId: "external-newer",
             taskId: "task-1",
             repoPath: "/tmp/repo",
@@ -653,9 +637,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "build",
           scenario: "build_after_human_request_changes",
           startMode: "reuse",
-          sourceSessionId: "newer",
+          sourceExternalSessionId: "external-newer",
         }),
-      ).resolves.toBe("newer");
+      ).resolves.toBe("external-newer");
       expect(persistedListCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -678,7 +662,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         current: {
           latest: {
             runtimeKind: "opencode",
-            sessionId: "latest",
             externalSessionId: "external-latest",
             taskId: "task-1",
             repoPath: "/tmp/repo",
@@ -701,9 +684,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
             selectedModel: null,
             isLoadingModelCatalog: false,
           },
-          chosen: {
+          "external-chosen": {
             runtimeKind: "opencode",
-            sessionId: "chosen",
             externalSessionId: "external-chosen",
             taskId: "task-1",
             repoPath: "/tmp/repo",
@@ -756,9 +738,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "build",
           scenario: "build_after_human_request_changes",
           startMode: "reuse",
-          sourceSessionId: "chosen",
+          sourceExternalSessionId: "external-chosen",
         }),
-      ).resolves.toBe("chosen");
+      ).resolves.toBe("external-chosen");
       expect(persistedListCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -780,7 +762,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
-        sessionId: "fresh-build-session",
         externalSessionId: "external-fresh-build-session",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: input.role,
@@ -797,7 +778,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         current: {
           stale: {
             runtimeKind: "opencode",
-            sessionId: "stale",
             externalSessionId: "external-stale",
             taskId: "task-1",
             repoPath: "/tmp/repo",
@@ -851,7 +831,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
-      ).resolves.toBe("fresh-build-session");
+      ).resolves.toBe("external-fresh-build-session");
       expect(startCalls).toBe(1);
       expect(persistedListCalls).toBe(0);
     } finally {
@@ -874,9 +854,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       setSessionsById: () => {},
       sessionsRef: {
         current: {
-          chosen: {
+          "external-chosen": {
             runtimeKind: "opencode",
-            sessionId: "chosen",
             externalSessionId: "external-chosen",
             taskId: "task-1",
             repoPath: "/tmp/repo",
@@ -930,9 +909,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "build",
           scenario: "build_after_human_request_changes",
           startMode: "reuse",
-          sourceSessionId: "chosen",
+          sourceExternalSessionId: "external-chosen",
         }),
-      ).resolves.toBe("chosen");
+      ).resolves.toBe("external-chosen");
       expect(persistedListCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -950,9 +929,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     };
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        reused: {
+        "external-reused": {
           runtimeKind: "opencode",
-          sessionId: "reused",
           externalSessionId: "external-reused",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -1023,10 +1001,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "build",
           scenario: "build_after_human_request_changes",
           startMode: "reuse",
-          sourceSessionId: "reused",
+          sourceExternalSessionId: "external-reused",
         }),
-      ).resolves.toBe("reused");
-      expect(sessionsRef.current.reused?.selectedModel).toEqual(existingSelectedModel);
+      ).resolves.toBe("external-reused");
+      expect(sessionsRef.current["external-reused"]?.selectedModel).toEqual(existingSelectedModel);
       expect(persistedSessions).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -1049,7 +1027,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(input.model).toEqual(selectedModel);
       return {
         runtimeKind: "claude-code",
-        sessionId: "fresh-runtime-session",
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:30:00.000Z",
         role: "build",
@@ -1067,9 +1044,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       setSessionsById: () => {},
       sessionsRef: {
         current: {
-          reused: {
+          "external-reused": {
             runtimeKind: "opencode",
-            sessionId: "reused",
             externalSessionId: "external-reused",
             taskId: "task-1",
             repoPath: "/tmp/repo",
@@ -1127,9 +1103,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "build",
           scenario: "build_after_human_request_changes",
           startMode: "reuse",
-          sourceSessionId: "reused",
+          sourceExternalSessionId: "external-reused",
         }),
-      ).resolves.toBe("reused");
+      ).resolves.toBe("external-reused");
       expect(startCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;
@@ -1154,7 +1130,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(input.model).toEqual(selectedModel);
       return {
         runtimeKind: "opencode",
-        sessionId: "fresh-profile-session",
         externalSessionId: "fresh-profile-external",
         startedAt: "2026-02-22T08:35:00.000Z",
         role: "build",
@@ -1172,9 +1147,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       setSessionsById: () => {},
       sessionsRef: {
         current: {
-          reused: {
+          "external-reused": {
             runtimeKind: "opencode",
-            sessionId: "reused",
             externalSessionId: "external-reused",
             taskId: "task-1",
             repoPath: "/tmp/repo",
@@ -1233,9 +1207,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "build",
           scenario: "build_after_human_request_changes",
           startMode: "reuse",
-          sourceSessionId: "reused",
+          sourceExternalSessionId: "external-reused",
         }),
-      ).resolves.toBe("reused");
+      ).resolves.toBe("external-reused");
       expect(startCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;
@@ -1253,7 +1227,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
-        sessionId: "fresh-session",
         externalSessionId: "fresh-ext",
         startedAt: "2026-02-22T09:00:00.000Z",
         role: "build",
@@ -1268,7 +1241,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       return [
         persistedSessionRecord({
           runtimeKind: "opencode",
-          sessionId: "persisted-build",
           externalSessionId: "persisted-build-ext",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -1292,7 +1264,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         current: {
           existingBuild: {
             runtimeKind: "opencode",
-            sessionId: "existing-build",
             externalSessionId: "existing-build-ext",
             taskId: "task-1",
             repoPath: "/tmp/repo",
@@ -1345,7 +1316,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
-      ).resolves.toBe("fresh-session");
+      ).resolves.toBe("fresh-ext");
       expect(startCalls).toBe(1);
       expect(persistedListCalls).toBe(0);
     } finally {
@@ -1363,7 +1334,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
-        sessionId: "planner-created",
         externalSessionId: "planner-ext",
         startedAt: "2026-02-22T08:30:00.000Z",
         role: "planner",
@@ -1379,7 +1349,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       current: {
         existingSpec: {
           runtimeKind: "opencode",
-          sessionId: "existing-spec",
           externalSessionId: "existing-spec-ext",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -1431,13 +1400,13 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      const sessionId = await start({
+      const externalSessionId = await start({
         taskId: "task-1",
         role: "planner",
         startMode: "fresh",
         selectedModel: PLANNER_SELECTION,
       });
-      expect(sessionId).toBe("planner-created");
+      expect(externalSessionId).toBe("planner-ext");
       expect(startCalls).toBe(1);
     } finally {
       adapter.startSession = originalStartSession;
@@ -1451,7 +1420,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     setPersistedSessionListFixture("/tmp/repo", "task-1", [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "persisted-2",
         externalSessionId: "external-2",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -1464,7 +1432,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       }),
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "persisted-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -1479,7 +1446,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       }),
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "persisted-build-newer",
         externalSessionId: "external-build-newer",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -1518,9 +1484,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
         sessionsRef.current = {
-          "persisted-build-newer": {
+          "external-build-newer": {
             runtimeKind: "opencode",
-            sessionId: "persisted-build-newer",
             externalSessionId: "external-build-newer",
             taskId: "task-1",
             repoPath: "/tmp/repo",
@@ -1550,14 +1515,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
       sendAgentMessage: async () => {},
     });
 
-    const sessionId = await start({
+    const externalSessionId = await start({
       taskId: "task-1",
       role: "build",
       scenario: "build_after_human_request_changes",
       startMode: "reuse",
-      sourceSessionId: "persisted-build-newer",
+      sourceExternalSessionId: "external-build-newer",
     });
-    expect(sessionId).toBe("persisted-build-newer");
+    expect(externalSessionId).toBe("external-build-newer");
     expect(loadAgentSessionsCalls).toBe(1);
   });
 
@@ -1567,9 +1532,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     const persistedSnapshots: AgentSessionRecord[] = [];
     let sessionsById: Record<string, AgentSessionState> = {
-      "source-build": {
+      "external-source-build": {
         runtimeKind: "opencode",
-        sessionId: "source-build",
         externalSessionId: "external-source-build",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -1611,7 +1575,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       });
       return {
         runtimeKind: "opencode",
-        sessionId: "forked-pr-session",
         externalSessionId: "external-forked-pr-session",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: "build",
@@ -1677,35 +1640,39 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      const sessionId = await start({
+      const externalSessionId = await start({
         taskId: "task-1",
         role: "build",
         scenario: "build_pull_request_generation",
         startMode: "fork",
         selectedModel: BUILD_SELECTION,
-        sourceSessionId: "source-build",
+        sourceExternalSessionId: "external-source-build",
       });
 
-      expect(sessionId).toBe("forked-pr-session");
-      expect(sessionsById["forked-pr-session"]?.scenario).toBe("build_pull_request_generation");
-      expect(sessionsById["forked-pr-session"]?.workingDirectory).toBe("/tmp/repo/worktree");
-      expect(sessionsById["forked-pr-session"]?.runtimeRoute).toEqual({
+      expect(externalSessionId).toBe("external-forked-pr-session");
+      expect(sessionsById["external-forked-pr-session"]?.scenario).toBe(
+        "build_pull_request_generation",
+      );
+      expect(sessionsById["external-forked-pr-session"]?.workingDirectory).toBe(
+        "/tmp/repo/worktree",
+      );
+      expect(sessionsById["external-forked-pr-session"]?.runtimeRoute).toEqual({
         type: "local_http",
         endpoint: "http://127.0.0.1:4444",
       });
       expect(
-        sessionsById["forked-pr-session"]
-          ? sessionMessagesToArray(sessionsById["forked-pr-session"])
+        sessionsById["external-forked-pr-session"]
+          ? sessionMessagesToArray(sessionsById["external-forked-pr-session"])
           : undefined,
       ).toEqual([
         {
-          id: "history:session-forked:forked-pr-session",
+          id: "history:session-forked:external-forked-pr-session",
           role: "system",
           content: "Session forked (build - build_pull_request_generation)",
           timestamp: "2026-02-22T08:20:00.000Z",
         },
         {
-          id: "history:system-prompt:forked-pr-session",
+          id: "history:system-prompt:external-forked-pr-session",
           role: "system",
           content: expect.stringContaining("System prompt:"),
           timestamp: "2026-02-22T08:20:00.000Z",
@@ -1737,7 +1704,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         },
       ]);
       expect(persistedSnapshots).toHaveLength(1);
-      expect(persistedSnapshots[0]?.sessionId).toBe("forked-pr-session");
+      expect(persistedSnapshots[0]?.externalSessionId).toBe("external-forked-pr-session");
     } finally {
       adapter.forkSession = originalForkSession;
       adapter.loadSessionHistory = originalLoadSessionHistory;
@@ -1748,11 +1715,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
-    const loadAgentSessionsCalls: Array<{ taskId: string; targetSessionId?: string }> = [];
+    const loadAgentSessionsCalls: Array<{ taskId: string; targetExternalSessionId?: string }> = [];
     let sessionsById: Record<string, AgentSessionState> = {
-      "source-build": {
+      "external-source-build": {
         runtimeKind: "opencode",
-        sessionId: "source-build",
         externalSessionId: "external-source-build",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -1780,7 +1746,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     adapter.forkSession = async () => ({
       runtimeKind: "opencode",
-      sessionId: "forked-from-hydrated-source",
       externalSessionId: "external-forked-from-hydrated-source",
       startedAt: "2026-02-22T08:20:00.000Z",
       role: "build",
@@ -1823,15 +1788,17 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async (taskId, options) => {
-        const targetSessionId = options?.targetSessionId ?? undefined;
-        loadAgentSessionsCalls.push(targetSessionId ? { taskId, targetSessionId } : { taskId });
-        const sourceBuild = sessionsById["source-build"];
+        const targetExternalSessionId = options?.targetExternalSessionId ?? undefined;
+        loadAgentSessionsCalls.push(
+          targetExternalSessionId ? { taskId, targetExternalSessionId } : { taskId },
+        );
+        const sourceBuild = sessionsById["external-source-build"];
         if (!sourceBuild) {
-          throw new Error("Missing source-build session");
+          throw new Error("Missing external-source-build session");
         }
         sessionsById = {
           ...sessionsById,
-          "source-build": {
+          "external-source-build": {
             ...sourceBuild,
             status: "idle",
             runtimeId: "runtime-1",
@@ -1847,35 +1814,35 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      const sessionId = await start({
+      const externalSessionId = await start({
         taskId: "task-1",
         role: "build",
         scenario: "build_pull_request_generation",
         startMode: "fork",
         selectedModel: BUILD_SELECTION,
-        sourceSessionId: "source-build",
+        sourceExternalSessionId: "external-source-build",
       });
 
-      expect(sessionId).toBe("forked-from-hydrated-source");
+      expect(externalSessionId).toBe("external-forked-from-hydrated-source");
       expect(loadAgentSessionsCalls).toEqual([
         {
           taskId: "task-1",
-          targetSessionId: "source-build",
+          targetExternalSessionId: "external-source-build",
         },
       ]);
       expect(
-        sessionsById["forked-from-hydrated-source"]
-          ? sessionMessagesToArray(sessionsById["forked-from-hydrated-source"])
+        sessionsById["external-forked-from-hydrated-source"]
+          ? sessionMessagesToArray(sessionsById["external-forked-from-hydrated-source"])
           : undefined,
       ).toEqual([
         {
-          id: "history:session-forked:forked-from-hydrated-source",
+          id: "history:session-forked:external-forked-from-hydrated-source",
           role: "system",
           content: "Session forked (build - build_pull_request_generation)",
           timestamp: "2026-02-22T08:20:00.000Z",
         },
         {
-          id: "history:system-prompt:forked-from-hydrated-source",
+          id: "history:system-prompt:external-forked-from-hydrated-source",
           role: "system",
           content: expect.stringContaining("System prompt:"),
           timestamp: "2026-02-22T08:20:00.000Z",
@@ -1902,9 +1869,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalForkSession = adapter.forkSession;
     const forkCalls: unknown[] = [];
     let sessionsById: Record<string, AgentSessionState> = {
-      "source-build": {
+      "external-source-build": {
         runtimeKind: "opencode",
-        sessionId: "source-build",
         externalSessionId: "external-source-build",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -1933,7 +1899,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       forkCalls.push(input);
       return {
         runtimeKind: "opencode",
-        sessionId: "forked-from-runtime-connection",
         externalSessionId: "external-forked-from-runtime-connection",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: "build",
@@ -1984,10 +1949,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
           scenario: "build_pull_request_generation",
           startMode: "fork",
           selectedModel: BUILD_SELECTION,
-          sourceSessionId: "source-build",
+          sourceExternalSessionId: "external-source-build",
         }),
       ).rejects.toThrow(
-        'Session "source-build" is missing live runtime context required for forking.',
+        'Session "external-source-build" is missing live runtime context required for forking.',
       );
       expect(forkCalls).toHaveLength(0);
     } finally {
@@ -2001,9 +1966,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const forkCalls: unknown[] = [];
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "source-build": {
+        "external-source-build": {
           runtimeKind: "opencode",
-          sessionId: "source-build",
           externalSessionId: "external-source-build",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2032,7 +1996,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       forkCalls.push(input);
       return {
         runtimeKind: "opencode",
-        sessionId: "unexpected-fork",
         externalSessionId: "unexpected-external-fork",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: "build",
@@ -2074,10 +2037,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
           scenario: "build_pull_request_generation",
           startMode: "fork",
           selectedModel: BUILD_SELECTION,
-          sourceSessionId: "source-build",
+          sourceExternalSessionId: "external-source-build",
         }),
       ).rejects.toThrow(
-        'Session "source-build" is missing live runtime context required for forking.',
+        'Session "external-source-build" is missing live runtime context required for forking.',
       );
       expect(forkCalls).toHaveLength(0);
     } finally {
@@ -2092,9 +2055,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalStopSession = adapter.stopSession;
     const stoppedSessionIds: string[] = [];
     let sessionsById: Record<string, AgentSessionState> = {
-      "source-build": {
+      "external-source-build": {
         runtimeKind: "opencode",
-        sessionId: "source-build",
         externalSessionId: "external-source-build",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -2122,7 +2084,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     adapter.forkSession = async () => ({
       runtimeKind: "opencode",
-      sessionId: "fork-history-failure",
       externalSessionId: "external-fork-history-failure",
       startedAt: "2026-02-22T08:20:00.000Z",
       role: "build",
@@ -2132,8 +2093,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     adapter.loadSessionHistory = async () => {
       throw new Error("history unavailable");
     };
-    adapter.stopSession = async (sessionId) => {
-      stoppedSessionIds.push(sessionId);
+    adapter.stopSession = async (externalSessionId) => {
+      stoppedSessionIds.push(externalSessionId);
     };
 
     const start = createStartAgentSessionWithFlatDeps({
@@ -2171,13 +2132,13 @@ describe("agent-orchestrator/handlers/start-session", () => {
           scenario: "build_pull_request_generation",
           startMode: "fork",
           selectedModel: BUILD_SELECTION,
-          sourceSessionId: "source-build",
+          sourceExternalSessionId: "external-source-build",
         }),
       ).rejects.toThrow(
-        'Failed to initialize started session "fork-history-failure": history unavailable. The started session was stopped before local registration.',
+        'Failed to initialize started session "external-fork-history-failure": history unavailable. The started session was stopped before local registration.',
       );
-      expect(stoppedSessionIds).toEqual(["fork-history-failure"]);
-      expect(sessionsById["fork-history-failure"]).toBeUndefined();
+      expect(stoppedSessionIds).toEqual(["external-fork-history-failure"]);
+      expect(sessionsById["external-fork-history-failure"]).toBeUndefined();
     } finally {
       adapter.forkSession = originalForkSession;
       adapter.loadSessionHistory = originalLoadSessionHistory;
@@ -2193,9 +2154,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalStopSession = adapter.stopSession;
     const stoppedSessionIds: string[] = [];
     let sessionsById: Record<string, AgentSessionState> = {
-      "source-build": {
+      "external-source-build": {
         runtimeKind: "opencode",
-        sessionId: "source-build",
         externalSessionId: "external-source-build",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -2224,7 +2184,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     adapter.forkSession = async () => ({
       runtimeKind: "opencode",
-      sessionId: "forked-stale-after-history",
       externalSessionId: "external-forked-stale-after-history",
       startedAt: "2026-02-22T08:20:00.000Z",
       role: "build",
@@ -2245,8 +2204,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
         },
       ];
     };
-    adapter.stopSession = async (sessionId) => {
-      stoppedSessionIds.push(sessionId);
+    adapter.stopSession = async (externalSessionId) => {
+      stoppedSessionIds.push(externalSessionId);
     };
 
     const start = createStartAgentSessionWithFlatDeps({
@@ -2285,11 +2244,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
           scenario: "build_pull_request_generation",
           startMode: "fork",
           selectedModel: BUILD_SELECTION,
-          sourceSessionId: "source-build",
+          sourceExternalSessionId: "external-source-build",
         }),
       ).rejects.toThrow("Workspace changed while starting session.");
-      expect(stoppedSessionIds).toEqual(["forked-stale-after-history"]);
-      expect(sessionsById["forked-stale-after-history"]).toBeUndefined();
+      expect(stoppedSessionIds).toEqual(["external-forked-stale-after-history"]);
+      expect(sessionsById["external-forked-stale-after-history"]).toBeUndefined();
     } finally {
       adapter.forkSession = originalForkSession;
       adapter.loadSessionHistory = originalLoadSessionHistory;
@@ -2302,9 +2261,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalForkSession = adapter.forkSession;
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "source-build": {
+        "external-source-build": {
           runtimeKind: "opencode",
-          sessionId: "source-build",
           externalSessionId: "external-source-build",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2334,7 +2292,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       forkCalls.push(input);
       return {
         runtimeKind: "opencode",
-        sessionId: "unexpected-fork",
         externalSessionId: "unexpected-external-fork",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: "build",
@@ -2376,7 +2333,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "build",
           scenario: "build_pull_request_generation",
           startMode: "fork",
-          sourceSessionId: "source-build",
+          sourceExternalSessionId: "external-source-build",
           selectedModel: {
             runtimeKind: "claude-code",
             providerId: "anthropic",
@@ -2386,7 +2343,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         }),
       ).rejects.toThrow(
-        'Session "source-build" cannot be forked with runtime "claude-code" because it belongs to runtime "opencode".',
+        'Session "external-source-build" cannot be forked with runtime "claude-code" because it belongs to runtime "opencode".',
       );
       expect(forkCalls).toHaveLength(0);
     } finally {
@@ -2411,7 +2368,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(input.model).toEqual(selectedModel);
       return {
         runtimeKind: "claude-code",
-        sessionId: "fresh-runtime-session",
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:40:00.000Z",
         role: "build",
@@ -2423,7 +2379,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     setPersistedSessionListFixture("/tmp/repo", "task-1", [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "persisted-opencode",
         externalSessionId: "external-opencode",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -2466,9 +2421,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
         sessionsRef.current = {
-          "persisted-opencode": {
+          "external-opencode": {
             runtimeKind: "opencode",
-            sessionId: "persisted-opencode",
             externalSessionId: "external-opencode",
             taskId: "task-1",
             repoPath: "/tmp/repo",
@@ -2510,9 +2464,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "build",
           scenario: "build_after_human_request_changes",
           startMode: "reuse",
-          sourceSessionId: "persisted-opencode",
+          sourceExternalSessionId: "external-opencode",
         }),
-      ).resolves.toBe("persisted-opencode");
+      ).resolves.toBe("external-opencode");
       expect(loadAgentSessionsCalls).toBe(1);
       expect(startCalls).toBe(0);
     } finally {
@@ -2530,7 +2484,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       startCalls += 1;
       return {
         runtimeKind: "claude-code",
-        sessionId: "fresh-runtime-session",
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:40:00.000Z",
         role: "build",
@@ -2541,7 +2494,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     setPersistedSessionListFixture("/tmp/repo", "task-1", [
       {
-        sessionId: "persisted-claude",
         externalSessionId: "external-claude",
         runtimeKind: "claude-code",
         role: "build",
@@ -2581,9 +2533,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
         sessionsRef.current = {
-          "persisted-claude": {
+          "external-claude": {
             runtimeKind: "claude-code",
-            sessionId: "persisted-claude",
             externalSessionId: "external-claude",
             taskId: "task-1",
             repoPath: "/tmp/repo",
@@ -2619,14 +2570,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      const sessionId = await start({
+      const externalSessionId = await start({
         taskId: "task-1",
         role: "build",
         scenario: "build_after_human_request_changes",
         startMode: "reuse",
-        sourceSessionId: "persisted-claude",
+        sourceExternalSessionId: "external-claude",
       });
-      expect(sessionId).toBe("persisted-claude");
+      expect(externalSessionId).toBe("external-claude");
       expect(loadAgentSessionsCalls).toBe(1);
       expect(startCalls).toBe(0);
     } finally {
@@ -2818,7 +2769,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => ({
-      sessionId: "session-qa",
       externalSessionId: "external-qa",
       role: input.role,
       scenario: input.scenario,
@@ -2880,7 +2830,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: QA_SELECTION,
         }),
-      ).resolves.toBe("session-qa");
+      ).resolves.toBe("external-qa");
       expect(qaTargetCalls).toBe(1);
       expect(ensuredWorkingDirectories).toEqual(["/tmp/repo/worktree"]);
     } finally {
@@ -2954,7 +2904,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalStartSession = adapter.startSession;
     adapter.startSession = async () => ({
       runtimeKind: "opencode",
-      sessionId: "session-created",
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "build",
@@ -3018,7 +2967,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef.current = "/tmp/other";
       return {
         runtimeKind: "opencode",
-        sessionId: "session-created",
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
@@ -3085,7 +3033,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     adapter.startSession = async () => {
       return {
         runtimeKind: "opencode",
-        sessionId: "session-created",
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
@@ -3154,7 +3101,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       currentWorkspaceRepoPathRef.current = "/tmp/other";
       return {
         runtimeKind: "opencode",
-        sessionId: "session-created",
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
@@ -3195,7 +3141,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      await withCapturedConsoleError(async (calls) => {
+      await withCapturedConsole("error", async (calls) => {
         await expect(
           start({
             taskId: "task-1",
@@ -3204,7 +3150,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
             selectedModel: BUILD_SELECTION,
           }),
         ).rejects.toThrow(
-          "Workspace changed while starting session. Failed to stop stale started session 'session-created': stop boom",
+          "Workspace changed while starting session. Failed to stop stale started session 'external-created': stop boom",
         );
         expect(calls).toHaveLength(1);
         expect(String(calls[0]?.[1] ?? "")).toBe("start-session-stop-on-stale-after-start");
@@ -3238,7 +3184,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
-        sessionId: "session-created",
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
@@ -3285,26 +3230,26 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      const sessionId = await start({
+      const externalSessionId = await start({
         taskId: "task-1",
         role: "build",
         sendKickoff: true,
         startMode: "fresh",
         selectedModel: BUILD_SELECTION,
       });
-      expect(sessionId).toBe("session-created");
+      expect(externalSessionId).toBe("external-created");
       expect(startCalls).toBe(1);
       expect(attachCalls).toBe(1);
       expect(persistCalls).toBe(1);
       expect(kickoffCalls).toBe(1);
       expect(refreshCalls).toBe(1);
-      expect(Object.keys(sessionsState)).toContain("session-created");
+      expect(Object.keys(sessionsState)).toContain("external-created");
       expect(
-        sessionsState["session-created"]
-          ? sessionMessageAt(sessionsState["session-created"], 0)
+        sessionsState["external-created"]
+          ? sessionMessageAt(sessionsState["external-created"], 0)
           : undefined,
       ).toEqual({
-        id: "history:session-start:session-created",
+        id: "history:session-start:external-created",
         role: "system",
         content: "Session started (build - build_implementation_start)",
         timestamp: "2026-02-22T08:00:10.000Z",
@@ -3460,7 +3405,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalStartSession = adapter.startSession;
     adapter.startSession = async () => ({
       runtimeKind: "opencode",
-      sessionId: "session-created",
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "build",
@@ -3510,9 +3454,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const raceResult = await withTimeout(startPromise, 20);
       refreshDeferred.resolve();
 
-      expect(raceResult).toBe("session-created");
+      expect(raceResult).toBe("external-created");
       expect(refreshCalls).toBe(1);
-      await expect(startPromise).resolves.toBe("session-created");
+      await expect(startPromise).resolves.toBe("external-created");
     } finally {
       refreshDeferred.resolve();
       adapter.startSession = originalStartSession;
@@ -3526,7 +3470,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     adapter.forkSession = async () => ({
       runtimeKind: "opencode",
-      sessionId: "session-created",
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "build",
@@ -3539,9 +3482,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     host.agentSessionsList = async () => [];
 
     let sessionsById: Record<string, AgentSessionState> = {
-      "source-build": {
+      "external-source-build": {
         runtimeKind: "opencode",
-        sessionId: "source-build",
         externalSessionId: "external-source-build",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -3606,7 +3548,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
-      sendAgentMessage: async (_sessionId, parts) => {
+      sendAgentMessage: async (_externalSessionId, parts) => {
         kickoffPrompt = parts.map((part) => (part.kind === "text" ? part.text : "")).join("\n");
       },
     });
@@ -3618,7 +3560,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         scenario: "build_pull_request_generation",
         sendKickoff: true,
         startMode: "fork",
-        sourceSessionId: "source-build",
+        sourceExternalSessionId: "external-source-build",
         selectedModel: BUILD_SELECTION,
       });
 
@@ -3640,7 +3582,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     adapter.forkSession = async () => ({
       runtimeKind: "opencode",
-      sessionId: "session-created",
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "build",
@@ -3653,9 +3594,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     host.agentSessionsList = async () => [];
 
     let sessionsById: Record<string, AgentSessionState> = {
-      "source-build": {
+      "external-source-build": {
         runtimeKind: "opencode",
-        sessionId: "source-build",
         externalSessionId: "external-source-build",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -3727,7 +3667,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           scenario: "build_pull_request_generation",
           sendKickoff: true,
           startMode: "fork",
-          sourceSessionId: "source-build",
+          sourceExternalSessionId: "external-source-build",
           selectedModel: BUILD_SELECTION,
         }),
       ).rejects.toThrow(
@@ -3756,7 +3696,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       observedStartInput = input;
       return {
         runtimeKind: "opencode",
-        sessionId: "session-created",
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
@@ -3801,7 +3740,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           selectedModel,
           startMode: "fresh",
         }),
-      ).resolves.toBe("session-created");
+      ).resolves.toBe("external-created");
       if (observedStartInput === null) {
         throw new Error("Expected adapter.startSession to receive input.");
       }

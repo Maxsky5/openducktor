@@ -14,6 +14,8 @@ export type AgentSessionScenario = z.infer<typeof agentSessionScenarioSchema>;
 const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
+const nonEmptyStringSchema = z.string().trim().min(1);
+
 const agentSessionMetadataValueSchema: z.ZodType<
   string | number | boolean | null | undefined | Array<unknown> | Record<string, unknown>
 > = z.lazy(() =>
@@ -66,9 +68,8 @@ export const agentSessionQuestionRequestSchema = z.object({
 });
 export type AgentSessionQuestionRequest = z.infer<typeof agentSessionQuestionRequestSchema>;
 
-export const agentSessionRecordSchema = z.object({
-  sessionId: z.string(),
-  externalSessionId: optionalFromNullable(z.string()),
+const agentSessionRecordShape = {
+  externalSessionId: nonEmptyStringSchema,
   role: agentSessionRoleSchema,
   scenario: agentSessionScenarioSchema,
   startedAt: z.string(),
@@ -78,15 +79,16 @@ export const agentSessionRecordSchema = z.object({
     (value) => (value === undefined ? null : value),
     agentSessionModelSelectionSchema.nullable(),
   ),
-});
+} satisfies z.ZodRawShape;
+
+export const agentSessionRecordSchema = z.object(agentSessionRecordShape);
 export type AgentSessionRecord = z.infer<typeof agentSessionRecordSchema>;
 
 export const agentSessionStopTargetSchema = z.object({
-  repoPath: z.string().trim().min(1),
-  taskId: z.string().trim().min(1),
-  sessionId: z.string().trim().min(1),
+  repoPath: nonEmptyStringSchema,
+  taskId: nonEmptyStringSchema,
+  externalSessionId: nonEmptyStringSchema,
   runtimeKind: runtimeKindSchema,
-  workingDirectory: z.string().trim().min(1),
-  externalSessionId: optionalFromNullable(z.string().trim().min(1)),
+  workingDirectory: nonEmptyStringSchema,
 });
 export type AgentSessionStopTarget = z.infer<typeof agentSessionStopTargetSchema>;

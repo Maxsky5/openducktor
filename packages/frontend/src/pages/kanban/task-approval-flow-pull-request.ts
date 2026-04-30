@@ -23,8 +23,10 @@ export async function submitPullRequestApproval({
   refreshTasks,
 }: SubmitPullRequestApprovalArgs): Promise<SubmitPullRequestApprovalResult> {
   if (approval.pullRequestDraftMode === "generate_ai") {
-    const sessionId = await requestPullRequestGeneration(approval.taskId);
-    return sessionId ? { outcome: "generation_started" } : { outcome: "generation_cancelled" };
+    const externalSessionId = await requestPullRequestGeneration(approval.taskId);
+    return externalSessionId
+      ? { outcome: "generation_started" }
+      : { outcome: "generation_cancelled" };
   }
 
   const pullRequest = await host.taskPullRequestUpsert(

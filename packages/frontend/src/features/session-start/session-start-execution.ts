@@ -13,7 +13,7 @@ type SessionStartExecutionRequestBase = {
 
 export type ReuseSessionStartExecutionRequest = SessionStartExecutionRequestBase & {
   startMode: "reuse";
-  sourceSessionId: string;
+  sourceExternalSessionId: string;
 };
 
 export type FreshSessionStartExecutionRequest = SessionStartExecutionRequestBase & {
@@ -25,7 +25,7 @@ export type FreshSessionStartExecutionRequest = SessionStartExecutionRequestBase
 export type ForkSessionStartExecutionRequest = SessionStartExecutionRequestBase & {
   startMode: "fork";
   selectedModel: AgentModelSelection;
-  sourceSessionId: string;
+  sourceExternalSessionId: string;
 };
 
 export type SessionStartExecutionRequest =
@@ -58,14 +58,14 @@ const prepareReuseSessionStartInput = ({
   taskId,
   role,
   scenario,
-  sourceSessionId,
+  sourceExternalSessionId,
   kickoffTargetBranch,
 }: ReuseSessionStartExecutionRequest): StartAgentSessionInput => ({
   taskId,
   role,
   scenario,
   startMode: "reuse",
-  sourceSessionId,
+  sourceExternalSessionId,
   ...(kickoffTargetBranch !== undefined ? { kickoffTargetBranch } : {}),
 });
 
@@ -74,7 +74,7 @@ const prepareForkSessionStartInput = ({
   role,
   scenario,
   selectedModel,
-  sourceSessionId,
+  sourceExternalSessionId,
   kickoffTargetBranch,
 }: ForkSessionStartExecutionRequest): StartAgentSessionInput => ({
   taskId,
@@ -82,7 +82,7 @@ const prepareForkSessionStartInput = ({
   scenario,
   selectedModel,
   startMode: "fork",
-  sourceSessionId,
+  sourceExternalSessionId,
   ...(kickoffTargetBranch !== undefined ? { kickoffTargetBranch } : {}),
 });
 

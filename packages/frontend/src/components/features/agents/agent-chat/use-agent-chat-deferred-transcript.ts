@@ -1,7 +1,7 @@
 import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 type UseAgentChatDeferredTranscriptArgs = {
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   shouldDefer: boolean;
 };
 
@@ -10,10 +10,12 @@ type UseAgentChatDeferredTranscriptResult = {
 };
 
 export function useAgentChatDeferredTranscript({
-  activeSessionId,
+  activeExternalSessionId,
   shouldDefer,
 }: UseAgentChatDeferredTranscriptArgs): UseAgentChatDeferredTranscriptResult {
-  const [renderedSessionId, setRenderedSessionId] = useState<string | null>(activeSessionId);
+  const [renderedSessionId, setRenderedSessionId] = useState<string | null>(
+    activeExternalSessionId,
+  );
   const frameRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -34,12 +36,12 @@ export function useAgentChatDeferredTranscript({
     }
 
     cancelPendingDeferral();
-    if (renderedSessionId === activeSessionId) {
+    if (renderedSessionId === activeExternalSessionId) {
       return;
     }
 
-    setRenderedSessionId(activeSessionId);
-  }, [activeSessionId, cancelPendingDeferral, renderedSessionId, shouldDefer]);
+    setRenderedSessionId(activeExternalSessionId);
+  }, [activeExternalSessionId, cancelPendingDeferral, renderedSessionId, shouldDefer]);
 
   useEffect(() => {
     if (!shouldDefer) {
@@ -48,18 +50,18 @@ export function useAgentChatDeferredTranscript({
 
     cancelPendingDeferral();
 
-    if (renderedSessionId === activeSessionId) {
+    if (renderedSessionId === activeExternalSessionId) {
       return;
     }
 
-    if (activeSessionId === null) {
+    if (activeExternalSessionId === null) {
       startTransition(() => {
-        setRenderedSessionId(activeSessionId);
+        setRenderedSessionId(activeExternalSessionId);
       });
       return;
     }
 
-    const nextSessionId = activeSessionId;
+    const nextSessionId = activeExternalSessionId;
     frameRef.current = globalThis.requestAnimationFrame(() => {
       frameRef.current = null;
       timerRef.current = setTimeout(() => {
@@ -69,7 +71,7 @@ export function useAgentChatDeferredTranscript({
         });
       }, 0);
     });
-  }, [activeSessionId, cancelPendingDeferral, renderedSessionId, shouldDefer]);
+  }, [activeExternalSessionId, cancelPendingDeferral, renderedSessionId, shouldDefer]);
 
   useEffect(() => {
     return () => {
@@ -78,6 +80,6 @@ export function useAgentChatDeferredTranscript({
   }, [cancelPendingDeferral]);
 
   return {
-    isTranscriptRenderDeferred: shouldDefer && renderedSessionId !== activeSessionId,
+    isTranscriptRenderDeferred: shouldDefer && renderedSessionId !== activeExternalSessionId,
   };
 }

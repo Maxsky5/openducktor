@@ -20,7 +20,7 @@ type AgentChatMessageCardProps = {
   sessionRuntimeRoute?: RuntimeRoute | null | undefined;
   subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
   subagentPendingPermissionCount?: number;
-  subagentPendingPermissionCountBySessionId?: Record<string, number>;
+  subagentPendingPermissionCountByExternalSessionId?: Record<string, number>;
 };
 
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
@@ -34,7 +34,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   sessionRuntimeRoute,
   subagentPendingPermissions,
   subagentPendingPermissionCount,
-  subagentPendingPermissionCountBySessionId = EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
+  subagentPendingPermissionCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
 }: AgentChatMessageCardProps): ReactElement | null {
   const runtimeDefinitionsContext = useContext(RuntimeDefinitionsContext);
   const runtimeDefinitions = runtimeDefinitionsContext?.runtimeDefinitions ?? [];
@@ -49,8 +49,8 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   });
   const resolvedSubagentPendingPermissionCount =
     subagentPendingPermissionCount ??
-    (message.meta?.kind === "subagent" && message.meta.sessionId
-      ? (subagentPendingPermissionCountBySessionId[message.meta.sessionId] ?? 0)
+    (message.meta?.kind === "subagent" && message.meta.externalSessionId
+      ? (subagentPendingPermissionCountByExternalSessionId[message.meta.externalSessionId] ?? 0)
       : 0);
 
   return (

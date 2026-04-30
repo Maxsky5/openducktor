@@ -3,7 +3,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type AgentSessionOptionSummary = Pick<
   AgentSessionState,
-  "sessionId" | "role" | "scenario" | "startedAt" | "status"
+  "externalSessionId" | "role" | "scenario" | "startedAt" | "status"
 >;
 
 export const compareAgentSessionRecency = (
@@ -13,10 +13,10 @@ export const compareAgentSessionRecency = (
   if (a.startedAt !== b.startedAt) {
     return a.startedAt > b.startedAt ? -1 : 1;
   }
-  if (a.sessionId === b.sessionId) {
+  if (a.externalSessionId === b.externalSessionId) {
     return 0;
   }
-  return a.sessionId > b.sessionId ? -1 : 1;
+  return a.externalSessionId > b.externalSessionId ? -1 : 1;
 };
 
 export const buildRoleSessionSequenceById = (
@@ -28,12 +28,12 @@ export const buildRoleSessionSequenceById = (
         if (a.startedAt !== b.startedAt) {
           return a.startedAt < b.startedAt ? -1 : 1;
         }
-        if (a.sessionId === b.sessionId) {
+        if (a.externalSessionId === b.externalSessionId) {
           return 0;
         }
-        return a.sessionId < b.sessionId ? -1 : 1;
+        return a.externalSessionId < b.externalSessionId ? -1 : 1;
       })
-      .map((session, index) => [session.sessionId, index + 1]),
+      .map((session, index) => [session.externalSessionId, index + 1]),
   );
 };
 
@@ -44,7 +44,7 @@ export const formatAgentSessionOptionLabel = (params: {
   roleLabelByRole: Record<AgentRole, string>;
 }): string => {
   if (params.session.role === null || params.session.scenario === null) {
-    throw new Error(`Session ${params.session.sessionId} is not a workflow session.`);
+    throw new Error(`Session ${params.session.externalSessionId} is not a workflow session.`);
   }
   const scenarioLabel = params.scenarioLabels[params.session.scenario];
   const roleLabel = params.roleLabelByRole[params.session.role];
@@ -57,5 +57,5 @@ export const formatAgentSessionOptionDescription = (session: AgentSessionOptionS
   const startedAtLabel = Number.isNaN(startedAt.getTime())
     ? session.startedAt
     : startedAt.toLocaleString();
-  return `${startedAtLabel} · ${session.status} · ${session.sessionId.slice(0, 8)}`;
+  return `${startedAtLabel} · ${session.status} · ${session.externalSessionId.slice(0, 8)}`;
 };

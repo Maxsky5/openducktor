@@ -12,15 +12,15 @@ const normalizeLiveSessionTitle = (title: string): string | undefined => {
 
 type CreateReattachLiveSessionArgs = {
   adapter: {
-    hasSession?: (sessionId: string) => boolean;
+    hasSession?: (externalSessionId: string) => boolean;
   };
   repoPath: string;
   updateSession: (
-    sessionId: string,
+    externalSessionId: string,
     updater: (current: AgentSessionState) => AgentSessionState,
     options?: { persist?: boolean },
   ) => void;
-  attachSessionListener?: (repoPath: string, sessionId: string) => void;
+  attachSessionListener?: (repoPath: string, externalSessionId: string) => void;
   promptOverrides: import("@openducktor/contracts").RepoPromptOverrides;
   resolveHydrationRuntime: (record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>;
   listLiveAgentSessions: (
@@ -79,8 +79,8 @@ export const createReattachLiveSession = ({
       return false;
     }
 
-    const externalSessionId = record.externalSessionId ?? record.sessionId;
-    const attachedExistingSession = adapter.hasSession(record.sessionId);
+    const externalSessionId = record.externalSessionId;
+    const attachedExistingSession = adapter.hasSession(record.externalSessionId);
     const liveAgentSessions = await awaitUnlessStale(
       listLiveAgentSessions(runtimeResolution.runtimeKind, runtimeResolution.runtimeConnection, [
         record.workingDirectory,
@@ -105,7 +105,7 @@ export const createReattachLiveSession = ({
       }
       if (!attachMissingLiveSession) {
         throw new Error(
-          `Cannot reattach live session ${record.sessionId} without an attachMissingLiveSession handler.`,
+          `Cannot reattach live session ${record.externalSessionId} without an attachMissingLiveSession handler.`,
         );
       }
       const resumeResult = await awaitUnlessStale(
@@ -123,9 +123,9 @@ export const createReattachLiveSession = ({
     if (isStaleRepoOperation()) {
       return false;
     }
-    attachSessionListener(repoPath, record.sessionId);
+    attachSessionListener(repoPath, record.externalSessionId);
     updateSession(
-      record.sessionId,
+      record.externalSessionId,
       (current) => ({
         ...current,
         runtimeKind: runtimeResolution.runtimeKind,

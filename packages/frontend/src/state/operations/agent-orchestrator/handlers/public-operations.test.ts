@@ -235,7 +235,7 @@ describe("agent-orchestrator-public-operations", () => {
       await expect(
         operations.ensureSessionReadyForView({
           taskId: "task-1",
-          sessionId: "session-1",
+          externalSessionId: "session-1",
           repoReadinessState: "ready",
         }),
       ).rejects.toThrow("prepare failed");

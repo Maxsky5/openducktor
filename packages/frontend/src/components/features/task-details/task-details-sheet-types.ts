@@ -21,7 +21,7 @@ export type TaskDetailsSheetProps = {
   onOpenSession?: (
     taskId: string,
     role: AgentRole,
-    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
   ) => void;
   onDelegate?: (taskId: string) => void;
   onEdit?: (taskId: string) => void;

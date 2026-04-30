@@ -12,7 +12,7 @@ let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-di
 const removeAgentSession = mock(async () => {});
 let agentSessionState: Pick<AgentSessionState, "purpose" | "role" | "scenario"> | null = null;
 let latestDialogProps: {
-  sessionId: string | null;
+  externalSessionId: string | null;
   source: RuntimeSessionTranscriptSource | null;
   title: string;
   description: string;
@@ -55,13 +55,13 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     mock.module("./agent-session-transcript-dialog", () => ({
       AgentSessionTranscriptDialog: (props: {
-        sessionId: string | null;
+        externalSessionId: string | null;
         source: RuntimeSessionTranscriptSource | null;
         title: string;
         description: string;
       }): ReactElement => {
         latestDialogProps = props;
-        return <div data-testid="session-dialog-props">{props.sessionId}</div>;
+        return <div data-testid="session-dialog-props">{props.externalSessionId}</div>;
       },
     }));
   });
@@ -85,7 +85,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
           type="button"
           onClick={() => {
             openSessionTranscript({
-              sessionId: "session-child-1",
+              externalSessionId: "session-child-1",
               source: transcriptSource,
               title: "Subagent activity",
               description: "View what this subagent did.",
@@ -108,7 +108,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     await waitFor(() => {
       expect(latestDialogProps).toMatchObject({
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
         source: transcriptSource,
         title: "Subagent activity",
         description: "View what this subagent did.",
@@ -135,7 +135,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
             type="button"
             onClick={() => {
               openSessionTranscript({
-                sessionId: "session-child-1",
+                externalSessionId: "session-child-1",
                 source: transcriptSource,
               });
             }}
@@ -157,7 +157,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     render(<DialogControls />, { wrapper });
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
-    await waitFor(() => expect(latestDialogProps?.sessionId).toBe("session-child-1"));
+    await waitFor(() => expect(latestDialogProps?.externalSessionId).toBe("session-child-1"));
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
@@ -183,7 +183,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
             type="button"
             onClick={() => {
               openSessionTranscript({
-                sessionId: "session-build-1",
+                externalSessionId: "session-build-1",
                 source: transcriptSource,
               });
             }}
@@ -205,7 +205,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     render(<DialogControls />, { wrapper });
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
-    await waitFor(() => expect(latestDialogProps?.sessionId).toBe("session-build-1"));
+    await waitFor(() => expect(latestDialogProps?.externalSessionId).toBe("session-build-1"));
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
