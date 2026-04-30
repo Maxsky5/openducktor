@@ -65,6 +65,7 @@ describe("document contracts", () => {
       agentSessions: [
         {
           sessionId: "session-1",
+          externalSessionId: "session-1",
           role: "build",
           scenario: "build_implementation_start",
           startedAt: "2026-02-18T17:20:00Z",

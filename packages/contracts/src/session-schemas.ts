@@ -81,43 +81,8 @@ const agentSessionRecordShape = {
   ),
 } satisfies z.ZodRawShape;
 
-export const agentSessionRecordSchema = z.object(agentSessionRecordShape).strict();
+export const agentSessionRecordSchema = z.object(agentSessionRecordShape);
 export type AgentSessionRecord = z.infer<typeof agentSessionRecordSchema>;
-
-const legacyAgentSessionRecordSchema = z.object({
-  ...agentSessionRecordShape,
-  externalSessionId: optionalFromNullable(nonEmptyStringSchema),
-  sessionId: optionalFromNullable(nonEmptyStringSchema),
-});
-
-export const parseAgentSessionRecordCompat = (value: unknown): AgentSessionRecord => {
-  const legacyRecord = legacyAgentSessionRecordSchema.parse(value);
-  const legacySessionId = legacyRecord.sessionId;
-  const externalSessionId = legacyRecord.externalSessionId;
-
-  if (legacySessionId && externalSessionId && legacySessionId !== externalSessionId) {
-    throw new Error(
-      "Invalid agent session record metadata: sessionId and externalSessionId differ; fix saved task metadata and retry.",
-    );
-  }
-
-  const canonicalExternalSessionId = externalSessionId ?? legacySessionId;
-  if (!canonicalExternalSessionId) {
-    throw new Error(
-      "Invalid agent session record metadata: externalSessionId is required; fix saved task metadata and retry.",
-    );
-  }
-
-  return agentSessionRecordSchema.parse({
-    externalSessionId: canonicalExternalSessionId,
-    role: legacyRecord.role,
-    scenario: legacyRecord.scenario,
-    startedAt: legacyRecord.startedAt,
-    runtimeKind: legacyRecord.runtimeKind,
-    workingDirectory: legacyRecord.workingDirectory,
-    selectedModel: legacyRecord.selectedModel,
-  });
-};
 
 export const agentSessionStopTargetSchema = z.object({
   repoPath: nonEmptyStringSchema,

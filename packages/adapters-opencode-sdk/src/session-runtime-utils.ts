@@ -1,7 +1,7 @@
 import type { AgentRole, AgentScenario, StartAgentSessionInput } from "@openducktor/core";
 import type { SessionInput } from "./types";
 
-type SessionInputSource = Omit<StartAgentSessionInput, "sessionId" | "role" | "scenario"> & {
+type SessionInputSource = Omit<StartAgentSessionInput, "role" | "scenario"> & {
   role: AgentRole | null;
   scenario: AgentScenario | null;
 };

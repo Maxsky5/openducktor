@@ -26,7 +26,6 @@ import {
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  parseAgentSessionRecordCompat,
   type RuntimeDescriptor,
   repoConfigSchema,
   runtimeDescriptorSchema,
@@ -1470,8 +1469,8 @@ describe("runtime schemas", () => {
     expect(parsed.selectedModel).toBeNull();
   });
 
-  test("agent session record rejects duplicate local session id in canonical payload", () => {
-    const result = agentSessionRecordSchema.safeParse({
+  test("agent session record ignores old local session id when external id is present", () => {
+    const parsed = agentSessionRecordSchema.parse({
       sessionId: "obp-session-2",
       externalSessionId: "obp-session-2",
       role: "planner",
@@ -1482,60 +1481,15 @@ describe("runtime schemas", () => {
       selectedModel: null,
     });
 
-    expect(result.success).toBe(false);
-  });
-
-  test("compat parser normalizes equal legacy dual-id agent session record", () => {
-    const parsed = parseAgentSessionRecordCompat({
-      sessionId: "opencode-session-1",
-      externalSessionId: "opencode-session-1",
-      role: "build",
-      scenario: "build_implementation_start",
-      startedAt: "2026-02-18T17:11:00.000Z",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo",
-      selectedModel: null,
-    });
-
     expect(parsed).toEqual({
-      externalSessionId: "opencode-session-1",
-      role: "build",
-      scenario: "build_implementation_start",
+      externalSessionId: "obp-session-2",
+      role: "planner",
+      scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
-      runtimeKind: "opencode",
+      runtimeKind: "claude-code",
       workingDirectory: "/repo",
       selectedModel: null,
     });
-  });
-
-  test("compat parser rejects conflicting legacy dual-id agent session record", () => {
-    expect(() =>
-      parseAgentSessionRecordCompat({
-        sessionId: "local-session-1",
-        externalSessionId: "opencode-session-1",
-        role: "build",
-        scenario: "build_implementation_start",
-        startedAt: "2026-02-18T17:11:00.000Z",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
-        selectedModel: null,
-      }),
-    ).toThrow("sessionId and externalSessionId differ");
-  });
-
-  test("compat parser promotes sessionId-only legacy agent session record explicitly", () => {
-    const parsed = parseAgentSessionRecordCompat({
-      sessionId: "legacy-session-1",
-      role: "qa",
-      scenario: "qa_review",
-      startedAt: "2026-02-18T17:11:00.000Z",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo",
-      selectedModel: null,
-    });
-
-    expect(parsed.externalSessionId).toBe("legacy-session-1");
-    expect("sessionId" in parsed).toBe(false);
   });
 
   test("agent session record rejects blank canonical session identity", () => {

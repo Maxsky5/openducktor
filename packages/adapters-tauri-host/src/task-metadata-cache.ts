@@ -24,29 +24,8 @@ const toMetadataIssue = (issue: { path: PropertyKey[]; message: string }): Metad
 const formatAgentSessionIssue = (issue: MetadataIssue): string => {
   const path = issue.path.length > 1 ? issue.path.slice(1) : ["unknown"];
   const [index, ...rest] = path;
-  const suffix = rest.length > 0 ? `.${rest.join(".")}` : readNestedIssuePath(issue.message);
+  const suffix = rest.length > 0 ? `.${rest.join(".")}` : "";
   return `agentSessions[${String(index)}]${suffix}: ${issue.message}`;
-};
-
-const readNestedIssuePath = (message: string): string => {
-  try {
-    const issues = JSON.parse(message) as unknown;
-    if (!Array.isArray(issues)) {
-      return "";
-    }
-    const firstNestedPath = issues
-      .map((issue) =>
-        typeof issue === "object" &&
-        issue !== null &&
-        Array.isArray((issue as { path?: unknown }).path)
-          ? (issue as { path: unknown[] }).path
-          : [],
-      )
-      .find((path) => path.length > 0);
-    return firstNestedPath ? `.${firstNestedPath.map(String).join(".")}` : "";
-  } catch {
-    return "";
-  }
 };
 
 const parseTaskMetadataPayload = (payload: unknown, taskId: string): TaskMetadataPayload => {
