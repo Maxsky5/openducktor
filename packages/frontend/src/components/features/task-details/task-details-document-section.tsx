@@ -116,6 +116,5 @@ export const TaskDetailsDocumentSection = memo(
     previous.markdown === next.markdown &&
     previous.updatedAt === next.updatedAt &&
     previous.empty === next.empty &&
-    previous.defaultExpanded === next.defaultExpanded &&
-    previous.icon === next.icon,
+    previous.defaultExpanded === next.defaultExpanded,
 );

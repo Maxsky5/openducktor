@@ -1,12 +1,12 @@
 import { Maximize2 } from "lucide-react";
-import { type MouseEvent, type ReactElement, useCallback, useState } from "react";
+import type { ReactElement } from "react";
+import { useCallback, useState } from "react";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { Button } from "@/components/ui/button";
-import { CopyIconButton } from "@/components/ui/copy-icon-button";
+import { DocumentCopyButton } from "@/components/ui/document-copy-button";
 import { MarkdownPreviewModal } from "@/components/ui/markdown-preview-modal";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { buildCopyPreview } from "@/lib/copy-preview";
-import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
+import { hasLabeledCodeFence } from "@/lib/markdown-utils";
 
 export type AgentStudioWorkspaceDocument = {
   title: string;
@@ -31,10 +31,6 @@ const formatDocumentUpdatedAt = (iso: string | null): string | null => {
   }).format(value);
 };
 
-const hasLabeledCodeFence = (markdown: string): boolean => {
-  return markdown.includes("```") && /```[a-z0-9_-]+/i.test(markdown);
-};
-
 export type AgentStudioWorkspaceSidebarModel = {
   activeDocument: AgentStudioWorkspaceDocument | null;
 };
@@ -43,32 +39,6 @@ type DocumentSectionProps = {
   emptyState: string;
   document: TaskDocumentState;
 };
-
-function AgentStudioDocumentCopyButton({ markdown }: { markdown: string }): ReactElement {
-  const { copied, copyToClipboard } = useCopyToClipboard({
-    getSuccessDescription: buildCopyPreview,
-    errorLogContext: "AgentStudioWorkspaceSidebar",
-  });
-
-  const handleCopy = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
-      event.stopPropagation();
-      event.preventDefault();
-      void copyToClipboard(markdown);
-    },
-    [copyToClipboard, markdown],
-  );
-
-  return (
-    <CopyIconButton
-      copied={copied}
-      ariaLabel="Copy document content"
-      dataTestId="copy-agent-studio-document-content"
-      className="absolute top-2 right-2 z-10"
-      onClick={handleCopy}
-    />
-  );
-}
 
 function DocumentSection({ emptyState, document }: DocumentSectionProps): ReactElement {
   return (
@@ -80,7 +50,12 @@ function DocumentSection({ emptyState, document }: DocumentSectionProps): ReactE
             variant="document"
             premiumCodeBlocks={hasLabeledCodeFence(document.markdown)}
           />
-          <AgentStudioDocumentCopyButton markdown={document.markdown} />
+          <DocumentCopyButton
+            markdown={document.markdown}
+            dataTestId="copy-agent-studio-document-content"
+            errorLogContext="AgentStudioWorkspaceSidebar"
+            className="absolute top-2 right-2 z-10"
+          />
         </>
       ) : (
         <p className="text-sm text-muted-foreground">{emptyState}</p>
