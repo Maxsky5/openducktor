@@ -1,6 +1,9 @@
-import { type MouseEvent, type ReactElement, useCallback } from "react";
+import { Maximize2 } from "lucide-react";
+import { type MouseEvent, type ReactElement, useCallback, useState } from "react";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import { Button } from "@/components/ui/button";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
+import { MarkdownPreviewModal } from "@/components/ui/markdown-preview-modal";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
@@ -91,29 +94,59 @@ export function AgentStudioWorkspaceSidebar({
 }: {
   model: AgentStudioWorkspaceSidebarModel;
 }): ReactElement {
+  const [modalOpen, setModalOpen] = useState(false);
+  const openModal = useCallback(() => {
+    setModalOpen(true);
+  }, []);
+
   if (!model.activeDocument) {
     return <div className="h-full min-h-0" />;
   }
+
+  const { activeDocument } = model;
+  const canExpand = activeDocument.document.markdown.trim().length > 0;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="space-y-1 border-b border-border p-4">
         <div className="flex items-start justify-between gap-4">
-          <h2 className="text-lg font-semibold leading-none tracking-tight">
-            {model.activeDocument.title}
-          </h2>
+          <div className="flex items-start gap-2">
+            <h2 className="text-lg font-semibold leading-none tracking-tight">
+              {activeDocument.title}
+            </h2>
+            {canExpand ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0"
+                aria-label={`Open ${activeDocument.title} in fullscreen`}
+                data-testid="expand-agent-studio-document"
+                onClick={openModal}
+              >
+                <Maximize2 className="size-3.5" />
+              </Button>
+            ) : null}
+          </div>
           <p className="shrink-0 text-right text-xs text-muted-foreground">
-            {formatDocumentUpdatedAt(model.activeDocument.document.updatedAt) ?? "Not set"}
+            {formatDocumentUpdatedAt(activeDocument.document.updatedAt) ?? "Not set"}
           </p>
         </div>
-        <p className="text-sm text-muted-foreground">{model.activeDocument.description}</p>
+        <p className="text-sm text-muted-foreground">{activeDocument.description}</p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <DocumentSection
-          emptyState={model.activeDocument.emptyState}
-          document={model.activeDocument.document}
+          emptyState={activeDocument.emptyState}
+          document={activeDocument.document}
         />
       </div>
+      {canExpand ? (
+        <MarkdownPreviewModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          markdown={activeDocument.document.markdown}
+          title={activeDocument.title}
+        />
+      ) : null}
     </div>
   );
 }

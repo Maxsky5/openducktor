@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { AgentStudioWorkspaceSidebar } from "./agent-studio-workspace-sidebar";
+
+enableReactActEnvironment();
 
 const emptyDoc = {
   markdown: "",
@@ -34,6 +37,7 @@ describe("AgentStudioWorkspaceSidebar", () => {
     expect(html).toContain("Current specification document for this task.");
     expect(html).toContain("Spec");
     expect(html).toContain('data-testid="copy-agent-studio-document-content"');
+    expect(html).toContain('data-testid="expand-agent-studio-document"');
     expect(html).toMatch(/Feb 21(?:, \d{1,2}:\d{2}\s?[AP]M| at)/u);
   });
 
@@ -56,6 +60,7 @@ describe("AgentStudioWorkspaceSidebar", () => {
     expect(html).toContain("No QA report yet.");
     expect(html).toContain("Not set");
     expect(html).not.toContain('data-testid="copy-agent-studio-document-content"');
+    expect(html).not.toContain('data-testid="expand-agent-studio-document"');
   });
 
   test("renders empty sidebar for Builder role documents", () => {
