@@ -94,9 +94,23 @@ export function AgentStudioWorkspaceSidebar({
 }: {
   model: AgentStudioWorkspaceSidebarModel;
 }): ReactElement {
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalSnapshot, setModalSnapshot] = useState<{
+    markdown: string;
+    title: string;
+  } | null>(null);
+
   const openModal = useCallback(() => {
-    setModalOpen(true);
+    if (!model.activeDocument) {
+      return;
+    }
+    setModalSnapshot({
+      markdown: model.activeDocument.document.markdown,
+      title: model.activeDocument.title,
+    });
+  }, [model.activeDocument]);
+
+  const closeModal = useCallback(() => {
+    setModalSnapshot(null);
   }, []);
 
   if (!model.activeDocument) {
@@ -139,12 +153,16 @@ export function AgentStudioWorkspaceSidebar({
           document={activeDocument.document}
         />
       </div>
-      {canExpand ? (
+      {modalSnapshot ? (
         <MarkdownPreviewModal
-          open={modalOpen}
-          onOpenChange={setModalOpen}
-          markdown={activeDocument.document.markdown}
-          title={activeDocument.title}
+          open
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              closeModal();
+            }
+          }}
+          markdown={modalSnapshot.markdown}
+          title={modalSnapshot.title}
         />
       ) : null}
     </div>

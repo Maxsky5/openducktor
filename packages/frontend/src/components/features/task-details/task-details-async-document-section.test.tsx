@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { FileCode } from "lucide-react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { TaskDetailsAsyncDocumentSection } from "./task-details-async-document-section";
 import type { TaskDocumentState } from "./use-task-documents";
+
+enableReactActEnvironment();
 
 const EMPTY_LABEL = "No implementation plan yet.";
 

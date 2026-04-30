@@ -74,4 +74,24 @@ describe("AgentStudioWorkspaceSidebar", () => {
 
     expect(html).not.toContain("Specification");
   });
+
+  test("expand button is hidden when document markdown is empty", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioWorkspaceSidebar, {
+        model: {
+          activeDocument: {
+            title: "Specification",
+            description: "Current specification document.",
+            emptyState: "No spec document yet.",
+            document: {
+              ...emptyDoc,
+              markdown: "",
+            },
+          },
+        },
+      }),
+    );
+
+    expect(html).not.toContain('data-testid="expand-agent-studio-document"');
+  });
 });

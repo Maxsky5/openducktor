@@ -33,7 +33,10 @@ export const TaskDetailsAsyncDocumentSection = memo(function TaskDetailsAsyncDoc
   defaultExpanded = false,
   onLoad,
 }: TaskDetailsAsyncDocumentSectionProps): ReactElement {
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalSnapshot, setModalSnapshot] = useState<{
+    markdown: string;
+    title: string;
+  } | null>(null);
 
   const handleExpandedChange = useCallback(
     (expanded: boolean): void => {
@@ -46,7 +49,11 @@ export const TaskDetailsAsyncDocumentSection = memo(function TaskDetailsAsyncDoc
   );
 
   const openModal = useCallback(() => {
-    setModalOpen(true);
+    setModalSnapshot({ markdown: document.markdown, title });
+  }, [document.markdown, title]);
+
+  const closeModal = useCallback(() => {
+    setModalSnapshot(null);
   }, []);
 
   const canExpand =
@@ -136,12 +143,16 @@ export const TaskDetailsAsyncDocumentSection = memo(function TaskDetailsAsyncDoc
       ) : (
         <TaskDetailsCollapsibleCard {...commonProps} />
       )}
-      {canExpand ? (
+      {modalSnapshot ? (
         <MarkdownPreviewModal
-          open={modalOpen}
-          onOpenChange={setModalOpen}
-          markdown={document.markdown}
-          title={title}
+          open
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              closeModal();
+            }
+          }}
+          markdown={modalSnapshot.markdown}
+          title={modalSnapshot.title}
         />
       ) : null}
     </>

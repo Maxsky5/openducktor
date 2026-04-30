@@ -4,6 +4,7 @@ import {
   Dialog,
   DialogBody,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -57,7 +58,14 @@ export function MarkdownPreviewModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader>{title ? <DialogTitle>{title}</DialogTitle> : null}</DialogHeader>
+        <DialogHeader>
+          <DialogTitle className={title ? undefined : "sr-only"}>
+            {title ?? "Document Preview"}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Fullscreen markdown document preview.
+          </DialogDescription>
+        </DialogHeader>
         <DialogBody>
           <div className="relative">
             <MarkdownRenderer

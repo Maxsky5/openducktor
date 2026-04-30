@@ -29,10 +29,17 @@ export const TaskDetailsDocumentSection = memo(
     empty,
     defaultExpanded = false,
   }: TaskDetailsDocumentSectionProps): ReactElement {
-    const [modalOpen, setModalOpen] = useState(false);
+    const [modalSnapshot, setModalSnapshot] = useState<{
+      markdown: string;
+      title: string;
+    } | null>(null);
 
     const openModal = useCallback(() => {
-      setModalOpen(true);
+      setModalSnapshot({ markdown, title });
+    }, [markdown, title]);
+
+    const closeModal = useCallback(() => {
+      setModalSnapshot(null);
     }, []);
 
     const hasContent = markdown.trim().length > 0;
@@ -93,12 +100,18 @@ export const TaskDetailsDocumentSection = memo(
             </Suspense>
           )}
         </TaskDetailsCollapsibleCard>
-        <MarkdownPreviewModal
-          open={modalOpen}
-          onOpenChange={setModalOpen}
-          markdown={markdown}
-          title={title}
-        />
+        {modalSnapshot ? (
+          <MarkdownPreviewModal
+            open
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) {
+                closeModal();
+              }
+            }}
+            markdown={modalSnapshot.markdown}
+            title={modalSnapshot.title}
+          />
+        ) : null}
       </>
     );
   },

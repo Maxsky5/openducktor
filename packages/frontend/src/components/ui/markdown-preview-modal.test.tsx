@@ -55,6 +55,14 @@ describe("MarkdownPreviewModal", () => {
     expect(screen.getByText("Specification")).toBeDefined();
   });
 
+  test("renders sr-only default title when no title prop is provided", () => {
+    render(<MarkdownPreviewModal open onOpenChange={() => {}} markdown="# Content" />);
+
+    const title = screen.getByText("Document Preview");
+    expect(title).toBeDefined();
+    expect(title.className).toContain("sr-only");
+  });
+
   test("renders copy button with expected test id", () => {
     render(<MarkdownPreviewModal open onOpenChange={() => {}} markdown="# Content" />);
 
