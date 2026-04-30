@@ -140,7 +140,13 @@ pub(crate) fn allows_transition(task: &TaskCard, from: &TaskStatus, to: &TaskSta
                     | TaskStatus::Deferred
             )
         }
-        TaskStatus::Blocked => matches!(to, TaskStatus::InProgress | TaskStatus::Deferred),
+        TaskStatus::Blocked => matches!(
+            to,
+            TaskStatus::InProgress
+                | TaskStatus::AiReview
+                | TaskStatus::HumanReview
+                | TaskStatus::Deferred
+        ),
         TaskStatus::AiReview => matches!(
             to,
             TaskStatus::InProgress

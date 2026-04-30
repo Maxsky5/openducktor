@@ -191,12 +191,20 @@ impl AppService {
         summary: Option<&str>,
     ) -> Result<TaskCard> {
         let context = self.load_task_context(repo_path, task_id)?;
-        if context.task.status != TaskStatus::InProgress {
-            return Err(anyhow!(
-                "build_completed is only allowed from in_progress. Task {} is {}.",
-                context.task.id,
-                context.task.status.as_cli_value()
-            ));
+        match context.task.status {
+            TaskStatus::AiReview | TaskStatus::HumanReview => {
+                return Ok(self.enrich_task(context.task, &context.repo.tasks));
+            }
+            TaskStatus::InProgress | TaskStatus::Blocked => {
+                // proceed with normal completion flow
+            }
+            _ => {
+                return Err(anyhow!(
+                    "build_completed is only allowed from in_progress, blocked, ai_review, or human_review. Task {} is {}.",
+                    context.task.id,
+                    context.task.status.as_cli_value()
+                ));
+            }
         }
         let repo_config =
             self.workspace_get_repo_config_by_repo_path(context.repo.repo_path.as_str())?;
@@ -247,12 +255,7 @@ impl AppService {
                     "Worktree cleanup scripts require a builder worktree for task {}. Start Builder first.",
                     context.task.id
                 );
-                self.task_transition(
-                    context.repo.repo_path.as_str(),
-                    context.task.id.as_str(),
-                    TaskStatus::Blocked,
-                    Some(message.as_str()),
-                )?;
+                self.block_task_or_transition(context, &message)?;
                 return Err(anyhow!(message));
             }
         };
@@ -264,15 +267,46 @@ impl AppService {
                 "Worktree cleanup script command failed: {}\n{}",
                 failure.hook, failure.stderr
             );
+            self.block_task_or_transition(context, &message)?;
+            return Err(anyhow!(message));
+        }
+
+        Ok(())
+    }
+
+    /// Transition to Blocked, or force-record a same-status patch if already blocked.
+    fn block_task_or_transition(
+        &self,
+        context: &super::task_context::LoadedTaskContext,
+        message: &str,
+    ) -> Result<()> {
+        if context.task.status == TaskStatus::Blocked {
+            // Already blocked: force-record the failure via a same-status update.
+            self.task_store.update_task(
+                context.repo_dir(),
+                context.task.id.as_str(),
+                UpdateTaskPatch {
+                    status: Some(TaskStatus::Blocked),
+                    title: None,
+                    description: None,
+                    notes: None,
+                    priority: None,
+                    issue_type: None,
+                    ai_review_enabled: None,
+                    labels: None,
+                    assignee: None,
+                    parent_id: None,
+                    target_branch: None,
+                },
+            )?;
+        } else {
             self.task_transition(
                 context.repo.repo_path.as_str(),
                 context.task.id.as_str(),
                 TaskStatus::Blocked,
-                Some(message.as_str()),
+                Some(message),
             )?;
-            return Err(anyhow!(message));
         }
-
         Ok(())
     }
 

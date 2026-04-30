@@ -268,7 +268,7 @@ describe("buildAgentSystemPrompt", () => {
       overrides: {
         "system.shared.workflow_guards": {
           template: "",
-          baseVersion: 2,
+          baseVersion: 3,
           enabled: true,
         },
       },

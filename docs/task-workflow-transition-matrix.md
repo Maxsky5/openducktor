@@ -57,6 +57,9 @@ Native task actions:
 | `reset_task` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | reject while live spec/planner/build/QA activity exists; reject on unsafe branch cleanup; clear workflow documents, linked sessions, delivery metadata, and in-memory runs | `open` |
 | `odt_build_completed` | `in_progress` | `qaRequired=true` and latest QA verdict is not `approved` (including no QA verdict yet) | `ai_review` |
 | `odt_build_completed` | `in_progress` | `qaRequired=false` or latest QA verdict is `approved` | `human_review` |
+| `odt_build_completed` | `blocked` | `qaRequired=true` and latest QA verdict is not `approved` (including no QA verdict yet) | `ai_review` |
+| `odt_build_completed` | `blocked` | `qaRequired=false` or latest QA verdict is `approved` | `human_review` |
+| `odt_build_completed` | `ai_review`, `human_review` | idempotent no-op (no hooks, no transition patch) | unchanged |
 | `odt_set_pull_request` | `in_progress`, `ai_review`, `human_review` | provider id and PR number required; OpenDucktor resolves canonical PR metadata | unchanged |
 | `odt_qa_rejected` | `ai_review`, `human_review` | report markdown required | `in_progress` |
 | `odt_qa_approved` | `ai_review`, `human_review` | report markdown required | `human_review` |
