@@ -80,7 +80,7 @@ describe("agent-orchestrator/handlers/start-session-support", () => {
       taskId: "task-1",
       role: "build",
       scenario: "build_implementation_start",
-      externalSessionId: "session-1",
+      externalSessionId: "external-1",
     });
   });
 });

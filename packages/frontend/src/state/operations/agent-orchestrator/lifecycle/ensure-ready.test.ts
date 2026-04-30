@@ -296,7 +296,7 @@ describe("agent-orchestrator-ensure-ready", () => {
 
     try {
       await expect(ensureReady("session-1")).rejects.toThrow(
-        "Session 'session-1' runtime kind metadata 'claude-code' does not match ensured runtime kind 'opencode'.",
+        "Session 'external-1' runtime kind metadata 'claude-code' does not match ensured runtime kind 'opencode'.",
       );
     } finally {
       adapter.hasSession = originalHasSession;

@@ -149,7 +149,7 @@ describe("session-target-resolution", () => {
     });
 
     expect(resolveSessionTargetOptions(task, [], "qa")).toEqual({
-      externalSessionId: "qa-history",
+      externalSessionId: "external-qa-history",
       scenario: "qa_review",
     });
   });

@@ -183,9 +183,9 @@ describe("agent-runtime-registry", () => {
       });
 
       expect(attachStarted).toBe(true);
-      expect(engine.hasSession("session-pending")).toBe(true);
-      const unsubscribe = engine.subscribeEvents("session-pending", () => {});
-      expect(subscribedExternalSessionIds).toEqual(["session-pending"]);
+      expect(engine.hasSession("external-pending")).toBe(true);
+      const unsubscribe = engine.subscribeEvents("external-pending", () => {});
+      expect(subscribedExternalSessionIds).toEqual(["external-pending"]);
 
       attachDeferred.resolve();
       await attachPromise;

@@ -60,7 +60,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         loadAgentSessions: async () => {
           loadCalls += 1;
           sessionsRef.current = {
-            "persisted-build": createBuildSessionFixture({
+            "ext-build": createBuildSessionFixture({
               externalSessionId: "ext-build",
             }),
           };
@@ -71,7 +71,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
           ctx: createStartSessionContextFixture(),
           input: {
             startMode: "reuse",
-            sourceExternalSessionId: "persisted-build",
+            sourceExternalSessionId: "ext-build",
             scenario: "build_after_human_request_changes",
           },
           deps: {
@@ -88,7 +88,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         }),
       ).resolves.toEqual({
         kind: "reused",
-        externalSessionId: "persisted-build",
+        externalSessionId: "ext-build",
       });
       expect(loadCalls).toBe(1);
     } finally {
@@ -100,7 +100,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
     const sessionDependencies = createSessionDependenciesFixture({
       sessionsRef: {
         current: {
-          "existing-build": createBuildSessionFixture({
+          "ext-build": createBuildSessionFixture({
             workingDirectory: "/tmp/repo/old-worktree",
           }),
         },
@@ -112,7 +112,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         ctx: createStartSessionContextFixture(),
         input: {
           startMode: "reuse",
-          sourceExternalSessionId: "existing-build",
+          sourceExternalSessionId: "ext-build",
           scenario: "build_after_human_request_changes",
         },
         deps: {
@@ -134,7 +134,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
     const sessionDependencies = createSessionDependenciesFixture({
       sessionsRef: {
         current: {
-          "existing-qa": createBuildSessionFixture({
+          "ext-qa": createBuildSessionFixture({
             externalSessionId: "ext-qa",
             role: "qa",
           }),
@@ -147,7 +147,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         ctx: createStartSessionContextFixture({ role: "qa" }),
         input: {
           startMode: "reuse",
-          sourceExternalSessionId: "existing-qa",
+          sourceExternalSessionId: "ext-qa",
           scenario: "qa_review",
         },
         deps: {
@@ -190,7 +190,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
     const sessionDependencies = createSessionDependenciesFixture({
       sessionsRef: {
         current: {
-          "existing-qa": createBuildSessionFixture({
+          "ext-qa": createBuildSessionFixture({
             externalSessionId: "ext-qa",
             role: "qa",
           }),
@@ -215,7 +215,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         ctx: createStartSessionContextFixture({ role: "qa" }),
         input: {
           startMode: "reuse",
-          sourceExternalSessionId: "existing-qa",
+          sourceExternalSessionId: "ext-qa",
           scenario: "qa_review",
         },
         deps: {

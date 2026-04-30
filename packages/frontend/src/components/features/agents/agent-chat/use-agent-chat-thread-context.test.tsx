@@ -120,12 +120,12 @@ describe("useAgentChatThreadContext", () => {
     );
 
     await harness.mount();
-    expect(harness.getLatest().threadSession?.externalSessionId).toBe("session-a");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("external-a");
     expect(harness.getLatest().isContextSwitching).toBe(false);
 
     await harness.update(createHookArgs({ activeSession: sessionB, contextSwitchVersion: 1 }));
-    expect(harness.getLatest().threadSession?.externalSessionId).toBe("session-b");
-    expect(harness.getLatest().activeExternalSessionId).toBe("session-b");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("external-b");
+    expect(harness.getLatest().activeExternalSessionId).toBe("external-b");
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });
@@ -199,7 +199,7 @@ describe("useAgentChatThreadContext", () => {
     await harness.run(() => {
       flushRafFrames(1);
     });
-    expect(harness.getLatest().threadSession?.externalSessionId).toBe("session-a");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("external-a");
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });

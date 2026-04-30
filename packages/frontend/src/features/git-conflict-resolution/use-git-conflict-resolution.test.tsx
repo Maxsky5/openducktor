@@ -49,7 +49,7 @@ const createConflict = (overrides: Record<string, unknown> = {}) => ({
 
 describe("useGitConflictResolution", () => {
   test("filters reusable Builder sessions to the conflicted worktree", async () => {
-    const startConflictResolutionSession = mock(async () => "build-1");
+    const startConflictResolutionSession = mock(async () => "external-build-1");
     const harness = createHookHarness(useGitConflictResolution, {
       activeWorkspace: {
         workspaceId: "workspace-repo",
@@ -92,14 +92,14 @@ describe("useGitConflictResolution", () => {
           message: expect.any(String),
           existingSessionOptions: [
             expect.objectContaining({
-              value: "build-1",
+              value: "external-build-1",
             }),
           ],
           initialStartMode: "reuse",
-          initialSourceExternalSessionId: "build-1",
+          initialSourceExternalSessionId: "external-build-1",
         }),
       );
-      expect(openedSessions).toEqual(["build-1"]);
+      expect(openedSessions).toEqual(["external-build-1"]);
     } finally {
       await harness.unmount();
     }
@@ -138,7 +138,7 @@ describe("useGitConflictResolution", () => {
       expect(startConflictResolutionSession).toHaveBeenCalledWith(
         expect.objectContaining({
           initialStartMode: "reuse",
-          initialSourceExternalSessionId: "build-1",
+          initialSourceExternalSessionId: "external-build-1",
           targetWorkingDirectory: "/repo/worktrees/task-1",
           scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
         }),

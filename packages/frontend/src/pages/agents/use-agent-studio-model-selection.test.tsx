@@ -250,7 +250,7 @@ describe("useAgentStudioModelSelection", () => {
 
     const state = resolveActiveSessionSelectionState(hydratedSession, summary);
 
-    expect(state.externalSessionId).toBe("session-1");
+    expect(state.externalSessionId).toBe("external-1");
     expect(state.selectedModel).toEqual(hydratedSession.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.runtimeRoute).toEqual({
@@ -284,7 +284,7 @@ describe("useAgentStudioModelSelection", () => {
 
     const state = resolveActiveSessionSelectionState(null, summary);
 
-    expect(state.externalSessionId).toBe("session-1");
+    expect(state.externalSessionId).toBe("external-1");
     expect(state.selectedModel).toEqual(summary.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.workingDirectory).toBe("/repo");
@@ -698,7 +698,7 @@ describe("useAgentStudioModelSelection", () => {
       harness.getLatest().handleSelectVariant("high");
     });
 
-    expect(updateAgentSessionModel).toHaveBeenCalledWith("session-1", {
+    expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
       runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",

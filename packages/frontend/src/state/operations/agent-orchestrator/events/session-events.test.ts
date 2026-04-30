@@ -1264,7 +1264,7 @@ describe("agent-orchestrator-session-events", () => {
     const subagentCorrelationKey = "part:assistant-parent:subtask-1";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "parent-session": buildSession({
+        "external-parent-session": buildSession({
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1284,7 +1284,7 @@ describe("agent-orchestrator-session-events", () => {
             },
           ],
         }),
-        "child-session": buildSession({
+        "external-child-session": buildSession({
           externalSessionId: "external-child-session",
           role: "build",
         }),
@@ -1307,7 +1307,7 @@ describe("agent-orchestrator-session-events", () => {
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      externalSessionId: "child-session",
+      externalSessionId: "external-child-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -1325,7 +1325,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "permission_required",
-      externalSessionId: "child-session",
+      externalSessionId: "external-child-session",
       requestId: "perm-child-1",
       permission: "read",
       patterns: ["src/**"],
@@ -1335,14 +1335,14 @@ describe("agent-orchestrator-session-events", () => {
       subagentCorrelationKey,
     });
 
-    expect(sessionsRef.current["child-session"]?.pendingPermissions).toEqual([
+    expect(sessionsRef.current["external-child-session"]?.pendingPermissions).toEqual([
       {
         requestId: "perm-child-1",
         permission: "read",
         patterns: ["src/**"],
       },
     ]);
-    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "parent-session");
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
       correlationKey: subagentCorrelationKey,
@@ -1350,9 +1350,8 @@ describe("agent-orchestrator-session-events", () => {
       status: "running",
     });
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId?.[
-        "external-child-session"
-      ],
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingPermissionsByExternalSessionId?.["external-child-session"],
     ).toEqual([
       {
         requestId: "perm-child-1",
@@ -1374,7 +1373,7 @@ describe("agent-orchestrator-session-events", () => {
     const subagentCorrelationKey = "part:assistant-parent:subtask-parent-context";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "parent-session": buildSession({
+        "external-parent-session": buildSession({
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1413,7 +1412,7 @@ describe("agent-orchestrator-session-events", () => {
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -1431,7 +1430,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "permission_required",
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       requestId: "perm-child-1",
       permission: "read",
       patterns: ["src/**"],
@@ -1441,11 +1440,10 @@ describe("agent-orchestrator-session-events", () => {
       subagentCorrelationKey,
     });
 
-    expect(sessionsRef.current["parent-session"]?.pendingPermissions).toHaveLength(0);
+    expect(sessionsRef.current["external-parent-session"]?.pendingPermissions).toHaveLength(0);
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId?.[
-        "external-child-session"
-      ],
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingPermissionsByExternalSessionId?.["external-child-session"],
     ).toEqual([
       {
         requestId: "perm-child-1",
@@ -1453,7 +1451,7 @@ describe("agent-orchestrator-session-events", () => {
         patterns: ["src/**"],
       },
     ]);
-    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "parent-session");
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
       correlationKey: subagentCorrelationKey,
@@ -1474,7 +1472,7 @@ describe("agent-orchestrator-session-events", () => {
     const subagentCorrelationKey = "part:assistant-parent:subtask-parent-write";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "parent-session": buildSession({
+        "external-parent-session": buildSession({
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1513,7 +1511,7 @@ describe("agent-orchestrator-session-events", () => {
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -1531,7 +1529,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "permission_required",
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       requestId: "perm-child-write",
       permission: "write",
       patterns: ["src/**"],
@@ -1543,16 +1541,16 @@ describe("agent-orchestrator-session-events", () => {
     await Promise.resolve();
 
     expect(replyPermission).toHaveBeenCalledWith({
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       requestId: "perm-child-write",
       reply: "reject",
       message: expect.any(String),
     });
-    expect(sessionsRef.current["parent-session"]?.pendingPermissions).toHaveLength(0);
+    expect(sessionsRef.current["external-parent-session"]?.pendingPermissions).toHaveLength(0);
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]?.subagentPendingPermissionsByExternalSessionId,
     ).toBeUndefined();
-    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "parent-session");
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
       correlationKey: subagentCorrelationKey,
@@ -1573,7 +1571,7 @@ describe("agent-orchestrator-session-events", () => {
     const subagentCorrelationKey = "part:assistant-parent:subtask-detached-child-write";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "parent-session": buildSession({
+        "external-parent-session": buildSession({
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1593,7 +1591,7 @@ describe("agent-orchestrator-session-events", () => {
             },
           ],
         }),
-        "child-session": buildSession({
+        "external-child-session": buildSession({
           externalSessionId: "external-child-session",
           role: "build",
         }),
@@ -1616,13 +1614,14 @@ describe("agent-orchestrator-session-events", () => {
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerAttached: (externalSessionId) => externalSessionId === "parent-session",
+      isSessionListenerAttached: (externalSessionId) =>
+        externalSessionId === "external-parent-session",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1635,7 +1634,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleParentEvent({
       type: "permission_required",
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       requestId: "perm-child-write",
       permission: "write",
       patterns: ["src/**"],
@@ -1647,13 +1646,13 @@ describe("agent-orchestrator-session-events", () => {
     await Promise.resolve();
 
     expect(replyPermission).toHaveBeenCalledWith({
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       requestId: "perm-child-write",
       reply: "reject",
       message: expect.any(String),
     });
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]?.subagentPendingPermissionsByExternalSessionId,
     ).toBeUndefined();
   });
 
@@ -1670,7 +1669,7 @@ describe("agent-orchestrator-session-events", () => {
     const subagentCorrelationKey = "part:assistant-parent:subtask-child-write";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "parent-session": buildSession({
+        "external-parent-session": buildSession({
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1690,7 +1689,7 @@ describe("agent-orchestrator-session-events", () => {
             },
           ],
         }),
-        "child-session": buildSession({
+        "external-child-session": buildSession({
           externalSessionId: "external-child-session",
           role: "build",
         }),
@@ -1713,14 +1712,15 @@ describe("agent-orchestrator-session-events", () => {
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
       isSessionListenerAttached: (externalSessionId) =>
-        externalSessionId === "parent-session" || externalSessionId === "child-session",
+        externalSessionId === "external-parent-session" ||
+        externalSessionId === "external-child-session",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1728,14 +1728,15 @@ describe("agent-orchestrator-session-events", () => {
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      externalSessionId: "child-session",
+      externalSessionId: "external-child-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
       isSessionListenerAttached: (externalSessionId) =>
-        externalSessionId === "parent-session" || externalSessionId === "child-session",
+        externalSessionId === "external-parent-session" ||
+        externalSessionId === "external-child-session",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1747,7 +1748,7 @@ describe("agent-orchestrator-session-events", () => {
     }
     const event: SessionEvent = {
       type: "permission_required",
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       requestId: "perm-child-write",
       permission: "write",
       patterns: ["src/**"],
@@ -1760,25 +1761,25 @@ describe("agent-orchestrator-session-events", () => {
     handleParentEvent(event);
     expect(replyPermission).toHaveBeenCalledTimes(0);
 
-    handleChildEvent({ ...event, externalSessionId: "child-session" });
+    handleChildEvent({ ...event, externalSessionId: "external-child-session" });
     await Promise.resolve();
 
     expect(replyPermission).toHaveBeenCalledTimes(1);
     expect(replyPermission).toHaveBeenCalledWith({
-      externalSessionId: "child-session",
+      externalSessionId: "external-child-session",
       requestId: "perm-child-write",
       reply: "reject",
       message: expect.any(String),
     });
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]?.subagentPendingPermissionsByExternalSessionId,
     ).toBeUndefined();
 
     handleParentEvent(event);
 
     expect(replyPermission).toHaveBeenCalledTimes(1);
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]?.subagentPendingPermissionsByExternalSessionId,
     ).toBeUndefined();
   });
 
@@ -1794,7 +1795,7 @@ describe("agent-orchestrator-session-events", () => {
     const subagentCorrelationKey = "part:assistant-parent:subtask-missing-child";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "parent-session": buildSession({
+        "external-parent-session": buildSession({
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1833,7 +1834,7 @@ describe("agent-orchestrator-session-events", () => {
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -1851,7 +1852,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "permission_required",
-      externalSessionId: "parent-session",
+      externalSessionId: "external-parent-session",
       requestId: "perm-child-1",
       permission: "read",
       patterns: ["src/**"],
@@ -1860,7 +1861,7 @@ describe("agent-orchestrator-session-events", () => {
       subagentCorrelationKey,
     });
 
-    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "parent-session");
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
       correlationKey: subagentCorrelationKey,
@@ -1886,7 +1887,7 @@ describe("agent-orchestrator-session-events", () => {
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "parent-session": buildSession({
+        "external-parent-session": buildSession({
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1967,7 +1968,7 @@ describe("agent-orchestrator-session-events", () => {
         message.content.includes("Automatic permission rejection failed"),
       ),
     ).toBe(true);
-    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "parent-session");
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
       correlationKey: "part:assistant-parent:subtask-fail",

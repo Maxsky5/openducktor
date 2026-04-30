@@ -121,11 +121,11 @@ describe("useAgentStudioThreadContext", () => {
     );
 
     await harness.mount();
-    expect(harness.getLatest().threadSession?.externalSessionId).toBe("session-a");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("external-a");
     expect(harness.getLatest().isContextSwitching).toBe(false);
 
     await harness.update(createHookArgs({ activeSession: sessionB }));
-    expect(harness.getLatest().threadSession?.externalSessionId).toBe("session-b");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("external-b");
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });
@@ -203,7 +203,7 @@ describe("useAgentStudioThreadContext", () => {
     );
 
     await harness.mount();
-    expect(harness.getLatest().threadSession?.externalSessionId).toBe("session-a");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("external-a");
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });

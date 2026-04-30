@@ -633,7 +633,7 @@ describe("use-agent-orchestrator-operations", () => {
 
         await harness.run(async () => {
           await expect(
-            harness.getLatest().sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+            harness.getLatest().sendAgentMessage("external-1", [{ kind: "text", text: "hello" }]),
           ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
         });
 
@@ -759,12 +759,12 @@ describe("use-agent-orchestrator-operations", () => {
             role: "build",
             scenario: "build_after_human_request_changes",
             startMode: "reuse",
-            sourceExternalSessionId: "session-in-memory",
+            sourceExternalSessionId: "external-in-memory",
           });
         });
 
-        expect(firstSessionId).toBe("session-in-memory");
-        expect(secondSessionId).toBe("session-in-memory");
+        expect(firstSessionId).toBe("external-in-memory");
+        expect(secondSessionId).toBe("external-in-memory");
         expect(startCalls).toBe(1);
         expect(persistedListCalls).toBe(0);
       } finally {
@@ -897,8 +897,8 @@ describe("use-agent-orchestrator-operations", () => {
           [firstSessionId, secondSessionId] = await Promise.all([firstStart, secondStart]);
         });
 
-        expect(firstSessionId).toBe("session-concurrent");
-        expect(secondSessionId).toBe("session-concurrent");
+        expect(firstSessionId).toBe("external-concurrent");
+        expect(secondSessionId).toBe("external-concurrent");
         expect(startCalls).toBe(1);
         expect(persistedListCalls).toBe(0);
       } finally {
@@ -1031,14 +1031,14 @@ describe("use-agent-orchestrator-operations", () => {
             role: "build",
             scenario: "build_after_human_request_changes",
             startMode: "reuse",
-            sourceExternalSessionId: "session-1",
+            sourceExternalSessionId: "external-1",
           });
         });
 
-        expect(externalSessionId).toBe("session-1");
+        expect(externalSessionId).toBe("external-1");
         expect(startCalls).toBe(0);
         await harness.waitFor((state) =>
-          state.sessions.some((entry) => entry.externalSessionId === "session-1"),
+          state.sessions.some((entry) => entry.externalSessionId === "external-1"),
         );
       } finally {
         await harness.unmount();
@@ -1243,7 +1243,7 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.updateArgs({ activeRepo: "/tmp/repo-b" });
         refreshDeferred.resolve();
 
-        await expect(startPromise).resolves.toBe("session-kickoff");
+        await expect(startPromise).resolves.toBe("external-kickoff");
         expect(refreshCalls).toBe(1);
         expect(startCalls).toBe(1);
       } finally {
@@ -1359,7 +1359,7 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.run(async () => {
           await harness
             .getLatest()
-            .sendAgentMessage("session-1", [{ kind: "text", text: "prime" }]);
+            .sendAgentMessage("external-1", [{ kind: "text", text: "prime" }]);
         });
 
         if (!eventHandler) {
@@ -1369,13 +1369,13 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.run(async () => {
           eventHandler?.({
             type: "session_error",
-            externalSessionId: "session-1",
+            externalSessionId: "external-1",
             message: "boom",
             timestamp: "2026-02-22T08:00:04.000Z",
           });
           eventHandler?.({
             type: "permission_required",
-            externalSessionId: "session-1",
+            externalSessionId: "external-1",
             requestId: "perm-1",
             permission: "read",
             patterns: ["*.md"],
@@ -1384,7 +1384,7 @@ describe("use-agent-orchestrator-operations", () => {
           });
           eventHandler?.({
             type: "question_required",
-            externalSessionId: "session-1",
+            externalSessionId: "external-1",
             requestId: "question-1",
             questions: [
               {
@@ -1401,11 +1401,11 @@ describe("use-agent-orchestrator-operations", () => {
 
         const pendingState = await harness.waitFor(
           (state) =>
-            state.sessions.find((entry) => entry.externalSessionId === "session-1")
+            state.sessions.find((entry) => entry.externalSessionId === "external-1")
               ?.pendingPermissions.length === 1,
         );
         const pendingSession = pendingState.sessions.find(
-          (entry) => entry.externalSessionId === "session-1",
+          (entry) => entry.externalSessionId === "external-1",
         );
         expect(pendingSession?.pendingPermissions).toHaveLength(1);
         expect(pendingSession?.pendingQuestions).toHaveLength(1);
@@ -1413,12 +1413,12 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.run(async () => {
           await harness
             .getLatest()
-            .sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
+            .sendAgentMessage("external-1", [{ kind: "text", text: "hello" }]);
         });
 
         const recoveredSession = harness
           .getLatest()
-          .sessions.find((entry) => entry.externalSessionId === "session-1");
+          .sessions.find((entry) => entry.externalSessionId === "external-1");
         expect(stopCalls).toBe(0);
         expect(resumeCalls).toBe(0);
         expect(subscribeCalls).toBeGreaterThan(0);
@@ -1615,7 +1615,7 @@ describe("use-agent-orchestrator-operations", () => {
 
         await harness.run(async () => {
           await expect(
-            harness.getLatest().sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+            harness.getLatest().sendAgentMessage("external-1", [{ kind: "text", text: "hello" }]),
           ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
         });
 
@@ -1716,7 +1716,7 @@ describe("use-agent-orchestrator-operations", () => {
           await harness.getLatest().loadAgentSessions("task-1");
         });
         await harness.waitFor((state) =>
-          state.sessions.some((entry) => entry.externalSessionId === "session-1"),
+          state.sessions.some((entry) => entry.externalSessionId === "external-1"),
         );
 
         let reusedSessionId = "";
@@ -1726,11 +1726,11 @@ describe("use-agent-orchestrator-operations", () => {
             role: "build",
             scenario: "build_after_human_request_changes",
             startMode: "reuse",
-            sourceExternalSessionId: "session-1",
+            sourceExternalSessionId: "external-1",
           });
         });
 
-        expect(reusedSessionId).toBe("session-1");
+        expect(reusedSessionId).toBe("external-1");
         expect(startCalls).toBe(0);
       } finally {
         await harness.unmount();
@@ -1779,14 +1779,14 @@ describe("use-agent-orchestrator-operations", () => {
             .getLatest()
             .sessions.map((session) => session.externalSessionId)
             .sort(),
-        ).toEqual(["session-1", "session-spec"]);
+        ).toEqual(["external-1", "external-spec"]);
 
         await harness.run(async () => {
           harness.getLatest().removeAgentSessions({ taskId: "task-1", roles: ["build"] });
         });
 
         expect(harness.getLatest().sessions.map((session) => session.externalSessionId)).toEqual([
-          "session-spec",
+          "external-spec",
         ]);
       } finally {
         host.agentSessionsList = originalAgentSessionsList;
@@ -1802,7 +1802,7 @@ describe("use-agent-orchestrator-operations", () => {
       const detachCalls: string[] = [];
 
       OpencodeSdkAdapter.prototype.hasSession = (externalSessionId) =>
-        externalSessionId === "session-transcript";
+        externalSessionId === "external-transcript";
       OpencodeSdkAdapter.prototype.detachSession = async (externalSessionId) => {
         detachCalls.push(externalSessionId);
       };
@@ -1817,7 +1817,7 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.mount();
         await harness.run(async () => {
           harness.getLatest().commitSessions({
-            "session-transcript": {
+            "external-transcript": {
               externalSessionId: "external-transcript",
               taskId: "task-1",
               repoPath: "/tmp/repo",
@@ -1832,7 +1832,7 @@ describe("use-agent-orchestrator-operations", () => {
               historyHydrationState: "hydrated",
               runtimeRecoveryState: "idle",
               purpose: "transcript",
-              messages: createSessionMessagesState("session-transcript", []),
+              messages: createSessionMessagesState("external-transcript", []),
               draftAssistantText: "",
               draftAssistantMessageId: null,
               draftReasoningText: "",
@@ -1850,12 +1850,12 @@ describe("use-agent-orchestrator-operations", () => {
         });
 
         await harness.run(async () => {
-          await harness.getLatest().removeAgentSession("session-transcript");
+          await harness.getLatest().removeAgentSession("external-transcript");
         });
 
-        expect(detachCalls).toEqual(["session-transcript"]);
+        expect(detachCalls).toEqual(["external-transcript"]);
         expect(
-          harness.getLatest().sessionStore.getSessionSnapshot("session-transcript"),
+          harness.getLatest().sessionStore.getSessionSnapshot("external-transcript"),
         ).toBeNull();
       } finally {
         await harness.unmount();
@@ -1872,7 +1872,7 @@ describe("use-agent-orchestrator-operations", () => {
       const detachCalls: string[] = [];
 
       OpencodeSdkAdapter.prototype.hasSession = (externalSessionId) =>
-        externalSessionId.startsWith("session-transcript");
+        externalSessionId.startsWith("external-transcript");
       OpencodeSdkAdapter.prototype.detachSession = async (externalSessionId) => {
         detachCalls.push(externalSessionId);
       };
@@ -1887,7 +1887,7 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.mount();
         await harness.run(async () => {
           harness.getLatest().commitSessions({
-            "session-transcript-a": {
+            "external-transcript-a": {
               externalSessionId: "external-transcript-a",
               taskId: "task-1",
               repoPath: "/tmp/repo",
@@ -1902,7 +1902,7 @@ describe("use-agent-orchestrator-operations", () => {
               historyHydrationState: "hydrated",
               runtimeRecoveryState: "idle",
               purpose: "transcript",
-              messages: createSessionMessagesState("session-transcript-a", []),
+              messages: createSessionMessagesState("external-transcript-a", []),
               draftAssistantText: "",
               draftAssistantMessageId: null,
               draftReasoningText: "",
@@ -1916,7 +1916,7 @@ describe("use-agent-orchestrator-operations", () => {
               isLoadingModelCatalog: false,
               promptOverrides: {},
             },
-            "session-transcript-b": {
+            "external-transcript-b": {
               externalSessionId: "external-transcript-b",
               taskId: "task-1",
               repoPath: "/tmp/repo",
@@ -1931,7 +1931,7 @@ describe("use-agent-orchestrator-operations", () => {
               historyHydrationState: "hydrated",
               runtimeRecoveryState: "idle",
               purpose: "transcript",
-              messages: createSessionMessagesState("session-transcript-b", []),
+              messages: createSessionMessagesState("external-transcript-b", []),
               draftAssistantText: "",
               draftAssistantMessageId: null,
               draftReasoningText: "",
@@ -1952,7 +1952,7 @@ describe("use-agent-orchestrator-operations", () => {
           await harness.getLatest().removeAgentSessions({ taskId: "task-1" });
         });
 
-        expect(detachCalls.sort()).toEqual(["session-transcript-a", "session-transcript-b"]);
+        expect(detachCalls.sort()).toEqual(["external-transcript-a", "external-transcript-b"]);
         expect(harness.getLatest().sessions).toEqual([]);
       } finally {
         await harness.unmount();
@@ -1990,7 +1990,7 @@ describe("use-agent-orchestrator-operations", () => {
           tasks: [taskFixtureWithPersistedBuildSession],
         });
         const hydrated = await harness.waitFor((state) => state.sessions.length === 1);
-        expect(hydrated.sessions[0]?.externalSessionId).toBe("session-1");
+        expect(hydrated.sessions[0]?.externalSessionId).toBe("external-1");
         expect(persistedListCalls).toBe(0);
       } finally {
         await harness.unmount();
@@ -2070,11 +2070,11 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.mount();
         const resolved = await harness.waitFor((state) =>
           state.sessions.some(
-            (session) => session.externalSessionId === "session-1" && session.status === "running",
+            (session) => session.externalSessionId === "external-1" && session.status === "running",
           ),
         );
         expect(
-          resolved.sessions.find((session) => session.externalSessionId === "session-1")?.status,
+          resolved.sessions.find((session) => session.externalSessionId === "external-1")?.status,
         ).toBe("running");
       } finally {
         await harness.unmount();
@@ -2234,19 +2234,19 @@ describe("use-agent-orchestrator-operations", () => {
       });
 
       expect(
-        harness.getLatest().sessionStore.getSessionSnapshot("session-1")?.runtimeRecoveryState,
+        harness.getLatest().sessionStore.getSessionSnapshot("external-1")?.runtimeRecoveryState,
       ).toBe("idle");
 
       await harness.run(async () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
-          externalSessionId: "session-1",
+          externalSessionId: "external-1",
           persistedRecords: [persistedBuildSessionFixture],
         });
       });
 
       expect(
-        harness.getLatest().sessionStore.getSessionSnapshot("session-1")?.runtimeRecoveryState,
+        harness.getLatest().sessionStore.getSessionSnapshot("external-1")?.runtimeRecoveryState,
       ).toBe("waiting_for_runtime");
 
       host.runtimeList = async () => [
@@ -2278,12 +2278,12 @@ describe("use-agent-orchestrator-operations", () => {
       await harness.run(async () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
-          externalSessionId: "session-1",
+          externalSessionId: "external-1",
           persistedRecords: [persistedBuildSessionFixture],
         });
       });
 
-      const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("session-1");
+      const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("external-1");
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
       expect(recoveredSession?.historyHydrationState).toBe("hydrated");
       expect(
@@ -2392,14 +2392,14 @@ describe("use-agent-orchestrator-operations", () => {
       await harness.run(async () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
-          externalSessionId: "session-1",
+          externalSessionId: "external-1",
           persistedRecords: [persistedBuildSessionFixture],
         });
       });
 
       expect(loadSessionHistoryCalls).toBe(1);
       expect(
-        harness.getLatest().sessionStore.getSessionSnapshot("session-1")?.historyHydrationState,
+        harness.getLatest().sessionStore.getSessionSnapshot("external-1")?.historyHydrationState,
       ).toBe("hydrated");
     } finally {
       await harness.unmount();
@@ -2610,7 +2610,7 @@ describe("use-agent-orchestrator-operations", () => {
       });
 
       expect(operationOrder).toEqual(["attach:start", "subscribe", "attach:finish"]);
-      expect(subscribeExternalSessionIds).toEqual(["session-transcript"]);
+      expect(subscribeExternalSessionIds).toEqual(["external-subagent"]);
       expect(attachSessionCalls).toHaveLength(1);
       expect(attachSessionCalls[0]).toMatchObject({
         externalSessionId: "external-subagent",
@@ -2632,7 +2632,7 @@ describe("use-agent-orchestrator-operations", () => {
 
       const transcriptSession = harness
         .getLatest()
-        .sessionStore.getSessionSnapshot("session-transcript");
+        .sessionStore.getSessionSnapshot("external-subagent");
       expect(transcriptSession?.purpose).toBe("transcript");
       expect(transcriptSession?.taskId).toBe("");
       expect(transcriptSession?.role).toBeNull();
@@ -2652,7 +2652,7 @@ describe("use-agent-orchestrator-operations", () => {
       }
       listener({
         type: "permission_required",
-        externalSessionId: "session-transcript",
+        externalSessionId: "external-subagent",
         timestamp: "2026-02-22T09:00:02.000Z",
         requestId: "permission-1",
         permission: "file.read",
@@ -2726,7 +2726,7 @@ describe("use-agent-orchestrator-operations", () => {
       await harness.mount();
       await harness.run(async () => {
         harness.getLatest().commitSessions({
-          "session-transcript": {
+          "external-subagent": {
             externalSessionId: "stale-external-subagent",
             taskId: "",
             repoPath: "/tmp/repo",
@@ -2741,7 +2741,7 @@ describe("use-agent-orchestrator-operations", () => {
             historyHydrationState: "hydrated",
             runtimeRecoveryState: "idle",
             purpose: "transcript",
-            messages: createSessionMessagesState("session-transcript", []),
+            messages: createSessionMessagesState("external-subagent", []),
             draftAssistantText: "",
             draftAssistantMessageId: null,
             draftReasoningText: "",
@@ -2773,11 +2773,11 @@ describe("use-agent-orchestrator-operations", () => {
       });
 
       expect(attachSessionCalls).toHaveLength(1);
-      expect(subscribedExternalSessionIds).toEqual(["session-transcript"]);
+      expect(subscribedExternalSessionIds).toEqual(["external-subagent"]);
 
       const transcriptSession = harness
         .getLatest()
-        .sessionStore.getSessionSnapshot("session-transcript");
+        .sessionStore.getSessionSnapshot("external-subagent");
       expect(transcriptSession).toMatchObject({
         purpose: "transcript",
         externalSessionId: "external-subagent",
@@ -2824,7 +2824,7 @@ describe("use-agent-orchestrator-operations", () => {
       };
     };
     OpencodeSdkAdapter.prototype.hasSession = (externalSessionId) =>
-      externalSessionId === "session-transcript" && runtimeAttached;
+      externalSessionId === "external-subagent" && runtimeAttached;
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
       loadSessionHistoryCalls += 1;
       return [];
@@ -2859,14 +2859,14 @@ describe("use-agent-orchestrator-operations", () => {
       });
 
       expect(
-        harness.getLatest().sessionStore.getSessionSnapshot("session-transcript"),
+        harness.getLatest().sessionStore.getSessionSnapshot("external-subagent"),
       ).not.toBeNull();
 
       await harness.run(async () => {
-        await harness.getLatest().operations.removeAgentSession("session-transcript");
+        await harness.getLatest().operations.removeAgentSession("external-subagent");
       });
 
-      expect(harness.getLatest().sessionStore.getSessionSnapshot("session-transcript")).toBeNull();
+      expect(harness.getLatest().sessionStore.getSessionSnapshot("external-subagent")).toBeNull();
 
       attachSessionDeferred.resolve({
         runtimeKind: "opencode",
@@ -2881,8 +2881,8 @@ describe("use-agent-orchestrator-operations", () => {
       });
 
       expect(loadSessionHistoryCalls).toBe(0);
-      expect(detachExternalSessionIds).toEqual(["session-transcript", "session-transcript"]);
-      expect(harness.getLatest().sessionStore.getSessionSnapshot("session-transcript")).toBeNull();
+      expect(detachExternalSessionIds).toEqual(["external-subagent", "external-subagent"]);
+      expect(harness.getLatest().sessionStore.getSessionSnapshot("external-subagent")).toBeNull();
     } finally {
       await harness.unmount();
       OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
@@ -2976,13 +2976,13 @@ describe("use-agent-orchestrator-operations", () => {
         });
       });
       const sessionsById = harness.getLatest().sessionStore.getSessionsByIdSnapshot();
-      const failedSession = sessionsById["session-1"];
+      const failedSession = sessionsById["external-1"];
       if (!failedSession) {
         throw new Error("Expected session-1 to exist after bootstrapping persisted sessions");
       }
       harness.getLatest().sessionStore.setSessionsById({
         ...sessionsById,
-        "session-1": {
+        "external-1": {
           ...failedSession,
           historyHydrationState: "failed",
         },
@@ -2992,14 +2992,14 @@ describe("use-agent-orchestrator-operations", () => {
       await harness.run(async () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
-          externalSessionId: "session-1",
+          externalSessionId: "external-1",
           persistedRecords: [persistedBuildSessionFixture],
         });
       });
 
       expect(loadSessionHistoryCalls).toBe(1);
       expect(
-        harness.getLatest().sessionStore.getSessionSnapshot("session-1")?.historyHydrationState,
+        harness.getLatest().sessionStore.getSessionSnapshot("external-1")?.historyHydrationState,
       ).toBe("hydrated");
     } finally {
       await harness.unmount();
@@ -3083,13 +3083,13 @@ describe("use-agent-orchestrator-operations", () => {
         harness.run(async () => {
           await harness.getLatest().retrySessionRuntimeAttachment({
             taskId: "task-1",
-            externalSessionId: "session-1",
+            externalSessionId: "external-1",
             persistedRecords: [persistedBuildSessionFixture],
           });
         }),
       ).rejects.toThrow("history unavailable");
 
-      const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("session-1");
+      const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("external-1");
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
       expect(recoveredSession?.historyHydrationState).toBe("failed");
       expect(recoveredSession?.runtimeRoute).toEqual({
@@ -3193,17 +3193,17 @@ describe("use-agent-orchestrator-operations", () => {
       });
 
       const sessionsById = harness.getLatest().sessionStore.getSessionsByIdSnapshot();
-      const session = sessionsById["session-1"];
+      const session = sessionsById["external-1"];
       if (!session) {
         throw new Error("Expected session-1 to exist after bootstrapping persisted sessions");
       }
       await harness.run(async () => {
         harness.getLatest().commitSessions({
           ...sessionsById,
-          "session-1": {
+          "external-1": {
             ...session,
             historyHydrationState: "failed",
-            messages: createSessionMessagesState("session-1", [
+            messages: createSessionMessagesState("external-1", [
               {
                 id: "local-message-1",
                 role: "assistant",
@@ -3219,13 +3219,13 @@ describe("use-agent-orchestrator-operations", () => {
       await harness.run(async () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
-          externalSessionId: "session-1",
+          externalSessionId: "external-1",
           persistedRecords: [persistedBuildSessionFixture],
         });
       });
 
       expect(loadSessionHistoryCalls).toBe(1);
-      const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("session-1");
+      const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("external-1");
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
       expect(recoveredSession?.historyHydrationState).toBe("hydrated");
       const recoveredContents = recoveredSession
@@ -3344,7 +3344,7 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.mount();
         await harness.waitFor((state) =>
           state.sessions.some(
-            (session) => session.externalSessionId === "session-1" && session.status === "running",
+            (session) => session.externalSessionId === "external-1" && session.status === "running",
           ),
         );
         expect(new Set(scannedEndpoints)).toEqual(new Set(["http://127.0.0.1:4444"]));
@@ -3524,11 +3524,11 @@ describe("use-agent-orchestrator-operations", () => {
       try {
         await harness.mount();
         const resolved = await harness.waitFor((state) =>
-          state.sessions.some((session) => session.externalSessionId === "session-1"),
+          state.sessions.some((session) => session.externalSessionId === "external-1"),
         );
         expect(repoConfigCalls).toBe(0);
         expect(
-          resolved.sessions.find((session) => session.externalSessionId === "session-1"),
+          resolved.sessions.find((session) => session.externalSessionId === "external-1"),
         ).toBeDefined();
       } finally {
         await harness.unmount();
@@ -3559,11 +3559,11 @@ describe("use-agent-orchestrator-operations", () => {
       try {
         await harness.mount();
         const resolved = await harness.waitFor((state) =>
-          state.sessions.some((session) => session.externalSessionId === "session-2"),
+          state.sessions.some((session) => session.externalSessionId === "external-2"),
         );
         expect(resolved.sessions.map((session) => session.externalSessionId).sort()).toEqual([
-          "session-1",
-          "session-2",
+          "external-1",
+          "external-2",
         ]);
         expect(persistedListCalls).toBe(0);
       } finally {
@@ -3642,7 +3642,7 @@ describe("use-agent-orchestrator-operations", () => {
         },
       ];
       OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
-        if (input.externalSessionId === "session-1") {
+        if (input.externalSessionId === "external-1") {
           throw new Error("task-1 resume failed");
         }
         return {
@@ -3672,12 +3672,12 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.mount();
         const resolved = await harness.waitFor((state) =>
           state.sessions.some(
-            (session) => session.externalSessionId === "session-2" && session.status === "running",
+            (session) => session.externalSessionId === "external-2" && session.status === "running",
           ),
         );
-        expect(resolved.sessions.some((session) => session.externalSessionId === "session-1")).toBe(
-          true,
-        );
+        expect(
+          resolved.sessions.some((session) => session.externalSessionId === "external-1"),
+        ).toBe(true);
       } finally {
         await harness.unmount();
         host.agentSessionsList = originalAgentSessionsList;
@@ -3781,11 +3781,11 @@ describe("use-agent-orchestrator-operations", () => {
         });
         const resolved = await harness.waitFor((state) =>
           state.sessions.some(
-            (session) => session.externalSessionId === "session-2" && session.status === "running",
+            (session) => session.externalSessionId === "external-2" && session.status === "running",
           ),
         );
         expect(
-          resolved.sessions.find((session) => session.externalSessionId === "session-2")?.status,
+          resolved.sessions.find((session) => session.externalSessionId === "external-2")?.status,
         ).toBe("running");
       } finally {
         await harness.unmount();

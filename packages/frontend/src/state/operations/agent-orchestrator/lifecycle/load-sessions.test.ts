@@ -258,10 +258,10 @@ describe("agent-orchestrator-load-sessions", () => {
       (await import("../../shared/host")).host.agentSessionsList = originalList;
     }
 
-    expect(Object.keys(state)).toContain("session-1");
-    expect(state["session-1"]?.status).toBe("stopped");
-    expect(state["session-1"]?.pendingPermissions).toEqual([]);
-    expect(state["session-1"]?.pendingQuestions).toEqual([]);
+    expect(Object.keys(state)).toContain("external-1");
+    expect(state["external-1"]?.status).toBe("stopped");
+    expect(state["external-1"]?.pendingPermissions).toEqual([]);
+    expect(state["external-1"]?.pendingQuestions).toEqual([]);
   });
 
   test("does not merge persisted pending input into an existing session entry", async () => {
@@ -302,7 +302,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: { "session-1": existingSession },
+      current: { "external-1": existingSession },
     };
     let state: Record<string, AgentSessionState> = sessionsRef.current;
     const setSessionsById = (
@@ -381,11 +381,11 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.agentSessionsList = originalList;
     }
 
-    expect(state["session-1"] ? sessionMessagesToArray(state["session-1"]) : undefined).toEqual(
+    expect(state["external-1"] ? sessionMessagesToArray(state["external-1"]) : undefined).toEqual(
       sessionMessagesToArray(existingSession),
     );
-    expect(state["session-1"]?.pendingPermissions).toEqual([]);
-    expect(state["session-1"]?.pendingQuestions).toEqual([]);
+    expect(state["external-1"]?.pendingPermissions).toEqual([]);
+    expect(state["external-1"]?.pendingQuestions).toEqual([]);
   });
 
   test("clears pending permissions when the live snapshot reports no pending input", async () => {
@@ -418,7 +418,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: { "session-1": existingSession },
+      current: { "external-1": existingSession },
     };
     let state: Record<string, AgentSessionState> = sessionsRef.current;
     const setSessionsById = (
@@ -508,20 +508,20 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetExternalSessionId: "session-1",
+        targetExternalSessionId: "external-1",
         historyPolicy: "requested_only",
       });
     } finally {
       hostModule.host.agentSessionsList = originalList;
     }
 
-    expect(state["session-1"]?.pendingPermissions).toEqual([]);
+    expect(state["external-1"]?.pendingPermissions).toEqual([]);
   });
 
   test("does not recover pending input from transcript history when no live snapshot exists", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-1": {
+        "external-1": {
           externalSessionId: "external-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -647,15 +647,15 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetExternalSessionId: "session-1",
+        targetExternalSessionId: "external-1",
         historyPolicy: "requested_only",
       });
     } finally {
       hostModule.host.agentSessionsList = originalList;
     }
 
-    expect(state["session-1"]?.pendingPermissions).toEqual([]);
-    expect(state["session-1"]?.pendingQuestions).toEqual([]);
+    expect(state["external-1"]?.pendingPermissions).toEqual([]);
+    expect(state["external-1"]?.pendingQuestions).toEqual([]);
   });
 
   test("hydrates requested session history from the current live runtime without re-resolving runtimes", async () => {
@@ -717,7 +717,7 @@ describe("agent-orchestrator-load-sessions", () => {
       promptOverrides: {},
     };
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: { "session-live": existingSession },
+      current: { "external-live": existingSession },
     };
     let state = sessionsRef.current;
     const setSessionsById = (
@@ -775,7 +775,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-live",
+      targetExternalSessionId: "external-live",
       historyPolicy: "requested_only",
       persistedRecords: [
         persistedSessionRecord({
@@ -825,7 +825,7 @@ describe("agent-orchestrator-load-sessions", () => {
   test("recovers a targeted session runtime attachment without hydrating history", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-1": {
+        "external-1": {
           externalSessionId: "external-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -936,7 +936,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "recover_runtime_attachment",
-        targetExternalSessionId: "session-1",
+        targetExternalSessionId: "external-1",
         historyPolicy: "none",
         preloadedRuntimeLists,
       });
@@ -945,14 +945,14 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(historyLoads).toBe(0);
-    expect(getSession(state, "session-1").runId).toBeNull();
-    expect(getSession(state, "session-1").runtimeId).toBe("runtime-1");
-    expect(getSession(state, "session-1").runtimeRoute).toEqual({
+    expect(getSession(state, "external-1").runId).toBeNull();
+    expect(getSession(state, "external-1").runtimeId).toBe("runtime-1");
+    expect(getSession(state, "external-1").runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4444",
     });
-    expect(getSession(state, "session-1").historyHydrationState).toBe("not_requested");
-    expect(sessionMessagesToArray(getSession(state, "session-1"))).toEqual([]);
+    expect(getSession(state, "external-1").historyHydrationState).toBe("not_requested");
+    expect(sessionMessagesToArray(getSession(state, "external-1"))).toEqual([]);
   });
 
   test("recovers a worktree session from a repo-root runtime after verifying the live external session", async () => {
@@ -968,7 +968,7 @@ describe("agent-orchestrator-load-sessions", () => {
     });
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-1": {
+        "external-1": {
           ...persistedRecord,
           externalSessionId: "external-1",
           runtimeKind: "opencode",
@@ -1051,7 +1051,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "recover_runtime_attachment",
-      targetExternalSessionId: "session-1",
+      targetExternalSessionId: "external-1",
       historyPolicy: "none",
       persistedRecords: [persistedRecord],
       preloadedRuntimeLists: new Map([
@@ -1078,14 +1078,14 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     expect(observedSnapshotDirectories).toEqual([["/tmp/repo/worktree"]]);
-    expect(getSession(state, "session-1").runtimeId).toBeNull();
-    expect(getSession(state, "session-1").runtimeRoute).toEqual({
+    expect(getSession(state, "external-1").runtimeId).toBeNull();
+    expect(getSession(state, "external-1").runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4444",
     });
-    expect(getSession(state, "session-1").workingDirectory).toBe("/tmp/repo/worktree");
-    expect(getSession(state, "session-1").historyHydrationState).toBe("not_requested");
-    expect(sessionMessagesToArray(getSession(state, "session-1"))).toEqual([]);
+    expect(getSession(state, "external-1").workingDirectory).toBe("/tmp/repo/worktree");
+    expect(getSession(state, "external-1").historyHydrationState).toBe("not_requested");
+    expect(sessionMessagesToArray(getSession(state, "external-1"))).toEqual([]);
   });
 
   test("route-hydrates unmatched records after probing a repo-root worktree route", async () => {
@@ -1185,20 +1185,20 @@ describe("agent-orchestrator-load-sessions", () => {
       ]),
     });
 
-    expect(getSession(state, "session-1").runtimeId).toBeNull();
-    expect(getSession(state, "session-1").runtimeRoute).toEqual({
+    expect(getSession(state, "external-1").runtimeId).toBeNull();
+    expect(getSession(state, "external-1").runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4444",
     });
-    expect(getSession(state, "session-1").workingDirectory).toBe("/tmp/repo/worktree");
-    expect(getSession(state, "session-2").runtimeId).toBeNull();
-    expect(getSession(state, "session-2").runtimeRoute).toEqual({
+    expect(getSession(state, "external-1").workingDirectory).toBe("/tmp/repo/worktree");
+    expect(getSession(state, "external-2").runtimeId).toBeNull();
+    expect(getSession(state, "external-2").runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4444",
     });
-    expect(getSession(state, "session-2").workingDirectory).toBe("/tmp/repo/worktree");
-    expect(sessionMessagesToArray(getSession(state, "session-1"))).toEqual([]);
-    expect(sessionMessagesToArray(getSession(state, "session-2"))).toEqual([]);
+    expect(getSession(state, "external-2").workingDirectory).toBe("/tmp/repo/worktree");
+    expect(sessionMessagesToArray(getSession(state, "external-1"))).toEqual([]);
+    expect(sessionMessagesToArray(getSession(state, "external-2"))).toEqual([]);
   });
 
   test("composes bootstrap, requested history hydration, and live reconciliation without cross-mode regressions", async () => {
@@ -1378,7 +1378,7 @@ describe("agent-orchestrator-load-sessions", () => {
       historyPolicy: "none",
     });
 
-    expect(state["session-1"]).toMatchObject({
+    expect(state["external-1"]).toMatchObject({
       status: "stopped",
       runtimeRoute: null,
       messages: [],
@@ -1393,13 +1393,13 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-1",
+      targetExternalSessionId: "external-1",
       persistedRecords,
       preloadedRuntimeLists: runtimeLists,
       historyPolicy: "requested_only",
     });
 
-    const hydratedSession = state["session-1"];
+    const hydratedSession = state["external-1"];
     expect(hydratedSession).toMatchObject({
       status: "running",
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
@@ -1440,9 +1440,9 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(attachedListeners).toBe(2);
     expect(liveSnapshotLoads).toBe(3);
     expect(
-      sessionMessagesToArray(getSession(state, "session-1")).map((message) => message.id),
+      sessionMessagesToArray(getSession(state, "external-1")).map((message) => message.id),
     ).toEqual(hydratedMessageIds);
-    expect(state["session-1"]).toMatchObject({
+    expect(state["external-1"]).toMatchObject({
       status: "running",
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       historyHydrationState: "hydrated",
@@ -1450,7 +1450,7 @@ describe("agent-orchestrator-load-sessions", () => {
         { requestId: "permission-live", permission: "read", patterns: ["README.md"] },
       ],
     });
-    expect(state["session-1"]?.pendingQuestions).toHaveLength(1);
+    expect(state["external-1"]?.pendingQuestions).toHaveLength(1);
     expect(promptOverrideLoads).toBe(1);
   });
 
@@ -1596,9 +1596,9 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(resumeCalls).toBe(1);
     expect(historyLoads).toBe(1);
-    expect(state["session-1"]?.historyHydrationState).toBe("hydrated");
+    expect(state["external-1"]?.historyHydrationState).toBe("hydrated");
     expect(
-      sessionMessagesToArray(getSession(state, "session-1")).map((message) => message.content),
+      sessionMessagesToArray(getSession(state, "external-1")).map((message) => message.content),
     ).toEqual([
       "Session started (planner - planner_initial)",
       expect.stringContaining("System prompt:"),
@@ -1761,9 +1761,9 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(resumeCalls).toBe(1);
     expect(historyLoads).toBe(1);
-    expect(state["session-1"]?.historyHydrationState).toBe("hydrated");
+    expect(state["external-1"]?.historyHydrationState).toBe("hydrated");
     expect(
-      sessionMessagesToArray(getSession(state, "session-1")).map((message) => message.content),
+      sessionMessagesToArray(getSession(state, "external-1")).map((message) => message.content),
     ).toEqual([
       "Session started (planner - planner_initial)",
       expect.stringContaining("System prompt:"),
@@ -1897,13 +1897,13 @@ describe("agent-orchestrator-load-sessions", () => {
     await loadPromise;
 
     expect(resumeCalls).toBe(0);
-    expect(state["session-1"]?.runtimeRoute).toBeUndefined();
+    expect(state["external-1"]?.runtimeRoute).toBeUndefined();
   });
 
   test("reuses the trusted live agent session store for requested session hydration", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-1": {
+        "external-1": {
           externalSessionId: "external-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2001,7 +2001,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-1",
+      targetExternalSessionId: "external-1",
       persistedRecords: [
         persistedSessionRecord({
           runtimeKind: "opencode",
@@ -2016,13 +2016,13 @@ describe("agent-orchestrator-load-sessions", () => {
       ],
     });
 
-    expect(state["session-1"]?.status).toBe("running");
+    expect(state["external-1"]?.status).toBe("running");
   });
 
   test("refreshes requested session history even when in-memory messages already exist", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-live": {
+        "external-live": {
           externalSessionId: "external-live",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2106,7 +2106,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-live",
+      targetExternalSessionId: "external-live",
       historyPolicy: "requested_only",
       persistedRecords: [
         persistedSessionRecord({
@@ -2224,7 +2224,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-child-1",
+      targetExternalSessionId: "external-child-1",
       historyPolicy: "requested_only",
       preloadedRuntimeLists,
       persistedRecords: [
@@ -2243,17 +2243,17 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(attachedSessions).toEqual([
       {
         repoPath: "/tmp/repo",
-        externalSessionId: "session-child-1",
+        externalSessionId: "external-child-1",
       },
     ]);
-    expect(attachCalls).toEqual([{ externalSessionId: "session-child-1" }]);
-    expect(state["session-child-1"]?.status).toBe("running");
+    expect(attachCalls).toEqual([{ externalSessionId: "external-child-1" }]);
+    expect(state["external-child-1"]?.status).toBe("running");
   });
 
   test("uses the resolved working directory for requested-history live lookups and state updates", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-1": {
+        "external-1": {
           externalSessionId: "external-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2343,7 +2343,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-1",
+      targetExternalSessionId: "external-1",
       historyPolicy: "requested_only",
       persistedRecords: [
         persistedSessionRecord({
@@ -2361,7 +2361,7 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     expect(observedSnapshotDirectories).toEqual(["/tmp/repo/resolved-worktree"]);
-    expect(state["session-1"]?.workingDirectory).toBe("/tmp/repo/resolved-worktree");
+    expect(state["external-1"]?.workingDirectory).toBe("/tmp/repo/resolved-worktree");
   });
 
   test("preserves canonical live messages that arrive during requested-history hydration", async () => {
@@ -2369,7 +2369,7 @@ describe("agent-orchestrator-load-sessions", () => {
       createDeferred<Awaited<ReturnType<ReturnType<typeof createAdapter>["loadSessionHistory"]>>>();
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-live": {
+        "external-live": {
           externalSessionId: "external-live",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2447,7 +2447,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const loadPromise = loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-live",
+      targetExternalSessionId: "external-live",
       historyPolicy: "requested_only",
       persistedRecords: [
         persistedSessionRecord({
@@ -2467,11 +2467,11 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     await Promise.resolve();
-    const currentSession = sessionsRef.current["session-live"];
+    const currentSession = sessionsRef.current["external-live"];
     if (!currentSession) {
       throw new Error("Expected in-memory session before resolving hydration");
     }
-    sessionsRef.current["session-live"] = {
+    sessionsRef.current["external-live"] = {
       ...currentSession,
       messages: [
         {
@@ -2510,7 +2510,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadPromise;
 
-    const mergedMessages = sessionMessagesToArray(getSession(sessionsRef.current, "session-live"));
+    const mergedMessages = sessionMessagesToArray(getSession(sessionsRef.current, "external-live"));
     expect(mergedMessages.some((message) => message.id === "live-user-1")).toBe(true);
     expect(mergedMessages.find((message) => message.id === "assistant-1")?.content).toBe(
       "Live replacement",
@@ -2594,11 +2594,13 @@ describe("agent-orchestrator-load-sessions", () => {
       legacyHost.runsList = originalRunsList;
     }
 
-    expect(Object.keys(state)).toContain("session-1");
+    expect(Object.keys(state)).toContain("external-1");
     expect(historyLoads).toBe(0);
     expect(runLoads).toBe(0);
-    expect(state["session-1"] ? sessionMessagesToArray(state["session-1"]) : undefined).toEqual([]);
-    expect(state["session-1"]?.runtimeRoute).toBeNull();
+    expect(state["external-1"] ? sessionMessagesToArray(state["external-1"]) : undefined).toEqual(
+      [],
+    );
+    expect(state["external-1"]?.runtimeRoute).toBeNull();
   });
 
   test("hydrates requested session through its persisted runtime kind when endpoint is missing", async () => {
@@ -2721,7 +2723,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetExternalSessionId: "session-1",
+        targetExternalSessionId: "external-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -2732,14 +2734,14 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(ensuredRuntimeKinds).toEqual([]);
     expect(observedRuntimeEndpoint).toBe("http://127.0.0.1:4555");
-    expect(state["session-1"]?.runtimeKind).toBe("claude-code");
-    expect(state["session-1"]?.runtimeId).toBe("runtime-1");
+    expect(state["external-1"]?.runtimeKind).toBe("claude-code");
+    expect(state["external-1"]?.runtimeId).toBe("runtime-1");
   });
 
   test("rejects requested-session warmup when persisted runtime metadata is missing", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-1": {
+        "external-1": {
           externalSessionId: "external-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2753,7 +2755,7 @@ describe("agent-orchestrator-load-sessions", () => {
           workingDirectory: "/tmp/repo",
           messages: [
             {
-              id: "history:session-start:session-1",
+              id: "history:session-start:external-1",
               role: "system",
               content: "Session started (planner - planner_initial)",
               timestamp: "2026-02-22T08:00:00.000Z",
@@ -2809,10 +2811,10 @@ describe("agent-orchestrator-load-sessions", () => {
       await expect(
         loadAgentSessions("task-1", {
           mode: "requested_history",
-          targetExternalSessionId: "session-1",
+          targetExternalSessionId: "external-1",
           historyPolicy: "requested_only",
         }),
-      ).rejects.toThrow("Persisted session 'session-1' is missing runtime kind metadata.");
+      ).rejects.toThrow("Persisted session 'external-1' is missing runtime kind metadata.");
     } finally {
       hostModule.host.agentSessionsList = originalList;
     }
@@ -2821,7 +2823,7 @@ describe("agent-orchestrator-load-sessions", () => {
   test("warms requested-session todos even when the model catalog is already loaded", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-1": {
+        "external-1": {
           runtimeKind: "opencode",
           externalSessionId: "external-1",
           taskId: "task-1",
@@ -2836,7 +2838,7 @@ describe("agent-orchestrator-load-sessions", () => {
           workingDirectory: "/tmp/repo",
           messages: [
             {
-              id: "history:session-start:session-1",
+              id: "history:session-start:external-1",
               role: "system",
               content: "Session started (planner - planner_initial)",
               timestamp: "2026-02-22T08:00:00.000Z",
@@ -2913,14 +2915,14 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetExternalSessionId: "session-1",
+        targetExternalSessionId: "external-1",
         historyPolicy: "requested_only",
       });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
     }
-    expect(sessionsRef.current["session-1"]?.runtimeRoute).toEqual({
+    expect(sessionsRef.current["external-1"]?.runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4555",
     });
@@ -2954,7 +2956,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: { "session-1": existingSession },
+      current: { "external-1": existingSession },
     };
     let state: Record<string, AgentSessionState> = sessionsRef.current;
     const setSessionsById = (
@@ -3044,7 +3046,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetExternalSessionId: "session-1",
+        targetExternalSessionId: "external-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -3054,9 +3056,9 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(historyLoads).toBe(1);
-    expect(sessionMessagesToArray(getSession(state, "session-1")).length).toBeGreaterThan(0);
-    expect(sessionMessageAt(getSession(state, "session-1"), 0)?.id).toBe(
-      "history:session-start:session-1",
+    expect(sessionMessagesToArray(getSession(state, "external-1")).length).toBeGreaterThan(0);
+    expect(sessionMessageAt(getSession(state, "external-1"), 0)?.id).toBe(
+      "history:session-start:external-1",
     );
   });
 
@@ -3064,7 +3066,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const setSessionsByIdCalls: Array<Record<string, AgentSessionState>> = [];
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-1": {
+        "external-1": {
           externalSessionId: "external-session-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -3196,16 +3198,16 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-1",
+      targetExternalSessionId: "external-session-1",
       persistedRecords: [record],
       preloadedRuntimeLists: new Map([["opencode", hostRuntimeList]]),
     });
 
     expect(setSessionsByIdCalls.length).toBeGreaterThan(0);
-    expect(sessionsRef.current["session-1"]?.pendingPermissions).toEqual([
+    expect(sessionsRef.current["external-session-1"]?.pendingPermissions).toEqual([
       { requestId: "perm-1", permission: "read", patterns: ["**/.env"] },
     ]);
-    expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([
+    expect(sessionsRef.current["external-session-1"]?.pendingQuestions).toEqual([
       {
         requestId: "question-1",
         questions: [
@@ -3267,11 +3269,11 @@ describe("agent-orchestrator-load-sessions", () => {
       await expect(
         loadAgentSessions("task-1", {
           mode: "requested_history",
-          targetExternalSessionId: "session-1",
+          targetExternalSessionId: "external-1",
           historyPolicy: "requested_only",
         }),
-      ).rejects.toThrow("Persisted session 'session-1' is missing runtime kind metadata.");
-      expect(state["session-1"]?.messages ?? []).toEqual([]);
+      ).rejects.toThrow("Persisted session 'external-1' is missing runtime kind metadata.");
+      expect(state["external-1"]?.messages ?? []).toEqual([]);
     } finally {
       hostModule.host.agentSessionsList = originalList;
     }
@@ -3361,7 +3363,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetExternalSessionId: "session-qa-1",
+        targetExternalSessionId: "external-qa-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -3370,13 +3372,13 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(observedRuntimeEndpoint as string | null).toBe("http://127.0.0.1:4444");
-    expect(state["session-qa-1"]?.runtimeId).toBeNull();
-    expect(state["session-qa-1"]?.runtimeRoute).toEqual({
+    expect(state["external-qa-1"]?.runtimeId).toBeNull();
+    expect(state["external-qa-1"]?.runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4444",
     });
-    expect(state["session-qa-1"]?.workingDirectory).toBe("/tmp/repo/worktree");
-    expect(sessionMessagesToArray(getSession(state, "session-qa-1")).length).toBeGreaterThan(0);
+    expect(state["external-qa-1"]?.workingDirectory).toBe("/tmp/repo/worktree");
+    expect(sessionMessagesToArray(getSession(state, "external-qa-1")).length).toBeGreaterThan(0);
   });
 
   test("does not bind qa repo-root sessions to an existing workspace runtime", async () => {
@@ -3486,7 +3488,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await expect(
         loadAgentSessions("task-1", {
           mode: "requested_history",
-          targetExternalSessionId: "session-qa-root",
+          targetExternalSessionId: "external-qa-root",
           historyPolicy: "requested_only",
         }),
       ).rejects.toThrow("No live runtime found for working directory /tmp/repo/.");
@@ -3499,7 +3501,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(ensuredRuntimeKinds).toEqual([]);
     expect(
-      state["session-qa-root"] ? sessionMessagesToArray(state["session-qa-root"]) : undefined,
+      state["external-qa-root"] ? sessionMessagesToArray(state["external-qa-root"]) : undefined,
     ).toEqual([]);
   });
 
@@ -3587,7 +3589,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetExternalSessionId: "session-1",
+        targetExternalSessionId: "external-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -3702,7 +3704,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetExternalSessionId: "session-1",
+        targetExternalSessionId: "external-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -3713,13 +3715,13 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["session-1"]?.runtimeId).toBeNull();
-    expect(state["session-1"]?.runtimeRoute).toEqual({
+    expect(state["external-1"]?.runtimeId).toBeNull();
+    expect(state["external-1"]?.runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4666",
     });
-    expect(state["session-1"]?.workingDirectory).toBe("/tmp/repo/conflict-worktree");
-    expect(sessionMessagesToArray(getSession(state, "session-1")).length).toBeGreaterThan(0);
+    expect(state["external-1"]?.workingDirectory).toBe("/tmp/repo/conflict-worktree");
+    expect(sessionMessagesToArray(getSession(state, "external-1")).length).toBeGreaterThan(0);
   });
 
   test("does not ensure a shared workspace runtime for qa sessions on non-root working directories", async () => {
@@ -3809,7 +3811,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await expect(
         loadAgentSessions("task-1", {
           mode: "requested_history",
-          targetExternalSessionId: "session-qa-worktree",
+          targetExternalSessionId: "external-qa-worktree",
           historyPolicy: "requested_only",
         }),
       ).rejects.toThrow("No live runtime found for working directory /tmp/repo/worktrees/task-1.");
@@ -3821,8 +3823,8 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["session-qa-worktree"]?.runtimeRoute).toBeNull();
-    expect(sessionMessagesToArray(getSession(state, "session-qa-worktree"))).toEqual([]);
+    expect(state["external-qa-worktree"]?.runtimeRoute).toBeNull();
+    expect(sessionMessagesToArray(getSession(state, "external-qa-worktree"))).toEqual([]);
   });
 
   test("resumes live persisted sessions without eagerly hydrating transcript history", async () => {
@@ -3878,11 +3880,11 @@ describe("agent-orchestrator-load-sessions", () => {
           historyLoads += 1;
           return [
             {
-              messageId: "history:session-start:session-1",
+              messageId: "history:session-start:external-1",
               parts: [
                 {
                   kind: "text",
-                  messageId: "history:session-start:session-1",
+                  messageId: "history:session-start:external-1",
                   partId: "part-1",
                   text: "Resumed history",
                   completed: true,
@@ -3969,12 +3971,14 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(resumeCalls).toBe(1);
     expect(historyLoads).toBe(0);
     expect(attachedListeners).toBe(1);
-    expect(state["session-1"]?.status).toBe("running");
-    expect(state["session-1"]?.runtimeRoute).toEqual({
+    expect(state["external-1"]?.status).toBe("running");
+    expect(state["external-1"]?.runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4444",
     });
-    expect(state["session-1"] ? sessionMessagesToArray(state["session-1"]) : undefined).toEqual([]);
+    expect(state["external-1"] ? sessionMessagesToArray(state["external-1"]) : undefined).toEqual(
+      [],
+    );
   });
 
   test("does not attach projected live sessions when the repo changes while reconcile is in flight", async () => {
@@ -4106,7 +4110,7 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(attachedListeners).toBe(0);
-    expect(state["session-1"]).toBeUndefined();
+    expect(state["external-1"]).toBeUndefined();
   });
 
   test("does not resume persisted sessions when the runtime does not report them live", async () => {
@@ -4201,7 +4205,7 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(resumeCalls).toBe(0);
-    expect(state["session-1"]?.status).toBe("stopped");
+    expect(state["external-1"]?.status).toBe("stopped");
   });
 
   test("reattaches already attached live sessions when reconciling after a repo switch", async () => {
@@ -4313,8 +4317,8 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(attachedListeners).toBe(1);
-    expect(state["session-1"]?.status).toBe("running");
-    expect(state["session-1"]?.runtimeRoute).toEqual({
+    expect(state["external-1"]?.status).toBe("running");
+    expect(state["external-1"]?.runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4444",
     });
@@ -4446,13 +4450,13 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(resumeCalls).toEqual([
       {
-        externalSessionId: "session-1",
+        externalSessionId: "external-1",
         workingDirectory: "/tmp/repo/worktree",
       },
     ]);
     expect(attachedListeners).toBe(1);
-    expect(state["session-1"]?.status).toBe("running");
-    expect(state["session-1"]?.runtimeRoute).toEqual({
+    expect(state["external-1"]?.status).toBe("running");
+    expect(state["external-1"]?.runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4555",
     });
@@ -4499,7 +4503,7 @@ describe("agent-orchestrator-load-sessions", () => {
       promptOverrides: {},
     };
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: { "session-1": existingSession },
+      current: { "external-1": existingSession },
     };
     let state: Record<string, AgentSessionState> = sessionsRef.current;
     let attachedListeners = 0;
@@ -4598,13 +4602,13 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(attachedListeners).toBe(0);
-    expect(state["session-1"]?.status).toBe("stopped");
-    expect(state["session-1"]?.runtimeRoute).toEqual({
+    expect(state["external-1"]?.status).toBe("stopped");
+    expect(state["external-1"]?.runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4555",
     });
-    expect(state["session-1"]?.pendingPermissions).toEqual([]);
-    expect(state["session-1"]?.pendingQuestions).toEqual([]);
+    expect(state["external-1"]?.pendingPermissions).toEqual([]);
+    expect(state["external-1"]?.pendingQuestions).toEqual([]);
   });
 
   test("skips hydration when repo epoch changes while loading persisted sessions", async () => {
@@ -4774,7 +4778,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await expect(
         loadAgentSessions("task-1", {
           mode: "requested_history",
-          targetExternalSessionId: "session-1",
+          targetExternalSessionId: "external-1",
           historyPolicy: "requested_only",
         }),
       ).rejects.toThrow("No live runtime found for working directory /tmp/repo.");
@@ -4788,7 +4792,9 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.qaGetReport = originalQaGetReport;
     }
 
-    expect(state["session-1"] ? sessionMessagesToArray(state["session-1"]) : undefined).toEqual([]);
+    expect(state["external-1"] ? sessionMessagesToArray(state["external-1"]) : undefined).toEqual(
+      [],
+    );
     expect(specCalls).toBe(0);
     expect(planCalls).toBe(0);
     expect(qaCalls).toBe(0);
@@ -4875,14 +4881,14 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const firstLoad = loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-1",
+      targetExternalSessionId: "external-1",
       historyPolicy: "requested_only",
       persistedRecords,
       preloadedRuntimeLists,
     });
     const secondLoad = loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-1",
+      targetExternalSessionId: "external-1",
       historyPolicy: "requested_only",
       persistedRecords,
       preloadedRuntimeLists,
@@ -4905,10 +4911,10 @@ describe("agent-orchestrator-load-sessions", () => {
     await Promise.all([firstLoad, secondLoad]);
 
     expect(historyCalls).toBe(1);
-    expect(state["session-1"]?.historyHydrationState).toBe("hydrated");
+    expect(state["external-1"]?.historyHydrationState).toBe("hydrated");
     expect(
       someSessionMessageForTest(
-        getSession(state, "session-1"),
+        getSession(state, "external-1"),
         (message) => message.content === "Previous request",
       ),
     ).toBe(true);
@@ -4995,14 +5001,14 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const interactiveLoad = loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-1",
+      targetExternalSessionId: "external-1",
       historyPolicy: "requested_only",
       persistedRecords,
       preloadedRuntimeLists,
     });
     const readonlyLoad = loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetExternalSessionId: "session-1",
+      targetExternalSessionId: "external-1",
       historyPolicy: "requested_only",
       historyPreludeMode: "none",
       persistedRecords,
@@ -5077,7 +5083,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: { "session-1": existingSession },
+      current: { "external-1": existingSession },
     };
     let state: Record<string, AgentSessionState> = sessionsRef.current;
     const setSessionsById = (
@@ -5162,7 +5168,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetExternalSessionId: "session-1",
+        targetExternalSessionId: "external-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -5170,20 +5176,20 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(persistedListCalls).toBe(0);
-    expect(state["session-1"]?.historyHydrationState).toBe("hydrated");
-    expect(state["session-1"]?.contextUsage).toEqual({
+    expect(state["external-1"]?.historyHydrationState).toBe("hydrated");
+    expect(state["external-1"]?.contextUsage).toEqual({
       totalTokens: 123,
       providerId: "openai",
       modelId: "gpt-5",
     });
     expect(
       someSessionMessageForTest(
-        getSession(state, "session-1"),
+        getSession(state, "external-1"),
         (message) => message.content === "Hydrated message",
       ),
     ).toBe(true);
     const hydratedUser = findSessionMessageForTest(
-      getSession(state, "session-1"),
+      getSession(state, "external-1"),
       (message) => message.id === "hydrated-user-1",
     );
     if (!hydratedUser || hydratedUser.meta?.kind !== "user") {
