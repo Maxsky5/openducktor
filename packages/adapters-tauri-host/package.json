@@ -1,6 +1,6 @@
 {
   "name": "@openducktor/adapters-tauri-host",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
