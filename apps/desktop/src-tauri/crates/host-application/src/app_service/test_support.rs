@@ -1580,7 +1580,7 @@ pub(crate) fn spawn_opencode_session_status_server(
         response_body
     );
     let handle = std::thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(1);
+        let deadline = Instant::now() + Duration::from_secs(5);
         loop {
             match listener.accept() {
                 Ok((mut stream, _)) => {
