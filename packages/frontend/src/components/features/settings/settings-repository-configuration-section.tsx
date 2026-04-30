@@ -157,9 +157,9 @@ export function RepositoryConfigurationSection({
           onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
         />
 
-        <RepositoryWorktreeFileCopiesSection
+        <RepositoryWorktreeCopyPathsSection
           isDisabled={isLoadingSettings || isSaving}
-          worktreeFileCopies={selectedRepoConfig.worktreeFileCopies}
+          worktreeCopyPaths={selectedRepoConfig.worktreeCopyPaths}
           onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
         />
       </div>
@@ -685,28 +685,28 @@ function RepositoryDevServerRow({
   );
 }
 
-function RepositoryWorktreeFileCopiesSection({
+function RepositoryWorktreeCopyPathsSection({
   isDisabled,
-  worktreeFileCopies,
+  worktreeCopyPaths,
   onUpdateSelectedRepoConfig,
 }: {
   isDisabled: boolean;
-  worktreeFileCopies: string[];
+  worktreeCopyPaths: string[];
   onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
   return (
     <div className="grid gap-2">
-      <Label htmlFor="repo-worktree-file-copies">Worktree file copies (one path per line)</Label>
+      <Label htmlFor="repo-worktree-copy-paths">Worktree copy paths (one path per line)</Label>
       <Textarea
-        id="repo-worktree-file-copies"
+        id="repo-worktree-copy-paths"
         rows={4}
-        value={worktreeFileCopies.join("\n")}
+        value={worktreeCopyPaths.join("\n")}
         disabled={isDisabled}
         onChange={(event) => {
-          const worktreeFileCopiesInput = event.currentTarget.value;
+          const worktreeCopyPathsInput = event.currentTarget.value;
           onUpdateSelectedRepoConfig((repoConfig) => ({
             ...repoConfig,
-            worktreeFileCopies: parseHookLines(worktreeFileCopiesInput),
+            worktreeCopyPaths: parseHookLines(worktreeCopyPathsInput),
           }));
         }}
       />

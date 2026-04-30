@@ -95,18 +95,21 @@ const createHookHarness = (initialProps: HookArgs) => {
       createElement(
         QueryProvider,
         { useIsolatedClient: true },
-        createElement(RuntimeDefinitionsContext.Provider, {
-          value: {
-            runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-            isLoadingRuntimeDefinitions: false,
-            runtimeDefinitionsError: null,
-            refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-            loadRepoRuntimeCatalog: async () => createModalCatalog(),
-            loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-            loadRepoRuntimeFileSearch: async () => [],
+        createElement(
+          RuntimeDefinitionsContext.Provider,
+          {
+            value: {
+              runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+              isLoadingRuntimeDefinitions: false,
+              runtimeDefinitionsError: null,
+              refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+              loadRepoRuntimeCatalog: async () => createModalCatalog(),
+              loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+              loadRepoRuntimeFileSearch: async () => [],
+            },
           },
           children,
-        }),
+        ),
       ),
     );
 
@@ -121,7 +124,7 @@ const createDefaultRepoSettings = (): RepoSettingsInput => ({
   preStartHooks: [],
   postCompleteHooks: [],
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   agentDefaults: {
     spec: null,
     planner: null,
@@ -522,7 +525,7 @@ describe("useKanbanSessionStartFlow", () => {
           preStartHooks: [],
           postCompleteHooks: [],
           devServers: [],
-          worktreeFileCopies: [],
+          worktreeCopyPaths: [],
           agentDefaults: {
             spec: null,
             planner: null,

@@ -219,7 +219,7 @@ fn task_delete_allows_cascade_and_forwards_delete_flag() -> Result<()> {
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -282,7 +282,7 @@ fn task_delete_removes_managed_worktrees_and_related_branches() -> Result<()> {
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -394,7 +394,7 @@ fn task_delete_rejects_branch_still_checked_out_in_remaining_worktree() -> Resul
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -487,7 +487,7 @@ fn task_delete_cascade_cleans_descendant_worktrees() -> Result<()> {
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -577,7 +577,7 @@ fn task_delete_stops_before_store_delete_when_worktree_cleanup_fails() {
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -654,7 +654,7 @@ fn task_delete_rejects_active_builder_runs() {
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -701,7 +701,7 @@ fn task_delete_rejects_active_builder_runs() {
                 git: Default::default(),
                 hooks: HookSet::default(),
                 dev_servers: Vec::new(),
-                worktree_file_copies: Vec::new(),
+                worktree_copy_paths: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
                 ..Default::default()
@@ -774,7 +774,7 @@ fn task_delete_retries_branch_cleanup_after_worktree_was_removed() -> Result<()>
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()

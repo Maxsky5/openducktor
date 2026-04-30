@@ -21,7 +21,7 @@ const baseRepoConfig: RepoConfig = {
     postComplete: [],
   },
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
 };
@@ -202,25 +202,27 @@ describe("RepositoryConfigurationSection", () => {
     }
   });
 
-  test("preserves worktree file copy blank rows during textarea round-trip", () => {
+  test("preserves worktree copy path blank rows during textarea round-trip", () => {
     const { rendered, getLatestRepoConfig } = renderStatefulSection(baseRepoConfig);
 
     try {
-      const worktreeFileCopiesTextarea = rendered.container.querySelector(
-        "#repo-worktree-file-copies",
+      expect(screen.getByLabelText("Worktree copy paths (one path per line)")).toBeTruthy();
+
+      const worktreeCopyPathsTextarea = rendered.container.querySelector(
+        "#repo-worktree-copy-paths",
       );
-      if (!(worktreeFileCopiesTextarea instanceof HTMLTextAreaElement)) {
-        throw new Error("Expected repo worktree file copies textarea");
+      if (!(worktreeCopyPathsTextarea instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected repo worktree copy paths textarea");
       }
 
-      fireEvent.change(worktreeFileCopiesTextarea, {
+      fireEvent.change(worktreeCopyPathsTextarea, {
         target: {
           value: ".env\n",
         },
       });
 
-      expect(worktreeFileCopiesTextarea.value).toBe(".env\n");
-      expect(getLatestRepoConfig().worktreeFileCopies).toEqual([".env", ""]);
+      expect(worktreeCopyPathsTextarea.value).toBe(".env\n");
+      expect(getLatestRepoConfig().worktreeCopyPaths).toEqual([".env", ""]);
     } finally {
       rendered.unmount();
     }

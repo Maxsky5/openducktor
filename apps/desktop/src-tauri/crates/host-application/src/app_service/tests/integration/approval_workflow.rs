@@ -64,7 +64,7 @@ fn base_repo_config(worktree_base: &Path) -> RepoConfig {
         git: Default::default(),
         hooks: HookSet::default(),
         dev_servers: Vec::new(),
-        worktree_file_copies: Vec::new(),
+        worktree_copy_paths: Vec::new(),
         prompt_overrides: Default::default(),
         agent_defaults: Default::default(),
         ..Default::default()

@@ -36,7 +36,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
       command: " bun run dev ",
     },
   ],
-  worktreeFileCopies: [" .env ", " "],
+  worktreeCopyPaths: [" .env ", " "],
   promptOverrides: {
     "kickoff.spec_initial": {
       template: " custom kickoff ",
@@ -171,7 +171,7 @@ describe("settings-modal-normalization", () => {
         command: "bun run dev",
       },
     ]);
-    expect(normalized.worktreeFileCopies).toEqual([".env"]);
+    expect(normalized.worktreeCopyPaths).toEqual([".env"]);
     expect(normalized.promptOverrides).toEqual({
       "kickoff.spec_initial": {
         template: "custom kickoff",

@@ -343,7 +343,7 @@ fn git_create_worktree_copies_configured_files() -> Result<()> {
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: vec![".env".to_string()],
+            worktree_copy_paths: vec![".env".to_string()],
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -397,7 +397,7 @@ fn git_create_worktree_cleans_up_when_configured_file_copy_fails() -> Result<()>
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: vec![".env".to_string()],
+            worktree_copy_paths: vec![".env".to_string()],
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -414,7 +414,7 @@ fn git_create_worktree_cleans_up_when_configured_file_copy_fails() -> Result<()>
         .expect_err("missing configured copy source should fail");
     assert!(error
         .to_string()
-        .contains("Configured worktree file copy failed"));
+        .contains("Configured worktree copy failed"));
     assert!(
         !worktree.exists(),
         "manual worktree creation should remove the failed worktree"

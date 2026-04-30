@@ -12,7 +12,7 @@ use host_domain::{
     SystemOpenInToolId, SystemOpenInToolInfo, WorkspaceRecord,
 };
 use host_infra_system::{
-    command_exists, copy_configured_worktree_files, discover_open_in_tools,
+    command_exists, copy_configured_worktree_paths, discover_open_in_tools,
     open_directory_in_tool as open_directory_in_tool_with_system, remove_worktree,
     remove_worktree_path_if_present, resolve_effective_worktree_base_dir_for_workspace,
     run_command, run_command_allow_failure_with_env, version_command, AutopilotSettings,
@@ -598,10 +598,10 @@ impl AppService {
             create_branch,
         )?;
 
-        if let Err(error) = copy_configured_worktree_files(
+        if let Err(error) = copy_configured_worktree_paths(
             Path::new(&repo_path),
             Path::new(worktree),
-            repo_config.worktree_file_copies.as_slice(),
+            repo_config.worktree_copy_paths.as_slice(),
         ) {
             let cleanup_error = self.cleanup_failed_created_worktree(
                 Path::new(&repo_path),
@@ -610,7 +610,7 @@ impl AppService {
                 create_branch,
             );
             return Err(anyhow!(
-                "Configured worktree file copy failed: {error}{}",
+                "Configured worktree copy failed: {error}{}",
                 cleanup_error
             ));
         }

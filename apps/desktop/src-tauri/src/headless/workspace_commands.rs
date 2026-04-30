@@ -232,7 +232,7 @@ fn handle_workspace_update_repo_config(state: &HeadlessState, args: Value) -> Co
                 default_target_branch: config.default_target_branch,
                 git: config.git,
                 dev_servers: config.dev_servers,
-                worktree_file_copies: config.worktree_file_copies,
+                worktree_copy_paths: config.worktree_copy_paths,
                 prompt_overrides: config.prompt_overrides,
                 agent_defaults: config.agent_defaults,
             },
@@ -257,7 +257,7 @@ async fn handle_workspace_save_repo_settings(state: &HeadlessState, args: Value)
         git: settings.git,
         hooks: settings.hooks,
         dev_servers: settings.dev_servers,
-        worktree_file_copies: settings.worktree_file_copies,
+        worktree_copy_paths: settings.worktree_copy_paths,
         prompt_overrides: settings.prompt_overrides,
         agent_defaults: settings.agent_defaults,
     };

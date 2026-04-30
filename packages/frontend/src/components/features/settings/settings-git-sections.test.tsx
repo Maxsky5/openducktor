@@ -55,7 +55,7 @@ const baseRepoConfig: RepoConfig = {
     postComplete: [],
   },
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
 };

@@ -38,7 +38,7 @@ export type WorkspaceRepoConfigInput = {
   defaultTargetBranch?: GitTargetBranch;
   git?: RepoGitConfig;
   devServers?: RepoDevServerScript[];
-  worktreeFileCopies?: string[];
+  worktreeCopyPaths?: string[];
   agentDefaults?: WorkspaceAgentDefaults;
   promptOverrides?: RepoPromptOverrides;
 };
@@ -46,7 +46,7 @@ export type WorkspaceRepoConfigInput = {
 export type WorkspaceRepoSettingsInput = WorkspaceRepoConfigInput & {
   defaultTargetBranch?: GitTargetBranch;
   hooks?: WorkspaceRepoHooksInput;
-  worktreeFileCopies?: string[];
+  worktreeCopyPaths?: string[];
 };
 
 export type WorkspaceRepoHooksInput = {

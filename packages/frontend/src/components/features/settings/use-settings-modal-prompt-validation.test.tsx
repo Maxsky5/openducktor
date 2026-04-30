@@ -49,7 +49,7 @@ const createSnapshot = (): SettingsSnapshot => ({
       },
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
-      worktreeFileCopies: [],
+      worktreeCopyPaths: [],
       promptOverrides: {
         "kickoff.build_implementation_start": {
           template: "invalid {{unknown.value}}",
@@ -72,7 +72,7 @@ const createSnapshot = (): SettingsSnapshot => ({
       },
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
-      worktreeFileCopies: [],
+      worktreeCopyPaths: [],
       promptOverrides: {},
       agentDefaults: {},
     },

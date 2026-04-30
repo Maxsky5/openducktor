@@ -24,7 +24,7 @@ type RepoConfigFixture = {
   git: { providers: Record<string, never> };
   hooks: { preStart: []; postComplete: [] };
   devServers: [];
-  worktreeFileCopies: [];
+  worktreeCopyPaths: [];
   promptOverrides: EmptyObject;
   agentDefaults: EmptyObject;
 };
@@ -188,7 +188,7 @@ describe("use-workspace-selection-operations", () => {
         postComplete: [],
       },
       devServers: [],
-      worktreeFileCopies: [],
+      worktreeCopyPaths: [],
       promptOverrides: {},
       agentDefaults: {},
     }));
@@ -448,7 +448,7 @@ describe("use-workspace-selection-operations", () => {
         postComplete: [],
       },
       devServers: [],
-      worktreeFileCopies: [],
+      worktreeCopyPaths: [],
       promptOverrides: {},
       agentDefaults: {},
     }));
@@ -524,7 +524,7 @@ describe("use-workspace-selection-operations", () => {
           postComplete: [],
         },
         devServers: [],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
       };
@@ -563,7 +563,7 @@ describe("use-workspace-selection-operations", () => {
           postComplete: [],
         },
         devServers: [],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
       });
@@ -588,7 +588,7 @@ describe("use-workspace-selection-operations", () => {
           postComplete: [],
         },
         devServers: [],
-        worktreeFileCopies: [],
+        worktreeCopyPaths: [],
         promptOverrides: {},
         agentDefaults: {},
       });

@@ -27,7 +27,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
     postComplete: [],
   },
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
   ...overrides,
@@ -60,7 +60,7 @@ function SeedFilesystemDirectory({
 
 test("RepositoryConfigurationSection applies the confirmed worktree base path", async () => {
   const Wrapper = () => {
-    const [selectedRepoConfig, setSelectedRepoConfig] = useState(createRepoConfig());
+    const [selectedRepoConfig, setSelectedRepoConfig] = useState(() => createRepoConfig());
 
     return (
       <QueryProvider useIsolatedClient>
@@ -106,7 +106,7 @@ test("RepositoryConfigurationSection applies the confirmed worktree base path", 
 
 test("RepositoryConfigurationSection applies the confirmed repository rebind path", async () => {
   const Wrapper = () => {
-    const [selectedRepoConfig, setSelectedRepoConfig] = useState(createRepoConfig());
+    const [selectedRepoConfig, setSelectedRepoConfig] = useState(() => createRepoConfig());
 
     return (
       <QueryProvider useIsolatedClient>

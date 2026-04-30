@@ -112,7 +112,7 @@ export function useRepoSettingsOperations({
         defaultTargetBranch: normalizedTargetBranch,
         hooks,
         devServers,
-        worktreeFileCopies: input.worktreeFileCopies.map((f) => f.trim()).filter(Boolean),
+        worktreeCopyPaths: input.worktreeCopyPaths.map((f) => f.trim()).filter(Boolean),
         agentDefaults,
       });
 

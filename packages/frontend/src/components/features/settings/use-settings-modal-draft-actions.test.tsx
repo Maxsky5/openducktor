@@ -44,7 +44,7 @@ const createInitialSnapshot = (): SettingsSnapshot => ({
       },
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
-      worktreeFileCopies: [],
+      worktreeCopyPaths: [],
       promptOverrides: {},
       agentDefaults: {},
     },

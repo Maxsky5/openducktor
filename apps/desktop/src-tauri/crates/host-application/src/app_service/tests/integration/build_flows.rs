@@ -226,7 +226,7 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -359,7 +359,7 @@ fn build_start_copies_configured_worktree_files_into_new_worktree() -> Result<()
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: vec![".env".to_string()],
+            worktree_copy_paths: vec![".env".to_string()],
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -497,7 +497,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
             git: Default::default(),
             hooks: pre_start_failure_hooks,
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -534,7 +534,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
             git: Default::default(),
             hooks: post_complete_failure_hooks,
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -638,7 +638,7 @@ fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: vec![".env".to_string()],
+            worktree_copy_paths: vec![".env".to_string()],
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
             ..Default::default()
@@ -654,7 +654,7 @@ fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()
         )
         .expect_err("missing configured worktree file should fail build startup");
     let message = error.to_string();
-    assert!(message.contains("Configured worktree file copy failed"));
+    assert!(message.contains("Configured worktree copy failed"));
     assert!(message.contains(".env"));
     assert!(
         !worktree_base.join("task-1").exists(),
@@ -667,7 +667,7 @@ fn build_start_cleans_up_when_configured_worktree_file_copy_fails() -> Result<()
             .updated_patches
             .iter()
             .all(|(task_id, _)| task_id != "task-1"),
-        "configured file copy failure should not change task status before build start"
+        "configured worktree copy failure should not change task status before build start"
     );
     drop(state);
 

@@ -72,7 +72,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   },
   hooks: { preStart: [], postComplete: [] },
   devServers: [],
-  worktreeFileCopies: [],
+  worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
   ...overrides,

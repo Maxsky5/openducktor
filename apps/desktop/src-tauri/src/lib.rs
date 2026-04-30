@@ -287,7 +287,7 @@ pub(crate) struct RepoConfigPayload {
     default_target_branch: Option<host_infra_system::GitTargetBranch>,
     git: Option<host_infra_system::RepoGitConfig>,
     dev_servers: Option<Vec<host_infra_system::RepoDevServerScript>>,
-    worktree_file_copies: Option<Vec<String>>,
+    worktree_copy_paths: Option<Vec<String>>,
     prompt_overrides: Option<host_infra_system::PromptOverrides>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
@@ -302,7 +302,7 @@ pub(crate) struct RepoSettingsPayload {
     git: Option<host_infra_system::RepoGitConfig>,
     hooks: Option<host_infra_system::HookSet>,
     dev_servers: Option<Vec<host_infra_system::RepoDevServerScript>>,
-    worktree_file_copies: Option<Vec<String>>,
+    worktree_copy_paths: Option<Vec<String>>,
     prompt_overrides: Option<host_infra_system::PromptOverrides>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
 }

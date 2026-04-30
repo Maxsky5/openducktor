@@ -42,7 +42,7 @@ const createSnapshot = (): SettingsSnapshot => ({
       git: { providers: {} },
       hooks: { preStart: [], postComplete: [] },
       devServers: [],
-      worktreeFileCopies: [],
+      worktreeCopyPaths: [],
       promptOverrides: {},
       agentDefaults: {},
     },

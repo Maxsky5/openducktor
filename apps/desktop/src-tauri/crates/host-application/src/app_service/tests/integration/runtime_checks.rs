@@ -151,7 +151,7 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
             git: Default::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },

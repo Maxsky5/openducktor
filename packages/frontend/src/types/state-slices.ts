@@ -64,8 +64,8 @@ export type RepoSettingsInput = {
   preStartHooks: string[];
   postCompleteHooks: string[];
   devServers: RepoDevServerScript[];
-  /** Files copied from the main repo into a new worktree on creation. */
-  worktreeFileCopies: string[];
+  /** Paths copied from the main repo into a new worktree on creation. */
+  worktreeCopyPaths: string[];
   agentDefaults: {
     spec: RepoAgentDefaultInput | null;
     planner: RepoAgentDefaultInput | null;

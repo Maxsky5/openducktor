@@ -331,7 +331,7 @@ pub struct RepoConfig {
     #[serde(default)]
     pub dev_servers: Vec<RepoDevServerScript>,
     #[serde(default)]
-    pub worktree_file_copies: Vec<String>,
+    pub worktree_copy_paths: Vec<String>,
     #[serde(default)]
     pub prompt_overrides: PromptOverrides,
     #[serde(default)]
@@ -359,7 +359,7 @@ impl Default for RepoConfig {
             git: RepoGitConfig::default(),
             hooks: HookSet::default(),
             dev_servers: Vec::new(),
-            worktree_file_copies: Vec::new(),
+            worktree_copy_paths: Vec::new(),
             prompt_overrides: PromptOverrides::default(),
             agent_defaults: AgentDefaults::default(),
         }
