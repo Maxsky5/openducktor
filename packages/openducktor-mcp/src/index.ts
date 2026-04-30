@@ -97,7 +97,7 @@ const WORKSPACE_SCOPED_TOOL_NAMES = new Set<RegisteredToolName>(ODT_WORKSPACE_SC
 // rejectForbiddenWorkspaceIdInput can return the canonical structured ODT error envelope.
 const FORBIDDEN_WORKSPACE_ID_SCHEMA = z.unknown().optional().describe("Do not provide.");
 const SHARED_SERVER_INSTRUCTIONS =
-  "Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).";
+  "Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools.";
 
 const createServerInstructions = (options: { forbidWorkspaceIdInput: boolean }): string => {
   const workspaceInstruction = options.forbidWorkspaceIdInput
@@ -244,7 +244,7 @@ const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
   },
   odt_set_plan: {
     description:
-      "Persist implementation plan markdown. Valid pre-build planning transitions to ready_for_dev; allowed revisions from active/review states leave status unchanged. Optional epic subtask proposal priority values must be integers in [0, 4], default 2.",
+      "Persist implementation plan markdown. Valid pre-build planning transitions to ready_for_dev; allowed revisions from active/review states leave status unchanged.",
     execute: (store, input) => store.setPlan(input),
   },
   odt_build_blocked: {

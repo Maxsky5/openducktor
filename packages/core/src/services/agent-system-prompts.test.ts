@@ -66,8 +66,8 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain("- implementationPlan: ## Plan");
     expect(prompt).not.toContain("- latestQaReport: ## QA");
     expect(prompt).toContain("odt_set_plan");
-    expect(prompt).toContain("priority must be an integer 0..4");
-    expect(prompt).toContain('"priority"?: 0|1|2|3|4');
+    expect(prompt).not.toContain("priority must be an integer 0..4");
+    expect(prompt).not.toContain('"priority"?: 0|1|2|3|4');
     expect(prompt).not.toContain("- odt_set_spec(");
     expect(prompt).not.toContain("- odt_build_completed(");
     expect(prompt).not.toContain("- odt_qa_rejected(");

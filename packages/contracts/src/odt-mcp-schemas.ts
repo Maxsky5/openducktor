@@ -14,7 +14,6 @@ import {
 } from "./odt-tool-names";
 import {
   issueTypeSchema,
-  planSubtaskInputSchema,
   qaWorkflowVerdictSchema,
   taskPrioritySchema,
   taskStatusSchema,
@@ -201,7 +200,6 @@ export const SetPlanInputSchema = z
     workspaceId: workspaceScopedToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     markdown: z.string().trim().min(1),
-    subtasks: z.array(planSubtaskInputSchema.strict()).optional(),
   })
   .strict();
 export type SetPlanInput = z.infer<typeof SetPlanInputSchema>;
