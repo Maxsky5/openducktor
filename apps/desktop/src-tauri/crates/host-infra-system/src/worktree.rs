@@ -180,6 +180,27 @@ fn copy_worktree_directory_recursive(
     original: &str,
 ) -> Result<()> {
     reject_symlinked_components(worktree_path, relative_path, original, "destination")?;
+    copy_worktree_directory_recursive_after_parent_check(
+        worktree_path,
+        worktree_root,
+        relative_path,
+        source_path,
+        destination_path,
+        source_metadata,
+        original,
+    )
+}
+
+fn copy_worktree_directory_recursive_after_parent_check(
+    worktree_path: &Path,
+    worktree_root: &Path,
+    relative_path: &Path,
+    source_path: &Path,
+    destination_path: &Path,
+    source_metadata: &fs::Metadata,
+    original: &str,
+) -> Result<()> {
+    reject_existing_symlink(destination_path, original, "destination")?;
     fs::create_dir_all(destination_path).with_context(|| {
         format!(
             "Failed creating configured worktree copy directory: {}",
@@ -229,7 +250,7 @@ fn copy_worktree_directory_recursive(
         }
 
         if entry_metadata.is_dir() {
-            copy_worktree_directory_recursive(
+            copy_worktree_directory_recursive_after_parent_check(
                 worktree_path,
                 worktree_root,
                 &entry_relative,
@@ -239,14 +260,14 @@ fn copy_worktree_directory_recursive(
                 original,
             )?;
         } else if entry_metadata.is_file() {
-            copy_worktree_file(
-                worktree_path,
-                worktree_root,
-                &entry_relative,
-                entry_source.as_path(),
-                entry_destination.as_path(),
-                original,
-            )?;
+            reject_existing_symlink(&entry_destination, original, "destination")?;
+            fs::copy(&entry_source, &entry_destination).with_context(|| {
+                format!(
+                    "Failed copying configured worktree path {} to {}",
+                    entry_source.display(),
+                    entry_destination.display()
+                )
+            })?;
         } else {
             return Err(anyhow!(
                 "Configured worktree copy source is not a file or directory: {}",
@@ -275,18 +296,21 @@ fn validate_worktree_copy_path(path: &Path, original: &str) -> Result<()> {
         ));
     }
 
-    let mut normal_components = path.components().filter_map(|component| match component {
-        Component::Normal(segment) => Some(segment),
-        _ => None,
-    });
-    let Some(first_normal_component) = normal_components.next() else {
+    let mut has_normal_component = false;
+    for component in path.components() {
+        let Component::Normal(segment) = component else {
+            continue;
+        };
+        has_normal_component = true;
+        if segment.to_string_lossy().eq_ignore_ascii_case(".git") {
+            return Err(anyhow!(
+                "Configured worktree copy path cannot include the repository metadata directory: {original}"
+            ));
+        }
+    }
+    if !has_normal_component {
         return Err(anyhow!(
             "Configured worktree copy path cannot be the repository root: {original}"
-        ));
-    };
-    if first_normal_component == ".git" {
-        return Err(anyhow!(
-            "Configured worktree copy path cannot include the repository metadata directory: {original}"
         ));
     }
 
@@ -303,6 +327,29 @@ fn validate_worktree_copy_path(path: &Path, original: &str) -> Result<()> {
                 ));
             }
             Component::CurDir | Component::Normal(_) => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn reject_existing_symlink(path: &Path, original: &str, path_role: &str) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return Err(anyhow!(
+                    "Configured worktree copy {path_role} cannot use symlinked path components: {original}"
+                ));
+            }
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "Failed inspecting configured worktree copy {path_role} path: {}",
+                    path.display()
+                )
+            });
         }
     }
 
@@ -719,6 +766,48 @@ mod tests {
 
         let error = copy_configured_worktree_paths(&repo, &worktree, &[".git".to_string()])
             .expect_err("git metadata root should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("cannot include the repository metadata directory"),
+            "unexpected copy error: {error}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn copy_configured_worktree_paths_rejects_nested_git_metadata_component() {
+        let root = unique_temp_path("copy-configured-nested-git-metadata");
+        let repo = root.join("repo");
+        let worktree = root.join("worktree");
+        fs::create_dir_all(repo.join("subdir").join(".git"))
+            .expect("nested metadata directory should exist");
+        fs::create_dir_all(&worktree).expect("worktree directory should exist");
+
+        let error =
+            copy_configured_worktree_paths(&repo, &worktree, &["subdir/.git/config".to_string()])
+                .expect_err("nested git metadata component should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("cannot include the repository metadata directory"),
+            "unexpected copy error: {error}"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn copy_configured_worktree_paths_rejects_case_variant_git_metadata_component() {
+        let root = unique_temp_path("copy-configured-case-git-metadata");
+        let repo = root.join("repo");
+        let worktree = root.join("worktree");
+        fs::create_dir_all(&repo).expect("repo directory should exist");
+        fs::create_dir_all(&worktree).expect("worktree directory should exist");
+
+        let error = copy_configured_worktree_paths(&repo, &worktree, &["subdir/.Git".to_string()])
+            .expect_err("case variant git metadata component should be rejected");
         assert!(
             error
                 .to_string()
