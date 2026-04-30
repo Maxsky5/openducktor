@@ -28,30 +28,37 @@ import type { StartAgentSessionInput } from "./start-session";
 
 type SessionActions = {
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
-  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
-  stopAgentSession: (sessionId: string) => Promise<void>;
-  updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
+  sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
+  stopAgentSession: (externalSessionId: string) => Promise<void>;
+  updateAgentSessionModel: (
+    externalSessionId: string,
+    selection: AgentModelSelection | null,
+  ) => void;
   replyAgentPermission: (
-    sessionId: string,
+    externalSessionId: string,
     requestId: string,
     reply: "once" | "always" | "reject",
     message?: string,
   ) => Promise<void>;
-  answerAgentQuestion: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>;
+  answerAgentQuestion: (
+    externalSessionId: string,
+    requestId: string,
+    answers: string[][],
+  ) => Promise<void>;
 };
 
 type CreatePublicOperationsArgs = {
   bootstrapTaskSessions: (taskId: string, persistedRecords?: AgentSessionRecord[]) => Promise<void>;
   hydrateRequestedTaskSessionHistory: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
     historyPreludeMode?: AgentSessionHistoryPreludeMode;
     allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
   ensureSessionReadyForView: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
     repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
     historyPreludeMode?: AgentSessionHistoryPreludeMode;
@@ -92,7 +99,7 @@ type CreatePublicOperationsArgs = {
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
   replyRuntimeSessionPermission?: AgentOperationsContextValue["replyRuntimeSessionPermission"];
-  removeAgentSession: (sessionId: string) => Promise<void>;
+  removeAgentSession: (externalSessionId: string) => Promise<void>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => Promise<void>;
   sessionActions: SessionActions;
 };
@@ -156,13 +163,13 @@ export const createOrchestratorPublicOperations = ({
   removeAgentSessions: (input) => removeAgentSessions(input),
   startAgentSession: (input: StartAgentSessionInput): Promise<string> =>
     sessionActions.startAgentSession(input),
-  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]): Promise<void> =>
+  sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]): Promise<void> =>
     withErrorToast("Failed to send message", () =>
-      sessionActions.sendAgentMessage(sessionId, parts),
+      sessionActions.sendAgentMessage(externalSessionId, parts),
     ),
-  stopAgentSession: (sessionId: string): Promise<void> =>
+  stopAgentSession: (externalSessionId: string): Promise<void> =>
     withErrorToast("Failed to stop agent session", () =>
-      sessionActions.stopAgentSession(sessionId),
+      sessionActions.stopAgentSession(externalSessionId),
     ),
   updateAgentSessionModel: sessionActions.updateAgentSessionModel,
   replyAgentPermission: sessionActions.replyAgentPermission,

@@ -28,7 +28,7 @@ type CreateLoadAgentSessionsArgs = {
   setSessionsById: Dispatch<SetStateAction<Record<string, AgentSessionState>>>;
   taskRef: MutableRefObject<TaskCard[]>;
   updateSession: UpdateSession;
-  attachSessionListener?: (repoPath: string, sessionId: string) => void;
+  attachSessionListener?: (repoPath: string, externalSessionId: string) => void;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadTaskDocuments?: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   liveAgentSessionStore?: LiveAgentSessionStore;
@@ -61,21 +61,21 @@ export const createLoadAgentSessions = ({
   const buildRequestedHistoryKey = (
     repoPath: string,
     taskId: string,
-    sessionId: string,
+    externalSessionId: string,
     historyPreludeMode: AgentSessionLoadOptions["historyPreludeMode"],
   ): string =>
-    `${repoPath}::${taskId}::${sessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}`;
+    `${repoPath}::${taskId}::${externalSessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}`;
 
   const buildRuntimeAttachmentRecoveryKey = (
     repoPath: string,
     taskId: string,
-    sessionId: string,
+    externalSessionId: string,
     recoveryDedupKey?: string | null,
     historyPreludeMode?: AgentSessionLoadOptions["historyPreludeMode"],
   ): string =>
     recoveryDedupKey?.trim().length
-      ? `${repoPath}::${taskId}::${sessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}::${recoveryDedupKey.trim()}`
-      : `${repoPath}::${taskId}::${sessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}`;
+      ? `${repoPath}::${taskId}::${externalSessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}::${recoveryDedupKey.trim()}`
+      : `${repoPath}::${taskId}::${externalSessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}`;
 
   const buildLoadIntent = (
     repoPath: string,
@@ -83,7 +83,7 @@ export const createLoadAgentSessions = ({
     options?: AgentSessionLoadOptions,
   ): SessionLoadIntent => {
     const mode = options?.mode ?? "bootstrap";
-    const requestedSessionId = options?.targetSessionId?.trim() || null;
+    const requestedSessionId = options?.targetExternalSessionId?.trim() || null;
     const shouldHydrateRequestedSession =
       mode === "requested_history" && requestedSessionId !== null;
     const shouldRecoverRuntimeAttachment =
@@ -224,8 +224,8 @@ export const createLoadAgentSessions = ({
 
       const effectiveHistoryHydrationSessionIds = new Set(historyHydrationSessionIds);
       if (intent.historyPolicy === "live_if_empty") {
-        for (const sessionId of reattachedSessionIds) {
-          const currentSession = sessionsRef.current[sessionId];
+        for (const externalSessionId of reattachedSessionIds) {
+          const currentSession = sessionsRef.current[externalSessionId];
           if (!currentSession) {
             continue;
           }
@@ -233,7 +233,7 @@ export const createLoadAgentSessions = ({
           if (hasHydratedHistory && getSessionMessageCount(currentSession) > 0) {
             continue;
           }
-          effectiveHistoryHydrationSessionIds.add(sessionId);
+          effectiveHistoryHydrationSessionIds.add(externalSessionId);
         }
       }
 

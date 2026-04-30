@@ -15,7 +15,7 @@ import {
 import { mergeTodoListPreservingOrder } from "../support/todos";
 
 type UpdateSession = (
-  sessionId: string,
+  externalSessionId: string,
   updater: (current: AgentSessionState) => AgentSessionState,
   options?: { persist?: boolean },
 ) => void;
@@ -95,7 +95,7 @@ export const createLoadSessionModelCatalog = ({
   adapter,
   updateSession,
 }: CreateSessionLoadersArgs): ((
-  sessionId: string,
+  externalSessionId: string,
   runtimeKind: RuntimeKind,
   runtimeConnection: AgentRuntimeConnection,
 ) => Promise<void>) => {
@@ -103,12 +103,12 @@ export const createLoadSessionModelCatalog = ({
   const catalogByRuntimeKey = new Map<string, AgentModelCatalog>();
 
   return async (
-    sessionId: string,
+    externalSessionId: string,
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
   ): Promise<void> => {
     updateSession(
-      sessionId,
+      externalSessionId,
       (current) => ({
         ...current,
         isLoadingModelCatalog: true,
@@ -144,7 +144,7 @@ export const createLoadSessionModelCatalog = ({
       }
     } finally {
       updateSession(
-        sessionId,
+        externalSessionId,
         (current) => ({
           ...current,
           ...(catalog
@@ -168,22 +168,20 @@ export const createLoadSessionTodos = ({
   supportsSessionTodos = () => true,
   updateSession,
 }: CreateSessionLoadersArgs): ((
-  sessionId: string,
+  externalSessionId: string,
   runtimeKind: RuntimeKind,
   runtimeConnection: AgentRuntimeConnection,
-  externalSessionId: string,
 ) => Promise<void>) => {
   const inFlightTodosBySessionKey = new Map<string, Promise<AgentSessionTodoItem[]>>();
 
   return async (
-    sessionId: string,
+    externalSessionId: string,
     runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
-    externalSessionId: string,
   ): Promise<void> => {
     if (!supportsSessionTodos(runtimeKind)) {
       updateSession(
-        sessionId,
+        externalSessionId,
         (current) => ({
           ...current,
           todos: [],
@@ -209,7 +207,7 @@ export const createLoadSessionTodos = ({
     }
     const todos = await inFlightTodos;
     updateSession(
-      sessionId,
+      externalSessionId,
       (current) => ({
         ...current,
         todos: mergeTodoListPreservingOrder(current.todos, todos),

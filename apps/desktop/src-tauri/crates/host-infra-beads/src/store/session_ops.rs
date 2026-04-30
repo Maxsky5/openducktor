@@ -77,9 +77,6 @@ impl BeadsTaskStore {
         mut session: AgentSessionDocument,
     ) -> Result<AgentSessionDocument> {
         session.session_id = session.session_id.trim().to_string();
-        if session.session_id.is_empty() {
-            return Err(anyhow!("Agent session sessionId is required"));
-        }
 
         session.role = session.role.trim().to_string();
         if session.role.is_empty() {
@@ -162,7 +159,7 @@ impl BeadsTaskStore {
 
         if let Some(existing_index) = sessions
             .iter()
-            .position(|entry| entry.session_id == compact_session.session_id)
+            .position(|entry| entry.external_session_id.as_deref() == compact_session.external_session_id.as_deref())
         {
             sessions[existing_index] = compact_session;
         } else {

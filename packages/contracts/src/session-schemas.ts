@@ -14,6 +14,8 @@ export type AgentSessionScenario = z.infer<typeof agentSessionScenarioSchema>;
 const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
+const nonEmptyStringSchema = z.string().trim().min(1);
+
 const agentSessionMetadataValueSchema: z.ZodType<
   string | number | boolean | null | undefined | Array<unknown> | Record<string, unknown>
 > = z.lazy(() =>
@@ -66,9 +68,8 @@ export const agentSessionQuestionRequestSchema = z.object({
 });
 export type AgentSessionQuestionRequest = z.infer<typeof agentSessionQuestionRequestSchema>;
 
-export const agentSessionRecordSchema = z.object({
-  sessionId: z.string(),
-  externalSessionId: optionalFromNullable(z.string()),
+const agentSessionRecordShape = {
+  externalSessionId: nonEmptyStringSchema,
   role: agentSessionRoleSchema,
   scenario: agentSessionScenarioSchema,
   startedAt: z.string(),
@@ -78,15 +79,51 @@ export const agentSessionRecordSchema = z.object({
     (value) => (value === undefined ? null : value),
     agentSessionModelSelectionSchema.nullable(),
   ),
-});
+} satisfies z.ZodRawShape;
+
+export const agentSessionRecordSchema = z.object(agentSessionRecordShape).strict();
 export type AgentSessionRecord = z.infer<typeof agentSessionRecordSchema>;
 
+const legacyAgentSessionRecordSchema = z.object({
+  ...agentSessionRecordShape,
+  externalSessionId: optionalFromNullable(nonEmptyStringSchema),
+  sessionId: optionalFromNullable(nonEmptyStringSchema),
+});
+
+export const parseAgentSessionRecordCompat = (value: unknown): AgentSessionRecord => {
+  const legacyRecord = legacyAgentSessionRecordSchema.parse(value);
+  const legacySessionId = legacyRecord.sessionId;
+  const externalSessionId = legacyRecord.externalSessionId;
+
+  if (legacySessionId && externalSessionId && legacySessionId !== externalSessionId) {
+    throw new Error(
+      "Invalid agent session record metadata: sessionId and externalSessionId differ; fix saved task metadata and retry.",
+    );
+  }
+
+  const canonicalExternalSessionId = externalSessionId ?? legacySessionId;
+  if (!canonicalExternalSessionId) {
+    throw new Error(
+      "Invalid agent session record metadata: externalSessionId is required; fix saved task metadata and retry.",
+    );
+  }
+
+  return agentSessionRecordSchema.parse({
+    externalSessionId: canonicalExternalSessionId,
+    role: legacyRecord.role,
+    scenario: legacyRecord.scenario,
+    startedAt: legacyRecord.startedAt,
+    runtimeKind: legacyRecord.runtimeKind,
+    workingDirectory: legacyRecord.workingDirectory,
+    selectedModel: legacyRecord.selectedModel,
+  });
+};
+
 export const agentSessionStopTargetSchema = z.object({
-  repoPath: z.string().trim().min(1),
-  taskId: z.string().trim().min(1),
-  sessionId: z.string().trim().min(1),
+  repoPath: nonEmptyStringSchema,
+  taskId: nonEmptyStringSchema,
+  externalSessionId: nonEmptyStringSchema,
   runtimeKind: runtimeKindSchema,
-  workingDirectory: z.string().trim().min(1),
-  externalSessionId: optionalFromNullable(z.string().trim().min(1)),
+  workingDirectory: nonEmptyStringSchema,
 });
 export type AgentSessionStopTarget = z.infer<typeof agentSessionStopTargetSchema>;

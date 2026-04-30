@@ -14,7 +14,6 @@ import { createAgentSessionActions } from "./session-actions";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
@@ -41,11 +40,11 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 
 const getSession = (
   sessionsRef: { current: Record<string, AgentSessionState> },
-  sessionId = "session-1",
+  externalSessionId = "session-1",
 ): AgentSessionState => {
-  const session = sessionsRef.current[sessionId];
+  const session = sessionsRef.current[externalSessionId];
   if (!session) {
-    throw new Error(`Expected session ${sessionId}`);
+    throw new Error(`Expected session ${externalSessionId}`);
   }
   return session;
 };
@@ -193,12 +192,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -225,7 +224,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         {
           repoPath: "/tmp/repo",
           taskId: "task-1",
-          sessionId: "session-1",
           runtimeKind: "opencode",
           workingDirectory: "/tmp/repo",
           externalSessionId: "external-1",
@@ -301,12 +299,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         ]),
       },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -374,12 +372,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -426,7 +424,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       null;
 
     adapter.hasSession = () => true;
-    adapter.subscribeEvents = (_sessionId, listener) => {
+    adapter.subscribeEvents = (_externalSessionId, listener) => {
       sessionEventListener = listener as (event: { type: string; [key: string]: unknown }) => void;
       return () => {
         sessionEventListener = null;
@@ -458,20 +456,20 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
-      sessionsRef.current[sessionId] = updater(current);
+      sessionsRef.current[externalSessionId] = updater(current);
     };
 
     const unsubscribe = attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -482,10 +480,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       refreshTaskData: async () => {},
     });
 
-    adapter.stopSession = async (sessionId) => {
+    adapter.stopSession = async (externalSessionId) => {
       sessionEventListener?.({
         type: "session_finished",
-        sessionId,
+        externalSessionId,
         timestamp: "2026-02-22T08:00:10.000Z",
         message: "Session stopped",
       });
@@ -601,12 +599,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef,
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -681,12 +679,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -707,7 +705,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         expect(target).toEqual({
           repoPath: "/tmp/repo",
           taskId: "task-1",
-          sessionId: "session-1",
           runtimeKind: "opencode",
           workingDirectory: "/tmp/repo/worktree",
           externalSessionId: "external-1",
@@ -771,12 +768,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -867,12 +864,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -946,12 +943,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -985,7 +982,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         {
           repoPath: fallbackRepoPath,
           taskId: "task-1",
-          sessionId: "session-1",
           runtimeKind: "opencode",
           workingDirectory: `${fallbackRepoPath}/worktree`,
           externalSessionId: "external-1",
@@ -1040,12 +1036,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1103,7 +1099,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     adapter.resumeSession = async (input) => {
       resumeCalls += 1;
       return {
-        sessionId: input.sessionId,
         externalSessionId: input.externalSessionId,
         role: input.role,
         scenario: input.scenario,
@@ -1141,12 +1136,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1239,12 +1234,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1306,7 +1301,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     adapter.resumeSession = async (input) => {
       resumeCalls += 1;
       return {
-        sessionId: input.sessionId,
         externalSessionId: input.externalSessionId,
         role: input.role,
         scenario: input.scenario,
@@ -1357,12 +1351,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1435,12 +1429,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1507,12 +1501,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1598,12 +1592,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1675,12 +1669,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1753,12 +1747,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1827,12 +1821,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1895,12 +1889,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1945,13 +1939,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const originalHasSession = adapter.hasSession;
     const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
     const originalSendUserMessage = adapter.sendUserMessage;
-    const sendCalls: Array<{ sessionId: string; parts: { kind: string; text?: string }[] }> = [];
+    const sendCalls: Array<{
+      externalSessionId: string;
+      parts: { kind: string; text?: string }[];
+    }> = [];
 
     adapter.hasSession = () => true;
     adapter.listLiveAgentSessionSnapshots = async () => [];
     adapter.sendUserMessage = async (input) => {
       sendCalls.push({
-        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
         parts: input.parts.map((part) =>
           part.kind === "text" ? { kind: part.kind, text: part.text } : { kind: part.kind },
         ),
@@ -1996,12 +1993,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef,
       turnModelBySessionRef,
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -2024,7 +2021,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: "queued follow-up" }]);
 
       expect(sendCalls).toEqual([
-        { sessionId: "session-1", parts: [{ kind: "text", text: "queued follow-up" }] },
+        { externalSessionId: "session-1", parts: [{ kind: "text", text: "queued follow-up" }] },
       ]);
       expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("Still working");
       expect(sessionsRef.current["session-1"]?.draftAssistantMessageId).toBe("assistant-live-1");
@@ -2090,12 +2087,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef,
       turnModelBySessionRef,
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
-        sessionsRef.current[sessionId] = updater(current);
+        sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({

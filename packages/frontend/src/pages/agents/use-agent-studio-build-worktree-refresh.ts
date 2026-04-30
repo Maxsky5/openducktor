@@ -75,7 +75,7 @@ const seedProcessedToolMessageKeys = (session: AgentSessionState): Set<string> =
       return;
     }
 
-    keys.add(`${session.sessionId}:${message.id}`);
+    keys.add(`${session.externalSessionId}:${message.id}`);
   });
   return keys;
 };
@@ -89,7 +89,7 @@ const collectCompletedWorktreeAffectingToolKeys = (session: AgentSessionState): 
     }
 
     if (canToolAffectWorktree(meta)) {
-      keys.add(`${session.sessionId}:${message.id}`);
+      keys.add(`${session.externalSessionId}:${message.id}`);
     }
   });
   return keys;
@@ -121,8 +121,8 @@ export function useAgentStudioBuildWorktreeRefresh({
       return;
     }
 
-    if (previousSessionIdRef.current !== activeSession.sessionId) {
-      previousSessionIdRef.current = activeSession.sessionId;
+    if (previousSessionIdRef.current !== activeSession.externalSessionId) {
+      previousSessionIdRef.current = activeSession.externalSessionId;
       previousMessagesRef.current = activeSession.messages;
       processedToolMessageKeysRef.current = seedProcessedToolMessageKeys(activeSession);
       return;
@@ -155,7 +155,7 @@ export function useAgentStudioBuildWorktreeRefresh({
         return;
       }
 
-      const messageKey = `${activeSession.sessionId}:${message.id}`;
+      const messageKey = `${activeSession.externalSessionId}:${message.id}`;
       if (processedToolMessageKeysRef.current.has(messageKey)) {
         return;
       }

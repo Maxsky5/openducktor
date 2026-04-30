@@ -12,7 +12,6 @@ import { handleAssistantPart } from "./session-parts";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
@@ -40,24 +39,24 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 
 const getSession = (
   sessionsRef: { current: Record<string, AgentSessionState> },
-  sessionId = "session-1",
+  externalSessionId = "session-1",
 ): AgentSessionState => {
-  const session = sessionsRef.current[sessionId];
+  const session = sessionsRef.current[externalSessionId];
   if (!session) {
-    throw new Error(`Expected session ${sessionId}`);
+    throw new Error(`Expected session ${externalSessionId}`);
   }
   return session;
 };
 
 const getSessionMessages = (
   sessionsRef: { current: Record<string, AgentSessionState> },
-  sessionId = "session-1",
-) => sessionMessagesToArray(getSession(sessionsRef, sessionId));
+  externalSessionId = "session-1",
+) => sessionMessagesToArray(getSession(sessionsRef, externalSessionId));
 
 const getLastSessionMessage = (
   sessionsRef: { current: Record<string, AgentSessionState> },
-  sessionId = "session-1",
-) => lastSessionMessageForTest(getSession(sessionsRef, sessionId));
+  externalSessionId = "session-1",
+) => lastSessionMessageForTest(getSession(sessionsRef, externalSessionId));
 
 describe("agent-orchestrator-session-events", () => {
   test("centralizes assistant batch coalescing rules in one reducer", () => {
@@ -65,7 +64,7 @@ describe("agent-orchestrator-session-events", () => {
     const prepared = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_delta",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         channel: "text",
         messageId: "assistant-1",
         delta: "Hello",
@@ -73,13 +72,13 @@ describe("agent-orchestrator-session-events", () => {
       },
       {
         type: "session_status",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         status: { type: "busy" },
         timestamp: "2026-02-22T08:00:01.500Z",
       },
       {
         type: "assistant_delta",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         channel: "text",
         messageId: "assistant-1",
         delta: " world",
@@ -87,7 +86,7 @@ describe("agent-orchestrator-session-events", () => {
       },
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:03.000Z",
         part: {
           kind: "reasoning",
@@ -99,7 +98,7 @@ describe("agent-orchestrator-session-events", () => {
       },
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:04.000Z",
         part: {
           kind: "reasoning",
@@ -111,7 +110,7 @@ describe("agent-orchestrator-session-events", () => {
       },
       {
         type: "assistant_message",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         messageId: "assistant-1",
         timestamp: "2026-02-22T08:00:05.000Z",
         message: "Final answer",
@@ -121,13 +120,13 @@ describe("agent-orchestrator-session-events", () => {
     expect(prepared.readyEvents).toEqual([
       {
         type: "session_status",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         status: { type: "busy" },
         timestamp: "2026-02-22T08:00:01.500Z",
       },
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:04.000Z",
         part: {
           kind: "reasoning",
@@ -139,7 +138,7 @@ describe("agent-orchestrator-session-events", () => {
       },
       {
         type: "assistant_message",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         messageId: "assistant-1",
         timestamp: "2026-02-22T08:00:05.000Z",
         message: "Final answer",
@@ -152,7 +151,7 @@ describe("agent-orchestrator-session-events", () => {
     const prepared = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.000Z",
         part: {
           kind: "tool",
@@ -166,7 +165,7 @@ describe("agent-orchestrator-session-events", () => {
       },
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:02.000Z",
         part: {
           kind: "tool",
@@ -181,13 +180,13 @@ describe("agent-orchestrator-session-events", () => {
       },
       {
         type: "session_todos_updated",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:03.000Z",
         todos: [{ id: "todo-1", content: "Do it", status: "pending", priority: "high" }],
       },
       {
         type: "session_todos_updated",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:04.000Z",
         todos: [{ id: "todo-1", content: "Do it", status: "completed", priority: "high" }],
       },
@@ -196,7 +195,7 @@ describe("agent-orchestrator-session-events", () => {
     expect(prepared.readyEvents).toEqual([
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:02.000Z",
         part: {
           kind: "tool",
@@ -211,7 +210,7 @@ describe("agent-orchestrator-session-events", () => {
       },
       {
         type: "session_todos_updated",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:04.000Z",
         todos: [{ id: "todo-1", content: "Do it", status: "completed", priority: "high" }],
       },
@@ -226,7 +225,7 @@ describe("agent-orchestrator-session-events", () => {
     const first = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_message",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         messageId: "assistant-1",
         timestamp: "2026-02-22T08:00:01.000Z",
         message: "Final answer 1",
@@ -237,7 +236,7 @@ describe("agent-orchestrator-session-events", () => {
     const second = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_message",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         messageId: "assistant-1",
         timestamp: "2026-02-22T08:00:01.100Z",
         message: "Final answer 2",
@@ -258,7 +257,7 @@ describe("agent-orchestrator-session-events", () => {
     const first = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.000Z",
         part: {
           kind: "text",
@@ -274,7 +273,7 @@ describe("agent-orchestrator-session-events", () => {
     const second = batcher.prepareQueuedSessionEvents([
       {
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:20.000Z",
         part: {
           kind: "text",
@@ -297,7 +296,7 @@ describe("agent-orchestrator-session-events", () => {
     const prepared = batcher.prepareQueuedSessionEvents([
       {
         type: "tool_call",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.000Z",
         call: {
           tool: "odt_set_spec",
@@ -309,7 +308,7 @@ describe("agent-orchestrator-session-events", () => {
       },
       {
         type: "tool_call",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:02.000Z",
         call: {
           tool: "odt_set_spec",
@@ -329,7 +328,7 @@ describe("agent-orchestrator-session-events", () => {
     const originalDateNow = Date.now;
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -345,16 +344,16 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
@@ -362,7 +361,7 @@ describe("agent-orchestrator-session-events", () => {
       attachAgentSessionListener({
         adapter,
         repoPath: "/tmp/repo",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         sessionsRef,
         draftRawBySessionRef: { current: {} },
         draftSourceBySessionRef: { current: {} },
@@ -383,7 +382,7 @@ describe("agent-orchestrator-session-events", () => {
       Date.now = () => Date.parse("2026-02-22T08:00:05.000Z");
       handleEvent({
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:05.000Z",
         part: {
           kind: "tool",
@@ -409,7 +408,7 @@ describe("agent-orchestrator-session-events", () => {
       Date.now = () => Date.parse("2026-02-22T08:00:10.000Z");
       handleEvent({
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:10.000Z",
         part: {
           kind: "tool",
@@ -438,7 +437,7 @@ describe("agent-orchestrator-session-events", () => {
       Date.now = () => Date.parse("2026-02-22T08:00:20.000Z");
       handleEvent({
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:20.000Z",
         part: {
           kind: "tool",
@@ -490,7 +489,7 @@ describe("agent-orchestrator-session-events", () => {
       const refreshTaskDataArgs: Array<[string, string | undefined]> = [];
 
       const adapter: SessionEventAdapter = {
-        subscribeEvents: (_sessionId, handler) => {
+        subscribeEvents: (_externalSessionId, handler) => {
           handlers.push(
             handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
           );
@@ -506,23 +505,23 @@ describe("agent-orchestrator-session-events", () => {
       };
 
       const updateSession = (
-        sessionId: string,
+        externalSessionId: string,
         updater: (current: AgentSessionState) => AgentSessionState,
       ) => {
-        const current = sessionsRef.current[sessionId];
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
         sessionsRef.current = {
           ...sessionsRef.current,
-          [sessionId]: updater(current),
+          [externalSessionId]: updater(current),
         };
       };
 
       attachAgentSessionListener({
         adapter,
         repoPath: "/tmp/repo",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         sessionsRef,
         draftRawBySessionRef: { current: {} },
         draftSourceBySessionRef: { current: {} },
@@ -548,7 +547,7 @@ describe("agent-orchestrator-session-events", () => {
 
       handleEvent({
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:05.000Z",
         part: {
           kind: "tool",
@@ -564,7 +563,7 @@ describe("agent-orchestrator-session-events", () => {
 
       handleEvent({
         type: "assistant_part",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:06.000Z",
         part: {
           kind: "tool",
@@ -590,7 +589,7 @@ describe("agent-orchestrator-session-events", () => {
   test("writes canonical user_message events into the transcript", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -606,23 +605,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -642,7 +641,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "user_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "user-message-1",
       timestamp: "2026-02-22T08:00:01.000Z",
       message: "Generate the pull request",
@@ -684,7 +683,7 @@ describe("agent-orchestrator-session-events", () => {
   test("reconciles queued user_message updates in place when the agent reads the turn", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -700,23 +699,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -736,7 +735,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "user_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "user-message-queued",
       timestamp: "2026-02-22T08:00:01.000Z",
       message: "Queued follow-up",
@@ -745,7 +744,7 @@ describe("agent-orchestrator-session-events", () => {
     });
     handleEvent({
       type: "user_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "user-message-queued",
       timestamp: "2026-02-22T08:00:01.000Z",
       message: "Queued follow-up",
@@ -773,7 +772,7 @@ describe("agent-orchestrator-session-events", () => {
   test("flushes queued non-immediate events in a single session commit", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -790,24 +789,24 @@ describe("agent-orchestrator-session-events", () => {
     let updateSessionCalls = 0;
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       updateSessionCalls += 1;
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     const unsubscribe = attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
       draftRawBySessionRef: { current: {} },
@@ -828,13 +827,13 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_started",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:00.000Z",
       message: "Started",
     });
     handleEvent({
       type: "session_todos_updated",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:01.000Z",
       todos: [
         {
@@ -866,7 +865,7 @@ describe("agent-orchestrator-session-events", () => {
   test("flushes queued work before applying an immediate event", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -883,24 +882,24 @@ describe("agent-orchestrator-session-events", () => {
     let updateSessionCalls = 0;
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       updateSessionCalls += 1;
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
       draftRawBySessionRef: { current: {} },
@@ -921,7 +920,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_started",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:00.000Z",
       message: "Started",
     });
@@ -929,7 +928,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "user_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "user-message-1",
       timestamp: "2026-02-22T08:00:01.000Z",
       message: "Continue",
@@ -951,7 +950,7 @@ describe("agent-orchestrator-session-events", () => {
   test("collapses assistant stream chunks across a queued flush", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -968,24 +967,24 @@ describe("agent-orchestrator-session-events", () => {
     let updateSessionCalls = 0;
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       updateSessionCalls += 1;
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
       draftRawBySessionRef: { current: {} },
@@ -1006,7 +1005,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_delta",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       channel: "text",
       messageId: "assistant-1",
       delta: "Hello",
@@ -1014,7 +1013,7 @@ describe("agent-orchestrator-session-events", () => {
     });
     handleEvent({
       type: "assistant_delta",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       channel: "text",
       messageId: "assistant-1",
       delta: " world",
@@ -1022,7 +1021,7 @@ describe("agent-orchestrator-session-events", () => {
     });
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:03.000Z",
       part: {
         kind: "reasoning",
@@ -1034,14 +1033,14 @@ describe("agent-orchestrator-session-events", () => {
     });
     handleEvent({
       type: "session_status",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:04.500Z",
       status: "running",
       message: "Still running",
     });
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:04.000Z",
       part: {
         kind: "reasoning",
@@ -1053,7 +1052,7 @@ describe("agent-orchestrator-session-events", () => {
     });
     handleEvent({
       type: "user_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "user-1",
       timestamp: "2026-02-22T08:00:05.000Z",
       message: "Continue",
@@ -1075,7 +1074,7 @@ describe("agent-orchestrator-session-events", () => {
   test("prefers final assistant message over earlier streamed text in the same batch", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -1091,23 +1090,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
       draftRawBySessionRef: { current: {} },
@@ -1128,7 +1127,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_delta",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       channel: "text",
       messageId: "assistant-1",
       delta: "Draft",
@@ -1136,7 +1135,7 @@ describe("agent-orchestrator-session-events", () => {
     });
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.000Z",
       part: {
         kind: "text",
@@ -1148,7 +1147,7 @@ describe("agent-orchestrator-session-events", () => {
     });
     handleEvent({
       type: "assistant_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "assistant-1",
       timestamp: "2026-02-22T08:00:03.000Z",
       message: "Final answer",
@@ -1160,7 +1159,7 @@ describe("agent-orchestrator-session-events", () => {
     });
     handleEvent({
       type: "user_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "user-1",
       timestamp: "2026-02-22T08:00:04.000Z",
       message: "Continue",
@@ -1184,7 +1183,7 @@ describe("agent-orchestrator-session-events", () => {
       (_request: Parameters<SessionEventAdapter["replyPermission"]>[0]) => Promise.resolve(),
     );
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -1200,23 +1199,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -1234,7 +1233,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "permission_required",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       requestId: "perm-1",
       permission: "write",
       patterns: ["edit file"],
@@ -1256,7 +1255,7 @@ describe("agent-orchestrator-session-events", () => {
   test("patches the parent subagent row when a child permission event has linkage", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1266,7 +1265,6 @@ describe("agent-orchestrator-session-events", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "parent-session": buildSession({
-          sessionId: "parent-session",
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1287,30 +1285,29 @@ describe("agent-orchestrator-session-events", () => {
           ],
         }),
         "child-session": buildSession({
-          sessionId: "child-session",
           externalSessionId: "external-child-session",
           role: "build",
         }),
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "child-session",
+      externalSessionId: "child-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -1328,12 +1325,11 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "permission_required",
-      sessionId: "child-session",
+      externalSessionId: "child-session",
       requestId: "perm-child-1",
       permission: "read",
       patterns: ["src/**"],
       timestamp: "2026-02-22T08:00:05.000Z",
-      parentSessionId: "parent-session",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey,
@@ -1350,11 +1346,11 @@ describe("agent-orchestrator-session-events", () => {
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
       correlationKey: subagentCorrelationKey,
-      sessionId: "external-child-session",
+      externalSessionId: "external-child-session",
       status: "running",
     });
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId?.[
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId?.[
         "external-child-session"
       ],
     ).toEqual([
@@ -1369,7 +1365,7 @@ describe("agent-orchestrator-session-events", () => {
   test("patches the parent subagent row with the child external id when handled from parent context", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1379,7 +1375,6 @@ describe("agent-orchestrator-session-events", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "parent-session": buildSession({
-          sessionId: "parent-session",
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1402,23 +1397,23 @@ describe("agent-orchestrator-session-events", () => {
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -1436,12 +1431,11 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "permission_required",
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       requestId: "perm-child-1",
       permission: "read",
       patterns: ["src/**"],
       timestamp: "2026-02-22T08:00:05.000Z",
-      parentSessionId: "parent-session",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey,
@@ -1449,7 +1443,7 @@ describe("agent-orchestrator-session-events", () => {
 
     expect(sessionsRef.current["parent-session"]?.pendingPermissions).toHaveLength(0);
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId?.[
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId?.[
         "external-child-session"
       ],
     ).toEqual([
@@ -1463,7 +1457,7 @@ describe("agent-orchestrator-session-events", () => {
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
       correlationKey: subagentCorrelationKey,
-      sessionId: "external-child-session",
+      externalSessionId: "external-child-session",
     });
   });
 
@@ -1471,7 +1465,7 @@ describe("agent-orchestrator-session-events", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const replyPermission = mock(async () => {});
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1481,7 +1475,6 @@ describe("agent-orchestrator-session-events", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "parent-session": buildSession({
-          sessionId: "parent-session",
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1504,23 +1497,23 @@ describe("agent-orchestrator-session-events", () => {
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -1538,12 +1531,11 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "permission_required",
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       requestId: "perm-child-write",
       permission: "write",
       patterns: ["src/**"],
       timestamp: "2026-02-22T08:00:05.000Z",
-      parentSessionId: "parent-session",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey,
@@ -1551,20 +1543,20 @@ describe("agent-orchestrator-session-events", () => {
     await Promise.resolve();
 
     expect(replyPermission).toHaveBeenCalledWith({
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       requestId: "perm-child-write",
       reply: "reject",
       message: expect.any(String),
     });
     expect(sessionsRef.current["parent-session"]?.pendingPermissions).toHaveLength(0);
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId,
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId,
     ).toBeUndefined();
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
       correlationKey: subagentCorrelationKey,
-      sessionId: "external-child-session",
+      externalSessionId: "external-child-session",
     });
   });
 
@@ -1572,7 +1564,7 @@ describe("agent-orchestrator-session-events", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const replyPermission = mock(async () => {});
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1582,7 +1574,6 @@ describe("agent-orchestrator-session-events", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "parent-session": buildSession({
-          sessionId: "parent-session",
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1603,36 +1594,35 @@ describe("agent-orchestrator-session-events", () => {
           ],
         }),
         "child-session": buildSession({
-          sessionId: "child-session",
           externalSessionId: "external-child-session",
           role: "build",
         }),
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerAttached: (sessionId) => sessionId === "parent-session",
+      isSessionListenerAttached: (externalSessionId) => externalSessionId === "parent-session",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1645,12 +1635,11 @@ describe("agent-orchestrator-session-events", () => {
 
     handleParentEvent({
       type: "permission_required",
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       requestId: "perm-child-write",
       permission: "write",
       patterns: ["src/**"],
       timestamp: "2026-02-22T08:00:05.000Z",
-      parentSessionId: "parent-session",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey,
@@ -1658,13 +1647,13 @@ describe("agent-orchestrator-session-events", () => {
     await Promise.resolve();
 
     expect(replyPermission).toHaveBeenCalledWith({
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       requestId: "perm-child-write",
       reply: "reject",
       message: expect.any(String),
     });
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId,
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId,
     ).toBeUndefined();
   });
 
@@ -1672,7 +1661,7 @@ describe("agent-orchestrator-session-events", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const replyPermission = mock(async () => {});
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1682,7 +1671,6 @@ describe("agent-orchestrator-session-events", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "parent-session": buildSession({
-          sessionId: "parent-session",
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1703,37 +1691,36 @@ describe("agent-orchestrator-session-events", () => {
           ],
         }),
         "child-session": buildSession({
-          sessionId: "child-session",
           externalSessionId: "external-child-session",
           role: "build",
         }),
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerAttached: (sessionId) =>
-        sessionId === "parent-session" || sessionId === "child-session",
+      isSessionListenerAttached: (externalSessionId) =>
+        externalSessionId === "parent-session" || externalSessionId === "child-session",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1741,14 +1728,14 @@ describe("agent-orchestrator-session-events", () => {
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "child-session",
+      externalSessionId: "child-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerAttached: (sessionId) =>
-        sessionId === "parent-session" || sessionId === "child-session",
+      isSessionListenerAttached: (externalSessionId) =>
+        externalSessionId === "parent-session" || externalSessionId === "child-session",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1760,12 +1747,11 @@ describe("agent-orchestrator-session-events", () => {
     }
     const event: SessionEvent = {
       type: "permission_required",
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       requestId: "perm-child-write",
       permission: "write",
       patterns: ["src/**"],
       timestamp: "2026-02-22T08:00:05.000Z",
-      parentSessionId: "parent-session",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey,
@@ -1774,32 +1760,32 @@ describe("agent-orchestrator-session-events", () => {
     handleParentEvent(event);
     expect(replyPermission).toHaveBeenCalledTimes(0);
 
-    handleChildEvent({ ...event, sessionId: "child-session" });
+    handleChildEvent({ ...event, externalSessionId: "child-session" });
     await Promise.resolve();
 
     expect(replyPermission).toHaveBeenCalledTimes(1);
     expect(replyPermission).toHaveBeenCalledWith({
-      sessionId: "child-session",
+      externalSessionId: "child-session",
       requestId: "perm-child-write",
       reply: "reject",
       message: expect.any(String),
     });
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId,
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId,
     ).toBeUndefined();
 
     handleParentEvent(event);
 
     expect(replyPermission).toHaveBeenCalledTimes(1);
     expect(
-      sessionsRef.current["parent-session"]?.subagentPendingPermissionsBySessionId,
+      sessionsRef.current["parent-session"]?.subagentPendingPermissionsByExternalSessionId,
     ).toBeUndefined();
   });
 
   test("does not patch the parent subagent row when linked permission lacks a child external id", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1809,7 +1795,6 @@ describe("agent-orchestrator-session-events", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "parent-session": buildSession({
-          sessionId: "parent-session",
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1832,23 +1817,23 @@ describe("agent-orchestrator-session-events", () => {
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -1866,12 +1851,11 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "permission_required",
-      sessionId: "parent-session",
+      externalSessionId: "parent-session",
       requestId: "perm-child-1",
       permission: "read",
       patterns: ["src/**"],
       timestamp: "2026-02-22T08:00:05.000Z",
-      parentSessionId: "parent-session",
       parentExternalSessionId: "external-parent-session",
       subagentCorrelationKey,
     });
@@ -1881,7 +1865,7 @@ describe("agent-orchestrator-session-events", () => {
       kind: "subagent",
       correlationKey: subagentCorrelationKey,
     });
-    expect(parentSubagentMessage?.meta).not.toHaveProperty("sessionId");
+    expect(parentSubagentMessage?.meta).not.toHaveProperty("externalSessionId");
   });
 
   test("keeps permission pending when auto-reject reply fails", async () => {
@@ -1891,7 +1875,7 @@ describe("agent-orchestrator-session-events", () => {
         Promise.reject(new Error("network down")),
     );
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -1903,7 +1887,6 @@ describe("agent-orchestrator-session-events", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "parent-session": buildSession({
-          sessionId: "parent-session",
           externalSessionId: "external-parent-session",
           role: "planner",
           messages: [
@@ -1928,23 +1911,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -1962,13 +1945,12 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "permission_required",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       requestId: "perm-fail",
       permission: "write",
       patterns: ["edit file"],
       metadata: { tool: "edit" },
       timestamp: "2026-02-22T08:00:05.000Z",
-      parentSessionId: "parent-session",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-1",
       subagentCorrelationKey: "part:assistant-parent:subtask-fail",
@@ -1989,7 +1971,7 @@ describe("agent-orchestrator-session-events", () => {
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
       correlationKey: "part:assistant-parent:subtask-fail",
-      sessionId: "external-1",
+      externalSessionId: "external-1",
     });
   });
 
@@ -1999,7 +1981,7 @@ describe("agent-orchestrator-session-events", () => {
       (_request: Parameters<SessionEventAdapter["replyPermission"]>[0]) => Promise.resolve(),
     );
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -2023,23 +2005,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -2057,7 +2039,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "permission_required",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       requestId: "perm-template-fail",
       permission: "write",
       patterns: ["edit file"],
@@ -2082,7 +2064,7 @@ describe("agent-orchestrator-session-events", () => {
   test("records session_error as an error notice and clears pending requests", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -2121,23 +2103,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -2155,7 +2137,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_error",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       message: "Aborted",
       timestamp: "2026-02-22T08:00:10.000Z",
     });
@@ -2176,7 +2158,7 @@ describe("agent-orchestrator-session-events", () => {
   test("normalizes JSON-wrapped session_error payloads before rendering the error notice", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -2194,23 +2176,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -2228,7 +2210,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_error",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       message: '{"message":"Our servers are currently overloaded. Please try again later."}',
       timestamp: "2026-02-22T08:00:10.000Z",
     });
@@ -2248,7 +2230,7 @@ describe("agent-orchestrator-session-events", () => {
   test("renders a cancelled session notice when a user-requested stop aborts", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -2289,23 +2271,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -2323,7 +2305,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_error",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       message: '{"message":"Aborted"}',
       timestamp: "2026-02-22T08:00:10.000Z",
     });
@@ -2355,7 +2337,7 @@ describe("agent-orchestrator-session-events", () => {
   test("handles question/todo updates and terminal finish", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -2371,23 +2353,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -2405,7 +2387,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "question_required",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       requestId: "question-1",
       questions: [
         {
@@ -2420,13 +2402,13 @@ describe("agent-orchestrator-session-events", () => {
     });
     handleEvent({
       type: "session_todos_updated",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       todos: [{ id: "todo-1", content: "Do it", status: "pending", priority: "high" }],
       timestamp: "2026-02-22T08:00:03.000Z",
     });
     handleEvent({
       type: "session_finished",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:04.000Z",
     });
 
@@ -2438,7 +2420,7 @@ describe("agent-orchestrator-session-events", () => {
   test("renders a cancelled session notice when a user-requested stop finishes normally", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -2493,23 +2475,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -2527,7 +2509,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_finished",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:10.000Z",
       message: "Session stopped",
     });
@@ -2558,7 +2540,7 @@ describe("agent-orchestrator-session-events", () => {
   test("keeps real failures on the error path even when stop intent was set", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -2577,23 +2559,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -2611,7 +2593,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_error",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       message: "Permission denied",
       timestamp: "2026-02-22T08:00:10.000Z",
     });
@@ -2635,7 +2617,7 @@ describe("agent-orchestrator-session-events", () => {
   test("finalizes assistant draft through status transitions", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -2652,23 +2634,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -2688,13 +2670,13 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_status",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       status: { type: "busy" },
       timestamp: "2026-02-22T08:00:01.000Z",
     });
     handleEvent({
       type: "assistant_delta",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       channel: "text",
       messageId: "assistant-message-1",
       delta: "Partial answer",
@@ -2702,13 +2684,13 @@ describe("agent-orchestrator-session-events", () => {
     });
     handleEvent({
       type: "session_status",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       status: { type: "retry", attempt: 1, message: '{"message":"Retrying"}' },
       timestamp: "2026-02-22T08:00:03.000Z",
     });
     handleEvent({
       type: "session_status",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       status: { type: "idle" },
       timestamp: "2026-02-22T08:00:04.000Z",
     });
@@ -2733,7 +2715,7 @@ describe("agent-orchestrator-session-events", () => {
     let clearCalls = 0;
 
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -2749,23 +2731,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -2787,7 +2769,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_started",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       message: "Started",
       timestamp: "2026-02-22T08:00:01.000Z",
     });
@@ -2797,7 +2779,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.000Z",
       part: {
         kind: "text",
@@ -2810,7 +2792,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.100Z",
       part: {
         kind: "reasoning",
@@ -2823,7 +2805,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.200Z",
       part: {
         kind: "tool",
@@ -2838,7 +2820,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.250Z",
       part: {
         kind: "tool",
@@ -2853,7 +2835,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.275Z",
       part: {
         kind: "tool",
@@ -2869,7 +2851,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.300Z",
       part: {
         kind: "subagent",
@@ -2886,7 +2868,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.350Z",
       part: {
         kind: "subagent",
@@ -2897,7 +2879,7 @@ describe("agent-orchestrator-session-events", () => {
         agent: "build",
         prompt: "Do work",
         description: "Done subtask",
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
         startedAtMs: 100,
         endedAtMs: 300,
       },
@@ -2905,7 +2887,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "m1",
       timestamp: "2026-02-22T08:00:03.000Z",
       message: "Final assistant output",
@@ -2920,7 +2902,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_delta",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       channel: "text",
       messageId: "m2",
       timestamp: "2026-02-22T08:00:03.500Z",
@@ -2929,7 +2911,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_idle",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:04.000Z",
     });
 
@@ -2982,7 +2964,7 @@ describe("agent-orchestrator-session-events", () => {
       throw new Error("Expected subagent message with subagent meta");
     }
     expect(subagentMessage.meta.status).toBe("completed");
-    expect(subagentMessage.meta.sessionId).toBe("session-child-1");
+    expect(subagentMessage.meta.externalSessionId).toBe("session-child-1");
     expect(subagentMessage.meta.correlationKey).toBe("spawn:m1:build:Do work");
     expect(subagentMessage.meta.startedAtMs).toBe(100);
     expect(subagentMessage.meta.endedAtMs).toBe(300);
@@ -3011,7 +2993,7 @@ describe("agent-orchestrator-session-events", () => {
   test("writes live text parts into transcript messages instead of draft state", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -3035,23 +3017,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -3071,7 +3053,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.000Z",
       part: {
         kind: "text",
@@ -3084,7 +3066,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.100Z",
       part: {
         kind: "text",
@@ -3114,28 +3096,28 @@ describe("agent-orchestrator-session-events", () => {
 
     const context: SessionPartEventContext = {
       store: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         sessionsRef,
-        updateSession: (sessionId, updater) => {
-          const current = sessionsRef.current[sessionId];
+        updateSession: (externalSessionId, updater) => {
+          const current = sessionsRef.current[externalSessionId];
           if (!current) {
             return;
           }
           sessionsRef.current = {
             ...sessionsRef.current,
-            [sessionId]: updater(current),
+            [externalSessionId]: updater(current),
           };
         },
       },
       drafts: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         draftRawBySessionRef: { current: {} },
         draftSourceBySessionRef: { current: {} },
         draftMessageIdBySessionRef: { current: {} },
         draftFlushTimeoutBySessionRef: { current: {} },
       },
       turn: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         turnStartedAtBySessionRef: { current: {} },
         recordTurnActivityTimestamp,
         resolveTurnDurationMs: () => undefined,
@@ -3149,7 +3131,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleAssistantPart(context, {
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.000Z",
       part: {
         kind: "tool",
@@ -3169,7 +3151,7 @@ describe("agent-orchestrator-session-events", () => {
   test("forwards turn timing callbacks to part handlers through attachAgentSessionListener", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -3185,16 +3167,16 @@ describe("agent-orchestrator-session-events", () => {
     };
     const recordTurnActivityTimestamp = mock(() => {});
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
@@ -3202,7 +3184,7 @@ describe("agent-orchestrator-session-events", () => {
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
@@ -3224,7 +3206,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.000Z",
       part: {
         kind: "subagent",
@@ -3242,10 +3224,10 @@ describe("agent-orchestrator-session-events", () => {
     expect(recordTurnActivityTimestamp).toHaveBeenCalledWith("session-1", 100);
   });
 
-  test("reuses the spawned subagent row when a later update adds sessionId", () => {
+  test("reuses the spawned subagent row when a later update adds externalSessionId", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -3260,16 +3242,16 @@ describe("agent-orchestrator-session-events", () => {
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
@@ -3277,7 +3259,7 @@ describe("agent-orchestrator-session-events", () => {
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
@@ -3298,7 +3280,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.300Z",
       part: {
         kind: "subagent",
@@ -3315,7 +3297,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.350Z",
       part: {
         kind: "subagent",
@@ -3326,7 +3308,7 @@ describe("agent-orchestrator-session-events", () => {
         agent: "build",
         prompt: "Do work",
         description: "Done subtask",
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
         startedAtMs: 100,
         endedAtMs: 300,
       },
@@ -3340,14 +3322,14 @@ describe("agent-orchestrator-session-events", () => {
     if (subagentMessages[0]?.meta?.kind !== "subagent") {
       throw new Error("Expected subagent meta");
     }
-    expect(subagentMessages[0].meta.sessionId).toBe("session-child-1");
+    expect(subagentMessages[0].meta.externalSessionId).toBe("session-child-1");
     expect(subagentMessages[0].meta.status).toBe("completed");
   });
 
   test("keeps same-prompt subagents separate until an exact identity match arrives", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -3362,16 +3344,16 @@ describe("agent-orchestrator-session-events", () => {
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
@@ -3379,7 +3361,7 @@ describe("agent-orchestrator-session-events", () => {
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
@@ -3400,7 +3382,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.300Z",
       part: {
         kind: "subagent",
@@ -3417,7 +3399,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.325Z",
       part: {
         kind: "subagent",
@@ -3434,7 +3416,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.350Z",
       part: {
         kind: "subagent",
@@ -3445,7 +3427,7 @@ describe("agent-orchestrator-session-events", () => {
         agent: "build",
         prompt: "Do work",
         description: "First subagent done",
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
         startedAtMs: 100,
         endedAtMs: 300,
       },
@@ -3466,16 +3448,16 @@ describe("agent-orchestrator-session-events", () => {
       throw new Error("Expected subagent meta");
     }
 
-    expect(firstSubagent.meta.sessionId).toBe("session-child-1");
+    expect(firstSubagent.meta.externalSessionId).toBe("session-child-1");
     expect(firstSubagent.meta.status).toBe("completed");
-    expect(secondSubagent.meta.sessionId).toBeUndefined();
+    expect(secondSubagent.meta.externalSessionId).toBeUndefined();
     expect(secondSubagent.meta.status).toBe("running");
   });
 
   test("preserves cancelled subagent updates on the existing live row", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -3490,16 +3472,16 @@ describe("agent-orchestrator-session-events", () => {
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
@@ -3507,7 +3489,7 @@ describe("agent-orchestrator-session-events", () => {
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
@@ -3528,7 +3510,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.300Z",
       part: {
         kind: "subagent",
@@ -3545,7 +3527,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.350Z",
       part: {
         kind: "subagent",
@@ -3556,7 +3538,7 @@ describe("agent-orchestrator-session-events", () => {
         agent: "build",
         prompt: "Do work",
         description: "Cancelled by user",
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
         startedAtMs: 100,
         endedAtMs: 250,
       },
@@ -3571,7 +3553,7 @@ describe("agent-orchestrator-session-events", () => {
       throw new Error("Expected subagent meta");
     }
     expect(subagentMessages[0].meta.status).toBe("cancelled");
-    expect(subagentMessages[0].meta.sessionId).toBe("session-child-1");
+    expect(subagentMessages[0].meta.externalSessionId).toBe("session-child-1");
     expect(subagentMessages[0].meta.startedAtMs).toBe(100);
     expect(subagentMessages[0].meta.endedAtMs).toBe(250);
   });
@@ -3579,7 +3561,7 @@ describe("agent-orchestrator-session-events", () => {
   test("absorbs a unique fallback session-correlated subagent row into the existing live row", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -3594,16 +3576,16 @@ describe("agent-orchestrator-session-events", () => {
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
@@ -3611,7 +3593,7 @@ describe("agent-orchestrator-session-events", () => {
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
@@ -3632,7 +3614,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.300Z",
       part: {
         kind: "subagent",
@@ -3649,7 +3631,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.350Z",
       part: {
         kind: "subagent",
@@ -3660,7 +3642,7 @@ describe("agent-orchestrator-session-events", () => {
         agent: "build",
         prompt: "Do work",
         description: "Done subtask",
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
         startedAtMs: 100,
         endedAtMs: 300,
       },
@@ -3676,7 +3658,7 @@ describe("agent-orchestrator-session-events", () => {
     }
     expect(subagent.id).toBe("subagent:part:m1:p-subtask-spawn");
     expect(subagent.meta.correlationKey).toBe("session:m2:session-child-1");
-    expect(subagent.meta.sessionId).toBe("session-child-1");
+    expect(subagent.meta.externalSessionId).toBe("session-child-1");
     expect(subagent.meta.status).toBe("completed");
     expect(subagent.meta.startedAtMs).toBe(100);
     expect(subagent.meta.endedAtMs).toBe(300);
@@ -3685,7 +3667,7 @@ describe("agent-orchestrator-session-events", () => {
   test("keeps fallback session-correlated subagent rows separate when multiple same-prompt live rows exist", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -3700,16 +3682,16 @@ describe("agent-orchestrator-session-events", () => {
       },
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
@@ -3717,7 +3699,7 @@ describe("agent-orchestrator-session-events", () => {
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
@@ -3738,7 +3720,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.300Z",
       part: {
         kind: "subagent",
@@ -3755,7 +3737,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.325Z",
       part: {
         kind: "subagent",
@@ -3772,7 +3754,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.350Z",
       part: {
         kind: "subagent",
@@ -3783,7 +3765,7 @@ describe("agent-orchestrator-session-events", () => {
         agent: "build",
         prompt: "Do work",
         description: "Done subtask",
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
         startedAtMs: 100,
         endedAtMs: 300,
       },
@@ -3798,7 +3780,7 @@ describe("agent-orchestrator-session-events", () => {
   test("matches an older assistant message when the newest same-text message is outside the timestamp window", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -3829,23 +3811,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -3865,7 +3847,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "assistant-final",
       timestamp: "2026-02-22T08:00:11.000Z",
       message: "Stable output",
@@ -3880,7 +3862,7 @@ describe("agent-orchestrator-session-events", () => {
   test("updates live session context usage from step-finish part tokens", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -3920,23 +3902,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -3967,7 +3949,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.000Z",
       part: {
         kind: "step",
@@ -3993,7 +3975,7 @@ describe("agent-orchestrator-session-events", () => {
   test("does not mark a step message as tokenized when the step update is ignored", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -4010,23 +3992,23 @@ describe("agent-orchestrator-session-events", () => {
     const contextUsageMessageIdBySessionRef = { current: {} as Record<string, string> };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -4047,7 +4029,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.000Z",
       part: {
         kind: "step",
@@ -4066,7 +4048,7 @@ describe("agent-orchestrator-session-events", () => {
   test("keeps live context usage bound to the in-flight turn model after selection changes", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -4126,23 +4108,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -4163,7 +4145,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.000Z",
       part: {
         kind: "step",
@@ -4189,7 +4171,7 @@ describe("agent-orchestrator-session-events", () => {
   test("preserves step-derived context usage when the final assistant message omits token metadata", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -4228,23 +4210,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -4264,7 +4246,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:01.000Z",
       part: {
         kind: "text",
@@ -4277,7 +4259,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.000Z",
       part: {
         kind: "step",
@@ -4291,7 +4273,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "assistant-live-1",
       timestamp: "2026-02-22T08:00:03.000Z",
       message: "Final answer",
@@ -4317,7 +4299,7 @@ describe("agent-orchestrator-session-events", () => {
   test("preserves step-derived context usage even when no assistant transcript row exists yet", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -4356,23 +4338,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -4392,7 +4374,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.000Z",
       part: {
         kind: "step",
@@ -4406,7 +4388,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "assistant-live-1",
       timestamp: "2026-02-22T08:00:03.000Z",
       message: "Final answer",
@@ -4432,7 +4414,7 @@ describe("agent-orchestrator-session-events", () => {
   test("does not carry previous-turn context usage into a new final snapshot without token updates", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -4480,23 +4462,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -4516,7 +4498,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:01.000Z",
       part: {
         kind: "text",
@@ -4529,7 +4511,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "assistant-live-2",
       timestamp: "2026-02-22T08:00:02.000Z",
       message: "Fresh answer",
@@ -4553,7 +4535,7 @@ describe("agent-orchestrator-session-events", () => {
   test("routes reasoning deltas into thinking draft state without finalizing assistant text", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -4569,23 +4551,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -4603,7 +4585,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_delta",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       channel: "reasoning",
       messageId: "assistant-message-reasoning",
       delta: "Reason silently",
@@ -4615,7 +4597,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_idle",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:03.000Z",
     });
 
@@ -4630,7 +4612,7 @@ describe("agent-orchestrator-session-events", () => {
   test("flushes buffered text drafts before terminal idle settlement", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -4646,23 +4628,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -4682,7 +4664,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_delta",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       channel: "text",
       messageId: "assistant-buffered-1",
       delta: "Buffered answer",
@@ -4693,7 +4675,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "session_idle",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       timestamp: "2026-02-22T08:00:03.000Z",
     });
 
@@ -4708,7 +4690,7 @@ describe("agent-orchestrator-session-events", () => {
   test("upserts the finalized assistant message instead of appending a duplicate", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_sessionId, handler) => {
+      subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -4740,23 +4722,23 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[sessionId];
+      const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
       sessionsRef.current = {
         ...sessionsRef.current,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
     };
 
     attachAgentSessionListener({
       adapter,
       repoPath: "/tmp/repo",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -4776,7 +4758,7 @@ describe("agent-orchestrator-session-events", () => {
 
     handleEvent({
       type: "assistant_message",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messageId: "msg-final",
       message: "Final answer",
       timestamp: "2026-02-22T08:00:04.000Z",

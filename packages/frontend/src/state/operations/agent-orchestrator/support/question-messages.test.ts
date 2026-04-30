@@ -4,7 +4,7 @@ import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestr
 import { annotateQuestionToolMessage } from "./question-messages";
 
 const createSession = (messages: AgentSessionState["messages"]) => ({
-  sessionId: "session-1",
+  externalSessionId: "session-1",
   messages,
 });
 

@@ -47,7 +47,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeSession: createSession({
     runtimeKind: "opencode",
-    sessionId: "session-a",
     externalSessionId: "external-a",
     role: "spec",
     scenario: "spec_initial",
@@ -106,14 +105,12 @@ describe("useAgentStudioThreadContext", () => {
   test("switches thread session immediately when active session changes", async () => {
     const sessionA = createSession({
       runtimeKind: "opencode",
-      sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",
       scenario: "spec_initial",
     });
     const sessionB = createSession({
       runtimeKind: "opencode",
-      sessionId: "session-b",
       externalSessionId: "external-b",
       role: "planner",
       scenario: "planner_initial",
@@ -124,11 +121,11 @@ describe("useAgentStudioThreadContext", () => {
     );
 
     await harness.mount();
-    expect(harness.getLatest().threadSession?.sessionId).toBe("session-a");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("session-a");
     expect(harness.getLatest().isContextSwitching).toBe(false);
 
     await harness.update(createHookArgs({ activeSession: sessionB }));
-    expect(harness.getLatest().threadSession?.sessionId).toBe("session-b");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("session-b");
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });
@@ -136,7 +133,6 @@ describe("useAgentStudioThreadContext", () => {
   test("keeps the visible thread ready immediately when the selected session is already available", async () => {
     const session = createSession({
       runtimeKind: "opencode",
-      sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",
       scenario: "spec_initial",
@@ -155,7 +151,6 @@ describe("useAgentStudioThreadContext", () => {
   test("keeps context-switch intent active while hydration is running", async () => {
     const session = createSession({
       runtimeKind: "opencode",
-      sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",
       scenario: "spec_initial",
@@ -195,7 +190,6 @@ describe("useAgentStudioThreadContext", () => {
   test("does not treat session history hydration as a full context switch once session is selected", async () => {
     const session = createSession({
       runtimeKind: "opencode",
-      sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",
       scenario: "spec_initial",
@@ -209,7 +203,7 @@ describe("useAgentStudioThreadContext", () => {
     );
 
     await harness.mount();
-    expect(harness.getLatest().threadSession?.sessionId).toBe("session-a");
+    expect(harness.getLatest().threadSession?.externalSessionId).toBe("session-a");
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });
@@ -217,7 +211,6 @@ describe("useAgentStudioThreadContext", () => {
   test("cancels pending animation frame on unmount cleanup", async () => {
     const session = createSession({
       runtimeKind: "opencode",
-      sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",
       scenario: "spec_initial",

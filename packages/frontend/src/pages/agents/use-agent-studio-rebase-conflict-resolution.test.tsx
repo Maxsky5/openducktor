@@ -36,7 +36,7 @@ const createConflict = (overrides: Record<string, unknown> = {}) => ({
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
   const builderSession = buildSession({
-    sessionId: "build-1",
+    externalSessionId: "build-1",
     workingDirectory: "/repo/worktrees/task-1",
     selectedModel: {
       runtimeKind: "opencode",
@@ -46,7 +46,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
   });
   const plannerSession = createAgentSessionFixture({
     runtimeKind: "opencode",
-    sessionId: "planner-1",
+    externalSessionId: "planner-1",
     taskId: "task-1",
     role: "planner",
     scenario: "planner_initial",
@@ -101,7 +101,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           reason: "rebase_conflict_resolution",
           postStartAction: "send_message",
           initialStartMode: "reuse",
-          initialSourceSessionId: "build-1",
+          initialSourceExternalSessionId: "build-1",
         }),
       );
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
@@ -117,11 +117,11 @@ describe("useAgentStudioRebaseConflictResolution", () => {
 
   test("filters reusable Builder sessions to the conflicted worktree", async () => {
     const matchingBuilderSession = buildSession({
-      sessionId: "build-1",
+      externalSessionId: "build-1",
       workingDirectory: "/repo/worktrees/task-1",
     });
     const otherBuilderSession = buildSession({
-      sessionId: "build-other",
+      externalSessionId: "build-other",
       workingDirectory: "/repo/worktrees/other",
     });
     const args = createBaseArgs({
@@ -143,7 +143,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.startSessionRequest).toHaveBeenCalledWith(
         expect.objectContaining({
           existingSessionOptions: [expect.objectContaining({ value: "build-1" })],
-          initialSourceSessionId: "build-1",
+          initialSourceExternalSessionId: "build-1",
         }),
       );
     } finally {
@@ -157,14 +157,14 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         ...createBaseArgs().selection,
         viewSessionsForTask: [
           buildSession({
-            sessionId: "build-1",
+            externalSessionId: "build-1",
             workingDirectory: "/repo/worktrees/task-1",
             selectedModel: null,
           }),
         ],
         sessionsForTask: [
           buildSession({
-            sessionId: "build-1",
+            externalSessionId: "build-1",
             workingDirectory: "/repo/worktrees/task-1",
             selectedModel: null,
           }),
@@ -184,7 +184,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         expect.objectContaining({
           scenario: "build_rebase_conflict_resolution",
           initialStartMode: "reuse",
-          initialSourceSessionId: "build-1",
+          initialSourceExternalSessionId: "build-1",
           targetWorkingDirectory: "/repo/worktrees/task-1",
         }),
       );

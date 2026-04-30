@@ -22,7 +22,7 @@ type SessionStartModalConfirmInput =
   | {
       runInBackground: boolean;
       startMode: AgentSessionStartMode;
-      sourceSessionId: string | null;
+      sourceExternalSessionId: string | null;
       targetBranch?: string;
     };
 
@@ -51,7 +51,7 @@ export type SessionStartModalModel = {
   targetBranchOptions?: ComboboxOption[];
   selectedTargetBranch?: string;
   onSelectStartMode: (startMode: AgentSessionStartMode) => void;
-  onSelectSourceSession: (sessionId: string) => void;
+  onSelectSourceSession: (externalSessionId: string) => void;
   onSelectTargetBranch?: (branch: string) => void;
   onSelectRuntime: (runtimeKind: RuntimeKind) => void;
   onSelectAgent: (agent: string) => void;
@@ -134,7 +134,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     onConfirm({
       runInBackground: false,
       startMode: selectedStartMode,
-      sourceSessionId: requiresExistingSession ? selectedSourceSessionId : null,
+      sourceExternalSessionId: requiresExistingSession ? selectedSourceSessionId : null,
       ...(showTargetBranchSelector ? { targetBranch: selectedTargetBranch } : {}),
     });
   };
@@ -344,7 +344,9 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                     onConfirm({
                       runInBackground: true,
                       startMode: selectedStartMode,
-                      sourceSessionId: requiresExistingSession ? selectedSourceSessionId : null,
+                      sourceExternalSessionId: requiresExistingSession
+                        ? selectedSourceSessionId
+                        : null,
                       ...(showTargetBranchSelector ? { targetBranch: selectedTargetBranch } : {}),
                     })
                   }

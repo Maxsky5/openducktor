@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { directMergeRecordSchema, gitTargetBranchSchema, pullRequestSchema } from "./git-schemas";
-import { agentSessionRecordSchema } from "./session-schemas";
+import { parseAgentSessionRecordCompat } from "./session-schemas";
 import { qaWorkflowVerdictSchema } from "./task-schemas";
 
 export const taskMetadataDocumentSchema = z.object({
@@ -43,6 +43,25 @@ const normalizeLegacyTaskMetadataPayload = (value: unknown): unknown => {
   };
 };
 
+const agentSessionRecordsCompatSchema = z.array(z.unknown()).transform((records, context) => {
+  const normalized = [];
+
+  for (let index = 0; index < records.length; index += 1) {
+    try {
+      normalized.push(parseAgentSessionRecordCompat(records[index]));
+    } catch (error) {
+      context.addIssue({
+        code: "custom",
+        path: [index],
+        message: error instanceof Error ? error.message : "Invalid agent session record metadata.",
+      });
+      return z.NEVER;
+    }
+  }
+
+  return normalized;
+});
+
 export const taskMetadataPayloadSchema = z.preprocess(
   normalizeLegacyTaskMetadataPayload,
   z.object({
@@ -64,7 +83,7 @@ export const taskMetadataPayloadSchema = z.preprocess(
       (value) => (value === null ? undefined : value),
       directMergeRecordSchema.optional(),
     ),
-    agentSessions: z.array(agentSessionRecordSchema).default([]),
+    agentSessions: agentSessionRecordsCompatSchema.default([]),
   }),
 );
 export type TaskMetadataPayload = z.infer<typeof taskMetadataPayloadSchema>;

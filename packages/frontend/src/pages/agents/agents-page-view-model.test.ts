@@ -41,7 +41,6 @@ const createTaskCard = (id: string): TaskCard => ({
 
 const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/repo",
@@ -169,11 +168,14 @@ describe("agents-page-view-model", () => {
       onWorkflowStepSelect,
       onSessionSelectionChange,
       sessionSelectorAutofocusByValue: {
-        [activeSession.sessionId]: false,
+        [activeSession.externalSessionId]: false,
       },
-      sessionSelectorValue: activeSession.sessionId,
+      sessionSelectorValue: activeSession.externalSessionId,
       sessionSelectorGroups: [
-        { label: "Recent", options: [{ value: activeSession.sessionId, label: "Spec session" }] },
+        {
+          label: "Recent",
+          options: [{ value: activeSession.externalSessionId, label: "Spec session" }],
+        },
       ],
       agentStudioReady: false,
       sessionsForTaskLength: 0,
@@ -187,9 +189,9 @@ describe("agents-page-view-model", () => {
     expect(model.workflowSteps).toHaveLength(2);
     expect(typeof model.onOpenTaskDetails).toBe("function");
     expect(model.sessionSelector.disabled).toBe(true);
-    expect(model.sessionSelector.shouldAutofocusComposerForValue(activeSession.sessionId)).toBe(
-      false,
-    );
+    expect(
+      model.sessionSelector.shouldAutofocusComposerForValue(activeSession.externalSessionId),
+    ).toBe(false);
 
     model.sessionSelector.onValueChange("session-next");
     expect(onSessionSelectionChange).toHaveBeenCalledWith("session-next");

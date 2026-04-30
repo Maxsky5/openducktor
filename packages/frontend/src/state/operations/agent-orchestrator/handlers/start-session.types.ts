@@ -25,7 +25,7 @@ export type StartAgentSessionInput =
       sendKickoff?: boolean;
       kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "reuse";
-      sourceSessionId: string;
+      sourceExternalSessionId: string;
     }
   | {
       taskId: string;
@@ -45,7 +45,7 @@ export type StartAgentSessionInput =
       sendKickoff?: boolean;
       kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "fork";
-      sourceSessionId: string;
+      sourceExternalSessionId: string;
     };
 
 export type SessionStateById = Record<string, AgentSessionState>;
@@ -59,7 +59,7 @@ export type SessionDependencies = {
   inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  attachSessionListener: (repoPath: string, sessionId: string) => void;
+  attachSessionListener: (repoPath: string, externalSessionId: string) => void;
 };
 
 export type RuntimeDependencies = {
@@ -81,7 +81,7 @@ export type TaskDependencies = {
   taskRef: { current: TaskCard[] };
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
-  sendAgentMessage: (sessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
+  sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
 };
 
 export type ModelDependencies = {
@@ -112,7 +112,7 @@ export type SessionStartTags = {
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
-  sessionId: string;
+  externalSessionId: string;
 };
 
 export type StartSessionContext = {
@@ -139,7 +139,7 @@ export type StartSessionCreationInput = {
   | {
       startMode: "reuse";
       selectedModel?: never;
-      sourceSessionId: string;
+      sourceExternalSessionId: string;
     }
   | {
       startMode: "fresh";
@@ -149,7 +149,7 @@ export type StartSessionCreationInput = {
   | {
       startMode: "fork";
       selectedModel: AgentModelSelection;
-      sourceSessionId: string;
+      sourceExternalSessionId: string;
     }
 );
 
@@ -164,7 +164,7 @@ export type ResolvedRuntimeAndModel = {
 export type StartOrReuseResult =
   | {
       kind: "reused";
-      sessionId: string;
+      externalSessionId: string;
     }
   | {
       kind: "started";

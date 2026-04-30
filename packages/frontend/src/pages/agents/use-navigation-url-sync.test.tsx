@@ -34,7 +34,7 @@ describe("useNavigationUrlSync", () => {
       await harness.mount();
       expect(harness.getLatest().navigation).toMatchObject({
         taskId: "task-1",
-        sessionId: null,
+        externalSessionId: null,
         role: "build",
       });
       calls.length = 0;
@@ -82,7 +82,7 @@ describe("useNavigationUrlSync", () => {
     await harness.mount();
     expect(harness.getLatest().navigation).toMatchObject({
       taskId: "task-1",
-      sessionId: null,
+      externalSessionId: null,
       role: "spec",
     });
     expect(calls).toHaveLength(0);
@@ -95,7 +95,7 @@ describe("useNavigationUrlSync", () => {
 
     expect(harness.getLatest().navigation).toMatchObject({
       taskId: "task-2",
-      sessionId: "session-2",
+      externalSessionId: "session-2",
       role: "planner",
     });
     expect(calls).toHaveLength(0);
@@ -144,7 +144,7 @@ describe("useNavigationUrlSync", () => {
 
     expect(harness.getLatest().navigation).toMatchObject({
       taskId: "task-1",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       role: "build",
     });
     expect(calls).toHaveLength(2);
@@ -157,7 +157,7 @@ describe("useNavigationUrlSync", () => {
 
     expect(harness.getLatest().navigation).toMatchObject({
       taskId: "task-1",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       role: "build",
     });
     expect(calls).toHaveLength(2);
@@ -200,7 +200,7 @@ describe("useNavigationUrlSync", () => {
 
     expect(harness.getLatest().navigation).toMatchObject({
       taskId: "task-1",
-      sessionId: null,
+      externalSessionId: null,
       role: "build",
     });
     expect(calls).toHaveLength(2);

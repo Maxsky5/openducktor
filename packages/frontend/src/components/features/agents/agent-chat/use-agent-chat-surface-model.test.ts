@@ -12,8 +12,8 @@ describe("invokeStopAgentSession", () => {
       },
     } as Promise<void>;
 
-    const result = invokeStopAgentSession("session-1", (sessionId) => {
-      stopCalls.push(sessionId);
+    const result = invokeStopAgentSession("session-1", (externalSessionId) => {
+      stopCalls.push(externalSessionId);
       return stopPromise;
     });
 
@@ -28,8 +28,8 @@ describe("invokeStopAgentSession", () => {
 
   test("does nothing when no session or stop operation is available", () => {
     const stopCalls: string[] = [];
-    const stopSession = async (sessionId: string): Promise<void> => {
-      stopCalls.push(sessionId);
+    const stopSession = async (externalSessionId: string): Promise<void> => {
+      stopCalls.push(externalSessionId);
     };
 
     expect(invokeStopAgentSession(null, stopSession)).toBeUndefined();

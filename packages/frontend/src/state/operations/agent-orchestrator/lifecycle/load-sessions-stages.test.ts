@@ -24,7 +24,6 @@ import {
 } from "./load-sessions-stages";
 
 const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
@@ -53,7 +52,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
 });
 
 const createRecord = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord => ({
-  sessionId: "session-1",
   externalSessionId: "external-1",
   role: "build",
   scenario: "build_implementation_start",
@@ -91,16 +89,16 @@ const createStateHarness = (sessions: Record<string, AgentSessionState>) => {
       sessionsRef.current = state;
     },
     updateSession: (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     },
@@ -165,7 +163,7 @@ const createStdioRuntime = (
 describe("load-sessions-stages", () => {
   test("prefers hydrated final assistant messages over stale local streamed rows with the same id", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "assistant-1",
@@ -196,11 +194,13 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)?.content).toBe(
-      "Final complete response",
-    );
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)?.meta).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0)?.content,
+    ).toBe("Final complete response");
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0)?.meta,
+    ).toMatchObject({
       kind: "assistant",
       isFinal: true,
       providerId: "openai",
@@ -210,7 +210,7 @@ describe("load-sessions-stages", () => {
 
   test("does not coerce a same-id non-assistant message into a final assistant row", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "shared-id",
@@ -241,8 +241,10 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       id: "shared-id",
       role: "tool",
       content: "Tool output",
@@ -256,7 +258,7 @@ describe("load-sessions-stages", () => {
 
   test("absorbs live reasoning and tool rows that duplicate hydrated history rows", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "thinking:assistant-1:thinking-1",
@@ -336,13 +338,17 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(3);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(3);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       role: "thinking",
       content: "Hydrated reasoning",
       meta: { kind: "reasoning", completed: true },
     });
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 1)).toMatchObject({
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 1),
+    ).toMatchObject({
       role: "tool",
       content: "bash completed",
       meta: {
@@ -353,7 +359,9 @@ describe("load-sessions-stages", () => {
         inputReadyAtMs: 120,
       },
     });
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 2)).toMatchObject({
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 2),
+    ).toMatchObject({
       id: "assistant-1",
       role: "assistant",
       content: "Final answer",
@@ -362,7 +370,7 @@ describe("load-sessions-stages", () => {
 
   test("preserves newer live reasoning rows when hydrated history is still non-terminal", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "thinking:assistant-1:thinking-1",
@@ -391,8 +399,10 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       role: "thinking",
       content: "Live reasoning has continued",
       meta: { kind: "reasoning", completed: false },
@@ -401,7 +411,7 @@ describe("load-sessions-stages", () => {
 
   test("keeps cross-id reasoning rows separate under canonical ids", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "thinking:assistant-1:thinking-1",
@@ -430,12 +440,12 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(2);
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(2);
   });
 
   test("does not downgrade live running tool rows to stale hydrated pending rows", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "tool:assistant-1:call-1",
@@ -469,8 +479,10 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       role: "tool",
       content: "running output",
       meta: {
@@ -483,7 +495,7 @@ describe("load-sessions-stages", () => {
 
   test("preserves live running tool output over stale hydrated running rows", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "tool:assistant-1:call-1",
@@ -518,8 +530,10 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       role: "tool",
       content: "newer running output",
       meta: {
@@ -532,7 +546,7 @@ describe("load-sessions-stages", () => {
 
   test("keeps separate same-tool rows with different call ids", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "tool:assistant-1:call-1",
@@ -565,12 +579,12 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(2);
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(2);
   });
 
   test("prefers hydrated completed tool rows over same-id live running rows", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "tool:assistant-1:call-1",
@@ -605,8 +619,10 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       role: "tool",
       content: "completed output",
       meta: {
@@ -620,7 +636,7 @@ describe("load-sessions-stages", () => {
 
   test("absorbs live tool rows created before a call id is available", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "tool:assistant-1:call-1",
@@ -655,8 +671,10 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       id: "tool:assistant-1:call-1",
       role: "tool",
       content: "completed output",
@@ -672,7 +690,7 @@ describe("load-sessions-stages", () => {
 
   test("matches tool rows with missing call ids without throwing", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "tool:assistant-1:hydrated-part-key",
@@ -706,8 +724,10 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       id: "tool:assistant-1:hydrated-part-key",
       role: "tool",
       content: "completed output",
@@ -722,7 +742,7 @@ describe("load-sessions-stages", () => {
 
   test("absorbs current subagent rows when hydrated history has the same child session id", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "subagent:part:msg-200:subtask-a",
@@ -737,7 +757,7 @@ describe("load-sessions-stages", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Finished A",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 100,
             endedAtMs: 300,
           },
@@ -757,15 +777,17 @@ describe("load-sessions-stages", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Starting A",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 100,
           },
         },
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       id: "subagent:part:msg-200:subtask-a",
       role: "system",
       content: "Subagent (build): Finished A",
@@ -773,7 +795,7 @@ describe("load-sessions-stages", () => {
         kind: "subagent",
         correlationKey: "part:msg-200:subtask-a",
         status: "completed",
-        sessionId: "child-a",
+        externalSessionId: "child-a",
         startedAtMs: 100,
         endedAtMs: 300,
       },
@@ -782,7 +804,7 @@ describe("load-sessions-stages", () => {
 
   test("absorbs a unique current completed session row when hydrated history still has the unresolved part row", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "subagent:part:msg-200:subtask-a",
@@ -815,7 +837,7 @@ describe("load-sessions-stages", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Finished A",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 100,
             endedAtMs: 300,
           },
@@ -823,8 +845,10 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       id: "subagent:part:msg-200:subtask-a",
       role: "system",
       content: "Subagent (build): Finished A",
@@ -835,7 +859,7 @@ describe("load-sessions-stages", () => {
         agent: "build",
         prompt: "Inspect repo",
         description: "Finished A",
-        sessionId: "child-a",
+        externalSessionId: "child-a",
         startedAtMs: 100,
         endedAtMs: 300,
       },
@@ -844,7 +868,7 @@ describe("load-sessions-stages", () => {
 
   test("absorbs a unique current cancelled session row when hydrated history still has the unresolved part row", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "subagent:part:msg-200:subtask-a",
@@ -877,7 +901,7 @@ describe("load-sessions-stages", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Cancelled A",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 100,
             endedAtMs: 280,
           },
@@ -885,8 +909,10 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       id: "subagent:part:msg-200:subtask-a",
       role: "system",
       content: "Subagent (build): Cancelled A",
@@ -897,7 +923,7 @@ describe("load-sessions-stages", () => {
         agent: "build",
         prompt: "Inspect repo",
         description: "Cancelled A",
-        sessionId: "child-a",
+        externalSessionId: "child-a",
         startedAtMs: 100,
         endedAtMs: 280,
       },
@@ -906,7 +932,7 @@ describe("load-sessions-stages", () => {
 
   test("keeps same-prompt current session rows separate when the hydration fallback is ambiguous", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "subagent:part:msg-200:subtask-a",
@@ -939,7 +965,7 @@ describe("load-sessions-stages", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Finished A",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 100,
             endedAtMs: 300,
           },
@@ -957,7 +983,7 @@ describe("load-sessions-stages", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Finished B",
-            sessionId: "child-b",
+            externalSessionId: "child-b",
             startedAtMs: 110,
             endedAtMs: 320,
           },
@@ -965,8 +991,10 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(3);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(3);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       id: "subagent:part:msg-200:subtask-a",
       meta: {
         kind: "subagent",
@@ -978,7 +1006,7 @@ describe("load-sessions-stages", () => {
 
   test("does not absorb descriptor-less rows through the hydration fallback", () => {
     const merged = mergeHydratedMessages(
-      "session-1",
+      "external-1",
       [
         {
           id: "subagent:part:msg-200:subtask-a",
@@ -1005,7 +1033,7 @@ describe("load-sessions-stages", () => {
             partId: "session-a-completed",
             correlationKey: "session:msg-201:child-a",
             status: "completed",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 100,
             endedAtMs: 300,
           },
@@ -1013,8 +1041,10 @@ describe("load-sessions-stages", () => {
       ],
     );
 
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: merged })).toBe(2);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 0)).toMatchObject({
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: merged })).toBe(2);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 0),
+    ).toMatchObject({
       id: "subagent:part:msg-200:subtask-a",
       meta: {
         kind: "subagent",
@@ -1022,13 +1052,15 @@ describe("load-sessions-stages", () => {
         status: "running",
       },
     });
-    expect(sessionMessageAt({ sessionId: "session-1", messages: merged }, 1)).toMatchObject({
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: merged }, 1),
+    ).toMatchObject({
       id: "subagent:session:msg-201:child-a",
       meta: {
         kind: "subagent",
         correlationKey: "session:msg-201:child-a",
         status: "completed",
-        sessionId: "child-a",
+        externalSessionId: "child-a",
       },
     });
   });
@@ -1037,15 +1069,15 @@ describe("load-sessions-stages", () => {
     const existingSession = createSession({
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
     });
-    const stateHarness = createStateHarness({ "session-1": existingSession });
+    const stateHarness = createStateHarness({ "external-1": existingSession });
     let persistedLoads = 0;
     let setCalls = 0;
 
     const output = await preparePersistedSessionMergeStage({
       intent: createIntent({
         mode: "requested_history",
-        requestedSessionId: "session-1",
-        requestedHistoryKey: "/tmp/repo::task-1::session-1",
+        requestedSessionId: "external-1",
+        requestedHistoryKey: "/tmp/repo::task-1::external-1",
         shouldHydrateRequestedSession: true,
         historyPolicy: "requested_only",
       }),
@@ -1065,8 +1097,8 @@ describe("load-sessions-stages", () => {
     expect(persistedLoads).toBe(0);
     expect(setCalls).toBe(0);
     expect(output.recordsToHydrate).toHaveLength(1);
-    expect(output.recordsToHydrate[0]?.sessionId).toBe("session-1");
-    expect(output.historyHydrationSessionIds.has("session-1")).toBe(true);
+    expect(output.recordsToHydrate[0]?.externalSessionId).toBe("external-1");
+    expect(output.historyHydrationSessionIds.has("external-1")).toBe(true);
   });
 
   test("merges persisted records while preserving in-memory pending input", async () => {
@@ -1079,7 +1111,7 @@ describe("load-sessions-stages", () => {
         },
       ],
     });
-    const stateHarness = createStateHarness({ "session-1": existingSession });
+    const stateHarness = createStateHarness({ "external-1": existingSession });
 
     await preparePersistedSessionMergeStage({
       intent: createIntent(),
@@ -1095,7 +1127,7 @@ describe("load-sessions-stages", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const nextSession = stateHarness.getState()["session-1"];
+    const nextSession = stateHarness.getState()["external-1"];
     expect(nextSession?.startedAt).toBe("2026-03-01T10:00:00.000Z");
     expect(nextSession?.pendingPermissions).toEqual(existingSession.pendingPermissions);
     expect(nextSession?.pendingQuestions).toEqual(existingSession.pendingQuestions);
@@ -1107,7 +1139,7 @@ describe("load-sessions-stages", () => {
       role: "spec",
       scenario: "spec_initial",
     });
-    const stateHarness = createStateHarness({ "session-1": existingSession });
+    const stateHarness = createStateHarness({ "external-1": existingSession });
 
     await preparePersistedSessionMergeStage({
       intent: createIntent({
@@ -1121,7 +1153,7 @@ describe("load-sessions-stages", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const nextSession = stateHarness.getState()["session-1"];
+    const nextSession = stateHarness.getState()["external-1"];
     expect(nextSession?.purpose).toBe("transcript");
     expect(nextSession?.role).toBe("spec");
     expect(nextSession?.scenario).toBe("spec_initial");
@@ -1129,7 +1161,7 @@ describe("load-sessions-stages", () => {
 
   test("keeps requested-history persisted workflow records as primary sessions", async () => {
     const stateHarness = createStateHarness({
-      "session-1": createSession({
+      "external-1": createSession({
         purpose: "transcript",
         role: null,
         scenario: null,
@@ -1139,7 +1171,7 @@ describe("load-sessions-stages", () => {
     await preparePersistedSessionMergeStage({
       intent: createIntent({
         mode: "requested_history",
-        requestedSessionId: "session-1",
+        requestedSessionId: "external-1",
         shouldHydrateRequestedSession: true,
         historyPolicy: "requested_only",
       }),
@@ -1150,7 +1182,7 @@ describe("load-sessions-stages", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const requestedSession = stateHarness.getState()["session-1"];
+    const requestedSession = stateHarness.getState()["external-1"];
     expect(requestedSession?.purpose).toBe("primary");
     expect(requestedSession?.role).toBe("build");
     expect(requestedSession?.scenario).toBe("build_implementation_start");
@@ -1158,7 +1190,7 @@ describe("load-sessions-stages", () => {
 
   test("keeps recovered workflow records primary when runtime attachment is retried", async () => {
     const stateHarness = createStateHarness({
-      "session-1": createSession({
+      "external-1": createSession({
         purpose: "transcript",
         role: null,
         scenario: null,
@@ -1168,7 +1200,7 @@ describe("load-sessions-stages", () => {
     await preparePersistedSessionMergeStage({
       intent: createIntent({
         mode: "recover_runtime_attachment",
-        requestedSessionId: "session-1",
+        requestedSessionId: "external-1",
         historyPolicy: "none",
         shouldReconcileLiveSessions: true,
       }),
@@ -1179,14 +1211,14 @@ describe("load-sessions-stages", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    const recoveredSession = stateHarness.getState()["session-1"];
+    const recoveredSession = stateHarness.getState()["external-1"];
     expect(recoveredSession?.purpose).toBe("primary");
     expect(recoveredSession?.role).toBe("build");
     expect(recoveredSession?.scenario).toBe("build_implementation_start");
   });
 
   test("marks requested-history hydration failed when runtime resolution fails", async () => {
-    const stateHarness = createStateHarness({ "session-1": createSession() });
+    const stateHarness = createStateHarness({ "external-1": createSession() });
     let promptLoads = 0;
 
     await expect(
@@ -1196,7 +1228,6 @@ describe("load-sessions-stages", () => {
           listLiveAgentSessionSnapshots: async () => [],
           loadSessionHistory: async () => [],
           attachSession: async (input) => ({
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1205,7 +1236,6 @@ describe("load-sessions-stages", () => {
             runtimeKind: input.runtimeKind,
           }),
           resumeSession: async (input) => ({
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1218,7 +1248,7 @@ describe("load-sessions-stages", () => {
         updateSession: stateHarness.updateSession,
         isStaleRepoOperation: () => false,
         recordsToHydrate: [createRecord()],
-        historyHydrationSessionIds: new Set(["session-1"]),
+        historyHydrationSessionIds: new Set(["external-1"]),
         runtimePlanner: {
           readCurrentHydratedRuntimeResolution: () => null,
           resolveHydrationRuntime: async () => ({
@@ -1240,12 +1270,12 @@ describe("load-sessions-stages", () => {
     ).rejects.toThrow("No live runtime found for working directory /tmp/repo/worktree.");
 
     expect(promptLoads).toBe(0);
-    expect(stateHarness.getState()["session-1"]?.historyHydrationState).toBe("failed");
+    expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("failed");
   });
 
   test("throws runtime resolution failures for reconcile hydration without marking the task reconciled", async () => {
     const initialSession = createSession();
-    const stateHarness = createStateHarness({ "session-1": initialSession });
+    const stateHarness = createStateHarness({ "external-1": initialSession });
     let updateCalls = 0;
 
     await expect(
@@ -1255,7 +1285,6 @@ describe("load-sessions-stages", () => {
           listLiveAgentSessionSnapshots: async () => [],
           loadSessionHistory: async () => [],
           attachSession: async (input) => ({
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1264,7 +1293,6 @@ describe("load-sessions-stages", () => {
             runtimeKind: input.runtimeKind,
           }),
           resumeSession: async (input) => ({
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1274,9 +1302,9 @@ describe("load-sessions-stages", () => {
           }),
         },
         setSessionsById: stateHarness.setSessionsById,
-        updateSession: (sessionId, updater) => {
+        updateSession: (externalSessionId, updater) => {
           updateCalls += 1;
-          stateHarness.updateSession(sessionId, updater);
+          stateHarness.updateSession(externalSessionId, updater);
         },
         isStaleRepoOperation: () => false,
         recordsToHydrate: [createRecord()],
@@ -1301,12 +1329,12 @@ describe("load-sessions-stages", () => {
       "Multiple live stdio runtimes found for working directory /tmp/repo/worktree.",
     );
 
-    expect(stateHarness.getState()["session-1"]).toEqual(initialSession);
+    expect(stateHarness.getState()["external-1"]).toEqual(initialSession);
     expect(updateCalls).toBe(0);
   });
 
   test("loads requested-history hydration through the adapter for stdio OpenCode runtimes", async () => {
-    const stateHarness = createStateHarness({ "session-1": createSession() });
+    const stateHarness = createStateHarness({ "external-1": createSession() });
     let historyLoads = 0;
     const historyInputs: LoadAgentSessionHistoryInput[] = [];
 
@@ -1321,7 +1349,6 @@ describe("load-sessions-stages", () => {
             throw new Error("Adapter rejected stdio runtime connections.");
           },
           attachSession: async (input) => ({
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1330,7 +1357,6 @@ describe("load-sessions-stages", () => {
             runtimeKind: input.runtimeKind,
           }),
           resumeSession: async (input) => ({
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1343,7 +1369,7 @@ describe("load-sessions-stages", () => {
         updateSession: stateHarness.updateSession,
         isStaleRepoOperation: () => false,
         recordsToHydrate: [createRecord()],
-        historyHydrationSessionIds: new Set(["session-1"]),
+        historyHydrationSessionIds: new Set(["external-1"]),
         runtimePlanner: {
           readCurrentHydratedRuntimeResolution: () => null,
           resolveHydrationRuntime: async () => ({
@@ -1380,13 +1406,13 @@ describe("load-sessions-stages", () => {
         limit: 600,
       },
     ]);
-    expect(stateHarness.getState()["session-1"]?.historyHydrationState).toBe("failed");
+    expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("failed");
   });
 
   test("skips requested-history failure updates when the repo becomes stale during runtime resolution", async () => {
     let stale = false;
     const initialSession = createSession({ historyHydrationState: "hydrating" });
-    const stateHarness = createStateHarness({ "session-1": initialSession });
+    const stateHarness = createStateHarness({ "external-1": initialSession });
 
     await hydrateSessionRecordsStage({
       adapter: {
@@ -1394,7 +1420,6 @@ describe("load-sessions-stages", () => {
         listLiveAgentSessionSnapshots: async () => [],
         loadSessionHistory: async () => [],
         attachSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1403,7 +1428,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
         resumeSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1416,7 +1440,7 @@ describe("load-sessions-stages", () => {
       updateSession: stateHarness.updateSession,
       isStaleRepoOperation: () => stale,
       recordsToHydrate: [createRecord()],
-      historyHydrationSessionIds: new Set(["session-1"]),
+      historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
         readCurrentHydratedRuntimeResolution: () => null,
         resolveHydrationRuntime: async () => {
@@ -1436,13 +1460,13 @@ describe("load-sessions-stages", () => {
       getRepoPromptOverrides: async () => ({}),
     });
 
-    expect(stateHarness.getState()["session-1"]).toEqual(initialSession);
+    expect(stateHarness.getState()["external-1"]).toEqual(initialSession);
   });
 
   test("skips runtime projection when the repo becomes stale during runtime resolution", async () => {
     let stale = false;
     const initialSession = createSession();
-    const stateHarness = createStateHarness({ "session-1": initialSession });
+    const stateHarness = createStateHarness({ "external-1": initialSession });
 
     await hydrateSessionRecordsStage({
       adapter: {
@@ -1450,7 +1474,6 @@ describe("load-sessions-stages", () => {
         listLiveAgentSessionSnapshots: async () => [],
         loadSessionHistory: async () => [],
         attachSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1459,7 +1482,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
         resumeSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1498,12 +1520,12 @@ describe("load-sessions-stages", () => {
       getRepoPromptOverrides: async () => ({}),
     });
 
-    expect(stateHarness.getState()["session-1"]).toEqual(initialSession);
+    expect(stateHarness.getState()["external-1"]).toEqual(initialSession);
   });
 
   test("clears a stale session title when the live snapshot has no custom title", async () => {
     const stateHarness = createStateHarness({
-      "session-1": createSession({
+      "external-1": createSession({
         title: "Fallback title",
         historyHydrationState: "hydrating",
       }),
@@ -1515,7 +1537,6 @@ describe("load-sessions-stages", () => {
         listLiveAgentSessionSnapshots: async () => [],
         loadSessionHistory: async () => [],
         attachSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1524,7 +1545,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
         resumeSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1537,7 +1557,7 @@ describe("load-sessions-stages", () => {
       updateSession: stateHarness.updateSession,
       isStaleRepoOperation: () => false,
       recordsToHydrate: [createRecord()],
-      historyHydrationSessionIds: new Set(["session-1"]),
+      historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
         readCurrentHydratedRuntimeResolution: () => null,
         resolveHydrationRuntime: async () => ({
@@ -1570,12 +1590,12 @@ describe("load-sessions-stages", () => {
       getRepoPromptOverrides: async () => ({}),
     });
 
-    expect(stateHarness.getState()["session-1"]?.title).toBeUndefined();
+    expect(stateHarness.getState()["external-1"]?.title).toBeUndefined();
   });
 
   test("hydrates parent subagent pending permission overlay from live child snapshots", async () => {
     const stateHarness = createStateHarness({
-      "session-1": createSession({ historyHydrationState: "hydrating" }),
+      "external-1": createSession({ historyHydrationState: "hydrating" }),
     });
     const permissionRequest = {
       requestId: "perm-child-1",
@@ -1603,13 +1623,12 @@ describe("load-sessions-stages", () => {
                 status: "running",
                 agent: "explorer",
                 description: "Inspect session state",
-                sessionId: "external-child-session",
+                externalSessionId: "external-child-session",
               },
             ],
           },
         ],
         attachSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1618,7 +1637,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
         resumeSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1631,7 +1649,7 @@ describe("load-sessions-stages", () => {
       updateSession: stateHarness.updateSession,
       isStaleRepoOperation: () => false,
       recordsToHydrate: [createRecord()],
-      historyHydrationSessionIds: new Set(["session-1"]),
+      historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
         readCurrentHydratedRuntimeResolution: () => null,
         resolveHydrationRuntime: async () => ({
@@ -1646,7 +1664,7 @@ describe("load-sessions-stages", () => {
           },
         }),
         loadLiveAgentSessionSnapshot: async (record) => {
-          const externalSessionId = record.externalSessionId ?? record.sessionId;
+          const externalSessionId = record.externalSessionId;
           loadedSnapshotSessionIds.push(externalSessionId);
           if (externalSessionId === "external-1") {
             return {
@@ -1682,7 +1700,7 @@ describe("load-sessions-stages", () => {
 
     expect(loadedSnapshotSessionIds).toContain("external-child-session");
     expect(
-      stateHarness.getState()["session-1"]?.subagentPendingPermissionsBySessionId?.[
+      stateHarness.getState()["external-1"]?.subagentPendingPermissionsByExternalSessionId?.[
         "external-child-session"
       ],
     ).toEqual([permissionRequest]);
@@ -1690,9 +1708,9 @@ describe("load-sessions-stages", () => {
 
   test("clears hydrated parent subagent pending overlay entries when child snapshot has no pending permissions", async () => {
     const stateHarness = createStateHarness({
-      "session-1": createSession({
+      "external-1": createSession({
         historyHydrationState: "hydrating",
-        subagentPendingPermissionsBySessionId: {
+        subagentPendingPermissionsByExternalSessionId: {
           "external-child-session": [
             { requestId: "stale-perm", permission: "read", patterns: ["src/**"] },
           ],
@@ -1722,13 +1740,12 @@ describe("load-sessions-stages", () => {
                 status: "running",
                 agent: "explorer",
                 description: "Inspect session state",
-                sessionId: "external-child-session",
+                externalSessionId: "external-child-session",
               },
             ],
           },
         ],
         attachSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1737,7 +1754,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
         resumeSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1750,7 +1766,7 @@ describe("load-sessions-stages", () => {
       updateSession: stateHarness.updateSession,
       isStaleRepoOperation: () => false,
       recordsToHydrate: [createRecord()],
-      historyHydrationSessionIds: new Set(["session-1"]),
+      historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
         readCurrentHydratedRuntimeResolution: () => null,
         resolveHydrationRuntime: async () => ({
@@ -1765,7 +1781,7 @@ describe("load-sessions-stages", () => {
           },
         }),
         loadLiveAgentSessionSnapshot: async (record) => {
-          const externalSessionId = record.externalSessionId ?? record.sessionId;
+          const externalSessionId = record.externalSessionId;
           if (externalSessionId === "external-1") {
             return {
               externalSessionId,
@@ -1798,7 +1814,9 @@ describe("load-sessions-stages", () => {
       getRepoPromptOverrides: async () => ({}),
     });
 
-    expect(stateHarness.getState()["session-1"]?.subagentPendingPermissionsBySessionId).toEqual({
+    expect(
+      stateHarness.getState()["external-1"]?.subagentPendingPermissionsByExternalSessionId,
+    ).toEqual({
       "unscanned-child-session": [
         { requestId: "live-perm", permission: "read", patterns: ["docs/**"] },
       ],
@@ -1808,9 +1826,9 @@ describe("load-sessions-stages", () => {
   test("keeps parent hydration successful and preserves child overlay when child snapshot lookup fails", async () => {
     const stalePermission = { requestId: "stale-perm", permission: "read", patterns: ["src/**"] };
     const stateHarness = createStateHarness({
-      "session-1": createSession({
+      "external-1": createSession({
         historyHydrationState: "hydrating",
-        subagentPendingPermissionsBySessionId: {
+        subagentPendingPermissionsByExternalSessionId: {
           "external-child-session": [stalePermission],
         },
       }),
@@ -1841,13 +1859,12 @@ describe("load-sessions-stages", () => {
                   status: "running",
                   agent: "explorer",
                   description: "Inspect session state",
-                  sessionId: "external-child-session",
+                  externalSessionId: "external-child-session",
                 },
               ],
             },
           ],
           attachSession: async (input) => ({
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1856,7 +1873,6 @@ describe("load-sessions-stages", () => {
             runtimeKind: input.runtimeKind,
           }),
           resumeSession: async (input) => ({
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1869,7 +1885,7 @@ describe("load-sessions-stages", () => {
         updateSession: stateHarness.updateSession,
         isStaleRepoOperation: () => false,
         recordsToHydrate: [createRecord()],
-        historyHydrationSessionIds: new Set(["session-1"]),
+        historyHydrationSessionIds: new Set(["external-1"]),
         runtimePlanner: {
           readCurrentHydratedRuntimeResolution: () => null,
           resolveHydrationRuntime: async () => ({
@@ -1884,7 +1900,7 @@ describe("load-sessions-stages", () => {
             },
           }),
           loadLiveAgentSessionSnapshot: async (record) => {
-            const externalSessionId = record.externalSessionId ?? record.sessionId;
+            const externalSessionId = record.externalSessionId;
             if (externalSessionId === "external-child-session") {
               throw new Error("child snapshot unavailable");
             }
@@ -1909,8 +1925,10 @@ describe("load-sessions-stages", () => {
       console.warn = originalWarn;
     }
 
-    expect(stateHarness.getState()["session-1"]?.historyHydrationState).toBe("hydrated");
-    expect(stateHarness.getState()["session-1"]?.subagentPendingPermissionsBySessionId).toEqual({
+    expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("hydrated");
+    expect(
+      stateHarness.getState()["external-1"]?.subagentPendingPermissionsByExternalSessionId,
+    ).toEqual({
       "external-child-session": [stalePermission],
     });
     expect(warnings[0]?.[0]).toContain("child snapshot unavailable");
@@ -1919,7 +1937,7 @@ describe("load-sessions-stages", () => {
   test("runtime planner reuses current hydrated runtime and preloaded live snapshots", async () => {
     const workingDirectory = "/tmp/repo/worktree";
     const stateHarness = createStateHarness({
-      "session-1": createSession({
+      "external-1": createSession({
         runtimeKind: "opencode",
         runtimeId: "runtime-current",
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
@@ -1948,8 +1966,8 @@ describe("load-sessions-stages", () => {
     const planner = await createRuntimeResolutionPlannerStage({
       intent: createIntent({
         mode: "requested_history",
-        requestedSessionId: "session-1",
-        requestedHistoryKey: "/tmp/repo::task-1::session-1",
+        requestedSessionId: "external-1",
+        requestedHistoryKey: "/tmp/repo::task-1::external-1",
         shouldHydrateRequestedSession: true,
         historyPolicy: "requested_only",
       }),
@@ -1974,7 +1992,6 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         loadSessionHistory: async () => [],
         attachSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1983,7 +2000,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
         resumeSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1998,7 +2014,7 @@ describe("load-sessions-stages", () => {
       },
       sessionsRef: stateHarness.sessionsRef,
       recordsToHydrate: [createRecord({ role: "planner", workingDirectory })],
-      historyHydrationSessionIds: new Set(["session-1"]),
+      historyHydrationSessionIds: new Set(["external-1"]),
     });
 
     const reusedResolution = planner.readCurrentHydratedRuntimeResolution(
@@ -2043,7 +2059,7 @@ describe("load-sessions-stages", () => {
     const planner = await createRuntimeResolutionPlannerStage({
       intent: createIntent({
         mode: "recover_runtime_attachment",
-        requestedSessionId: "session-1",
+        requestedSessionId: "external-1",
         shouldReconcileLiveSessions: true,
         historyPolicy: "none",
       }),
@@ -2057,7 +2073,6 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         loadSessionHistory: async () => [],
         attachSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -2066,7 +2081,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
         resumeSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -2116,7 +2130,7 @@ describe("load-sessions-stages", () => {
     const planner = await createRuntimeResolutionPlannerStage({
       intent: createIntent({
         mode: "recover_runtime_attachment",
-        requestedSessionId: "session-1",
+        requestedSessionId: "external-1",
         shouldReconcileLiveSessions: true,
         historyPolicy: "none",
       }),
@@ -2132,7 +2146,6 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         loadSessionHistory: async () => [],
         attachSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -2141,7 +2154,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
         resumeSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -2181,7 +2193,7 @@ describe("load-sessions-stages", () => {
     const planner = await createRuntimeResolutionPlannerStage({
       intent: createIntent({
         mode: "recover_runtime_attachment",
-        requestedSessionId: "session-1",
+        requestedSessionId: "external-1",
         shouldReconcileLiveSessions: true,
         historyPolicy: "none",
       }),
@@ -2195,7 +2207,6 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         loadSessionHistory: async () => [],
         attachSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -2204,7 +2215,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
         resumeSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -2267,7 +2277,6 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         loadSessionHistory: async () => [],
         attachSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -2276,7 +2285,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
         resumeSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -2355,7 +2363,6 @@ describe("load-sessions-stages", () => {
         hasSession: () => false,
         loadSessionHistory: async () => [],
         attachSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -2364,7 +2371,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
         resumeSession: async (input) => ({
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -2408,9 +2414,11 @@ describe("load-sessions-stages", () => {
     });
 
     expect(systemPrompt).toBe("");
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: prelude })).toBe(1);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: prelude }, 0)).toMatchObject({
-      id: "history:session-start:session-1",
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(1);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: prelude }, 0),
+    ).toMatchObject({
+      id: "history:session-start:external-1",
       content: "Session started (planner - planner_initial)",
     });
   });
@@ -2434,7 +2442,7 @@ describe("load-sessions-stages", () => {
     });
 
     expect(systemPrompt).toBe("");
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: prelude })).toBe(0);
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(0);
   });
 
   test("prompt assembler builds system prompt and header messages when the task exists", async () => {
@@ -2455,9 +2463,11 @@ describe("load-sessions-stages", () => {
     });
 
     expect(systemPrompt.length).toBeGreaterThan(0);
-    expect(getSessionMessageCount({ sessionId: "session-1", messages: prelude })).toBe(2);
-    expect(sessionMessageAt({ sessionId: "session-1", messages: prelude }, 1)).toMatchObject({
-      id: "history:system-prompt:session-1",
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(2);
+    expect(
+      sessionMessageAt({ externalSessionId: "external-1", messages: prelude }, 1),
+    ).toMatchObject({
+      id: "history:system-prompt:external-1",
       content: `System prompt:\n\n${systemPrompt}`,
     });
   });

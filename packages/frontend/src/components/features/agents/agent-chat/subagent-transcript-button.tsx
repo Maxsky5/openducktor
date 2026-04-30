@@ -36,11 +36,11 @@ const isLiveSubagentStatus = (status: SubagentMeta["status"]): boolean => {
 };
 
 const buildTranscriptRequest = (
-  sessionId: string,
+  externalSessionId: string,
   source: RuntimeSessionTranscriptSource,
 ): OpenAgentSessionTranscriptRequest => {
   return {
-    sessionId,
+    externalSessionId,
     title: "Subagent activity",
     description: "View what this subagent did.",
     source,
@@ -93,7 +93,7 @@ export function SubagentTranscriptButton({
   onOpenTranscript,
 }: SubagentTranscriptButtonProps): ReactElement | null {
   const transcriptDialog = useOptionalAgentSessionTranscriptDialog();
-  const sessionId = meta.sessionId?.trim() || null;
+  const externalSessionId = meta.externalSessionId?.trim() || null;
   const openTranscript = onOpenTranscript ?? transcriptDialog?.openSessionTranscript;
   const transcriptSource = buildTranscriptSource({
     sessionRuntimeKind,
@@ -104,14 +104,14 @@ export function SubagentTranscriptButton({
     pendingPermissions,
   });
 
-  if (!sessionId || !openTranscript || !transcriptSource) {
+  if (!externalSessionId || !openTranscript || !transcriptSource) {
     return null;
   }
 
   const handleOpen = (event: MouseEvent<HTMLButtonElement>): void => {
     event.preventDefault();
     event.stopPropagation();
-    openTranscript(buildTranscriptRequest(sessionId, transcriptSource));
+    openTranscript(buildTranscriptRequest(externalSessionId, transcriptSource));
   };
 
   return (

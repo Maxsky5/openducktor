@@ -22,21 +22,21 @@ import type { SessionStartExistingSessionOption } from "./session-start-types";
 
 const resolveSourceSelection = (
   options: SessionStartExistingSessionOption[],
-  sourceSessionId: string,
+  sourceExternalSessionId: string,
 ): AgentModelSelection | null => {
-  if (!sourceSessionId) {
+  if (!sourceExternalSessionId) {
     return null;
   }
 
-  const selectedOption = options.find((option) => option.value === sourceSessionId);
+  const selectedOption = options.find((option) => option.value === sourceExternalSessionId);
   return selectedOption?.selectedModel ?? null;
 };
 
 const resolveValidSourceSessionId = (
   options: SessionStartExistingSessionOption[],
-  sourceSessionId: string | null | undefined,
+  sourceExternalSessionId: string | null | undefined,
 ): string => {
-  const normalizedSourceSessionId = sourceSessionId?.trim() ?? "";
+  const normalizedSourceSessionId = sourceExternalSessionId?.trim() ?? "";
   if (!normalizedSourceSessionId) {
     return options[0]?.value ?? "";
   }
@@ -48,12 +48,12 @@ const resolveValidSourceSessionId = (
 
 const resolveInitialStartState = ({
   existingSessionOptions,
-  initialSourceSessionId,
+  initialSourceExternalSessionId,
   initialStartMode,
   scenario,
 }: {
   existingSessionOptions: SessionStartExistingSessionOption[];
-  initialSourceSessionId: string | null | undefined;
+  initialSourceExternalSessionId: string | null | undefined;
   initialStartMode: AgentSessionStartMode | undefined;
   scenario: AgentScenario;
 }): {
@@ -73,7 +73,7 @@ const resolveInitialStartState = ({
     selectedStartMode,
     selectedSourceSessionId: resolveValidSourceSessionId(
       existingSessionOptions,
-      initialSourceSessionId,
+      initialSourceExternalSessionId,
     ),
   };
 };
@@ -82,17 +82,17 @@ const buildReuseSelectionDraft = ({
   catalog,
   options,
   runtimeDefinitions,
-  sourceSessionId,
+  sourceExternalSessionId,
 }: {
   catalog: AgentModelCatalog | null;
   options: SessionStartExistingSessionOption[];
   runtimeDefinitions: RuntimeDescriptor[];
-  sourceSessionId: string;
+  sourceExternalSessionId: string;
 }): {
   runtimeKind: RuntimeKind | null;
   selection: AgentModelSelection | null;
 } => {
-  const sourceSelection = resolveSourceSelection(options, sourceSessionId);
+  const sourceSelection = resolveSourceSelection(options, sourceExternalSessionId);
   const runtimeKind = resolveRuntimeKindSelection({
     runtimeDefinitions,
     requestedRuntimeKind: sourceSelection?.runtimeKind ?? null,
@@ -132,7 +132,7 @@ type UseSessionStartModalReuseStateResult = {
   resetStartState: () => void;
   selectedSourceSessionId: string;
   selectedStartMode: AgentSessionStartMode;
-  handleSelectSourceSession: (sessionId: string) => void;
+  handleSelectSourceSession: (externalSessionId: string) => void;
   handleSelectStartMode: (startMode: AgentSessionStartMode) => void;
 };
 
@@ -166,19 +166,19 @@ export function useSessionStartModalReuseState({
       scenario: nextIntent.scenario,
       existingSessionOptions: nextIntent.existingSessionOptions ?? [],
       initialStartMode: nextIntent.initialStartMode,
-      initialSourceSessionId: nextIntent.initialSourceSessionId,
+      initialSourceExternalSessionId: nextIntent.initialSourceExternalSessionId,
     });
     setSelectedStartMode(nextState.selectedStartMode);
     setSelectedSourceSessionId(nextState.selectedSourceSessionId);
   }, []);
 
   const applyReuseSourceSelection = useCallback(
-    (sourceSessionId: string): void => {
+    (sourceExternalSessionId: string): void => {
       const nextDraft = buildReuseSelectionDraft({
         catalog,
         options: existingSessionOptions,
         runtimeDefinitions,
-        sourceSessionId,
+        sourceExternalSessionId,
       });
       setRequestedRuntimeKind(nextDraft.runtimeKind);
       setSelection((current) =>
@@ -214,8 +214,11 @@ export function useSessionStartModalReuseState({
   );
 
   const handleSelectSourceSession = useCallback(
-    (sessionId: string): void => {
-      const nextSourceSessionId = resolveValidSourceSessionId(existingSessionOptions, sessionId);
+    (externalSessionId: string): void => {
+      const nextSourceSessionId = resolveValidSourceSessionId(
+        existingSessionOptions,
+        externalSessionId,
+      );
       setSelectedSourceSessionId(nextSourceSessionId);
       if (selectedStartMode !== "reuse") {
         return;

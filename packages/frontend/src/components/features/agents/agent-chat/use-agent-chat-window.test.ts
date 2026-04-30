@@ -18,7 +18,7 @@ import { useAgentChatWindow } from "./use-agent-chat-window";
 
 type HarnessProps = {
   rows: AgentChatWindowRow[];
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   isSessionViewLoading: boolean;
   isSessionWorking?: boolean;
   syncBottomAfterComposerLayoutRef?: { current: (() => void) | null };
@@ -80,11 +80,11 @@ const triggerResizeObservers = (): void => {
   }
 };
 
-const createTurnRows = (turnCount: number, sessionId = "session-1"): AgentChatWindowRow[] =>
+const createTurnRows = (turnCount: number, externalSessionId = "session-1"): AgentChatWindowRow[] =>
   Array.from({ length: turnCount }, (_, turnIndex) => [
     {
       kind: "message" as const,
-      key: `${sessionId}:user-${turnIndex}`,
+      key: `${externalSessionId}:user-${turnIndex}`,
       message: {
         id: `user-${turnIndex}`,
         role: "user" as const,
@@ -94,7 +94,7 @@ const createTurnRows = (turnCount: number, sessionId = "session-1"): AgentChatWi
     },
     {
       kind: "message" as const,
-      key: `${sessionId}:assistant-${turnIndex}`,
+      key: `${externalSessionId}:assistant-${turnIndex}`,
       message: {
         id: `assistant-${turnIndex}`,
         role: "assistant" as const,
@@ -300,7 +300,7 @@ describe("useAgentChatWindow", () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows,
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       isSessionViewLoading: false,
     });
 
@@ -316,7 +316,7 @@ describe("useAgentChatWindow", () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows,
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       isSessionViewLoading: false,
     });
 
@@ -324,7 +324,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows,
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       isSessionViewLoading: false,
     });
 
@@ -338,7 +338,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
       },
       {
@@ -362,7 +362,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -391,7 +391,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
       },
       {
@@ -424,7 +424,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -454,7 +454,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -489,7 +489,7 @@ describe("useAgentChatWindow", () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows: [],
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       isSessionViewLoading: true,
     });
 
@@ -497,7 +497,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows,
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       isSessionViewLoading: false,
     });
 
@@ -511,7 +511,7 @@ describe("useAgentChatWindow", () => {
   test("resolves the latest turn window immediately when the active session changes", () => {
     expect(
       resolveAgentChatEffectiveTurnStart({
-        activeSessionId: "session-2",
+        activeExternalSessionId: "session-2",
         previousSessionId: "session-1",
         turnStart: 0,
         latestTurnStart: 12,
@@ -527,7 +527,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -543,7 +543,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: secondSessionRows,
-      activeSessionId: "session-2",
+      activeExternalSessionId: "session-2",
       isSessionViewLoading: false,
     });
 
@@ -561,7 +561,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true, extraContentHeightPx },
@@ -583,7 +583,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: secondSessionRows,
-      activeSessionId: "session-2",
+      activeExternalSessionId: "session-2",
       isSessionViewLoading: false,
     });
 
@@ -608,7 +608,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true, extraContentHeightPx },
@@ -630,13 +630,13 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: [],
-      activeSessionId: "session-2",
+      activeExternalSessionId: "session-2",
       isSessionViewLoading: true,
     });
 
     await harness.update({
       rows: secondSessionRows,
-      activeSessionId: "session-2",
+      activeExternalSessionId: "session-2",
       isSessionViewLoading: false,
     });
 
@@ -659,7 +659,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -695,7 +695,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -723,7 +723,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
       },
@@ -761,7 +761,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: false,
       },
@@ -784,7 +784,7 @@ describe("useAgentChatWindow", () => {
     extraContentHeightPx.current = 200;
     await harness.update({
       rows,
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       isSessionViewLoading: false,
       isSessionWorking: false,
     });
@@ -801,7 +801,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: false,
       },
@@ -822,7 +822,7 @@ describe("useAgentChatWindow", () => {
     extraContentHeightPx.current = 200;
     await harness.update({
       rows,
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       isSessionViewLoading: false,
       isSessionWorking: false,
     });
@@ -838,7 +838,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
       },
@@ -871,7 +871,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: initialRows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
       },
@@ -897,7 +897,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: nextRows,
-      activeSessionId: "session-1",
+      activeExternalSessionId: "session-1",
       isSessionViewLoading: false,
       isSessionWorking: true,
     });
@@ -919,7 +919,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
       },
@@ -957,7 +957,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
       },
@@ -1002,7 +1002,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
         syncBottomAfterComposerLayoutRef,
@@ -1044,7 +1044,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeSessionId: "session-1",
+        activeExternalSessionId: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
         syncBottomAfterComposerLayoutRef,

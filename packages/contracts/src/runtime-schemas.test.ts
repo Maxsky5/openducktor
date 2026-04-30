@@ -26,6 +26,7 @@ import {
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  parseAgentSessionRecordCompat,
   type RuntimeDescriptor,
   repoConfigSchema,
   runtimeDescriptorSchema,
@@ -1430,18 +1431,11 @@ describe("runtime schemas", () => {
 
   test("agent session record parses persisted history payload", () => {
     const parsed = agentSessionRecordSchema.parse({
-      sessionId: "obp-session-1",
       externalSessionId: "session-opencode-1",
-      taskId: "task-1",
       role: "spec",
       scenario: "spec_initial",
-      status: "idle",
       startedAt: "2026-02-18T17:11:00.000Z",
-      updatedAt: "2026-02-18T17:14:00.000Z",
-      endedAt: null,
-      runtimeId: "runtime-1",
       runtimeKind: "opencode",
-      runId: null,
       workingDirectory: "/repo",
       selectedModel: {
         runtimeKind: "opencode",
@@ -1461,7 +1455,7 @@ describe("runtime schemas", () => {
 
   test("agent session record parses compact persisted payload with explicit runtime kind", () => {
     const parsed = agentSessionRecordSchema.parse({
-      sessionId: "obp-session-2",
+      externalSessionId: "obp-session-2",
       role: "planner",
       scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
@@ -1471,28 +1465,108 @@ describe("runtime schemas", () => {
 
     expect(parsed.role).toBe("planner");
     expect(parsed.scenario).toBe("planner_initial");
-    expect(parsed.externalSessionId).toBeUndefined();
+    expect(parsed.externalSessionId).toBe("obp-session-2");
     expect(parsed.runtimeKind).toBe("claude-code");
     expect(parsed.selectedModel).toBeNull();
+  });
+
+  test("agent session record rejects duplicate local session id in canonical payload", () => {
+    const result = agentSessionRecordSchema.safeParse({
+      sessionId: "obp-session-2",
+      externalSessionId: "obp-session-2",
+      role: "planner",
+      scenario: "planner_initial",
+      startedAt: "2026-02-18T17:11:00.000Z",
+      runtimeKind: "claude-code",
+      workingDirectory: "/repo",
+      selectedModel: null,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("compat parser normalizes equal legacy dual-id agent session record", () => {
+    const parsed = parseAgentSessionRecordCompat({
+      sessionId: "opencode-session-1",
+      externalSessionId: "opencode-session-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-02-18T17:11:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+      selectedModel: null,
+    });
+
+    expect(parsed).toEqual({
+      externalSessionId: "opencode-session-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      startedAt: "2026-02-18T17:11:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+      selectedModel: null,
+    });
+  });
+
+  test("compat parser rejects conflicting legacy dual-id agent session record", () => {
+    expect(() =>
+      parseAgentSessionRecordCompat({
+        sessionId: "local-session-1",
+        externalSessionId: "opencode-session-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        startedAt: "2026-02-18T17:11:00.000Z",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        selectedModel: null,
+      }),
+    ).toThrow("sessionId and externalSessionId differ");
+  });
+
+  test("compat parser promotes sessionId-only legacy agent session record explicitly", () => {
+    const parsed = parseAgentSessionRecordCompat({
+      sessionId: "legacy-session-1",
+      role: "qa",
+      scenario: "qa_review",
+      startedAt: "2026-02-18T17:11:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+      selectedModel: null,
+    });
+
+    expect(parsed.externalSessionId).toBe("legacy-session-1");
+    expect("sessionId" in parsed).toBe(false);
+  });
+
+  test("agent session record rejects blank canonical session identity", () => {
+    const result = agentSessionRecordSchema.safeParse({
+      externalSessionId: " ",
+      role: "planner",
+      scenario: "planner_initial",
+      startedAt: "2026-02-18T17:11:00.000Z",
+      runtimeKind: "claude-code",
+      workingDirectory: "/repo",
+      selectedModel: null,
+    });
+
+    expect(result.success).toBe(false);
   });
 
   test("agent session stop target parses durable session identity", () => {
     const parsed = agentSessionStopTargetSchema.parse({
       repoPath: "/repo",
       taskId: "task-1",
-      sessionId: "session-1",
+      externalSessionId: "external-session-1",
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/task-1",
-      externalSessionId: "external-session-1",
     });
 
     expect(parsed).toEqual({
       repoPath: "/repo",
       taskId: "task-1",
-      sessionId: "session-1",
+      externalSessionId: "external-session-1",
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/task-1",
-      externalSessionId: "external-session-1",
     });
   });
 

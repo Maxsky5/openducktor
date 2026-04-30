@@ -82,7 +82,7 @@ export type AgentChatMessageMeta =
       agent?: string;
       prompt?: string;
       description?: string;
-      sessionId?: string;
+      externalSessionId?: string;
       executionMode?: AgentSubagentExecutionMode;
       metadata?: Record<string, unknown>;
       startedAtMs?: number;
@@ -110,7 +110,7 @@ export type AgentChatMessage = {
 };
 
 export type SessionMessagesState = {
-  readonly sessionId: string;
+  readonly externalSessionId: string;
   readonly count: number;
   readonly version: number;
 };
@@ -162,7 +162,6 @@ export type AgentSessionRuntimeRecoveryState =
 export type AgentSessionPurpose = "primary" | "transcript";
 
 export type AgentSessionState = {
-  sessionId: string;
   externalSessionId: string;
   purpose?: AgentSessionPurpose;
   title?: string;
@@ -187,7 +186,9 @@ export type AgentSessionState = {
   pendingPermissions: AgentPermissionRequest[];
   pendingQuestions: AgentQuestionRequest[];
   /** Live-only parent-session overlay keyed by child runtime session id. */
-  subagentPendingPermissionsBySessionId?: Record<string, AgentPermissionRequest[]> | undefined;
+  subagentPendingPermissionsByExternalSessionId?:
+    | Record<string, AgentPermissionRequest[]>
+    | undefined;
   todos: AgentSessionTodoItem[];
   modelCatalog: AgentModelCatalog | null;
   selectedModel: AgentModelSelection | null;
@@ -214,7 +215,7 @@ export type AgentSessionHistoryHydrationPolicy = "none" | "requested_only" | "li
 
 export type AgentSessionLoadOptions = {
   mode?: AgentSessionLoadMode;
-  targetSessionId?: string | null;
+  targetExternalSessionId?: string | null;
   recoveryDedupKey?: string | null;
   historyPolicy?: AgentSessionHistoryHydrationPolicy;
   historyPreludeMode?: AgentSessionHistoryPreludeMode;

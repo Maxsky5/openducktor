@@ -96,7 +96,7 @@ export const selectRuntimeAttachmentCandidates = ({
 
 export function useAgentStudioRuntimeAttachmentRetry({
   activeTaskId,
-  activeSessionId,
+  activeExternalSessionId,
   shouldWaitForSessionRuntime,
   activeRuntimeAttachmentKey,
   runtimeAttachmentCandidates,
@@ -105,13 +105,13 @@ export function useAgentStudioRuntimeAttachmentRetry({
   repoReadinessState,
 }: {
   activeTaskId: string;
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   shouldWaitForSessionRuntime: boolean;
   activeRuntimeAttachmentKey: string | null;
   runtimeAttachmentCandidates: RuntimeAttachmentCandidate[];
   ensureSessionReadyForView: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
     repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
@@ -119,20 +119,20 @@ export function useAgentStudioRuntimeAttachmentRetry({
   repoReadinessState: SessionRepoReadinessState;
 }): void {
   const lastAttachmentAttemptRef = useRef<{
-    sessionId: string;
+    externalSessionId: string;
     attachmentKey: string;
     candidates: RuntimeAttachmentCandidate[];
   } | null>(null);
   const attachmentAttemptCounterRef = useRef(0);
 
   useEffect(() => {
-    if (!activeSessionId) {
+    if (!activeExternalSessionId) {
       attachmentAttemptCounterRef.current = 0;
       lastAttachmentAttemptRef.current = null;
       return;
     }
 
-    if (lastAttachmentAttemptRef.current?.sessionId !== activeSessionId) {
+    if (lastAttachmentAttemptRef.current?.externalSessionId !== activeExternalSessionId) {
       attachmentAttemptCounterRef.current = 0;
       lastAttachmentAttemptRef.current = null;
     }
@@ -156,14 +156,14 @@ export function useAgentStudioRuntimeAttachmentRetry({
     const recoveryDedupKey = `${activeRuntimeAttachmentKey}::attempt:${attachmentAttemptCounterRef.current}`;
 
     lastAttachmentAttemptRef.current = {
-      sessionId: activeSessionId,
+      externalSessionId: activeExternalSessionId,
       attachmentKey: activeRuntimeAttachmentKey,
       candidates: cloneRuntimeAttachmentCandidates(runtimeAttachmentCandidates),
     };
 
     void ensureSessionReadyForView({
       taskId: activeTaskId,
-      sessionId: activeSessionId,
+      externalSessionId: activeExternalSessionId,
       repoReadinessState,
       recoveryDedupKey,
     }).catch(() => {
@@ -171,7 +171,7 @@ export function useAgentStudioRuntimeAttachmentRetry({
     });
   }, [
     activeRuntimeAttachmentKey,
-    activeSessionId,
+    activeExternalSessionId,
     activeTaskId,
     ensureSessionReadyForView,
     repoReadinessState,
@@ -180,7 +180,7 @@ export function useAgentStudioRuntimeAttachmentRetry({
   ]);
 
   useEffect(() => {
-    if (!activeSessionId || !shouldWaitForSessionRuntime) {
+    if (!activeExternalSessionId || !shouldWaitForSessionRuntime) {
       return;
     }
 
@@ -197,7 +197,7 @@ export function useAgentStudioRuntimeAttachmentRetry({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [activeSessionId, refreshRuntimeAttachmentSources, shouldWaitForSessionRuntime]);
+  }, [activeExternalSessionId, refreshRuntimeAttachmentSources, shouldWaitForSessionRuntime]);
 }
 
 export const refreshRuntimeAttachmentSources = async (

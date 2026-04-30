@@ -17,7 +17,7 @@ export type SessionStartModalIntent = {
   scenario: AgentScenario;
   initialStartMode?: AgentSessionStartMode;
   existingSessionOptions?: SessionStartExistingSessionOption[];
-  initialSourceSessionId?: string | null;
+  initialSourceExternalSessionId?: string | null;
   targetWorkingDirectory?: string | null;
   initialTargetBranch?: GitTargetBranch | null;
   initialTargetBranchError?: string | null;

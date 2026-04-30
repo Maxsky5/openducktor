@@ -45,7 +45,9 @@ export const upsertAgentSessionRecordInQuery = (
         return current;
       }
 
-      const existingIndex = current.findIndex((entry) => entry.sessionId === session.sessionId);
+      const existingIndex = current.findIndex(
+        (entry) => entry.externalSessionId === session.externalSessionId,
+      );
       if (existingIndex === -1) {
         return [...current, session];
       }

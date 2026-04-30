@@ -3,10 +3,10 @@ import { sessionMessagesToArray } from "@/test-utils/session-message-test-helper
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeHydratedMessages } from "./hydrated-message-merge";
 
-const SESSION_ID = "session-1";
+const EXTERNAL_SESSION_ID = "session-1";
 
 const createSession = (messages: AgentSessionState["messages"]) => ({
-  sessionId: SESSION_ID,
+  externalSessionId: EXTERNAL_SESSION_ID,
   messages,
 });
 
@@ -15,7 +15,7 @@ const mergedMessages = (
   currentMessages: AgentChatMessage[],
 ): AgentChatMessage[] => {
   return sessionMessagesToArray(
-    createSession(mergeHydratedMessages(SESSION_ID, hydratedMessages, currentMessages)),
+    createSession(mergeHydratedMessages(EXTERNAL_SESSION_ID, hydratedMessages, currentMessages)),
   );
 };
 
@@ -317,7 +317,7 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Finished A",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 100,
             endedAtMs: 300,
           },
@@ -337,7 +337,7 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Error A",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 95,
             endedAtMs: 320,
           },
@@ -357,7 +357,7 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
         agent: "build",
         prompt: "Inspect repo",
         description: "Error A",
-        sessionId: "child-a",
+        externalSessionId: "child-a",
         startedAtMs: 95,
         endedAtMs: 320,
       },
@@ -380,7 +380,7 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Part one",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 100,
             endedAtMs: 300,
           },
@@ -398,7 +398,7 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Part two",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 110,
             endedAtMs: 310,
           },
@@ -418,7 +418,7 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Current session row",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 90,
           },
         },
@@ -487,7 +487,7 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Current session row",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 90,
           },
         },
@@ -495,8 +495,12 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
     );
 
     expect(merged).toHaveLength(2);
-    expect(merged[0]?.meta?.kind === "subagent" ? merged[0].meta.sessionId : null).toBe("child-a");
-    expect(merged[1]?.meta?.kind === "subagent" ? merged[1].meta.sessionId : null).toBeUndefined();
+    expect(merged[0]?.meta?.kind === "subagent" ? merged[0].meta.externalSessionId : null).toBe(
+      "child-a",
+    );
+    expect(
+      merged[1]?.meta?.kind === "subagent" ? merged[1].meta.externalSessionId : null,
+    ).toBeUndefined();
     expect(merged[0]?.meta?.kind === "subagent" ? merged[0].meta.startedAtMs : null).toBe(90);
     expect(merged[1]?.meta?.kind === "subagent" ? merged[1].meta.startedAtMs : null).toBe(110);
   });
@@ -578,7 +582,7 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Failed A",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 100,
             endedAtMs: 300,
           },
@@ -598,7 +602,7 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
             agent: "build",
             prompt: "Inspect repo",
             description: "Still running A",
-            sessionId: "child-a",
+            externalSessionId: "child-a",
             startedAtMs: 95,
           },
         },

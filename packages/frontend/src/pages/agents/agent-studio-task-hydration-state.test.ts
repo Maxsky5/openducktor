@@ -5,7 +5,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
   test("blocks a missing-history session while repo readiness is unavailable", () => {
     const lifecycle = deriveAgentStudioTaskHydrationState({
       activeSession: {
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         repoPath: "/repo-a",
@@ -42,7 +41,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
   test("waits for a build session runtime attachment even after page readiness turns ready", () => {
     const lifecycle = deriveAgentStudioTaskHydrationState({
       activeSession: {
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         repoPath: "/repo-a",
@@ -80,7 +78,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
   test("shows a recovering waiting session while runtime reattachment is in progress", () => {
     const lifecycle = deriveAgentStudioTaskHydrationState({
       activeSession: {
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         repoPath: "/repo-a",
@@ -117,7 +114,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
   test("treats attached stdio build sessions as ready for history hydration", () => {
     const lifecycle = deriveAgentStudioTaskHydrationState({
       activeSession: {
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         repoPath: "/repo-a",
@@ -154,7 +150,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
   test("keeps existing transcript renderable even if a previous history hydration failed", () => {
     const lifecycle = deriveAgentStudioTaskHydrationState({
       activeSession: {
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         repoPath: "/repo-a",
@@ -200,7 +195,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
   test("requests background hydration once an attached session still has transcript after a prior history failure", () => {
     const lifecycle = deriveAgentStudioTaskHydrationState({
       activeSession: {
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         repoPath: "/repo-a",
@@ -247,7 +241,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
   test("renders empty history when hydration already completed successfully", () => {
     const lifecycle = deriveAgentStudioTaskHydrationState({
       activeSession: {
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         repoPath: "/repo-a",

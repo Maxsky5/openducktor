@@ -65,17 +65,17 @@ const attachSessionListenerAndGuard = async ({
   session: SessionDependencies;
   runtime: RuntimeDependencies;
 }): Promise<void> => {
-  session.attachSessionListener(startedCtx.repoPath, startedCtx.summary.sessionId);
+  session.attachSessionListener(startedCtx.repoPath, startedCtx.summary.externalSessionId);
 
   if (!startedCtx.isStaleRepoOperation()) {
     session.setSessionsById((current) => {
-      const currentSession = current[startedCtx.summary.sessionId];
+      const currentSession = current[startedCtx.summary.externalSessionId];
       if (!currentSession || currentSession.status !== "starting") {
         return current;
       }
       return {
         ...current,
-        [startedCtx.summary.sessionId]: {
+        [startedCtx.summary.externalSessionId]: {
           ...currentSession,
           status: "idle",
         },
@@ -162,7 +162,7 @@ const maybeSendKickoff = async ({
   });
 
   throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
-  await task.sendAgentMessage(startedCtx.summary.sessionId, [
+  await task.sendAgentMessage(startedCtx.summary.externalSessionId, [
     {
       kind: "text",
       text: kickoffPromptWithTaskContext(
@@ -230,7 +230,7 @@ export const createStartAgentSession = ({
     }
 
     const normalizedSourceSessionId =
-      input.startMode === "fresh" ? "" : input.sourceSessionId.trim();
+      input.startMode === "fresh" ? "" : input.sourceExternalSessionId.trim();
     const freshStartTarget =
       input.startMode === "fresh"
         ? await resolveFreshStartTargetWorkingDirectoryForStart({
@@ -290,7 +290,7 @@ export const createStartAgentSession = ({
         },
       });
       if (startResult.kind === "reused") {
-        return startResult.sessionId;
+        return startResult.externalSessionId;
       }
 
       await attachSessionListenerAndGuard({
@@ -309,7 +309,7 @@ export const createStartAgentSession = ({
         promptOverrides: startResult.promptOverrides,
       });
 
-      return startResult.ctx.summary.sessionId;
+      return startResult.ctx.summary.externalSessionId;
     });
 
     session.inFlightStartsByWorkspaceTaskRef.current.set(inFlightKey, startPromise);

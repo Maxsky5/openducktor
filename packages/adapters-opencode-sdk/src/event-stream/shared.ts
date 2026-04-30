@@ -20,17 +20,15 @@ export type PendingSubagentSessionBinding = {
 };
 
 export type EventStreamContext = {
-  sessionId: string;
   externalSessionId: string;
   input: SessionInput;
   now: () => string;
-  emit: (sessionId: string, event: AgentEvent) => void;
-  getSession: (sessionId: string) => SessionRecord | undefined;
+  emit: (externalSessionId: string, event: AgentEvent) => void;
+  getSession: (externalSessionId: string) => SessionRecord | undefined;
   resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined;
 };
 
 export type SubagentSessionLink = {
-  parentSessionId: string;
   parentExternalSessionId: string;
   childExternalSessionId: string;
   subagentCorrelationKey: string;
@@ -41,11 +39,11 @@ export type EventStreamState = {
   messageRoleById: Map<string, string>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
   subagentCorrelationKeyByPartId: Map<string, string>;
-  subagentCorrelationKeyBySessionId: Map<string, string>;
+  subagentCorrelationKeyByExternalSessionId: Map<string, string>;
   pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
   pendingSubagentCorrelationKeys: string[];
-  pendingSubagentSessionsById: Map<string, PendingSubagentSessionBinding>;
-  pendingSubagentPartEmissionsBySessionId: Map<string, PendingSubagentPartEmission[]>;
+  pendingSubagentSessionsByExternalSessionId: Map<string, PendingSubagentSessionBinding>;
+  pendingSubagentPartEmissionsByExternalSessionId: Map<string, PendingSubagentPartEmission[]>;
 };
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
@@ -93,8 +91,8 @@ export const setSessionIdle = (session: SessionRecord | undefined): void => {
 };
 
 type SessionIdleEmitter = {
-  sessionId: string;
-  emit: (sessionId: string, event: AgentEvent) => void;
+  externalSessionId: string;
+  emit: (externalSessionId: string, event: AgentEvent) => void;
   now: () => string;
 };
 
@@ -106,34 +104,34 @@ export const emitIdleForSession = (
     return false;
   }
   setSessionIdle(session);
-  emitter.emit(emitter.sessionId, {
+  emitter.emit(emitter.externalSessionId, {
     type: "session_idle",
-    sessionId: emitter.sessionId,
+    externalSessionId: emitter.externalSessionId,
     timestamp: emitter.now(),
   });
   return true;
 };
 
 const getSessionRecord = (
-  context: Pick<EventStreamContext, "sessionId" | "getSession">,
+  context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
 ): SessionRecord | undefined => {
-  return context.getSession(context.sessionId);
+  return context.getSession(context.externalSessionId);
 };
 
 export const markSessionActive = (
-  context: Pick<EventStreamContext, "sessionId" | "getSession">,
+  context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
 ): void => {
   setSessionActive(getSessionRecord(context));
 };
 
 export const markSessionIdle = (
-  context: Pick<EventStreamContext, "sessionId" | "getSession">,
+  context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
 ): void => {
   setSessionIdle(getSessionRecord(context));
 };
 
 export const emitSessionIdle = (
-  context: Pick<EventStreamContext, "sessionId" | "getSession" | "emit" | "now">,
+  context: Pick<EventStreamContext, "externalSessionId" | "getSession" | "emit" | "now">,
 ): boolean => {
   return emitIdleForSession(getSessionRecord(context), context);
 };

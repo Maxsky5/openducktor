@@ -15,7 +15,7 @@ const taskDocument = {
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const session = createAgentSessionFixture({
   runtimeKind: "opencode",
-  sessionId: "session-1",
+  externalSessionId: "session-1",
   taskId: "task-1",
   role: "planner",
   scenario: "planner_initial",
@@ -226,7 +226,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
   test("derives contextSessionsLength from the sessions context size", () => {
     const secondSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "session-2",
+      externalSessionId: "session-2",
       taskId: "task-1",
       role: "planner",
       scenario: "planner_initial",

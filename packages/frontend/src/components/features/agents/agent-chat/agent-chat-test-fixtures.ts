@@ -90,7 +90,6 @@ const baseMessage: AgentChatMessage = {
 };
 
 const baseSession: AgentSessionState = {
-  sessionId: "session-1",
   externalSessionId: "ext-1",
   taskId: "task-1",
   repoPath: "/repo",

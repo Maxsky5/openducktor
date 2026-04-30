@@ -126,20 +126,20 @@ describe("useShellAgentActivity", () => {
   test("shows only active sessions for the current repo", async () => {
     const harness = createHarness({ activeWorkspace: createActiveWorkspace("/repo") }, [
       createActivitySession({
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         taskId: "task-1",
         repoPath: "/repo",
         startedAt: "2026-03-17T10:00:00.000Z",
       }),
       createActivitySession({
-        sessionId: "session-2",
+        externalSessionId: "session-2",
         taskId: "task-2",
         repoPath: "/repo",
         status: "stopped",
         startedAt: "2026-03-17T09:00:00.000Z",
       }),
       createActivitySession({
-        sessionId: "session-3",
+        externalSessionId: "session-3",
         taskId: "task-3",
         repoPath: "/other-repo",
         startedAt: "2026-03-17T08:00:00.000Z",
@@ -154,7 +154,7 @@ describe("useShellAgentActivity", () => {
         waitingForInputCount: 0,
         activeSessions: [
           expect.objectContaining({
-            sessionId: "session-1",
+            externalSessionId: "session-1",
             taskId: "task-1",
             taskTitle: "task-1",
           }),
@@ -169,7 +169,7 @@ describe("useShellAgentActivity", () => {
   test("updates when the workspace clears and when active sessions change", async () => {
     const harness = createHarness({ activeWorkspace: createActiveWorkspace("/repo") }, [
       createActivitySession({
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         taskId: "task-1",
         repoPath: "/repo",
         startedAt: "2026-03-17T10:00:00.000Z",
@@ -211,7 +211,7 @@ describe("useShellAgentActivity", () => {
   test("does not expose previous repo activity during a direct repo-to-repo switch", async () => {
     const harness = createHarness({ activeWorkspace: createActiveWorkspace("/repo-a") }, [
       createActivitySession({
-        sessionId: "session-a",
+        externalSessionId: "session-a",
         taskId: "task-a",
         repoPath: "/repo-a",
         startedAt: "2026-03-17T10:00:00.000Z",
@@ -234,7 +234,7 @@ describe("useShellAgentActivity", () => {
       await harness.run(() => {
         const nextSessions = [
           createActivitySession({
-            sessionId: "session-b",
+            externalSessionId: "session-b",
             taskId: "task-b",
             repoPath: "/repo-b",
             startedAt: "2026-03-17T11:00:00.000Z",
@@ -250,7 +250,7 @@ describe("useShellAgentActivity", () => {
         waitingForInputCount: 0,
         activeSessions: [
           expect.objectContaining({
-            sessionId: "session-b",
+            externalSessionId: "session-b",
             taskId: "task-b",
             taskTitle: "task-b",
           }),

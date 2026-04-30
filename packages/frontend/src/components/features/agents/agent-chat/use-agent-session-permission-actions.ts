@@ -4,11 +4,11 @@ import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
 type PermissionReply = "once" | "always" | "reject";
 
 type UseAgentSessionPermissionActionsParams = {
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   pendingPermissions: AgentPermissionRequest[];
   agentStudioReady: boolean;
   replyAgentPermission: (
-    sessionId: string,
+    externalSessionId: string,
     requestId: string,
     reply: PermissionReply,
   ) => Promise<void>;
@@ -47,7 +47,7 @@ const filterStringMapByPendingRequestIds = (
 };
 
 export function useAgentSessionPermissionActions({
-  activeSessionId,
+  activeExternalSessionId,
   pendingPermissions,
   agentStudioReady,
   replyAgentPermission,
@@ -62,16 +62,16 @@ export function useAgentSessionPermissionActions({
   const [permissionReplyErrorByRequestId, setPermissionReplyErrorByRequestId] = useState<
     Record<string, string>
   >({});
-  const previousSessionIdRef = useRef<string | null>(activeSessionId);
+  const previousSessionIdRef = useRef<string | null>(activeExternalSessionId);
 
   useEffect(() => {
-    if (previousSessionIdRef.current === activeSessionId) {
+    if (previousSessionIdRef.current === activeExternalSessionId) {
       return;
     }
-    previousSessionIdRef.current = activeSessionId;
+    previousSessionIdRef.current = activeExternalSessionId;
     setIsSubmittingPermissionByRequestId({});
     setPermissionReplyErrorByRequestId({});
-  }, [activeSessionId]);
+  }, [activeExternalSessionId]);
 
   useEffect(() => {
     const pendingRequestIds = new Set(pendingPermissions.map((request) => request.requestId));
@@ -85,7 +85,7 @@ export function useAgentSessionPermissionActions({
 
   const onReplyPermission = useCallback(
     async (requestId: string, reply: PermissionReply): Promise<void> => {
-      if (!activeSessionId || !agentStudioReady) {
+      if (!activeExternalSessionId || !agentStudioReady) {
         return;
       }
 
@@ -103,7 +103,7 @@ export function useAgentSessionPermissionActions({
       });
 
       try {
-        await replyAgentPermission(activeSessionId, requestId, reply);
+        await replyAgentPermission(activeExternalSessionId, requestId, reply);
       } catch (error) {
         const message =
           error instanceof Error && error.message.trim().length > 0
@@ -124,7 +124,7 @@ export function useAgentSessionPermissionActions({
         });
       }
     },
-    [activeSessionId, agentStudioReady, replyAgentPermission],
+    [activeExternalSessionId, agentStudioReady, replyAgentPermission],
   );
 
   return {

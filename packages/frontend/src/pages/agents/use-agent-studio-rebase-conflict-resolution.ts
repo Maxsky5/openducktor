@@ -39,7 +39,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
       message: string;
       targetWorkingDirectory?: string | null;
       existingSessionOptions?: SessionStartExistingSessionOption[];
-      initialSourceSessionId?: string | null;
+      initialSourceExternalSessionId?: string | null;
     },
   ) => Promise<string | undefined>;
   loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -72,8 +72,8 @@ export function useAgentStudioRebaseConflictResolution({
         ...(request.existingSessionOptions.length > 0
           ? { existingSessionOptions: request.existingSessionOptions }
           : {}),
-        ...(request.initialSourceSessionId !== undefined
-          ? { initialSourceSessionId: request.initialSourceSessionId }
+        ...(request.initialSourceExternalSessionId !== undefined
+          ? { initialSourceExternalSessionId: request.initialSourceExternalSessionId }
           : {}),
       }),
     loadPromptOverrides,
@@ -108,19 +108,21 @@ export function useAgentStudioRebaseConflictResolution({
         builderSessions,
         currentViewSessionId:
           selection.viewActiveSession?.role === "build"
-            ? selection.viewActiveSession.sessionId
+            ? selection.viewActiveSession.externalSessionId
             : null,
-        onOpenSession: (sessionId) => {
-          const session = builderSessions.find((entry) => entry.sessionId === sessionId);
+        onOpenSession: (externalSessionId) => {
+          const session = builderSessions.find(
+            (entry) => entry.externalSessionId === externalSessionId,
+          );
           if (
-            selection.viewActiveSession?.sessionId !== sessionId ||
+            selection.viewActiveSession?.externalSessionId !== externalSessionId ||
             selection.viewActiveSession?.role !== "build"
           ) {
             onContextSwitchIntent();
           }
           scheduleQueryUpdate({
             task: selection.viewTaskId,
-            session: sessionId,
+            session: externalSessionId,
             agent: session?.role ?? defaultBuilderSession?.role ?? "build",
           });
         },

@@ -42,7 +42,6 @@ const createSession = (
   todos: AgentSessionTodoItem[] = [],
 ): AgentSessionState => ({
   runtimeKind: "opencode",
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
@@ -69,20 +68,20 @@ const createSession = (
 
 const createStateHarness = (session: AgentSessionState) => {
   let state: Record<string, AgentSessionState> = {
-    [session.sessionId]: session,
+    [session.externalSessionId]: session,
   };
   const updateSession = (
-    sessionId: string,
+    externalSessionId: string,
     updater: (current: AgentSessionState) => AgentSessionState,
   ): void => {
-    const current = state[sessionId];
+    const current = state[externalSessionId];
     if (!current) {
       return;
     }
     const next = updater(current);
     state = {
       ...state,
-      [sessionId]: next,
+      [externalSessionId]: next,
     };
   };
   return {
@@ -109,14 +108,14 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    const loadPromise = loadSessionModelCatalog("session-1", "opencode", runtimeConnection);
+    const loadPromise = loadSessionModelCatalog("external-1", "opencode", runtimeConnection);
 
-    expect(harness.getState()["session-1"]?.isLoadingModelCatalog).toBe(true);
+    expect(harness.getState()["external-1"]?.isLoadingModelCatalog).toBe(true);
 
     deferredCatalog.resolve(catalogFixture);
     await loadPromise;
 
-    const session = harness.getState()["session-1"];
+    const session = harness.getState()["external-1"];
     expect(session?.isLoadingModelCatalog).toBe(false);
     expect(session?.modelCatalog).toEqual(catalogFixture);
     expect(session?.selectedModel).toEqual({
@@ -140,10 +139,10 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     });
 
     await expect(
-      loadSessionModelCatalog("session-1", "opencode", runtimeConnection),
+      loadSessionModelCatalog("external-1", "opencode", runtimeConnection),
     ).rejects.toThrow("catalog failed");
 
-    const session = harness.getState()["session-1"];
+    const session = harness.getState()["external-1"];
     expect(session?.isLoadingModelCatalog).toBe(false);
     expect(session ? getSessionMessageCount(session) : null).toBe(0);
   });
@@ -163,14 +162,14 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    const firstLoad = loadSessionModelCatalog("session-1", "opencode", runtimeConnection);
-    const secondLoad = loadSessionModelCatalog("session-1", "opencode", runtimeConnection);
+    const firstLoad = loadSessionModelCatalog("external-1", "opencode", runtimeConnection);
+    const secondLoad = loadSessionModelCatalog("external-1", "opencode", runtimeConnection);
 
     deferredCatalog.resolve(catalogFixture);
     await Promise.all([firstLoad, secondLoad]);
 
     expect(catalogLoads).toBe(1);
-    expect(harness.getState()["session-1"]?.modelCatalog).toEqual(catalogFixture);
+    expect(harness.getState()["external-1"]?.modelCatalog).toEqual(catalogFixture);
   });
 
   test("rejects empty local_http model catalog endpoints before adapter call", async () => {
@@ -188,14 +187,14 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     });
 
     await expect(
-      loadSessionModelCatalog("session-1", "opencode", {
+      loadSessionModelCatalog("external-1", "opencode", {
         type: "local_http",
         endpoint: "   ",
         workingDirectory: "/tmp/repo",
       }),
     ).rejects.toThrow("Session runtime local_http endpoint is required.");
 
-    const session = harness.getState()["session-1"];
+    const session = harness.getState()["external-1"];
     expect(listAvailableModelsCalled).toBe(false);
     expect(session?.isLoadingModelCatalog).toBe(false);
     expect(session ? getSessionMessageCount(session) : null).toBe(0);
@@ -217,7 +216,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionModelCatalog("session-1", "opencode", {
+    await loadSessionModelCatalog("external-1", "opencode", {
       type: "stdio",
       identity: " runtime-stdio ",
       workingDirectory: "/tmp/repo",
@@ -228,7 +227,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       identity: "runtime-stdio",
       workingDirectory: "/tmp/repo",
     });
-    expect(harness.getState()["session-1"]?.modelCatalog).toEqual(catalogFixture);
+    expect(harness.getState()["external-1"]?.modelCatalog).toEqual(catalogFixture);
   });
 
   test("loads todos and merges while preserving existing order", async () => {
@@ -251,9 +250,9 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionTodos("session-1", "opencode", runtimeConnection, "external-1");
+    await loadSessionTodos("external-1", "opencode", runtimeConnection);
 
-    const mergedTodos = harness.getState()["session-1"]?.todos ?? [];
+    const mergedTodos = harness.getState()["external-1"]?.todos ?? [];
     expect(mergedTodos.map((entry) => entry.id)).toEqual(["a", "b", "c"]);
     expect(mergedTodos[0]?.content).toBe("A updated");
     expect(mergedTodos[1]?.status).toBe("in_progress");
@@ -275,16 +274,11 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     });
 
     await expect(
-      loadSessionTodos(
-        "session-1",
-        "opencode",
-        {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4444",
-          workingDirectory: "/tmp/repo/../escape",
-        },
-        "external-1",
-      ),
+      loadSessionTodos("external-1", "opencode", {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/../escape",
+      }),
     ).rejects.toThrow("Session runtime workingDirectory must not contain traversal segments.");
     expect(loadSessionTodosCalled).toBe(false);
   });
@@ -305,8 +299,8 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    const firstLoad = loadSessionTodos("session-1", "opencode", runtimeConnection, "external-1");
-    const secondLoad = loadSessionTodos("session-1", "opencode", runtimeConnection, "external-1");
+    const firstLoad = loadSessionTodos("external-1", "opencode", runtimeConnection);
+    const secondLoad = loadSessionTodos("external-1", "opencode", runtimeConnection);
 
     deferredTodos.resolve([
       { id: "todo-1", content: "Todo", status: "pending", priority: "medium" },
@@ -314,7 +308,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     await Promise.all([firstLoad, secondLoad]);
 
     expect(todoLoads).toBe(1);
-    expect(harness.getState()["session-1"]?.todos).toEqual([
+    expect(harness.getState()["external-1"]?.todos).toEqual([
       { id: "todo-1", content: "Todo", status: "pending", priority: "medium" },
     ]);
   });
@@ -336,9 +330,9 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionTodos("session-1", "opencode", runtimeConnection, "external-1");
+    await loadSessionTodos("external-1", "opencode", runtimeConnection);
 
     expect(loadSessionTodosCalled).toBe(false);
-    expect(harness.getState()["session-1"]?.todos).toEqual([]);
+    expect(harness.getState()["external-1"]?.todos).toEqual([]);
   });
 });

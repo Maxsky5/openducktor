@@ -52,7 +52,7 @@ const createSession = (overrides?: {
   const session = {
     externalSessionId: "session-opencode-1",
     input: {
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       role: "build",
       taskId: "task-1",
       runtimeKind: "opencode",
@@ -93,7 +93,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [
           { kind: "slash_command", command: COMMAND },
           { kind: "text", text: " summarize latest session " },
@@ -127,7 +127,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [
           { kind: "slash_command", command: COMMAND },
           { kind: "text", text: " summarize latest session" },
@@ -158,7 +158,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [{ kind: "file_reference", file: FILE_REFERENCE }],
       },
       tools: {},
@@ -216,7 +216,7 @@ describe("message-execution", () => {
       sendUserMessage({
         session,
         request: {
-          sessionId: "session-1",
+          externalSessionId: "session-1",
           parts: [
             { kind: "slash_command", command: COMMAND },
             { kind: "text", text: " summarize latest session" },
@@ -244,7 +244,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [{ kind: "slash_command", command: COMMAND }],
       },
       tools: {},
@@ -259,7 +259,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [{ kind: "text", text: "plain follow-up" }],
       },
       tools: {},
@@ -280,7 +280,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [
           { kind: "text", text: "check " },
           { kind: "file_reference", file: FILE_REFERENCE },
@@ -322,7 +322,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [
           { kind: "text", text: "describe this" },
           { kind: "attachment", attachment: IMAGE_ATTACHMENT },
@@ -353,7 +353,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [
           { kind: "text", text: "review " },
           { kind: "attachment", attachment: IMAGE_ATTACHMENT },
@@ -401,7 +401,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [{ kind: "attachment", attachment: IMAGE_ATTACHMENT }],
       },
       tools: {},
@@ -428,7 +428,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [{ kind: "attachment", attachment: IMAGE_ATTACHMENT }],
       },
       tools: {},
@@ -448,7 +448,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [
           {
             kind: "file_reference",
@@ -484,7 +484,7 @@ describe("message-execution", () => {
     await sendUserMessage({
       session,
       request: {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         parts: [
           { kind: "file_reference", file: IMAGE_FILE_REFERENCE },
           { kind: "text", text: " and " },
@@ -541,7 +541,7 @@ describe("message-execution", () => {
       sendUserMessage({
         session,
         request: {
-          sessionId: "session-1",
+          externalSessionId: "session-1",
           parts: [
             { kind: "slash_command", command: COMMAND },
             { kind: "file_reference", file: FILE_REFERENCE },
@@ -561,7 +561,7 @@ describe("message-execution", () => {
       sendUserMessage({
         session,
         request: {
-          sessionId: "session-1",
+          externalSessionId: "session-1",
           parts: [
             { kind: "slash_command", command: COMMAND },
             { kind: "attachment", attachment: IMAGE_ATTACHMENT },
@@ -606,7 +606,7 @@ describe("message-execution", () => {
       sendUserMessage({
         session,
         request: {
-          sessionId: "session-1",
+          externalSessionId: "session-1",
           parts: [{ kind: "slash_command", command: COMMAND }],
         },
         tools: {},

@@ -29,7 +29,7 @@ const sendAgentMessageMock = mock(async () => {});
 const updateAgentSessionModelMock = mock(() => {});
 const bootstrapTaskSessionsMock = mock(async (_taskId: string) => {});
 const hydrateRequestedTaskSessionHistoryMock = mock(
-  async (_input: { taskId: string; sessionId: string }) => {},
+  async (_input: { taskId: string; externalSessionId: string }) => {},
 );
 const loadAgentSessionsMock = mock(
   async (_taskId: string, _options?: AgentSessionLoadOptions) => {},
@@ -132,7 +132,7 @@ let currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" 
 let currentSessionsFixture = [
   {
     runtimeKind: "opencode",
-    sessionId: "session-spec",
+    externalSessionId: "session-spec",
     taskId: "TASK-123",
     role: "spec",
     scenario: "spec_initial",
@@ -144,7 +144,7 @@ let currentSessionsFixture = [
   },
   {
     runtimeKind: "opencode",
-    sessionId: "session-build-older",
+    externalSessionId: "session-build-older",
     taskId: "TASK-123",
     role: "build",
     scenario: "build_after_human_request_changes",
@@ -156,7 +156,7 @@ let currentSessionsFixture = [
   },
   {
     runtimeKind: "opencode",
-    sessionId: "session-build-latest",
+    externalSessionId: "session-build-latest",
     taskId: "TASK-123",
     role: "build",
     scenario: "build_implementation_start",
@@ -300,7 +300,7 @@ const waitForSessionStartModalReady = async (): Promise<void> => {
 const confirmSessionStartModal = async (input?: {
   runInBackground?: boolean;
   startMode?: "fresh" | "reuse" | "fork";
-  sourceSessionId?: string | null;
+  sourceExternalSessionId?: string | null;
   modelId?: string;
   profileId?: string;
   variant?: string;
@@ -379,13 +379,13 @@ const confirmSessionStartModal = async (input?: {
         | ((value: {
             runInBackground?: boolean;
             startMode?: "fresh" | "reuse" | "fork";
-            sourceSessionId?: string | null;
+            sourceExternalSessionId?: string | null;
           }) => void)
         | undefined
     )?.({
       runInBackground: input?.runInBackground ?? false,
       startMode: input?.startMode ?? "fresh",
-      sourceSessionId: input?.sourceSessionId ?? null,
+      sourceExternalSessionId: input?.sourceExternalSessionId ?? null,
     });
     await Promise.resolve();
     await Promise.resolve();
@@ -538,7 +538,7 @@ describe("KanbanPage session start modal flow", () => {
     currentSessionsFixture = [
       {
         runtimeKind: "opencode",
-        sessionId: "session-spec",
+        externalSessionId: "session-spec",
         taskId: "TASK-123",
         role: "spec",
         scenario: "spec_initial",
@@ -550,7 +550,7 @@ describe("KanbanPage session start modal flow", () => {
       },
       {
         runtimeKind: "opencode",
-        sessionId: "session-build-older",
+        externalSessionId: "session-build-older",
         taskId: "TASK-123",
         role: "build",
         scenario: "build_after_human_request_changes",
@@ -562,7 +562,7 @@ describe("KanbanPage session start modal flow", () => {
       },
       {
         runtimeKind: "opencode",
-        sessionId: "session-build-latest",
+        externalSessionId: "session-build-latest",
         taskId: "TASK-123",
         role: "build",
         scenario: "build_implementation_start",
@@ -801,11 +801,11 @@ describe("KanbanPage session start modal flow", () => {
         latestSessionStartModalModel?.onConfirm as (input: {
           runInBackground?: boolean;
           startMode?: "fresh" | "reuse" | "fork";
-          sourceSessionId?: string | null;
+          sourceExternalSessionId?: string | null;
         }) => void
       )({
         startMode: "reuse",
-        sourceSessionId: "session-existing",
+        sourceExternalSessionId: "session-existing",
       });
       await Promise.resolve();
     });
@@ -816,7 +816,7 @@ describe("KanbanPage session start modal flow", () => {
         role: "build",
         scenario: "build_implementation_start",
         startMode: "reuse",
-        sourceSessionId: "session-existing",
+        sourceExternalSessionId: "session-existing",
       }),
     );
     expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
@@ -1202,7 +1202,7 @@ describe("KanbanPage session start modal flow", () => {
     currentSessionsFixture = [
       {
         runtimeKind: "opencode",
-        sessionId: "session-build-idle",
+        externalSessionId: "session-build-idle",
         taskId: "TASK-123",
         role: "build",
         scenario: "build_implementation_start",
@@ -1214,7 +1214,7 @@ describe("KanbanPage session start modal flow", () => {
       },
       {
         runtimeKind: "opencode",
-        sessionId: "session-qa-stopped",
+        externalSessionId: "session-qa-stopped",
         taskId: "TASK-123",
         role: "qa",
         scenario: "qa_review",
@@ -1272,7 +1272,7 @@ describe("KanbanPage session start modal flow", () => {
     currentSessionsFixture = [
       {
         runtimeKind: "opencode",
-        sessionId: "session-build-idle",
+        externalSessionId: "session-build-idle",
         taskId: "TASK-123",
         role: "build",
         scenario: "build_implementation_start",

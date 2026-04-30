@@ -143,14 +143,13 @@ describe("agent-runtime-registry", () => {
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const attachDeferred = createDeferred<void>();
     let attachStarted = false;
-    const subscribedSessionIds: string[] = [];
+    const subscribedExternalSessionIds: string[] = [];
 
     OpencodeSdkAdapter.prototype.attachSession = async (input) => {
       attachStarted = true;
       await attachDeferred.promise;
       return {
         runtimeKind: input.runtimeKind,
-        sessionId: input.sessionId,
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T09:00:00.000Z",
         role: input.role,
@@ -158,8 +157,8 @@ describe("agent-runtime-registry", () => {
         status: "running",
       };
     };
-    OpencodeSdkAdapter.prototype.subscribeEvents = (sessionId) => {
-      subscribedSessionIds.push(sessionId);
+    OpencodeSdkAdapter.prototype.subscribeEvents = (externalSessionId) => {
+      subscribedExternalSessionIds.push(externalSessionId);
       return () => {};
     };
 
@@ -167,7 +166,6 @@ describe("agent-runtime-registry", () => {
 
     try {
       const attachPromise = engine.attachSession({
-        sessionId: "session-pending",
         externalSessionId: "external-pending",
         repoPath: "/repo",
         workingDirectory: "/repo/worktree",
@@ -187,7 +185,7 @@ describe("agent-runtime-registry", () => {
       expect(attachStarted).toBe(true);
       expect(engine.hasSession("session-pending")).toBe(true);
       const unsubscribe = engine.subscribeEvents("session-pending", () => {});
-      expect(subscribedSessionIds).toEqual(["session-pending"]);
+      expect(subscribedExternalSessionIds).toEqual(["session-pending"]);
 
       attachDeferred.resolve();
       await attachPromise;

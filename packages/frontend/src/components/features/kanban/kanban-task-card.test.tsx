@@ -15,7 +15,6 @@ describe("KanbanTaskCard active sessions", () => {
       availableActions: ["build_start", "open_builder", "open_qa"],
       agentSessions: [
         {
-          sessionId: "session-spec-old",
           externalSessionId: "external-spec-old",
           role: "spec",
           scenario: "spec_initial",
@@ -39,7 +38,7 @@ describe("KanbanTaskCard active sessions", () => {
           taskSessions: [
             {
               runtimeKind: "opencode",
-              sessionId: "session-build",
+              externalSessionId: "session-build",
               role: "build",
               scenario: "build_implementation_start",
               status: "running",
@@ -47,7 +46,7 @@ describe("KanbanTaskCard active sessions", () => {
             },
             {
               runtimeKind: "opencode",
-              sessionId: "session-qa",
+              externalSessionId: "session-qa",
               role: "qa",
               scenario: "qa_review",
               status: "starting",
@@ -83,7 +82,6 @@ describe("KanbanTaskCard active sessions", () => {
       availableActions: ["build_start"],
       agentSessions: [
         {
-          sessionId: "session-planner",
           externalSessionId: "external-planner",
           role: "planner",
           scenario: "planner_initial",
@@ -93,7 +91,6 @@ describe("KanbanTaskCard active sessions", () => {
           selectedModel: null,
         },
         {
-          sessionId: "session-spec",
           externalSessionId: "external-spec",
           role: "spec",
           scenario: "spec_initial",
@@ -142,7 +139,7 @@ describe("KanbanTaskCard active sessions", () => {
           taskSessions: [
             {
               runtimeKind: "opencode",
-              sessionId: "session-build",
+              externalSessionId: "session-build",
               role: "build",
               scenario: "build_implementation_start",
               status: "running",
@@ -150,7 +147,7 @@ describe("KanbanTaskCard active sessions", () => {
             },
             {
               runtimeKind: "opencode",
-              sessionId: "session-qa",
+              externalSessionId: "session-qa",
               role: "qa",
               scenario: "qa_review",
               status: "running",

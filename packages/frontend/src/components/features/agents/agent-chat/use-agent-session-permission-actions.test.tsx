@@ -21,7 +21,7 @@ const createPermissionRequest = (requestId: string): AgentPermissionRequest => (
 });
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeSessionId: "session-1",
+  activeExternalSessionId: "session-1",
   pendingPermissions: [createPermissionRequest("req-1")],
   agentStudioReady: true,
   replyAgentPermission: async () => {},
@@ -32,7 +32,7 @@ describe("useAgentSessionPermissionActions", () => {
   test("does nothing when session is missing or studio is not ready", async () => {
     const replyAgentPermission = mock(async () => {});
     const base = createBaseArgs({ replyAgentPermission });
-    const harness = createHookHarness({ ...base, activeSessionId: null });
+    const harness = createHookHarness({ ...base, activeExternalSessionId: null });
 
     try {
       await harness.mount();
@@ -172,7 +172,7 @@ describe("useAgentSessionPermissionActions", () => {
 
       await harness.update({
         ...baseArgs,
-        activeSessionId: "session-2",
+        activeExternalSessionId: "session-2",
       });
 
       await harness.waitFor(

@@ -77,7 +77,13 @@ describe("document contracts", () => {
     expect(parsed.pullRequest?.number).toBe(42);
     expect(parsed.directMerge?.method).toBe("squash");
     expect(parsed.agentSessions).toHaveLength(1);
-    expect(parsed.agentSessions[0]?.scenario).toBe("build_implementation_start");
+    expect(parsed.agentSessions[0]).toEqual(
+      expect.objectContaining({
+        externalSessionId: "session-1",
+        scenario: "build_implementation_start",
+      }),
+    );
+    expect("sessionId" in (parsed.agentSessions[0] ?? {})).toBe(false);
   });
 
   test("task metadata payload normalizes missing top-level delivery fields independently", () => {

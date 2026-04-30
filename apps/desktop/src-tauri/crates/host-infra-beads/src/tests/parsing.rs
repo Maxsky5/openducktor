@@ -150,7 +150,7 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
 
     let session_error = parse_agent_sessions(&json!([
         {
-            "sessionId": "obp-session-1",
+            "sessionId": "session-opencode-1",
             "externalSessionId": "session-opencode-1",
             "role": "spec",
             "scenario": "spec_initial",
@@ -176,7 +176,7 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
 
     let sessions = parse_agent_sessions(&json!([
         {
-            "sessionId": "obp-session-1",
+            "sessionId": "session-opencode-1",
             "externalSessionId": "session-opencode-1",
             "role": "spec",
             "scenario": "spec_initial",
@@ -194,16 +194,47 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
     ]))
     .expect("agent sessions");
     assert_eq!(sessions.len(), 1);
-    assert_eq!(sessions[0].session_id, "obp-session-1");
+    assert_eq!(sessions[0].session_id, "session-opencode-1");
     assert_eq!(
         sessions[0].external_session_id.as_deref(),
         Some("session-opencode-1")
     );
 
+    let promoted_sessions = parse_agent_sessions(&json!([
+        {
+            "sessionId": "legacy-session-only",
+            "role": "planner",
+            "scenario": "planner_revision",
+            "startedAt": "2026-02-18T17:22:00Z",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/repo",
+            "selectedModel": null
+        }
+    ]))
+    .expect("legacy session ids should be promoted");
+    assert_eq!(promoted_sessions[0].external_session_id.as_deref(), Some("legacy-session-only"));
+
+    let conflict_error = parse_agent_sessions(&json!([
+        {
+            "sessionId": "legacy-session",
+            "externalSessionId": "other-session",
+            "role": "planner",
+            "scenario": "planner_revision",
+            "startedAt": "2026-02-18T17:22:00Z",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/repo",
+            "selectedModel": null
+        }
+    ]))
+    .expect_err("conflicting session ids should fail");
+    assert!(conflict_error
+        .to_string()
+        .contains("sessionId and externalSessionId must match"));
+
     let legacy_sessions = parse_agent_sessions(&json!([
         {
             "sessionId": "legacy-planner-session",
-            "externalSessionId": "legacy-opencode-session",
+            "externalSessionId": "legacy-planner-session",
             "role": "planner",
             "scenario": "planner_revision",
             "startedAt": "2026-02-18T17:22:00Z",

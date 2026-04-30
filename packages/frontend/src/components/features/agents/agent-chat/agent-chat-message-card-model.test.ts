@@ -448,7 +448,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "task",
-            metadata: { sessionId: "1234567890abcdef" },
+            metadata: { externalSessionId: "1234567890abcdef" },
           }),
           "",
         ),

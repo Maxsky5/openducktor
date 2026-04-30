@@ -16,17 +16,20 @@ import type {
   SessionRecord,
 } from "./types";
 
-export const hasSession = (sessions: Map<string, SessionRecord>, sessionId: string): boolean => {
-  return sessions.has(sessionId);
+export const hasSession = (
+  sessions: Map<string, SessionRecord>,
+  externalSessionId: string,
+): boolean => {
+  return sessions.has(externalSessionId);
 };
 
 export const requireSession = (
   sessions: Map<string, SessionRecord>,
-  sessionId: string,
+  externalSessionId: string,
 ): SessionRecord => {
-  const session = sessions.get(sessionId);
+  const session = sessions.get(externalSessionId);
   if (!session) {
-    throw new Error(`Unknown session: ${sessionId}`);
+    throw new Error(`Unknown session: ${externalSessionId}`);
   }
   return session;
 };
@@ -43,9 +46,9 @@ const resolveSubagentSessionLink = (
   }
   const matches: SubagentSessionLink[] = [];
 
-  for (const [parentSessionId, session] of sessions) {
+  for (const session of sessions.values()) {
     const subagentCorrelationKey =
-      session.subagentCorrelationKeyBySessionId.get(childExternalSessionId);
+      session.subagentCorrelationKeyByExternalSessionId.get(childExternalSessionId);
     if (!subagentCorrelationKey) {
       continue;
     }
@@ -54,7 +57,6 @@ const resolveSubagentSessionLink = (
     }
 
     matches.push({
-      parentSessionId,
       parentExternalSessionId: session.externalSessionId,
       childExternalSessionId,
       subagentCorrelationKey,
@@ -97,10 +99,10 @@ const ensureRuntimeEventTransport = (input: {
     onEvent: (event) => {
       for (const subscriber of streamRecord.subscribers.values()) {
         const relevant = isRelevantSubscriberEvent(subscriber, event, {
-          isKnownChildSessionId: (sessionId) =>
+          isKnownChildExternalSessionId: (externalSessionId) =>
             input.sessions
-              .get(subscriber.sessionId)
-              ?.subagentCorrelationKeyBySessionId.has(sessionId) ?? false,
+              .get(subscriber.externalSessionId)
+              ?.subagentCorrelationKeyByExternalSessionId.has(externalSessionId) ?? false,
         });
         logStreamEvent({
           subscriber,
@@ -113,7 +115,6 @@ const ensureRuntimeEventTransport = (input: {
         }
         processOpencodeEvent({
           context: {
-            sessionId: subscriber.sessionId,
             externalSessionId: subscriber.externalSessionId,
             input: subscriber.input,
           },
@@ -130,9 +131,9 @@ const ensureRuntimeEventTransport = (input: {
     .catch((error: unknown) => {
       const message = error instanceof Error ? error.message : "Event stream failed";
       for (const subscriber of streamRecord.subscribers.values()) {
-        input.emit(subscriber.sessionId, {
+        input.emit(subscriber.externalSessionId, {
           type: "session_error",
-          sessionId: subscriber.sessionId,
+          externalSessionId: subscriber.externalSessionId,
           timestamp: input.now(),
           message,
         });
@@ -150,11 +151,10 @@ export const attachSessionToRuntimeEvents = (input: {
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   createClient: ClientFactory;
   runtimeEndpoint: string;
-  sessionId: string;
   externalSessionId: string;
   sessionInput: SessionInput;
   now: () => string;
-  emit: (sessionId: string, event: AgentEvent) => void;
+  emit: (externalSessionId: string, event: AgentEvent) => void;
   logEvent?: OpencodeEventLogger;
 }): void => {
   const eventTransport = ensureRuntimeEventTransport({
@@ -166,8 +166,7 @@ export const attachSessionToRuntimeEvents = (input: {
     emit: input.emit,
     ...(input.logEvent ? { logEvent: input.logEvent } : {}),
   });
-  eventTransport.subscribers.set(input.sessionId, {
-    sessionId: input.sessionId,
+  eventTransport.subscribers.set(input.externalSessionId, {
     externalSessionId: input.externalSessionId,
     input: input.sessionInput,
   });
@@ -178,7 +177,6 @@ export const registerSession = (input: {
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   createClient: ClientFactory;
   runtimeEndpoint: string;
-  sessionId: string;
   externalSessionId: string;
   sessionInput: SessionInput;
   client: OpencodeClient;
@@ -187,11 +185,10 @@ export const registerSession = (input: {
   emitStartedEvent?: boolean;
   subscribeToEvents?: boolean;
   now: () => string;
-  emit: (sessionId: string, event: AgentEvent) => void;
+  emit: (externalSessionId: string, event: AgentEvent) => void;
   logEvent?: OpencodeEventLogger;
 }): AgentSessionSummary => {
   const summary: AgentSessionSummary = {
-    sessionId: input.sessionId,
     externalSessionId: input.externalSessionId,
     role: input.sessionInput.role,
     scenario: input.sessionInput.scenario,
@@ -201,7 +198,7 @@ export const registerSession = (input: {
 
   const eventTransportKey = input.runtimeEndpoint;
 
-  input.sessions.set(input.sessionId, {
+  input.sessions.set(input.externalSessionId, {
     summary,
     input: input.sessionInput,
     client: input.client,
@@ -219,11 +216,11 @@ export const registerSession = (input: {
     messageMetadataById: new Map(),
     pendingDeltasByPartId: new Map(),
     subagentCorrelationKeyByPartId: new Map(),
-    subagentCorrelationKeyBySessionId: new Map(),
+    subagentCorrelationKeyByExternalSessionId: new Map(),
     pendingSubagentCorrelationKeysBySignature: new Map(),
     pendingSubagentCorrelationKeys: [],
-    pendingSubagentSessionsById: new Map(),
-    pendingSubagentPartEmissionsBySessionId: new Map(),
+    pendingSubagentSessionsByExternalSessionId: new Map(),
+    pendingSubagentPartEmissionsByExternalSessionId: new Map(),
   });
 
   if (input.subscribeToEvents !== false) {
@@ -233,7 +230,6 @@ export const registerSession = (input: {
         runtimeEventTransports: input.runtimeEventTransports,
         createClient: input.createClient,
         runtimeEndpoint: input.runtimeEndpoint,
-        sessionId: input.sessionId,
         externalSessionId: input.externalSessionId,
         sessionInput: input.sessionInput,
         now: input.now,
@@ -241,15 +237,15 @@ export const registerSession = (input: {
         ...(input.logEvent ? { logEvent: input.logEvent } : {}),
       });
     } catch (error) {
-      input.sessions.delete(input.sessionId);
+      input.sessions.delete(input.externalSessionId);
       throw error;
     }
   }
 
   if (input.emitStartedEvent !== false) {
-    input.emit(input.sessionId, {
+    input.emit(input.externalSessionId, {
       type: "session_started",
-      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
       timestamp: input.now(),
       message: input.startedMessage,
     });
@@ -275,12 +271,12 @@ const releaseSessionRuntimeAttachment = async (
   sessions: Map<string, SessionRecord>,
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
 ): Promise<void> => {
-  sessions.delete(session.summary.sessionId);
+  sessions.delete(session.summary.externalSessionId);
   const eventTransport = runtimeEventTransports.get(session.eventTransportKey);
   if (!eventTransport) {
     return;
   }
-  eventTransport.subscribers.delete(session.summary.sessionId);
+  eventTransport.subscribers.delete(session.summary.externalSessionId);
   if (eventTransport.subscribers.size > 0) {
     return;
   }

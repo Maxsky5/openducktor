@@ -12,7 +12,7 @@ import { CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 type UseAgentChatHistoryWindowInput = {
   rows: AgentChatWindowRow[];
   turns?: AgentChatWindowTurn[];
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   isSessionViewLoading: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   userScrolledRef: RefObject<boolean>;
@@ -29,14 +29,14 @@ type UseAgentChatHistoryWindowResult = {
 };
 
 export const resolveAgentChatEffectiveTurnStart = ({
-  activeSessionId,
+  activeExternalSessionId,
   previousSessionId,
   turnStart,
   latestTurnStart,
   rowsLength,
   pendingLatestReset,
 }: {
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   previousSessionId: string | null;
   turnStart: number;
   latestTurnStart: number;
@@ -50,7 +50,7 @@ export const resolveAgentChatEffectiveTurnStart = ({
     return latestTurnStart;
   }
 
-  if (previousSessionId !== activeSessionId) {
+  if (previousSessionId !== activeExternalSessionId) {
     return latestTurnStart;
   }
 
@@ -60,7 +60,7 @@ export const resolveAgentChatEffectiveTurnStart = ({
 export function useAgentChatHistoryWindow({
   rows,
   turns: providedTurns,
-  activeSessionId,
+  activeExternalSessionId,
   isSessionViewLoading,
   messagesContainerRef,
   userScrolledRef,
@@ -78,16 +78,16 @@ export function useAgentChatHistoryWindow({
   const fillFrameRef = useRef<number | null>(null);
   const continuationFrameRef = useRef<number | null>(null);
   const pendingLatestResetRef = useRef(isSessionViewLoading && rows.length === 0);
-  const previousSessionIdRef = useRef<string | null>(activeSessionId);
+  const previousSessionIdRef = useRef<string | null>(activeExternalSessionId);
   const pendingScrollRestoreRef = useRef<{
     beforeScrollHeight: number;
     beforeScrollTop: number;
   } | null>(null);
   const latestTurnStart = getLatestTurnStart();
   const shouldUsePendingLatestTurnStart = pendingLatestResetRef.current && rows.length > 0;
-  const didSessionChange = previousSessionIdRef.current !== activeSessionId;
+  const didSessionChange = previousSessionIdRef.current !== activeExternalSessionId;
   const effectiveTurnStart = resolveAgentChatEffectiveTurnStart({
-    activeSessionId,
+    activeExternalSessionId,
     previousSessionId: previousSessionIdRef.current,
     turnStart,
     latestTurnStart,
@@ -203,7 +203,7 @@ export function useAgentChatHistoryWindow({
   // deferred-session latest-turn rebasing happen on the very next DOM update.
   useLayoutEffect(() => {
     if (didSessionChange) {
-      previousSessionIdRef.current = activeSessionId;
+      previousSessionIdRef.current = activeExternalSessionId;
       pendingLatestResetRef.current = isSessionViewLoading && rows.length === 0;
     } else if (shouldUsePendingLatestTurnStart) {
       pendingLatestResetRef.current = false;

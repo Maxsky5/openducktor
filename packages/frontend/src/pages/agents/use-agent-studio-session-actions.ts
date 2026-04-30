@@ -47,7 +47,7 @@ export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features
 
 export type AgentSessionActionState = Pick<
   AgentSessionState,
-  | "sessionId"
+  | "externalSessionId"
   | "role"
   | "status"
   | "selectedModel"
@@ -83,7 +83,7 @@ type UseAgentStudioSessionActionsArgs = {
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent?: (intent: {
     taskId: string;
-    sessionId: string | null;
+    externalSessionId: string | null;
     role: AgentRole;
     scenario: AgentScenario | null;
   }) => void;
@@ -131,7 +131,7 @@ export function useAgentStudioSessionActions({
   startScenarioKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
-  handleWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
+  handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
@@ -143,7 +143,7 @@ export function useAgentStudioSessionActions({
   >({});
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
 
-  const activeSessionId = activeSession?.sessionId ?? null;
+  const activeExternalSessionId = activeSession?.externalSessionId ?? null;
   const activeSessionRole = activeSession?.role ?? role;
   const activeSessionStatus = activeSession?.status ?? "stopped";
   const activeSessionSelectedModel = activeSession?.selectedModel ?? null;
@@ -157,7 +157,7 @@ export function useAgentStudioSessionActions({
     activeWorkspace,
     taskId,
     role,
-    sessionId: activeSessionId,
+    externalSessionId: activeExternalSessionId,
   });
   const isSending = (sendingActivityCountByContext[activeComposerContextKey] ?? 0) > 0;
   const isSessionWorking =
@@ -254,12 +254,12 @@ export function useAgentStudioSessionActions({
       const sendContextKeys = new Set<string>();
 
       try {
-        let targetSessionId: string | null | undefined = activeSessionId;
-        if (!targetSessionId) {
-          targetSessionId = await startSession("composer_send");
+        let targetExternalSessionId: string | null | undefined = activeExternalSessionId;
+        if (!targetExternalSessionId) {
+          targetExternalSessionId = await startSession("composer_send");
         }
 
-        if (!targetSessionId) {
+        if (!targetExternalSessionId) {
           return false;
         }
 
@@ -267,7 +267,7 @@ export function useAgentStudioSessionActions({
           activeWorkspace,
           taskId,
           role,
-          sessionId: targetSessionId,
+          externalSessionId: targetExternalSessionId,
         });
         sendContextKeys.add(activeComposerContextKey);
         sendContextKeys.add(targetComposerContextKey);
@@ -280,7 +280,7 @@ export function useAgentStudioSessionActions({
           return next;
         });
         await sendAgentMessage(
-          targetSessionId,
+          targetExternalSessionId,
           await resolveDraftToUserMessageParts(draft, async (attachment) => {
             if (attachment.file) {
               return stageLocalAttachmentFile(attachment.file);
@@ -307,7 +307,7 @@ export function useAgentStudioSessionActions({
     [
       activeWorkspace,
       activeComposerContextKey,
-      activeSessionId,
+      activeExternalSessionId,
       activeSessionIsLoadingModelCatalog,
       activeSessionSelectedModel,
       agentStudioReady,
@@ -327,7 +327,7 @@ export function useAgentStudioSessionActions({
 
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
-      if (!activeSessionId || !agentStudioReady) {
+      if (!activeExternalSessionId || !agentStudioReady) {
         return;
       }
 
@@ -336,7 +336,7 @@ export function useAgentStudioSessionActions({
         [requestId]: true,
       }));
       try {
-        await answerAgentQuestion(activeSessionId, requestId, answers);
+        await answerAgentQuestion(activeExternalSessionId, requestId, answers);
       } finally {
         setIsSubmittingQuestionByRequestId((current) => {
           if (!current[requestId]) {
@@ -348,17 +348,17 @@ export function useAgentStudioSessionActions({
         });
       }
     },
-    [activeSessionId, agentStudioReady, answerAgentQuestion],
+    [activeExternalSessionId, agentStudioReady, answerAgentQuestion],
   );
 
   useEffect(() => {
     setIsSubmittingQuestionByRequestId((current) => {
-      if (activeSessionId === null && Object.keys(current).length === 0) {
+      if (activeExternalSessionId === null && Object.keys(current).length === 0) {
         return current;
       }
       return {};
     });
-  }, [activeSessionId]);
+  }, [activeExternalSessionId]);
 
   useEffect(() => {
     const activeRequestIds = new Set(activeSessionPendingQuestions.map((entry) => entry.requestId));
@@ -377,18 +377,18 @@ export function useAgentStudioSessionActions({
   }, [activeSessionPendingQuestions]);
 
   const handleWorkflowStepSelect = useCallback(
-    (nextRole: AgentRole, sessionId: string | null): void => {
+    (nextRole: AgentRole, externalSessionId: string | null): void => {
       if (!taskId) {
         return;
       }
 
-      const currentSessionId = activeSessionId;
+      const currentExternalSessionId = activeExternalSessionId;
       const currentRole = activeSessionRole;
 
-      if (!sessionId) {
+      if (!externalSessionId) {
         if (
           shouldTriggerContextSwitchIntent({
-            currentSessionId,
+            currentExternalSessionId,
             currentRole,
             nextSessionId: null,
             nextRole,
@@ -399,29 +399,31 @@ export function useAgentStudioSessionActions({
 
         applyAgentStudioSelectionQuery(updateQuery, {
           taskId,
-          sessionId: undefined,
+          externalSessionId: undefined,
           role: nextRole,
           scenario,
         });
         scheduleSelectionIntent?.({
           taskId,
-          sessionId: null,
+          externalSessionId: null,
           role: nextRole,
           scenario,
         });
         return;
       }
 
-      const session = sessionsForTask.find((entry) => entry.sessionId === sessionId);
+      const session = sessionsForTask.find(
+        (entry) => entry.externalSessionId === externalSessionId,
+      );
       if (!isWorkflowAgentSessionSummary(session)) {
         return;
       }
 
       if (
         shouldTriggerContextSwitchIntent({
-          currentSessionId,
+          currentExternalSessionId,
           currentRole,
-          nextSessionId: session.sessionId,
+          nextSessionId: session.externalSessionId,
           nextRole: session.role,
         })
       ) {
@@ -430,19 +432,19 @@ export function useAgentStudioSessionActions({
 
       applyAgentStudioSelectionQuery(updateQuery, {
         taskId: session.taskId,
-        sessionId: session.sessionId,
+        externalSessionId: session.externalSessionId,
         role: session.role,
         scenario: session.scenario,
       });
       scheduleSelectionIntent?.({
         taskId: session.taskId,
-        sessionId: session.sessionId,
+        externalSessionId: session.externalSessionId,
         role: session.role,
         scenario: session.scenario,
       });
     },
     [
-      activeSessionId,
+      activeExternalSessionId,
       activeSessionRole,
       onContextSwitchIntent,
       scenario,
@@ -459,16 +461,18 @@ export function useAgentStudioSessionActions({
         return;
       }
 
-      const selectedSession = sessionsForTask.find((entry) => entry.sessionId === nextValue);
+      const selectedSession = sessionsForTask.find(
+        (entry) => entry.externalSessionId === nextValue,
+      );
       if (!isWorkflowAgentSessionSummary(selectedSession)) {
         return;
       }
 
       if (
         shouldTriggerContextSwitchIntent({
-          currentSessionId: activeSessionId,
+          currentExternalSessionId: activeExternalSessionId,
           currentRole: activeSessionRole,
-          nextSessionId: selectedSession.sessionId,
+          nextSessionId: selectedSession.externalSessionId,
           nextRole: selectedSession.role,
         })
       ) {
@@ -477,19 +481,19 @@ export function useAgentStudioSessionActions({
 
       applyAgentStudioSelectionQuery(updateQuery, {
         taskId: selectedSession.taskId,
-        sessionId: selectedSession.sessionId,
+        externalSessionId: selectedSession.externalSessionId,
         role: selectedSession.role,
         scenario: selectedSession.scenario,
       });
       scheduleSelectionIntent?.({
         taskId: selectedSession.taskId,
-        sessionId: selectedSession.sessionId,
+        externalSessionId: selectedSession.externalSessionId,
         role: selectedSession.role,
         scenario: selectedSession.scenario,
       });
     },
     [
-      activeSessionId,
+      activeExternalSessionId,
       activeSessionRole,
       onContextSwitchIntent,
       scheduleSelectionIntent,

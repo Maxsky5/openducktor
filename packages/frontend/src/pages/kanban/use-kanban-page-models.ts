@@ -204,7 +204,7 @@ export function useKanbanPageModels({
         scenario: request.scenario,
         initialStartMode: request.initialStartMode,
         targetWorkingDirectory: request.targetWorkingDirectory,
-        initialSourceSessionId: request.initialSourceSessionId,
+        initialSourceExternalSessionId: request.initialSourceExternalSessionId,
         existingSessionOptions: request.existingSessionOptions,
         postStartAction: "send_message",
         message: request.message,
@@ -221,10 +221,10 @@ export function useKanbanPageModels({
         task,
         builderSessions,
         currentViewSessionId: null,
-        onOpenSession: (sessionId) => {
+        onOpenSession: (externalSessionId) => {
           const search = new URLSearchParams({
             task: taskId,
-            session: sessionId,
+            session: externalSessionId,
             agent: "build",
           });
           navigate(`/agents?${search.toString()}`);

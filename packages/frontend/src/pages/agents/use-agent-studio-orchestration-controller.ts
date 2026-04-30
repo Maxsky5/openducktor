@@ -39,7 +39,7 @@ type AgentStudioOrchestrationActionsContext = {
   onContextSwitchIntent: () => void;
   scheduleSelectionIntent: (intent: {
     taskId: string;
-    sessionId: string | null;
+    externalSessionId: string | null;
     role: AgentRole;
     scenario: AgentScenario | null;
   }) => void;
@@ -369,7 +369,7 @@ export function useAgentStudioOrchestrationController({
 
   const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
     useAgentSessionPermissionActions({
-      activeSessionId: viewActiveSession?.sessionId ?? null,
+      activeExternalSessionId: viewActiveSession?.externalSessionId ?? null,
       pendingPermissions: viewActiveSession?.pendingPermissions ?? [],
       agentStudioReady,
       replyAgentPermission,

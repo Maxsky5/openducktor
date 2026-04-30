@@ -71,7 +71,7 @@ describe("session-start-workflow", () => {
     });
 
     expect(result).toEqual({
-      sessionId: "session-new",
+      externalSessionId: "session-new",
       postStartActionError: null,
     });
     expect(startAgentSession).toHaveBeenCalledWith(
@@ -94,7 +94,7 @@ describe("session-start-workflow", () => {
         role: "build",
         scenario: "build_pull_request_generation",
         startMode: "reuse",
-        sourceSessionId: "builder-session-1",
+        sourceExternalSessionId: "builder-session-1",
         targetBranch: {
           remote: "origin",
           branch: "release/2026.04",
@@ -118,7 +118,7 @@ describe("session-start-workflow", () => {
     });
 
     expect(result).toEqual({
-      sessionId: "session-pr",
+      externalSessionId: "session-pr",
       postStartActionError: null,
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-pr", [
@@ -167,7 +167,7 @@ describe("session-start-workflow", () => {
     });
 
     expect(result).toEqual({
-      sessionId: "session-build-new",
+      externalSessionId: "session-build-new",
       postStartActionError: null,
     });
     const sentCalls = sendAgentMessage.mock.calls as unknown as Array<

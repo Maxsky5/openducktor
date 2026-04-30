@@ -216,7 +216,7 @@ export const handleToolPart = (
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = resolveTodoUpdateFromTool(part, input, output);
   let shouldRefreshTaskData = false;
-  const activeSession = context.store.sessionsRef.current[context.store.sessionId] ?? null;
+  const activeSession = context.store.sessionsRef.current[context.store.externalSessionId] ?? null;
   const taskId = activeSession?.taskId;
   const runtimeDescriptor =
     activeSession?.runtimeKind && context.refresh.resolveRuntimeDefinition
@@ -225,7 +225,7 @@ export const handleToolPart = (
   const workflowToolAliasesByCanonical = runtimeDescriptor?.workflowToolAliasesByCanonical;
 
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => {
       const { nextState, refreshDecision } = composeToolPartSessionUpdate({
         current,
@@ -255,7 +255,7 @@ export const handleToolPart = (
       {
         tags: {
           repoPath: context.refresh.repoPath,
-          sessionId: context.store.sessionId,
+          externalSessionId: context.store.externalSessionId,
           tool: part.tool,
         },
       },

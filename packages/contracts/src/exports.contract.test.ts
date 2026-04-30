@@ -170,6 +170,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionStartModeValues",
   "agentSessionStatusSchema",
   "agentSessionStopTargetSchema",
+  "parseAgentSessionRecordCompat",
   "AUTOPILOT_ACTION_IDS",
   "AUTOPILOT_EVENT_IDS",
   "BuildBlockedInputSchema",

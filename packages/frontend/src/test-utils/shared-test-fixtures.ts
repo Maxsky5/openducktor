@@ -76,7 +76,6 @@ const BASE_TASK_CARD_FIXTURE: TaskCard = {
 };
 
 const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: "/repo",

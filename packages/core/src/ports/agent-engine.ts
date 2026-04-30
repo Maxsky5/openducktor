@@ -16,28 +16,26 @@ import type {
   AgentUserMessageDisplayPart,
   AgentUserMessagePart,
   AgentUserMessageState,
+  ExternalSessionId,
+  RuntimeHistoryAnchor,
   RuntimeKind,
+  RuntimePendingInputRequestId,
 } from "../types/agent-orchestrator";
 
-export type StartAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
-  sessionId?: string;
-};
+export type StartAgentSessionInput = AgentSessionContext;
 
-export type ResumeAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
-  sessionId: string;
-  externalSessionId: string;
+export type ResumeAgentSessionInput = AgentSessionContext & {
+  externalSessionId: ExternalSessionId;
 };
 
 export type AttachAgentSessionInput =
-  | (Omit<AgentSessionContext, "sessionId"> & {
-      sessionId: string;
-      externalSessionId: string;
+  | (AgentSessionContext & {
+      externalSessionId: ExternalSessionId;
       purpose?: "primary";
     })
   | {
       purpose: "transcript";
-      sessionId: string;
-      externalSessionId: string;
+      externalSessionId: ExternalSessionId;
       repoPath: string;
       runtimeKind: RuntimeKind;
       runtimeId: string;
@@ -49,34 +47,33 @@ export type AttachAgentSessionInput =
       systemPrompt: "";
     };
 
-export type ForkAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
-  sessionId?: string;
-  parentExternalSessionId: string;
-  messageId?: string;
+export type ForkAgentSessionInput = AgentSessionContext & {
+  parentExternalSessionId: ExternalSessionId;
+  runtimeHistoryAnchor?: RuntimeHistoryAnchor;
 };
 
 export type SendAgentUserMessageInput = {
-  sessionId: string;
+  externalSessionId: ExternalSessionId;
   parts: AgentUserMessagePart[];
   model?: AgentModelSelection;
 };
 
 export type UpdateAgentSessionModelInput = {
-  sessionId: string;
+  externalSessionId: ExternalSessionId;
   model: AgentModelSelection | null;
 };
 
 export type LoadAgentSessionHistoryInput = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
-  externalSessionId: string;
+  externalSessionId: ExternalSessionId;
   limit?: number;
 };
 
 export type LoadAgentSessionTodosInput = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
-  externalSessionId: string;
+  externalSessionId: ExternalSessionId;
 };
 
 export type ListLiveAgentSessionPendingInput = {
@@ -84,8 +81,8 @@ export type ListLiveAgentSessionPendingInput = {
   runtimeConnection: AgentRuntimeConnection;
 };
 
-export type LiveAgentSessionPendingInputBySession = Record<
-  string,
+export type LiveAgentSessionPendingInputByExternalSessionId = Record<
+  ExternalSessionId,
   {
     permissions: AgentPendingPermissionRequest[];
     questions: AgentPendingQuestionRequest[];
@@ -117,8 +114,8 @@ export type ListLiveAgentSessionsInput = {
 export type LoadAgentSessionDiffInput = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
-  sessionId: string;
-  messageId?: string;
+  externalSessionId: ExternalSessionId;
+  runtimeHistoryAnchor?: RuntimeHistoryAnchor;
 };
 
 export type LoadAgentFileStatusInput = {
@@ -128,7 +125,7 @@ export type LoadAgentFileStatusInput = {
 
 export type AgentSessionHistoryMessage =
   | {
-      messageId: string;
+      messageId: RuntimeHistoryAnchor;
       role: "user";
       timestamp: string;
       text: string;
@@ -138,7 +135,7 @@ export type AgentSessionHistoryMessage =
       parts: AgentStreamPart[];
     }
   | {
-      messageId: string;
+      messageId: RuntimeHistoryAnchor;
       role: "assistant";
       timestamp: string;
       text: string;
@@ -162,7 +159,7 @@ export type LiveAgentSessionStatus =
     };
 
 export type LiveAgentSessionSummary = {
-  externalSessionId: string;
+  externalSessionId: ExternalSessionId;
   title: string;
   workingDirectory: string;
   startedAt: string;
@@ -175,8 +172,8 @@ export type LiveAgentSessionSnapshot = LiveAgentSessionSummary & {
 };
 
 export type ReplyPermissionInput = {
-  sessionId: string;
-  requestId: string;
+  externalSessionId: ExternalSessionId;
+  requestId: RuntimePendingInputRequestId;
   reply: "once" | "always" | "reject";
   message?: string;
 };
@@ -184,22 +181,21 @@ export type ReplyPermissionInput = {
 export type ReplyRuntimeSessionPermissionInput = {
   runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
-  requestId: string;
+  requestId: RuntimePendingInputRequestId;
   reply: "once" | "always" | "reject";
   message?: string;
 };
 
 export type ReplyQuestionInput = {
-  sessionId: string;
-  requestId: string;
+  externalSessionId: ExternalSessionId;
+  requestId: RuntimePendingInputRequestId;
   answers: string[][];
 };
 
 export type EventUnsubscribe = () => void;
 
 export type AgentSessionSummary = {
-  sessionId: string;
-  externalSessionId: string;
+  externalSessionId: ExternalSessionId;
   runtimeKind?: string;
   role: AgentRole | null;
   scenario: AgentScenario | null;
@@ -221,25 +217,28 @@ export interface AgentSessionPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
   attachSession(input: AttachAgentSessionInput): Promise<AgentSessionSummary>;
-  detachSession(sessionId: string): Promise<void>;
+  detachSession(externalSessionId: ExternalSessionId): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
   listLiveAgentSessions(input: ListLiveAgentSessionsInput): Promise<LiveAgentSessionSummary[]>;
   listLiveAgentSessionSnapshots(
     input: ListLiveAgentSessionsInput,
   ): Promise<LiveAgentSessionSnapshot[]>;
-  hasSession(sessionId: string): boolean;
+  hasSession(externalSessionId: ExternalSessionId): boolean;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
   listLiveAgentSessionPendingInput(
     input: ListLiveAgentSessionPendingInput,
-  ): Promise<LiveAgentSessionPendingInputBySession>;
+  ): Promise<LiveAgentSessionPendingInputByExternalSessionId>;
   updateSessionModel(input: UpdateAgentSessionModelInput): void;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyPermission(input: ReplyPermissionInput): Promise<void>;
   replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
-  subscribeEvents(sessionId: string, listener: (event: AgentEvent) => void): EventUnsubscribe;
-  stopSession(sessionId: string): Promise<void>;
+  subscribeEvents(
+    externalSessionId: ExternalSessionId,
+    listener: (event: AgentEvent) => void,
+  ): EventUnsubscribe;
+  stopSession(externalSessionId: ExternalSessionId): Promise<void>;
 }
 
 export interface AgentWorkspaceInspectionPort {

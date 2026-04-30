@@ -43,7 +43,6 @@ const taskFixture: TaskCard = {
 };
 
 const sessionFixture: AgentSessionRecord = {
-  sessionId: "session-1",
   externalSessionId: "external-1",
   role: "build",
   scenario: "build_implementation_start",

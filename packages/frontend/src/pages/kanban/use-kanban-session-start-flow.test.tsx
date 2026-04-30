@@ -145,7 +145,7 @@ const createBaseArgs = (): HookArgs => ({
   tasks: [createTaskCardFixture({ id: "TASK-1", status: "human_review" })],
   sessions: [
     createAgentSessionFixture({
-      sessionId: "builder-session-2",
+      externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       runtimeKind: "opencode",
       role: "build",
@@ -160,7 +160,7 @@ const createBaseArgs = (): HookArgs => ({
       startedAt: "2026-03-20T12:00:00.000Z",
     }),
     createAgentSessionFixture({
-      sessionId: "builder-session-1",
+      externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       runtimeKind: "opencode",
       role: "build",
@@ -385,7 +385,7 @@ describe("useKanbanSessionStartFlow", () => {
       state.sessionStartModal?.onConfirm({
         runInBackground: false,
         startMode: "reuse",
-        sourceSessionId: "builder-session-2",
+        sourceExternalSessionId: "builder-session-2",
       });
       await Promise.resolve();
       await Promise.resolve();
@@ -398,7 +398,7 @@ describe("useKanbanSessionStartFlow", () => {
         role: "build",
         scenario: "build_pull_request_generation",
         startMode: "reuse",
-        sourceSessionId: "builder-session-2",
+        sourceExternalSessionId: "builder-session-2",
       }),
     );
 
@@ -447,7 +447,7 @@ describe("useKanbanSessionStartFlow", () => {
       state.sessionStartModal?.onConfirm({
         runInBackground: false,
         startMode: "fresh",
-        sourceSessionId: null,
+        sourceExternalSessionId: null,
         targetBranch: "refs/remotes/origin/release/2026.04",
       });
       await Promise.resolve();
@@ -563,7 +563,7 @@ describe("useKanbanSessionStartFlow", () => {
         modal?.onConfirm({
           runInBackground: false,
           startMode: "reuse",
-          sourceSessionId: "builder-session-2",
+          sourceExternalSessionId: "builder-session-2",
         });
         await Promise.resolve();
         await Promise.resolve();
@@ -577,7 +577,7 @@ describe("useKanbanSessionStartFlow", () => {
           role: "build",
           scenario: "build_after_human_request_changes",
           startMode: "reuse",
-          sourceSessionId: "builder-session-2",
+          sourceExternalSessionId: "builder-session-2",
         }),
       );
 
@@ -754,7 +754,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.mount();
     await harness.run((state) => {
       state.onOpenSession("TASK-1", "build", {
-        sessionId: "builder-session-1",
+        externalSessionId: "builder-session-1",
         scenario: "build_implementation_start",
       });
     });
@@ -773,7 +773,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.mount();
     await harness.run((state) => {
       state.onOpenSession("TASK-1", "build", {
-        sessionId: "builder-session-archived",
+        externalSessionId: "builder-session-archived",
         scenario: "build_after_qa_rejected",
       });
     });
@@ -820,7 +820,7 @@ describe("useKanbanSessionStartFlow", () => {
     const args = createBaseArgs();
     args.sessions = [
       createAgentSessionFixture({
-        sessionId: "builder-session-new-running",
+        externalSessionId: "builder-session-new-running",
         taskId: "TASK-1",
         runtimeKind: "opencode",
         role: "build",
@@ -831,7 +831,7 @@ describe("useKanbanSessionStartFlow", () => {
         startedAt: "2026-03-20T12:00:00.000Z",
       }),
       createAgentSessionFixture({
-        sessionId: "builder-session-old-waiting",
+        externalSessionId: "builder-session-old-waiting",
         taskId: "TASK-1",
         runtimeKind: "opencode",
         role: "build",

@@ -13,7 +13,6 @@ import type {
 
 type ProcessOpencodeEventInput = {
   context: {
-    sessionId: string;
     externalSessionId: string;
     input: SessionInput;
   };
@@ -32,7 +31,6 @@ type SubscribeGlobalEventsInput = {
 
 type SubscribeOpencodeEventsInput = {
   context: {
-    sessionId: string;
     externalSessionId: string;
     input: SessionInput;
   };
@@ -53,7 +51,7 @@ type LogEventInput = {
 };
 
 type RelevantSubscriberEventOptions = {
-  isKnownChildSessionId?: (sessionId: string) => boolean;
+  isKnownChildExternalSessionId?: (externalSessionId: string) => boolean;
 };
 
 type GlobalEventStream = {
@@ -105,12 +103,11 @@ const toDirectoryScopedEvent = (event: GlobalEvent): Event => {
 const normalizeDirectory = (directory: string): string => directory.trim();
 
 export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => {
-  const session = input.getSession(input.context.sessionId);
+  const session = input.getSession(input.context.externalSessionId);
   if (!session) {
     return;
   }
   const runtime = {
-    sessionId: input.context.sessionId,
     externalSessionId: input.context.externalSessionId,
     input: input.context.input,
     now: input.now,
@@ -123,11 +120,12 @@ export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => 
     messageRoleById: session.messageRoleById,
     pendingDeltasByPartId: session.pendingDeltasByPartId,
     subagentCorrelationKeyByPartId: session.subagentCorrelationKeyByPartId,
-    subagentCorrelationKeyBySessionId: session.subagentCorrelationKeyBySessionId,
+    subagentCorrelationKeyByExternalSessionId: session.subagentCorrelationKeyByExternalSessionId,
     pendingSubagentCorrelationKeysBySignature: session.pendingSubagentCorrelationKeysBySignature,
     pendingSubagentCorrelationKeys: session.pendingSubagentCorrelationKeys,
-    pendingSubagentSessionsById: session.pendingSubagentSessionsById,
-    pendingSubagentPartEmissionsBySessionId: session.pendingSubagentPartEmissionsBySessionId,
+    pendingSubagentSessionsByExternalSessionId: session.pendingSubagentSessionsByExternalSessionId,
+    pendingSubagentPartEmissionsByExternalSessionId:
+      session.pendingSubagentPartEmissionsByExternalSessionId,
   };
 
   if (handleMessageEvent(input.event, runtime)) {
@@ -141,7 +139,6 @@ export const logStreamEvent = ({ subscriber, event, relevant, logEvent }: LogEve
     return;
   }
   logEvent({
-    sessionId: subscriber.sessionId,
     externalSessionId: subscriber.externalSessionId,
     relevant,
     event,
@@ -171,14 +168,14 @@ export const isRelevantSubscriberEvent = (
     return true;
   }
 
-  const eventSessionId = readEventSessionId(event);
-  if (eventSessionId) {
+  const eventExternalSessionId = readEventSessionId(event);
+  if (eventExternalSessionId) {
     const properties = "properties" in event ? event.properties : undefined;
     const info =
       properties && typeof properties === "object" && properties !== null && "info" in properties
         ? (properties as { info?: unknown }).info
         : undefined;
-    const parentSessionId =
+    const parentExternalSessionId =
       info && typeof info === "object" && info !== null
         ? (["parentID", "parentId", "parent_id"] as const).reduce<string | undefined>(
             (found, key) => {
@@ -192,11 +189,14 @@ export const isRelevantSubscriberEvent = (
           )
         : undefined;
 
-    if (parentSessionId === subscriber.externalSessionId) {
+    if (parentExternalSessionId === subscriber.externalSessionId) {
       return true;
     }
 
-    if (event.type === "permission.asked" && options?.isKnownChildSessionId?.(eventSessionId)) {
+    if (
+      event.type === "permission.asked" &&
+      options?.isKnownChildExternalSessionId?.(eventExternalSessionId)
+    ) {
       return true;
     }
 
@@ -222,19 +222,16 @@ export const subscribeOpencodeEvents = async (
     onEvent: (event) => {
       const relevant = isRelevantSubscriberEvent(
         {
-          sessionId: input.context.sessionId,
           externalSessionId: input.context.externalSessionId,
           input: input.context.input,
         },
         event,
         input.resolveSubagentSessionLink
           ? {
-              isKnownChildSessionId: (sessionId) => {
-                const link = input.resolveSubagentSessionLink?.(sessionId);
+              isKnownChildExternalSessionId: (externalSessionId) => {
+                const link = input.resolveSubagentSessionLink?.(externalSessionId);
                 return Boolean(
-                  link &&
-                    (link.parentSessionId === input.context.sessionId ||
-                      link.parentExternalSessionId === input.context.externalSessionId),
+                  link && link.parentExternalSessionId === input.context.externalSessionId,
                 );
               },
             }
@@ -242,7 +239,6 @@ export const subscribeOpencodeEvents = async (
       );
       logStreamEvent({
         subscriber: {
-          sessionId: input.context.sessionId,
           externalSessionId: input.context.externalSessionId,
           input: input.context.input,
         },

@@ -133,7 +133,7 @@ const EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID: ActiveTaskSessionContextByTa
 const noopOpenSession = (
   _taskId: string,
   _role: AgentRole,
-  _options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+  _options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
 ): void => {};
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
@@ -180,7 +180,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const [selectionIntent, setSelectionIntent] = useState<{
     taskId: string;
-    sessionId: string | null;
+    externalSessionId: string | null;
     role: AgentRole;
     scenario: AgentScenario | null;
   } | null>(null);
@@ -216,7 +216,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const scheduleSelectionIntent = useCallback(
     (intent: {
       taskId: string;
-      sessionId: string | null;
+      externalSessionId: string | null;
       role: AgentRole;
       scenario: AgentScenario | null;
     }): void => {
@@ -302,10 +302,12 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     }
 
     const normalizedQueryScenario = sessionParam ? null : scenarioFromQuery;
-    const normalizedIntentScenario = selectionIntent.sessionId ? null : selectionIntent.scenario;
+    const normalizedIntentScenario = selectionIntent.externalSessionId
+      ? null
+      : selectionIntent.scenario;
     if (
       selectionIntent.taskId === taskIdParam &&
-      selectionIntent.sessionId === sessionParam &&
+      selectionIntent.externalSessionId === sessionParam &&
       selectionIntent.role === roleFromQuery &&
       normalizedIntentScenario === normalizedQueryScenario
     ) {
@@ -354,12 +356,12 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       [
         selection.viewTaskId,
         selection.viewRole,
-        selection.viewActiveSession?.sessionId ?? "new",
+        selection.viewActiveSession?.externalSessionId ?? "new",
         contextSwitchVersion,
       ].join(":"),
     [
       contextSwitchVersion,
-      selection.viewActiveSession?.sessionId,
+      selection.viewActiveSession?.externalSessionId,
       selection.viewRole,
       selection.viewTaskId,
     ],
@@ -374,7 +376,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       selection.viewTaskId ?? "",
       selection.viewSelectedTask?.updatedAt ?? "",
       selection.viewSelectedTask?.status ?? "",
-      selection.viewActiveSession?.sessionId ?? "",
+      selection.viewActiveSession?.externalSessionId ?? "",
       selection.viewActiveSession?.status ?? "",
       selection.viewActiveSession?.workingDirectory ?? "",
       selection.isViewSessionHistoryHydrating ? "1" : "0",
@@ -395,7 +397,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   }, [
     isForegroundLoadingTasks,
     selection.isViewSessionHistoryHydrating,
-    selection.viewActiveSession?.sessionId,
+    selection.viewActiveSession?.externalSessionId,
     selection.viewActiveSession?.status,
     selection.viewActiveSession?.workingDirectory,
     selection.viewSelectedTask?.status,

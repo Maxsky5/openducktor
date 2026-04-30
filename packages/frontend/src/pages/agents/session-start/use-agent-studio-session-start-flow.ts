@@ -97,7 +97,7 @@ export function useAgentStudioSessionStartFlow({
         activeWorkspace,
         taskId,
         role,
-        sessionId: activeSession?.sessionId ?? null,
+        externalSessionId: activeSession?.externalSessionId ?? null,
       })
     ] ?? 0) > 0;
 
@@ -202,10 +202,10 @@ export function useAgentStudioSessionStartFlow({
 
         applyAgentStudioSelectionQuery(updateQuery, {
           taskId: request.taskId,
-          sessionId: workflow.sessionId,
+          externalSessionId: workflow.externalSessionId,
           role: request.role,
         });
-        return workflow.sessionId;
+        return workflow.externalSessionId;
       });
     },
     [

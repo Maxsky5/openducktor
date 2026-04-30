@@ -30,7 +30,7 @@ const NOOP_SUBMIT_ANSWERS = async (_requestId: string, _answers: string[][]): Pr
 type UseReadonlySessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;
   activeWorkspace: ActiveWorkspace | null;
-  sessionId: string | null;
+  externalSessionId: string | null;
   source: RuntimeSessionTranscriptSource | null;
 };
 
@@ -64,7 +64,7 @@ const matchesSourceRuntime = (
 export function useReadonlySessionTranscriptSurfaceModel({
   isOpen,
   activeWorkspace,
-  sessionId,
+  externalSessionId: requestedExternalSessionId,
   source,
 }: UseReadonlySessionTranscriptSurfaceModelArgs) {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
@@ -81,7 +81,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     replyAgentPermission,
     replyRuntimeSessionPermission,
   } = useAgentOperations();
-  const liveSession = useAgentSession(sessionId ?? null);
+  const liveSession = useAgentSession(requestedExternalSessionId ?? null);
   const isMountedRef = useRef(true);
   const attachLiveTranscriptKeyRef = useRef<string | null>(null);
   const visiblePendingPermissionsRef = useRef<AgentPermissionRequest[]>([]);
@@ -209,7 +209,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       ).runtimeConnection,
     };
   }, [runtimeListQuery.data, runtimeListQuery.error, runtimeListQuery.isPending, source]);
-  const externalSessionId = source?.externalSessionId ?? sessionId ?? null;
+  const externalSessionId = source?.externalSessionId ?? requestedExternalSessionId ?? null;
   useEffect(() => {
     const hasTranscriptIdentity = Boolean(externalSessionId || source?.runtimeId);
     if (!hasTranscriptIdentity) {
@@ -246,10 +246,9 @@ export function useReadonlySessionTranscriptSurfaceModel({
     if (
       !isOpen ||
       !activeWorkspace ||
-      !sessionId ||
+      !externalSessionId ||
       !source ||
       source.isLive !== true ||
-      !externalSessionId ||
       !resolvedSource.runtimeConnection ||
       resolvedSource.error ||
       resolvedSource.isPending
@@ -259,7 +258,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
 
     return [
       activeWorkspace.repoPath,
-      sessionId,
       externalSessionId,
       source.runtimeKind,
       resolvedSource.runtimeId ?? "",
@@ -274,7 +272,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
     resolvedSource.isPending,
     resolvedSource.runtimeConnection,
     resolvedSource.runtimeId,
-    sessionId,
     source,
   ]);
 
@@ -290,7 +287,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     if (!liveTranscriptAttachKey) {
       return;
     }
-    if (!activeWorkspace || !sessionId || !source || !externalSessionId) {
+    if (!activeWorkspace || !externalSessionId || !source) {
       return;
     }
     const runtimeConnection = resolvedSource.runtimeConnection;
@@ -307,7 +304,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
 
     void attachRuntimeTranscriptSession({
       repoPath: activeWorkspace.repoPath,
-      sessionId,
       externalSessionId,
       runtimeKind: source.runtimeKind,
       runtimeId: resolvedSource.runtimeId ?? source.runtimeId,
@@ -342,17 +338,15 @@ export function useReadonlySessionTranscriptSurfaceModel({
     liveTranscriptAttachKey,
     resolvedSource.runtimeConnection,
     resolvedSource.runtimeId,
-    sessionId,
     source,
   ]);
 
   const historyQueryEnabled = Boolean(
     isOpen &&
       activeWorkspace &&
-      sessionId &&
+      externalSessionId &&
       source &&
       source.isLive !== true &&
-      externalSessionId &&
       resolvedSource.runtimeConnection &&
       liveSession === null,
   );
@@ -387,7 +381,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
     if (
       !activeWorkspace ||
       !source ||
-      !sessionId ||
       !externalSessionId ||
       !resolvedSource.runtimeConnection ||
       !historyQuery.data
@@ -397,7 +390,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
 
     return createRuntimeTranscriptSession({
       repoPath: activeWorkspace.repoPath,
-      sessionId,
       externalSessionId,
       runtimeKind: source.runtimeKind,
       runtimeId: resolvedSource.runtimeId,
@@ -412,7 +404,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
     historyQuery.data,
     liveSession,
     resolvedSource,
-    sessionId,
     source,
     visiblePendingPermissions,
   ]);
@@ -430,7 +421,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const isLiveAttachBlocking = isAttachingLiveTranscript && !hasTranscriptSession;
   const isTranscriptLoading = isHistoryLoading || isLiveAttachBlocking;
   const isResolvingTranscript =
-    Boolean(isOpen && activeWorkspace && sessionId && source) &&
+    Boolean(isOpen && activeWorkspace && externalSessionId && source) &&
     runtimeData.session === null &&
     (resolvedSource.isPending || isTranscriptLoading);
   const loadError =
@@ -448,7 +439,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     if (isResolvingTranscript) {
       return null;
     }
-    if (sessionId && activeWorkspace) {
+    if (externalSessionId && activeWorkspace) {
       return {
         title: "Conversation unavailable.",
       };
@@ -456,14 +447,14 @@ export function useReadonlySessionTranscriptSurfaceModel({
     return {
       title: "Select a repository and session to view the conversation.",
     };
-  }, [activeWorkspace, isResolvingTranscript, loadError, sessionId]);
+  }, [activeWorkspace, isResolvingTranscript, loadError, externalSessionId]);
   const permissionSession = runtimeData.session;
-  const activePermissionSessionId = permissionSession?.sessionId ?? null;
+  const activePermissionSessionId = permissionSession?.externalSessionId ?? null;
   const pendingPermissionRequests =
     permissionSession?.pendingPermissions ?? EMPTY_PENDING_PERMISSIONS;
   const replyTranscriptPermission = useCallback(
     async (
-      targetSessionId: string,
+      targetExternalSessionId: string,
       requestId: string,
       reply: "once" | "always" | "reject",
     ): Promise<void> => {
@@ -471,7 +462,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
         await replyRuntimeSessionPermission({
           runtimeKind: source.runtimeKind,
           runtimeConnection: resolvedSource.runtimeConnection,
-          targetSessionId,
+          targetExternalSessionId,
           requestId,
           reply,
         });
@@ -487,7 +478,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       }
 
       if (liveSession) {
-        await replyAgentPermission(targetSessionId, requestId, reply);
+        await replyAgentPermission(targetExternalSessionId, requestId, reply);
         return;
       }
 
@@ -504,7 +495,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
   );
   const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
     useAgentSessionPermissionActions({
-      activeSessionId: activePermissionSessionId,
+      activeExternalSessionId: activePermissionSessionId,
       pendingPermissions: pendingPermissionRequests,
       agentStudioReady: runtimeReadiness.isReady,
       replyAgentPermission: replyTranscriptPermission,

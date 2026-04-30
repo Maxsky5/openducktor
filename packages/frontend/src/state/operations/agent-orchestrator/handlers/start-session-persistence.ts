@@ -48,7 +48,7 @@ export const registerStartedSession = async ({
     }
     return {
       ...current,
-      [startedCtx.summary.sessionId]: initialSession,
+      [startedCtx.summary.externalSessionId]: initialSession,
     };
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);

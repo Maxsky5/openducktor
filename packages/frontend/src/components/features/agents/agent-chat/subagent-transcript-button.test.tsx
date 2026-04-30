@@ -10,7 +10,7 @@ const createSubagentMeta = (overrides: Partial<SubagentMeta> = {}): SubagentMeta
   status: "completed",
   agent: "build",
   description: "Did work",
-  sessionId: "session-child-1",
+  externalSessionId: "session-child-1",
   ...overrides,
 });
 
@@ -43,7 +43,7 @@ describe("SubagentTranscriptButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
     expect(onOpenTranscript).toHaveBeenCalledWith({
-      sessionId: "session-child-1",
+      externalSessionId: "session-child-1",
       title: "Subagent activity",
       description: "View what this subagent did.",
       source: {
@@ -72,7 +72,7 @@ describe("SubagentTranscriptButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
     expect(onOpenTranscript).toHaveBeenCalledWith({
-      sessionId: "session-child-1",
+      externalSessionId: "session-child-1",
       title: "Subagent activity",
       description: "View what this subagent did.",
       source: {
@@ -99,7 +99,7 @@ describe("SubagentTranscriptButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
     expect(onOpenTranscript).toHaveBeenCalledWith({
-      sessionId: "session-child-1",
+      externalSessionId: "session-child-1",
       title: "Subagent activity",
       description: "View what this subagent did.",
       source: {
@@ -124,7 +124,7 @@ describe("SubagentTranscriptButton", () => {
     );
 
     const metaWithoutSessionId = createSubagentMeta();
-    delete metaWithoutSessionId.sessionId;
+    delete metaWithoutSessionId.externalSessionId;
 
     rerender(
       <SubagentTranscriptButton

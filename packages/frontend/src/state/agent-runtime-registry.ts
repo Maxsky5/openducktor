@@ -65,8 +65,8 @@ export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
 };
 
 class RuntimeRegistryAgentEngine implements AgentEnginePort {
-  private readonly runtimeKindsBySessionId = new Map<string, RuntimeKind>();
-  private readonly pendingRuntimeKindsBySessionId = new Map<string, RuntimeKind>();
+  private readonly runtimeKindsByExternalSessionId = new Map<string, RuntimeKind>();
+  private readonly pendingRuntimeKindsByExternalSessionId = new Map<string, RuntimeKind>();
 
   constructor(
     private readonly getAdapter: (runtimeKind: RuntimeKind) => RegisteredRuntimeAdapter,
@@ -101,7 +101,7 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   async startSession(input: Parameters<AgentEnginePort["startSession"]>[0]) {
     const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model);
     const summary = await this.getAdapter(runtimeKind).startSession(input);
-    this.runtimeKindsBySessionId.set(summary.sessionId, runtimeKind);
+    this.runtimeKindsByExternalSessionId.set(summary.externalSessionId, runtimeKind);
     return {
       ...summary,
       runtimeKind,
@@ -109,9 +109,13 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   }
 
   async resumeSession(input: Parameters<AgentEnginePort["resumeSession"]>[0]) {
-    const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model, input.sessionId);
+    const runtimeKind = this.resolveRuntimeKind(
+      input.runtimeKind,
+      input.model,
+      input.externalSessionId,
+    );
     const summary = await this.getAdapter(runtimeKind).resumeSession(input);
-    this.runtimeKindsBySessionId.set(summary.sessionId, runtimeKind);
+    this.runtimeKindsByExternalSessionId.set(summary.externalSessionId, runtimeKind);
     return {
       ...summary,
       runtimeKind,
@@ -122,36 +126,38 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     const runtimeKind = this.resolveRuntimeKind(
       input.runtimeKind,
       "model" in input ? input.model : undefined,
-      input.sessionId,
+      input.externalSessionId,
     );
-    this.pendingRuntimeKindsBySessionId.set(input.sessionId, runtimeKind);
+    this.pendingRuntimeKindsByExternalSessionId.set(input.externalSessionId, runtimeKind);
     try {
       const summary = await this.getAdapter(runtimeKind).attachSession(input);
-      this.pendingRuntimeKindsBySessionId.delete(input.sessionId);
-      this.runtimeKindsBySessionId.set(summary.sessionId, runtimeKind);
+      this.pendingRuntimeKindsByExternalSessionId.delete(input.externalSessionId);
+      this.runtimeKindsByExternalSessionId.set(summary.externalSessionId, runtimeKind);
       return {
         ...summary,
         runtimeKind,
       };
     } catch (error) {
-      if (this.pendingRuntimeKindsBySessionId.get(input.sessionId) === runtimeKind) {
-        this.pendingRuntimeKindsBySessionId.delete(input.sessionId);
+      if (
+        this.pendingRuntimeKindsByExternalSessionId.get(input.externalSessionId) === runtimeKind
+      ) {
+        this.pendingRuntimeKindsByExternalSessionId.delete(input.externalSessionId);
       }
       throw error;
     }
   }
 
-  async detachSession(sessionId: string): Promise<void> {
-    const runtimeKind = this.requireSessionRuntimeKind(sessionId);
-    await this.getAdapter(runtimeKind).detachSession(sessionId);
-    this.pendingRuntimeKindsBySessionId.delete(sessionId);
-    this.runtimeKindsBySessionId.delete(sessionId);
+  async detachSession(externalSessionId: string): Promise<void> {
+    const runtimeKind = this.requireSessionRuntimeKind(externalSessionId);
+    await this.getAdapter(runtimeKind).detachSession(externalSessionId);
+    this.pendingRuntimeKindsByExternalSessionId.delete(externalSessionId);
+    this.runtimeKindsByExternalSessionId.delete(externalSessionId);
   }
 
   async forkSession(input: Parameters<AgentEnginePort["forkSession"]>[0]) {
     const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model);
     const summary = await this.getAdapter(runtimeKind).forkSession(input);
-    this.runtimeKindsBySessionId.set(summary.sessionId, runtimeKind);
+    this.runtimeKindsByExternalSessionId.set(summary.externalSessionId, runtimeKind);
     return {
       ...summary,
       runtimeKind,
@@ -196,8 +202,8 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     ).listLiveAgentSessionSnapshots(input);
   }
 
-  hasSession(sessionId: string): boolean {
-    return this.discoverSessionRuntimeKind(sessionId) !== null;
+  hasSession(externalSessionId: string): boolean {
+    return this.discoverSessionRuntimeKind(externalSessionId) !== null;
   }
 
   loadSessionHistory(input: Parameters<AgentEnginePort["loadSessionHistory"]>[0]) {
@@ -221,17 +227,21 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   }
 
   updateSessionModel(input: Parameters<AgentEnginePort["updateSessionModel"]>[0]) {
-    return this.getAdapter(this.requireSessionRuntimeKind(input.sessionId)).updateSessionModel(
+    return this.getAdapter(
+      this.requireSessionRuntimeKind(input.externalSessionId),
+    ).updateSessionModel(input);
+  }
+
+  sendUserMessage(input: Parameters<AgentEnginePort["sendUserMessage"]>[0]) {
+    return this.getAdapter(this.requireSessionRuntimeKind(input.externalSessionId)).sendUserMessage(
       input,
     );
   }
 
-  sendUserMessage(input: Parameters<AgentEnginePort["sendUserMessage"]>[0]) {
-    return this.getAdapter(this.requireSessionRuntimeKind(input.sessionId)).sendUserMessage(input);
-  }
-
   replyPermission(input: Parameters<AgentEnginePort["replyPermission"]>[0]) {
-    return this.getAdapter(this.requireSessionRuntimeKind(input.sessionId)).replyPermission(input);
+    return this.getAdapter(this.requireSessionRuntimeKind(input.externalSessionId)).replyPermission(
+      input,
+    );
   }
 
   replyRuntimeSessionPermission(
@@ -243,20 +253,25 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   }
 
   replyQuestion(input: Parameters<AgentEnginePort["replyQuestion"]>[0]) {
-    return this.getAdapter(this.requireSessionRuntimeKind(input.sessionId)).replyQuestion(input);
+    return this.getAdapter(this.requireSessionRuntimeKind(input.externalSessionId)).replyQuestion(
+      input,
+    );
   }
 
-  subscribeEvents(sessionId: string, listener: Parameters<AgentEnginePort["subscribeEvents"]>[1]) {
-    return this.getAdapter(this.requireSessionRuntimeKind(sessionId)).subscribeEvents(
-      sessionId,
+  subscribeEvents(
+    externalSessionId: string,
+    listener: Parameters<AgentEnginePort["subscribeEvents"]>[1],
+  ) {
+    return this.getAdapter(this.requireSessionRuntimeKind(externalSessionId)).subscribeEvents(
+      externalSessionId,
       listener,
     );
   }
 
-  async stopSession(sessionId: string): Promise<void> {
-    const runtimeKind = this.requireSessionRuntimeKind(sessionId);
-    await this.getAdapter(runtimeKind).stopSession(sessionId);
-    this.runtimeKindsBySessionId.delete(sessionId);
+  async stopSession(externalSessionId: string): Promise<void> {
+    const runtimeKind = this.requireSessionRuntimeKind(externalSessionId);
+    await this.getAdapter(runtimeKind).stopSession(externalSessionId);
+    this.runtimeKindsByExternalSessionId.delete(externalSessionId);
   }
 
   loadSessionDiff(input: Parameters<AgentEnginePort["loadSessionDiff"]>[0]) {
@@ -284,7 +299,7 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   private resolveRuntimeKind(
     runtimeKind: RuntimeKind | undefined,
     model: AgentModelSelection | undefined,
-    sessionId?: string,
+    externalSessionId?: string,
   ): RuntimeKind {
     if (runtimeKind) {
       return runtimeKind;
@@ -292,34 +307,34 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     if (model?.runtimeKind) {
       return model.runtimeKind;
     }
-    if (sessionId) {
-      return this.requireSessionRuntimeKind(sessionId);
+    if (externalSessionId) {
+      return this.requireSessionRuntimeKind(externalSessionId);
     }
     throw new Error("Runtime kind is required to select an agent runtime adapter.");
   }
 
-  private requireSessionRuntimeKind(sessionId: string): RuntimeKind {
-    const resolvedRuntimeKind = this.discoverSessionRuntimeKind(sessionId);
+  private requireSessionRuntimeKind(externalSessionId: string): RuntimeKind {
+    const resolvedRuntimeKind = this.discoverSessionRuntimeKind(externalSessionId);
     if (resolvedRuntimeKind) {
       return resolvedRuntimeKind;
     }
-    throw new Error(`Runtime kind is unknown for session '${sessionId}'.`);
+    throw new Error(`Runtime kind is unknown for session '${externalSessionId}'.`);
   }
 
-  private discoverSessionRuntimeKind(sessionId: string): RuntimeKind | null {
-    const cachedRuntimeKind = this.runtimeKindsBySessionId.get(sessionId);
-    if (cachedRuntimeKind && this.getAdapter(cachedRuntimeKind).hasSession(sessionId)) {
+  private discoverSessionRuntimeKind(externalSessionId: string): RuntimeKind | null {
+    const cachedRuntimeKind = this.runtimeKindsByExternalSessionId.get(externalSessionId);
+    if (cachedRuntimeKind && this.getAdapter(cachedRuntimeKind).hasSession(externalSessionId)) {
       return cachedRuntimeKind;
     }
 
-    const pendingRuntimeKind = this.pendingRuntimeKindsBySessionId.get(sessionId);
+    const pendingRuntimeKind = this.pendingRuntimeKindsByExternalSessionId.get(externalSessionId);
     if (pendingRuntimeKind) {
       return pendingRuntimeKind;
     }
 
     for (const runtimeKind of this.registeredRuntimeKinds) {
-      if (this.getAdapter(runtimeKind).hasSession(sessionId)) {
-        this.runtimeKindsBySessionId.set(sessionId, runtimeKind);
+      if (this.getAdapter(runtimeKind).hasSession(externalSessionId)) {
+        this.runtimeKindsByExternalSessionId.set(externalSessionId, runtimeKind);
         return runtimeKind;
       }
     }

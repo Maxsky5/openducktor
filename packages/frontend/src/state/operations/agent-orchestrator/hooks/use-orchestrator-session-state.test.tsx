@@ -36,7 +36,6 @@ const taskFixture: TaskCard = {
 
 const createSessionFixture = (): AgentSessionState => ({
   runtimeKind: "opencode",
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: "/tmp/repo-a",

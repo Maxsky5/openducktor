@@ -19,12 +19,16 @@ export const stopSessionOnStaleAndThrow = async ({
 }): Promise<never> => {
   const tags = createSessionStartTags(startedCtx);
   try {
-    await runOrchestratorTask(reason, async () => runtime.adapter.stopSession(tags.sessionId), {
-      tags,
-    });
+    await runOrchestratorTask(
+      reason,
+      async () => runtime.adapter.stopSession(tags.externalSessionId),
+      {
+        tags,
+      },
+    );
   } catch (error) {
     throw new Error(
-      `${STALE_START_ERROR} Failed to stop stale started session '${tags.sessionId}': ${errorMessage(error)}`,
+      `${STALE_START_ERROR} Failed to stop stale started session '${tags.externalSessionId}': ${errorMessage(error)}`,
       { cause: error },
     );
   }
@@ -42,31 +46,31 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
   session: SessionDependencies;
   runtime: RuntimeDependencies;
 }): Promise<never> => {
-  const sessionId = startedCtx.summary.sessionId;
+  const externalSessionId = startedCtx.summary.externalSessionId;
   session.setSessionsById((current) => {
-    if (!(sessionId in current)) {
+    if (!(externalSessionId in current)) {
       return current;
     }
     const next = { ...current };
-    delete next[sessionId];
+    delete next[externalSessionId];
     return next;
   });
 
   try {
     await runOrchestratorTask(
       "start-session-stop-after-persist-failure",
-      async () => runtime.adapter.stopSession(sessionId),
+      async () => runtime.adapter.stopSession(externalSessionId),
       { tags: createSessionStartTags(startedCtx) },
     );
   } catch (stopError) {
     throw new Error(
-      `Failed to persist started session "${sessionId}": ${errorMessage(error)}. Failed to stop the started session during rollback: ${errorMessage(stopError)}`,
+      `Failed to persist started session "${externalSessionId}": ${errorMessage(error)}. Failed to stop the started session during rollback: ${errorMessage(stopError)}`,
       { cause: stopError },
     );
   }
 
   throw new Error(
-    `Failed to persist started session "${sessionId}": ${errorMessage(error)}. The started session was stopped and removed locally.`,
+    `Failed to persist started session "${externalSessionId}": ${errorMessage(error)}. The started session was stopped and removed locally.`,
     error instanceof Error ? { cause: error } : undefined,
   );
 };
@@ -82,21 +86,21 @@ export const rollbackStartedSessionBeforeRegistration = async ({
   runtime: RuntimeDependencies;
   reason: string;
 }): Promise<never> => {
-  const sessionId = startedCtx.summary.sessionId;
+  const externalSessionId = startedCtx.summary.externalSessionId;
 
   try {
-    await runOrchestratorTask(reason, async () => runtime.adapter.stopSession(sessionId), {
+    await runOrchestratorTask(reason, async () => runtime.adapter.stopSession(externalSessionId), {
       tags: createSessionStartTags(startedCtx),
     });
   } catch (stopError) {
     throw new Error(
-      `Failed to initialize started session "${sessionId}": ${errorMessage(error)}. Failed to stop the started session during rollback: ${errorMessage(stopError)}`,
+      `Failed to initialize started session "${externalSessionId}": ${errorMessage(error)}. Failed to stop the started session during rollback: ${errorMessage(stopError)}`,
       { cause: stopError },
     );
   }
 
   throw new Error(
-    `Failed to initialize started session "${sessionId}": ${errorMessage(error)}. The started session was stopped before local registration.`,
+    `Failed to initialize started session "${externalSessionId}": ${errorMessage(error)}. The started session was stopped before local registration.`,
     error instanceof Error ? { cause: error } : undefined,
   );
 };

@@ -67,11 +67,11 @@ export function useAgentStudioFreshSessionCreation({
 } {
   const queryClient = useQueryClient();
   const applyFreshSessionSelectionQuery = useCallback(
-    (sessionId: string, nextRole: AgentRole, nextScenario: AgentScenario): void => {
+    (externalSessionId: string, nextRole: AgentRole, nextScenario: AgentScenario): void => {
       updateQuery(
         buildAgentStudioSelectionQueryUpdate({
           taskId,
-          sessionId,
+          externalSessionId,
           role: nextRole,
           scenario: nextScenario,
         }),
@@ -89,15 +89,15 @@ export function useAgentStudioFreshSessionCreation({
         activeWorkspace,
         taskId,
         role: params.nextRole,
-        sessionId: null,
+        externalSessionId: null,
       });
       const executeStartedSession = async (
         decision: ResolvedSessionStartDecision,
       ): Promise<string | undefined> => {
         const shouldSwitchContext = shouldTriggerContextSwitchIntent({
-          currentSessionId: activeSession?.sessionId ?? null,
+          currentExternalSessionId: activeSession?.externalSessionId ?? null,
           currentRole: activeSession?.role ?? role,
-          nextSessionId: decision.startMode === "reuse" ? decision.sourceSessionId : null,
+          nextSessionId: decision.startMode === "reuse" ? decision.sourceExternalSessionId : null,
           nextRole: params.nextRole,
         });
 
@@ -139,8 +139,8 @@ export function useAgentStudioFreshSessionCreation({
               return undefined;
             }
 
-            const sessionId = workflow.sessionId;
-            if (!sessionId) {
+            const externalSessionId = workflow.externalSessionId;
+            if (!externalSessionId) {
               return undefined;
             }
 
@@ -148,8 +148,12 @@ export function useAgentStudioFreshSessionCreation({
               onContextSwitchIntent?.();
             }
 
-            applyFreshSessionSelectionQuery(sessionId, params.nextRole, params.nextScenario);
-            return sessionId;
+            applyFreshSessionSelectionQuery(
+              externalSessionId,
+              params.nextRole,
+              params.nextScenario,
+            );
+            return externalSessionId;
           } catch (error) {
             const roleLabel = AGENT_ROLE_LABELS[params.nextRole] ?? params.nextRole.toUpperCase();
             toast.error(`Failed to start ${roleLabel} session`, {

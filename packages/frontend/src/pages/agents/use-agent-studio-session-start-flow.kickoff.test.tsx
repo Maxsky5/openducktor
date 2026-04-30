@@ -168,7 +168,7 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
       state.sessionStartModal?.onConfirm({
         runInBackground: false,
         startMode: "fresh",
-        sourceSessionId: null,
+        sourceExternalSessionId: null,
       });
     });
 

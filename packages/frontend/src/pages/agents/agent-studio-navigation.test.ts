@@ -7,19 +7,19 @@ describe("agent-studio-navigation", () => {
       restoreNavigationFromPersistedContext(
         {
           taskId: "task-current",
-          sessionId: null,
+          externalSessionId: null,
           role: null,
           scenario: null,
         },
         {
           taskId: "task-persisted",
-          sessionId: "session-persisted",
+          externalSessionId: "session-persisted",
           role: "planner",
         },
       ),
     ).toEqual({
       taskId: "task-current",
-      sessionId: null,
+      externalSessionId: null,
       role: "planner",
       scenario: null,
     });
@@ -30,19 +30,19 @@ describe("agent-studio-navigation", () => {
       restoreNavigationFromPersistedContext(
         {
           taskId: "task-current",
-          sessionId: null,
+          externalSessionId: null,
           role: null,
           scenario: null,
         },
         {
           taskId: "task-current",
-          sessionId: "session-persisted",
+          externalSessionId: "session-persisted",
           role: "planner",
         },
       ),
     ).toEqual({
       taskId: "task-current",
-      sessionId: "session-persisted",
+      externalSessionId: "session-persisted",
       role: "planner",
       scenario: null,
     });

@@ -100,7 +100,7 @@ describe("stream-part-mapper", () => {
       },
       output: {
         result: "Done subtask",
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
       },
       metadata: {
         background: true,
@@ -123,7 +123,7 @@ describe("stream-part-mapper", () => {
       agent: "planner",
       prompt: "Inspect the tests",
       description: "Done subtask",
-      sessionId: "session-child-1",
+      externalSessionId: "session-child-1",
       executionMode: "background",
       metadata: {
         background: true,
@@ -145,7 +145,7 @@ describe("stream-part-mapper", () => {
       },
       output: {
         result: "Cancelled by user",
-        sessionId: "session-child-cancelled-1",
+        externalSessionId: "session-child-cancelled-1",
       },
       time: {
         start: 10,
@@ -164,7 +164,7 @@ describe("stream-part-mapper", () => {
       agent: "planner",
       prompt: "Inspect the tests",
       description: "Cancelled by user",
-      sessionId: "session-child-cancelled-1",
+      externalSessionId: "session-child-cancelled-1",
       startedAtMs: 10,
       endedAtMs: 25,
     });
@@ -184,7 +184,7 @@ describe("stream-part-mapper", () => {
         isError: true,
       },
       metadata: {
-        sessionId: "session-child-error-1",
+        externalSessionId: "session-child-error-1",
       },
       time: {
         start: 10,
@@ -203,9 +203,9 @@ describe("stream-part-mapper", () => {
       agent: "planner",
       prompt: "Inspect the tests",
       description: "Task failed",
-      sessionId: "session-child-error-1",
+      externalSessionId: "session-child-error-1",
       metadata: {
-        sessionId: "session-child-error-1",
+        externalSessionId: "session-child-error-1",
       },
       startedAtMs: 10,
       endedAtMs: 25,
@@ -223,7 +223,7 @@ describe("stream-part-mapper", () => {
         description: "Starting subagent",
       },
       metadata: {
-        sessionId: "session-child-task-1",
+        externalSessionId: "session-child-task-1",
       },
       time: {
         start: 25,
@@ -241,9 +241,9 @@ describe("stream-part-mapper", () => {
       agent: "build",
       prompt: "Inspect the repo",
       description: "Starting subagent",
-      sessionId: "session-child-task-1",
+      externalSessionId: "session-child-task-1",
       metadata: {
-        sessionId: "session-child-task-1",
+        externalSessionId: "session-child-task-1",
       },
       startedAtMs: 25,
     });
@@ -275,7 +275,7 @@ describe("stream-part-mapper", () => {
         },
         output: {
           result: "Finished work",
-          sessionId: "session-child-identity-1",
+          externalSessionId: "session-child-identity-1",
         },
       },
     } as unknown as Part;
@@ -293,7 +293,7 @@ describe("stream-part-mapper", () => {
     expect(spawned.correlationKey).toBe("spawn:assistant-identity-1:build:Inspect the repo");
     expect(completed.correlationKey).toBe("spawn:assistant-identity-1:build:Inspect the repo");
     expect(completed.description).toBe("Finished work");
-    expect(completed.sessionId).toBe("session-child-identity-1");
+    expect(completed.externalSessionId).toBe("session-child-identity-1");
   });
 
   test("derives preview hints for current tool families", () => {

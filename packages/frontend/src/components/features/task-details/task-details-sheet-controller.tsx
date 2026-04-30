@@ -30,7 +30,7 @@ type TaskDetailsSheetControllerProps = Omit<
   onOpenSession: (
     taskId: string,
     role: AgentRole,
-    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
   ) => void;
 };
 

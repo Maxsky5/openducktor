@@ -21,7 +21,7 @@ type UseAgentChatSessionHydrationParams = {
   repoReadinessState: SessionRepoReadinessState;
   ensureSessionReadyForView: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
     repoReadinessState: SessionRepoReadinessState;
     recoveryDedupKey?: string | null;
     historyPreludeMode?: AgentSessionHistoryPreludeMode;
@@ -53,14 +53,14 @@ export function useAgentChatSessionHydration({
   refreshRuntimeAttachmentSources,
   runtimeAttachmentCandidates,
 }: UseAgentChatSessionHydrationParams): AgentChatSessionHydrationResult {
-  const activeSessionId = activeSession?.sessionId ?? null;
+  const activeExternalSessionId = activeSession?.externalSessionId ?? null;
   const [requestState, setRequestState] = useState<{
-    sessionId: string | null;
+    externalSessionId: string | null;
     status: "idle" | "pending" | "failed";
-  }>({ sessionId: null, status: "idle" });
+  }>({ externalSessionId: null, status: "idle" });
   const activeRuntimeAttachmentKey =
-    activeWorkspace && activeTaskId && activeSessionId
-      ? `${activeWorkspace.repoPath}::${activeTaskId}::${activeSessionId}`
+    activeWorkspace && activeTaskId && activeExternalSessionId
+      ? `${activeWorkspace.repoPath}::${activeTaskId}::${activeExternalSessionId}`
       : null;
   const lifecycle = deriveAgentSessionViewLifecycle({
     session: activeSession,
@@ -69,7 +69,7 @@ export function useAgentChatSessionHydration({
 
   useAgentChatRuntimeAttachmentRetry({
     activeTaskId,
-    activeSessionId,
+    activeExternalSessionId,
     shouldWaitForSessionRuntime: lifecycle.shouldWaitForRuntimeAttachment,
     activeRuntimeAttachmentKey,
     runtimeAttachmentCandidates,
@@ -82,28 +82,28 @@ export function useAgentChatSessionHydration({
   });
 
   const isRequestFailed =
-    requestState.sessionId === activeSessionId && requestState.status === "failed";
+    requestState.externalSessionId === activeExternalSessionId && requestState.status === "failed";
   const shouldEnsureSessionReady = lifecycle.shouldEnsureReadyForView && !isRequestFailed;
 
   useEffect(() => {
-    if (!activeSessionId) {
-      setRequestState({ sessionId: null, status: "idle" });
+    if (!activeExternalSessionId) {
+      setRequestState({ externalSessionId: null, status: "idle" });
       return;
     }
 
     if (!shouldEnsureSessionReady || lifecycle.phase === "waiting_for_runtime_attachment") {
       setRequestState((current) =>
-        current.sessionId === activeSessionId && current.status === "pending"
-          ? { sessionId: activeSessionId, status: "idle" }
+        current.externalSessionId === activeExternalSessionId && current.status === "pending"
+          ? { externalSessionId: activeExternalSessionId, status: "idle" }
           : current,
       );
       return;
     }
 
-    setRequestState({ sessionId: activeSessionId, status: "pending" });
+    setRequestState({ externalSessionId: activeExternalSessionId, status: "pending" });
     void ensureSessionReadyForView({
       taskId: activeTaskId,
-      sessionId: activeSessionId,
+      externalSessionId: activeExternalSessionId,
       repoReadinessState,
       ...(historyPreludeMode ? { historyPreludeMode } : {}),
       ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
@@ -111,20 +111,20 @@ export function useAgentChatSessionHydration({
     })
       .then(() => {
         setRequestState((current) =>
-          current.sessionId === activeSessionId
-            ? { sessionId: activeSessionId, status: "idle" }
+          current.externalSessionId === activeExternalSessionId
+            ? { externalSessionId: activeExternalSessionId, status: "idle" }
             : current,
         );
       })
       .catch(() => {
         setRequestState((current) =>
-          current.sessionId === activeSessionId
-            ? { sessionId: activeSessionId, status: "failed" }
+          current.externalSessionId === activeExternalSessionId
+            ? { externalSessionId: activeExternalSessionId, status: "failed" }
             : current,
         );
       });
   }, [
-    activeSessionId,
+    activeExternalSessionId,
     activeTaskId,
     ensureSessionReadyForView,
     historyPreludeMode,
@@ -136,19 +136,19 @@ export function useAgentChatSessionHydration({
   ]);
 
   const shouldShowPendingHydrationState =
-    requestState.sessionId === activeSessionId && requestState.status === "pending";
+    requestState.externalSessionId === activeExternalSessionId && requestState.status === "pending";
 
   return {
     isActiveTaskHydrated: Boolean(activeWorkspace && activeTaskId),
     isActiveTaskHydrationFailed: false,
-    isActiveSessionHistoryHydrated: activeSessionId ? lifecycle.canRenderHistory : false,
-    isActiveSessionHistoryHydrationFailed: activeSessionId
+    isActiveSessionHistoryHydrated: activeExternalSessionId ? lifecycle.canRenderHistory : false,
+    isActiveSessionHistoryHydrationFailed: activeExternalSessionId
       ? lifecycle.isHistoryHydrationFailed || isRequestFailed
       : false,
-    isActiveSessionHistoryHydrating: activeSessionId
+    isActiveSessionHistoryHydrating: activeExternalSessionId
       ? shouldShowPendingHydrationState || lifecycle.isHydratingHistory
       : false,
-    isWaitingForRuntimeReadiness: activeSessionId
+    isWaitingForRuntimeReadiness: activeExternalSessionId
       ? lifecycle.isWaitingForRuntimeReadiness && !isRequestFailed
       : false,
   };

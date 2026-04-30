@@ -16,7 +16,6 @@ const localHttpRuntimeResolution = {
 };
 
 const sessionRecordFixture: AgentSessionRecord = {
-  sessionId: "session-1",
   externalSessionId: "external-1",
   role: "build",
   scenario: "build_implementation_start",
@@ -27,7 +26,6 @@ const sessionRecordFixture: AgentSessionRecord = {
 };
 
 const createSessionStateFixture = (): AgentSessionState => ({
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: "/tmp/repo",
@@ -65,14 +63,14 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
-      updateSession: (sessionId, updater) => {
-        if (sessionId !== "session-1") {
+      updateSession: (externalSessionId, updater) => {
+        if (externalSessionId !== "external-1") {
           return;
         }
         state = updater(state);
       },
-      attachSessionListener: (_repoPath, sessionId) => {
-        attachedSessionId = sessionId;
+      attachSessionListener: (_repoPath, externalSessionId) => {
+        attachedSessionId = externalSessionId;
       },
       promptOverrides: {},
       resolveHydrationRuntime: async () => localHttpRuntimeResolution,
@@ -114,14 +112,14 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
-      updateSession: (sessionId, updater) => {
-        if (sessionId !== "session-1") {
+      updateSession: (externalSessionId, updater) => {
+        if (externalSessionId !== "external-1") {
           return;
         }
         state = updater(state);
       },
-      attachSessionListener: (_repoPath, sessionId) => {
-        attachedSessionId = sessionId;
+      attachSessionListener: (_repoPath, externalSessionId) => {
+        attachedSessionId = externalSessionId;
       },
       promptOverrides: {},
       resolveHydrationRuntime: async () => localHttpRuntimeResolution,
@@ -149,7 +147,7 @@ describe("reattach-live-session", () => {
 
     expect(reattached).toBe(true);
     expect(resumed).toBe(true);
-    expect(attachedSessionId === "session-1").toBe(true);
+    expect(attachedSessionId === "external-1").toBe(true);
     expect(state.pendingPermissions).toEqual([
       { requestId: "permission-2", permission: "read", patterns: [] },
     ]);
@@ -165,14 +163,14 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
-      updateSession: (sessionId, updater) => {
-        if (sessionId !== "session-1") {
+      updateSession: (externalSessionId, updater) => {
+        if (externalSessionId !== "external-1") {
           return;
         }
         state = updater(state);
       },
-      attachSessionListener: (_repoPath, sessionId) => {
-        attachedSessionId = sessionId;
+      attachSessionListener: (_repoPath, externalSessionId) => {
+        attachedSessionId = externalSessionId;
       },
       promptOverrides: {},
       resolveHydrationRuntime: async () => localHttpRuntimeResolution,
@@ -213,8 +211,8 @@ describe("reattach-live-session", () => {
         hasSession: () => true,
       },
       repoPath: "/tmp/repo",
-      updateSession: (sessionId, updater) => {
-        if (sessionId !== "session-1") {
+      updateSession: (externalSessionId, updater) => {
+        if (externalSessionId !== "external-1") {
           return;
         }
         state = updater(state);
@@ -245,14 +243,14 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
-      updateSession: (sessionId, updater) => {
-        if (sessionId !== "session-1") {
+      updateSession: (externalSessionId, updater) => {
+        if (externalSessionId !== "external-1") {
           return;
         }
         state = updater(state);
       },
-      attachSessionListener: (_repoPath, sessionId) => {
-        attachedSessionId = sessionId;
+      attachSessionListener: (_repoPath, externalSessionId) => {
+        attachedSessionId = externalSessionId;
       },
       promptOverrides: {},
       resolveHydrationRuntime: async () => localHttpRuntimeResolution,

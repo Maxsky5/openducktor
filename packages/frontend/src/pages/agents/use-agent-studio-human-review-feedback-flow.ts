@@ -26,7 +26,7 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
       scenario: "build_after_human_request_changes";
       reason: "create_session";
       existingSessionOptions: SessionStartExistingSessionOption[];
-      initialSourceSessionId?: string | null;
+      initialSourceExternalSessionId?: string | null;
       postStartAction: SessionStartPostAction;
     },
   ) => Promise<string | undefined>;
@@ -99,8 +99,8 @@ export function useAgentStudioHumanReviewFeedbackFlow({
             scenario: request.scenario,
             reason: "create_session" as const,
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.initialSourceSessionId !== undefined
-              ? { initialSourceSessionId: request.initialSourceSessionId }
+            ...(request.initialSourceExternalSessionId !== undefined
+              ? { initialSourceExternalSessionId: request.initialSourceExternalSessionId }
               : {}),
             ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
             postStartAction: request.postStartAction,

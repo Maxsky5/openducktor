@@ -86,11 +86,16 @@ impl AppService {
         let session = self
             .agent_sessions_list(repo_path, request.task_id.as_str())?
             .into_iter()
-            .find(|session| session.session_id == request.session_id)
+            .find(|session| {
+                session
+                    .external_session_id
+                    .as_deref()
+                    .is_some_and(|external_session_id| external_session_id == request.external_session_id)
+            })
             .ok_or_else(|| {
                 anyhow!(
-                    "Agent session {} was not found for task {}",
-                    request.session_id,
+                    "Agent session with externalSessionId {} was not found for task {}",
+                    request.external_session_id,
                     request.task_id
                 )
             })?;
@@ -105,8 +110,8 @@ impl AppService {
     ) -> Result<()> {
         if session.runtime_kind.trim() != request.runtime_kind.as_str() {
             return Err(anyhow!(
-                "Agent session {} runtime kind mismatch: expected {}, found {}",
-                request.session_id,
+                "Agent session with externalSessionId {} runtime kind mismatch: expected {}, found {}",
+                request.external_session_id,
                 request.runtime_kind.as_str(),
                 session.runtime_kind.trim()
             ));
@@ -116,30 +121,11 @@ impl AppService {
             != normalize_path_for_comparison(request.working_directory.as_str())
         {
             return Err(anyhow!(
-                "Agent session {} working directory mismatch: expected {}, found {}",
-                request.session_id,
+                "Agent session with externalSessionId {} working directory mismatch: expected {}, found {}",
+                request.external_session_id,
                 request.working_directory,
                 session.working_directory
             ));
-        }
-
-        let requested_external_session_id = request
-            .external_session_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        let persisted_external_session_id = session
-            .external_session_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        if let Some(requested_external_session_id) = requested_external_session_id {
-            if persisted_external_session_id != Some(requested_external_session_id) {
-                return Err(anyhow!(
-                    "Agent session {} external session id mismatch",
-                    request.session_id
-                ));
-            }
         }
 
         Ok(())
@@ -154,8 +140,8 @@ impl LiveSessionStopRouteResolver<'_> {
             [] => {}
             _ => {
                 return Err(anyhow!(
-                    "Multiple live runtime routes matched session {}",
-                    self.request.session_id
+                    "Multiple live runtime routes matched externalSessionId {}",
+                    self.request.external_session_id
                 ));
             }
         }
@@ -170,12 +156,12 @@ impl LiveSessionStopRouteResolver<'_> {
         match probed_routes.as_slice() {
             [runtime_route] => Ok(runtime_route.clone()),
             [] => Err(anyhow!(
-                "No live runtime route found for session {}",
-                self.request.session_id
+                "No live runtime route found for externalSessionId {}",
+                self.request.external_session_id
             )),
             _ => Err(anyhow!(
-                "Multiple live runtime routes matched session {}",
-                self.request.session_id
+                "Multiple live runtime routes matched externalSessionId {}",
+                self.request.external_session_id
             )),
         }
     }

@@ -60,7 +60,6 @@ export const createTaskDependenciesFixture = (
 export const createBuildSessionFixture = (overrides = {}) =>
   createAgentSessionFixture(
     {
-      sessionId: "existing-build",
       externalSessionId: "ext-build",
       taskId: "task-1",
       role: "build",

@@ -9,9 +9,9 @@ import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestr
 
 export const createSessionMessageOwner = (
   messages: AgentSessionState["messages"],
-  sessionId = "session-1",
+  externalSessionId = "session-1",
 ): SessionMessageOwner => ({
-  sessionId,
+  externalSessionId,
   messages,
 });
 

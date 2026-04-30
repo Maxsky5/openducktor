@@ -308,7 +308,7 @@ describe("useAgentStudioDocuments", () => {
 
     const activeSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "session-1",
+      externalSessionId: "session-1",
       messages: [
         createCompletedToolMessage({
           tool: "odt_set_spec",
@@ -349,7 +349,7 @@ describe("useAgentStudioDocuments", () => {
 
     const activeSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "session-runtime-alias",
+      externalSessionId: "session-runtime-alias",
       messages: [
         createCompletedToolMessage({
           tool: "openducktor_odt_set_spec",
@@ -383,7 +383,7 @@ describe("useAgentStudioDocuments", () => {
   test("ignores incorrect-case runtime aliases for document refresh", async () => {
     const activeSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "session-bad-case",
+      externalSessionId: "session-bad-case",
       messages: [
         createCompletedToolMessage({
           tool: "OpenDucktor_ODT_SET_SPEC",
@@ -419,7 +419,7 @@ describe("useAgentStudioDocuments", () => {
 
     const activeSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "session-hydrated-aliases",
+      externalSessionId: "session-hydrated-aliases",
       messages: [
         createCompletedToolMessage({
           tool: "openducktor_odt_set_spec",
@@ -474,7 +474,7 @@ describe("useAgentStudioDocuments", () => {
 
     const activeSession = createAgentSessionFixture({
       runtimeKind: "opencode",
-      sessionId: "session-2",
+      externalSessionId: "session-2",
       messages: [createCompletedToolMessage({ tool: "odt_set_plan", input: {}, output: "done" })],
     });
 
@@ -504,7 +504,7 @@ describe("useAgentStudioDocuments", () => {
     });
 
     const activeSession = createAgentSessionFixture({
-      sessionId: "session-3",
+      externalSessionId: "session-3",
       messages: [
         createCompletedToolMessage({
           tool: "odt_set_plan",
@@ -546,7 +546,7 @@ describe("useAgentStudioDocuments", () => {
       selectedTask: null,
       activeSession: createAgentSessionFixture({
         runtimeKind: "opencode",
-        sessionId: "session-dedupe",
+        externalSessionId: "session-dedupe",
         messages: [toolMessage],
       }),
     };
@@ -561,7 +561,7 @@ describe("useAgentStudioDocuments", () => {
         ...baseArgs,
         activeSession: createAgentSessionFixture({
           runtimeKind: "opencode",
-          sessionId: "session-dedupe",
+          externalSessionId: "session-dedupe",
           messages: [toolMessage],
         }),
       });
@@ -585,7 +585,7 @@ describe("useAgentStudioDocuments", () => {
       workspaceRepoPath: null,
       activeSession: createAgentSessionFixture({
         runtimeKind: "opencode",
-        sessionId: "session-repo-hydration",
+        externalSessionId: "session-repo-hydration",
         messages: [toolMessage],
       }),
     };
@@ -634,7 +634,7 @@ describe("useAgentStudioDocuments", () => {
       selectedTask: null,
       activeSession: createAgentSessionFixture({
         runtimeKind: "opencode",
-        sessionId: "session-A",
+        externalSessionId: "session-A",
         messages: [toolMessage],
       }),
     });
@@ -648,7 +648,7 @@ describe("useAgentStudioDocuments", () => {
         selectedTask: null,
         activeSession: createAgentSessionFixture({
           runtimeKind: "opencode",
-          sessionId: "session-B",
+          externalSessionId: "session-B",
           messages: [toolMessage],
         }),
       });
@@ -687,7 +687,7 @@ describe("useAgentStudioDocuments", () => {
       selectedTask: null,
       activeSession: createAgentSessionFixture({
         runtimeKind: "opencode",
-        sessionId: "session-transition",
+        externalSessionId: "session-transition",
         messages: [pendingToolMessage],
       }),
     };
@@ -701,7 +701,7 @@ describe("useAgentStudioDocuments", () => {
         ...baseArgs,
         activeSession: createAgentSessionFixture({
           runtimeKind: "opencode",
-          sessionId: "session-transition",
+          externalSessionId: "session-transition",
           messages: [completedToolMessage],
         }),
       });

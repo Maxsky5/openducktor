@@ -89,7 +89,7 @@ export type KanbanPageContentModel = {
   onOpenSession: (
     taskId: string,
     role: AgentRole,
-    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
   ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
@@ -115,7 +115,7 @@ export type KanbanPageTaskDetailsControllerModel = {
   onOpenSession: (
     taskId: string,
     role: AgentRole,
-    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
   ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;

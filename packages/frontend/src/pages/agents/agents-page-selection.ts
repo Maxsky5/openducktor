@@ -161,7 +161,7 @@ export const resolveAgentStudioSessionSelection = ({
 
   if (sessionParam) {
     const explicitSession =
-      sessionsForTask.find((entry) => entry.sessionId === sessionParam) ?? null;
+      sessionsForTask.find((entry) => entry.externalSessionId === sessionParam) ?? null;
     if (isWorkflowAgentSessionSummary(explicitSession)) {
       return toSelection(explicitSession.role, explicitSession);
     }
@@ -242,10 +242,10 @@ export const resolveAgentStudioBuilderSessionsForTask = ({
     if (!session || session.role !== "build" || session.taskId !== taskId) {
       continue;
     }
-    if (seenSessionIds.has(session.sessionId)) {
+    if (seenSessionIds.has(session.externalSessionId)) {
       continue;
     }
-    seenSessionIds.add(session.sessionId);
+    seenSessionIds.add(session.externalSessionId);
     sessions.push(session);
   }
 

@@ -120,13 +120,13 @@ export const attachAgentSessionListener = (
     const batchedHandlerContext = createSessionEventHandlerContext({
       ...eventContext,
       sessionsRef: batchedSessionsRef,
-      updateSession: (sessionId, updater, options) => {
-        if (sessionId !== context.sessionId) {
-          context.updateSession(sessionId, updater, options);
+      updateSession: (externalSessionId, updater, options) => {
+        if (externalSessionId !== context.externalSessionId) {
+          context.updateSession(externalSessionId, updater, options);
           return;
         }
 
-        const current = batchedSessionsRef.current[sessionId];
+        const current = batchedSessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
@@ -142,7 +142,7 @@ export const attachAgentSessionListener = (
         }
         batchedSessionsRef.current = {
           ...batchedSessionsRef.current,
-          [sessionId]: next,
+          [externalSessionId]: next,
         };
       },
     });
@@ -158,7 +158,7 @@ export const attachAgentSessionListener = (
       return;
     }
 
-    const nextSession = batchedSessionsRef.current[context.sessionId];
+    const nextSession = batchedSessionsRef.current[context.externalSessionId];
     if (!nextSession) {
       if (queuedEvents.length > 0) {
         scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
@@ -167,7 +167,7 @@ export const attachAgentSessionListener = (
     }
 
     context.updateSession(
-      context.sessionId,
+      context.externalSessionId,
       () => nextSession,
       shouldPersistBufferedSession ? { persist: true } : undefined,
     );
@@ -191,7 +191,7 @@ export const attachAgentSessionListener = (
     }, delayMs);
   };
 
-  const unsubscribe = context.adapter.subscribeEvents(context.sessionId, (event) => {
+  const unsubscribe = context.adapter.subscribeEvents(context.externalSessionId, (event) => {
     if (isImmediateSessionEvent(event)) {
       flushQueuedEvents();
       handleSessionEvent(handlerContext, event);

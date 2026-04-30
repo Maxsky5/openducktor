@@ -25,7 +25,7 @@ const createHookHarness = (initialProps: HookArgs) =>
 
 const createCompletedToolSession = (tool: string, id = tool, input?: Record<string, unknown>) =>
   createAgentSessionFixture({
-    sessionId: "build-session-1",
+    externalSessionId: "build-session-1",
     role: "build",
     messages: [
       {
@@ -84,7 +84,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createAgentSessionFixture({
-        sessionId: "build-session-1",
+        externalSessionId: "build-session-1",
         role: "build",
         messages: [],
       }),
@@ -104,7 +104,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
       await harness.update({
         ...createBaseArgs(),
         activeSession: createAgentSessionFixture({
-          sessionId: "build-session-1",
+          externalSessionId: "build-session-1",
           role: "build",
           messages: [
             ...sessionMessagesToArray(createCompletedToolSession("apply_patch", "tool-1")),
@@ -123,7 +123,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createAgentSessionFixture({
-        sessionId: "build-session-1",
+        externalSessionId: "build-session-1",
         role: "build",
         messages: [],
       }),
@@ -154,7 +154,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
 
   test("deduplicates completed tool messages within the same session", async () => {
     const initialSession = createAgentSessionFixture({
-      sessionId: "build-session-1",
+      externalSessionId: "build-session-1",
       role: "build",
       messages: [],
     });
@@ -224,7 +224,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
       await harness.update({
         ...createBaseArgs(),
         activeSession: createAgentSessionFixture({
-          sessionId: "spec-session-1",
+          externalSessionId: "spec-session-1",
           role: "spec",
           messages: createCompletedToolSession("apply_patch", "tool-3").messages,
         }),
@@ -254,7 +254,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
     const baseArgs = {
       ...createBaseArgs(),
       activeSession: createAgentSessionFixture({
-        sessionId: "build-session-1",
+        externalSessionId: "build-session-1",
         role: "build",
         messages: [pendingToolMessage],
       }),
@@ -268,7 +268,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
       await harness.update({
         ...baseArgs,
         activeSession: createAgentSessionFixture({
-          sessionId: "build-session-1",
+          externalSessionId: "build-session-1",
           role: "build",
           messages: [baseCompletedMessage],
         }),

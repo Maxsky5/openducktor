@@ -162,12 +162,12 @@ describe("useAgentStudioSessionStartSession", () => {
 
     await harness.mount();
 
-    let sessionId: string | undefined;
+    let externalSessionId: string | undefined;
     await harness.run(async (state) => {
-      sessionId = await state.startSession("composer_send");
+      externalSessionId = await state.startSession("composer_send");
     });
 
-    expect(sessionId).toBe("session-new");
+    expect(externalSessionId).toBe("session-new");
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         role: "qa",
@@ -183,8 +183,10 @@ describe("useAgentStudioSessionStartSession", () => {
   test("does not overwrite selected model when reusing an existing session", async () => {
     const updateQuery = mock(() => {});
     const startAgentSession = mock(
-      async (input: { startMode: string; sourceSessionId?: string }) =>
-        input.startMode === "reuse" ? (input.sourceSessionId ?? "session-existing") : "session-new",
+      async (input: { startMode: string; sourceExternalSessionId?: string }) =>
+        input.startMode === "reuse"
+          ? (input.sourceExternalSessionId ?? "session-existing")
+          : "session-new",
     );
     const harness = createHookHarness(
       createBaseArgs({
@@ -193,7 +195,7 @@ describe("useAgentStudioSessionStartSession", () => {
         executeRequestedSessionStart: async (_request, executeWithDecision) =>
           executeWithDecision({
             startMode: "reuse",
-            sourceSessionId: "session-existing",
+            sourceExternalSessionId: "session-existing",
           }),
       }),
     );
@@ -209,7 +211,7 @@ describe("useAgentStudioSessionStartSession", () => {
         role: "spec",
         scenario: "spec_initial",
         startMode: "reuse",
-        sourceSessionId: "session-existing",
+        sourceExternalSessionId: "session-existing",
       }),
     );
     expect(updateQuery).toHaveBeenCalledWith(

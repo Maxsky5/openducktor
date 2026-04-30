@@ -19,7 +19,7 @@ export type StartGitConflictResolutionSessionInput = {
   message: string;
   existingSessionOptions: ReturnType<typeof buildReusableSessionOptions>;
   initialStartMode: "fresh" | "reuse";
-  initialSourceSessionId: string | null;
+  initialSourceExternalSessionId: string | null;
   targetWorkingDirectory: string;
 };
 
@@ -28,7 +28,7 @@ type GitConflictTaskContext = {
   task: TaskCard | null;
   builderSessions: AgentSessionSummary[];
   currentViewSessionId: string | null;
-  onOpenSession: (sessionId: string) => void;
+  onOpenSession: (externalSessionId: string) => void;
 };
 
 type UseGitConflictResolutionArgs = {
@@ -65,7 +65,7 @@ const pickDefaultBuilderSession = ({
   currentViewSessionId: string | null;
 }): AgentSessionSummary | null => {
   return (
-    builderSessions.find((session) => session.sessionId === currentViewSessionId) ??
+    builderSessions.find((session) => session.externalSessionId === currentViewSessionId) ??
     builderSessions[0] ??
     null
   );
@@ -122,7 +122,7 @@ export function useGitConflictResolution({
         },
       });
 
-      const sessionId = await startConflictResolutionSession({
+      const externalSessionId = await startConflictResolutionSession({
         taskId: taskContext.taskId,
         role: "build",
         scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
@@ -132,15 +132,15 @@ export function useGitConflictResolution({
           role: "build",
         }),
         initialStartMode: defaultBuilderSession ? "reuse" : "fresh",
-        initialSourceSessionId: defaultBuilderSession?.sessionId ?? null,
+        initialSourceExternalSessionId: defaultBuilderSession?.externalSessionId ?? null,
         targetWorkingDirectory: conflictWorkingDirectory,
       });
 
-      if (!sessionId) {
+      if (!externalSessionId) {
         return false;
       }
 
-      taskContext.onOpenSession(sessionId);
+      taskContext.onOpenSession(externalSessionId);
       return true;
     },
     [activeWorkspace, loadPromptOverrides, startConflictResolutionSession],

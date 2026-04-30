@@ -49,13 +49,15 @@ export const formatSubagentContent = (meta: {
   agent?: string;
   prompt?: string;
   description?: string;
-  sessionId?: string;
+  externalSessionId?: string;
 }): string => {
   const agentLabel = meta.agent?.trim() || "subagent";
   const summary =
     meta.description?.trim() ||
     meta.prompt?.trim() ||
-    (meta.sessionId ? `Session ${meta.sessionId.slice(0, 8)}` : "Subagent activity");
+    (meta.externalSessionId
+      ? `Session ${meta.externalSessionId.slice(0, 8)}`
+      : "Subagent activity");
 
   return `Subagent (${agentLabel}): ${summary}`;
 };
@@ -85,7 +87,7 @@ export const mergeSubagentMeta = (
   const agent = incomingMeta.agent ?? existingMeta?.agent;
   const prompt = incomingMeta.prompt ?? existingMeta?.prompt;
   const description = incomingMeta.description ?? existingMeta?.description;
-  const sessionId = incomingMeta.sessionId ?? existingMeta?.sessionId;
+  const externalSessionId = incomingMeta.externalSessionId ?? existingMeta?.externalSessionId;
   const executionMode = incomingMeta.executionMode ?? existingMeta?.executionMode;
 
   return {
@@ -96,7 +98,7 @@ export const mergeSubagentMeta = (
     ...(typeof agent === "string" ? { agent } : {}),
     ...(typeof prompt === "string" ? { prompt } : {}),
     ...(typeof description === "string" ? { description } : {}),
-    ...(typeof sessionId === "string" ? { sessionId } : {}),
+    ...(typeof externalSessionId === "string" ? { externalSessionId } : {}),
     ...(executionMode ? { executionMode } : {}),
     ...(metadata ? { metadata } : {}),
     ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),

@@ -239,7 +239,7 @@ const removePendingSubagentCorrelationKey = (
 
 const normalizeHistoryStreamParts = (parts: Part[]): AgentStreamPart[] => {
   const pendingBySignature = new Map<string, string[]>();
-  const correlationBySessionId = new Map<string, string>();
+  const correlationByExternalSessionId = new Map<string, string>();
   const normalized: AgentStreamPart[] = [];
 
   for (const rawPart of parts) {
@@ -259,8 +259,8 @@ const normalizeHistoryStreamParts = (parts: Part[]): AgentStreamPart[] => {
       if (signature) {
         enqueuePendingSubagentCorrelationKey(pendingBySignature, signature, correlationKey);
       }
-      if (mapped.sessionId) {
-        correlationBySessionId.set(mapped.sessionId, correlationKey);
+      if (mapped.externalSessionId) {
+        correlationByExternalSessionId.set(mapped.externalSessionId, correlationKey);
       }
 
       normalized.push({
@@ -270,8 +270,8 @@ const normalizeHistoryStreamParts = (parts: Part[]): AgentStreamPart[] => {
       continue;
     }
 
-    const sessionCorrelationKey = mapped.sessionId
-      ? correlationBySessionId.get(mapped.sessionId)
+    const sessionCorrelationKey = mapped.externalSessionId
+      ? correlationByExternalSessionId.get(mapped.externalSessionId)
       : undefined;
     const pendingCorrelationKeys = signature
       ? peekPendingSubagentCorrelationKeys(pendingBySignature, signature)
@@ -283,12 +283,12 @@ const normalizeHistoryStreamParts = (parts: Part[]): AgentStreamPart[] => {
     const correlationKey =
       sessionCorrelationKey ??
       queuedCorrelationKey ??
-      (mapped.sessionId
-        ? ["session", mapped.messageId, mapped.sessionId].join(":")
+      (mapped.externalSessionId
+        ? ["session", mapped.messageId, mapped.externalSessionId].join(":")
         : buildPartScopedSubagentCorrelationKey(mapped, rawPart.id));
 
-    if (mapped.sessionId) {
-      correlationBySessionId.set(mapped.sessionId, correlationKey);
+    if (mapped.externalSessionId) {
+      correlationByExternalSessionId.set(mapped.externalSessionId, correlationKey);
       removePendingSubagentCorrelationKey(pendingBySignature, correlationKey);
     }
 
@@ -305,7 +305,7 @@ const seedSubagentCorrelationFromHistory = (
   session: Pick<
     SessionRecord,
     | "subagentCorrelationKeyByPartId"
-    | "subagentCorrelationKeyBySessionId"
+    | "subagentCorrelationKeyByExternalSessionId"
     | "pendingSubagentCorrelationKeysBySignature"
     | "pendingSubagentCorrelationKeys"
   >,
@@ -317,8 +317,11 @@ const seedSubagentCorrelationFromHistory = (
     }
 
     session.subagentCorrelationKeyByPartId.set(part.partId, part.correlationKey);
-    if (part.sessionId) {
-      session.subagentCorrelationKeyBySessionId.set(part.sessionId, part.correlationKey);
+    if (part.externalSessionId) {
+      session.subagentCorrelationKeyByExternalSessionId.set(
+        part.externalSessionId,
+        part.correlationKey,
+      );
     }
 
     const signature = buildSubagentSignature(part);
@@ -327,7 +330,7 @@ const seedSubagentCorrelationFromHistory = (
     }
 
     if (part.status === "pending" || part.status === "running") {
-      if (part.sessionId) {
+      if (part.externalSessionId) {
         removePendingSubagentCorrelationKey(
           session.pendingSubagentCorrelationKeysBySignature,
           part.correlationKey,
@@ -502,7 +505,7 @@ export const loadAndSeedSessionHistory = async (
     session: Pick<
       SessionRecord,
       | "subagentCorrelationKeyByPartId"
-      | "subagentCorrelationKeyBySessionId"
+      | "subagentCorrelationKeyByExternalSessionId"
       | "pendingSubagentCorrelationKeysBySignature"
       | "pendingSubagentCorrelationKeys"
     >;

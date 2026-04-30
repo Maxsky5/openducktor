@@ -544,7 +544,7 @@ impl TaskStore for FakeTaskStore {
         if let Some(index) = state
             .agent_sessions
             .iter()
-            .position(|entry| entry.session_id == session.session_id)
+            .position(|entry| entry.external_session_id == session.external_session_id)
         {
             state.agent_sessions[index] = session;
         } else {

@@ -23,7 +23,6 @@ const createTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
 
 const createSession = (overrides: Partial<ReturnType<typeof createAgentSessionFixture>> = {}) =>
   createAgentSessionFixture({
-    sessionId: "session-build-1",
     externalSessionId: "ext-session-build-1",
     taskId: "task-1",
     role: "build",
@@ -122,7 +121,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
   test("opens the feedback modal with an empty draft", async () => {
     const harness = createHookHarness(
       createBaseArgs({
-        sessionsForTask: [createSession({ sessionId: "session-build-latest" })],
+        sessionsForTask: [createSession({ externalSessionId: "session-build-latest" })],
       }),
     );
 
@@ -141,7 +140,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       const harness = createHookHarness(
         createBaseArgs({
           startSessionRequest,
-          sessionsForTask: [createSession({ sessionId: "session-build-existing" })],
+          sessionsForTask: [createSession({ externalSessionId: "session-build-existing" })],
         }),
       );
 
@@ -164,7 +163,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       scenario: "build_after_human_request_changes";
       reason: "create_session";
       existingSessionOptions: Array<{ value: string }>;
-      initialSourceSessionId?: string | null;
+      initialSourceExternalSessionId?: string | null;
       initialStartMode?: "fresh" | "reuse" | "fork";
       postStartAction: "kickoff";
       message?: string;
@@ -182,11 +181,11 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         startSessionRequest,
         sessionsForTask: [
           createSession({
-            sessionId: "session-build-existing",
+            externalSessionId: "session-build-existing",
             startedAt: "2026-02-22T13:00:00.000Z",
           }),
           createSession({
-            sessionId: "session-build-older",
+            externalSessionId: "session-build-older",
             startedAt: "2026-02-22T11:00:00.000Z",
           }),
         ],
@@ -207,7 +206,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
           expect.objectContaining({ value: "session-build-existing" }),
           expect.objectContaining({ value: "session-build-older" }),
         ],
-        initialSourceSessionId: "session-build-existing",
+        initialSourceExternalSessionId: "session-build-existing",
         postStartAction: "kickoff",
         message: "Ship the requested fixes.",
         beforeStartAction: {
@@ -226,7 +225,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
     const harness = createHookHarness(
       createBaseArgs({
         startSessionRequest,
-        sessionsForTask: [createSession({ sessionId: "session-build-existing" })],
+        sessionsForTask: [createSession({ externalSessionId: "session-build-existing" })],
       }),
     );
 
@@ -251,7 +250,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       const harness = createHookHarness(
         createBaseArgs({
           startSessionRequest,
-          sessionsForTask: [createSession({ sessionId: "session-build-existing" })],
+          sessionsForTask: [createSession({ externalSessionId: "session-build-existing" })],
         }),
       );
 

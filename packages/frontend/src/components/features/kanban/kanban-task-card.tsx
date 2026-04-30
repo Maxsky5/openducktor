@@ -43,7 +43,7 @@ type KanbanTaskCardProps = {
   onOpenSession?: (
     taskId: string,
     role: AgentRole,
-    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
   ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart?: (taskId: string) => void;
@@ -102,7 +102,7 @@ const areTaskAgentSessionsEqual = (
     }
 
     if (
-      leftSession.sessionId !== rightSession.sessionId ||
+      leftSession.externalSessionId !== rightSession.externalSessionId ||
       leftSession.role !== rightSession.role ||
       leftSession.scenario !== rightSession.scenario ||
       leftSession.startedAt !== rightSession.startedAt
@@ -134,7 +134,7 @@ const areRunningTaskSessionsEqual = (
       return false;
     }
     if (
-      leftSession.sessionId !== rightSession.sessionId ||
+      leftSession.externalSessionId !== rightSession.externalSessionId ||
       leftSession.role !== rightSession.role ||
       leftSession.scenario !== rightSession.scenario ||
       leftSession.status !== rightSession.status ||
@@ -329,7 +329,7 @@ function TaskActions({
   onOpenSession?: (
     taskId: string,
     role: AgentRole,
-    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
   ) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;

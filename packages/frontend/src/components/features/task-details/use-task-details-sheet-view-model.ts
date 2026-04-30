@@ -77,7 +77,7 @@ type UseTaskDetailsSheetViewModelOptions = {
   resolveSessionOptionsByRole?:
     | ((
         role: AgentRole,
-      ) => { sessionId?: string | null; scenario?: AgentScenario | null } | undefined)
+      ) => { externalSessionId?: string | null; scenario?: AgentScenario | null } | undefined)
     | undefined;
   onDelegate: TaskDetailsSheetProps["onDelegate"] | undefined;
   onDefer: TaskDetailsSheetProps["onDefer"] | undefined;

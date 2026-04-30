@@ -97,7 +97,7 @@ describe("agent-chat-thread windowing helpers", () => {
 
   test("resolveAgentChatWindowRowsState reuses cached rows when switching back to a previously built session", () => {
     const firstSession = buildSession({
-      sessionId: "session-a",
+      externalSessionId: "session-a",
       messages: [
         buildMessage("assistant", "Prelude", { id: "assistant-a-0" }),
         buildMessage("user", "Question A", { id: "user-a-1" }),
@@ -106,7 +106,7 @@ describe("agent-chat-thread windowing helpers", () => {
       pendingQuestions: [],
     });
     const secondSession = buildSession({
-      sessionId: "session-b",
+      externalSessionId: "session-b",
       messages: [
         buildMessage("assistant", "Prelude", { id: "assistant-b-0" }),
         buildMessage("user", "Question B", { id: "user-b-1" }),
@@ -141,7 +141,7 @@ describe("agent-chat-thread windowing helpers", () => {
   test("resolveAgentChatWindowRowsState invalidates cached rows when a raw message array is mutated in place", () => {
     const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
     const session = buildSession({
-      sessionId: "session-mutable-array",
+      externalSessionId: "session-mutable-array",
       messages,
     });
     const cache = new Map();
@@ -170,13 +170,13 @@ describe("agent-chat-thread windowing helpers", () => {
   test("buildAgentChatWindowRows keeps row keys distinct across sessions with repeated message ids", () => {
     const firstSession = buildSession({
       runtimeKind: "opencode",
-      sessionId: "session-a",
+      externalSessionId: "session-a",
       messages: [buildMessage("assistant", "A", { id: "message-1" })],
       pendingQuestions: [],
     });
     const secondSession = buildSession({
       runtimeKind: "opencode",
-      sessionId: "session-b",
+      externalSessionId: "session-b",
       messages: [buildMessage("assistant", "B", { id: "message-1" })],
       pendingQuestions: [],
     });
@@ -365,7 +365,7 @@ describe("agent-chat-thread windowing helpers", () => {
       }),
     ];
     const runningSession = buildSession({
-      sessionId: "session-status",
+      externalSessionId: "session-status",
       role: "build",
       status: "running",
       messages: sharedMessages,
@@ -431,7 +431,7 @@ describe("agent-chat-thread windowing helpers", () => {
       throw new Error("Expected prefix messages to exist");
     }
     const initialSession = buildSession({
-      sessionId: "session-incremental",
+      externalSessionId: "session-incremental",
       role: "build",
       status: "running",
       messages: baseMessages,
@@ -483,7 +483,7 @@ describe("agent-chat-thread windowing helpers", () => {
 
   test("resolveAgentChatWindowRowsState rebases cached suffix metadata arrays with prefix state", () => {
     const initialSession = buildSession({
-      sessionId: "session-rebased-metadata",
+      externalSessionId: "session-rebased-metadata",
       role: "build",
       status: "running",
       messages: [

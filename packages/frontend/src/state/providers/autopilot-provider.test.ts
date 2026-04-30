@@ -17,14 +17,13 @@ import {
 } from "./autopilot-provider";
 
 const startSessionWorkflowMock = mock(async () => ({
-  sessionId: "session-new",
+  externalSessionId: "session-new",
   postStartActionError: null,
 }));
 
 const createBuilderSessionRecord = (
   overrides: Partial<AgentSessionRecord> = {},
 ): AgentSessionRecord => ({
-  sessionId: "builder-session-1",
   externalSessionId: "external-builder-session-1",
   role: "build",
   scenario: "build_implementation_start",
@@ -142,7 +141,7 @@ describe("autopilot provider helpers", () => {
   beforeEach(() => {
     startSessionWorkflowMock.mockReset();
     startSessionWorkflowMock.mockImplementation(async () => ({
-      sessionId: "session-new",
+      externalSessionId: "session-new",
       postStartActionError: null,
     }));
   });
@@ -328,7 +327,7 @@ describe("autopilot provider helpers", () => {
         status: "ai_review",
         agentSessions: [
           createBuilderSessionRecord({
-            sessionId: "qa-session-1",
+            externalSessionId: "qa-session-1",
             role: "qa",
             scenario: "qa_review",
             workingDirectory: "/tmp/repo/current-worktree",
@@ -356,7 +355,7 @@ describe("autopilot provider helpers", () => {
       expect.objectContaining({
         intent: expect.objectContaining({
           startMode: "reuse",
-          sourceSessionId: "qa-session-1",
+          sourceExternalSessionId: "qa-session-1",
         }),
         selection: null,
       }),

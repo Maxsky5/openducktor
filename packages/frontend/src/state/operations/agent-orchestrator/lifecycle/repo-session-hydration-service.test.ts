@@ -65,7 +65,6 @@ const taskWithSession = (taskId: string, externalSessionId: string): TaskCard =>
   agentSessions: [
     {
       runtimeKind: "opencode",
-      sessionId: `session-${taskId}`,
       externalSessionId,
       role: "build",
       scenario: "build_implementation_start",
@@ -419,7 +418,6 @@ describe("repo-session-hydration-service", () => {
                 hasSession: () => false,
                 loadSessionHistory: async () => [],
                 attachSession: async (input) => ({
-                  sessionId: input.sessionId,
                   externalSessionId: input.externalSessionId,
                   role: input.role,
                   scenario: input.scenario,
@@ -428,7 +426,6 @@ describe("repo-session-hydration-service", () => {
                   runtimeKind: input.runtimeKind,
                 }),
                 resumeSession: async (input) => ({
-                  sessionId: input.sessionId,
                   externalSessionId: input.externalSessionId,
                   role: input.role,
                   scenario: input.scenario,
@@ -876,7 +873,6 @@ describe("repo-session-hydration-service", () => {
       plannerSession,
       {
         ...plannerSession,
-        sessionId: "session-task-mixed-build",
         externalSessionId: "external-missing-build",
         role: "build",
         scenario: "build_implementation_start",
@@ -944,7 +940,6 @@ describe("repo-session-hydration-service", () => {
       plannerSession,
       {
         ...plannerSession,
-        sessionId: "session-task-mixed-build",
         externalSessionId: "external-build",
         role: "build",
         scenario: "build_implementation_start",
@@ -1015,12 +1010,10 @@ describe("repo-session-hydration-service", () => {
     task.agentSessions = [
       {
         ...firstSession,
-        sessionId: "session::shared",
         externalSessionId: "external",
       },
       {
         ...firstSession,
-        sessionId: "session",
         externalSessionId: "shared::external",
       },
     ];
@@ -1088,7 +1081,6 @@ describe("repo-session-hydration-service", () => {
       plannerSession,
       {
         ...plannerSession,
-        sessionId: "session-task-mixed-build",
         externalSessionId: "external-missing-build",
         role: "build",
         scenario: "build_implementation_start",
@@ -1103,14 +1095,14 @@ describe("repo-session-hydration-service", () => {
       sessionsRef.current = state;
     };
     const updateSession: Parameters<typeof createLoadAgentSessions>[0]["updateSession"] = (
-      sessionId,
+      externalSessionId,
       updater,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
-      state = { ...state, [sessionId]: updater(current) };
+      state = { ...state, [externalSessionId]: updater(current) };
       sessionsRef.current = state;
     };
     const adapter: Parameters<typeof createLoadAgentSessions>[0]["adapter"] = {
@@ -1128,7 +1120,6 @@ describe("repo-session-hydration-service", () => {
       resumeSession: async (input) => {
         resumeCalls += 1;
         return {
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           role: input.role,
           scenario: input.scenario,
@@ -1138,7 +1129,6 @@ describe("repo-session-hydration-service", () => {
         };
       },
       attachSession: async (input) => ({
-        sessionId: input.sessionId,
         externalSessionId: input.externalSessionId,
         role: input.role,
         scenario: input.scenario,
@@ -1167,7 +1157,7 @@ describe("repo-session-hydration-service", () => {
     });
     const sessionHydration = createSessionHydrationOperations({
       loadAgentSessions,
-      getSessionSnapshot: (sessionId) => sessionsRef.current[sessionId],
+      getSessionSnapshot: (externalSessionId) => sessionsRef.current[externalSessionId],
     });
     const service = createTestRepoSessionHydrationService({
       agentEngine: {
@@ -1196,12 +1186,12 @@ describe("repo-session-hydration-service", () => {
     expect(resumeCalls).toBe(1);
     expect(attachedListeners).toBe(1);
     expect(retryRequests).toBe(0);
-    expect(state["session-task-mixed"]?.status).toBe("running");
-    expect(state["session-task-mixed-build"]?.runtimeRoute).toEqual({
+    expect(state["external-planner"]?.status).toBe("running");
+    expect(state["external-missing-build"]?.runtimeRoute).toEqual({
       type: "local_http",
       endpoint: "http://127.0.0.1:4555",
     });
-    expect(state["session-task-mixed-build"]?.status).toBe("stopped");
+    expect(state["external-missing-build"]?.status).toBe("stopped");
     service.dispose();
   });
 
@@ -1698,8 +1688,8 @@ describe("repo-session-hydration-service", () => {
 
     expect(snapshotLoads).toBe(1);
     expect(reconcileCalls).toHaveLength(1);
-    expect(reconcileCalls[0]?.records.map((record) => record.sessionId)).toEqual([
-      "session-task-1",
+    expect(reconcileCalls[0]?.records.map((record) => record.externalSessionId)).toEqual([
+      "external-1",
     ]);
     service.dispose();
   });
@@ -1889,7 +1879,6 @@ describe("repo-session-hydration-service", () => {
       partiallyInvalidSession,
       {
         ...partiallyInvalidSession,
-        sessionId: "session-task-invalid-broken",
         externalSessionId: "external-broken",
         runtimeKind: undefined as unknown as typeof partiallyInvalidSession.runtimeKind,
       },

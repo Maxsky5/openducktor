@@ -33,7 +33,7 @@ type ForkStrategyInput = {
 };
 
 const requireForkSourceRuntime = (
-  sourceSessionId: string,
+  sourceExternalSessionId: string,
   sourceSession: AgentSessionState,
 ): {
   runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
@@ -42,7 +42,7 @@ const requireForkSourceRuntime = (
   const sourceRuntimeKind = sourceSession.runtimeKind;
   if (!sourceRuntimeKind) {
     throw new Error(
-      `Session "${sourceSessionId}" is missing runtime kind metadata required for forking.`,
+      `Session "${sourceExternalSessionId}" is missing runtime kind metadata required for forking.`,
     );
   }
 
@@ -60,7 +60,7 @@ const requireForkSourceRuntime = (
     };
   } catch (error) {
     throw new Error(
-      `Session "${sourceSessionId}" is missing live runtime context required for forking.`,
+      `Session "${sourceExternalSessionId}" is missing live runtime context required for forking.`,
       { cause: error },
     );
   }
@@ -74,16 +74,16 @@ export const executeForkStart = async ({
   const sourceSession = await resolveLoadedSourceSession({
     ctx,
     deps,
-    sourceSessionId: input.sourceSessionId,
+    sourceExternalSessionId: input.sourceExternalSessionId,
   });
   const { runtimeKind: sourceRuntimeKind, runtimeConnection: sourceRuntimeConnection } =
-    requireForkSourceRuntime(input.sourceSessionId, sourceSession);
+    requireForkSourceRuntime(input.sourceExternalSessionId, sourceSession);
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
 
   if (selectedModel.runtimeKind && sourceRuntimeKind !== selectedModel.runtimeKind) {
     throw new Error(
-      `Session "${input.sourceSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
+      `Session "${input.sourceExternalSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
     );
   }
 
@@ -156,13 +156,13 @@ export const executeForkStart = async ({
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   const initialMessages: AgentSessionState["messages"] = createSessionMessagesState(
-    summary.sessionId,
+    summary.externalSessionId,
     [
       ...getSessionMessagesSlice(
         {
-          sessionId: summary.sessionId,
+          externalSessionId: summary.externalSessionId,
           messages: buildSessionHeaderMessages({
-            sessionId: summary.sessionId,
+            externalSessionId: summary.externalSessionId,
             role: ctx.role,
             scenario: promptContext.resolvedScenario,
             systemPrompt: promptContext.systemPrompt,

@@ -18,7 +18,6 @@ const createRecord = (
   workingDirectory: string,
 ): AgentSessionRecord => ({
   runtimeKind: "opencode",
-  sessionId: "session-1",
   externalSessionId: "external-1",
   role,
   scenario: role === "qa" ? "qa_review" : "build_implementation_start",

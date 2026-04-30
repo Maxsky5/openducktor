@@ -20,14 +20,14 @@ const BUILD_SELECTION = {
 describe("session-start-orchestration", () => {
   test("prefers the active reusable session and task defaults when building a modal request", () => {
     const latestSession = createAgentSessionFixture({
-      sessionId: "builder-session-2",
+      externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       role: "build",
       scenario: "build_after_qa_rejected",
       startedAt: "2026-03-20T12:00:00.000Z",
     });
     const activeSession = createAgentSessionFixture({
-      sessionId: "builder-session-1",
+      externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       role: "build",
       scenario: "build_after_qa_rejected",
@@ -56,7 +56,7 @@ describe("session-start-orchestration", () => {
     });
 
     expect(request.selectedModel).toEqual(BUILD_SELECTION);
-    expect(request.initialSourceSessionId).toBe("builder-session-1");
+    expect(request.initialSourceExternalSessionId).toBe("builder-session-1");
     expect(request.initialTargetBranch).toEqual({
       remote: "origin",
       branch: "release/2026.04",
@@ -70,14 +70,14 @@ describe("session-start-orchestration", () => {
 
   test("falls back to the latest reusable session when no active session matches", () => {
     const latestSession = createAgentSessionFixture({
-      sessionId: "builder-session-2",
+      externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       role: "build",
       scenario: "build_after_qa_rejected",
       startedAt: "2026-03-20T12:00:00.000Z",
     });
     const olderSession = createAgentSessionFixture({
-      sessionId: "builder-session-1",
+      externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       role: "build",
       scenario: "build_implementation_start",
@@ -96,7 +96,7 @@ describe("session-start-orchestration", () => {
       taskSessions: [latestSession, olderSession],
     });
 
-    expect(request.initialSourceSessionId).toBe("builder-session-2");
+    expect(request.initialSourceExternalSessionId).toBe("builder-session-2");
   });
 
   test("does not auto-build reusable options for fresh-only scenarios and preserves overrides", () => {
@@ -113,7 +113,7 @@ describe("session-start-orchestration", () => {
       selectedModel: BUILD_SELECTION,
       taskSessions: [
         createAgentSessionFixture({
-          sessionId: "spec-session-1",
+          externalSessionId: "spec-session-1",
           taskId: "TASK-1",
           role: "spec",
           scenario: "spec_initial",
@@ -122,21 +122,21 @@ describe("session-start-orchestration", () => {
     });
 
     expect(request.existingSessionOptions).toBeUndefined();
-    expect(request.initialSourceSessionId).toBeNull();
+    expect(request.initialSourceExternalSessionId).toBeNull();
     expect(request.initialStartMode).toBe("fresh");
     expect(request.targetWorkingDirectory).toBe("/repo/worktrees/TASK-1");
   });
 
   test("keeps an explicit initial source session override even when another active session matches", () => {
     const latestSession = createAgentSessionFixture({
-      sessionId: "builder-session-2",
+      externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       role: "build",
       scenario: "build_after_qa_rejected",
       startedAt: "2026-03-20T12:00:00.000Z",
     });
     const activeSession = createAgentSessionFixture({
-      sessionId: "builder-session-1",
+      externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       role: "build",
       scenario: "build_after_qa_rejected",
@@ -149,7 +149,7 @@ describe("session-start-orchestration", () => {
         taskId: "TASK-1",
         role: "build",
         scenario: "build_after_qa_rejected",
-        initialSourceSessionId: "builder-session-2",
+        initialSourceExternalSessionId: "builder-session-2",
         postStartAction: "kickoff",
       },
       selectedModel: null,
@@ -157,7 +157,7 @@ describe("session-start-orchestration", () => {
       activeSession,
     });
 
-    expect(request.initialSourceSessionId).toBe("builder-session-2");
+    expect(request.initialSourceExternalSessionId).toBe("builder-session-2");
   });
 
   test("keeps an explicit target branch override instead of selected task defaults", () => {
@@ -207,20 +207,20 @@ describe("session-start-orchestration", () => {
       },
       decision: {
         startMode: "reuse",
-        sourceSessionId: "builder-session-1",
+        sourceExternalSessionId: "builder-session-1",
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
     });
 
     expect(result).toEqual({
-      sessionId: "builder-session-2",
+      externalSessionId: "builder-session-2",
       postStartActionError: null,
     });
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         startMode: "reuse",
-        sourceSessionId: "builder-session-1",
+        sourceExternalSessionId: "builder-session-1",
       }),
     );
     expect(startAgentSession).not.toHaveBeenCalledWith(
@@ -243,7 +243,7 @@ describe("session-start-orchestration", () => {
       decision: {
         startMode: "fork",
         selectedModel: BUILD_SELECTION,
-        sourceSessionId: "builder-session-1",
+        sourceExternalSessionId: "builder-session-1",
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
@@ -253,7 +253,7 @@ describe("session-start-orchestration", () => {
       expect.objectContaining({
         startMode: "fork",
         selectedModel: BUILD_SELECTION,
-        sourceSessionId: "builder-session-1",
+        sourceExternalSessionId: "builder-session-1",
       }),
     );
   });
@@ -285,7 +285,7 @@ describe("session-start-orchestration", () => {
     });
 
     expect(result).toEqual({
-      sessionId: "session-new",
+      externalSessionId: "session-new",
       postStartActionError: null,
     });
     expect(sendAgentMessage).toHaveBeenCalledTimes(1);

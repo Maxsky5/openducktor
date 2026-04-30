@@ -121,7 +121,7 @@ describe("SessionStartModal", () => {
     expect(onConfirm).toHaveBeenCalledWith({
       runInBackground: false,
       startMode: "fresh",
-      sourceSessionId: null,
+      sourceExternalSessionId: null,
     });
 
     expect(screen.getByRole("button", { name: /start session/i })).toBeTruthy();
@@ -198,7 +198,7 @@ describe("SessionStartModal", () => {
     expect(onConfirm).toHaveBeenCalledWith({
       runInBackground: false,
       startMode: "reuse",
-      sourceSessionId: "session-1",
+      sourceExternalSessionId: "session-1",
     });
 
     unmount();

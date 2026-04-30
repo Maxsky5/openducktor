@@ -49,7 +49,6 @@ const taskFixture: TaskCard = {
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
@@ -134,7 +133,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumeCalls += 1;
       return {
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -161,7 +159,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
-      updateSession: (_sessionId, updater) => {
+      updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
           return;
@@ -223,7 +221,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
-      updateSession: (_sessionId, updater) => {
+      updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
           return;
@@ -318,7 +316,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumeCalls += 1;
       return {
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -366,7 +363,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
-      updateSession: (_sessionId, updater) => {
+      updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
           return;
@@ -421,7 +418,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumeCalls += 1;
       return {
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -476,7 +472,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef,
-      updateSession: (_sessionId, updater) => {
+      updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
           return;
@@ -529,7 +525,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumeCalls += 1;
       return {
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -566,7 +561,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef,
-      updateSession: (_sessionId, updater) => {
+      updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
           return;
@@ -618,7 +613,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef.current = "/tmp/other";
       return {
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -645,7 +639,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
-      updateSession: (_sessionId, updater) => {
+      updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
           return;
@@ -690,7 +684,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef.current = "/tmp/other";
       return {
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -717,7 +710,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
-      updateSession: (_sessionId, updater) => {
+      updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
           return;
@@ -764,7 +757,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumedInput = input;
       return {
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -811,7 +803,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
-      updateSession: (_sessionId, updater) => {
+      updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
           return;
@@ -832,7 +824,6 @@ describe("agent-orchestrator-ensure-ready", () => {
     try {
       await ensureReady("session-1");
       expect(resumedInput).toMatchObject({
-        sessionId: "session-1",
         externalSessionId: "external-1",
         model: {
           providerId: "openai",
@@ -863,7 +854,6 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumedInput = input;
       return {
         runtimeKind: "claude-code",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -895,7 +885,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
-      updateSession: (_sessionId, updater) => {
+      updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
           return;

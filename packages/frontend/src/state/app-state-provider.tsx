@@ -142,12 +142,12 @@ export const useAgentActivitySessions = (): AgentActivitySessionSummary[] => {
   );
 };
 
-export const useAgentSession = (sessionId: string | null): AgentSessionState | null => {
+export const useAgentSession = (externalSessionId: string | null): AgentSessionState | null => {
   const sessionStore = useAgentSessionsContext();
   return useSyncExternalStore(
     sessionStore.subscribe,
-    () => sessionStore.getSessionSnapshot(sessionId),
-    () => sessionStore.getSessionSnapshot(sessionId),
+    () => sessionStore.getSessionSnapshot(externalSessionId),
+    () => sessionStore.getSessionSnapshot(externalSessionId),
   );
 };
 

@@ -126,6 +126,7 @@ type CommandMockResult =
 
 type MakeMockClientInput = {
   sessionId?: string;
+  sessionIds?: string[];
   promptAsyncResult?: PromptAsyncMockResult;
   commandResult?: CommandMockResult;
   streamEvents?: Event[];
@@ -149,6 +150,7 @@ type MakeMockClientInput = {
 
 const makeMockClient = ({
   sessionId = "session-opencode-1",
+  sessionIds,
   promptAsyncResult = { mode: "success" },
   commandResult = { mode: "success" },
   streamEvents = [],
@@ -224,12 +226,13 @@ const makeMockClient = ({
   const stream: MockEventStream = {
     events: [...streamEvents],
   };
+  const queuedSessionIds = [...(sessionIds ?? [sessionId])];
 
   const client = {
     session: {
       create: async (input: unknown) => {
         session.createCalls.push(input);
-        return { data: { id: sessionId }, error: undefined };
+        return { data: { id: queuedSessionIds.shift() ?? sessionId }, error: undefined };
       },
       promptAsync: async (input: unknown) => {
         session.promptAsyncCalls.push(input);
@@ -401,7 +404,7 @@ const makeMockClient = ({
 
 const startDefaultSession = async (
   adapter: OpencodeSdkAdapter,
-  sessionId = "session-1",
+  _sessionId = "session-opencode-1",
   role: "spec" | "planner" | "build" | "qa" = "spec",
   model?: {
     providerId: string;
@@ -419,7 +422,6 @@ const startDefaultSession = async (
           ? "build_implementation_start"
           : "spec_initial";
   await adapter.startSession({
-    sessionId,
     repoPath: "/repo",
     workingDirectory: "/repo",
     taskId: "task-1",
@@ -460,7 +462,7 @@ const createLoadSessionTodosHarness = (
 
 describe("OpencodeSdkAdapter", () => {
   test("shares one global event stream across sessions on the same endpoint", async () => {
-    const mock = makeMockClient({});
+    const mock = makeMockClient({ sessionIds: ["session-opencode-1", "session-2"] });
     let listCalls = 0;
     const abortSignals: AbortSignal[] = [];
     (
@@ -495,7 +497,6 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     await adapter.startSession({
-      sessionId: "session-1",
       repoPath: "/repo",
       workingDirectory: "/repo",
       taskId: "task-1",
@@ -510,7 +511,6 @@ describe("OpencodeSdkAdapter", () => {
       },
     });
     await adapter.startSession({
-      sessionId: "session-2",
       repoPath: "/repo",
       workingDirectory: "/other",
       taskId: "task-2",
@@ -541,10 +541,10 @@ describe("OpencodeSdkAdapter", () => {
       },
     ]);
 
-    await adapter.stopSession("session-1");
+    await adapter.stopSession("session-2");
     expect(abortSignals[0]?.aborted).toBe(false);
 
-    await adapter.stopSession("session-2");
+    await adapter.stopSession("session-opencode-1");
     expect(abortSignals[0]?.aborted).toBe(true);
   });
 
@@ -556,10 +556,9 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: unknown[] = [];
-    adapter.subscribeEvents("session-1", (event) => events.push(event));
+    adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
 
     const summary = await adapter.startSession({
-      sessionId: "session-1",
       repoPath: "/repo",
       workingDirectory: "/repo",
       taskId: "task-1",
@@ -574,7 +573,6 @@ describe("OpencodeSdkAdapter", () => {
       },
     });
 
-    expect(summary.sessionId).toBe("session-1");
     expect(summary.externalSessionId).toBe("session-opencode-1");
     expect(summary.role).toBe("planner");
     expect(mock.session.createCalls).toHaveLength(1);
@@ -708,10 +706,9 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => events.push(event));
+    adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
 
-    const summary = await adapter.attachSession({
-      sessionId: "session-1",
+    await adapter.attachSession({
       externalSessionId: "session-opencode-1",
       repoPath: "/repo",
       workingDirectory: "/repo",
@@ -723,7 +720,6 @@ describe("OpencodeSdkAdapter", () => {
       runtimeConnection: defaultRuntimeConnection,
     });
 
-    expect(summary.sessionId).toBe("session-1");
     expect(mock.session.getCalls).toHaveLength(1);
     expect(mock.session.messagesCalls).toHaveLength(1);
     expect(events).toEqual([]);
@@ -742,7 +738,6 @@ describe("OpencodeSdkAdapter", () => {
 
     await expect(
       adapter.attachSession({
-        sessionId: "session-1",
         externalSessionId: "session-opencode-1",
         repoPath: "/repo",
         workingDirectory: "/repo",
@@ -755,7 +750,7 @@ describe("OpencodeSdkAdapter", () => {
       }),
     ).rejects.toThrow("client.global.event()");
 
-    expect(adapter.hasSession("session-1")).toBe(false);
+    expect(adapter.hasSession("session-opencode-1")).toBe(false);
   });
 
   test("attachSession does not keep session-bound running subagents in pending correlation queues", async () => {
@@ -801,7 +796,7 @@ describe("OpencodeSdkAdapter", () => {
                   description: "Starting A",
                 },
                 metadata: {
-                  sessionId: "child-a",
+                  externalSessionId: "child-a",
                 },
                 time: {
                   start: Date.parse("2026-02-17T12:00:01Z"),
@@ -819,7 +814,6 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     await adapter.attachSession({
-      sessionId: "session-1",
       externalSessionId: "session-opencode-1",
       repoPath: "/repo",
       workingDirectory: "/repo",
@@ -832,12 +826,14 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const sessions = (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
-    const session = sessions.get("session-1");
+    const session = sessions.get("session-opencode-1");
     if (!session) {
       throw new Error("Expected adapter session record");
     }
 
-    expect(session.subagentCorrelationKeyBySessionId.get("child-a")).toBe("part:msg-200:subtask-a");
+    expect(session.subagentCorrelationKeyByExternalSessionId.get("child-a")).toBe(
+      "part:msg-200:subtask-a",
+    );
     expect(session.pendingSubagentCorrelationKeys).toEqual([]);
     expect(session.pendingSubagentCorrelationKeysBySignature.size).toBe(0);
   });
@@ -849,13 +845,15 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
 
     const events: Array<{ type: string }> = [];
-    adapter.subscribeEvents("session-1", (event) => events.push(event as { type: string }));
+    adapter.subscribeEvents("session-opencode-1", (event) =>
+      events.push(event as { type: string }),
+    );
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [{ kind: "text", text: "Write and persist spec" }],
       model: {
         providerId: "openai",
@@ -912,13 +910,13 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => events.push(event));
+    adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [{ kind: "text", text: "Recover ids" }],
     });
 
@@ -934,10 +932,10 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "build");
+    await startDefaultSession(adapter, "session-opencode-1", "build");
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [
         {
           kind: "slash_command",
@@ -979,13 +977,13 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "build");
+    await startDefaultSession(adapter, "session-opencode-1", "build");
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => events.push(event));
+    adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [
         {
           kind: "slash_command",
@@ -1001,7 +999,7 @@ describe("OpencodeSdkAdapter", () => {
 
     expect(events).toContainEqual({
       type: "session_status",
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       timestamp: "2026-02-17T12:00:00Z",
       status: { type: "busy" },
     });
@@ -1014,11 +1012,11 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "build");
+    await startDefaultSession(adapter, "session-opencode-1", "build");
 
     await expect(
       adapter.sendUserMessage({
-        sessionId: "session-1",
+        externalSessionId: "session-opencode-1",
         parts: [
           { kind: "text", text: "before " },
           {
@@ -1050,14 +1048,14 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "build");
+    await startDefaultSession(adapter, "session-opencode-1", "build");
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => events.push(event));
+    adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
 
     await expect(
       adapter.sendUserMessage({
-        sessionId: "session-1",
+        externalSessionId: "session-opencode-1",
         parts: [
           {
             kind: "slash_command",
@@ -1074,13 +1072,13 @@ describe("OpencodeSdkAdapter", () => {
 
     expect(events).toContainEqual({
       type: "session_status",
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       timestamp: "2026-02-17T12:00:00Z",
       status: { type: "busy" },
     });
     expect(events).toContainEqual({
       type: "session_idle",
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       timestamp: "2026-02-17T12:00:00Z",
     });
   });
@@ -1092,14 +1090,14 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
 
     const sessions = (
       adapter as unknown as {
         sessions: Map<string, { hasIdleSinceActivity: boolean }>;
       }
     ).sessions;
-    const session = sessions.get("session-1");
+    const session = sessions.get("session-opencode-1");
     if (!session) {
       throw new Error("Expected adapter session record");
     }
@@ -1107,7 +1105,7 @@ describe("OpencodeSdkAdapter", () => {
     session.hasIdleSinceActivity = true;
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [{ kind: "text", text: "Second turn" }],
     });
 
@@ -1121,7 +1119,7 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
 
     const sessions = (
       adapter as unknown as {
@@ -1134,7 +1132,7 @@ describe("OpencodeSdkAdapter", () => {
         >;
       }
     ).sessions;
-    const session = sessions.get("session-1");
+    const session = sessions.get("session-opencode-1");
     if (!session) {
       throw new Error("Expected adapter session record");
     }
@@ -1142,7 +1140,7 @@ describe("OpencodeSdkAdapter", () => {
     session.activeAssistantMessageId = null;
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [{ kind: "text", text: "First turn" }],
     });
 
@@ -1156,7 +1154,7 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
 
     const sessions = (
       adapter as unknown as {
@@ -1170,7 +1168,7 @@ describe("OpencodeSdkAdapter", () => {
         >;
       }
     ).sessions;
-    const session = sessions.get("session-1");
+    const session = sessions.get("session-opencode-1");
     if (!session) {
       throw new Error("Expected adapter session record");
     }
@@ -1179,7 +1177,7 @@ describe("OpencodeSdkAdapter", () => {
     session.activeAssistantMessageId = "msg-200";
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [{ kind: "text", text: "Queued follow-up" }],
     });
 
@@ -1204,7 +1202,7 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "build");
+    await startDefaultSession(adapter, "session-opencode-1", "build");
 
     const sessions = (
       adapter as unknown as {
@@ -1217,13 +1215,13 @@ describe("OpencodeSdkAdapter", () => {
         >;
       }
     ).sessions;
-    const session = sessions.get("session-1");
+    const session = sessions.get("session-opencode-1");
     if (!session) {
       throw new Error("Expected adapter session record");
     }
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [
         {
           kind: "slash_command",
@@ -1240,7 +1238,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(session.activeAssistantMessageId).toBe("msg-command-assistant-1");
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [{ kind: "text", text: "Queued follow-up" }],
     });
 
@@ -1256,9 +1254,9 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     adapter.updateSessionModel({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       model: {
         providerId: "openai",
         modelId: "gpt-5",
@@ -1268,7 +1266,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [{ kind: "text", text: "Continue" }],
     });
 
@@ -1291,7 +1289,7 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
 
     const selectedModel = {
       providerId: "openai",
@@ -1300,12 +1298,12 @@ describe("OpencodeSdkAdapter", () => {
     } as const;
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [{ kind: "text", text: "First message" }],
       model: selectedModel,
     });
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [{ kind: "text", text: "Second message" }],
       model: selectedModel,
     });
@@ -1325,14 +1323,14 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "spec", {
+    await startDefaultSession(adapter, "session-opencode-1", "spec", {
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
     });
 
     await adapter.sendUserMessage({
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       parts: [{ kind: "text", text: "Use the saved model" }],
     });
 
@@ -1367,11 +1365,11 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
 
     await expect(
       adapter.sendUserMessage({
-        sessionId: "session-1",
+        externalSessionId: "session-opencode-1",
         parts: [{ kind: "text", text: "Try again" }],
       }),
     ).rejects.toThrow(
@@ -1391,11 +1389,11 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
 
     await expect(
       adapter.sendUserMessage({
-        sessionId: "session-1",
+        externalSessionId: "session-opencode-1",
         parts: [{ kind: "text", text: "Try again" }],
       }),
     ).rejects.toThrow("OpenCode request failed: prompt session: socket closed");
@@ -1541,7 +1539,7 @@ describe("OpencodeSdkAdapter", () => {
                   result: "Finished A",
                 },
                 metadata: {
-                  sessionId: "child-a",
+                  externalSessionId: "child-a",
                 },
                 time: {
                   start: Date.parse("2026-02-17T12:00:00Z"),
@@ -1580,7 +1578,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(history[0].parts[1]).toMatchObject({
       kind: "subagent",
       status: "completed",
-      sessionId: "child-a",
+      externalSessionId: "child-a",
       correlationKey: "part:msg-200:subtask-a",
     });
   });
@@ -1618,7 +1616,7 @@ describe("OpencodeSdkAdapter", () => {
                 description: "Starting A",
               },
               metadata: {
-                sessionId: "child-a",
+                externalSessionId: "child-a",
               },
               time: {
                 start: Date.parse("2026-02-17T12:00:01Z"),
@@ -1683,11 +1681,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "build");
+    await startDefaultSession(adapter, "session-opencode-1", "build");
     const history = await adapter.loadSessionHistory({
       runtimeKind: "opencode",
       runtimeConnection: defaultRuntimeConnection,
@@ -1706,7 +1704,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(subagentEvents[0]?.part).toMatchObject({
       kind: "subagent",
       status: "running",
-      sessionId: "child-a",
+      externalSessionId: "child-a",
       correlationKey: "part:msg-200:subtask-a",
     });
   });
@@ -1747,7 +1745,7 @@ describe("OpencodeSdkAdapter", () => {
                 result: "Finished A",
               },
               metadata: {
-                sessionId: "child-a",
+                externalSessionId: "child-a",
               },
               time: {
                 start: Date.parse("2026-02-17T12:00:01Z"),
@@ -1813,11 +1811,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "build");
+    await startDefaultSession(adapter, "session-opencode-1", "build");
     const history = await adapter.loadSessionHistory({
       runtimeKind: "opencode",
       runtimeConnection: defaultRuntimeConnection,
@@ -1836,7 +1834,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(subagentEvents[0]?.part).toMatchObject({
       kind: "subagent",
       status: "completed",
-      sessionId: "child-a",
+      externalSessionId: "child-a",
       correlationKey: "part:msg-200:subtask-a",
     });
   });
@@ -1887,7 +1885,7 @@ describe("OpencodeSdkAdapter", () => {
                   result: "Finished A",
                 },
                 metadata: {
-                  sessionId: "child-a",
+                  externalSessionId: "child-a",
                 },
                 time: {
                   start: Date.parse("2026-02-17T12:00:01Z"),
@@ -1927,7 +1925,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(history[1].parts[0]).toMatchObject({
       kind: "subagent",
       status: "completed",
-      sessionId: "child-a",
+      externalSessionId: "child-a",
       correlationKey: "part:msg-200:subtask-a",
     });
   });
@@ -2186,11 +2184,10 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const sessions = (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
-    sessions.set("session-1", {
+    sessions.set("session-opencode-1", {
       externalSessionId: "session-opencode-1",
       eventTransportKey: defaultRuntimeConnection.endpoint,
       input: {
-        sessionId: "session-1",
         repoPath: "/repo",
         runtimeKind: "opencode",
         runtimeConnection: defaultRuntimeConnection,
@@ -2279,7 +2276,7 @@ describe("OpencodeSdkAdapter", () => {
       externalSessionId: "session-opencode-1",
       eventTransportKey: defaultRuntimeConnection.endpoint,
       input: {
-        sessionId: "session-runtime-a",
+        externalSessionId: "session-runtime-a",
         repoPath: "/repo",
         runtimeKind: "opencode",
         runtimeConnection: defaultRuntimeConnection,
@@ -2314,7 +2311,7 @@ describe("OpencodeSdkAdapter", () => {
       externalSessionId: "session-opencode-1",
       eventTransportKey: "http://127.0.0.1:12000",
       input: {
-        sessionId: "session-runtime-b",
+        externalSessionId: "session-runtime-b",
         repoPath: "/repo",
         runtimeKind: "opencode",
         runtimeConnection: {
@@ -2432,11 +2429,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     const partEvents = events.filter((entry) => entry.type === "assistant_part");
@@ -2498,11 +2495,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     const idleEvents = events.filter((entry) => entry.type === "session_idle");
@@ -2556,11 +2553,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     const assistantMessages = events.filter((entry) => entry.type === "assistant_message");
@@ -2638,11 +2635,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(1);
@@ -2704,11 +2701,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(1);
@@ -2770,11 +2767,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     expect(events.some((entry) => entry.type === "assistant_message")).toBe(false);
@@ -2812,11 +2809,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     const userEvents = events.filter((entry) => entry.type === "user_message");
@@ -2878,11 +2875,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     const userEvents = events.filter((entry) => entry.type === "user_message");
@@ -2943,16 +2940,16 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     expect(events).toContainEqual({
       type: "assistant_part",
-      sessionId: "session-1",
+      externalSessionId: "session-opencode-1",
       timestamp: "2026-02-17T12:00:00Z",
       part: {
         kind: "step",
@@ -3010,11 +3007,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     const toolPartEvent = events.find((entry) => {
@@ -3089,11 +3086,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "planner");
+    await startDefaultSession(adapter, "session-opencode-1", "planner");
     await flushAsync();
 
     const toolPartEvent = events.find((entry) => {
@@ -3167,11 +3164,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     const toolPartEvent = events.find((entry) => {
@@ -3228,11 +3225,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     const todoEvent = events.find((entry) => entry.type === "session_todos_updated");
@@ -3286,11 +3283,11 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-1", "spec");
+    await startDefaultSession(adapter, "session-opencode-1", "spec");
     await flushAsync();
 
     const todoEvent = events.find((entry) => entry.type === "session_todos_updated");
@@ -3835,11 +3832,11 @@ describe("OpencodeSdkAdapter", () => {
     await startDefaultSession(adapter);
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-1", (event) => {
+    adapter.subscribeEvents("session-opencode-1", (event) => {
       events.push(event);
     });
 
-    await adapter.stopSession("session-1");
+    await adapter.stopSession("session-opencode-1");
 
     expect(mock.session.abortCalls).toHaveLength(1);
     expect(events.some((event) => event.type === "session_finished")).toBe(true);

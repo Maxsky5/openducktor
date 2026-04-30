@@ -75,8 +75,10 @@ export type AgentChatWindowRowsCacheEntry = AgentChatWindowRowsState & {
 
 const CHAT_WINDOW_ROWS_CACHE_LIMIT = 6;
 
-const toAgentChatWindowRowsCacheKey = (sessionId: string, showThinkingMessages: boolean): string =>
-  `${sessionId}:${showThinkingMessages ? "thinking:on" : "thinking:off"}`;
+const toAgentChatWindowRowsCacheKey = (
+  externalSessionId: string,
+  showThinkingMessages: boolean,
+): string => `${externalSessionId}:${showThinkingMessages ? "thinking:on" : "thinking:off"}`;
 
 const touchAgentChatWindowRowsCacheEntry = (
   cache: Map<string, AgentChatWindowRowsCacheEntry>,
@@ -134,7 +136,7 @@ const buildRawMessageSignatures = (messages: AgentSessionMessages): string[] | n
 const areSessionMessageContainersEquivalent = (
   previousMessages: AgentSessionMessages,
   nextMessages: AgentSessionMessages,
-  sessionId: string,
+  externalSessionId: string,
 ): boolean => {
   if (isSessionMessagesState(previousMessages) && isSessionMessagesState(nextMessages)) {
     if (previousMessages === nextMessages) {
@@ -142,8 +144,8 @@ const areSessionMessageContainersEquivalent = (
     }
 
     return (
-      previousMessages.sessionId === sessionId &&
-      nextMessages.sessionId === sessionId &&
+      previousMessages.externalSessionId === externalSessionId &&
+      nextMessages.externalSessionId === externalSessionId &&
       previousMessages.version === nextMessages.version &&
       previousMessages.count === nextMessages.count
     );
@@ -206,7 +208,7 @@ const findFirstChangedCachedMessageIndex = (
 const appendMessageRows = (
   rows: AgentChatWindowRow[],
   rowStartByMessageIndex: number[],
-  sessionId: string,
+  externalSessionId: string,
   message: AgentChatMessage,
   messageIndex: number,
   showThinkingMessages: boolean,
@@ -228,7 +230,7 @@ const appendMessageRows = (
     rows.push({
       kind: "turn_duration",
       // Scope row identity to the active session to avoid cross-session cache reuse.
-      key: `${sessionId}:${message.id}:duration`,
+      key: `${externalSessionId}:${message.id}:duration`,
       durationMs: turnDurationMs,
     });
   }
@@ -236,7 +238,7 @@ const appendMessageRows = (
   rows.push({
     kind: "message",
     // Message IDs can repeat across sessions; include session ID for stable row keys.
-    key: `${sessionId}:${message.id}`,
+    key: `${externalSessionId}:${message.id}`,
     message,
   });
 };
@@ -387,7 +389,7 @@ export function buildAgentChatWindowRowsState(
     appendMessageRows(
       rows,
       rowStartByMessageIndex,
-      session.sessionId,
+      session.externalSessionId,
       message,
       messageIndex,
       showThinkingMessages,
@@ -422,7 +424,7 @@ export function resolveAgentChatWindowRowsState({
   showThinkingMessages: boolean;
   cache: Map<string, AgentChatWindowRowsCacheEntry>;
 }): Pick<AgentChatWindowRowsState, keyof AgentChatWindowResolvedState> {
-  const cacheKey = toAgentChatWindowRowsCacheKey(session.sessionId, showThinkingMessages);
+  const cacheKey = toAgentChatWindowRowsCacheKey(session.externalSessionId, showThinkingMessages);
   const cacheEntry = cache.get(cacheKey);
 
   if (cacheEntry) {
@@ -430,7 +432,7 @@ export function resolveAgentChatWindowRowsState({
       areSessionMessageContainersEquivalent(
         cacheEntry.messages,
         session.messages,
-        session.sessionId,
+        session.externalSessionId,
       )
     ) {
       touchAgentChatWindowRowsCacheEntry(cache, cacheKey, cacheEntry);
@@ -560,7 +562,7 @@ export function buildAgentChatWindowRows(
 
 export function findFirstChangedChatMessageIndex(
   previousMessages: AgentSessionState["messages"] | null,
-  nextSession: Pick<AgentSessionState, "sessionId" | "messages">,
+  nextSession: Pick<AgentSessionState, "externalSessionId" | "messages">,
 ): number {
   return findFirstChangedSessionMessageIndex(previousMessages, nextSession);
 }
@@ -598,7 +600,7 @@ export function getAgentChatWindowRowsKey(
   resolveMessageIdentityToken: (message: AgentChatMessage) => number,
 ): string {
   const signatureParts: string[] = [
-    session.sessionId,
+    session.externalSessionId,
     showThinkingMessages ? "thinking:on" : "thinking:off",
   ];
 

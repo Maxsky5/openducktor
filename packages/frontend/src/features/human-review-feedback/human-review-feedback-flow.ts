@@ -12,7 +12,7 @@ export type HumanReviewFeedbackStartRequest = {
   scenario: HumanReviewFeedbackState["scenario"];
   initialStartMode?: "fresh" | "reuse" | "fork";
   existingSessionOptions: SessionStartExistingSessionOption[];
-  initialSourceSessionId?: string;
+  initialSourceExternalSessionId?: string;
   postStartAction: "kickoff";
   message: string;
   beforeStartAction: {
@@ -44,7 +44,7 @@ const buildRequestChangesSessionRequest = (
     sessions: builderSessions,
     role: "build",
   });
-  const latestBuilderSessionId = builderSessions[0]?.sessionId;
+  const latestBuilderSessionId = builderSessions[0]?.externalSessionId;
 
   return {
     taskId: state.taskId,
@@ -52,7 +52,7 @@ const buildRequestChangesSessionRequest = (
     scenario: state.scenario,
     ...(existingSessionOptions.length === 0 ? { initialStartMode: "fresh" as const } : {}),
     existingSessionOptions,
-    ...(latestBuilderSessionId ? { initialSourceSessionId: latestBuilderSessionId } : {}),
+    ...(latestBuilderSessionId ? { initialSourceExternalSessionId: latestBuilderSessionId } : {}),
     postStartAction: "kickoff",
     message: feedback,
     beforeStartAction: {
@@ -79,10 +79,10 @@ export const submitHumanReviewFeedback = async ({
     return { outcome: "cancelled" };
   }
 
-  const sessionId = await startRequestChangesSession(
+  const externalSessionId = await startRequestChangesSession(
     buildRequestChangesSessionRequest(state, builderSessions, trimmedMessage),
   );
-  if (!sessionId) {
+  if (!externalSessionId) {
     return { outcome: "cancelled" };
   }
 

@@ -32,7 +32,7 @@ type PrepareCurrent = (current: AgentSessionState) => AgentSessionState;
 
 const markSessionRunning = (context: SessionPartEventContext): void => {
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) =>
       current.status === "running"
         ? current
@@ -51,23 +51,24 @@ const updateDraftChannelBuffer = (
   messageId: string | undefined,
   source: "delta" | "part",
 ): void => {
-  const currentRaw = context.drafts.draftRawBySessionRef.current[context.store.sessionId] ?? {};
-  context.drafts.draftRawBySessionRef.current[context.store.sessionId] = {
+  const currentRaw =
+    context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] ?? {};
+  context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] = {
     ...currentRaw,
     [channel]: raw,
   };
 
   const currentSource =
-    context.drafts.draftSourceBySessionRef.current[context.store.sessionId] ?? {};
-  context.drafts.draftSourceBySessionRef.current[context.store.sessionId] = {
+    context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] ?? {};
+  context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] = {
     ...currentSource,
     [channel]: source,
   };
 
   if (context.drafts.draftMessageIdBySessionRef) {
     const currentMessageIds =
-      context.drafts.draftMessageIdBySessionRef.current[context.store.sessionId] ?? {};
-    context.drafts.draftMessageIdBySessionRef.current[context.store.sessionId] = {
+      context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] ?? {};
+    context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] = {
       ...currentMessageIds,
       ...(messageId ? { [channel]: messageId } : {}),
     };
@@ -82,23 +83,26 @@ const clearDraftChannelBuffer = (
 ): void => {
   if (channel === "reasoning") {
     const timeoutId =
-      context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.sessionId];
+      context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.externalSessionId];
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
       if (context.drafts.draftFlushTimeoutBySessionRef) {
-        delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.sessionId];
+        delete context.drafts.draftFlushTimeoutBySessionRef.current[
+          context.store.externalSessionId
+        ];
       }
     }
   }
 
-  const currentRaw = context.drafts.draftRawBySessionRef.current[context.store.sessionId] ?? {};
+  const currentRaw =
+    context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] ?? {};
   const nextRaw = { ...currentRaw };
   delete nextRaw[channel];
-  context.drafts.draftRawBySessionRef.current[context.store.sessionId] = nextRaw;
+  context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] = nextRaw;
 
   const currentSource =
-    context.drafts.draftSourceBySessionRef.current[context.store.sessionId] ?? {};
-  context.drafts.draftSourceBySessionRef.current[context.store.sessionId] =
+    context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] ?? {};
+  context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] =
     source === undefined
       ? Object.fromEntries(Object.entries(currentSource).filter(([key]) => key !== channel))
       : {
@@ -108,8 +112,8 @@ const clearDraftChannelBuffer = (
 
   if (context.drafts.draftMessageIdBySessionRef) {
     const currentMessageIds =
-      context.drafts.draftMessageIdBySessionRef.current[context.store.sessionId] ?? {};
-    context.drafts.draftMessageIdBySessionRef.current[context.store.sessionId] =
+      context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] ?? {};
+    context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] =
       messageId === undefined
         ? Object.fromEntries(Object.entries(currentMessageIds).filter(([key]) => key !== channel))
         : {
@@ -140,7 +144,7 @@ const resolvePartModelSelection = (
     };
   }
 
-  const turnModel = context.turn.turnModelBySessionRef?.current[context.store.sessionId];
+  const turnModel = context.turn.turnModelBySessionRef?.current[context.store.externalSessionId];
   return turnModel ?? current.selectedModel ?? null;
 };
 
@@ -193,7 +197,7 @@ export const handleAssistantDelta = (
   context: SessionPartEventContext,
   event: Extract<SessionEvent, { type: "assistant_delta" }>,
 ): void => {
-  context.turn.recordTurnActivityTimestamp?.(context.store.sessionId, event.timestamp);
+  context.turn.recordTurnActivityTimestamp?.(context.store.externalSessionId, event.timestamp);
   if (event.channel === "text") {
     if (!event.messageId || event.delta.length === 0) {
       return;
@@ -202,7 +206,7 @@ export const handleAssistantDelta = (
     markSessionRunning(context);
     clearDraftChannelBuffer(context, "text");
     context.store.updateSession(
-      context.store.sessionId,
+      context.store.externalSessionId,
       (current) => {
         const existingMessage = findSessionMessageById(current, messageId);
         const baseContent = existingMessage?.role === "assistant" ? existingMessage.content : "";
@@ -223,13 +227,15 @@ export const handleAssistantDelta = (
   }
 
   if (
-    context.drafts.draftSourceBySessionRef.current[context.store.sessionId]?.[event.channel] ===
-    "part"
+    context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId]?.[
+      event.channel
+    ] === "part"
   ) {
     return;
   }
   const nextRaw = `${
-    context.drafts.draftRawBySessionRef.current[context.store.sessionId]?.[event.channel] ?? ""
+    context.drafts.draftRawBySessionRef.current[context.store.externalSessionId]?.[event.channel] ??
+    ""
   }${event.delta}`;
   updateDraftChannelBuffer(context, event.channel, nextRaw, event.messageId, "delta");
   markSessionRunning(context);
@@ -241,7 +247,7 @@ const settleSessionBeforeDraftUpdate = (
   prepareCurrent: PrepareCurrent,
 ): void => {
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => {
       const prepared = prepareCurrent(current);
       return prepared.status === "running"
@@ -266,7 +272,7 @@ const handleTextPart = (
   }
   clearDraftChannelBuffer(context, "text");
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => {
       const prepared = prepareCurrent(current);
       if (part.text.trim().length === 0) {
@@ -309,7 +315,7 @@ const handleReasoningPart = (
 
   clearDraftChannelBuffer(context, "reasoning");
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => {
       const prepared = prepareCurrent(current);
       const messageId = toReasoningMessageId(part.messageId, part.partId);
@@ -356,11 +362,11 @@ const handleSubagentPart = (
   const eventTimestamp = eventTimestampMs(event.timestamp);
 
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => {
       const prepared = prepareCurrent(current);
       const fallbackMatches =
-        typeof part.sessionId === "string" &&
+        typeof part.externalSessionId === "string" &&
         part.correlationKey.startsWith("session:") &&
         typeof part.agent === "string" &&
         typeof part.prompt === "string"
@@ -368,7 +374,7 @@ const handleSubagentPart = (
               (message) =>
                 message.role === "system" &&
                 message.meta?.kind === "subagent" &&
-                !message.meta.sessionId &&
+                !message.meta.externalSessionId &&
                 message.meta.correlationKey.startsWith("part:") &&
                 message.meta.agent === part.agent &&
                 message.meta.prompt === part.prompt,
@@ -380,12 +386,13 @@ const handleSubagentPart = (
         (message) =>
           message.meta?.kind === "subagent" && message.meta.correlationKey === part.correlationKey,
       );
-      const sessionMessage = part.sessionId
+      const sessionMessage = part.externalSessionId
         ? findLastSessionMessageByRole(
             prepared,
             "system",
             (message) =>
-              message.meta?.kind === "subagent" && message.meta.sessionId === part.sessionId,
+              message.meta?.kind === "subagent" &&
+              message.meta.externalSessionId === part.externalSessionId,
           )
         : undefined;
       const fallbackMessage =
@@ -402,7 +409,9 @@ const handleSubagentPart = (
         ...(typeof part.agent === "string" ? { agent: part.agent } : {}),
         ...(typeof part.prompt === "string" ? { prompt: part.prompt } : {}),
         ...(typeof part.description === "string" ? { description: part.description } : {}),
-        ...(typeof part.sessionId === "string" ? { sessionId: part.sessionId } : {}),
+        ...(typeof part.externalSessionId === "string"
+          ? { externalSessionId: part.externalSessionId }
+          : {}),
         ...(part.executionMode ? { executionMode: part.executionMode } : {}),
         ...(part.metadata ? { metadata: part.metadata } : {}),
         ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
@@ -450,7 +459,7 @@ const handleStepPart = (
   }
 
   context.store.updateSession(
-    context.store.sessionId,
+    context.store.externalSessionId,
     (current) => {
       const prepared = prepareCurrent(current);
       const model = resolvePartModelSelection(context, prepared, part.messageId);
@@ -465,7 +474,7 @@ const handleStepPart = (
       }
 
       if (context.turn.contextUsageMessageIdBySessionRef) {
-        context.turn.contextUsageMessageIdBySessionRef.current[context.store.sessionId] =
+        context.turn.contextUsageMessageIdBySessionRef.current[context.store.externalSessionId] =
           part.messageId;
       }
 
@@ -489,7 +498,7 @@ export const handleAssistantPart = (
       (part.kind === "tool" || part.kind === "subagent") && typeof part.startedAtMs === "number"
         ? part.startedAtMs
         : event.timestamp;
-    context.turn.recordTurnActivityTimestamp?.(context.store.sessionId, activityTimestamp);
+    context.turn.recordTurnActivityTimestamp?.(context.store.externalSessionId, activityTimestamp);
   }
   const prepareCurrent = createPrePartTodoSettlement(part, event.timestamp);
 

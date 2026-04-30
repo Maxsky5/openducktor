@@ -81,7 +81,7 @@ type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
   ) => void;
   retrySessionRuntimeAttachment: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
     recoveryDedupKey?: string | null;
     historyPreludeMode?: AgentSessionHistoryPreludeMode;
     allowLiveSessionResume?: boolean;
@@ -119,14 +119,15 @@ export function useAgentOrchestratorOperations({
   }, []);
 
   const recordTurnActivityTimestamp = useCallback(
-    (sessionId: string, timestamp: string | number): void => {
+    (externalSessionId: string, timestamp: string | number): void => {
       const timestampMs = toTimestampMs(timestamp);
       if (timestampMs === undefined) {
         return;
       }
-      const current = assistantTurnTimingBySessionRef.current[sessionId]?.activityStartedAtMs;
-      assistantTurnTimingBySessionRef.current[sessionId] = {
-        ...(assistantTurnTimingBySessionRef.current[sessionId] ?? {}),
+      const current =
+        assistantTurnTimingBySessionRef.current[externalSessionId]?.activityStartedAtMs;
+      assistantTurnTimingBySessionRef.current[externalSessionId] = {
+        ...(assistantTurnTimingBySessionRef.current[externalSessionId] ?? {}),
         activityStartedAtMs:
           typeof current === "number" ? Math.min(current, timestampMs) : timestampMs,
       };
@@ -135,14 +136,14 @@ export function useAgentOrchestratorOperations({
   );
 
   const recordTurnUserMessageTimestamp = useCallback(
-    (sessionId: string, timestamp: string | number): void => {
+    (externalSessionId: string, timestamp: string | number): void => {
       const timestampMs = toTimestampMs(timestamp);
       if (timestampMs === undefined) {
         return;
       }
-      const current = assistantTurnTimingBySessionRef.current[sessionId]?.userAnchorAtMs;
-      assistantTurnTimingBySessionRef.current[sessionId] = {
-        ...(assistantTurnTimingBySessionRef.current[sessionId] ?? {}),
+      const current = assistantTurnTimingBySessionRef.current[externalSessionId]?.userAnchorAtMs;
+      assistantTurnTimingBySessionRef.current[externalSessionId] = {
+        ...(assistantTurnTimingBySessionRef.current[externalSessionId] ?? {}),
         userAnchorAtMs: typeof current === "number" ? Math.min(current, timestampMs) : timestampMs,
       };
     },
@@ -163,12 +164,12 @@ export function useAgentOrchestratorOperations({
 
   const updateSession = useCallback(
     (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
       options?: { persist?: boolean },
     ): void => {
       const currentSessions = sessionsRef.current;
-      const current = currentSessions[sessionId];
+      const current = currentSessions[externalSessionId];
       if (!current) {
         return;
       }
@@ -192,7 +193,7 @@ export function useAgentOrchestratorOperations({
 
       const nextSessions = {
         ...currentSessions,
-        [sessionId]: nextSession,
+        [externalSessionId]: nextSession,
       };
       commitSessions(nextSessions);
 
@@ -203,7 +204,7 @@ export function useAgentOrchestratorOperations({
           {
             tags: {
               repoPath: workspaceRepoPath,
-              sessionId,
+              externalSessionId,
               taskId: nextSession.taskId,
               role: nextSession.role,
             },
@@ -218,7 +219,7 @@ export function useAgentOrchestratorOperations({
     async (input: {
       runtimeKind: RuntimeKind;
       runtimeConnection: AgentRuntimeConnection;
-      targetSessionId: string;
+      targetExternalSessionId: string;
       requestId: string;
       reply: "once" | "always" | "reject";
       message?: string;
@@ -233,7 +234,7 @@ export function useAgentOrchestratorOperations({
       clearSubagentPendingPermissionFromSessions({
         sessionsRef,
         updateSession,
-        targetSessionId: input.targetSessionId,
+        targetExternalSessionId: input.targetExternalSessionId,
         requestId: input.requestId,
       });
     },
@@ -242,12 +243,12 @@ export function useAgentOrchestratorOperations({
 
   const resolveTurnDurationMs = useCallback(
     (
-      sessionId: string,
+      externalSessionId: string,
       timestamp: string,
       messages: AgentSessionState["messages"] = [],
     ): number | undefined => {
       const completedAtMs = toTimestampMs(timestamp) ?? Date.now();
-      const currentTiming = assistantTurnTimingBySessionRef.current[sessionId] ?? {};
+      const currentTiming = assistantTurnTimingBySessionRef.current[externalSessionId] ?? {};
       const previousAssistantCompletedAtMs = currentTiming.previousAssistantCompletedAtMs;
       const activityStartedAtMs =
         currentTiming.activityStartedAtMs ??
@@ -270,20 +271,20 @@ export function useAgentOrchestratorOperations({
   );
 
   const clearTurnDuration = useCallback(
-    (sessionId: string, completedTimestamp?: string): void => {
+    (externalSessionId: string, completedTimestamp?: string): void => {
       const completedAtMs =
         completedTimestamp === undefined ? undefined : toTimestampMs(completedTimestamp);
-      const nextTiming = { ...(assistantTurnTimingBySessionRef.current[sessionId] ?? {}) };
+      const nextTiming = { ...(assistantTurnTimingBySessionRef.current[externalSessionId] ?? {}) };
       delete nextTiming.activityStartedAtMs;
       delete nextTiming.userAnchorAtMs;
       if (typeof completedAtMs === "number") {
         nextTiming.previousAssistantCompletedAtMs = completedAtMs;
       }
       if (Object.keys(nextTiming).length === 0) {
-        delete assistantTurnTimingBySessionRef.current[sessionId];
+        delete assistantTurnTimingBySessionRef.current[externalSessionId];
         return;
       }
-      assistantTurnTimingBySessionRef.current[sessionId] = nextTiming;
+      assistantTurnTimingBySessionRef.current[externalSessionId] = nextTiming;
     },
     [assistantTurnTimingBySessionRef, toTimestampMs],
   );
@@ -345,34 +346,34 @@ export function useAgentOrchestratorOperations({
   );
 
   const removeSessionIds = useCallback(
-    (sessionIds: string[]): void => {
-      if (sessionIds.length === 0) {
+    (externalSessionIds: string[]): void => {
+      if (externalSessionIds.length === 0) {
         return;
       }
 
-      for (const sessionId of sessionIds) {
-        const unsubscribe = unsubscribersRef.current.get(sessionId);
+      for (const externalSessionId of externalSessionIds) {
+        const unsubscribe = unsubscribersRef.current.get(externalSessionId);
         unsubscribe?.();
-        unsubscribersRef.current.delete(sessionId);
+        unsubscribersRef.current.delete(externalSessionId);
 
-        const flushTimeout = refBridges.draftFlushTimeoutBySessionRef.current[sessionId];
+        const flushTimeout = refBridges.draftFlushTimeoutBySessionRef.current[externalSessionId];
         if (flushTimeout !== undefined) {
           clearTimeout(flushTimeout);
         }
-        delete refBridges.draftFlushTimeoutBySessionRef.current[sessionId];
-        delete refBridges.draftRawBySessionRef.current[sessionId];
-        delete refBridges.draftSourceBySessionRef.current[sessionId];
-        delete refBridges.draftMessageIdBySessionRef.current[sessionId];
-        delete refBridges.assistantTurnTimingBySessionRef.current[sessionId];
-        delete refBridges.turnModelBySessionRef.current[sessionId];
+        delete refBridges.draftFlushTimeoutBySessionRef.current[externalSessionId];
+        delete refBridges.draftRawBySessionRef.current[externalSessionId];
+        delete refBridges.draftSourceBySessionRef.current[externalSessionId];
+        delete refBridges.draftMessageIdBySessionRef.current[externalSessionId];
+        delete refBridges.assistantTurnTimingBySessionRef.current[externalSessionId];
+        delete refBridges.turnModelBySessionRef.current[externalSessionId];
       }
 
       commitSessions((current) => {
         let hasChanges = false;
         const next = { ...current };
-        for (const sessionId of sessionIds) {
-          if (next[sessionId]) {
-            delete next[sessionId];
+        for (const externalSessionId of externalSessionIds) {
+          if (next[externalSessionId]) {
+            delete next[externalSessionId];
             hasChanges = true;
           }
         }
@@ -383,12 +384,16 @@ export function useAgentOrchestratorOperations({
   );
 
   const removeAgentSession = useCallback(
-    async (sessionId: string): Promise<void> => {
-      const session = sessionsRef.current[sessionId];
-      if (session && isTranscriptAgentSession(session) && agentEngine.hasSession(sessionId)) {
-        await agentEngine.detachSession(sessionId);
+    async (externalSessionId: string): Promise<void> => {
+      const session = sessionsRef.current[externalSessionId];
+      if (
+        session &&
+        isTranscriptAgentSession(session) &&
+        agentEngine.hasSession(externalSessionId)
+      ) {
+        await agentEngine.detachSession(externalSessionId);
       }
-      removeSessionIds([sessionId]);
+      removeSessionIds([externalSessionId]);
     },
     [agentEngine, removeSessionIds, sessionsRef],
   );
@@ -403,18 +408,23 @@ export function useAgentOrchestratorOperations({
       );
       await Promise.all(
         matchingSessions.map(async (session) => {
-          if (isTranscriptAgentSession(session) && agentEngine.hasSession(session.sessionId)) {
-            await agentEngine.detachSession(session.sessionId);
+          if (
+            isTranscriptAgentSession(session) &&
+            agentEngine.hasSession(session.externalSessionId)
+          ) {
+            await agentEngine.detachSession(session.externalSessionId);
           }
         }),
       );
-      const sessionIds = matchingSessions
+      const externalSessionIds = matchingSessions
         .filter(
           (session, index, sessions) =>
-            sessions.findIndex((candidate) => candidate.sessionId === session.sessionId) === index,
+            sessions.findIndex(
+              (candidate) => candidate.externalSessionId === session.externalSessionId,
+            ) === index,
         )
-        .map((session) => session.sessionId);
-      removeSessionIds(sessionIds);
+        .map((session) => session.externalSessionId);
+      removeSessionIds(externalSessionIds);
     },
     [agentEngine, removeSessionIds, sessionsRef],
   );
@@ -422,14 +432,14 @@ export function useAgentOrchestratorOperations({
   const liveAgentSessionStore = useMemo(() => new LiveAgentSessionStore(), []);
 
   const attachSessionListener = useCallback(
-    (repoPath: string, sessionId: string): void => {
-      if (unsubscribersRef.current.has(sessionId)) {
+    (repoPath: string, externalSessionId: string): void => {
+      if (unsubscribersRef.current.has(externalSessionId)) {
         return;
       }
       const unsubscribe = attachAgentSessionListener({
         adapter: agentEngine,
         repoPath,
-        sessionId,
+        externalSessionId,
         sessionsRef: refBridges.sessionsRef,
         draftRawBySessionRef: refBridges.draftRawBySessionRef,
         draftSourceBySessionRef: refBridges.draftSourceBySessionRef,
@@ -439,7 +449,8 @@ export function useAgentOrchestratorOperations({
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
         isSessionListenerAttached: (candidateSessionId) =>
-          candidateSessionId === sessionId || unsubscribersRef.current.has(candidateSessionId),
+          candidateSessionId === externalSessionId ||
+          unsubscribersRef.current.has(candidateSessionId),
         recordTurnActivityTimestamp,
         recordTurnUserMessageTimestamp,
         resolveTurnDurationMs,
@@ -449,7 +460,7 @@ export function useAgentOrchestratorOperations({
           findRuntimeDefinition(agentEngine.listRuntimeDefinitions(), runtimeKind),
       });
 
-      unsubscribersRef.current.set(sessionId, unsubscribe);
+      unsubscribersRef.current.set(externalSessionId, unsubscribe);
     },
     [
       agentEngine,
@@ -466,29 +477,31 @@ export function useAgentOrchestratorOperations({
 
   const attachRuntimeTranscriptSession = useCallback(
     async (input: AttachRuntimeTranscriptSessionInput): Promise<void> => {
-      const existingSession = sessionsRef.current[input.sessionId];
+      const existingSession = sessionsRef.current[input.externalSessionId];
       if (existingSession && !isTranscriptAgentSession(existingSession)) {
-        throw new Error(`Session ${input.sessionId} is already active and is not a transcript.`);
+        throw new Error(
+          `Session ${input.externalSessionId} is already active and is not a transcript.`,
+        );
       }
       if (!input.runtimeId.trim()) {
         throw new Error("Runtime identity is unavailable for this transcript.");
       }
 
-      const hadRuntimeSession = agentEngine.hasSession(input.sessionId);
+      const hadRuntimeSession = agentEngine.hasSession(input.externalSessionId);
       let attachedListener = false;
       const unsubscribeTranscriptListener = (): void => {
-        const unsubscribe = unsubscribersRef.current.get(input.sessionId);
+        const unsubscribe = unsubscribersRef.current.get(input.externalSessionId);
         unsubscribe?.();
-        unsubscribersRef.current.delete(input.sessionId);
+        unsubscribersRef.current.delete(input.externalSessionId);
       };
       const detachRuntimeSessionIfPresent = async (): Promise<void> => {
         unsubscribeTranscriptListener();
-        if (agentEngine.hasSession(input.sessionId)) {
-          await agentEngine.detachSession(input.sessionId);
+        if (agentEngine.hasSession(input.externalSessionId)) {
+          await agentEngine.detachSession(input.externalSessionId);
         }
       };
       const isCurrentTranscriptRequest = (): boolean => {
-        const current = sessionsRef.current[input.sessionId];
+        const current = sessionsRef.current[input.externalSessionId];
         return (
           current !== undefined &&
           isTranscriptAgentSession(current) &&
@@ -505,14 +518,13 @@ export function useAgentOrchestratorOperations({
         );
       }
       if (hasMatchingLocalSession && hadRuntimeSession) {
-        attachSessionListener(input.repoPath, input.sessionId);
+        attachSessionListener(input.repoPath, input.externalSessionId);
         return;
       }
       if (!hasMatchingLocalSession) {
         unsubscribeTranscriptListener();
         const initialSession = createRuntimeTranscriptSession({
           repoPath: input.repoPath,
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           runtimeKind: input.runtimeKind,
           runtimeId: input.runtimeId,
@@ -523,7 +535,7 @@ export function useAgentOrchestratorOperations({
         });
         commitSessions((current) => ({
           ...current,
-          [input.sessionId]: initialSession,
+          [input.externalSessionId]: initialSession,
         }));
       }
 
@@ -531,7 +543,6 @@ export function useAgentOrchestratorOperations({
         const summaryPromise = hadRuntimeSession
           ? Promise.resolve(null)
           : agentEngine.attachSession({
-              sessionId: input.sessionId,
               externalSessionId: input.externalSessionId,
               repoPath: input.repoPath,
               runtimeKind: input.runtimeKind,
@@ -545,7 +556,7 @@ export function useAgentOrchestratorOperations({
               systemPrompt: "",
             });
 
-        attachSessionListener(input.repoPath, input.sessionId);
+        attachSessionListener(input.repoPath, input.externalSessionId);
         attachedListener = true;
         const summary = await summaryPromise;
         if (!isCurrentTranscriptRequest()) {
@@ -564,7 +575,6 @@ export function useAgentOrchestratorOperations({
         }
         const hydratedSession = createRuntimeTranscriptSession({
           repoPath: input.repoPath,
-          sessionId: input.sessionId,
           externalSessionId: input.externalSessionId,
           runtimeKind: input.runtimeKind,
           runtimeId: input.runtimeId,
@@ -575,13 +585,13 @@ export function useAgentOrchestratorOperations({
         });
 
         updateSession(
-          input.sessionId,
+          input.externalSessionId,
           (current) => {
             const messages =
               getSessionMessageCount(current) === 0
                 ? hydratedSession.messages
                 : mergeHydratedMessages(
-                    input.sessionId,
+                    input.externalSessionId,
                     hydratedSession.messages,
                     current.messages,
                   );
@@ -606,11 +616,11 @@ export function useAgentOrchestratorOperations({
         if (attachedListener && !hadLocalSession) {
           unsubscribeTranscriptListener();
         }
-        if (!hadRuntimeSession && agentEngine.hasSession(input.sessionId)) {
-          await agentEngine.detachSession(input.sessionId);
+        if (!hadRuntimeSession && agentEngine.hasSession(input.externalSessionId)) {
+          await agentEngine.detachSession(input.externalSessionId);
         }
         if (!hadLocalSession) {
-          removeSessionIds([input.sessionId]);
+          removeSessionIds([input.externalSessionId]);
         }
         throw error;
       }
@@ -658,7 +668,7 @@ export function useAgentOrchestratorOperations({
     () =>
       createSessionHydrationOperations({
         loadAgentSessions,
-        getSessionSnapshot: (sessionId) => sessionsRef.current[sessionId],
+        getSessionSnapshot: (externalSessionId) => sessionsRef.current[externalSessionId],
       }),
     [loadAgentSessions, sessionsRef],
   );
@@ -666,21 +676,21 @@ export function useAgentOrchestratorOperations({
   const retrySessionRuntimeAttachment = useCallback(
     async ({
       taskId,
-      sessionId,
+      externalSessionId,
       recoveryDedupKey,
       historyPreludeMode,
       allowLiveSessionResume,
       persistedRecords,
     }: {
       taskId: string;
-      sessionId: string;
+      externalSessionId: string;
       recoveryDedupKey?: string | null;
       historyPreludeMode?: AgentSessionHistoryPreludeMode;
       allowLiveSessionResume?: boolean;
       persistedRecords?: AgentSessionRecord[];
     }): Promise<boolean> => {
       updateSession(
-        sessionId,
+        externalSessionId,
         (current) => withRuntimeRecoveryState(current, "recovering_runtime"),
         { persist: false },
       );
@@ -689,25 +699,25 @@ export function useAgentOrchestratorOperations({
       try {
         attached = await sessionHydration.recoverSessionRuntimeAndHydrateRequestedTaskSession({
           taskId,
-          sessionId,
+          externalSessionId,
           ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
           ...(historyPreludeMode ? { historyPreludeMode } : {}),
           ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
           ...(persistedRecords ? { persistedRecords } : {}),
         });
       } catch (error) {
-        attached = hasAttachedRuntime(sessionsRef.current[sessionId]);
+        attached = hasAttachedRuntime(sessionsRef.current[externalSessionId]);
         updateSession(
-          sessionId,
+          externalSessionId,
           (current) => withRuntimeRecoveryState(current, attached ? "idle" : "failed"),
           { persist: false },
         );
         throw error;
       }
 
-      attached = hasAttachedRuntime(sessionsRef.current[sessionId]);
+      attached = hasAttachedRuntime(sessionsRef.current[externalSessionId]);
       updateSession(
-        sessionId,
+        externalSessionId,
         (current) => withRuntimeRecoveryState(current, attached ? "idle" : "waiting_for_runtime"),
         { persist: false },
       );
@@ -720,7 +730,7 @@ export function useAgentOrchestratorOperations({
   const ensureSessionReadyForView = useCallback(
     async ({
       taskId,
-      sessionId,
+      externalSessionId,
       repoReadinessState,
       recoveryDedupKey,
       historyPreludeMode,
@@ -728,14 +738,14 @@ export function useAgentOrchestratorOperations({
       persistedRecords,
     }: {
       taskId: string;
-      sessionId: string;
+      externalSessionId: string;
       repoReadinessState: SessionRepoReadinessState;
       recoveryDedupKey?: string | null;
       historyPreludeMode?: AgentSessionHistoryPreludeMode;
       allowLiveSessionResume?: boolean;
       persistedRecords?: AgentSessionRecord[];
     }): Promise<boolean> => {
-      const session = sessionsRef.current[sessionId] ?? null;
+      const session = sessionsRef.current[externalSessionId] ?? null;
       const lifecycle = deriveAgentSessionViewLifecycle({
         session,
         repoReadinessState,
@@ -748,7 +758,7 @@ export function useAgentOrchestratorOperations({
       if (lifecycle.phase === "waiting_for_runtime_attachment") {
         return retrySessionRuntimeAttachment({
           taskId,
-          sessionId,
+          externalSessionId,
           ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
           ...(historyPreludeMode ? { historyPreludeMode } : {}),
           ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
@@ -758,7 +768,7 @@ export function useAgentOrchestratorOperations({
 
       await sessionHydration.hydrateRequestedTaskSession({
         taskId,
-        sessionId,
+        externalSessionId,
         ...(historyPreludeMode ? { historyPreludeMode } : {}),
         ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
         ...(persistedRecords ? { persistedRecords } : {}),

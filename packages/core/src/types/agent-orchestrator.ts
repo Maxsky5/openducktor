@@ -91,6 +91,15 @@ export type AgentSlashCommand = ContractsSlashCommandDescriptor;
 export type AgentSlashCommandCatalog = ContractsSlashCommandCatalog;
 export type AgentSubagentExecutionMode = ContractsRuntimeSubagentExecutionMode;
 export type AgentSubagentStatus = "pending" | "running" | "completed" | "cancelled" | "error";
+export type ExternalSessionId = string;
+export type RuntimeHistoryAnchor = string;
+export type RuntimePendingInputRequestId = string;
+export type RuntimeSessionRef = {
+  externalSessionId: ExternalSessionId;
+  runtimeKind: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
+  workingDirectory: string;
+};
 
 export type AgentFileSearchResultKind =
   | "directory"
@@ -184,14 +193,14 @@ export type AgentSessionTodoItem = {
 export type AgentUserMessageState = "queued" | "read";
 
 export type AgentPendingPermissionRequest = {
-  requestId: string;
+  requestId: RuntimePendingInputRequestId;
   permission: string;
   patterns: string[];
   metadata?: Record<string, unknown>;
 };
 
 export type AgentPendingQuestionRequest = {
-  requestId: string;
+  requestId: RuntimePendingInputRequestId;
   questions: Array<{
     header: string;
     question: string;
@@ -271,7 +280,6 @@ export type AgentToolCall =
     };
 
 export type AgentSessionContext = {
-  sessionId: string;
   repoPath: string;
   runtimeKind: RuntimeKind;
   runtimeId?: string;
@@ -334,7 +342,7 @@ export type AgentStreamPart =
       agent?: string;
       prompt?: string;
       description?: string;
-      sessionId?: string;
+      externalSessionId?: ExternalSessionId;
       executionMode?: AgentSubagentExecutionMode;
       metadata?: Record<string, unknown>;
       startedAtMs?: number;
@@ -374,32 +382,32 @@ export const AGENT_ROLE_TOOL_POLICY: AgentRoleToolPolicy = {
 export type AgentEvent =
   | {
       type: "session_started";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
       message: string;
     }
   | {
       type: "assistant_delta";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
       channel: "text" | "reasoning";
-      messageId?: string;
+      messageId?: RuntimeHistoryAnchor;
       delta: string;
     }
   | {
       type: "assistant_message";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
-      messageId: string;
+      messageId: RuntimeHistoryAnchor;
       message: string;
       totalTokens?: number;
       model?: AgentModelSelection;
     }
   | {
       type: "user_message";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
-      messageId: string;
+      messageId: RuntimeHistoryAnchor;
       message: string;
       parts: AgentUserMessageDisplayPart[];
       state: AgentUserMessageState;
@@ -407,25 +415,25 @@ export type AgentEvent =
     }
   | {
       type: "assistant_part";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
       part: AgentStreamPart;
     }
   | {
       type: "session_todos_updated";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
       todos: AgentSessionTodoItem[];
     }
   | {
       type: "tool_call";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
       call: AgentToolCall;
     }
   | {
       type: "tool_result";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
       tool: AgentToolName;
       success: boolean;
@@ -433,22 +441,21 @@ export type AgentEvent =
     }
   | {
       type: "permission_required";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
-      requestId: string;
+      requestId: RuntimePendingInputRequestId;
       permission: string;
       patterns: string[];
       metadata?: Record<string, unknown>;
-      parentSessionId?: string;
       parentExternalSessionId?: string;
       childExternalSessionId?: string;
       subagentCorrelationKey?: string;
     }
   | {
       type: "question_required";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
-      requestId: string;
+      requestId: RuntimePendingInputRequestId;
       questions: Array<{
         header: string;
         question: string;
@@ -459,24 +466,24 @@ export type AgentEvent =
     }
   | {
       type: "session_status";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
       status: AgentSessionStatus;
     }
   | {
       type: "session_error";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
       message: string;
     }
   | {
       type: "session_idle";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
     }
   | {
       type: "session_finished";
-      sessionId: string;
+      externalSessionId: ExternalSessionId;
       timestamp: string;
       message: string;
     };

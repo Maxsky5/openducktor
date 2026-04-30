@@ -1,7 +1,7 @@
 import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
 
 export type AgentActivitySessionItem = {
-  sessionId: string;
+  externalSessionId: string;
   taskId: string;
   taskTitle: string;
   role: AgentActivitySessionSummary["role"];
@@ -31,10 +31,10 @@ const byNewestSession = (
   if (left.startedAt !== right.startedAt) {
     return left.startedAt > right.startedAt ? -1 : 1;
   }
-  if (left.sessionId === right.sessionId) {
+  if (left.externalSessionId === right.externalSessionId) {
     return 0;
   }
-  return left.sessionId > right.sessionId ? -1 : 1;
+  return left.externalSessionId > right.externalSessionId ? -1 : 1;
 };
 
 export const summarizeAgentActivity = ({
@@ -49,7 +49,7 @@ export const summarizeAgentActivity = ({
 
   for (const session of sessions) {
     const sessionItem: AgentActivitySessionItem = {
-      sessionId: session.sessionId,
+      externalSessionId: session.externalSessionId,
       taskId: session.taskId,
       taskTitle: taskTitleById?.[session.taskId] ?? session.taskId,
       role: session.role,

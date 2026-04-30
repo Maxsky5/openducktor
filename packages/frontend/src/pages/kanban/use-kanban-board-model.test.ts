@@ -41,7 +41,6 @@ const createTaskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
 
 const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/repo",
@@ -70,17 +69,17 @@ describe("use-kanban-board-model helpers", () => {
   test("buildTaskSessionsByTaskId keeps waiting-input sessions even when they are idle", () => {
     const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
-        sessionId: "session-starting",
+        externalSessionId: "session-starting",
         status: "starting",
         startedAt: "2026-03-17T11:00:00.000Z",
       }),
       createSession({
-        sessionId: "session-running-older",
+        externalSessionId: "session-running-older",
         status: "running",
         startedAt: "2026-03-17T09:00:00.000Z",
       }),
       createSession({
-        sessionId: "session-running-newer",
+        externalSessionId: "session-running-newer",
         status: "running",
         startedAt: "2026-03-17T10:00:00.000Z",
         pendingQuestions: [
@@ -97,7 +96,7 @@ describe("use-kanban-board-model helpers", () => {
         ],
       }),
       createSession({
-        sessionId: "session-idle",
+        externalSessionId: "session-idle",
         status: "idle",
         pendingPermissions: [
           {
@@ -111,20 +110,20 @@ describe("use-kanban-board-model helpers", () => {
 
     expect(taskSessionsByTaskId.get("task-1")).toEqual([
       expect.objectContaining({
-        sessionId: "session-running-newer",
+        externalSessionId: "session-running-newer",
         presentationState: "waiting_input",
       }),
       expect.objectContaining({
-        sessionId: "session-idle",
+        externalSessionId: "session-idle",
         status: "idle",
         presentationState: "waiting_input",
       }),
       expect.objectContaining({
-        sessionId: "session-running-older",
+        externalSessionId: "session-running-older",
         presentationState: "active",
       }),
       expect.objectContaining({
-        sessionId: "session-starting",
+        externalSessionId: "session-starting",
         presentationState: "active",
       }),
     ]);
@@ -148,7 +147,7 @@ describe("use-kanban-board-model helpers", () => {
           },
         ],
       }),
-      createSession({ taskId: "task-with-session", sessionId: "session-2" }),
+      createSession({ taskId: "task-with-session", externalSessionId: "session-2" }),
     ]);
     const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
 
@@ -174,7 +173,7 @@ describe("use-kanban-board-model helpers", () => {
     const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
         taskId: "task-1-waiting",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         pendingQuestions: [
           {
             requestId: "question-1",
@@ -188,10 +187,10 @@ describe("use-kanban-board-model helpers", () => {
           },
         ],
       }),
-      createSession({ taskId: "task-2-active", sessionId: "session-2" }),
+      createSession({ taskId: "task-2-active", externalSessionId: "session-2" }),
       createSession({
         taskId: "task-4-waiting",
-        sessionId: "session-4",
+        externalSessionId: "session-4",
         pendingPermissions: [
           {
             requestId: "permission-1",
@@ -200,7 +199,7 @@ describe("use-kanban-board-model helpers", () => {
           },
         ],
       }),
-      createSession({ taskId: "task-5-active", sessionId: "session-5" }),
+      createSession({ taskId: "task-5-active", externalSessionId: "session-5" }),
     ]);
     const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
 
@@ -249,10 +248,10 @@ describe("use-kanban-board-model helpers", () => {
       createTaskCard({ id: "task-idle" }),
     ];
     const taskSessionsByTaskId = buildTaskSessionsByTaskId([
-      createSession({ taskId: "task-waiting", sessionId: "session-waiting" }),
+      createSession({ taskId: "task-waiting", externalSessionId: "session-waiting" }),
       createSession({
         taskId: "task-waiting",
-        sessionId: "session-question",
+        externalSessionId: "session-question",
         status: "idle",
         pendingQuestions: [
           {
@@ -267,7 +266,7 @@ describe("use-kanban-board-model helpers", () => {
           },
         ],
       }),
-      createSession({ taskId: "task-active", sessionId: "session-active" }),
+      createSession({ taskId: "task-active", externalSessionId: "session-active" }),
     ]);
 
     const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
@@ -282,14 +281,14 @@ describe("use-kanban-board-model helpers", () => {
       createSession({
         taskId: "task-1",
         role: "build",
-        sessionId: "build-running",
+        externalSessionId: "build-running",
         status: "running",
         startedAt: "2026-03-21T10:00:00.000Z",
       }),
       createSession({
         taskId: "task-1",
         role: "qa",
-        sessionId: "qa-waiting",
+        externalSessionId: "qa-waiting",
         status: "idle",
         startedAt: "2026-03-20T10:00:00.000Z",
         pendingQuestions: [

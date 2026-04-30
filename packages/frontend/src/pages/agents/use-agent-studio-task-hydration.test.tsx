@@ -21,7 +21,6 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioTaskHydration, initialProps);
 
 const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
@@ -96,7 +95,7 @@ describe("useAgentStudioTaskHydration", () => {
 
       expect(ensureSessionReadyForView).toHaveBeenCalledWith({
         taskId: "task-1",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         repoReadinessState: "ready",
       });
       await harness.waitFor((state) => state.isActiveSessionHistoryHydrating);
@@ -138,7 +137,7 @@ describe("useAgentStudioTaskHydration", () => {
       expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(false);
       expect(ensureSessionReadyForView).toHaveBeenCalledWith({
         taskId: "task-1",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         repoReadinessState: "ready",
       });
     } finally {
@@ -209,7 +208,7 @@ describe("useAgentStudioTaskHydration", () => {
       await harness.waitFor(() => ensureSessionReadyForView.mock.calls.length === 1);
       expect(ensureSessionReadyForView).toHaveBeenCalledWith({
         taskId: "task-1",
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         repoReadinessState: "ready",
       });
       expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(true);

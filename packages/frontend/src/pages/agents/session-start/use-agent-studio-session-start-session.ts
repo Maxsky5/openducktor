@@ -77,7 +77,7 @@ export function useAgentStudioSessionStartSession({
         activeWorkspace,
         taskId,
         role,
-        sessionId: null,
+        externalSessionId: null,
       });
       const executeStartedSession = async (
         decision: ResolvedSessionStartDecision,
@@ -105,7 +105,7 @@ export function useAgentStudioSessionStartSession({
 
           applyAgentStudioSelectionQuery(updateQuery, {
             taskId,
-            sessionId: workflow.sessionId,
+            externalSessionId: workflow.externalSessionId,
             role,
           });
           return workflow;
@@ -164,27 +164,27 @@ export function useAgentStudioSessionStartSession({
       });
       const inFlightSessionStart = startingSessionByTaskRef.current.get(startKey);
       if (inFlightSessionStart) {
-        return inFlightSessionStart.then((sessionId) =>
-          sessionId === undefined
+        return inFlightSessionStart.then((externalSessionId) =>
+          externalSessionId === undefined
             ? undefined
             : {
-                sessionId,
+                externalSessionId,
                 postStartActionError: null,
               },
         );
       }
 
       const startPromise = startRequestedSession(params);
-      const sessionIdPromise = startPromise.then((workflow) => workflow?.sessionId);
+      const externalSessionIdPromise = startPromise.then((workflow) => workflow?.externalSessionId);
 
-      startingSessionByTaskRef.current.set(startKey, sessionIdPromise);
+      startingSessionByTaskRef.current.set(startKey, externalSessionIdPromise);
       void startPromise
         .finally(() => {
           const currentStartPromise = startingSessionByTaskRef.current.get(startKey);
           if (currentStartPromise === undefined) {
             return;
           }
-          if (currentStartPromise === sessionIdPromise) {
+          if (currentStartPromise === externalSessionIdPromise) {
             startingSessionByTaskRef.current.delete(startKey);
           }
         })
@@ -210,7 +210,7 @@ export function useAgentStudioSessionStartSession({
         reason,
         postStartAction: "none",
       });
-      return workflow?.sessionId;
+      return workflow?.externalSessionId;
     },
     [runSessionStart],
   );

@@ -22,14 +22,14 @@ export type SessionHydrationOperations = {
   bootstrapTaskSessions: (taskId: string, persistedRecords?: AgentSessionRecord[]) => Promise<void>;
   hydrateRequestedTaskSession: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
     historyPreludeMode?: AgentSessionHistoryPreludeMode;
     allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
   recoverSessionRuntimeAndHydrateRequestedTaskSession: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
     recoveryDedupKey?: string | null;
     historyPreludeMode?: AgentSessionHistoryPreludeMode;
     allowLiveSessionResume?: boolean;
@@ -37,7 +37,7 @@ export type SessionHydrationOperations = {
   }) => Promise<boolean>;
   retrySessionRuntimeAttachment: (input: {
     taskId: string;
-    sessionId: string;
+    externalSessionId: string;
     recoveryDedupKey?: string | null;
     historyPreludeMode?: AgentSessionHistoryPreludeMode;
     allowLiveSessionResume?: boolean;
@@ -59,7 +59,7 @@ export const createSessionHydrationOperations = ({
   getSessionSnapshot,
 }: {
   loadAgentSessions: LoadAgentSessions;
-  getSessionSnapshot: (sessionId: string) => AgentSessionState | undefined;
+  getSessionSnapshot: (externalSessionId: string) => AgentSessionState | undefined;
 }): SessionHydrationOperations => {
   const withPersistedRecords = (
     options: AgentSessionLoadOptions,
@@ -71,7 +71,7 @@ export const createSessionHydrationOperations = ({
       loadAgentSessions(taskId, withPersistedRecords({}, persistedRecords)),
     hydrateRequestedTaskSession: ({
       taskId,
-      sessionId,
+      externalSessionId,
       historyPreludeMode,
       allowLiveSessionResume,
       persistedRecords,
@@ -81,7 +81,7 @@ export const createSessionHydrationOperations = ({
         withPersistedRecords(
           {
             mode: "requested_history",
-            targetSessionId: sessionId,
+            targetExternalSessionId: externalSessionId,
             historyPolicy: "requested_only",
             ...(historyPreludeMode ? { historyPreludeMode } : {}),
             ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
@@ -91,7 +91,7 @@ export const createSessionHydrationOperations = ({
       ),
     recoverSessionRuntimeAndHydrateRequestedTaskSession: async ({
       taskId,
-      sessionId,
+      externalSessionId,
       recoveryDedupKey,
       historyPreludeMode,
       allowLiveSessionResume,
@@ -102,7 +102,7 @@ export const createSessionHydrationOperations = ({
         withPersistedRecords(
           {
             mode: "recover_runtime_attachment",
-            targetSessionId: sessionId,
+            targetExternalSessionId: externalSessionId,
             ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
             historyPolicy: "none",
             ...(historyPreludeMode ? { historyPreludeMode } : {}),
@@ -112,7 +112,7 @@ export const createSessionHydrationOperations = ({
         ),
       );
 
-      const recoveredSession = getSessionSnapshot(sessionId);
+      const recoveredSession = getSessionSnapshot(externalSessionId);
       const attached = hasAttachedSessionRuntime(recoveredSession);
       const historyHydrationState = getAgentSessionHistoryHydrationState(recoveredSession);
       const shouldHydrateAfterRecovery =
@@ -130,7 +130,7 @@ export const createSessionHydrationOperations = ({
         withPersistedRecords(
           {
             mode: "requested_history",
-            targetSessionId: sessionId,
+            targetExternalSessionId: externalSessionId,
             historyPolicy: "requested_only",
             ...(historyPreludeMode ? { historyPreludeMode } : {}),
             ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
@@ -143,7 +143,7 @@ export const createSessionHydrationOperations = ({
     },
     retrySessionRuntimeAttachment: ({
       taskId,
-      sessionId,
+      externalSessionId,
       recoveryDedupKey,
       historyPreludeMode,
       allowLiveSessionResume,
@@ -154,7 +154,7 @@ export const createSessionHydrationOperations = ({
         withPersistedRecords(
           {
             mode: "recover_runtime_attachment",
-            targetSessionId: sessionId,
+            targetExternalSessionId: externalSessionId,
             ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
             historyPolicy: "none",
             ...(historyPreludeMode ? { historyPreludeMode } : {}),

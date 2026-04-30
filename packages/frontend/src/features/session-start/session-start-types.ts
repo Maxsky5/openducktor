@@ -25,7 +25,7 @@ export type NewSessionStartRequest = {
   initialTargetBranch?: GitTargetBranch | null;
   initialTargetBranchError?: string | null;
   existingSessionOptions?: SessionStartExistingSessionOption[];
-  initialSourceSessionId?: string | null;
+  initialSourceExternalSessionId?: string | null;
 };
 
 export type FreshSessionStartDecision = {
@@ -36,14 +36,14 @@ export type FreshSessionStartDecision = {
 
 export type ReuseSessionStartDecision = {
   startMode: "reuse";
-  sourceSessionId: string;
+  sourceExternalSessionId: string;
   targetBranch?: GitTargetBranch;
 };
 
 export type ForkSessionStartDecision = {
   startMode: "fork";
   selectedModel: AgentModelSelection;
-  sourceSessionId: string;
+  sourceExternalSessionId: string;
   targetBranch?: GitTargetBranch;
 };
 

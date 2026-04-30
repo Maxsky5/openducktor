@@ -25,18 +25,17 @@ const taskFixture = createTaskCardFixture({ title: "Task" });
 
 const getSession = (
   state: Record<string, AgentSessionState>,
-  sessionId: string,
+  externalSessionId: string,
 ): AgentSessionState => {
-  const session = state[sessionId];
+  const session = state[externalSessionId];
   if (!session) {
-    throw new Error(`Expected session ${sessionId}`);
+    throw new Error(`Expected session ${externalSessionId}`);
   }
   return session;
 };
 
 const persistedSessionRecord = (
   input: {
-    sessionId: string;
     externalSessionId: string;
     role: AgentSessionRecord["role"];
     scenario: AgentSessionRecord["scenario"];
@@ -48,7 +47,6 @@ const persistedSessionRecord = (
 ): AgentSessionRecord => {
   const {
     runtimeKind,
-    sessionId,
     externalSessionId,
     role,
     scenario,
@@ -60,7 +58,6 @@ const persistedSessionRecord = (
 
   return {
     runtimeKind: runtimeKind ?? "opencode",
-    sessionId,
     externalSessionId,
     role,
     scenario,
@@ -78,7 +75,6 @@ const createAdapter = (
   listLiveAgentSessionSnapshots: async () => [],
   loadSessionHistory: async () => [],
   resumeSession: async (input) => ({
-    sessionId: input.sessionId,
     externalSessionId: input.externalSessionId,
     role: input.role,
     scenario: input.scenario,
@@ -87,7 +83,6 @@ const createAdapter = (
     runtimeKind: input.runtimeKind,
   }),
   attachSession: async (input) => ({
-    sessionId: input.sessionId,
     externalSessionId: input.externalSessionId,
     role: input.role,
     scenario: input.scenario,
@@ -198,16 +193,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -232,7 +227,6 @@ describe("agent-orchestrator-load-sessions", () => {
     (await import("../../shared/host")).host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
@@ -272,7 +266,6 @@ describe("agent-orchestrator-load-sessions", () => {
 
   test("does not merge persisted pending input into an existing session entry", async () => {
     const existingSession: AgentSessionState = {
-      sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
       repoPath: "/tmp/repo",
@@ -322,16 +315,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -357,7 +350,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
@@ -398,7 +390,6 @@ describe("agent-orchestrator-load-sessions", () => {
 
   test("clears pending permissions when the live snapshot reports no pending input", async () => {
     const existingSession: AgentSessionState = {
-      sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
       repoPath: "/tmp/repo",
@@ -444,7 +435,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
@@ -500,15 +490,15 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: (sessionId, updater) => {
-        const current = state[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = state[externalSessionId];
         if (!current) {
           return;
         }
         const next = updater(current);
         state = {
           ...state,
-          [sessionId]: next,
+          [externalSessionId]: next,
         };
         sessionsRef.current = state;
       },
@@ -518,7 +508,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetSessionId: "session-1",
+        targetExternalSessionId: "session-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -532,7 +522,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": {
-          sessionId: "session-1",
           externalSessionId: "external-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -576,7 +565,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
@@ -642,14 +630,14 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: (sessionId, updater) => {
-        const current = state[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = state[externalSessionId];
         if (!current) {
           return;
         }
         state = {
           ...state,
-          [sessionId]: updater(current),
+          [externalSessionId]: updater(current),
         };
         sessionsRef.current = state;
       },
@@ -659,7 +647,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetSessionId: "session-1",
+        targetExternalSessionId: "session-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -702,7 +690,6 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const existingSession: AgentSessionState = {
-      sessionId: "session-live",
       externalSessionId: "external-live",
       taskId: "task-1",
       repoPath: "/tmp/repo",
@@ -771,15 +758,15 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
         const nextSession = updater(current);
         sessionsRef.current = {
           ...sessionsRef.current,
-          [sessionId]: nextSession,
+          [externalSessionId]: nextSession,
         };
         state = sessionsRef.current;
       },
@@ -788,12 +775,11 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-live",
+      targetExternalSessionId: "session-live",
       historyPolicy: "requested_only",
       persistedRecords: [
         persistedSessionRecord({
           runtimeKind: "opencode",
-          sessionId: "session-live",
           externalSessionId: "external-live",
           taskId: "task-1",
           role: "build",
@@ -840,7 +826,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": {
-          sessionId: "session-1",
           externalSessionId: "external-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -898,14 +883,14 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: (sessionId, updater) => {
-        const current = state[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = state[externalSessionId];
         if (!current) {
           return;
         }
         state = {
           ...state,
-          [sessionId]: updater(current),
+          [externalSessionId]: updater(current),
         };
         sessionsRef.current = state;
       },
@@ -917,7 +902,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
@@ -952,7 +936,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "recover_runtime_attachment",
-        targetSessionId: "session-1",
+        targetExternalSessionId: "session-1",
         historyPolicy: "none",
         preloadedRuntimeLists,
       });
@@ -974,7 +958,6 @@ describe("agent-orchestrator-load-sessions", () => {
   test("recovers a worktree session from a repo-root runtime after verifying the live external session", async () => {
     const persistedRecord = persistedSessionRecord({
       runtimeKind: "opencode",
-      sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
       role: "build",
@@ -1052,14 +1035,14 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: (sessionId, updater) => {
-        const current = state[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = state[externalSessionId];
         if (!current) {
           return;
         }
         state = {
           ...state,
-          [sessionId]: updater(current),
+          [externalSessionId]: updater(current),
         };
         sessionsRef.current = state;
       },
@@ -1068,7 +1051,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "recover_runtime_attachment",
-      targetSessionId: "session-1",
+      targetExternalSessionId: "session-1",
       historyPolicy: "none",
       persistedRecords: [persistedRecord],
       preloadedRuntimeLists: new Map([
@@ -1108,7 +1091,6 @@ describe("agent-orchestrator-load-sessions", () => {
   test("route-hydrates unmatched records after probing a repo-root worktree route", async () => {
     const firstRecord = persistedSessionRecord({
       runtimeKind: "opencode",
-      sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
       role: "build",
@@ -1119,7 +1101,6 @@ describe("agent-orchestrator-load-sessions", () => {
     });
     const secondRecord = persistedSessionRecord({
       runtimeKind: "opencode",
-      sessionId: "session-2",
       externalSessionId: "external-2",
       taskId: "task-1",
       role: "qa",
@@ -1163,14 +1144,14 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: (sessionId, updater) => {
-        const current = state[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = state[externalSessionId];
         if (!current) {
           return;
         }
         state = {
           ...state,
-          [sessionId]: updater(current),
+          [externalSessionId]: updater(current),
         };
         sessionsRef.current = state;
       },
@@ -1234,7 +1215,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const persistedRecords = [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
@@ -1275,16 +1255,16 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef.current = state;
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -1350,7 +1330,6 @@ describe("agent-orchestrator-load-sessions", () => {
           resumeCalls += 1;
           attachedToAdapter = true;
           return {
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1363,7 +1342,6 @@ describe("agent-orchestrator-load-sessions", () => {
           attachCalls += 1;
           attachedToAdapter = true;
           return {
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1415,7 +1393,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-1",
+      targetExternalSessionId: "session-1",
       persistedRecords,
       preloadedRuntimeLists: runtimeLists,
       historyPolicy: "requested_only",
@@ -1486,7 +1464,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const persistedRecords = [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
@@ -1527,16 +1504,16 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef.current = state;
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -1586,7 +1563,6 @@ describe("agent-orchestrator-load-sessions", () => {
           resumeCalls += 1;
           attachedToAdapter = true;
           return {
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1640,7 +1616,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const persistedRecords = [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
@@ -1681,16 +1656,16 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef.current = state;
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -1740,7 +1715,6 @@ describe("agent-orchestrator-load-sessions", () => {
           resumeCalls += 1;
           attachedToAdapter = true;
           return {
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1756,8 +1730,8 @@ describe("agent-orchestrator-load-sessions", () => {
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession,
-      attachSessionListener: (_repoPath, sessionId) => {
-        updateSession(sessionId, (current) => ({
+      attachSessionListener: (_repoPath, externalSessionId) => {
+        updateSession(externalSessionId, (current) => ({
           ...current,
           messages: [
             ...sessionMessagesToArray(current),
@@ -1815,16 +1789,16 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef.current = state;
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -1853,7 +1827,6 @@ describe("agent-orchestrator-load-sessions", () => {
         resumeSession: async (input) => {
           resumeCalls += 1;
           return {
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -1885,7 +1858,6 @@ describe("agent-orchestrator-load-sessions", () => {
       persistedRecords: [
         persistedSessionRecord({
           runtimeKind: "opencode",
-          sessionId: "session-1",
           externalSessionId: "external-1",
           taskId: "task-1",
           role: "planner",
@@ -1932,7 +1904,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": {
-          sessionId: "session-1",
           externalSessionId: "external-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2014,14 +1985,14 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: (sessionId, updater) => {
-        const currentSession = state[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const currentSession = state[externalSessionId];
         if (!currentSession) {
-          throw new Error(`Missing session '${sessionId}' in test state.`);
+          throw new Error(`Missing session '${externalSessionId}' in test state.`);
         }
         setSessionsById((current) => ({
           ...current,
-          [sessionId]: updater(currentSession),
+          [externalSessionId]: updater(currentSession),
         }));
       },
       loadRepoPromptOverrides: async () => ({}),
@@ -2030,11 +2001,10 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-1",
+      targetExternalSessionId: "session-1",
       persistedRecords: [
         persistedSessionRecord({
           runtimeKind: "opencode",
-          sessionId: "session-1",
           externalSessionId: "external-1",
           taskId: "task-1",
           role: "build",
@@ -2053,7 +2023,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-live": {
-          sessionId: "session-live",
           externalSessionId: "external-live",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2122,14 +2091,14 @@ describe("agent-orchestrator-load-sessions", () => {
           typeof updater === "function" ? updater(sessionsRef.current) : updater;
       },
       taskRef: { current: [taskFixture] },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
         sessionsRef.current = {
           ...sessionsRef.current,
-          [sessionId]: updater(current),
+          [externalSessionId]: updater(current),
         };
       },
       loadRepoPromptOverrides: async () => ({}),
@@ -2137,12 +2106,11 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-live",
+      targetExternalSessionId: "session-live",
       historyPolicy: "requested_only",
       persistedRecords: [
         persistedSessionRecord({
           runtimeKind: "opencode",
-          sessionId: "session-live",
           externalSessionId: "external-live",
           taskId: "task-1",
           role: "build",
@@ -2163,8 +2131,8 @@ describe("agent-orchestrator-load-sessions", () => {
   test("reattaches requested-history live sessions so transcript views keep streaming", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
-    const attachedSessions: Array<{ repoPath: string; sessionId: string }> = [];
-    const attachCalls: Array<{ sessionId: string }> = [];
+    const attachedSessions: Array<{ repoPath: string; externalSessionId: string }> = [];
+    const attachCalls: Array<{ externalSessionId: string }> = [];
 
     const setSessionsById = (
       updater:
@@ -2176,16 +2144,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -2198,9 +2166,8 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter({
         attachSession: async (input) => {
-          attachCalls.push({ sessionId: input.sessionId });
+          attachCalls.push({ externalSessionId: input.externalSessionId });
           return {
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -2227,8 +2194,8 @@ describe("agent-orchestrator-load-sessions", () => {
       setSessionsById,
       taskRef: { current: [taskFixture] },
       updateSession,
-      attachSessionListener: (repoPath, sessionId) => {
-        attachedSessions.push({ repoPath, sessionId });
+      attachSessionListener: (repoPath, externalSessionId) => {
+        attachedSessions.push({ repoPath, externalSessionId });
       },
       loadRepoPromptOverrides: async () => ({}),
     });
@@ -2257,13 +2224,12 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-child-1",
+      targetExternalSessionId: "session-child-1",
       historyPolicy: "requested_only",
       preloadedRuntimeLists,
       persistedRecords: [
         persistedSessionRecord({
           runtimeKind: "opencode",
-          sessionId: "session-child-1",
           externalSessionId: "external-child-1",
           taskId: "task-1",
           role: "build",
@@ -2277,10 +2243,10 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(attachedSessions).toEqual([
       {
         repoPath: "/tmp/repo",
-        sessionId: "session-child-1",
+        externalSessionId: "session-child-1",
       },
     ]);
-    expect(attachCalls).toEqual([{ sessionId: "session-child-1" }]);
+    expect(attachCalls).toEqual([{ externalSessionId: "session-child-1" }]);
     expect(state["session-child-1"]?.status).toBe("running");
   });
 
@@ -2288,7 +2254,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": {
-          sessionId: "session-1",
           externalSessionId: "external-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2330,16 +2295,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -2378,12 +2343,11 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-1",
+      targetExternalSessionId: "session-1",
       historyPolicy: "requested_only",
       persistedRecords: [
         persistedSessionRecord({
           runtimeKind: "opencode",
-          sessionId: "session-1",
           externalSessionId: "external-1",
           taskId: "task-1",
           role: "build",
@@ -2406,7 +2370,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-live": {
-          sessionId: "session-live",
           externalSessionId: "external-live",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2469,14 +2432,14 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
         sessionsRef.current = {
           ...sessionsRef.current,
-          [sessionId]: updater(current),
+          [externalSessionId]: updater(current),
         };
       },
       loadRepoPromptOverrides: async () => ({}),
@@ -2484,12 +2447,11 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const loadPromise = loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-live",
+      targetExternalSessionId: "session-live",
       historyPolicy: "requested_only",
       persistedRecords: [
         persistedSessionRecord({
           runtimeKind: "opencode",
-          sessionId: "session-live",
           externalSessionId: "external-live",
           taskId: "task-1",
           role: "build",
@@ -2569,16 +2531,16 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef.current = state;
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -2610,7 +2572,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
@@ -2654,16 +2615,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -2698,7 +2659,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "claude-code",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
@@ -2761,7 +2721,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetSessionId: "session-1",
+        targetExternalSessionId: "session-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -2780,7 +2740,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": {
-          sessionId: "session-1",
           externalSessionId: "external-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2834,7 +2793,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = hostModule.host.agentSessionsList;
     hostModule.host.agentSessionsList = async () => [
       {
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -2851,7 +2809,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await expect(
         loadAgentSessions("task-1", {
           mode: "requested_history",
-          targetSessionId: "session-1",
+          targetExternalSessionId: "session-1",
           historyPolicy: "requested_only",
         }),
       ).rejects.toThrow("Persisted session 'session-1' is missing runtime kind metadata.");
@@ -2865,7 +2823,6 @@ describe("agent-orchestrator-load-sessions", () => {
       current: {
         "session-1": {
           runtimeKind: "opencode",
-          sessionId: "session-1",
           externalSessionId: "external-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -2926,7 +2883,6 @@ describe("agent-orchestrator-load-sessions", () => {
     typedHost.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
@@ -2957,7 +2913,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetSessionId: "session-1",
+        targetExternalSessionId: "session-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -2973,7 +2929,6 @@ describe("agent-orchestrator-load-sessions", () => {
   test("rehydrates persisted sessions that exist in memory with empty message history", async () => {
     const existingSession: AgentSessionState = {
       runtimeKind: "opencode",
-      sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
       repoPath: "/tmp/repo",
@@ -3012,17 +2967,17 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       const next = updater(current);
       state = {
         ...state,
-        [sessionId]: next,
+        [externalSessionId]: next,
       };
       sessionsRef.current = state;
     };
@@ -3056,7 +3011,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
@@ -3090,7 +3044,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetSessionId: "session-1",
+        targetExternalSessionId: "session-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -3111,7 +3065,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": {
-          sessionId: "session-1",
           externalSessionId: "external-session-1",
           taskId: "task-1",
           repoPath: "/tmp/repo",
@@ -3198,14 +3151,14 @@ describe("agent-orchestrator-load-sessions", () => {
         setSessionsByIdCalls.push(sessionsRef.current);
       },
       taskRef: { current: [taskFixture] },
-      updateSession: (sessionId, updater) => {
-        const current = sessionsRef.current[sessionId];
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
         sessionsRef.current = {
           ...sessionsRef.current,
-          [sessionId]: updater(current),
+          [externalSessionId]: updater(current),
         };
       },
       loadRepoPromptOverrides: async () => ({}),
@@ -3213,7 +3166,6 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const record = persistedSessionRecord({
       runtimeKind: "opencode",
-      sessionId: "session-1",
       externalSessionId: "external-session-1",
       taskId: "task-1",
       role: "build",
@@ -3244,7 +3196,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     await loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-1",
+      targetExternalSessionId: "session-1",
       persistedRecords: [record],
       preloadedRuntimeLists: new Map([["opencode", hostRuntimeList]]),
     });
@@ -3299,7 +3251,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = hostModule.host.agentSessionsList;
     hostModule.host.agentSessionsList = async () => [
       {
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         repoPath: "/tmp/repo",
@@ -3316,7 +3267,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await expect(
         loadAgentSessions("task-1", {
           mode: "requested_history",
-          targetSessionId: "session-1",
+          targetExternalSessionId: "session-1",
           historyPolicy: "requested_only",
         }),
       ).rejects.toThrow("Persisted session 'session-1' is missing runtime kind metadata.");
@@ -3341,10 +3292,10 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
@@ -3353,7 +3304,7 @@ describe("agent-orchestrator-load-sessions", () => {
         next.runtimeRoute?.type === "local_http" ? next.runtimeRoute.endpoint : null;
       state = {
         ...state,
-        [sessionId]: next,
+        [externalSessionId]: next,
       };
       sessionsRef.current = state;
     };
@@ -3380,7 +3331,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-qa-1",
         externalSessionId: "external-qa-1",
         taskId: "task-1",
         role: "qa",
@@ -3411,7 +3361,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetSessionId: "session-qa-1",
+        targetExternalSessionId: "session-qa-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -3444,16 +3394,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -3482,7 +3432,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-qa-root",
         externalSessionId: "external-qa-root",
         taskId: "task-1",
         role: "qa",
@@ -3537,7 +3486,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await expect(
         loadAgentSessions("task-1", {
           mode: "requested_history",
-          targetSessionId: "session-qa-root",
+          targetExternalSessionId: "session-qa-root",
           historyPolicy: "requested_only",
         }),
       ).rejects.toThrow("No live runtime found for working directory /tmp/repo/.");
@@ -3568,16 +3517,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -3609,7 +3558,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
@@ -3639,7 +3587,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetSessionId: "session-1",
+        targetExternalSessionId: "session-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -3667,17 +3615,17 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       const next = updater(current);
       state = {
         ...state,
-        [sessionId]: next,
+        [externalSessionId]: next,
       };
       sessionsRef.current = state;
     };
@@ -3706,7 +3654,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
@@ -3755,7 +3702,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetSessionId: "session-1",
+        targetExternalSessionId: "session-1",
         historyPolicy: "requested_only",
       });
     } finally {
@@ -3790,16 +3737,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -3828,7 +3775,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-qa-worktree",
         externalSessionId: "external-qa-worktree",
         taskId: "task-1",
         role: "qa",
@@ -3863,7 +3809,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await expect(
         loadAgentSessions("task-1", {
           mode: "requested_history",
-          targetSessionId: "session-qa-worktree",
+          targetExternalSessionId: "session-qa-worktree",
           historyPolicy: "requested_only",
         }),
       ).rejects.toThrow("No live runtime found for working directory /tmp/repo/worktrees/task-1.");
@@ -3896,16 +3842,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -3951,7 +3897,6 @@ describe("agent-orchestrator-load-sessions", () => {
         resumeSession: async (input) => {
           resumeCalls += 1;
           return {
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -3987,7 +3932,6 @@ describe("agent-orchestrator-load-sessions", () => {
     typedHost.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
@@ -4051,16 +3995,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -4086,7 +4030,6 @@ describe("agent-orchestrator-load-sessions", () => {
         resumeSession: async (input) => {
           await resumeDeferred.promise;
           return {
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -4122,7 +4065,6 @@ describe("agent-orchestrator-load-sessions", () => {
     typedHost.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
@@ -4192,7 +4134,6 @@ describe("agent-orchestrator-load-sessions", () => {
         resumeSession: async (input) => {
           resumeCalls += 1;
           return {
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -4226,7 +4167,6 @@ describe("agent-orchestrator-load-sessions", () => {
     typedHost.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
@@ -4279,16 +4219,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -4339,7 +4279,6 @@ describe("agent-orchestrator-load-sessions", () => {
     typedHost.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
@@ -4385,7 +4324,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     let attachedListeners = 0;
-    const resumeCalls: Array<{ sessionId: string; workingDirectory: string }> = [];
+    const resumeCalls: Array<{ externalSessionId: string; workingDirectory: string }> = [];
 
     const setSessionsById = (
       updater:
@@ -4397,16 +4336,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -4421,11 +4360,10 @@ describe("agent-orchestrator-load-sessions", () => {
         hasSession: () => false,
         resumeSession: async (input) => {
           resumeCalls.push({
-            sessionId: input.sessionId,
+            externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,
           });
           return {
-            sessionId: input.sessionId,
             externalSessionId: input.externalSessionId,
             role: input.role,
             scenario: input.scenario,
@@ -4473,7 +4411,6 @@ describe("agent-orchestrator-load-sessions", () => {
     typedHost.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
@@ -4509,7 +4446,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(resumeCalls).toEqual([
       {
-        sessionId: "session-1",
+        externalSessionId: "session-1",
         workingDirectory: "/tmp/repo/worktree",
       },
     ]);
@@ -4523,7 +4460,6 @@ describe("agent-orchestrator-load-sessions", () => {
 
   test("does not reattach adapter-held sessions when the runtime no longer reports them live", async () => {
     const existingSession: AgentSessionState = {
-      sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
       repoPath: "/tmp/repo",
@@ -4578,16 +4514,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -4628,7 +4564,6 @@ describe("agent-orchestrator-load-sessions", () => {
     typedHost.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
@@ -4726,7 +4661,6 @@ describe("agent-orchestrator-load-sessions", () => {
       listDeferred.resolve([
         persistedSessionRecord({
           runtimeKind: "opencode",
-          sessionId: "session-stale",
           externalSessionId: "external-stale",
           taskId: "task-1",
           role: "build",
@@ -4765,17 +4699,17 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       const next = updater(current);
       state = {
         ...state,
-        [sessionId]: next,
+        [externalSessionId]: next,
       };
       sessionsRef.current = state;
     };
@@ -4808,7 +4742,6 @@ describe("agent-orchestrator-load-sessions", () => {
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
         runtimeKind: "opencode",
-        sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
@@ -4841,7 +4774,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await expect(
         loadAgentSessions("task-1", {
           mode: "requested_history",
-          targetSessionId: "session-1",
+          targetExternalSessionId: "session-1",
           historyPolicy: "requested_only",
         }),
       ).rejects.toThrow("No live runtime found for working directory /tmp/repo.");
@@ -4873,16 +4806,16 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef.current = state;
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -4914,7 +4847,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const workingDirectory = "/tmp/repo/worktree";
     const persistedRecords = [
       persistedSessionRecord({
-        sessionId: "session-1",
         externalSessionId: "external-1",
         role: "build",
         scenario: "build_implementation_start",
@@ -4943,14 +4875,14 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const firstLoad = loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-1",
+      targetExternalSessionId: "session-1",
       historyPolicy: "requested_only",
       persistedRecords,
       preloadedRuntimeLists,
     });
     const secondLoad = loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-1",
+      targetExternalSessionId: "session-1",
       historyPolicy: "requested_only",
       persistedRecords,
       preloadedRuntimeLists,
@@ -4994,16 +4926,16 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef.current = state;
     };
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -5035,7 +4967,6 @@ describe("agent-orchestrator-load-sessions", () => {
     const workingDirectory = "/tmp/repo/worktree";
     const persistedRecords = [
       persistedSessionRecord({
-        sessionId: "session-1",
         externalSessionId: "external-1",
         role: "build",
         scenario: "build_implementation_start",
@@ -5064,14 +4995,14 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const interactiveLoad = loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-1",
+      targetExternalSessionId: "session-1",
       historyPolicy: "requested_only",
       persistedRecords,
       preloadedRuntimeLists,
     });
     const readonlyLoad = loadAgentSessions("task-1", {
       mode: "requested_history",
-      targetSessionId: "session-1",
+      targetExternalSessionId: "session-1",
       historyPolicy: "requested_only",
       historyPreludeMode: "none",
       persistedRecords,
@@ -5098,7 +5029,6 @@ describe("agent-orchestrator-load-sessions", () => {
 
   test("hydrates an already loaded requested session without reloading the full persisted session list", async () => {
     const existingSession: AgentSessionState = {
-      sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
       repoPath: "/tmp/repo",
@@ -5160,16 +5090,16 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const updateSession = (
-      sessionId: string,
+      externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[sessionId];
+      const current = state[externalSessionId];
       if (!current) {
         return;
       }
       state = {
         ...state,
-        [sessionId]: updater(current),
+        [externalSessionId]: updater(current),
       };
       sessionsRef.current = state;
     };
@@ -5232,7 +5162,7 @@ describe("agent-orchestrator-load-sessions", () => {
     try {
       await loadAgentSessions("task-1", {
         mode: "requested_history",
-        targetSessionId: "session-1",
+        targetExternalSessionId: "session-1",
         historyPolicy: "requested_only",
       });
     } finally {

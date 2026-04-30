@@ -32,7 +32,7 @@ export type AgentStudioSessionContextUsage = {
 type BuildWorkflowModelContextArgs = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionWorkflowSummary[];
-  activeSession: Pick<AgentSessionState, "sessionId" | "role"> | null;
+  activeSession: Pick<AgentSessionState, "externalSessionId" | "role"> | null;
   role: AgentRole;
   isSessionWorking: boolean;
   roleLabelByRole: Record<AgentRole, string>;
@@ -85,7 +85,7 @@ export const buildWorkflowModelContext = ({
   });
   const sessionSelectorAutofocusByValue = Object.fromEntries(
     sessionsForTask.map((session) => [
-      session.sessionId,
+      session.externalSessionId,
       session.role !== null &&
         roleWorkflowsByTask[session.role].available &&
         session.pendingPermissions.length === 0 &&
@@ -94,7 +94,7 @@ export const buildWorkflowModelContext = ({
   );
   const fallbackSessionForSelectedRole = latestSessionByRole[selectedInteractionRole];
   const sessionSelectorValue =
-    activeSession?.sessionId ?? fallbackSessionForSelectedRole?.sessionId ?? "";
+    activeSession?.externalSessionId ?? fallbackSessionForSelectedRole?.externalSessionId ?? "";
   const createSessionDisabled = Boolean(activeSession && isSessionWorking);
   const sessionCreateOptions = buildSessionCreateOptions({
     roleEnabledByTask,

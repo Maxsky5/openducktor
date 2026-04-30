@@ -66,10 +66,10 @@ const compareTaskSessionOrder = (
   if (left.startedAt !== right.startedAt) {
     return left.startedAt > right.startedAt ? -1 : 1;
   }
-  if (left.sessionId === right.sessionId) {
+  if (left.externalSessionId === right.externalSessionId) {
     return 0;
   }
-  return left.sessionId > right.sessionId ? -1 : 1;
+  return left.externalSessionId > right.externalSessionId ? -1 : 1;
 };
 
 const comparePrimaryTaskSession = (
@@ -78,13 +78,13 @@ const comparePrimaryTaskSession = (
 ): number => {
   return compareActiveSessionForPrimary(
     {
-      sessionId: left.sessionId,
+      externalSessionId: left.externalSessionId,
       status: left.status,
       presentationState: toKanbanSessionPresentationState(left),
       startedAt: left.startedAt,
     },
     {
-      sessionId: right.sessionId,
+      externalSessionId: right.externalSessionId,
       status: right.status,
       presentationState: toKanbanSessionPresentationState(right),
       startedAt: right.startedAt,
@@ -195,7 +195,7 @@ export const buildTaskSessionsByTaskId = (
       taskId,
       taskSessions.map((session) => ({
         ...(session.runtimeKind ? { runtimeKind: session.runtimeKind } : {}),
-        sessionId: session.sessionId,
+        externalSessionId: session.externalSessionId,
         role: session.role,
         scenario: session.scenario,
         status: session.status,
@@ -217,7 +217,7 @@ type UseKanbanBoardModelArgs = {
   onOpenSession: (
     taskId: string,
     role: AgentRole,
-    options?: { sessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
   ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;

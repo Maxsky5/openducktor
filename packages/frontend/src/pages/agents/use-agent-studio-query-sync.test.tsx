@@ -222,7 +222,7 @@ describe("useAgentStudioQuerySync", () => {
           taskId: "task-from-context",
           role: "planner",
           scenario: "planner_initial",
-          sessionId: "session-from-context",
+          externalSessionId: "session-from-context",
         }),
       );
 
@@ -287,7 +287,7 @@ describe("useAgentStudioQuerySync", () => {
         JSON.stringify({
           taskId: "task-from-context",
           role: "planner",
-          sessionId: "session-from-context",
+          externalSessionId: "session-from-context",
         }),
       );
 
@@ -321,7 +321,7 @@ describe("useAgentStudioQuerySync", () => {
           taskId: "task-from-context",
           role: "build",
           scenario: "build_implementation_start",
-          sessionId: "session-from-context",
+          externalSessionId: "session-from-context",
         }),
       );
 
@@ -359,7 +359,7 @@ describe("useAgentStudioQuerySync", () => {
         JSON.stringify({
           taskId: "task-from-repo-b",
           role: "planner",
-          sessionId: "session-from-repo-b",
+          externalSessionId: "session-from-repo-b",
         }),
       );
 
@@ -393,8 +393,8 @@ describe("useAgentStudioQuerySync", () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
       seedWorkspaceNavigationContexts(memoryStorage, {
-        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
-        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+        "workspace-repo-a": { taskId: "task-a", role: "spec", externalSessionId: "session-a" },
+        "workspace-repo-b": { taskId: "task-b", role: "planner", externalSessionId: "session-b" },
       });
 
       const harness = createStatefulQuerySyncHarness({
@@ -433,8 +433,8 @@ describe("useAgentStudioQuerySync", () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
       seedWorkspaceNavigationContexts(memoryStorage, {
-        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionId: "session-a" },
-        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionId: "session-b" },
+        "workspace-repo-a": { taskId: "task-a", role: "spec", externalSessionId: "session-a" },
+        "workspace-repo-b": { taskId: "task-b", role: "planner", externalSessionId: "session-b" },
       });
 
       const harness = createStatefulQuerySyncHarness({
@@ -499,12 +499,12 @@ describe("useAgentStudioQuerySync", () => {
 
       const parsed = JSON.parse(stored) as {
         taskId?: string;
-        sessionId?: string;
+        externalSessionId?: string;
         role?: string;
       };
 
       expect(parsed.taskId).toBe("task-from-cleanup");
-      expect(parsed.sessionId).toBe("session-from-cleanup");
+      expect(parsed.externalSessionId).toBe("session-from-cleanup");
       expect(parsed.role).toBe("spec");
     } finally {
       Object.defineProperty(globalThis, "localStorage", {

@@ -69,10 +69,9 @@ const createThrowingStorage = (args: {
 
 const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 
-const createSession = (taskId: string, sessionId: string) =>
+const createSession = (taskId: string, externalSessionId: string) =>
   createAgentSessionFixture({
-    sessionId,
-    externalSessionId: `ext-${sessionId}`,
+    externalSessionId: `ext-${externalSessionId}`,
     taskId,
   });
 
@@ -221,7 +220,6 @@ describe("useAgentStudioTaskTabs", () => {
       const taskOne = createTask("task-1");
       const taskTwo = createTask("task-2");
       const runningBuildSession = createAgentSessionFixture({
-        sessionId: "session-build",
         externalSessionId: "ext-session-build",
         taskId: "task-2",
         role: "build",
@@ -230,7 +228,6 @@ describe("useAgentStudioTaskTabs", () => {
         startedAt: "2026-02-22T09:00:00.000Z",
       });
       const newerIdleSession = createAgentSessionFixture({
-        sessionId: "session-newer",
         externalSessionId: "ext-session-newer",
         taskId: "task-2",
         role: "qa",

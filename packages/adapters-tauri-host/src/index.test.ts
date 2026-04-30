@@ -47,7 +47,6 @@ const makeTaskMetadataPayload = (specMarkdown = "Spec Body") => ({
   },
   agentSessions: [
     {
-      sessionId: "session-1",
       externalSessionId: "external-1",
       role: "build",
       scenario: "build_implementation_start",
@@ -1572,7 +1571,6 @@ describe("TauriHostClient", () => {
       client.agentSessionStop({
         repoPath: "/repo",
         taskId: "task-1",
-        sessionId: "session-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktrees/task-1",
         externalSessionId: "external-session-1",
@@ -1591,7 +1589,6 @@ describe("TauriHostClient", () => {
     const result = await client.agentSessionStop({
       repoPath: "/repo",
       taskId: "task-1",
-      sessionId: "session-1",
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/task-1",
       externalSessionId: "external-session-1",
@@ -1605,7 +1602,6 @@ describe("TauriHostClient", () => {
           request: {
             repoPath: "/repo",
             taskId: "task-1",
-            sessionId: "session-1",
             runtimeKind: "opencode",
             workingDirectory: "/repo/worktrees/task-1",
             externalSessionId: "external-session-1",
@@ -1700,7 +1696,6 @@ describe("TauriHostClient", () => {
           qaReport: null,
           agentSessions: [
             {
-              sessionId: "obp-session-1",
               externalSessionId: "session-opencode-1",
               role: "spec",
               scenario: "spec_initial",
@@ -1745,7 +1740,6 @@ describe("TauriHostClient", () => {
           qaReport: null,
           agentSessions: [
             {
-              sessionId: "legacy-spec",
               externalSessionId: "legacy-ext-1",
               role: "spec",
               scenario: "spec_revision",
@@ -1755,7 +1749,6 @@ describe("TauriHostClient", () => {
               selectedModel: null,
             },
             {
-              sessionId: "legacy-planner",
               externalSessionId: "legacy-ext-2",
               role: "planner",
               scenario: "planner_revision",
@@ -1787,7 +1780,6 @@ describe("TauriHostClient", () => {
           qaReport: null,
           agentSessions: [
             {
-              sessionId: "bad-entry",
               externalSessionId: "legacy-ext-3",
               role: "planner",
               scenario: "planner_unknown",
@@ -1816,7 +1808,6 @@ describe("TauriHostClient", () => {
           qaReport: null,
           agentSessions: [
             {
-              sessionId: "legacy-spec",
               externalSessionId: "legacy-ext-1",
               role: "spec",
               scenario: "spec_revision",

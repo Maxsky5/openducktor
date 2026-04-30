@@ -111,7 +111,6 @@ mod tests {
             "repoPath": "/repo",
             "taskId": "task-1",
             "session": {
-                "sessionId": "session-1",
                 "externalSessionId": "external-session-1",
                 "role": "build",
                 "scenario": "build_default",
@@ -125,7 +124,7 @@ mod tests {
 
         assert_eq!(parsed.repo_path, "/repo");
         assert_eq!(parsed.task_id, "task-1");
-        assert_eq!(parsed.session.session_id, "session-1");
+        assert_eq!(parsed.session.external_session_id.as_deref(), Some("external-session-1"));
         assert_eq!(parsed.session.role, "build");
         assert_eq!(parsed.session.working_directory, "/repo/worktree/task-1");
     }

@@ -16,7 +16,7 @@ describe("session-start-execution", () => {
       role: "build",
       scenario: "build_after_human_request_changes",
       startMode: "reuse",
-      sourceSessionId: "session-build-1",
+      sourceExternalSessionId: "session-build-1",
     });
 
     expect(result).toEqual({
@@ -24,7 +24,7 @@ describe("session-start-execution", () => {
       role: "build",
       scenario: "build_after_human_request_changes",
       startMode: "reuse",
-      sourceSessionId: "session-build-1",
+      sourceExternalSessionId: "session-build-1",
     });
   });
 
@@ -69,14 +69,14 @@ describe("session-start-execution", () => {
       role: "build",
       scenario: "build_after_human_request_changes",
       startMode: "reuse",
-      sourceSessionId: "session-build-1",
+      sourceExternalSessionId: "session-build-1",
       startAgentSession,
     });
 
     expect(startAgentSession).toHaveBeenLastCalledWith(
       expect.objectContaining({
         startMode: "reuse",
-        sourceSessionId: "session-build-1",
+        sourceExternalSessionId: "session-build-1",
       }),
     );
   });

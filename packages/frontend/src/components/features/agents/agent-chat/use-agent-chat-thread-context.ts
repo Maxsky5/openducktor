@@ -10,7 +10,7 @@ type UseAgentChatThreadContextArgs = {
 
 type AgentChatThreadContext = {
   threadSession: AgentSessionState | null;
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   isContextSwitching: boolean;
 };
 
@@ -23,7 +23,7 @@ export const useAgentChatThreadContext = ({
   const [isContextSwitchIntentActive, setIsContextSwitchIntentActive] = useState(false);
   const contextSwitchVersionRef = useRef(contextSwitchVersion);
   const clearIntentRafRef = useRef<number | null>(null);
-  const activeSessionId = activeSession?.sessionId ?? null;
+  const activeExternalSessionId = activeSession?.externalSessionId ?? null;
   const hasPendingContextSwitchVersion = contextSwitchVersionRef.current !== contextSwitchVersion;
   const canRenderActiveSession = activeSession !== null && isSessionHistoryHydrated;
   const shouldClearThread =
@@ -86,7 +86,7 @@ export const useAgentChatThreadContext = ({
 
   return {
     threadSession: shouldClearThread ? null : activeSession,
-    activeSessionId: shouldClearThread ? null : activeSessionId,
+    activeExternalSessionId: shouldClearThread ? null : activeExternalSessionId,
     isContextSwitching: shouldClearThread,
   };
 };

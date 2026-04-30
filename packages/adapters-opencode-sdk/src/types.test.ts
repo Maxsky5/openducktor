@@ -15,7 +15,6 @@ const createClient: ClientFactory = () => {
 describe("types", () => {
   test("exports adapter contract types that can be instantiated", () => {
     const sessionInput: SessionInput = {
-      sessionId: "session-1",
       repoPath: "/repo",
       runtimeKind: "opencode",
       runtimeConnection: {
@@ -31,7 +30,6 @@ describe("types", () => {
     };
     const sessionRecord: SessionRecord = {
       summary: {
-        sessionId: "session-1",
         externalSessionId: "external-session-1",
         role: "spec",
         scenario: "spec_initial",
@@ -57,11 +55,11 @@ describe("types", () => {
       messageMetadataById: new Map(),
       pendingDeltasByPartId: new Map(),
       subagentCorrelationKeyByPartId: new Map(),
-      subagentCorrelationKeyBySessionId: new Map(),
+      subagentCorrelationKeyByExternalSessionId: new Map(),
       pendingSubagentCorrelationKeysBySignature: new Map(),
       pendingSubagentCorrelationKeys: [],
-      pendingSubagentSessionsById: new Map(),
-      pendingSubagentPartEmissionsBySessionId: new Map(),
+      pendingSubagentSessionsByExternalSessionId: new Map(),
+      pendingSubagentPartEmissionsByExternalSessionId: new Map(),
     };
     const status: McpServerStatus = { status: "connected" };
     const options: OpencodeSdkAdapterOptions = {
@@ -70,7 +68,7 @@ describe("types", () => {
       logEvent: () => undefined,
     };
 
-    expect(sessionRecord.input.sessionId).toBe("session-1");
+    expect(sessionRecord.summary.externalSessionId).toBe("external-session-1");
     expect(status.status).toBe("connected");
     expect(typeof options.createClient).toBe("function");
     expect(typeof options.logEvent).toBe("function");

@@ -51,7 +51,7 @@ describe("human-review-feedback-flow", () => {
 
     const result = await submitHumanReviewFeedback({
       state: createState({ message: "   " }),
-      builderSessions: [createBuilderSession({ sessionId: "builder-session-1" })],
+      builderSessions: [createBuilderSession({ externalSessionId: "builder-session-1" })],
       startRequestChangesSession,
     });
 
@@ -64,11 +64,11 @@ describe("human-review-feedback-flow", () => {
     const startRequestChangesSession = mock(async () => "session-new");
     const builderSessions = [
       createBuilderSession({
-        sessionId: "builder-session-2",
+        externalSessionId: "builder-session-2",
         startedAt: "2026-03-20T12:00:00.000Z",
       }),
       createBuilderSession({
-        sessionId: "builder-session-1",
+        externalSessionId: "builder-session-1",
         startedAt: "2026-03-19T12:00:00.000Z",
       }),
     ];
@@ -85,7 +85,7 @@ describe("human-review-feedback-flow", () => {
         taskId: "TASK-1",
         role: "build",
         scenario: "build_after_human_request_changes",
-        initialSourceSessionId: "builder-session-2",
+        initialSourceExternalSessionId: "builder-session-2",
         postStartAction: "kickoff",
         message: "Use the standard request-changes workflow.",
         beforeStartAction: {
@@ -126,7 +126,7 @@ describe("human-review-feedback-flow", () => {
 
     const result = await submitHumanReviewFeedback({
       state: createState({ message: "Keep editing if I cancel the second step." }),
-      builderSessions: [createBuilderSession({ sessionId: "builder-session-1" })],
+      builderSessions: [createBuilderSession({ externalSessionId: "builder-session-1" })],
       startRequestChangesSession,
     });
 
@@ -142,7 +142,7 @@ describe("human-review-feedback-flow", () => {
         scenario: "build_after_human_request_changes",
         message: "Address the requested changes in the shared flow.",
       }),
-      builderSessions: [createBuilderSession({ sessionId: "builder-session-1" })],
+      builderSessions: [createBuilderSession({ externalSessionId: "builder-session-1" })],
       startRequestChangesSession,
     });
 

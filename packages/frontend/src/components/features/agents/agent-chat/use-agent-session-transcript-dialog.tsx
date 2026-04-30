@@ -17,7 +17,7 @@ import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog"
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 
 export type OpenAgentSessionTranscriptRequest = {
-  sessionId: string;
+  externalSessionId: string;
   source: RuntimeSessionTranscriptSource;
   title?: string;
   description?: string;
@@ -38,8 +38,8 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
   const activeWorkspace = useActiveWorkspace();
   const { removeAgentSession } = useAgentOperations();
   const [request, setRequest] = useState<OpenAgentSessionTranscriptRequest | null>(null);
-  const sessionId = request?.sessionId ?? null;
-  const activeTranscriptSession = useAgentSession(sessionId);
+  const externalSessionId = request?.externalSessionId ?? null;
+  const activeTranscriptSession = useAgentSession(externalSessionId);
   const open = request !== null;
 
   const openSessionTranscript = useCallback((nextRequest: OpenAgentSessionTranscriptRequest) => {
@@ -48,10 +48,10 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
 
   const closeSessionTranscript = useCallback(() => {
     setRequest(null);
-    if (sessionId && isTranscriptAgentSession(activeTranscriptSession)) {
-      void removeAgentSession(sessionId);
+    if (externalSessionId && isTranscriptAgentSession(activeTranscriptSession)) {
+      void removeAgentSession(externalSessionId);
     }
-  }, [activeTranscriptSession, removeAgentSession, sessionId]);
+  }, [activeTranscriptSession, removeAgentSession, externalSessionId]);
 
   const contextValue = useMemo(
     () => ({
@@ -66,7 +66,7 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
       {children}
       <AgentSessionTranscriptDialog
         activeWorkspace={activeWorkspace}
-        sessionId={sessionId}
+        externalSessionId={externalSessionId}
         source={request?.source ?? null}
         open={open}
         onOpenChange={(nextOpen) => {

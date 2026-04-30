@@ -13,7 +13,6 @@ describe("session-target-resolution", () => {
       id: "TASK-1",
       agentSessions: [
         {
-          sessionId: "build-newer",
           externalSessionId: "external-build-newer",
           role: "build",
           scenario: "build_implementation_start",
@@ -23,7 +22,6 @@ describe("session-target-resolution", () => {
           selectedModel: null,
         },
         {
-          sessionId: "spec",
           externalSessionId: "external-spec",
           role: "spec",
           scenario: "spec_initial",
@@ -33,7 +31,6 @@ describe("session-target-resolution", () => {
           selectedModel: null,
         },
         {
-          sessionId: "build-older",
           externalSessionId: "external-build-older",
           role: "build",
           scenario: "build_after_qa_rejected",
@@ -52,7 +49,7 @@ describe("session-target-resolution", () => {
     const sessions: KanbanTaskSession[] = [
       {
         runtimeKind: "opencode",
-        sessionId: "build-older",
+        externalSessionId: "build-older",
         role: "build",
         scenario: "build_implementation_start",
         status: "running",
@@ -61,7 +58,7 @@ describe("session-target-resolution", () => {
       },
       {
         runtimeKind: "opencode",
-        sessionId: "build-newer",
+        externalSessionId: "build-newer",
         role: "build",
         scenario: "build_after_human_request_changes",
         status: "running",
@@ -70,14 +67,14 @@ describe("session-target-resolution", () => {
       },
     ];
 
-    expect(resolvePreferredActiveSession(sessions, "build")?.sessionId).toBe("build-newer");
+    expect(resolvePreferredActiveSession(sessions, "build")?.externalSessionId).toBe("build-newer");
   });
 
   test("prefers waiting-input session over running/starting sessions", () => {
     const sessions: KanbanTaskSession[] = [
       {
         runtimeKind: "opencode",
-        sessionId: "build-running",
+        externalSessionId: "build-running",
         role: "build",
         scenario: "build_implementation_start",
         status: "running",
@@ -86,7 +83,7 @@ describe("session-target-resolution", () => {
       },
       {
         runtimeKind: "opencode",
-        sessionId: "build-waiting",
+        externalSessionId: "build-waiting",
         role: "build",
         scenario: "build_implementation_start",
         status: "idle",
@@ -95,7 +92,9 @@ describe("session-target-resolution", () => {
       },
     ];
 
-    expect(resolvePreferredActiveSession(sessions, "build")?.sessionId).toBe("build-waiting");
+    expect(resolvePreferredActiveSession(sessions, "build")?.externalSessionId).toBe(
+      "build-waiting",
+    );
   });
 
   test("resolves parity options used by card and details actions", () => {
@@ -103,7 +102,6 @@ describe("session-target-resolution", () => {
       id: "TASK-2",
       agentSessions: [
         {
-          sessionId: "spec-history",
           externalSessionId: "external-spec-history",
           role: "spec",
           scenario: "spec_initial",
@@ -117,7 +115,7 @@ describe("session-target-resolution", () => {
     const sessions: KanbanTaskSession[] = [
       {
         runtimeKind: "opencode",
-        sessionId: "spec-active",
+        externalSessionId: "spec-active",
         role: "spec",
         scenario: "spec_initial",
         status: "running",
@@ -129,7 +127,7 @@ describe("session-target-resolution", () => {
     const options = resolveSessionTargetOptions(task, sessions, "spec");
 
     expect(options).toEqual({
-      sessionId: "spec-active",
+      externalSessionId: "spec-active",
       scenario: "spec_initial",
     });
   });
@@ -139,7 +137,6 @@ describe("session-target-resolution", () => {
       id: "TASK-3",
       agentSessions: [
         {
-          sessionId: "qa-history",
           externalSessionId: "external-qa-history",
           role: "qa",
           scenario: "qa_review",
@@ -152,7 +149,7 @@ describe("session-target-resolution", () => {
     });
 
     expect(resolveSessionTargetOptions(task, [], "qa")).toEqual({
-      sessionId: "qa-history",
+      externalSessionId: "qa-history",
       scenario: "qa_review",
     });
   });

@@ -13,4 +13,7 @@ export type WorkflowHeaderContext = Pick<
   | "createSessionDisabled"
 >;
 
-export type AgentStudioWorkflowStepSelect = (role: AgentRole, sessionId: string | null) => void;
+export type AgentStudioWorkflowStepSelect = (
+  role: AgentRole,
+  externalSessionId: string | null,
+) => void;

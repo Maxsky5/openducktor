@@ -232,13 +232,13 @@ describe("task-details-sheet-model", () => {
       {
         resolveSessionOptions: (role) =>
           role === "build"
-            ? { sessionId: "session-build", scenario: "build_implementation_start" }
+            ? { externalSessionId: "session-build", scenario: "build_implementation_start" }
             : undefined,
       },
     );
 
     expect(onOpenSession).toHaveBeenCalledWith("T-1", "build", {
-      sessionId: "session-build",
+      externalSessionId: "session-build",
       scenario: "build_implementation_start",
     });
   });

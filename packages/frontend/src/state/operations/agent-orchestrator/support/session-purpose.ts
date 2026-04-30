@@ -15,7 +15,7 @@ export const resolveAgentSessionPurpose = (
 
 export const resolveAgentSessionPurposeForLoad = (_input: {
   requestedSessionId?: string | null;
-  sessionId: string;
+  externalSessionId: string;
   shouldHydrateRequestedSession: boolean;
   mode?: "bootstrap" | "requested_history" | "reconcile_live" | "recover_runtime_attachment";
 }): AgentSessionPurpose => {

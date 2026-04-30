@@ -116,8 +116,8 @@ export function useAgentStudioQuerySessionSync({
     if (taskIdParam !== activeSession.taskId) {
       updates[AGENT_STUDIO_QUERY_KEYS.task] = activeSession.taskId;
     }
-    if (sessionParam !== activeSession.sessionId) {
-      updates[AGENT_STUDIO_QUERY_KEYS.session] = activeSession.sessionId;
+    if (sessionParam !== activeSession.externalSessionId) {
+      updates[AGENT_STUDIO_QUERY_KEYS.session] = activeSession.externalSessionId;
     }
     if (roleFromQuery !== activeSession.role) {
       updates[AGENT_STUDIO_QUERY_KEYS.agent] = activeSession.role;

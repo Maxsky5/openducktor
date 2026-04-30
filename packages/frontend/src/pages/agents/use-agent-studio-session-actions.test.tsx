@@ -198,7 +198,7 @@ const confirmSessionStartModal = async (
     state.sessionStartModal?.onConfirm({
       runInBackground: false,
       startMode: "fresh",
-      sourceSessionId: null,
+      sourceExternalSessionId: null,
     });
   });
 };
@@ -329,7 +329,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ sessionId: "session-existing" }),
+      activeSession: createSession({ externalSessionId: "session-existing" }),
       sendAgentMessage,
       startAgentSession,
     });
@@ -360,7 +360,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ sessionId: "session-existing" }),
+      activeSession: createSession({ externalSessionId: "session-existing" }),
       sendAgentMessage,
     });
 
@@ -389,7 +389,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ sessionId: "session-existing" }),
+      activeSession: createSession({ externalSessionId: "session-existing" }),
       sendAgentMessage,
     });
 
@@ -411,7 +411,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createSession({
-        sessionId: "session-existing",
+        externalSessionId: "session-existing",
         status: "running",
         modelCatalog: {
           runtime: {
@@ -451,7 +451,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createSession({
-        sessionId: "session-existing",
+        externalSessionId: "session-existing",
         status: "running",
         modelCatalog: {
           runtime: {
@@ -490,7 +490,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createSession({
-        sessionId: "session-existing",
+        externalSessionId: "session-existing",
         status: "running",
         runtimeKind: "opencode",
         modelCatalog: null,
@@ -518,7 +518,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createSession({
-        sessionId: "session-existing",
+        externalSessionId: "session-existing",
         status: "running",
         modelCatalog: {
           runtime: {
@@ -546,7 +546,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.update({
       ...createBaseArgs(),
       activeSession: createSession({
-        sessionId: "session-existing",
+        externalSessionId: "session-existing",
         status: "running",
         runtimeKind: "opencode",
         modelCatalog: null,
@@ -572,7 +572,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createSession({
-        sessionId: "session-existing",
+        externalSessionId: "session-existing",
         status: "running",
         runtimeKind: "opencode",
         modelCatalog: {
@@ -621,7 +621,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createSession({
-        sessionId: "session-existing",
+        externalSessionId: "session-existing",
         pendingQuestions: [
           {
             requestId: "question-1",
@@ -660,7 +660,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ sessionId: "session-existing" }),
+      activeSession: createSession({ externalSessionId: "session-existing" }),
       sendAgentMessage,
     });
 
@@ -689,7 +689,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ sessionId: "session-existing" }),
+      activeSession: createSession({ externalSessionId: "session-existing" }),
       sendAgentMessage,
     });
 
@@ -713,7 +713,7 @@ describe("useAgentStudioSessionActions", () => {
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ sessionId: "session-existing" }),
+      activeSession: createSession({ externalSessionId: "session-existing" }),
       selectedModelDescriptor: {
         id: "openai/gpt-5",
         providerId: "openai",
@@ -769,7 +769,7 @@ describe("useAgentStudioSessionActions", () => {
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ sessionId: "session-existing" }),
+      activeSession: createSession({ externalSessionId: "session-existing" }),
       selectedModelDescriptor: {
         id: "openai/gpt-5",
         providerId: "openai",
@@ -815,12 +815,12 @@ describe("useAgentStudioSessionActions", () => {
     const taskOneDraft = createComposerDraft("  hello world  ");
     const taskOneSession = createSession({
       taskId: "task-1",
-      sessionId: "session-task-1",
+      externalSessionId: "session-task-1",
       status: "stopped",
     });
     const taskTwoSession = createSession({
       taskId: "task-2",
-      sessionId: "session-task-2",
+      externalSessionId: "session-task-2",
       status: "stopped",
     });
 
@@ -866,12 +866,12 @@ describe("useAgentStudioSessionActions", () => {
     const firstDraft = createComposerDraft("  hello world  ");
     const taskOneSession = createSession({
       taskId: "task-1",
-      sessionId: "session-task-1",
+      externalSessionId: "session-task-1",
       status: "stopped",
     });
     const taskTwoSession = createSession({
       taskId: "task-2",
-      sessionId: "session-task-2",
+      externalSessionId: "session-task-2",
       status: "stopped",
     });
 
@@ -924,12 +924,12 @@ describe("useAgentStudioSessionActions", () => {
     const secondDraft = createComposerDraft("second send");
     const taskOneSession = createSession({
       taskId: "task-1",
-      sessionId: "session-task-1",
+      externalSessionId: "session-task-1",
       status: "stopped",
     });
     const taskTwoSession = createSession({
       taskId: "task-2",
-      sessionId: "session-task-2",
+      externalSessionId: "session-task-2",
       status: "stopped",
     });
 
@@ -986,7 +986,7 @@ describe("useAgentStudioSessionActions", () => {
     const draft = createComposerDraft("  hello world  ");
     const nextSession = createSession({
       taskId: "task-1",
-      sessionId: "session-new",
+      externalSessionId: "session-new",
       role: "spec",
       status: "stopped",
     });
@@ -1031,7 +1031,7 @@ describe("useAgentStudioSessionActions", () => {
     const draft = createComposerDraft("  hello world  ");
     const existingSpecSession = createSession({
       runtimeKind: "opencode",
-      sessionId: "session-existing",
+      externalSessionId: "session-existing",
       role: "spec",
       scenario: "spec_initial",
     });
@@ -1060,7 +1060,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("session selection and workflow selection update URL query", async () => {
     const updateCalls: Array<Record<string, string | undefined>> = [];
-    const sessionTwo = createSession({ sessionId: "session-2", taskId: "task-2" });
+    const sessionTwo = createSession({ externalSessionId: "session-2", taskId: "task-2" });
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1124,7 +1124,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession: createSession({ sessionId: "session-9" }),
+      activeSession: createSession({ externalSessionId: "session-9" }),
       answerAgentQuestion,
     });
 
@@ -1148,7 +1148,7 @@ describe("useAgentStudioSessionActions", () => {
       ...createBaseArgs(),
       role: "spec",
       scenario: "spec_initial",
-      activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
+      activeSession: createSession({ externalSessionId: "session-spec", role: "spec" }),
       selectedTask: createTask(),
       startAgentSession,
       sendAgentMessage,

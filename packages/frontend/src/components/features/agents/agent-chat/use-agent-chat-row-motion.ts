@@ -2,7 +2,7 @@ import type { RefCallback } from "react";
 import { useCallback, useRef } from "react";
 
 type UseAgentChatRowMotionInput = {
-  activeSessionId: string | null;
+  activeExternalSessionId: string | null;
   rowKeys: string[];
   windowStart: number;
 };
@@ -12,7 +12,7 @@ type UseAgentChatRowMotionResult = {
 };
 
 export function useAgentChatRowMotion({
-  activeSessionId: _activeSessionId,
+  activeExternalSessionId: _activeExternalSessionId,
   rowKeys: _rowKeys,
   windowStart: _windowStart,
 }: UseAgentChatRowMotionInput): UseAgentChatRowMotionResult {

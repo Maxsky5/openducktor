@@ -46,9 +46,9 @@ import { requiresLiveWorktreeRuntime } from "../support/session-runtime-attachme
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 import { isSubagentMessage } from "../support/subagent-messages";
 import {
-  EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID,
+  EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID,
   mergeSubagentPendingPermissionOverlay,
-  type SubagentPendingPermissionsBySessionId,
+  type SubagentPendingPermissionsByExternalSessionId,
 } from "../support/subagent-permission-overlay";
 import {
   createHydrationRuntimeResolver,
@@ -67,7 +67,7 @@ import {
 } from "./route-only-hydration";
 
 export type UpdateSession = (
-  sessionId: string,
+  externalSessionId: string,
   updater: (current: AgentSessionState) => AgentSessionState,
   options?: { persist?: boolean },
 ) => void;
@@ -155,7 +155,7 @@ export type LiveReconciliationStageInput = {
   options?: AgentSessionLoadOptions;
   adapter: SessionLifecycleAdapter;
   updateSession: UpdateSession;
-  attachSessionListener?: (repoPath: string, sessionId: string) => void;
+  attachSessionListener?: (repoPath: string, externalSessionId: string) => void;
   isStaleRepoOperation: () => boolean;
   recordsToHydrate: AgentSessionRecord[];
   runtimePlanner: HydrationRuntimePlanner;
@@ -228,7 +228,7 @@ const preloadRouteProbedRepoRootRuntimeConnectionsForWorktreeSessions = async ({
     Map<string, RouteProbedWorktreeRuntimeTarget>
   >();
   for (const record of records) {
-    const externalSessionId = record.externalSessionId ?? record.sessionId;
+    const externalSessionId = record.externalSessionId;
     const normalizedWorkingDirectory = normalizeWorkingDirectory(record.workingDirectory);
     if (
       !externalSessionId ||
@@ -311,35 +311,36 @@ const normalizeLiveSessionTitle = (title: string | undefined): string | undefine
 };
 
 const readSubagentSessionIds = (
-  sessionId: string,
+  externalSessionId: string,
   messages: AgentSessionState["messages"],
 ): string[] => {
-  const sessionIds = new Set<string>();
-  forEachSessionMessage({ sessionId, messages }, (message) => {
+  const externalSessionIds = new Set<string>();
+  forEachSessionMessage({ externalSessionId, messages }, (message) => {
     if (!isSubagentMessage(message)) {
       return;
     }
-    const subagentSessionId = message.meta.sessionId?.trim();
+    const subagentSessionId = message.meta.externalSessionId?.trim();
     if (subagentSessionId) {
-      sessionIds.add(subagentSessionId);
+      externalSessionIds.add(subagentSessionId);
     }
   });
-  return Array.from(sessionIds);
+  return Array.from(externalSessionIds);
 };
 
 type HydratedSubagentPendingPermissionOverlay = {
   scannedChildExternalSessionIds: string[];
-  pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsBySessionId;
+  pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsByExternalSessionId;
 };
 
 const EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY = Object.freeze({
   scannedChildExternalSessionIds: [],
-  pendingPermissionsByChildExternalSessionId: EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID,
+  pendingPermissionsByChildExternalSessionId:
+    EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID,
 }) satisfies HydratedSubagentPendingPermissionOverlay;
 
 const toHydratedSubagentPendingPermissionOverlay = (
   scannedChildExternalSessionIds: string[],
-  pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsBySessionId,
+  pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsByExternalSessionId,
 ): HydratedSubagentPendingPermissionOverlay => {
   if (scannedChildExternalSessionIds.length === 0) {
     return EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY;
@@ -350,7 +351,7 @@ const toHydratedSubagentPendingPermissionOverlay = (
     pendingPermissionsByChildExternalSessionId:
       Object.keys(pendingPermissionsByChildExternalSessionId).length > 0
         ? pendingPermissionsByChildExternalSessionId
-        : EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_SESSION_ID,
+        : EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID,
   };
 };
 
@@ -365,12 +366,13 @@ const loadHydratedSubagentPendingPermissionOverlay = async ({
   runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }>;
   runtimePlanner: HydrationRuntimePlanner;
 }): Promise<HydratedSubagentPendingPermissionOverlay> => {
-  const childExternalSessionIds = readSubagentSessionIds(record.sessionId, messages);
+  const childExternalSessionIds = readSubagentSessionIds(record.externalSessionId, messages);
   if (childExternalSessionIds.length === 0) {
     return EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY;
   }
 
-  const pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsBySessionId = {};
+  const pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsByExternalSessionId =
+    {};
   const scannedChildExternalSessionIds: string[] = [];
   await Promise.all(
     childExternalSessionIds.map(async (childExternalSessionId) => {
@@ -378,7 +380,6 @@ const loadHydratedSubagentPendingPermissionOverlay = async ({
         const snapshot = await runtimePlanner.loadLiveAgentSessionSnapshot(
           {
             ...record,
-            sessionId: childExternalSessionId,
             externalSessionId: childExternalSessionId,
           },
           runtimeResolution,
@@ -454,7 +455,6 @@ const toRequestedHistoryRecordFromSession = (
   }
 
   return {
-    sessionId: session.sessionId,
     externalSessionId: session.externalSessionId,
     role: session.role,
     scenario: session.scenario,
@@ -529,15 +529,15 @@ export const preparePersistedSessionMergeStage = async ({
       for (const record of persistedRecords) {
         const nextPurpose = resolveAgentSessionPurposeForLoad({
           requestedSessionId: intent.requestedSessionId,
-          sessionId: record.sessionId,
+          externalSessionId: record.externalSessionId,
           shouldHydrateRequestedSession: intent.shouldHydrateRequestedSession,
           mode: intent.mode,
         });
-        const existingSession = next[record.sessionId];
+        const existingSession = next[record.externalSessionId];
         const shouldPreserveTranscriptSession =
           intent.mode !== "requested_history" && intent.mode !== "recover_runtime_attachment";
         if (existingSession) {
-          next[record.sessionId] = mergePersistedSessionRecord(
+          next[record.externalSessionId] = mergePersistedSessionRecord(
             existingSession,
             record,
             intent.taskId,
@@ -548,7 +548,7 @@ export const preparePersistedSessionMergeStage = async ({
           );
           continue;
         }
-        next[record.sessionId] = {
+        next[record.externalSessionId] = {
           ...fromPersistedSessionRecord(record, intent.taskId, intent.repoPath),
           purpose: nextPurpose,
           pendingPermissions: [],
@@ -572,7 +572,7 @@ export const preparePersistedSessionMergeStage = async ({
   const recordsToHydrate =
     intent.requestedSessionId !== null &&
     (intent.shouldHydrateRequestedSession || intent.mode === "recover_runtime_attachment")
-      ? persistedRecords.filter((record) => record.sessionId === intent.requestedSessionId)
+      ? persistedRecords.filter((record) => record.externalSessionId === intent.requestedSessionId)
       : persistedRecords;
   const historyHydrationSessionIds = new Set(
     recordsToHydrate
@@ -580,9 +580,12 @@ export const preparePersistedSessionMergeStage = async ({
         if (intent.historyPolicy !== "requested_only") {
           return false;
         }
-        return intent.requestedSessionId === null || record.sessionId === intent.requestedSessionId;
+        return (
+          intent.requestedSessionId === null ||
+          record.externalSessionId === intent.requestedSessionId
+        );
       })
-      .map((record) => record.sessionId),
+      .map((record) => record.externalSessionId),
   );
 
   return {
@@ -605,7 +608,7 @@ export const createRuntimeResolutionPlannerStage = async ({
   const readCurrentHydratedRuntimeResolution = (
     record: AgentSessionRecord,
   ): Extract<ResolvedHydrationRuntime, { ok: true }> | null => {
-    const currentSession = sessionsRef.current[record.sessionId];
+    const currentSession = sessionsRef.current[record.externalSessionId];
     const runtimeKind = currentSession?.runtimeKind ?? null;
     const runtimeRoute = currentSession?.runtimeRoute ?? null;
     const workingDirectory =
@@ -624,7 +627,7 @@ export const createRuntimeResolutionPlannerStage = async ({
   };
 
   const recordsNeedingRuntimeResolution = recordsToHydrate.filter((record) => {
-    if (!historyHydrationSessionIds.has(record.sessionId)) {
+    if (!historyHydrationSessionIds.has(record.externalSessionId)) {
       return true;
     }
     return readCurrentHydratedRuntimeResolution(record) === null;
@@ -711,7 +714,7 @@ export const createRuntimeResolutionPlannerStage = async ({
     runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }>,
   ): Promise<LiveAgentSessionSnapshot | null> => {
     const resolvedWorkingDirectory = runtimeResolution.runtimeConnection.workingDirectory;
-    const externalSessionId = record.externalSessionId ?? record.sessionId;
+    const externalSessionId = record.externalSessionId;
     const storedSnapshot = liveAgentSessionStore?.readSnapshot({
       repoPath: intent.repoPath,
       runtimeKind: runtimeResolution.runtimeKind,
@@ -761,7 +764,7 @@ export const createHydrationPromptAssemblerStage = ({
     const task = taskRef.current.find((entry) => entry.id === taskId);
     if (!task) {
       return buildSessionHeaderMessages({
-        sessionId: record.sessionId,
+        externalSessionId: record.externalSessionId,
         role: record.role,
         scenario: resolvedScenario,
         systemPrompt: "",
@@ -778,7 +781,7 @@ export const createHydrationPromptAssemblerStage = ({
     });
 
     return buildSessionHeaderMessages({
-      sessionId: record.sessionId,
+      externalSessionId: record.externalSessionId,
       role: record.role,
       scenario: resolvedScenario,
       systemPrompt,
@@ -879,8 +882,7 @@ export const reconcileLiveSessionsStage = async ({
       }
 
       const attachInput = {
-        sessionId: record.sessionId,
-        externalSessionId: record.externalSessionId ?? record.sessionId,
+        externalSessionId: record.externalSessionId,
         repoPath: intent.repoPath,
         runtimeKind,
         runtimeConnection,
@@ -925,11 +927,11 @@ export const reconcileLiveSessionsStage = async ({
     }
     for (const { record, reattached } of reattachResults) {
       if (reattached) {
-        reattachedSessionIds.add(record.sessionId);
+        reattachedSessionIds.add(record.externalSessionId);
         continue;
       }
       updateSession(
-        record.sessionId,
+        record.externalSessionId,
         (current) => ({
           ...current,
           pendingPermissions: [],
@@ -962,12 +964,12 @@ export const hydrateSessionRecordsStage = async ({
   if (historyHydrationSessionIds.size > 0) {
     setSessionsById((current) => {
       const next = { ...current };
-      for (const sessionId of historyHydrationSessionIds) {
-        const existingSession = next[sessionId];
+      for (const externalSessionId of historyHydrationSessionIds) {
+        const existingSession = next[externalSessionId];
         if (!existingSession) {
           continue;
         }
-        next[sessionId] = {
+        next[externalSessionId] = {
           ...existingSession,
           historyHydrationState: "hydrating",
         };
@@ -981,7 +983,7 @@ export const hydrateSessionRecordsStage = async ({
       return;
     }
 
-    const shouldHydrateHistory = historyHydrationSessionIds.has(record.sessionId);
+    const shouldHydrateHistory = historyHydrationSessionIds.has(record.externalSessionId);
     const runtimeResolution =
       (shouldHydrateHistory ? runtimePlanner.readCurrentHydratedRuntimeResolution(record) : null) ??
       (await runtimePlanner.resolveHydrationRuntime(record));
@@ -991,7 +993,7 @@ export const hydrateSessionRecordsStage = async ({
     if (!runtimeResolution.ok) {
       if (shouldHydrateHistory) {
         updateSession(
-          record.sessionId,
+          record.externalSessionId,
           (current) => ({
             ...current,
             historyHydrationState: "failed",
@@ -1004,7 +1006,7 @@ export const hydrateSessionRecordsStage = async ({
         throw new Error(runtimeResolution.reason);
       }
       updateSession(
-        record.sessionId,
+        record.externalSessionId,
         (current) => ({
           ...current,
           runtimeKind: readPersistedRuntimeKind(record),
@@ -1022,7 +1024,7 @@ export const hydrateSessionRecordsStage = async ({
     const workingDirectory = runtimeConnection.workingDirectory;
     if (!shouldHydrateHistory) {
       updateSession(
-        record.sessionId,
+        record.externalSessionId,
         (current) => ({
           ...current,
           runtimeKind,
@@ -1046,7 +1048,7 @@ export const hydrateSessionRecordsStage = async ({
     const history = await adapter.loadSessionHistory({
       runtimeKind,
       runtimeConnection,
-      externalSessionId: record.externalSessionId ?? record.sessionId,
+      externalSessionId: record.externalSessionId,
       limit: INITIAL_SESSION_HISTORY_LIMIT,
     });
     const liveRuntimeSnapshot = await runtimePlanner.loadLiveAgentSessionSnapshot(
@@ -1060,14 +1062,17 @@ export const hydrateSessionRecordsStage = async ({
     const livePendingQuestions = liveRuntimeSnapshot?.pendingQuestions ?? [];
     const selectedModel = normalizePersistedSelection(record.selectedModel);
     const liveSessionTitle = normalizeLiveSessionTitle(liveRuntimeSnapshot?.title);
-    const hydratedMessages = createSessionMessagesState(record.sessionId, [
-      ...getSessionMessagesSlice({ sessionId: record.sessionId, messages: preludeMessages }, 0),
+    const hydratedMessages = createSessionMessagesState(record.externalSessionId, [
+      ...getSessionMessagesSlice(
+        { externalSessionId: record.externalSessionId, messages: preludeMessages },
+        0,
+      ),
       ...historyToChatMessages(history, {
         role: record.role,
         selectedModel,
       }),
     ]);
-    const hydratedSubagentPendingPermissionsBySessionId =
+    const hydratedSubagentPendingPermissionsByExternalSessionId =
       await loadHydratedSubagentPendingPermissionOverlay({
         record,
         messages: hydratedMessages,
@@ -1079,7 +1084,7 @@ export const hydrateSessionRecordsStage = async ({
     }
 
     updateSession(
-      record.sessionId,
+      record.externalSessionId,
       (current) => {
         const nextSession: AgentSessionState = {
           ...current,
@@ -1093,15 +1098,19 @@ export const hydrateSessionRecordsStage = async ({
           promptOverrides,
           pendingPermissions: livePendingPermissions,
           pendingQuestions: livePendingQuestions,
-          subagentPendingPermissionsBySessionId: mergeSubagentPendingPermissionOverlay({
-            current: current.subagentPendingPermissionsBySessionId,
+          subagentPendingPermissionsByExternalSessionId: mergeSubagentPendingPermissionOverlay({
+            current: current.subagentPendingPermissionsByExternalSessionId,
             scannedChildExternalSessionIds:
-              hydratedSubagentPendingPermissionsBySessionId.scannedChildExternalSessionIds,
+              hydratedSubagentPendingPermissionsByExternalSessionId.scannedChildExternalSessionIds,
             pendingPermissionsByChildExternalSessionId:
-              hydratedSubagentPendingPermissionsBySessionId.pendingPermissionsByChildExternalSessionId,
+              hydratedSubagentPendingPermissionsByExternalSessionId.pendingPermissionsByChildExternalSessionId,
           }),
           contextUsage: historyToSessionContextUsage(history, selectedModel),
-          messages: mergeHydratedMessages(current.sessionId, hydratedMessages, current.messages),
+          messages: mergeHydratedMessages(
+            current.externalSessionId,
+            hydratedMessages,
+            current.messages,
+          ),
         };
         if (liveRuntimeSnapshot) {
           if (liveSessionTitle) {
@@ -1128,9 +1137,9 @@ export const hydrateSessionRecordsStage = async ({
     await Promise.all(
       batch.map((record) =>
         hydrateRecord(record).catch((error) => {
-          if (historyHydrationSessionIds.has(record.sessionId)) {
+          if (historyHydrationSessionIds.has(record.externalSessionId)) {
             updateSession(
-              record.sessionId,
+              record.externalSessionId,
               (current) => ({
                 ...current,
                 historyHydrationState: "failed",
