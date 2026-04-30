@@ -113,8 +113,26 @@ export function AgentStudioWorkspaceSidebar({
     setModalSnapshot(null);
   }, []);
 
+  const snapshotModal = modalSnapshot ? (
+    <MarkdownPreviewModal
+      open
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          closeModal();
+        }
+      }}
+      markdown={modalSnapshot.markdown}
+      title={modalSnapshot.title}
+    />
+  ) : null;
+
   if (!model.activeDocument) {
-    return <div className="h-full min-h-0" />;
+    return (
+      <>
+        <div className="h-full min-h-0" />
+        {snapshotModal}
+      </>
+    );
   }
 
   const { activeDocument } = model;
@@ -153,18 +171,7 @@ export function AgentStudioWorkspaceSidebar({
           document={activeDocument.document}
         />
       </div>
-      {modalSnapshot ? (
-        <MarkdownPreviewModal
-          open
-          onOpenChange={(nextOpen) => {
-            if (!nextOpen) {
-              closeModal();
-            }
-          }}
-          markdown={modalSnapshot.markdown}
-          title={modalSnapshot.title}
-        />
-      ) : null}
+      {snapshotModal}
     </div>
   );
 }
