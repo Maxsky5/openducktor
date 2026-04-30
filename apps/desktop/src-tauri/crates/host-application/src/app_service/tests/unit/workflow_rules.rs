@@ -321,6 +321,21 @@ fn blocked_tasks_expose_builder_and_reset_implementation_actions() {
 }
 
 #[test]
+fn blocked_can_transition_to_ai_review_and_human_review() {
+    let task = make_task("task-1", "task", TaskStatus::Blocked);
+    assert!(allows_transition(
+        &task,
+        &TaskStatus::Blocked,
+        &TaskStatus::AiReview
+    ));
+    assert!(allows_transition(
+        &task,
+        &TaskStatus::Blocked,
+        &TaskStatus::HumanReview
+    ));
+}
+
+#[test]
 fn deferred_parent_task_exposes_resume_and_hides_defer() {
     let deferred = make_task("task-1", "task", TaskStatus::Deferred);
     let actions = derive_available_actions(&deferred, std::slice::from_ref(&deferred));

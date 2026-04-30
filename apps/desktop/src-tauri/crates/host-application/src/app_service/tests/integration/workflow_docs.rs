@@ -1406,6 +1406,134 @@ fn build_completed_routes_to_human_review_when_last_qa_was_approved() -> Result<
 }
 
 #[test]
+fn build_completed_from_blocked_routes_to_ai_review_when_enabled_without_approved_qa() -> Result<()>
+{
+    let repo_path = "/tmp/odt-repo-build-blocked-ai";
+    let mut task = make_task("task-1", "task", TaskStatus::Blocked);
+    task.document_summary.qa_report.has = false;
+    task.document_summary.qa_report.verdict = QaWorkflowVerdict::NotReviewed;
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let task = service.build_completed(repo_path, "task-1", Some("done"))?;
+    assert_eq!(task.status, TaskStatus::AiReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state
+        .updated_patches
+        .iter()
+        .any(|(_, patch)| patch.status == Some(TaskStatus::AiReview)));
+    Ok(())
+}
+
+#[test]
+fn build_completed_from_blocked_routes_to_human_review_when_ai_is_disabled() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-build-blocked-human";
+    let mut task = make_task("task-1", "task", TaskStatus::Blocked);
+    task.ai_review_enabled = false;
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let task = service.build_completed(repo_path, "task-1", None)?;
+    assert_eq!(task.status, TaskStatus::HumanReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state
+        .updated_patches
+        .iter()
+        .any(|(_, patch)| patch.status == Some(TaskStatus::HumanReview)));
+    Ok(())
+}
+
+#[test]
+fn build_completed_from_blocked_routes_to_human_review_when_last_qa_was_approved() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-build-blocked-approved-qa";
+    let mut task = make_task("task-1", "task", TaskStatus::Blocked);
+    task.ai_review_enabled = true;
+    task.document_summary.qa_report.has = true;
+    task.document_summary.qa_report.verdict = QaWorkflowVerdict::Approved;
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let task = service.build_completed(repo_path, "task-1", None)?;
+    assert_eq!(task.status, TaskStatus::HumanReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state
+        .updated_patches
+        .iter()
+        .any(|(_, patch)| patch.status == Some(TaskStatus::HumanReview)));
+    Ok(())
+}
+
+#[test]
+fn build_completed_from_ai_review_is_no_op() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-build-ai-review-no-op";
+    let mut task = make_task("task-1", "task", TaskStatus::AiReview);
+    task.ai_review_enabled = true;
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let task = service.build_completed(repo_path, "task-1", None)?;
+    assert_eq!(task.status, TaskStatus::AiReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state.updated_patches.is_empty());
+    Ok(())
+}
+
+#[test]
+fn build_completed_from_human_review_is_no_op() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-build-human-review-no-op";
+    let mut task = make_task("task-1", "task", TaskStatus::HumanReview);
+    task.ai_review_enabled = false;
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let task = service.build_completed(repo_path, "task-1", None)?;
+    assert_eq!(task.status, TaskStatus::HumanReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state.updated_patches.is_empty());
+    Ok(())
+}
+
+#[test]
 fn task_defer_rejects_subtasks() {
     let repo_path = "/tmp/odt-repo-defer-subtask";
     let mut subtask = make_task("task-1", "task", TaskStatus::Open);

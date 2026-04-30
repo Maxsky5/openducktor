@@ -191,12 +191,20 @@ impl AppService {
         summary: Option<&str>,
     ) -> Result<TaskCard> {
         let context = self.load_task_context(repo_path, task_id)?;
-        if context.task.status != TaskStatus::InProgress {
-            return Err(anyhow!(
-                "build_completed is only allowed from in_progress. Task {} is {}.",
-                context.task.id,
-                context.task.status.as_cli_value()
-            ));
+        match context.task.status {
+            TaskStatus::AiReview | TaskStatus::HumanReview => {
+                return Ok(self.enrich_task(context.task, &context.repo.tasks));
+            }
+            TaskStatus::InProgress | TaskStatus::Blocked => {
+                // proceed with normal completion flow
+            }
+            _ => {
+                return Err(anyhow!(
+                    "build_completed is only allowed from in_progress, blocked, ai_review, or human_review. Task {} is {}.",
+                    context.task.id,
+                    context.task.status.as_cli_value()
+                ));
+            }
         }
         let repo_config =
             self.workspace_get_repo_config_by_repo_path(context.repo.repo_path.as_str())?;
