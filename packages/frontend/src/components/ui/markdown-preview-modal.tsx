@@ -37,7 +37,7 @@ export function MarkdownPreviewModal({
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="min-h-0 flex-1 overflow-hidden">
-          <div className="relative h-full overflow-y-auto px-6 pt-4 pb-6">
+          <div className="relative max-h-[calc(100dvh-12rem)] overflow-y-auto px-6 pt-4 pb-6">
             <MarkdownRenderer
               markdown={markdown}
               variant="document"
