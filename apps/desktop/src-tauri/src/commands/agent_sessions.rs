@@ -124,9 +124,50 @@ mod tests {
 
         assert_eq!(parsed.repo_path, "/repo");
         assert_eq!(parsed.task_id, "task-1");
-        assert_eq!(parsed.session.external_session_id.as_deref(), Some("external-session-1"));
+        assert_eq!(parsed.session.external_session_id, "external-session-1");
         assert_eq!(parsed.session.role, "build");
         assert_eq!(parsed.session.working_directory, "/repo/worktree/task-1");
+    }
+
+    #[test]
+    fn agent_session_upsert_payload_rejects_legacy_session_id() {
+        let payload = json!({
+            "repoPath": "/repo",
+            "taskId": "task-1",
+            "session": {
+                "sessionId": "local-session-1",
+                "externalSessionId": "external-session-1",
+                "role": "build",
+                "scenario": "build_default",
+                "startedAt": "2026-02-20T12:00:00Z",
+                "runtimeKind": "opencode",
+                "workingDirectory": "/repo/worktree/task-1"
+            }
+        });
+        let error = serde_json::from_value::<AgentSessionUpsertPayload>(payload)
+            .expect_err("legacy session id should fail at command boundary");
+
+        assert!(error.to_string().contains("sessionId is legacy metadata"));
+    }
+
+    #[test]
+    fn agent_session_upsert_payload_rejects_session_id_only() {
+        let payload = json!({
+            "repoPath": "/repo",
+            "taskId": "task-1",
+            "session": {
+                "sessionId": "legacy-session-1",
+                "role": "build",
+                "scenario": "build_default",
+                "startedAt": "2026-02-20T12:00:00Z",
+                "runtimeKind": "opencode",
+                "workingDirectory": "/repo/worktree/task-1"
+            }
+        });
+        let error = serde_json::from_value::<AgentSessionUpsertPayload>(payload)
+            .expect_err("sessionId-only payload should fail at command boundary");
+
+        assert!(error.to_string().contains("externalSessionId"));
     }
 
     #[test]

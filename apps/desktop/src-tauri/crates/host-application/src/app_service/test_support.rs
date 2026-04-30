@@ -1463,8 +1463,7 @@ pub(crate) fn build_service_with_runtime_registry(
 
 pub(crate) fn make_session(_task_id: &str, session_id: &str) -> AgentSessionDocument {
     AgentSessionDocument {
-        session_id: session_id.to_string(),
-        external_session_id: Some(format!("external-{session_id}")),
+        external_session_id: session_id.to_string(),
         role: "build".to_string(),
         scenario: "build_default".to_string(),
         started_at: "2026-02-20T12:00:00Z".to_string(),

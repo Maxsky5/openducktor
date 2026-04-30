@@ -905,8 +905,7 @@ fn task_delete_only_removes_task_managed_worktrees() -> Result<()> {
         .expect("task store lock poisoned")
         .agent_sessions = vec![
         AgentSessionDocument {
-            session_id: "build-session".to_string(),
-            external_session_id: None,
+            external_session_id: "build-session".to_string(),
             role: "build".to_string(),
             scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -915,8 +914,7 @@ fn task_delete_only_removes_task_managed_worktrees() -> Result<()> {
             selected_model: None,
         },
         AgentSessionDocument {
-            session_id: "qa-session".to_string(),
-            external_session_id: None,
+            external_session_id: "qa-session".to_string(),
             role: "qa".to_string(),
             scenario: "qa_review".to_string(),
             started_at: "2026-03-17T12:00:00Z".to_string(),
@@ -991,8 +989,7 @@ fn task_delete_reports_partial_cleanup_progress_when_store_delete_fails() -> Res
     {
         let mut state = task_state.lock().expect("task store lock poisoned");
         state.agent_sessions = vec![AgentSessionDocument {
-            session_id: "build-session".to_string(),
-            external_session_id: None,
+            external_session_id: "build-session".to_string(),
             role: "build".to_string(),
             scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -1067,8 +1064,7 @@ fn task_delete_skips_detached_managed_worktree() -> Result<()> {
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: None,
+        external_session_id: "build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -2102,7 +2098,7 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
 
     let sessions = service.agent_sessions_list(repo_path, "task-1")?;
     assert_eq!(sessions.len(), 1);
-    assert_eq!(sessions[0].session_id, "session-1");
+    assert_eq!(sessions[0].external_session_id, "session-1");
 
     let mut upsert_session = make_session("wrong-task", "session-2");
     upsert_session.working_directory = repo_path.to_string();
@@ -2114,7 +2110,7 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
     assert_eq!(task_state.upserted_sessions[0].0, "task-1");
     assert_eq!(
         task_state.upserted_sessions[0].1.external_session_id,
-        Some("external-session-2".to_string())
+        "session-2".to_string()
     );
     Ok(())
 }
@@ -2189,7 +2185,7 @@ fn agent_sessions_list_bulk_reads_task_card_sessions_without_metadata_lookups() 
             .get("task-1")
             .expect("task-1 sessions should exist")
             .iter()
-            .map(|session| session.session_id.as_str())
+            .map(|session| session.external_session_id.as_str())
             .collect::<Vec<_>>(),
         vec!["session-1-newest", "session-1-oldest"]
     );
@@ -2202,9 +2198,9 @@ fn agent_sessions_list_bulk_reads_task_card_sessions_without_metadata_lookups() 
             .get("task-3")
             .expect("task-3 sessions should exist")
             .iter()
-            .map(|session| session.session_id.as_str())
+            .map(|session| session.external_session_id.as_str())
             .collect::<Vec<_>>(),
-        vec![task_three_session.session_id.as_str()]
+        vec![task_three_session.external_session_id.as_str()]
     );
 
     assert!(task_state

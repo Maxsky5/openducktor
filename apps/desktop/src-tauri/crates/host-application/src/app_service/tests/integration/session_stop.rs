@@ -55,10 +55,9 @@ fn start_build_session(
     external_session_id: &str,
 ) -> Result<BuildSessionBootstrap> {
     let bootstrap = service.build_start(repo_path, TEST_TASK_ID, TEST_RUNTIME_KIND)?;
-    let mut session = make_session(TEST_TASK_ID, "build-session");
+    let mut session = make_session(TEST_TASK_ID, external_session_id);
     session.role = "build".to_string();
     session.working_directory = bootstrap.working_directory.clone();
-    session.external_session_id = Some(external_session_id.to_string());
     assert!(service.agent_session_upsert(repo_path, TEST_TASK_ID, session)?);
     Ok(bootstrap)
 }

@@ -395,7 +395,6 @@ mod tests {
             "repoPath": "/repo",
             "taskId": "task-1",
             "session": {
-                "sessionId": "session-1",
                 "externalSessionId": "external-session-1",
                 "role": "build",
                 "scenario": "build_default",
@@ -408,8 +407,29 @@ mod tests {
 
         assert_eq!(parsed.repo_path, "/repo");
         assert_eq!(parsed.task_id, "task-1");
-        assert_eq!(parsed.session.session_id, "session-1");
+        assert_eq!(parsed.session.external_session_id, "external-session-1");
         assert_eq!(parsed.session.working_directory, "/repo/worktree/task-1");
+    }
+
+    #[test]
+    fn agent_session_upsert_args_rejects_legacy_session_id() {
+        let error = deserialize_args::<AgentSessionUpsertArgs>(json!({
+            "repoPath": "/repo",
+            "taskId": "task-1",
+            "session": {
+                "sessionId": "local-session-1",
+                "externalSessionId": "external-session-1",
+                "role": "build",
+                "scenario": "build_default",
+                "startedAt": "2026-02-20T12:00:00Z",
+                "runtimeKind": "opencode",
+                "workingDirectory": "/repo/worktree/task-1"
+            }
+        }))
+        .expect_err("legacy session id should fail at headless transport boundary");
+
+        assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
+        assert!(error.message.contains("sessionId is legacy metadata"));
     }
 
     #[test]

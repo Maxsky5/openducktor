@@ -295,7 +295,7 @@ export type AgentSessionContext = {
 export type AgentStreamPart =
   | {
       kind: "text";
-      messageId: string;
+      messageId: RuntimeHistoryAnchor;
       partId: string;
       text: string;
       synthetic?: boolean;
@@ -303,14 +303,14 @@ export type AgentStreamPart =
     }
   | {
       kind: "reasoning";
-      messageId: string;
+      messageId: RuntimeHistoryAnchor;
       partId: string;
       text: string;
       completed: boolean;
     }
   | {
       kind: "tool";
-      messageId: string;
+      messageId: RuntimeHistoryAnchor;
       partId: string;
       callId: string;
       tool: string;
@@ -326,7 +326,7 @@ export type AgentStreamPart =
     }
   | {
       kind: "step";
-      messageId: string;
+      messageId: RuntimeHistoryAnchor;
       partId: string;
       phase: "start" | "finish";
       reason?: string;
@@ -335,7 +335,7 @@ export type AgentStreamPart =
     }
   | {
       kind: "subagent";
-      messageId: string;
+      messageId: RuntimeHistoryAnchor;
       partId: string;
       correlationKey: string;
       status: AgentSubagentStatus;

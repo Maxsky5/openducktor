@@ -194,11 +194,7 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
     ]))
     .expect("agent sessions");
     assert_eq!(sessions.len(), 1);
-    assert_eq!(sessions[0].session_id, "session-opencode-1");
-    assert_eq!(
-        sessions[0].external_session_id.as_deref(),
-        Some("session-opencode-1")
-    );
+    assert_eq!(sessions[0].external_session_id, "session-opencode-1");
 
     let promoted_sessions = parse_agent_sessions(&json!([
         {
@@ -212,7 +208,10 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
         }
     ]))
     .expect("legacy session ids should be promoted");
-    assert_eq!(promoted_sessions[0].external_session_id.as_deref(), Some("legacy-session-only"));
+    assert_eq!(
+        promoted_sessions[0].external_session_id,
+        "legacy-session-only"
+    );
 
     let conflict_error = parse_agent_sessions(&json!([
         {
@@ -230,6 +229,22 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
     assert!(conflict_error
         .to_string()
         .contains("sessionId and externalSessionId must match"));
+
+    let blank_external_id_error = parse_agent_sessions(&json!([
+        {
+            "externalSessionId": "   ",
+            "role": "planner",
+            "scenario": "planner_initial",
+            "startedAt": "2026-02-18T17:22:00Z",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/repo",
+            "selectedModel": null
+        }
+    ]))
+    .expect_err("blank externalSessionId should fail");
+    assert!(blank_external_id_error
+        .to_string()
+        .contains("externalSessionId is required"));
 
     let legacy_sessions = parse_agent_sessions(&json!([
         {

@@ -130,7 +130,10 @@ fn parse_agent_session_compatibility_entry(entry: &Value) -> Result<Value> {
         return Ok(entry.clone());
     };
 
-    let session_id = object.get("sessionId").and_then(Value::as_str).map(str::trim);
+    let session_id = object
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .map(str::trim);
     let external_session_id = object
         .get("externalSessionId")
         .and_then(Value::as_str)
@@ -139,6 +142,7 @@ fn parse_agent_session_compatibility_entry(entry: &Value) -> Result<Value> {
     match (session_id, external_session_id) {
         (Some(session_id), Some(external_session_id)) if session_id == external_session_id => {
             let mut normalized = object.clone();
+            normalized.remove("sessionId");
             normalized.insert(
                 "externalSessionId".to_string(),
                 Value::String(external_session_id.to_string()),
@@ -150,6 +154,7 @@ fn parse_agent_session_compatibility_entry(entry: &Value) -> Result<Value> {
         )),
         (Some(session_id), None) => {
             let mut normalized = object.clone();
+            normalized.remove("sessionId");
             normalized.insert(
                 "externalSessionId".to_string(),
                 Value::String(session_id.to_string()),

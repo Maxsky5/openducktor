@@ -142,8 +142,7 @@ pub struct AgentSessionModelSelection {
 
 #[derive(Debug, Clone)]
 pub struct AgentSessionDocument {
-    pub session_id: String,
-    pub external_session_id: Option<String>,
+    pub external_session_id: String,
     pub role: String,
     pub scenario: String,
     pub started_at: String,
@@ -157,8 +156,7 @@ pub struct AgentSessionDocument {
 struct AgentSessionDocumentSerde {
     #[serde(default)]
     session_id: Option<String>,
-    #[serde(default)]
-    external_session_id: Option<String>,
+    external_session_id: String,
     role: String,
     scenario: String,
     started_at: String,
@@ -174,13 +172,8 @@ impl Serialize for AgentSessionDocument {
         S: Serializer,
     {
         use serde::ser::SerializeStruct;
-        let external_session_id = self
-            .external_session_id
-            .as_deref()
-            .ok_or_else(|| serde::ser::Error::custom("Agent session externalSessionId is required"))?;
-
         let mut state = serializer.serialize_struct("AgentSessionDocument", 6)?;
-        state.serialize_field("externalSessionId", external_session_id)?;
+        state.serialize_field("externalSessionId", &self.external_session_id)?;
         state.serialize_field("role", &self.role)?;
         state.serialize_field("scenario", &self.scenario)?;
         state.serialize_field("startedAt", &self.started_at)?;
@@ -210,16 +203,21 @@ impl<'de> Deserialize<'de> for AgentSessionDocument {
             selected_model,
         } = input;
 
-        let canonical_external_session_id = external_session_id
-            .clone()
-            .or(session_id.clone())
-            .ok_or_else(|| D::Error::custom("Agent session externalSessionId is required"))?;
+        if session_id.is_some() {
+            return Err(D::Error::custom(
+                "Agent session sessionId is legacy metadata and is not accepted on normalized session documents; use externalSessionId",
+            ));
+        }
 
-        let session_id = session_id.unwrap_or_else(|| canonical_external_session_id.clone());
+        let external_session_id = external_session_id.trim().to_string();
+        if external_session_id.is_empty() {
+            return Err(D::Error::custom(
+                "Agent session externalSessionId is required",
+            ));
+        }
 
         Ok(Self {
-            session_id,
-            external_session_id: Some(canonical_external_session_id),
+            external_session_id,
             role,
             scenario,
             started_at,

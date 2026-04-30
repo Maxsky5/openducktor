@@ -261,8 +261,7 @@ fn runs_list_consults_registered_runtime_delegate_for_stdio_probe_paths() -> Res
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -346,8 +345,7 @@ fn task_delete_blocks_custom_runtime_sessions_via_service_runtime_registry() -> 
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -409,8 +407,7 @@ fn task_delete_uses_task_runtime_route_for_matching_runtime_kind_and_worktree() 
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -473,8 +470,7 @@ fn task_delete_uses_task_runtime_route_for_non_build_roles_sharing_a_worktree() 
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "qa-session".to_string(),
-        external_session_id: Some("external-qa-session".to_string()),
+        external_session_id: "external-qa-session".to_string(),
         role: "qa".to_string(),
         scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
@@ -525,8 +521,7 @@ fn runs_list_hides_runs_when_runtime_probe_returns_actionable_failure() -> Resul
         .lock()
         .expect("task store lock poisoned")
         .agent_sessions = vec![AgentSessionDocument {
-        session_id: "build-session".to_string(),
-        external_session_id: Some("external-build-session".to_string()),
+        external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
         scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),

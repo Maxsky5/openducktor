@@ -190,14 +190,10 @@ pub(super) fn build_session_probe_plans(
         .iter()
         .filter(|session| allowed_roles.contains(session.role.trim()))
     {
-        let external_session_id = session
-            .external_session_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        let Some(external_session_id) = external_session_id else {
+        let external_session_id = session.external_session_id.trim();
+        if external_session_id.is_empty() {
             continue;
-        };
+        }
 
         let worktree_key = normalize_path_key(session.working_directory.as_str());
         let probe_target_resolution =
@@ -227,7 +223,7 @@ fn parse_runtime_kind_from_session(
         return Err(anyhow!(
             "Persisted {} session '{}' is missing runtime kind metadata",
             session.role.trim(),
-            session.session_id
+            session.external_session_id
         ));
     }
 
@@ -239,7 +235,7 @@ fn parse_runtime_kind_from_session(
             format!(
                 "Persisted {} session '{}' references unsupported runtime kind '{}'",
                 session.role.trim(),
-                session.session_id,
+                session.external_session_id,
                 session.runtime_kind.trim()
             )
         })?;
