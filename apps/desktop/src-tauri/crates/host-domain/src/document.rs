@@ -154,8 +154,6 @@ pub struct AgentSessionDocument {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentSessionDocumentSerde {
-    #[serde(default)]
-    session_id: Option<String>,
     external_session_id: String,
     role: String,
     scenario: String,
@@ -193,7 +191,6 @@ impl<'de> Deserialize<'de> for AgentSessionDocument {
     {
         let input = AgentSessionDocumentSerde::deserialize(deserializer)?;
         let AgentSessionDocumentSerde {
-            session_id,
             external_session_id,
             role,
             scenario,
@@ -202,12 +199,6 @@ impl<'de> Deserialize<'de> for AgentSessionDocument {
             working_directory,
             selected_model,
         } = input;
-
-        if session_id.is_some() {
-            return Err(D::Error::custom(
-                "Agent session sessionId is legacy metadata and is not accepted on normalized session documents; use externalSessionId",
-            ));
-        }
 
         let external_session_id = external_session_id.trim().to_string();
         if external_session_id.is_empty() {

@@ -125,54 +125,6 @@ fn normalize_agent_session_entry(entry: &Value) -> Value {
     Value::Object(normalized)
 }
 
-fn parse_agent_session_compatibility_entry(entry: &Value) -> Result<Value> {
-    let Some(object) = entry.as_object() else {
-        return Ok(entry.clone());
-    };
-
-    let session_id = object
-        .get("sessionId")
-        .and_then(Value::as_str)
-        .map(str::trim);
-    let external_session_id = object
-        .get("externalSessionId")
-        .and_then(Value::as_str)
-        .map(str::trim);
-
-    match (session_id, external_session_id) {
-        (Some(session_id), Some(external_session_id)) if session_id == external_session_id => {
-            let mut normalized = object.clone();
-            normalized.remove("sessionId");
-            normalized.insert(
-                "externalSessionId".to_string(),
-                Value::String(external_session_id.to_string()),
-            );
-            Ok(Value::Object(normalized))
-        }
-        (Some(session_id), Some(external_session_id)) => Err(anyhow!(
-            "Invalid legacy openducktor.agentSessions metadata: sessionId and externalSessionId must match when both are present. Found sessionId={session_id}, externalSessionId={external_session_id}. Fix the saved task metadata and retry."
-        )),
-        (Some(session_id), None) => {
-            let mut normalized = object.clone();
-            normalized.remove("sessionId");
-            normalized.insert(
-                "externalSessionId".to_string(),
-                Value::String(session_id.to_string()),
-            );
-            Ok(Value::Object(normalized))
-        }
-        (None, Some(external_session_id)) => {
-            let mut normalized = object.clone();
-            normalized.insert(
-                "externalSessionId".to_string(),
-                Value::String(external_session_id.to_string()),
-            );
-            Ok(Value::Object(normalized))
-        }
-        (None, None) => Ok(entry.clone()),
-    }
-}
-
 pub(crate) fn parse_agent_sessions(value: &Value) -> Result<Vec<AgentSessionDocument>> {
     let entries = value.as_array().ok_or_else(|| {
         anyhow!(
@@ -184,10 +136,7 @@ pub(crate) fn parse_agent_sessions(value: &Value) -> Result<Vec<AgentSessionDocu
         .iter()
         .enumerate()
         .map(|(index, entry)| {
-            let entry = parse_agent_session_compatibility_entry(entry).map_err(|error| {
-                anyhow!("Invalid openducktor.agentSessions[{index}] metadata: {error}")
-            })?;
-            AgentSessionDocument::deserialize(normalize_agent_session_entry(&entry)).map_err(|error| {
+            AgentSessionDocument::deserialize(normalize_agent_session_entry(entry)).map_err(|error| {
                 anyhow!(
                     "Invalid openducktor.agentSessions[{index}] metadata: {error}. Fix the saved task metadata and retry."
                 )

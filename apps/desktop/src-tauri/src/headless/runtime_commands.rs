@@ -412,8 +412,8 @@ mod tests {
     }
 
     #[test]
-    fn agent_session_upsert_args_rejects_legacy_session_id() {
-        let error = deserialize_args::<AgentSessionUpsertArgs>(json!({
+    fn agent_session_upsert_args_ignores_unknown_legacy_session_id() {
+        let parsed = deserialize_args::<AgentSessionUpsertArgs>(json!({
             "repoPath": "/repo",
             "taskId": "task-1",
             "session": {
@@ -426,10 +426,9 @@ mod tests {
                 "workingDirectory": "/repo/worktree/task-1"
             }
         }))
-        .expect_err("legacy session id should fail at headless transport boundary");
+        .expect("unknown legacy session id should be ignored when externalSessionId is present");
 
-        assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
-        assert!(error.message.contains("sessionId is legacy metadata"));
+        assert_eq!(parsed.session.external_session_id, "external-session-1");
     }
 
     #[test]

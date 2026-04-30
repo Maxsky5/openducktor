@@ -196,7 +196,7 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].external_session_id, "session-opencode-1");
 
-    let promoted_sessions = parse_agent_sessions(&json!([
+    let missing_external_id_error = parse_agent_sessions(&json!([
         {
             "sessionId": "legacy-session-only",
             "role": "planner",
@@ -207,13 +207,12 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
             "selectedModel": null
         }
     ]))
-    .expect("legacy session ids should be promoted");
-    assert_eq!(
-        promoted_sessions[0].external_session_id,
-        "legacy-session-only"
-    );
+    .expect_err("sessions without externalSessionId should fail");
+    assert!(missing_external_id_error
+        .to_string()
+        .contains("missing field `externalSessionId`"));
 
-    let conflict_error = parse_agent_sessions(&json!([
+    let external_session_wins = parse_agent_sessions(&json!([
         {
             "sessionId": "legacy-session",
             "externalSessionId": "other-session",
@@ -225,10 +224,11 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
             "selectedModel": null
         }
     ]))
-    .expect_err("conflicting session ids should fail");
-    assert!(conflict_error
-        .to_string()
-        .contains("sessionId and externalSessionId must match"));
+    .expect("sessionId should be ignored when externalSessionId is present");
+    assert_eq!(
+        external_session_wins[0].external_session_id,
+        "other-session"
+    );
 
     let blank_external_id_error = parse_agent_sessions(&json!([
         {
@@ -246,9 +246,8 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
         .to_string()
         .contains("externalSessionId is required"));
 
-    let legacy_sessions = parse_agent_sessions(&json!([
+    let legacy_scenario_sessions = parse_agent_sessions(&json!([
         {
-            "sessionId": "legacy-planner-session",
             "externalSessionId": "legacy-planner-session",
             "role": "planner",
             "scenario": "planner_revision",
@@ -258,9 +257,9 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
             "selectedModel": null
         }
     ]))
-    .expect("legacy agent sessions");
-    assert_eq!(legacy_sessions.len(), 1);
-    assert_eq!(legacy_sessions[0].scenario, "planner_initial");
+    .expect("legacy scenario agent sessions");
+    assert_eq!(legacy_scenario_sessions.len(), 1);
+    assert_eq!(legacy_scenario_sessions[0].scenario, "planner_initial");
 }
 
 #[test]
@@ -381,7 +380,6 @@ fn metadata_parsing_benchmark_scaffold() {
         (0..200)
             .map(|index| {
                 json!({
-                    "sessionId": format!("obp-session-{index}"),
                     "externalSessionId": format!("session-opencode-{index}"),
                     "role": "build",
                     "scenario": "build_default",

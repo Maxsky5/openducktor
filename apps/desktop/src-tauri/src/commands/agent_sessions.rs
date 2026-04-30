@@ -130,7 +130,7 @@ mod tests {
     }
 
     #[test]
-    fn agent_session_upsert_payload_rejects_legacy_session_id() {
+    fn agent_session_upsert_payload_ignores_unknown_legacy_session_id() {
         let payload = json!({
             "repoPath": "/repo",
             "taskId": "task-1",
@@ -144,10 +144,11 @@ mod tests {
                 "workingDirectory": "/repo/worktree/task-1"
             }
         });
-        let error = serde_json::from_value::<AgentSessionUpsertPayload>(payload)
-            .expect_err("legacy session id should fail at command boundary");
+        let parsed = serde_json::from_value::<AgentSessionUpsertPayload>(payload).expect(
+            "unknown legacy session id should be ignored when externalSessionId is present",
+        );
 
-        assert!(error.to_string().contains("sessionId is legacy metadata"));
+        assert_eq!(parsed.session.external_session_id, "external-session-1");
     }
 
     #[test]

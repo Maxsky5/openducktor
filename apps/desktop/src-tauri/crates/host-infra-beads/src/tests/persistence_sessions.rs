@@ -181,7 +181,6 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
                     "qaReports": [{"markdown": "# QA Report", "verdict": "approved", "updatedAt": "2026-02-20T12:00:00Z", "updatedBy": "qa-agent", "sourceTool": ODT_QA_APPROVED_SOURCE_TOOL, "revision": 1}]
                 },
                 "agentSessions": [{
-                    "sessionId": "ext-1",
                     "externalSessionId": "ext-1",
                 "taskId": "task-1",
                 "role": "build",
