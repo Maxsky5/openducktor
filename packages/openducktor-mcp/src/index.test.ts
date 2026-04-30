@@ -486,4 +486,27 @@ describe("MCP server tool results", () => {
       await client.close();
     }
   });
+
+  test("odt_set_plan registered tool excludes subtasks from input schema and description", async () => {
+    const bridge = await startMockBridge();
+    const transport = createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+
+      const setPlanTool = (
+        tools as { tools?: Array<{ name?: string; description?: string; inputSchema?: unknown }> }
+      ).tools?.find((entry) => entry.name === "odt_set_plan");
+      expect(setPlanTool).toBeTruthy();
+
+      expect(setPlanTool!.description).not.toContain("subtask");
+      expect(setPlanTool!.description).not.toContain("priority");
+
+      expect(readToolInputProperties(tools, "odt_set_plan")).not.toHaveProperty("subtasks");
+    } finally {
+      await client.close();
+    }
+  });
 });
