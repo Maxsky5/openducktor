@@ -143,7 +143,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.shared.workflow_guards": {
     id: "system.shared.workflow_guards",
     purpose: "system",
-    builtinVersion: 3,
+    builtinVersion: 4,
     template: joinPromptBlocks(
       "Workflow constraints you must obey:",
       bulletSection("Lifecycle contract", [
@@ -173,7 +173,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.shared.tool_protocol": {
     id: "system.shared.tool_protocol",
     purpose: "system",
-    builtinVersion: 4,
+    builtinVersion: 5,
     template: joinPromptBlocks(
       "OpenDucktor workflow tools are native MCP tools.\nCall them directly as tool invocations; do not emit XML wrappers or pseudo-tool payloads.",
       lineSection("Allowed tools for this role", ["{{role.allowedTools}}"]),
