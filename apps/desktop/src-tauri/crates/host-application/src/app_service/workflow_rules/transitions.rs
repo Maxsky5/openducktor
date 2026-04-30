@@ -146,7 +146,6 @@ pub(crate) fn allows_transition(task: &TaskCard, from: &TaskStatus, to: &TaskSta
                 | TaskStatus::AiReview
                 | TaskStatus::HumanReview
                 | TaskStatus::Deferred
-                | TaskStatus::Blocked
         ),
         TaskStatus::AiReview => matches!(
             to,
