@@ -1458,6 +1458,112 @@ describe("agent-orchestrator-session-events", () => {
     });
   });
 
+  test("records linked child permission overlays when the child listener owns local pending state", () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+    const subagentCorrelationKey = "part:assistant-parent:subtask-attached-permission";
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "external-parent-session": buildSession({
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          messages: [
+            {
+              id: `subagent:${subagentCorrelationKey}`,
+              role: "system",
+              content: "Subagent (build): Edit files",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "subagent",
+                partId: "subtask-attached-permission",
+                correlationKey: subagentCorrelationKey,
+                status: "running",
+                agent: "build",
+                prompt: "Edit files",
+              },
+            },
+          ],
+        }),
+        "external-child-session": buildSession({
+          externalSessionId: "external-child-session",
+          purpose: "transcript",
+          pendingPermissions: [],
+        }),
+      },
+    };
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[externalSessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [externalSessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "external-parent-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      isSessionListenerAttached: (externalSessionId) =>
+        externalSessionId === "external-child-session",
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "permission_required",
+      externalSessionId: "external-parent-session",
+      requestId: "perm-child-attached",
+      permission: "read",
+      patterns: ["src/**"],
+      timestamp: "2026-02-22T08:00:05.000Z",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey,
+    });
+
+    expect(sessionsRef.current["external-parent-session"]?.pendingPermissions).toHaveLength(0);
+    expect(sessionsRef.current["external-child-session"]?.pendingPermissions).toHaveLength(0);
+    expect(
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingPermissionsByExternalSessionId?.["external-child-session"],
+    ).toEqual([
+      {
+        requestId: "perm-child-attached",
+        permission: "read",
+        patterns: ["src/**"],
+      },
+    ]);
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
+    expect(parentSubagentMessage?.meta).toMatchObject({
+      kind: "subagent",
+      correlationKey: subagentCorrelationKey,
+      externalSessionId: "external-child-session",
+    });
+  });
+
   test("records child question overlays and patches the parent subagent row from parent context", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {

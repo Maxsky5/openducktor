@@ -567,11 +567,19 @@ export const handlePermissionRequired = (
 
   if (isLinkedChildPermissionObservedByParent(context, event)) {
     patchParentSubagentSessionLink(context, event);
-    if (isLinkedChildPermissionOwnedByAttachedListener(context, event)) {
+    const isOwnedByAttachedListener = isLinkedChildPermissionOwnedByAttachedListener(
+      context,
+      event,
+    );
+    if (isOwnedByAttachedListener && role && shouldAutoRejectPermission(role, event)) {
       return;
     }
 
     recordParentSubagentPendingPermission(context, event);
+    if (isOwnedByAttachedListener) {
+      return;
+    }
+
     if (role && shouldAutoRejectPermission(role, event)) {
       const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
       if (childExternalSessionId) {
