@@ -163,10 +163,36 @@ function useQueuedWorktreeRecoveryRefetch({
   }, [contextKey, hasResolvedWorktree, isResolving, refetch, worktreeRecoverySignal]);
 }
 
-const createAgentStudioBuildToolsWorktreeSnapshotHook = (
-  dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
-) =>
-  function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies({
+function resolveBuildToolsWorktreeStatus({
+  isEnabled,
+  contextMode,
+  worktreePath,
+  isResolving,
+  error,
+}: {
+  isEnabled: boolean;
+  contextMode: AgentStudioGitPanelContextMode;
+  worktreePath: string | null;
+  isResolving: boolean;
+  error: string | null;
+}): BuildToolsWorktreeStatus {
+  if (!isEnabled || contextMode === "repository") {
+    return "idle";
+  }
+  if (worktreePath != null) {
+    return "resolved";
+  }
+  if (isResolving) {
+    return "resolving";
+  }
+  if (error != null) {
+    return "failed";
+  }
+  return "idle";
+}
+
+function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
+  {
     workspaceRepoPath,
     activeBranch,
     viewRole,
@@ -178,225 +204,225 @@ const createAgentStudioBuildToolsWorktreeSnapshotHook = (
     isViewSessionHistoryHydrating,
     repoSettings,
     worktreeRecoverySignal,
-  }: UseAgentStudioBuildToolsWorktreeSnapshotArgs): AgentStudioBuildToolsWorktreeSnapshot {
-    const sessionRole = session.role;
-    const gitPanelContextMode: AgentStudioGitPanelContextMode =
-      sessionRole === "build" ? "worktree" : "repository";
-    const repositoryBranchIdentityKey =
-      gitPanelContextMode === "repository"
-        ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
-        : null;
-    const selectedTaskId = resolveBuildToolsSelectedTaskId({
-      viewTaskId,
-      viewSelectedTaskId: viewSelectedTask?.id ?? null,
-    });
-    const isSessionContextStable = sessionRole !== "build" || !isViewSessionHistoryHydrating;
-    const hasSelectedTask = selectedTaskId != null;
-    const taskTargetBranchState = resolveTaskTargetBranchState({
-      taskTargetBranch: viewSelectedTask?.targetBranch,
-      taskTargetBranchError: viewSelectedTask?.targetBranchError ?? null,
-      defaultTargetBranch: repoSettings?.defaultTargetBranch,
-    });
-    const worktreeDiffPreconditionError =
-      gitPanelContextMode === "worktree" ? taskTargetBranchState.validationError : null;
-    const diffComparisonTarget =
-      gitPanelContextMode === "repository"
-        ? { branch: UPSTREAM_TARGET_BRANCH }
-        : taskTargetBranchState.effectiveTargetBranch;
-    const buildToolsBootstrap = useAgentStudioBuildToolsBootstrap({
-      workspaceRepoPath,
-      viewRole,
-      session,
-      viewSelectedTask,
-      panelKind,
-      isPanelOpen,
-      isViewSessionHistoryHydrating,
-    });
-    const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
-    const repoPath = isEnabled ? buildToolsBootstrap.repoPath : null;
-    const taskId = isEnabled ? selectedTaskId : null;
-    const devServerTaskId = isEnabled ? (viewSelectedTask?.id ?? null) : null;
-    const isDevServerEnabled = isEnabled && devServerTaskId != null;
-    const directWorktreePath = resolveDirectBuildWorktreePath({
-      repoPath,
-      sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
-    });
-    const shouldQueryTaskWorktree =
-      isEnabled &&
-      gitPanelContextMode === "worktree" &&
-      repoPath != null &&
-      taskId != null &&
-      directWorktreePath == null;
-    const taskWorktreeQuery = useQuery({
-      ...taskWorktreeQueryOptions(repoPath ?? "", taskId ?? "", dependencies.taskWorktreeHost),
-      enabled: shouldQueryTaskWorktree,
-    });
-    const queriedWorktree =
-      shouldQueryTaskWorktree && repoPath != null && taskId != null && taskWorktreeQuery.isSuccess
-        ? resolveQueriedBuildWorktreePath({
-            repoPath,
-            taskId,
-            queriedWorkingDirectory: taskWorktreeQuery.data?.workingDirectory ?? null,
-          })
-        : { path: null, error: null };
-    const queryError =
-      shouldQueryTaskWorktree && taskId != null && taskWorktreeQuery.error
-        ? buildQueryWorktreeError(taskId, taskWorktreeQuery.error)
-        : null;
-    const worktreeError = queryError ?? queriedWorktree.error;
-    const worktreePath =
-      gitPanelContextMode === "worktree" ? (directWorktreePath ?? queriedWorktree.path) : null;
-    const hasResolvedWorktree = gitPanelContextMode === "repository" || worktreePath != null;
-    const isWorktreeResolving = shouldQueryTaskWorktree && taskWorktreeQuery.isFetching;
-    const retryWorktreeResolution = useCallback(async (): Promise<void> => {
-      if (!shouldQueryTaskWorktree) {
-        return;
-      }
-
-      await taskWorktreeQuery.refetch();
-    }, [shouldQueryTaskWorktree, taskWorktreeQuery]);
-    const recoveryContextKey =
-      shouldQueryTaskWorktree && repoPath != null && taskId != null
-        ? `${repoPath}::${taskId}`
-        : null;
-    useQueuedWorktreeRecoveryRefetch({
-      contextKey: recoveryContextKey,
-      hasResolvedWorktree,
-      isResolving: isWorktreeResolving,
-      refetch: () => {
-        void retryWorktreeResolution();
-      },
-      worktreeRecoverySignal,
-    });
-
-    const worktreeStatus: BuildToolsWorktreeStatus = (() => {
-      if (!isEnabled || gitPanelContextMode === "repository") {
-        return "idle";
-      }
-      if (worktreePath != null) {
-        return "resolved";
-      }
-      if (isWorktreeResolving) {
-        return "resolving";
-      }
-      if (worktreeError != null) {
-        return "failed";
-      }
-      return "idle";
-    })();
-    const shouldBlockDiffLoading =
-      gitPanelContextMode === "worktree" &&
-      shouldQueryTaskWorktree &&
-      (isWorktreeResolving || worktreeError != null || worktreePath == null);
-
-    const diffData = dependencies.useDiffData({
-      repoPath,
-      worktreePath,
-      worktreeResolutionTaskId: shouldQueryTaskWorktree ? taskId : null,
-      shouldBlockDiffLoading,
-      isWorktreeResolutionResolving: isWorktreeResolving,
-      worktreeResolutionError: worktreeError,
-      retryWorktreeResolution,
-      defaultTargetBranch: diffComparisonTarget,
-      ...(worktreeDiffPreconditionError
-        ? { preconditionError: worktreeDiffPreconditionError }
-        : {}),
-      branchIdentityKey: repositoryBranchIdentityKey,
-      enablePolling: buildToolsBootstrap.shouldEnableEventPolling && isEnabled,
-    });
-    const devServerModel = dependencies.useDevServerPanel({
-      repoPath,
-      taskId: devServerTaskId,
-      repoSettings,
-      enabled: isDevServerEnabled,
-    });
-    const resolvedGitPanelBranch = resolveAgentStudioGitPanelBranch({
-      contextMode: gitPanelContextMode,
-      workspaceActiveBranch: activeBranch,
-      diffBranch: diffData.branch,
-    });
-    const openInTarget = resolveBuildToolsOpenInTarget({
-      contextMode: gitPanelContextMode,
-      repoPath: workspaceRepoPath,
-      worktreePath: diffData.worktreePath,
-      queriedWorktreePath: queriedWorktree.path,
-      sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
-      isWorktreeResolving,
-    });
-
-    const worktree = useMemo<BuildToolsWorktreeSnapshotState>(
-      () => ({
-        path: worktreePath,
-        status: worktreeStatus,
-        error: worktreeError,
-        retry: shouldQueryTaskWorktree ? retryWorktreeResolution : EMPTY_ASYNC_RETRY,
-        isResolving: isWorktreeResolving,
-        shouldBlockDiffLoading,
-        resolutionTaskId: shouldQueryTaskWorktree ? taskId : null,
-      }),
-      [
-        isWorktreeResolving,
-        retryWorktreeResolution,
-        shouldBlockDiffLoading,
-        shouldQueryTaskWorktree,
-        taskId,
-        worktreeError,
-        worktreePath,
-        worktreeStatus,
-      ],
-    );
-
-    return useMemo(
-      () => ({
-        isEnabled,
-        context: {
+  }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
+  dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
+): AgentStudioBuildToolsWorktreeSnapshot {
+  const sessionRole = session.role;
+  const gitPanelContextMode: AgentStudioGitPanelContextMode =
+    sessionRole === "build" ? "worktree" : "repository";
+  const repositoryBranchIdentityKey =
+    gitPanelContextMode === "repository"
+      ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
+      : null;
+  const selectedTaskId = resolveBuildToolsSelectedTaskId({
+    viewTaskId,
+    viewSelectedTaskId: viewSelectedTask?.id ?? null,
+  });
+  const isSessionContextStable = sessionRole !== "build" || !isViewSessionHistoryHydrating;
+  const hasSelectedTask = selectedTaskId != null;
+  const taskTargetBranchState = resolveTaskTargetBranchState({
+    taskTargetBranch: viewSelectedTask?.targetBranch,
+    taskTargetBranchError: viewSelectedTask?.targetBranchError ?? null,
+    defaultTargetBranch: repoSettings?.defaultTargetBranch,
+  });
+  const worktreeDiffPreconditionError =
+    gitPanelContextMode === "worktree" ? taskTargetBranchState.validationError : null;
+  const diffComparisonTarget =
+    gitPanelContextMode === "repository"
+      ? { branch: UPSTREAM_TARGET_BRANCH }
+      : taskTargetBranchState.effectiveTargetBranch;
+  const buildToolsBootstrap = useAgentStudioBuildToolsBootstrap({
+    workspaceRepoPath,
+    viewRole,
+    session,
+    viewSelectedTask,
+    panelKind,
+    isPanelOpen,
+    isViewSessionHistoryHydrating,
+  });
+  const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
+  const repoPath = isEnabled ? buildToolsBootstrap.repoPath : null;
+  const taskId = isEnabled ? selectedTaskId : null;
+  const devServerTaskId = isEnabled ? (viewSelectedTask?.id ?? null) : null;
+  const isDevServerEnabled = isEnabled && devServerTaskId != null;
+  const directWorktreePath = resolveDirectBuildWorktreePath({
+    repoPath,
+    sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
+  });
+  const shouldQueryTaskWorktree =
+    isEnabled &&
+    gitPanelContextMode === "worktree" &&
+    repoPath != null &&
+    taskId != null &&
+    directWorktreePath == null;
+  const taskWorktreeQuery = useQuery({
+    ...taskWorktreeQueryOptions(repoPath ?? "", taskId ?? "", dependencies.taskWorktreeHost),
+    enabled: shouldQueryTaskWorktree,
+  });
+  const queriedWorktree =
+    shouldQueryTaskWorktree && repoPath != null && taskId != null && taskWorktreeQuery.isSuccess
+      ? resolveQueriedBuildWorktreePath({
           repoPath,
           taskId,
-          selectedTaskId,
-          viewRole,
-          sessionRole,
-          sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
-          isSessionContextStable,
-          hasSelectedTask,
-        },
-        gitPanelContextMode,
-        targetBranchState: taskTargetBranchState,
-        resolvedGitPanelBranch,
-        worktree,
-        diffData,
-        devServerModel,
-        openInTarget,
-        refreshWorktree: diffData.refresh,
-      }),
-      [
-        buildToolsBootstrap.sessionWorkingDirectory,
-        devServerModel,
-        diffData,
-        gitPanelContextMode,
-        hasSelectedTask,
-        isEnabled,
-        isSessionContextStable,
-        openInTarget,
-        repoPath,
-        resolvedGitPanelBranch,
-        selectedTaskId,
-        sessionRole,
-        taskTargetBranchState,
-        taskId,
-        viewRole,
-        worktree,
-      ],
-    );
-  };
+          queriedWorkingDirectory: taskWorktreeQuery.data?.workingDirectory ?? null,
+        })
+      : { path: null, error: null };
+  const queryError =
+    shouldQueryTaskWorktree && taskId != null && taskWorktreeQuery.error
+      ? buildQueryWorktreeError(taskId, taskWorktreeQuery.error)
+      : null;
+  const worktreeError = queryError ?? queriedWorktree.error;
+  const worktreePath =
+    gitPanelContextMode === "worktree" ? (directWorktreePath ?? queriedWorktree.path) : null;
+  const hasResolvedWorktree = gitPanelContextMode === "repository" || worktreePath != null;
+  const isWorktreeResolving = shouldQueryTaskWorktree && taskWorktreeQuery.isFetching;
+  const retryWorktreeResolution = useCallback(async (): Promise<void> => {
+    if (!shouldQueryTaskWorktree) {
+      return;
+    }
 
-export const useAgentStudioBuildToolsWorktreeSnapshot =
-  createAgentStudioBuildToolsWorktreeSnapshotHook(DEFAULT_SNAPSHOT_DEPENDENCIES);
+    await taskWorktreeQuery.refetch();
+  }, [shouldQueryTaskWorktree, taskWorktreeQuery]);
+  const recoveryContextKey =
+    shouldQueryTaskWorktree && repoPath != null && taskId != null ? `${repoPath}::${taskId}` : null;
+  useQueuedWorktreeRecoveryRefetch({
+    contextKey: recoveryContextKey,
+    hasResolvedWorktree,
+    isResolving: isWorktreeResolving,
+    refetch: () => {
+      void retryWorktreeResolution();
+    },
+    worktreeRecoverySignal,
+  });
+
+  const worktreeStatus = resolveBuildToolsWorktreeStatus({
+    isEnabled,
+    contextMode: gitPanelContextMode,
+    worktreePath,
+    isResolving: isWorktreeResolving,
+    error: worktreeError,
+  });
+  const shouldBlockDiffLoading =
+    gitPanelContextMode === "worktree" &&
+    shouldQueryTaskWorktree &&
+    (isWorktreeResolving || worktreeError != null || worktreePath == null);
+
+  const diffData = dependencies.useDiffData({
+    repoPath,
+    worktreePath,
+    worktreeResolutionTaskId: shouldQueryTaskWorktree ? taskId : null,
+    shouldBlockDiffLoading,
+    isWorktreeResolutionResolving: isWorktreeResolving,
+    worktreeResolutionError: worktreeError,
+    retryWorktreeResolution,
+    defaultTargetBranch: diffComparisonTarget,
+    ...(worktreeDiffPreconditionError ? { preconditionError: worktreeDiffPreconditionError } : {}),
+    branchIdentityKey: repositoryBranchIdentityKey,
+    enablePolling: buildToolsBootstrap.shouldEnableEventPolling && isEnabled,
+  });
+  const devServerModel = dependencies.useDevServerPanel({
+    repoPath,
+    taskId: devServerTaskId,
+    repoSettings,
+    enabled: isDevServerEnabled,
+  });
+  const resolvedGitPanelBranch = resolveAgentStudioGitPanelBranch({
+    contextMode: gitPanelContextMode,
+    workspaceActiveBranch: activeBranch,
+    diffBranch: diffData.branch,
+  });
+  const openInTarget = resolveBuildToolsOpenInTarget({
+    contextMode: gitPanelContextMode,
+    repoPath: workspaceRepoPath,
+    worktreePath: diffData.worktreePath,
+    queriedWorktreePath: queriedWorktree.path,
+    sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
+    isWorktreeResolving,
+  });
+
+  const worktree = useMemo<BuildToolsWorktreeSnapshotState>(
+    () => ({
+      path: worktreePath,
+      status: worktreeStatus,
+      error: worktreeError,
+      retry: shouldQueryTaskWorktree ? retryWorktreeResolution : EMPTY_ASYNC_RETRY,
+      isResolving: isWorktreeResolving,
+      shouldBlockDiffLoading,
+      resolutionTaskId: shouldQueryTaskWorktree ? taskId : null,
+    }),
+    [
+      isWorktreeResolving,
+      retryWorktreeResolution,
+      shouldBlockDiffLoading,
+      shouldQueryTaskWorktree,
+      taskId,
+      worktreeError,
+      worktreePath,
+      worktreeStatus,
+    ],
+  );
+
+  return useMemo(
+    () => ({
+      isEnabled,
+      context: {
+        repoPath,
+        taskId,
+        selectedTaskId,
+        viewRole,
+        sessionRole,
+        sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
+        isSessionContextStable,
+        hasSelectedTask,
+      },
+      gitPanelContextMode,
+      targetBranchState: taskTargetBranchState,
+      resolvedGitPanelBranch,
+      worktree,
+      diffData,
+      devServerModel,
+      openInTarget,
+      refreshWorktree: diffData.refresh,
+    }),
+    [
+      buildToolsBootstrap.sessionWorkingDirectory,
+      devServerModel,
+      diffData,
+      gitPanelContextMode,
+      hasSelectedTask,
+      isEnabled,
+      isSessionContextStable,
+      openInTarget,
+      repoPath,
+      resolvedGitPanelBranch,
+      selectedTaskId,
+      sessionRole,
+      taskTargetBranchState,
+      taskId,
+      viewRole,
+      worktree,
+    ],
+  );
+}
+
+export function useAgentStudioBuildToolsWorktreeSnapshot(
+  args: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
+): AgentStudioBuildToolsWorktreeSnapshot {
+  return useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
+    args,
+    DEFAULT_SNAPSHOT_DEPENDENCIES,
+  );
+}
 
 /** @internal Test-only dependency seam; production callers should use the default hook above. */
 export const createAgentStudioBuildToolsWorktreeSnapshotHookForTest = (
   overrides: Partial<AgentStudioBuildToolsWorktreeSnapshotDependencies>,
-) =>
-  createAgentStudioBuildToolsWorktreeSnapshotHook({
+) => {
+  const dependencies = {
     ...DEFAULT_SNAPSHOT_DEPENDENCIES,
     ...overrides,
-  });
+  };
+
+  return (args: UseAgentStudioBuildToolsWorktreeSnapshotArgs) =>
+    useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(args, dependencies);
+};

@@ -68,6 +68,11 @@ export function buildAgentsPageDiffModel({
   const { diffData, gitPanelContextMode, openInTarget, resolvedGitPanelBranch, targetBranchState } =
     buildToolsSnapshot;
   const configuredTargetBranch = canonicalTargetBranch(targetBranchState.effectiveTargetBranch);
+  const targetBranchValidationError = targetBranchState.validationError;
+  const pullRequestDetectionTask =
+    viewSelectedTask && !viewSelectedTask.pullRequest && canDetectTaskPullRequest(viewSelectedTask)
+      ? viewSelectedTask
+      : null;
   const targetBranchOptions = toBranchSelectorOptions(branches, {
     valueFormat: "full_ref",
     includeOptions: configuredTargetBranch
@@ -94,7 +99,7 @@ export function buildAgentsPageDiffModel({
             openDirectoryInTool(openInTarget.path as string, toolId),
         }
       : {}),
-    ...(targetBranchState.validationError
+    ...(targetBranchValidationError
       ? {
           targetBranch: targetBranchState.displayTargetBranch,
         }
@@ -112,18 +117,16 @@ export function buildAgentsPageDiffModel({
     ...(viewSelectedTask && detectingPullRequestTaskId === viewSelectedTask.id
       ? { isDetectingPullRequest: true }
       : {}),
-    ...(viewSelectedTask &&
-    !viewSelectedTask.pullRequest &&
-    canDetectTaskPullRequest(viewSelectedTask)
+    ...(pullRequestDetectionTask
       ? {
-          onDetectPullRequest: () => onDetectPullRequest(viewSelectedTask.id),
+          onDetectPullRequest: () => onDetectPullRequest(pullRequestDetectionTask.id),
         }
       : {}),
     ...gitActions,
-    ...(targetBranchState.validationError
+    ...(targetBranchValidationError
       ? {
           isGitActionsLocked: true,
-          gitActionsLockReason: targetBranchState.validationError,
+          gitActionsLockReason: targetBranchValidationError,
           showLockReasonBanner: true,
         }
       : {}),
@@ -189,25 +192,27 @@ export function useAgentsPageRightPanelModel({
     isBuilderSessionWorking: isActiveBuilderWorking,
     ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
   });
-  const diffModel = useMemo(() => {
-    return buildAgentsPageDiffModel({
-      branches,
+  const diffModel = useMemo(
+    () =>
+      buildAgentsPageDiffModel({
+        branches,
+        buildToolsSnapshot,
+        gitActions,
+        viewSelectedTask,
+        detectingPullRequestTaskId,
+        onDetectPullRequest,
+        ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
+      }),
+    [
       buildToolsSnapshot,
+      branches,
       gitActions,
-      viewSelectedTask,
-      detectingPullRequestTaskId,
       onDetectPullRequest,
-      ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
-    });
-  }, [
-    buildToolsSnapshot,
-    branches,
-    gitActions,
-    onDetectPullRequest,
-    detectingPullRequestTaskId,
-    setTaskTargetBranch,
-    viewSelectedTask,
-  ]);
+      detectingPullRequestTaskId,
+      setTaskTargetBranch,
+      viewSelectedTask,
+    ],
+  );
 
   const rightPanelModel = useMemo(
     () =>
