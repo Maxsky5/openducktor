@@ -273,15 +273,6 @@ export type AgentStateContextValue = {
     reply: "once" | "always" | "reject",
     message?: string,
   ) => Promise<void>;
-  replyRuntimeSessionPermission: (input: {
-    repoPath: string;
-    runtimeKind: RuntimeKind;
-    workingDirectory: string;
-    targetExternalSessionId: string;
-    requestId: string;
-    reply: "once" | "always" | "reject";
-    message?: string;
-  }) => Promise<void>;
   answerAgentQuestion: (
     externalSessionId: string,
     requestId: string,

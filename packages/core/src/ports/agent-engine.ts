@@ -163,12 +163,6 @@ export type ReplyPermissionInput = {
   message?: string;
 };
 
-export type ReplyRuntimeSessionPermissionInput = RepoRuntimeSessionOperationInput & {
-  requestId: RuntimePendingInputRequestId;
-  reply: "once" | "always" | "reject";
-  message?: string;
-};
-
 export type ReplyQuestionInput = {
   externalSessionId: ExternalSessionId;
   requestId: RuntimePendingInputRequestId;
@@ -215,7 +209,6 @@ export interface AgentSessionPort {
   updateSessionModel(input: UpdateAgentSessionModelInput): void;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyPermission(input: ReplyPermissionInput): Promise<void>;
-  replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
   subscribeEvents(
     externalSessionId: ExternalSessionId,

@@ -94,8 +94,6 @@ describe("agent-runtime-registry", () => {
   test("keeps runtime engine methods bound when passed as callbacks", async () => {
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-    const originalReplyRuntimeSessionPermission =
-      OpencodeSdkAdapter.prototype.replyRuntimeSessionPermission;
     const originalListLiveAgentSessionSnapshots =
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
     const listAvailableModels = mock(async () => ({
@@ -103,20 +101,17 @@ describe("agent-runtime-registry", () => {
       defaultModelsByProvider: {},
     }));
     const loadSessionTodos = mock(async () => []);
-    const replyRuntimeSessionPermission = mock(async () => {});
     const listLiveAgentSessionSnapshots = mock(async () => []);
 
     try {
       OpencodeSdkAdapter.prototype.listAvailableModels = listAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = loadSessionTodos;
-      OpencodeSdkAdapter.prototype.replyRuntimeSessionPermission = replyRuntimeSessionPermission;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = listLiveAgentSessionSnapshots;
 
       const engine = createAgentRuntimeRegistry().createAgentEngine();
       const {
         listAvailableModels: readModels,
         loadSessionTodos: readTodos,
-        replyRuntimeSessionPermission: replyRuntimePermission,
         listLiveAgentSessionSnapshots: readSnapshots,
       } = engine;
 
@@ -132,14 +127,6 @@ describe("agent-runtime-registry", () => {
         externalSessionId: "external-1",
       });
 
-      await replyRuntimePermission({
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-        workingDirectory: "/tmp/repo",
-        requestId: "permission-1",
-        reply: "once",
-      });
-
       await readSnapshots({
         runtimeKind: "opencode",
         repoPath: "/repo",
@@ -148,13 +135,10 @@ describe("agent-runtime-registry", () => {
 
       expect(listAvailableModels).toHaveBeenCalledTimes(1);
       expect(loadSessionTodos).toHaveBeenCalledTimes(1);
-      expect(replyRuntimeSessionPermission).toHaveBeenCalledTimes(1);
       expect(listLiveAgentSessionSnapshots).toHaveBeenCalledTimes(1);
     } finally {
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-      OpencodeSdkAdapter.prototype.replyRuntimeSessionPermission =
-        originalReplyRuntimeSessionPermission;
       OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
         originalListLiveAgentSessionSnapshots;
     }

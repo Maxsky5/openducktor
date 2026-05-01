@@ -1,4 +1,4 @@
-import type { OpencodeClient, Part } from "@opencode-ai/sdk/v2/client";
+import type { Part } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentPendingPermissionRequest,
   AgentPendingQuestionRequest,
@@ -26,13 +26,6 @@ import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
 import type { ClientFactory, SessionRecord } from "./types";
-
-type PermissionReplyTarget = {
-  client: Pick<OpencodeClient, "permission">;
-  workingDirectory: string;
-};
-
-type PermissionReplyPayload = Pick<ReplyPermissionInput, "requestId" | "reply" | "message">;
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -616,29 +609,16 @@ export const listLiveAgentSessionPendingInput = async (
   return bySession;
 };
 
-export const replyPermissionToTarget = async (
-  target: PermissionReplyTarget,
-  input: PermissionReplyPayload,
-): Promise<void> => {
-  await target.client.permission.reply({
-    directory: target.workingDirectory,
-    requestID: input.requestId,
-    reply: input.reply,
-    ...(input.message ? { message: input.message } : {}),
-  });
-};
-
 export const replyPermission = async (
   session: SessionRecord,
   input: ReplyPermissionInput,
 ): Promise<void> => {
-  await replyPermissionToTarget(
-    {
-      client: session.client,
-      workingDirectory: session.input.workingDirectory,
-    },
-    input,
-  );
+  await session.client.permission.reply({
+    directory: session.input.workingDirectory,
+    requestID: input.requestId,
+    reply: input.reply,
+    ...(input.message ? { message: input.message } : {}),
+  });
 };
 
 export const replyQuestion = async (

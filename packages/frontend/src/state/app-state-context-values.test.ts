@@ -149,7 +149,6 @@ describe("app-state-context-values", () => {
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
       attachRuntimeTranscriptSession: async () => {},
-      replyRuntimeSessionPermission: async () => {},
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       startAgentSession: async () => "session",

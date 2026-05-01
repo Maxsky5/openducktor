@@ -24,7 +24,6 @@ import type {
   LoadAgentSessionTodosInput,
   ReplyPermissionInput,
   ReplyQuestionInput,
-  ReplyRuntimeSessionPermissionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
   StartAgentSessionInput,
@@ -58,7 +57,6 @@ import {
   loadSessionHistory,
   loadSessionTodos,
   replyPermission,
-  replyPermissionToTarget,
   replyQuestion,
 } from "./message-ops";
 import {
@@ -696,26 +694,6 @@ export class OpencodeSdkAdapter
   async replyPermission(input: ReplyPermissionInput): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     await replyPermission(session, input);
-    this.clearPendingSubagentInputEvent(input.requestId);
-  }
-
-  async replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void> {
-    const runtimeClientInput = await this.resolveRuntimeClientInput(
-      input,
-      "reply runtime session permission",
-      { requireLive: true },
-    );
-    await replyPermissionToTarget(
-      {
-        client: this.createClient(runtimeClientInput),
-        workingDirectory: runtimeClientInput.workingDirectory,
-      },
-      {
-        requestId: input.requestId,
-        reply: input.reply,
-        ...(input.message ? { message: input.message } : {}),
-      },
-    );
     this.clearPendingSubagentInputEvent(input.requestId);
   }
 

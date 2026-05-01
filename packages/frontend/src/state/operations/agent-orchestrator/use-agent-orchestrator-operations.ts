@@ -45,7 +45,6 @@ import { mergeHydratedMessages } from "./support/hydrated-message-merge";
 import { getSessionMessageCount } from "./support/messages";
 import { createRuntimeTranscriptSession } from "./support/runtime-transcript-session";
 import { isTranscriptAgentSession } from "./support/session-purpose";
-import { clearSubagentPendingPermissionFromSessions } from "./support/subagent-permission-overlay";
 
 const hasAttachedRuntime = (
   session: Pick<AgentSessionState, "runtimeId"> | null | undefined,
@@ -213,34 +212,6 @@ export function useAgentOrchestratorOperations({
       }
     },
     [workspaceRepoPath, commitSessions, persistSessionRecord, sessionsRef],
-  );
-
-  const replyRuntimeSessionPermission = useCallback(
-    async (input: {
-      repoPath: string;
-      runtimeKind: RuntimeKind;
-      workingDirectory: string;
-      targetExternalSessionId: string;
-      requestId: string;
-      reply: "once" | "always" | "reject";
-      message?: string;
-    }) => {
-      await agentEngine.replyRuntimeSessionPermission({
-        repoPath: input.repoPath,
-        runtimeKind: input.runtimeKind,
-        workingDirectory: input.workingDirectory,
-        requestId: input.requestId,
-        reply: input.reply,
-        ...(input.message ? { message: input.message } : {}),
-      });
-      clearSubagentPendingPermissionFromSessions({
-        sessionsRef,
-        updateSession,
-        targetExternalSessionId: input.targetExternalSessionId,
-        requestId: input.requestId,
-      });
-    },
-    [agentEngine, sessionsRef, updateSession],
   );
 
   const resolveTurnDurationMs = useCallback(
@@ -975,7 +946,6 @@ export function useAgentOrchestratorOperations({
       attachRuntimeTranscriptSession,
       readSessionSlashCommands,
       readSessionFileSearch,
-      replyRuntimeSessionPermission,
       removeAgentSession,
       removeAgentSessions,
       sessionActions,
@@ -1004,7 +974,6 @@ export function useAgentOrchestratorOperations({
     ensureSessionReadyForView,
     readSessionSlashCommands,
     readSessionFileSearch,
-    replyRuntimeSessionPermission,
     removeAgentSessions,
     removeAgentSession,
     sessionActions,

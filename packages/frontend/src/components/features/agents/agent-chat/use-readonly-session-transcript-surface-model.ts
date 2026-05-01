@@ -68,7 +68,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
     readSessionTodos,
     attachRuntimeTranscriptSession,
     replyAgentPermission,
-    replyRuntimeSessionPermission,
     answerAgentQuestion,
   } = useAgentOperations();
   const liveSession = useAgentSession(requestedExternalSessionId ?? null);
@@ -445,45 +444,20 @@ export function useReadonlySessionTranscriptSurfaceModel({
       requestId: string,
       reply: "once" | "always" | "reject",
     ): Promise<void> => {
-      if (source) {
-        if (!activeWorkspace || !externalSessionId || !resolvedSource.runtimeId) {
-          throw new Error("Runtime transcript permission target is unavailable.");
+      if (!targetExternalSessionId) {
+        throw new Error("Runtime transcript permission target is unavailable.");
+      }
+      await replyAgentPermission(targetExternalSessionId, requestId, reply);
+      setRepliedRuntimePermissionRequestIds((current) => {
+        if (current.has(requestId)) {
+          return current;
         }
-        await replyRuntimeSessionPermission({
-          repoPath: activeWorkspace.repoPath,
-          runtimeKind: source.runtimeKind,
-          workingDirectory: source.workingDirectory,
-          targetExternalSessionId,
-          requestId,
-          reply,
-        });
-        setRepliedRuntimePermissionRequestIds((current) => {
-          if (current.has(requestId)) {
-            return current;
-          }
-          const next = new Set(current);
-          next.add(requestId);
-          return next;
-        });
-        return;
-      }
-
-      if (liveSession) {
-        await replyAgentPermission(targetExternalSessionId, requestId, reply);
-        return;
-      }
-
-      throw new Error("Runtime transcript permission target is unavailable.");
+        const next = new Set(current);
+        next.add(requestId);
+        return next;
+      });
     },
-    [
-      activeWorkspace,
-      externalSessionId,
-      liveSession,
-      replyAgentPermission,
-      replyRuntimeSessionPermission,
-      resolvedSource.runtimeId,
-      source,
-    ],
+    [replyAgentPermission],
   );
   const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
     useAgentSessionPermissionActions({
