@@ -367,10 +367,16 @@ fn task_delete_resolves_custom_runtime_by_repo_and_kind_for_task_worktree_sessio
         .agent_runtimes
         .lock()
         .expect("runtime lock poisoned");
-    let custom_runtime = runtimes
+    let matching_runtimes = runtimes
         .values()
-        .find(|runtime| runtime.summary.kind == AgentRuntimeKind::from("test-runtime"))
-        .expect("custom workspace runtime should be registered");
+        .filter(|runtime| runtime.summary.kind == AgentRuntimeKind::from("test-runtime"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        matching_runtimes.len(),
+        1,
+        "expected exactly one repo-scoped test-runtime instance"
+    );
+    let custom_runtime = matching_runtimes[0];
     assert_eq!(custom_runtime.summary.task_id, None);
     assert_eq!(custom_runtime.summary.role, RuntimeRole::Workspace);
     assert_eq!(custom_runtime.summary.working_directory, repo_path_string);
@@ -449,10 +455,16 @@ fn task_delete_resolves_custom_runtime_by_repo_and_kind_for_qa_worktree_session_
         .agent_runtimes
         .lock()
         .expect("runtime lock poisoned");
-    let custom_runtime = runtimes
+    let matching_runtimes = runtimes
         .values()
-        .find(|runtime| runtime.summary.kind == AgentRuntimeKind::from("test-runtime"))
-        .expect("custom workspace runtime should be registered");
+        .filter(|runtime| runtime.summary.kind == AgentRuntimeKind::from("test-runtime"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        matching_runtimes.len(),
+        1,
+        "expected exactly one repo-scoped test-runtime instance"
+    );
+    let custom_runtime = matching_runtimes[0];
     assert_eq!(custom_runtime.summary.task_id, None);
     assert_eq!(custom_runtime.summary.role, RuntimeRole::Workspace);
     assert_eq!(custom_runtime.summary.working_directory, repo_path_string);
