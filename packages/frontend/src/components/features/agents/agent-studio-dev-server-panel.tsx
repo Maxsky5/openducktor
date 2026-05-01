@@ -1,9 +1,18 @@
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { Check, Copy, Play, RefreshCw, Square } from "lucide-react";
-import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
+import {
+  cloneElement,
+  memo,
+  type ReactElement,
+  useCallback,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 import { AgentStudioDevServerTerminal } from "@/components/features/agents/agent-studio-dev-server-terminal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -14,6 +23,7 @@ export type AgentStudioDevServerPanelModel = {
   mode: AgentStudioDevServerPanelMode;
   isExpanded: boolean;
   isLoading: boolean;
+  disabledReason: string | null;
   repoPath: string | null;
   taskId: string | null;
   worktreePath: string | null;
@@ -30,6 +40,11 @@ export type AgentStudioDevServerPanelModel = {
   onStop: () => void;
   onRestart: () => void;
 };
+
+export const DEV_SERVER_DISABLED_REASON =
+  "Create or resume a Builder worktree before starting repository dev servers.";
+export const DEV_SERVER_EMPTY_REASON =
+  "Configure one or more builder dev server commands in repository settings to stream them here.";
 
 const statusIndicatorClassName = (status: DevServerScriptState["status"]): string => {
   if (status === "running") {
@@ -71,6 +86,47 @@ const getEmptyTerminalMessage = (script: DevServerScriptState): string => {
   return "Terminal output will appear here once this dev server writes output. Drag to select logs, then press Cmd/Ctrl+C to copy.";
 };
 
+const renderCompactStartButton = ({
+  button,
+  disabledReason,
+  disabledReasonId,
+}: {
+  button: ReactElement<{
+    className?: string;
+    onClick?: (() => void) | undefined;
+    disabled?: boolean | undefined;
+    [key: string]: unknown;
+  }>;
+  disabledReason: string | null;
+  disabledReasonId: string;
+}): ReactElement => {
+  if (!disabledReason) {
+    return button;
+  }
+
+  const tooltipTriggerButton = cloneElement(button, {
+    disabled: undefined,
+    onClick: undefined,
+    className: cn(button.props.className, "cursor-not-allowed opacity-50"),
+    "aria-disabled": "true",
+    "aria-describedby": disabledReasonId,
+  });
+
+  return (
+    <TooltipProvider>
+      <span id={disabledReasonId} className="sr-only">
+        {disabledReason}
+      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>{tooltipTriggerButton}</TooltipTrigger>
+        <TooltipContent side="top">
+          <p>{disabledReason}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
 export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel({
   model,
 }: {
@@ -93,6 +149,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
       : null);
   const selectedScriptTerminalChunkCount = selectedScriptTerminalBuffer?.entries.length ?? 0;
   const panelError = model.error ?? rendererError;
+  const disabledReasonId = useId();
   const { copied: copiedWorktreePath, copyToClipboard: copyWorktreePath } = useCopyToClipboard({
     getSuccessDescription: (value) => value,
     errorLogContext: "AgentStudioDevServerPanel",
@@ -100,11 +157,11 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
 
   const headerSummary = useMemo(() => {
     if (model.mode === "empty") {
-      return "Configure one or more builder dev server commands in repository settings to stream them here.";
+      return DEV_SERVER_EMPTY_REASON;
     }
 
     if (model.mode === "disabled") {
-      return "Create or resume a Builder worktree before starting repository dev servers.";
+      return DEV_SERVER_DISABLED_REASON;
     }
 
     if (model.mode === "loading") {
@@ -133,8 +190,22 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
     const isDisabled = model.mode === "disabled";
     const isLoading = model.mode === "loading";
     const startDisabled = isEmpty || isDisabled || isLoading || isActionPending;
-    const showCompactMessage = model.mode !== "stopped";
     const startLabel = getStartLabel(isLoading, model.isStartPending);
+    const startButton = (
+      <Button
+        type="button"
+        size="sm"
+        className="w-full justify-center rounded-lg"
+        disabled={startDisabled}
+        onClick={model.onStart}
+        data-testid="agent-studio-dev-server-start-button"
+      >
+        <Play className="size-4" />
+        {startLabel}
+      </Button>
+    );
+    // `disabledReason` is only produced for the stable `empty`/`disabled` modes.
+    // It cannot overlap with the transient loading/start-pending button labels.
 
     return (
       <div
@@ -142,26 +213,12 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
         data-testid="agent-studio-dev-server-compact-panel"
       >
         <div className="flex items-center">
-          <Button
-            type="button"
-            size="sm"
-            className="w-full justify-center rounded-lg"
-            disabled={startDisabled}
-            onClick={model.onStart}
-            data-testid="agent-studio-dev-server-start-button"
-          >
-            <Play className="size-4" />
-            {startLabel}
-          </Button>
+          {renderCompactStartButton({
+            button: startButton,
+            disabledReason: model.disabledReason,
+            disabledReasonId,
+          })}
         </div>
-        {showCompactMessage ? (
-          <div
-            className="mt-3 text-sm text-muted-foreground"
-            data-testid="agent-studio-dev-server-compact-message"
-          >
-            {headerSummary}
-          </div>
-        ) : null}
         {panelError ? (
           <div
             className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"

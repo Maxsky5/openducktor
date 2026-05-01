@@ -2,9 +2,11 @@ import type { DevServerEvent, DevServerGroupState } from "@openducktor/contracts
 import { devServerEventSchema } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  AgentStudioDevServerPanelMode,
-  AgentStudioDevServerPanelModel,
+import {
+  type AgentStudioDevServerPanelMode,
+  type AgentStudioDevServerPanelModel,
+  DEV_SERVER_DISABLED_REASON,
+  DEV_SERVER_EMPTY_REASON,
 } from "@/components/features/agents/agent-studio-dev-server-panel";
 import { errorMessage } from "@/lib/errors";
 import { hostClient, subscribeDevServerEvents } from "@/lib/host-client";
@@ -433,11 +435,19 @@ export function useAgentStudioDevServerPanel({
 
   const error =
     actionError ?? subscriptionError ?? (stateQuery.error ? errorMessage(stateQuery.error) : null);
+  let disabledReason: string | null = null;
+
+  if (mode === "disabled") {
+    disabledReason = DEV_SERVER_DISABLED_REASON;
+  } else if (mode === "empty") {
+    disabledReason = DEV_SERVER_EMPTY_REASON;
+  }
 
   return {
     mode,
     isExpanded,
     isLoading: isAwaitingFreshState || stateQuery.isLoading,
+    disabledReason,
     repoPath,
     taskId,
     worktreePath: effectiveState?.worktreePath ?? null,
