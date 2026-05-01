@@ -18,6 +18,12 @@ For deep work on a specific folder, also read that folder's `codemap.md`.
 - If a call fails, return/propagate an actionable error instead of silent defaults.
 - Do not add secondary probes or alternate paths to hide broken primary behavior.
 
+## Critical Notice — Keep it simple
+
+- ALWAYS try to keep the code simple
+- AVOID "normalization" unless it's absolutely necessary
+- NEVER harden code without a good reason
+
 ## Project
 
 OpenDucktor is a **Bun monorepo** for a macOS-first **Tauri v2** desktop app that orchestrates AI planning/building workflows with **Beads** as task source-of-truth.
