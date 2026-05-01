@@ -6,6 +6,7 @@ import {
   odtToolErrorPayloadSchema,
   publicTaskSchema,
   ReadTaskInputSchema,
+  SetPlanInputSchema,
   taskSummarySchema,
 } from "./odt-mcp-schemas";
 import {
@@ -167,5 +168,29 @@ describe("odt mcp public task schemas", () => {
         },
       });
     }).toThrow();
+  });
+
+  test("SetPlanInputSchema accepts taskId+markdown and rejects unknown subtasks field", () => {
+    const valid = SetPlanInputSchema.parse({
+      workspaceId: "repo",
+      taskId: "task-1",
+      markdown: "# Plan",
+    });
+
+    expect(valid.taskId).toBe("task-1");
+    expect(valid.markdown).toBe("# Plan");
+
+    const result = SetPlanInputSchema.safeParse({
+      workspaceId: "repo",
+      taskId: "task-1",
+      markdown: "# Plan",
+      subtasks: [{ title: "Subtask" }],
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const messages = result.error.issues.map((issue) => issue.message).join(" ");
+      expect(messages).toContain("subtasks");
+    }
   });
 });

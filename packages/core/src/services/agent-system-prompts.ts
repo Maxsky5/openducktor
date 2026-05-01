@@ -115,7 +115,7 @@ const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
   odt_read_task: `odt_read_task({"taskId": string})`,
   odt_read_task_documents: `odt_read_task_documents({"taskId": string, "includeSpec"?: boolean, "includePlan"?: boolean, "includeQaReport"?: boolean})`,
   odt_set_spec: `odt_set_spec({"taskId": string, "markdown": string})`,
-  odt_set_plan: `odt_set_plan({"taskId": string, "markdown": string, "subtasks"?: [{"title": string, "issueType"?: "task"|"feature"|"bug", "priority"?: 0|1|2|3|4, "description"?: string}]})`,
+  odt_set_plan: `odt_set_plan({"taskId": string, "markdown": string})`,
   odt_build_blocked: `odt_build_blocked({"taskId": string, "reason": string})`,
   odt_build_resumed: `odt_build_resumed({"taskId": string})`,
   odt_build_completed: `odt_build_completed({"taskId": string, "summary"?: string})`,
@@ -143,7 +143,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.shared.workflow_guards": {
     id: "system.shared.workflow_guards",
     purpose: "system",
-    builtinVersion: 3,
+    builtinVersion: 4,
     template: joinPromptBlocks(
       "Workflow constraints you must obey:",
       bulletSection("Lifecycle contract", [
@@ -153,7 +153,6 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
         "odt_set_plan for feature/epic allowed from spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
         "odt_set_plan for task/bug allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
         "odt_set_plan changes status only for valid pre-build progression to ready_for_dev; in_progress/blocked/ai_review/human_review calls are document-only revisions.",
-        "For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
         "odt_build_completed from in_progress or blocked transitions to ai_review only when qaRequired=true and the latest QA verdict is not approved; otherwise it transitions to human_review. Calling odt_build_completed from ai_review or human_review is accepted as an idempotent no-op.",
         "odt_qa_rejected transitions ai_review/human_review -> in_progress.",
         "odt_qa_approved transitions ai_review/human_review -> human_review.",
@@ -174,7 +173,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.shared.tool_protocol": {
     id: "system.shared.tool_protocol",
     purpose: "system",
-    builtinVersion: 4,
+    builtinVersion: 5,
     template: joinPromptBlocks(
       "OpenDucktor workflow tools are native MCP tools.\nCall them directly as tool invocations; do not emit XML wrappers or pseudo-tool payloads.",
       lineSection("Allowed tools for this role", ["{{role.allowedTools}}"]),
@@ -270,7 +269,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.role.planner.base": {
     id: "system.role.planner.base",
     purpose: "system",
-    builtinVersion: 2,
+    builtinVersion: 3,
     template: joinPromptBlocks(
       "You are the Planner Agent for OpenDucktor.\nPersist the plan with odt_set_plan.",
       bulletSection("Mission", [
@@ -289,8 +288,6 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
         "Break work into an ordered execution plan sized for safe, verifiable progress instead of one opaque blob.",
         "Include verification strategy, risks, rollout or rollback considerations, observability or docs impacts, and unresolved implementation questions.",
         "Run a cross-artifact consistency check against the spec and repo reality; surface blockers instead of writing plan fiction.",
-        "For epic tasks, propose direct subtasks when useful (max one level deep, no epic subtasks).",
-        "If you include subtask priority, use integers only in 0..4 (default 2).",
       ]),
       bulletSection("Quality bar", [
         "The plan should answer what to change, where to change it, why the approach fits this repo, how to verify it, and what could go wrong.",
