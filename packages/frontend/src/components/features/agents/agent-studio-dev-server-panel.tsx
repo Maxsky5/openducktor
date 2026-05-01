@@ -73,6 +73,37 @@ const getEmptyTerminalMessage = (script: DevServerScriptState): string => {
   return "Terminal output will appear here once this dev server writes output. Drag to select logs, then press Cmd/Ctrl+C to copy.";
 };
 
+const renderCompactStartButton = ({
+  button,
+  disabledReason,
+}: {
+  button: ReactElement;
+  disabledReason: string | null;
+}): ReactElement => {
+  if (!disabledReason) {
+    return button;
+  }
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className="inline-flex w-full cursor-not-allowed"
+            data-testid="agent-studio-dev-server-disabled-start-trigger"
+          >
+            {button}
+            <span className="sr-only">{disabledReason}</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p>{disabledReason}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
 export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel({
   model,
 }: {
@@ -156,26 +187,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
         data-testid="agent-studio-dev-server-compact-panel"
       >
         <div className="flex items-center">
-          {model.disabledReason ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className="inline-flex w-full cursor-not-allowed"
-                    data-testid="agent-studio-dev-server-disabled-start-trigger"
-                  >
-                    {startButton}
-                    <span className="sr-only">{model.disabledReason}</span>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>{model.disabledReason}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            startButton
-          )}
+          {renderCompactStartButton({ button: startButton, disabledReason: model.disabledReason })}
         </div>
         {panelError ? (
           <div
