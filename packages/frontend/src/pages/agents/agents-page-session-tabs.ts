@@ -533,6 +533,7 @@ export const buildAgentStudioQuickActions = (params: {
   sessionsForTask: AgentSessionSummary[];
   roleEnabledByTask: Record<AgentRole, boolean>;
   createSessionDisabled: boolean;
+  hasActiveGitConflict?: boolean;
 }): AgentStudioQuickActionOption[] => {
   const task = params.selectedTask;
   if (!task) {
@@ -558,6 +559,18 @@ export const buildAgentStudioQuickActions = (params: {
   });
 
   const options: AgentStudioQuickActionOption[] = [];
+
+  if (params.hasActiveGitConflict && params.roleEnabledByTask.build) {
+    options.push({
+      ...createLifecycleOption(
+        "quick:build_rebase_conflict_resolution",
+        "build",
+        "build_rebase_conflict_resolution",
+        "Ask Builder to resolve the active git conflict.",
+      ),
+      postStartAction: "send_message",
+    });
+  }
 
   if (availableActions.has("set_spec") && params.roleEnabledByTask.spec) {
     options.push(

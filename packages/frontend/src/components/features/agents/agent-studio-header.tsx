@@ -280,6 +280,18 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
     () => quickActions.filter((option) => option.id !== primaryQuickAction?.id),
     [primaryQuickAction?.id, quickActions],
   );
+  const prepareSessionDisabledReason = !agentStudioReady
+    ? "Agent Studio is not ready."
+    : !hasTaskId
+      ? "Select a task to prepare a session."
+      : sessionCreateOptions.length === 0
+        ? "No session roles are available for this task."
+        : createSessionDisabled
+          ? "Wait for the current session to finish."
+          : isCreatingSession
+            ? "Session start is already in progress."
+            : null;
+  const prepareSessionTriggerTitle = prepareSessionDisabledReason ?? "Prepare new session";
 
   return (
     <CardHeader className="border-b border-border bg-card pb-4">
@@ -414,9 +426,9 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                 variant="default"
                 size="icon"
                 className="h-9 w-9 rounded-md"
-                disabled={!agentStudioReady || createSessionDisabled || isCreatingSession}
-                title="Prepare new session"
-                aria-label="Prepare new session"
+                disabled={prepareSessionDisabledReason !== null}
+                title={prepareSessionTriggerTitle}
+                aria-label={prepareSessionTriggerTitle}
               >
                 <Plus className="size-4" />
               </Button>

@@ -1,8 +1,9 @@
 import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
+import type { GitConflict } from "@/features/agent-studio-git";
 import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
@@ -14,6 +15,12 @@ import type {
   useAgentStudioOrchestrationController,
 } from "../use-agent-studio-orchestration-controller";
 import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel";
+
+export type AgentStudioGitConflictQuickActionContext = {
+  conflict: GitConflict;
+  resolveWithBuilder: () => Promise<void>;
+  isHandling: boolean;
+};
 
 export type UseAgentsPageRightPanelModelArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -33,6 +40,9 @@ export type UseAgentsPageRightPanelModelArgs = {
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
   onResolveGitConflict: Parameters<typeof useAgentStudioGitActions>[0]["onResolveGitConflict"];
+  onGitConflictQuickActionContextChange?: (
+    context: AgentStudioGitConflictQuickActionContext | null,
+  ) => void;
 };
 
 type BuildAgentsPageDiffModelSnapshot = Pick<
@@ -165,6 +175,7 @@ export function useAgentsPageRightPanelModel({
   detectingPullRequestTaskId,
   onDetectPullRequest,
   onResolveGitConflict,
+  onGitConflictQuickActionContextChange,
 }: UseAgentsPageRightPanelModelArgs) {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const sessionRole = session.role;
@@ -208,6 +219,28 @@ export function useAgentsPageRightPanelModel({
     isBuilderSessionWorking: isActiveBuilderWorking,
     ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
   });
+  const gitConflictQuickActionContext = useMemo<AgentStudioGitConflictQuickActionContext | null>(
+    () =>
+      gitActions.gitConflict
+        ? {
+            conflict: gitActions.gitConflict,
+            resolveWithBuilder: gitActions.askBuilderToResolveGitConflict,
+            isHandling: gitActions.isHandlingGitConflict,
+          }
+        : null,
+    [
+      gitActions.gitConflict,
+      gitActions.askBuilderToResolveGitConflict,
+      gitActions.isHandlingGitConflict,
+    ],
+  );
+
+  useEffect(() => {
+    onGitConflictQuickActionContextChange?.(gitConflictQuickActionContext);
+    return () => {
+      onGitConflictQuickActionContextChange?.(null);
+    };
+  }, [gitConflictQuickActionContext, onGitConflictQuickActionContextChange]);
   const diffModel = useMemo(
     () =>
       buildAgentsPageDiffModel({

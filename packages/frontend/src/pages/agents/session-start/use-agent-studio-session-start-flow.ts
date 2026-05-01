@@ -54,6 +54,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   repoSettings: RepoSettingsInput | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
+  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
@@ -77,6 +78,7 @@ export function useAgentStudioSessionStartFlow({
   repoSettings,
   startAgentSession,
   sendAgentMessage,
+  humanRequestChangesTask,
   setTaskTargetBranch,
   updateQuery,
   onContextSwitchIntent,
@@ -193,6 +195,7 @@ export function useAgentStudioSessionStartFlow({
           ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
           startAgentSession,
           sendAgentMessage,
+          humanRequestChangesTask,
           onPostStartActionError: (action, error) => {
             const message =
               action === "kickoff"
@@ -220,6 +223,7 @@ export function useAgentStudioSessionStartFlow({
       sendAgentMessage,
       setTaskTargetBranch,
       startAgentSession,
+      humanRequestChangesTask,
       taskId,
       updateQuery,
     ],

@@ -105,6 +105,7 @@ describe("use-agent-studio-page-model-builders", () => {
       activeSession: null,
       role: "planner",
       isSessionWorking: false,
+      hasActiveGitConflict: false,
       roleLabelByRole,
     });
 
@@ -143,6 +144,7 @@ describe("use-agent-studio-page-model-builders", () => {
       activeSession: null,
       role: "spec",
       isSessionWorking: false,
+      hasActiveGitConflict: false,
       roleLabelByRole,
     });
 
@@ -180,6 +182,7 @@ describe("use-agent-studio-page-model-builders", () => {
       activeSession,
       role: "spec",
       isSessionWorking: true,
+      hasActiveGitConflict: false,
       roleLabelByRole,
     });
 
@@ -213,6 +216,7 @@ describe("use-agent-studio-page-model-builders", () => {
       activeSession: null,
       role: "build",
       isSessionWorking: false,
+      hasActiveGitConflict: false,
       roleLabelByRole,
     });
 
@@ -243,6 +247,7 @@ describe("use-agent-studio-page-model-builders", () => {
       activeSession: null,
       role: "build",
       isSessionWorking: false,
+      hasActiveGitConflict: false,
       roleLabelByRole,
     });
 

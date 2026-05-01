@@ -424,6 +424,8 @@ describe("AgentStudioHeader", () => {
     );
 
     expect(html).not.toContain('aria-label="Open task details"');
+    expect(html).toContain('aria-label="Select a task to prepare a session."');
+    expect(html).toContain('title="Select a task to prepare a session."');
   });
 
   test("disables controls when studio is blocked", () => {
@@ -440,7 +442,7 @@ describe("AgentStudioHeader", () => {
       /<button[^>]*(aria-label="Session history[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Session history[^"]*")/,
     );
     expect(html).toMatch(
-      /<button[^>]*(aria-label="Prepare new session"[^>]*disabled=""|disabled=""[^>]*aria-label="Prepare new session")/,
+      /<button[^>]*(aria-label="Agent Studio is not ready\."[^>]*disabled=""|disabled=""[^>]*aria-label="Agent Studio is not ready\.")/,
     );
     expect(html).toMatch(
       /<button[^>]*(aria-label="Quick actions[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Quick actions[^"]*")/,
@@ -476,8 +478,8 @@ describe("AgentStudioHeader", () => {
       }),
     );
 
-    expect(html).toContain('aria-label="Prepare new session"');
-    expect(html).toContain('disabled="" title="Prepare new session"');
+    expect(html).toContain('aria-label="Session start is already in progress."');
+    expect(html).toContain('disabled="" title="Session start is already in progress."');
     expect(html).toContain('class="lucide lucide-plus size-4"');
     expect(html).not.toContain(
       'title="Prepare new session"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-circle size-4 animate-spin"',

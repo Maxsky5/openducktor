@@ -45,6 +45,7 @@ import {
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
 import { useAgentStudioReadiness } from "../use-agents-page-readiness";
 import {
+  type AgentStudioGitConflictQuickActionContext,
   type UseAgentsPageRightPanelModelArgs,
   useAgentsPageRightPanelModel,
 } from "../use-agents-page-right-panel-model";
@@ -183,6 +184,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     externalSessionId: string | null;
     role: AgentRole;
   } | null>(null);
+  const [gitConflictQuickActionContext, setGitConflictQuickActionContext] =
+    useState<AgentStudioGitConflictQuickActionContext | null>(null);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
   const {
@@ -214,6 +217,12 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const scheduleSelectionIntent = useCallback(
     (intent: { taskId: string; externalSessionId: string | null; role: AgentRole }): void => {
       setSelectionIntent(intent);
+    },
+    [],
+  );
+  const handleGitConflictQuickActionContextChange = useCallback(
+    (context: AgentStudioGitConflictQuickActionContext | null): void => {
+      setGitConflictQuickActionContext(context);
     },
     [],
   );
@@ -421,6 +430,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       isLoadingTasks: isForegroundLoadingTasks,
     },
     readiness,
+    hasActiveGitConflict: gitConflictQuickActionContext !== null,
     draftStateKey,
     actions: {
       updateQuery: scheduleQueryUpdate,
@@ -515,10 +525,28 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
         detectingPullRequestTaskId={detectingPullRequestTaskId}
         onDetectPullRequest={handleDetectPullRequest}
         onResolveGitConflict={handleResolveRebaseConflict}
+        onGitConflictQuickActionContextChange={handleGitConflictQuickActionContextChange}
         refreshWorktreeRef={rightPanelRefreshWorktreeRef}
       />
     </>
   ) : null;
+
+  const agentStudioHeaderModel = useMemo(
+    () => ({
+      ...orchestration.agentStudioHeaderModel,
+      onQuickAction: (
+        option: Parameters<typeof orchestration.agentStudioHeaderModel.onQuickAction>[0],
+      ) => {
+        if (option.launchActionId === "build_rebase_conflict_resolution") {
+          void gitConflictQuickActionContext?.resolveWithBuilder();
+          return;
+        }
+
+        orchestration.agentStudioHeaderModel.onQuickAction(option);
+      },
+    }),
+    [gitConflictQuickActionContext, orchestration.agentStudioHeaderModel],
+  );
 
   const sessionStartModal = orchestration.sessionStartModal ? (
     <SessionStartModal model={orchestration.sessionStartModal} />
@@ -564,7 +592,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     taskTabsModel: orchestration.agentStudioTaskTabsModel,
     rightPanelToggleModel: orchestration.rightPanel.rightPanelToggleModel,
     hasSelectedTask: Boolean(selection.viewTaskId),
-    chatHeaderModel: orchestration.agentStudioHeaderModel,
+    chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
     isRightPanelVisible,
     rightPanelContent,

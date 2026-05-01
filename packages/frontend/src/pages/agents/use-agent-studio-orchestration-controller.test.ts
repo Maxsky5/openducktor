@@ -39,6 +39,7 @@ const baseArgs: BuildArgs = {
     isViewSessionHistoryHydrationFailed: false,
     isViewSessionHistoryHydrating: false,
     isViewSessionWaitingForRuntimeReadiness: false,
+    hasActiveGitConflict: false,
   },
   sessions: {
     allSessionSummaries: [session],

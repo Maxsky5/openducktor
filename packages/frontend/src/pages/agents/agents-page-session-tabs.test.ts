@@ -1098,6 +1098,36 @@ describe("agents-page-session-tabs", () => {
     expect(selectPrimaryAgentStudioQuickAction(options)?.launchActionId).toBe("spec_initial");
   });
 
+  test("surfaces active git conflict resolution as the primary quick action", () => {
+    const task = buildTask({
+      id: "task-1",
+      availableActions: ["build_start"],
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: false, completed: true },
+        planner: { required: true, canSkip: false, available: false, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: true, canSkip: false, available: false, completed: false },
+      },
+    });
+
+    const options = buildAgentStudioQuickActions({
+      selectedTask: task,
+      sessionsForTask: [],
+      roleEnabledByTask: buildRoleEnabledMapForTask(task),
+      createSessionDisabled: false,
+      hasActiveGitConflict: true,
+    });
+
+    expect(options[0]).toMatchObject({
+      launchActionId: "build_rebase_conflict_resolution",
+      postStartAction: "send_message",
+      disabled: false,
+    });
+    expect(selectPrimaryAgentStudioQuickAction(options)?.launchActionId).toBe(
+      "build_rebase_conflict_resolution",
+    );
+  });
+
   test("keeps pull-request quick action visible but disabled without a builder source", () => {
     const task = buildTask({ id: "task-1", availableActions: [] });
     const options = buildAgentStudioQuickActions({

@@ -35,6 +35,7 @@ type AgentStudioCoreContext = {
   contextSessionsLength: number;
   activeSession: AgentSessionState | null;
   sessionRuntimeDataError: string | null;
+  hasActiveGitConflict: boolean;
   isTaskHydrating: boolean;
   isSessionHistoryHydrated: boolean;
   isSessionHistoryHydrating: boolean;
@@ -296,9 +297,11 @@ export function useAgentStudioPageModels({
         activeSession: workflowActiveSession,
         role: core.role,
         isSessionWorking: sessionActions.isSessionWorking,
+        hasActiveGitConflict: core.hasActiveGitConflict,
         roleLabelByRole,
       }),
     [
+      core.hasActiveGitConflict,
       core.role,
       core.selectedTask,
       roleLabelByRole,

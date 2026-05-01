@@ -38,6 +38,7 @@ type BuildWorkflowModelContextArgs = {
   activeSession: Pick<AgentSessionState, "externalSessionId" | "role"> | null;
   role: AgentRole;
   isSessionWorking: boolean;
+  hasActiveGitConflict: boolean;
   roleLabelByRole: Record<AgentRole, string>;
 };
 
@@ -67,6 +68,7 @@ export const buildWorkflowModelContext = ({
   activeSession,
   role,
   isSessionWorking,
+  hasActiveGitConflict,
   roleLabelByRole,
 }: BuildWorkflowModelContextArgs): WorkflowModelContext => {
   const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
@@ -112,6 +114,7 @@ export const buildWorkflowModelContext = ({
     sessionsForTask,
     roleEnabledByTask,
     createSessionDisabled,
+    hasActiveGitConflict,
   });
 
   return {
