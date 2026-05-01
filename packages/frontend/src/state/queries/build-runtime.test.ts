@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { taskWorktreeQueryKeys, taskWorktreeQueryOptions } from "./build-runtime";
+import {
+  TASK_WORKTREE_TIMEOUT_MS,
+  taskWorktreeQueryKeys,
+  taskWorktreeQueryOptions,
+} from "./build-runtime";
 
 describe("build runtime queries", () => {
   let queryClient: QueryClient;
@@ -66,7 +70,10 @@ describe("build runtime queries", () => {
             taskWorktreeGet,
           }),
         ),
-      ).rejects.toThrow("Timed out after 5000ms while loading task worktree.");
+      ).rejects.toThrow(
+        `Timed out after ${TASK_WORKTREE_TIMEOUT_MS}ms while loading task worktree.`,
+      );
+      expect(setTimeoutMock).toHaveBeenCalledWith(expect.any(Function), TASK_WORKTREE_TIMEOUT_MS);
     } finally {
       globalThis.setTimeout = originalSetTimeout;
       globalThis.clearTimeout = originalClearTimeout;

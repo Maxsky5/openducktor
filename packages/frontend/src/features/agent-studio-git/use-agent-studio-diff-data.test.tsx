@@ -385,8 +385,8 @@ describe("useAgentStudioDiffData", () => {
       await harness.mount();
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
-      await harness.run((state) => {
-        state.refresh();
+      await harness.run(async (state) => {
+        await state.refresh();
       });
 
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
@@ -415,8 +415,8 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
       gitFetchRemoteMock.mockRejectedValueOnce(new Error("Cannot resolve safe remote for refresh"));
 
-      await harness.run((state) => {
-        state.refresh();
+      await harness.run(async (state) => {
+        await state.refresh();
       });
 
       await harness.waitFor(
@@ -2678,8 +2678,8 @@ describe("useAgentStudioDiffData", () => {
       await harness.mount();
       expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
 
-      await harness.run((state) => {
-        state.refresh();
+      await harness.run(async (state) => {
+        await state.refresh();
       });
 
       expect(retryWorktreeResolutionMock).toHaveBeenCalledTimes(1);
