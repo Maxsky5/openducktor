@@ -25,7 +25,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
   role: "planner",
-  scenario: "planner_initial",
   status: "idle",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeKind: "opencode",

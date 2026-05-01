@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { ExternalLink, PlayCircle, Tag } from "lucide-react";
 import { memo, type ReactElement, useId, useMemo } from "react";
 import type {
@@ -43,7 +43,7 @@ type KanbanTaskCardProps = {
   onOpenSession?: (
     taskId: string,
     role: AgentRole,
-    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null },
   ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart?: (taskId: string) => void;
@@ -104,7 +104,6 @@ const areTaskAgentSessionsEqual = (
     if (
       leftSession.externalSessionId !== rightSession.externalSessionId ||
       leftSession.role !== rightSession.role ||
-      leftSession.scenario !== rightSession.scenario ||
       leftSession.startedAt !== rightSession.startedAt
     ) {
       return false;
@@ -136,7 +135,6 @@ const areRunningTaskSessionsEqual = (
     if (
       leftSession.externalSessionId !== rightSession.externalSessionId ||
       leftSession.role !== rightSession.role ||
-      leftSession.scenario !== rightSession.scenario ||
       leftSession.status !== rightSession.status ||
       leftSession.presentationState !== rightSession.presentationState
     ) {
@@ -329,7 +327,7 @@ function TaskActions({
   onOpenSession?: (
     taskId: string,
     role: AgentRole,
-    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null },
   ) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;

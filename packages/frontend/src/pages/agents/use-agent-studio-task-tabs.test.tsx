@@ -194,7 +194,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-2",
         session: undefined,
         agent: undefined,
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -223,7 +222,6 @@ describe("useAgentStudioTaskTabs", () => {
         externalSessionId: "ext-session-build",
         taskId: "task-2",
         role: "build",
-        scenario: "build_implementation_start",
         status: "running",
         startedAt: "2026-02-22T09:00:00.000Z",
       });
@@ -231,7 +229,6 @@ describe("useAgentStudioTaskTabs", () => {
         externalSessionId: "ext-session-newer",
         taskId: "task-2",
         role: "qa",
-        scenario: "qa_review",
         status: "idle",
         startedAt: "2026-02-22T10:00:00.000Z",
       });
@@ -262,7 +259,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-2",
         session: undefined,
         agent: undefined,
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -373,7 +369,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-1",
         session: undefined,
         agent: undefined,
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -471,7 +466,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-2",
         session: undefined,
         agent: undefined,
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -619,7 +613,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-b",
         session: undefined,
         agent: undefined,
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -808,7 +801,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-1",
         session: undefined,
         agent: undefined,
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });

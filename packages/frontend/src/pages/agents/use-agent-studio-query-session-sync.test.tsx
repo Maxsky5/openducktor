@@ -170,7 +170,6 @@ describe("useAgentStudioQuerySessionSync", () => {
       externalSessionId: "ext-session-1",
       taskId: "task-1",
       role: "planner",
-      scenario: "planner_initial",
     });
     const harness = createHookHarness(
       createBaseArgs({
@@ -192,7 +191,6 @@ describe("useAgentStudioQuerySessionSync", () => {
         {
           session: "ext-session-1",
           agent: "planner",
-          scenario: undefined,
         },
       ]);
     } finally {
@@ -207,7 +205,6 @@ describe("useAgentStudioQuerySessionSync", () => {
       externalSessionId: "ext-session-1",
       taskId: "task-1",
       role: "spec",
-      scenario: "spec_initial",
     });
     const harness = createHookHarness(
       createBaseArgs({
@@ -235,7 +232,6 @@ describe("useAgentStudioQuerySessionSync", () => {
       externalSessionId: "ext-session-build",
       taskId: "task-1",
       role: "build",
-      scenario: "build_implementation_start",
     });
     const harness = createHookHarness(
       createBaseArgs({

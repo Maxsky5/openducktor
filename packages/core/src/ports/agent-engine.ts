@@ -7,7 +7,6 @@ import type {
   AgentPendingPermissionRequest,
   AgentPendingQuestionRequest,
   AgentRole,
-  AgentScenario,
   AgentSessionContext,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
@@ -50,7 +49,6 @@ export type AttachAgentSessionInput =
       workingDirectory: string;
       taskId: "";
       role: null;
-      scenario: null;
       systemPrompt: "";
     };
 
@@ -175,7 +173,6 @@ export type AgentSessionSummary = {
   externalSessionId: ExternalSessionId;
   runtimeKind?: RuntimeKind;
   role: AgentRole | null;
-  scenario: AgentScenario | null;
   startedAt: string;
   status: "starting" | "running" | "idle" | "error" | "stopped";
 };

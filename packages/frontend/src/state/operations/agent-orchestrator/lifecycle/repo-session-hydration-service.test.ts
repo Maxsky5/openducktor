@@ -50,7 +50,6 @@ const taskWithSession = (taskId: string, externalSessionId: string): TaskCard =>
       runtimeKind: "opencode",
       externalSessionId,
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-22T08:00:00.000Z",
       workingDirectory: worktreePath,
       selectedModel: null,

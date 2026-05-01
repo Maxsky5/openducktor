@@ -201,7 +201,7 @@ export function useKanbanPageModels({
       startSessionIntent({
         taskId: request.taskId,
         role: request.role,
-        scenario: request.scenario,
+        launchActionId: "build_rebase_conflict_resolution",
         initialStartMode: request.initialStartMode,
         targetWorkingDirectory: request.targetWorkingDirectory,
         initialSourceExternalSessionId: request.initialSourceExternalSessionId,

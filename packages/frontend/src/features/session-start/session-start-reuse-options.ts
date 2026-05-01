@@ -7,7 +7,6 @@ import {
 } from "@/lib/agent-session-options";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
-import { SCENARIO_LABELS } from "./session-start-prompts";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 
 export const buildReusableSessionOptions = ({
@@ -27,7 +26,6 @@ export const buildReusableSessionOptions = ({
       label: formatAgentSessionOptionLabel({
         session,
         sessionNumber: roleSessionNumberById.get(session.externalSessionId) ?? index + 1,
-        scenarioLabels: SCENARIO_LABELS,
         roleLabelByRole: AGENT_ROLE_LABELS,
       }),
       description: formatAgentSessionOptionDescription(session),

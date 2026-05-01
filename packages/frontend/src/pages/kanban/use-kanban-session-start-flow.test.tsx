@@ -3,6 +3,7 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toast } from "sonner";
+import { resolveBuildContinuationLaunchAction } from "@/features/session-start";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/shared/host";
@@ -15,10 +16,7 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
-import {
-  resolveKanbanBuildStartScenario,
-  useKanbanSessionStartFlow,
-} from "./use-kanban-session-start-flow";
+import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
 
 enableReactActEnvironment();
 
@@ -152,7 +150,6 @@ const createBaseArgs = (): HookArgs => ({
       taskId: "TASK-1",
       runtimeKind: "opencode",
       role: "build",
-      scenario: "build_after_qa_rejected",
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -167,7 +164,6 @@ const createBaseArgs = (): HookArgs => ({
       taskId: "TASK-1",
       runtimeKind: "opencode",
       role: "build",
-      scenario: "build_implementation_start",
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -189,11 +185,11 @@ const createBaseArgs = (): HookArgs => ({
   sendAgentMessage: async () => {},
 });
 
-describe("resolveKanbanBuildStartScenario", () => {
+describe("resolveBuildContinuationLaunchAction", () => {
   test("uses implementation start for regular build starts", () => {
     const task = createTaskCardFixture({ id: "TASK-1", status: "ready_for_dev" });
 
-    expect(resolveKanbanBuildStartScenario([task], "TASK-1")).toBe("build_implementation_start");
+    expect(resolveBuildContinuationLaunchAction(task)).toBe("build_implementation_start");
   });
 
   test("uses QA rejection follow-up for QA-rejected tasks", () => {
@@ -204,15 +200,13 @@ describe("resolveKanbanBuildStartScenario", () => {
       verdict: "rejected",
     };
 
-    expect(resolveKanbanBuildStartScenario([task], "TASK-1")).toBe("build_after_qa_rejected");
+    expect(resolveBuildContinuationLaunchAction(task)).toBe("build_after_qa_rejected");
   });
 
   test("uses human-feedback follow-up for human-review tasks", () => {
     const task = createTaskCardFixture({ id: "TASK-1", status: "human_review" });
 
-    expect(resolveKanbanBuildStartScenario([task], "TASK-1")).toBe(
-      "build_after_human_request_changes",
-    );
+    expect(resolveBuildContinuationLaunchAction(task)).toBe("build_after_human_request_changes");
   });
 });
 
@@ -329,14 +323,16 @@ describe("useKanbanSessionStartFlow", () => {
     expect(modal?.existingSessionOptions).toEqual([
       expect.objectContaining({
         value: "builder-session-2",
-        label: "Fix QA Rejection · Builder #2",
+        label: "Builder #2",
         description: "3/20/2026, 12:00:00 PM · idle · builder-",
         secondaryLabel: "Latest",
+        selectedModel: expect.objectContaining({ profileId: "builder" }),
       }),
       expect.objectContaining({
         value: "builder-session-1",
-        label: "Start Implementation · Builder #1",
+        label: "Builder #1",
         description: "3/19/2026, 12:00:00 PM · idle · builder-",
+        selectedModel: expect.objectContaining({ profileId: "builder" }),
       }),
     ]);
 
@@ -399,7 +395,6 @@ describe("useKanbanSessionStartFlow", () => {
       expect.objectContaining({
         taskId: "TASK-1",
         role: "build",
-        scenario: "build_pull_request_generation",
         startMode: "reuse",
         sourceExternalSessionId: "builder-session-2",
       }),
@@ -578,7 +573,6 @@ describe("useKanbanSessionStartFlow", () => {
         expect.objectContaining({
           taskId: "TASK-1",
           role: "build",
-          scenario: "build_after_human_request_changes",
           startMode: "reuse",
           sourceExternalSessionId: "builder-session-2",
         }),
@@ -758,12 +752,11 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.run((state) => {
       state.onOpenSession("TASK-1", "build", {
         externalSessionId: "builder-session-1",
-        scenario: "build_implementation_start",
       });
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-1&agent=build&scenario=build_implementation_start",
+      "/agents?task=TASK-1&session=builder-session-1&agent=build",
     );
 
     await harness.unmount();
@@ -777,12 +770,11 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.run((state) => {
       state.onOpenSession("TASK-1", "build", {
         externalSessionId: "builder-session-archived",
-        scenario: "build_after_qa_rejected",
       });
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-archived&agent=build&scenario=build_after_qa_rejected",
+      "/agents?task=TASK-1&session=builder-session-archived&agent=build",
     );
 
     await harness.unmount();
@@ -794,27 +786,27 @@ describe("useKanbanSessionStartFlow", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.onOpenSession("TASK-1", "build", { scenario: "build_implementation_start" });
+      state.onOpenSession("TASK-1", "build", { externalSessionId: null });
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-2&agent=build&scenario=build_after_qa_rejected",
+      "/agents?task=TASK-1&session=builder-session-2&agent=build",
     );
 
     await harness.unmount();
   });
 
-  test("onOpenSession falls back to agent+scenario when no matching session exists", async () => {
+  test("onOpenSession falls back to agent only when no matching session exists", async () => {
     const args = createBaseArgs();
     args.sessions = [];
     const harness = createHookHarness(args);
 
     await harness.mount();
     await harness.run((state) => {
-      state.onOpenSession("TASK-404", "qa", { scenario: "qa_review" });
+      state.onOpenSession("TASK-404", "qa");
     });
 
-    expect(args.navigate).toHaveBeenCalledWith("/agents?task=TASK-404&agent=qa&scenario=qa_review");
+    expect(args.navigate).toHaveBeenCalledWith("/agents?task=TASK-404&agent=qa");
 
     await harness.unmount();
   });
@@ -827,7 +819,6 @@ describe("useKanbanSessionStartFlow", () => {
         taskId: "TASK-1",
         runtimeKind: "opencode",
         role: "build",
-        scenario: "build_after_qa_rejected",
         status: "running",
         pendingPermissions: [],
         pendingQuestions: [],
@@ -838,7 +829,6 @@ describe("useKanbanSessionStartFlow", () => {
         taskId: "TASK-1",
         runtimeKind: "opencode",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         pendingPermissions: [],
         pendingQuestions: [
@@ -860,11 +850,11 @@ describe("useKanbanSessionStartFlow", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.onOpenSession("TASK-1", "build", { scenario: "build_after_qa_rejected" });
+      state.onOpenSession("TASK-1", "build");
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-old-waiting&agent=build&scenario=build_implementation_start",
+      "/agents?task=TASK-1&session=builder-session-old-waiting&agent=build",
     );
 
     await harness.unmount();

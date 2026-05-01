@@ -55,7 +55,6 @@ describe("use-agent-studio-session-action-helpers", () => {
       taskId: "task-existing",
       externalSessionId: "session-existing",
       role: "build",
-      scenario: "build_implementation_start",
     });
 
     expect(
@@ -68,7 +67,6 @@ describe("use-agent-studio-session-action-helpers", () => {
       task: "task-existing",
       session: "session-existing",
       agent: "spec",
-      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });
@@ -79,7 +77,7 @@ describe("use-agent-studio-session-action-helpers", () => {
       buildCreateSessionStartKey({
         taskId: "task-1",
         role: "qa",
-        scenario: "qa_review",
+        launchActionId: "qa_review",
       }),
     ).toBe("task-1:qa:qa_review");
 

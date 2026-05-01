@@ -221,7 +221,6 @@ describe("useAgentStudioQuerySync", () => {
         JSON.stringify({
           taskId: "task-from-context",
           role: "planner",
-          scenario: "planner_initial",
           externalSessionId: "session-from-context",
         }),
       );
@@ -320,7 +319,6 @@ describe("useAgentStudioQuerySync", () => {
         JSON.stringify({
           taskId: "task-from-context",
           role: "build",
-          scenario: "build_implementation_start",
           externalSessionId: "session-from-context",
         }),
       );

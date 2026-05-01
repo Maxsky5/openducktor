@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createTaskCardFixture } from "../../pages/agents/agent-studio-test-utils";
-import { BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO } from "./constants";
 import { useGitConflictResolution } from "./use-git-conflict-resolution";
 
 const buildSession = (
@@ -16,7 +15,6 @@ const buildSession = (
     repoPath: rest.repoPath ?? "/repo",
     runtimeKind: "opencode",
     role: "build",
-    scenario: "build_implementation_start",
     status: "idle",
     startedAt: "2026-03-18T10:00:00.000Z",
     runtimeId: null,
@@ -87,7 +85,6 @@ describe("useGitConflictResolution", () => {
         expect.objectContaining({
           taskId: "task-1",
           role: "build",
-          scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
           message: expect.any(String),
           existingSessionOptions: [
             expect.objectContaining({
@@ -139,7 +136,6 @@ describe("useGitConflictResolution", () => {
           initialStartMode: "reuse",
           initialSourceExternalSessionId: "external-build-1",
           targetWorkingDirectory: "/repo/worktrees/task-1",
-          scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
         }),
       );
     } finally {
@@ -175,7 +171,6 @@ describe("useGitConflictResolution", () => {
         expect.objectContaining({
           initialStartMode: "fresh",
           targetWorkingDirectory: "/repo/worktrees/task-1",
-          scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
         }),
       );
     } finally {

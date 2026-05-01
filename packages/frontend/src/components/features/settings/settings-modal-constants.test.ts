@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { countPromptErrorsByRoleTab, resolvePromptRoleTab } from "./settings-modal-constants";
+import {
+  countPromptErrorsByRoleTab,
+  PROMPT_TEMPLATE_LABELS,
+  resolvePromptRoleTab,
+} from "./settings-modal-constants";
 
 describe("settings-modal-constants", () => {
   test("maps template ids to prompt role tabs", () => {
     expect(resolvePromptRoleTab("system.role.spec.base")).toBe("spec");
     expect(resolvePromptRoleTab("kickoff.build_after_qa_rejected")).toBe("build");
-    expect(resolvePromptRoleTab("system.scenario.qa_review")).toBe("qa");
+    expect("system.scenario.qa_review" in PROMPT_TEMPLATE_LABELS).toBe(false);
     expect(resolvePromptRoleTab("system.shared.workflow_guards")).toBe("shared");
   });
 

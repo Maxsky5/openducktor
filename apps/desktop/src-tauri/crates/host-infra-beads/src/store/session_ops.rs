@@ -86,11 +86,6 @@ impl BeadsTaskStore {
             return Err(anyhow!("Agent session externalSessionId is required"));
         }
 
-        session.scenario = session.scenario.trim().to_string();
-        if session.scenario.is_empty() {
-            return Err(anyhow!("Agent session scenario is required"));
-        }
-
         session.started_at = session.started_at.trim().to_string();
         if session.started_at.is_empty() {
             return Err(anyhow!("Agent session startedAt is required"));

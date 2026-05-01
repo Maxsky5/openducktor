@@ -8,7 +8,6 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
-  AgentScenario,
   AgentSessionTodoItem,
   AgentSubagentExecutionMode,
   AgentSubagentStatus,
@@ -165,7 +164,6 @@ export type AgentSessionState = {
   repoPath: string;
   runtimeKind?: RuntimeKind;
   role: AgentRole | null;
-  scenario: AgentScenario | null;
   status: "starting" | "running" | "idle" | "error" | "stopped";
   startedAt: string;
   runtimeId: string | null;
@@ -196,7 +194,6 @@ export type AgentSessionState = {
 
 export type WorkflowAgentSessionState = AgentSessionState & {
   role: AgentRole;
-  scenario: AgentScenario;
 };
 
 export type TranscriptAgentSessionState = AgentSessionState & {

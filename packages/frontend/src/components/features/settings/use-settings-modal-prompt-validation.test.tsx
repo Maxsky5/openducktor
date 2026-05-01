@@ -29,7 +29,7 @@ const createSnapshot = (): SettingsSnapshot => ({
     rules: [],
   },
   globalPromptOverrides: {
-    "system.scenario.spec_initial": {
+    "system.role.spec.base": {
       template: "invalid {{task.bad}}",
       baseVersion: 1,
       enabled: true,

@@ -274,7 +274,6 @@ fn task_delete_blocks_custom_runtime_sessions_via_service_runtime_registry() -> 
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "test-runtime".to_string(),
         working_directory: repo_path_string.clone(),
@@ -340,7 +339,6 @@ fn task_delete_resolves_custom_runtime_by_repo_and_kind_for_task_worktree_sessio
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "test-runtime".to_string(),
         working_directory: task_worktree_string.clone(),
@@ -428,7 +426,6 @@ fn task_delete_resolves_custom_runtime_by_repo_and_kind_for_qa_worktree_session_
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-qa-session".to_string(),
         role: "qa".to_string(),
-        scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "test-runtime".to_string(),
         working_directory: qa_worktree_string.clone(),

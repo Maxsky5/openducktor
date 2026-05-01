@@ -1,5 +1,5 @@
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -7,6 +7,7 @@ import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type {
   ResolvedSessionStartDecision,
+  SessionLaunchActionId,
   SessionStartFlowRequest,
   SessionStartLaunchRequest,
   SessionStartRequestReason,
@@ -40,7 +41,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   branches?: GitBranch[];
   taskId: string;
   role: AgentRole;
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
   activeSession: AgentSessionState | null;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
@@ -63,7 +64,7 @@ export function useAgentStudioSessionStartFlow({
   branches = [],
   taskId,
   role,
-  scenario,
+  launchActionId,
   activeSession,
   sessionsForTask,
   selectedTask,
@@ -154,7 +155,7 @@ export function useAgentStudioSessionStartFlow({
     activeWorkspace,
     taskId,
     role,
-    scenario,
+    launchActionId,
     activeSession,
     selectedTask,
     agentStudioReady,
@@ -239,13 +240,13 @@ export function useAgentStudioSessionStartFlow({
     if (!canStartSessionForRole(selectedTask, role)) {
       return;
     }
-    if (role === "build" && scenario === "build_after_human_request_changes") {
+    if (role === "build" && launchActionId === "build_after_human_request_changes") {
       openHumanReviewFeedback();
       return;
     }
 
     const workflow = await runSessionStart({
-      reason: "scenario_kickoff",
+      reason: "launch_kickoff",
       postStartAction: "kickoff",
     });
     if (!workflow) {
@@ -255,9 +256,9 @@ export function useAgentStudioSessionStartFlow({
     agentStudioReady,
     isActiveTaskHydrated,
     openHumanReviewFeedback,
+    launchActionId,
     role,
     runSessionStart,
-    scenario,
     selectedTask,
     taskId,
   ]);

@@ -19,7 +19,6 @@ const persistedSessionRecord = (
   input: {
     externalSessionId: string;
     role: AgentSessionRecord["role"];
-    scenario: AgentSessionRecord["scenario"];
     startedAt: string;
     workingDirectory: string;
     runtimeKind?: AgentSessionRecord["runtimeKind"];
@@ -29,7 +28,6 @@ const persistedSessionRecord = (
   runtimeKind: input.runtimeKind ?? "opencode",
   externalSessionId: input.externalSessionId,
   role: input.role,
-  scenario: input.scenario,
   startedAt: input.startedAt,
   workingDirectory: input.workingDirectory,
   selectedModel: input.selectedModel ?? null,
@@ -48,7 +46,6 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
       persistedSessionRecord({
         externalSessionId: "ext-build",
         role: "build",
-        scenario: "build_after_human_request_changes",
         startedAt: "2026-02-22T08:20:00.000Z",
         workingDirectory: "/tmp/repo/worktree",
       }),
@@ -72,7 +69,6 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
           input: {
             startMode: "reuse",
             sourceExternalSessionId: "ext-build",
-            scenario: "build_after_human_request_changes",
           },
           deps: {
             session: sessionDependencies,
@@ -113,7 +109,6 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         input: {
           startMode: "reuse",
           sourceExternalSessionId: "ext-build",
-          scenario: "build_after_human_request_changes",
         },
         deps: {
           session: sessionDependencies,
@@ -148,7 +143,6 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         input: {
           startMode: "reuse",
           sourceExternalSessionId: "ext-qa",
-          scenario: "qa_review",
         },
         deps: {
           session: sessionDependencies,
@@ -216,7 +210,6 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         input: {
           startMode: "reuse",
           sourceExternalSessionId: "ext-qa",
-          scenario: "qa_review",
         },
         deps: {
           session: sessionDependencies,

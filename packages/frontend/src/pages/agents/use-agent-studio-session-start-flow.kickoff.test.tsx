@@ -98,7 +98,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: null,
   taskId: "task-1",
   role: "spec",
-  scenario: "spec_initial",
+  launchActionId: "spec_initial",
   activeSession: null,
   sessionsForTask: [],
   selectedTask: createTaskCardFixture(),

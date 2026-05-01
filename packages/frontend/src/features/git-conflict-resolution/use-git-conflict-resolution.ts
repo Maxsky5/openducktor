@@ -15,7 +15,7 @@ import { BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO } from "./constants";
 export type StartGitConflictResolutionSessionInput = {
   taskId: string;
   role: "build";
-  scenario: typeof BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO;
+  launchActionId: "build_rebase_conflict_resolution";
   message: string;
   existingSessionOptions: ReturnType<typeof buildReusableSessionOptions>;
   initialStartMode: "fresh" | "reuse";
@@ -125,7 +125,7 @@ export function useGitConflictResolution({
       const externalSessionId = await startConflictResolutionSession({
         taskId: taskContext.taskId,
         role: "build",
-        scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
+        launchActionId: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
         message,
         existingSessionOptions: buildReusableSessionOptions({
           sessions: validBuilderSessions,

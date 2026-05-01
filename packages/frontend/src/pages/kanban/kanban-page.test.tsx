@@ -135,7 +135,6 @@ let currentSessionsFixture = [
     externalSessionId: "session-spec",
     taskId: "TASK-123",
     role: "spec",
-    scenario: "spec_initial",
     status: "running",
     startedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -147,7 +146,6 @@ let currentSessionsFixture = [
     externalSessionId: "session-build-older",
     taskId: "TASK-123",
     role: "build",
-    scenario: "build_after_human_request_changes",
     status: "running",
     startedAt: "2026-01-01T12:00:00.000Z",
     updatedAt: "2026-01-01T12:00:00.000Z",
@@ -159,7 +157,6 @@ let currentSessionsFixture = [
     externalSessionId: "session-build-latest",
     taskId: "TASK-123",
     role: "build",
-    scenario: "build_implementation_start",
     status: "idle",
     startedAt: "2026-01-02T00:00:00.000Z",
     updatedAt: "2026-01-02T00:00:00.000Z",
@@ -541,7 +538,6 @@ describe("KanbanPage session start modal flow", () => {
         externalSessionId: "session-spec",
         taskId: "TASK-123",
         role: "spec",
-        scenario: "spec_initial",
         status: "running",
         startedAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
@@ -553,7 +549,6 @@ describe("KanbanPage session start modal flow", () => {
         externalSessionId: "session-build-older",
         taskId: "TASK-123",
         role: "build",
-        scenario: "build_after_human_request_changes",
         status: "running",
         startedAt: "2026-01-01T12:00:00.000Z",
         updatedAt: "2026-01-01T12:00:00.000Z",
@@ -565,7 +560,6 @@ describe("KanbanPage session start modal flow", () => {
         externalSessionId: "session-build-latest",
         taskId: "TASK-123",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
         updatedAt: "2026-01-02T00:00:00.000Z",
@@ -674,7 +668,6 @@ describe("KanbanPage session start modal flow", () => {
       expect.objectContaining({
         taskId: "TASK-123",
         role: "build",
-        scenario: "build_implementation_start",
         startMode: "fresh",
       }),
     );
@@ -814,7 +807,6 @@ describe("KanbanPage session start modal flow", () => {
       expect.objectContaining({
         taskId: "TASK-123",
         role: "build",
-        scenario: "build_implementation_start",
         startMode: "reuse",
         sourceExternalSessionId: "session-existing",
       }),
@@ -1205,7 +1197,6 @@ describe("KanbanPage session start modal flow", () => {
         externalSessionId: "session-build-idle",
         taskId: "TASK-123",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
         updatedAt: "2026-01-02T00:00:00.000Z",
@@ -1217,7 +1208,6 @@ describe("KanbanPage session start modal flow", () => {
         externalSessionId: "session-qa-stopped",
         taskId: "TASK-123",
         role: "qa",
-        scenario: "qa_review",
         status: "stopped",
         startedAt: "2026-01-03T00:00:00.000Z",
         updatedAt: "2026-01-03T00:00:00.000Z",
@@ -1275,7 +1265,6 @@ describe("KanbanPage session start modal flow", () => {
         externalSessionId: "session-build-idle",
         taskId: "TASK-123",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
         updatedAt: "2026-01-02T00:00:00.000Z",
@@ -1350,7 +1339,7 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  test("build action for a QA-rejected task navigates to the QA follow-up builder scenario", async () => {
+  test("build action for a QA-rejected task navigates to the QA follow-up builder launch action", async () => {
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "in_progress" });
     currentTaskFixture.documentSummary.qaReport = {
       has: true,
@@ -1374,7 +1363,7 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  test("build action for a human-review task navigates to the human-feedback builder scenario", async () => {
+  test("build action for a human-review task navigates to the human-feedback builder launch action", async () => {
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
     const renderer = await renderPage();
 
@@ -1393,7 +1382,7 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  test("open qa navigates directly to the QA review scenario", async () => {
+  test("open qa navigates directly to the QA review launch action", async () => {
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "in_progress" });
     const renderer = await renderPage();
 
@@ -1404,7 +1393,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(latestSessionStartModalModel).toBeNull();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("agent=qa");
-    expect(latestLocation).toContain("scenario=qa_review");
+    expect(latestLocation).not.toContain("scenario=");
 
     await act(async () => {
       renderer.unmount();
@@ -1469,7 +1458,7 @@ describe("KanbanPage session start modal flow", () => {
     }
   });
 
-  test("build action routes human review tasks into the human-changes builder scenario", async () => {
+  test("build action routes human review tasks into the human-changes builder launch action", async () => {
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
     const renderer = await renderPage();
 

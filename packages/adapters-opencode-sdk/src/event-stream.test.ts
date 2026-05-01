@@ -57,18 +57,11 @@ const makeClientWithEvents = (events: Event[]): OpencodeClient => {
 };
 
 const makeSessionInput = (): SessionInput => ({
-  externalSessionId: "external-session-1",
   repoPath: "/repo",
   runtimeKind: "opencode",
-  runtimeConnection: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:12345",
-    workingDirectory: "/repo",
-  },
   workingDirectory: "/repo",
   taskId: "task-1",
   role: "spec",
-  scenario: "spec_initial",
   systemPrompt: "System prompt",
 });
 
@@ -76,7 +69,6 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   summary: {
     externalSessionId: "external-session-1",
     role: "spec",
-    scenario: "spec_initial",
     startedAt: "2026-02-22T12:00:00.000Z",
     status: "running",
   },
@@ -2130,14 +2122,19 @@ describe("event-stream", () => {
         event.part.status === "completed",
     );
 
-    expect(completedSubagentParts.map((event) => event.part.correlationKey)).toEqual([
+    expect(
+      completedSubagentParts.map(
+        (event) => (event.part as { correlationKey: string }).correlationKey,
+      ),
+    ).toEqual([
       "part:assistant-subagent-created-order:subtask-a",
       "part:assistant-subagent-created-order:subtask-b",
     ]);
-    expect(completedSubagentParts.map((event) => event.part.externalSessionId)).toEqual([
-      "child-a",
-      "child-b",
-    ]);
+    expect(
+      completedSubagentParts.map(
+        (event) => (event.part as { externalSessionId?: string }).externalSessionId,
+      ),
+    ).toEqual(["child-a", "child-b"]);
   });
 
   test("defers ambiguous task tool updates until child sessions bind to spawned cards", async () => {
@@ -2206,21 +2203,23 @@ describe("event-stream", () => {
     );
 
     expect(subagentParts).toHaveLength(3);
-    expect(subagentParts.map((event) => event.part.correlationKey)).toEqual([
+    expect(
+      subagentParts.map((event) => (event.part as { correlationKey: string }).correlationKey),
+    ).toEqual([
       "part:assistant-subagent-ambiguous-deferred:subtask-a",
       "part:assistant-subagent-ambiguous-deferred:subtask-b",
       "part:assistant-subagent-ambiguous-deferred:subtask-b",
     ]);
-    expect(subagentParts.map((event) => event.part.status)).toEqual([
+    expect(subagentParts.map((event) => (event.part as { status: string }).status)).toEqual([
       "running",
       "running",
       "completed",
     ]);
-    expect(subagentParts.map((event) => event.part.externalSessionId)).toEqual([
-      undefined,
-      undefined,
-      "child-b",
-    ]);
+    expect(
+      subagentParts.map(
+        (event) => (event.part as { externalSessionId?: string }).externalSessionId,
+      ),
+    ).toEqual([undefined, undefined, "child-b"]);
   });
 
   test("normalizes todo.updated and ignores unrelated sessions", async () => {
@@ -3124,8 +3123,7 @@ describe("event-stream", () => {
                   externalSessionId: "child-session-1",
                 },
               },
-            } as unknown as Event["properties"],
-            roleHint: "assistant",
+            } as unknown as import("@opencode-ai/sdk/v2/client").Part,
           },
         ]);
       },

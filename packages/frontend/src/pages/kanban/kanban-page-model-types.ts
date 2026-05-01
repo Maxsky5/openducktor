@@ -1,5 +1,5 @@
 import type { GitTargetBranch, KanbanEmptyColumnDisplay, TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario, KanbanColumn as KanbanColumnData } from "@openducktor/core";
+import type { AgentRole, KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type {
   ActiveTaskSessionContextByTaskId,
@@ -89,7 +89,7 @@ export type KanbanPageContentModel = {
   onOpenSession: (
     taskId: string,
     role: AgentRole,
-    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null },
   ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
@@ -115,7 +115,7 @@ export type KanbanPageTaskDetailsControllerModel = {
   onOpenSession: (
     taskId: string,
     role: AgentRole,
-    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null },
   ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;

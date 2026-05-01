@@ -28,7 +28,6 @@ const persistedSessionRecord = (
   input: {
     externalSessionId: string;
     role: AgentSessionRecord["role"];
-    scenario: AgentSessionRecord["scenario"];
     startedAt: string;
     workingDirectory: string;
     runtimeKind?: AgentSessionRecord["runtimeKind"];
@@ -38,7 +37,6 @@ const persistedSessionRecord = (
   runtimeKind: input.runtimeKind ?? "opencode",
   externalSessionId: input.externalSessionId,
   role: input.role,
-  scenario: input.scenario,
   startedAt: input.startedAt,
   workingDirectory: input.workingDirectory,
   selectedModel: input.selectedModel ?? null,
@@ -135,7 +133,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const inFlight = Promise.resolve("session-in-flight");
     const inFlightMap = new Map<string, Promise<string>>([
       [
-        "/tmp/repo::task-1::build::reuse::session-in-flight::::::build_after_human_request_changes::no-kickoff",
+        "/tmp/repo::task-1::build::reuse::session-in-flight::::::no-kickoff-template::no-kickoff",
         inFlight,
       ],
     ]);
@@ -168,7 +166,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       start({
         taskId: "task-1",
         role: "build",
-        scenario: "build_after_human_request_changes",
         startMode: "reuse",
         sourceExternalSessionId: "session-in-flight",
       }),
@@ -196,7 +193,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: `${input.role}-external`,
         startedAt: "2026-02-22T08:00:10.000Z",
         role: input.role,
-        scenario: input.role === "planner" ? "planner_initial" : "build_implementation_start",
         status: "idle",
       };
     };
@@ -258,25 +254,20 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("does not dedupe fresh starts with different scenarios, models, or kickoff flags", async () => {
+  test("does not dedupe fresh starts with different models or kickoff templates", async () => {
     const modelSession = Promise.resolve("session-model");
-    const scenarioSession = Promise.resolve("session-scenario");
     const kickoffSession = Promise.resolve("session-kickoff");
     const inFlightMap = new Map<string, Promise<string>>([
       [
-        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build::build_after_human_request_changes::no-kickoff",
+        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build::no-kickoff-template::no-kickoff",
         modelSession,
       ],
       [
-        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build::build_pull_request_generation::no-kickoff",
-        scenarioSession,
-      ],
-      [
-        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build::build_after_human_request_changes::kickoff",
+        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build::kickoff.build_implementation_start::kickoff",
         kickoffSession,
       ],
       [
-        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::planner::build_after_human_request_changes::no-kickoff",
+        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::planner::no-kickoff-template::no-kickoff",
         Promise.resolve("session-profile"),
       ],
     ]);
@@ -311,7 +302,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       start({
         taskId: "task-1",
         role: "build",
-        scenario: "build_after_human_request_changes",
         startMode: "fresh",
         selectedModel: BUILD_SELECTION,
       }),
@@ -321,20 +311,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       start({
         taskId: "task-1",
         role: "build",
-        scenario: "build_pull_request_generation",
         startMode: "fresh",
         selectedModel: BUILD_SELECTION,
-      }),
-    ).resolves.toBe("session-scenario");
-
-    await expect(
-      start({
-        taskId: "task-1",
-        role: "build",
-        scenario: "build_after_human_request_changes",
-        startMode: "fresh",
-        selectedModel: BUILD_SELECTION,
-        sendKickoff: true,
+        kickoffTemplateId: "kickoff.build_implementation_start",
       }),
     ).resolves.toBe("session-kickoff");
 
@@ -342,7 +321,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       start({
         taskId: "task-1",
         role: "build",
-        scenario: "build_after_human_request_changes",
         startMode: "fresh",
         selectedModel: {
           ...BUILD_SELECTION,
@@ -363,7 +341,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       externalSessionId: "planner-external",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "planner",
-      scenario: "planner_initial",
       status: "idle",
     });
 
@@ -445,7 +422,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startSession: async () => ({
             externalSessionId: "external-1",
             role: "planner",
-            scenario: "planner_initial",
             startedAt: "2026-03-21T10:00:00.000Z",
             status: "running",
           }),
@@ -500,7 +476,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       runtimeKind: "opencode",
       externalSessionId: "external-session-persist-fail",
       role: "planner",
-      scenario: "planner_initial",
       status: "running",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
@@ -544,7 +519,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "planner",
-          scenario: "planner_initial",
           startMode: "fresh",
           selectedModel: PLANNER_SELECTION,
         }),
@@ -581,7 +555,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             taskId: "task-1",
             repoPath: "/tmp/repo",
             role: "build",
-            scenario: "build_after_human_request_changes",
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
@@ -625,7 +598,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_after_human_request_changes",
           startMode: "reuse",
           sourceExternalSessionId: "external-newer",
         }),
@@ -656,7 +628,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             taskId: "task-1",
             repoPath: "/tmp/repo",
             role: "build",
-            scenario: "build_after_human_request_changes",
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
@@ -679,7 +650,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             taskId: "task-1",
             repoPath: "/tmp/repo",
             role: "build",
-            scenario: "build_after_human_request_changes",
             status: "idle",
             startedAt: "2026-02-22T08:00:00.000Z",
             runtimeId: null,
@@ -723,7 +693,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_after_human_request_changes",
           startMode: "reuse",
           sourceExternalSessionId: "external-chosen",
         }),
@@ -752,7 +721,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-fresh-build-session",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: input.role,
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -769,7 +737,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             taskId: "task-1",
             repoPath: "/tmp/repo",
             role: "build",
-            scenario: "build_implementation_start",
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
@@ -845,7 +812,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             taskId: "task-1",
             repoPath: "/tmp/repo",
             role: "build",
-            scenario: "build_after_human_request_changes",
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
@@ -890,7 +856,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_after_human_request_changes",
           startMode: "reuse",
           sourceExternalSessionId: "external-chosen",
         }),
@@ -918,7 +883,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "build",
-          scenario: "build_after_human_request_changes",
           status: "idle",
           startedAt: "2026-02-22T08:10:00.000Z",
           runtimeId: null,
@@ -980,7 +944,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_after_human_request_changes",
           startMode: "reuse",
           sourceExternalSessionId: "external-reused",
         }),
@@ -1011,7 +974,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:30:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -1031,7 +993,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             taskId: "task-1",
             repoPath: "/tmp/repo",
             role: "build",
-            scenario: "build_implementation_start",
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
@@ -1080,7 +1041,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_after_human_request_changes",
           startMode: "reuse",
           sourceExternalSessionId: "external-reused",
         }),
@@ -1112,7 +1072,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "fresh-profile-external",
         startedAt: "2026-02-22T08:35:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -1132,7 +1091,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             taskId: "task-1",
             repoPath: "/tmp/repo",
             role: "build",
-            scenario: "build_implementation_start",
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
@@ -1182,7 +1140,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_after_human_request_changes",
           startMode: "reuse",
           sourceExternalSessionId: "external-reused",
         }),
@@ -1207,7 +1164,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "fresh-ext",
         startedAt: "2026-02-22T09:00:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -1222,7 +1178,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "build",
-          scenario: "build_implementation_start",
           status: "idle",
           startedAt: "2026-02-22T08:20:00.000Z",
           updatedAt: "2026-02-22T08:20:00.000Z",
@@ -1244,7 +1199,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             taskId: "task-1",
             repoPath: "/tmp/repo",
             role: "build",
-            scenario: "build_implementation_start",
             status: "idle",
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
@@ -1311,7 +1265,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "planner-ext",
         startedAt: "2026-02-22T08:30:00.000Z",
         role: "planner",
-        scenario: "planner_initial",
         status: "idle",
       };
     };
@@ -1327,7 +1280,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "spec",
-          scenario: "spec_initial",
           status: "idle",
           startedAt: "2026-02-22T08:10:00.000Z",
           runtimeId: null,
@@ -1396,7 +1348,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_after_human_request_changes",
         startedAt: "2026-02-22T08:20:00.000Z",
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo/worktree",
@@ -1407,7 +1358,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_after_human_request_changes",
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         updatedAt: "2026-02-22T08:10:00.000Z",
@@ -1420,7 +1370,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-02-22T08:30:00.000Z",
         updatedAt: "2026-02-22T08:30:00.000Z",
@@ -1458,7 +1407,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             taskId: "task-1",
             repoPath: "/tmp/repo",
             role: "build",
-            scenario: "build_implementation_start",
             status: "idle",
             startedAt: "2026-02-22T08:30:00.000Z",
             runtimeId: "runtime-1",
@@ -1485,7 +1433,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const externalSessionId = await start({
       taskId: "task-1",
       role: "build",
-      scenario: "build_after_human_request_changes",
       startMode: "reuse",
       sourceExternalSessionId: "external-build-newer",
     });
@@ -1505,7 +1452,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
@@ -1532,7 +1478,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     adapter.forkSession = async (input) => {
       expect(input.taskId).toBe("task-1");
       expect(input.role).toBe("build");
-      expect(input.scenario).toBe("build_pull_request_generation");
       expect(input.parentExternalSessionId).toBe("external-source-build");
       expect(input.repoPath).toBe("/tmp/repo");
       expect(input.runtimeKind).toBe("opencode");
@@ -1542,7 +1487,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-forked-pr-session",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: "build",
-        scenario: "build_pull_request_generation",
         status: "idle",
       };
     };
@@ -1603,34 +1547,29 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const externalSessionId = await start({
         taskId: "task-1",
         role: "build",
-        scenario: "build_pull_request_generation",
         startMode: "fork",
         selectedModel: BUILD_SELECTION,
         sourceExternalSessionId: "external-source-build",
       });
 
       expect(externalSessionId).toBe("external-forked-pr-session");
-      expect(sessionsById["external-forked-pr-session"]?.scenario).toBe(
-        "build_pull_request_generation",
-      );
       expect(sessionsById["external-forked-pr-session"]?.workingDirectory).toBe(
         "/tmp/repo/worktree",
       );
-      expect(
-        sessionsById["external-forked-pr-session"]
-          ? sessionMessagesToArray(sessionsById["external-forked-pr-session"])
-          : undefined,
-      ).toEqual([
+      const forkedMessages = sessionsById["external-forked-pr-session"]
+        ? sessionMessagesToArray(sessionsById["external-forked-pr-session"])
+        : [];
+      expect(forkedMessages.slice(0, 4)).toEqual([
         {
           id: "history:session-forked:external-forked-pr-session",
           role: "system",
-          content: "Session forked (build - build_pull_request_generation)",
+          content: "Session forked (build)",
           timestamp: "2026-02-22T08:20:00.000Z",
         },
         {
           id: "history:system-prompt:external-forked-pr-session",
           role: "system",
-          content: expect.stringContaining("System prompt:"),
+          content: forkedMessages[1]?.content ?? "",
           timestamp: "2026-02-22T08:20:00.000Z",
         },
         {
@@ -1659,6 +1598,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       ]);
+      expect(forkedMessages[1]?.content).toContain("System prompt:");
       expect(persistedSnapshots).toHaveLength(1);
       expect(persistedSnapshots[0]?.externalSessionId).toBe("external-forked-pr-session");
     } finally {
@@ -1679,7 +1619,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_implementation_start",
         status: "stopped",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: null,
@@ -1704,7 +1643,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       externalSessionId: "external-forked-from-hydrated-source",
       startedAt: "2026-02-22T08:20:00.000Z",
       role: "build",
-      scenario: "build_pull_request_generation",
       status: "idle",
     });
     adapter.loadSessionHistory = async () => [
@@ -1770,7 +1708,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const externalSessionId = await start({
         taskId: "task-1",
         role: "build",
-        scenario: "build_pull_request_generation",
         startMode: "fork",
         selectedModel: BUILD_SELECTION,
         sourceExternalSessionId: "external-source-build",
@@ -1783,21 +1720,20 @@ describe("agent-orchestrator/handlers/start-session", () => {
           targetExternalSessionId: "external-source-build",
         },
       ]);
-      expect(
-        sessionsById["external-forked-from-hydrated-source"]
-          ? sessionMessagesToArray(sessionsById["external-forked-from-hydrated-source"])
-          : undefined,
-      ).toEqual([
+      const forkedMessages = sessionsById["external-forked-from-hydrated-source"]
+        ? sessionMessagesToArray(sessionsById["external-forked-from-hydrated-source"])
+        : [];
+      expect(forkedMessages.slice(0, 3)).toEqual([
         {
           id: "history:session-forked:external-forked-from-hydrated-source",
           role: "system",
-          content: "Session forked (build - build_pull_request_generation)",
+          content: "Session forked (build)",
           timestamp: "2026-02-22T08:20:00.000Z",
         },
         {
           id: "history:system-prompt:external-forked-from-hydrated-source",
           role: "system",
-          content: expect.stringContaining("System prompt:"),
+          content: forkedMessages[1]?.content ?? "",
           timestamp: "2026-02-22T08:20:00.000Z",
         },
         {
@@ -1811,6 +1747,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       ]);
+      expect(forkedMessages[1]?.content).toContain("System prompt:");
     } finally {
       adapter.forkSession = originalForkSession;
       adapter.loadSessionHistory = originalLoadSessionHistory;
@@ -1828,7 +1765,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
@@ -1854,7 +1790,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-forked-from-runtime-connection",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: "build",
-        scenario: "build_pull_request_generation",
         status: "idle",
       };
     };
@@ -1898,7 +1833,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_pull_request_generation",
           startMode: "fork",
           selectedModel: BUILD_SELECTION,
           sourceExternalSessionId: "external-source-build",
@@ -1921,7 +1855,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "build",
-          scenario: "build_implementation_start",
           status: "idle",
           startedAt: "2026-02-22T08:10:00.000Z",
           runtimeId: null,
@@ -1947,7 +1880,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "unexpected-external-fork",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: "build",
-        scenario: "build_pull_request_generation",
         status: "idle",
       };
     };
@@ -1981,7 +1913,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_pull_request_generation",
           startMode: "fork",
           selectedModel: BUILD_SELECTION,
           sourceExternalSessionId: "external-source-build",
@@ -2008,7 +1939,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
@@ -2033,7 +1963,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       externalSessionId: "external-fork-history-failure",
       startedAt: "2026-02-22T08:20:00.000Z",
       role: "build",
-      scenario: "build_pull_request_generation",
       status: "idle",
     });
     adapter.loadSessionHistory = async () => {
@@ -2074,7 +2003,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_pull_request_generation",
           startMode: "fork",
           selectedModel: BUILD_SELECTION,
           sourceExternalSessionId: "external-source-build",
@@ -2105,7 +2033,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
@@ -2131,7 +2058,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       externalSessionId: "external-forked-stale-after-history",
       startedAt: "2026-02-22T08:20:00.000Z",
       role: "build",
-      scenario: "build_pull_request_generation",
       status: "idle",
     });
     adapter.loadSessionHistory = async () => {
@@ -2184,7 +2110,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_pull_request_generation",
           startMode: "fork",
           selectedModel: BUILD_SELECTION,
           sourceExternalSessionId: "external-source-build",
@@ -2219,7 +2144,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:40:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -2231,7 +2155,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_implementation_start",
         startedAt: "2026-02-22T08:20:00.000Z",
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo/worktree",
@@ -2273,7 +2196,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             taskId: "task-1",
             repoPath: "/tmp/repo",
             role: "build",
-            scenario: "build_after_human_request_changes",
             status: "idle",
             startedAt: "2026-02-22T08:20:00.000Z",
             runtimeId: "runtime-1",
@@ -2307,7 +2229,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_after_human_request_changes",
           startMode: "reuse",
           sourceExternalSessionId: "external-opencode",
         }),
@@ -2332,7 +2253,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:40:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -2342,7 +2262,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-claude",
         runtimeKind: "opencode",
         role: "build",
-        scenario: "build_after_human_request_changes",
         startedAt: "2026-02-22T08:20:00.000Z",
         workingDirectory: "/tmp/repo/worktree",
         selectedModel: {
@@ -2383,7 +2302,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             taskId: "task-1",
             repoPath: "/tmp/repo",
             role: "build",
-            scenario: "build_after_human_request_changes",
             status: "idle",
             startedAt: "2026-02-22T08:20:00.000Z",
             runtimeId: "runtime-1",
@@ -2416,7 +2334,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const externalSessionId = await start({
         taskId: "task-1",
         role: "build",
-        scenario: "build_after_human_request_changes",
         startMode: "reuse",
         sourceExternalSessionId: "external-claude",
       });
@@ -2611,7 +2528,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     adapter.startSession = async (input) => ({
       externalSessionId: "external-qa",
       role: input.role,
-      scenario: input.scenario,
       startedAt: "2026-02-22T08:00:00.000Z",
       status: "idle",
       runtimeKind: input.runtimeKind,
@@ -2745,7 +2661,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "build",
-      scenario: "build_implementation_start",
       status: "idle",
     });
 
@@ -2807,7 +2722,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -2872,7 +2786,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -2939,7 +2852,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -3021,7 +2933,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -3066,7 +2977,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const externalSessionId = await start({
         taskId: "task-1",
         role: "build",
-        sendKickoff: true,
+        kickoffTemplateId: "kickoff.build_pull_request_generation",
         startMode: "fresh",
         selectedModel: BUILD_SELECTION,
       });
@@ -3084,7 +2995,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ).toEqual({
         id: "history:session-start:external-created",
         role: "system",
-        content: "Session started (build - build_implementation_start)",
+        content: "Session started (build)",
         timestamp: "2026-02-22T08:00:10.000Z",
       });
     } finally {
@@ -3241,7 +3152,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "build",
-      scenario: "build_implementation_start",
       status: "idle",
     });
 
@@ -3279,7 +3189,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const startPromise = start({
         taskId: "task-1",
         role: "build",
-        sendKickoff: true,
+        kickoffTemplateId: "kickoff.build_pull_request_generation",
         startMode: "fresh",
         selectedModel: BUILD_SELECTION,
       });
@@ -3305,7 +3215,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "build",
-      scenario: "build_pull_request_generation",
       status: "idle",
     });
     adapter.loadSessionHistory = async () => [];
@@ -3320,7 +3229,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
@@ -3387,8 +3295,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       await start({
         taskId: "task-1",
         role: "build",
-        scenario: "build_pull_request_generation",
-        sendKickoff: true,
+        kickoffTemplateId: "kickoff.build_pull_request_generation",
         startMode: "fork",
         sourceExternalSessionId: "external-source-build",
         selectedModel: BUILD_SELECTION,
@@ -3415,7 +3322,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "build",
-      scenario: "build_pull_request_generation",
       status: "idle",
     });
     adapter.loadSessionHistory = async () => [];
@@ -3430,7 +3336,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
@@ -3492,8 +3397,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         start({
           taskId: "task-1",
           role: "build",
-          scenario: "build_pull_request_generation",
-          sendKickoff: true,
+          kickoffTemplateId: "kickoff.build_pull_request_generation",
           startMode: "fork",
           sourceExternalSessionId: "external-source-build",
           selectedModel: BUILD_SELECTION,
@@ -3527,7 +3431,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };

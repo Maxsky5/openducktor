@@ -89,7 +89,6 @@ describe("use-agent-studio-page-model-builders", () => {
       runtimeKind: "opencode",
       externalSessionId: "planner-session",
       role: "planner",
-      scenario: "planner_initial",
     });
     const unavailablePlannerTask = createTaskCardFixture({
       agentWorkflows: {
@@ -122,13 +121,11 @@ describe("use-agent-studio-page-model-builders", () => {
       runtimeKind: "opencode",
       externalSessionId: "spec-session",
       role: "spec",
-      scenario: "spec_initial",
     });
     const qaWaitingSession = createSession({
       runtimeKind: "opencode",
       externalSessionId: "qa-session",
       role: "qa",
-      scenario: "qa_review",
       pendingQuestions: [{ requestId: "q-1", questions: [] }],
     });
     const task = createTaskCardFixture({
@@ -155,12 +152,11 @@ describe("use-agent-studio-page-model-builders", () => {
     });
   });
 
-  test("buildWorkflowModelContext includes follow-up build scenario from human feedback", () => {
+  test("buildWorkflowModelContext includes follow-up build launch action from human feedback", () => {
     const activeSession = createSession({
       runtimeKind: "opencode",
       externalSessionId: "spec-session",
       role: "spec",
-      scenario: "spec_initial",
     });
     const taskWithFeedback = createTaskCardFixture({
       status: "human_review",
@@ -224,7 +220,7 @@ describe("use-agent-studio-page-model-builders", () => {
     );
   });
 
-  test("does not expose qa-rejected follow-up build scenario when latest qa verdict is approved", () => {
+  test("does not expose qa-rejected follow-up build launch action when latest qa verdict is approved", () => {
     const taskWithApprovedQa = createTaskCardFixture({
       status: "human_review",
       documentSummary: {

@@ -1465,7 +1465,6 @@ pub(crate) fn make_session(_task_id: &str, session_id: &str) -> AgentSessionDocu
     AgentSessionDocument {
         external_session_id: session_id.to_string(),
         role: "build".to_string(),
-        scenario: "build_default".to_string(),
         started_at: "2026-02-20T12:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: "/tmp/repo".to_string(),

@@ -2,10 +2,8 @@ import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
-  AgentScenario,
   AgentSessionStartMode,
 } from "@openducktor/core";
-import { getAgentScenarioDefinition } from "@openducktor/core";
 import {
   type Dispatch,
   type SetStateAction,
@@ -15,8 +13,9 @@ import {
   useState,
 } from "react";
 import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
+import { getSessionLaunchAction, type SessionLaunchActionId } from "./session-start-launch-options";
 import type { SessionStartModalIntent } from "./session-start-modal-types";
-import { resolveScenarioStartMode } from "./session-start-mode";
+import { resolveLaunchStartMode } from "./session-start-mode";
 import { coerceVisibleSelectionToCatalog, isSameSelection } from "./session-start-selection";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 
@@ -50,22 +49,22 @@ const resolveInitialStartState = ({
   existingSessionOptions,
   initialSourceExternalSessionId,
   initialStartMode,
-  scenario,
+  launchActionId,
 }: {
   existingSessionOptions: SessionStartExistingSessionOption[];
   initialSourceExternalSessionId: string | null | undefined;
   initialStartMode: AgentSessionStartMode | undefined;
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
 }): {
   selectedSourceSessionId: string;
   selectedStartMode: AgentSessionStartMode;
 } => {
-  const allowedStartModes = getAgentScenarioDefinition(scenario).allowedStartModes;
+  const allowedStartModes = getSessionLaunchAction(launchActionId).allowedStartModes;
   const selectedStartMode =
     initialStartMode && allowedStartModes.includes(initialStartMode)
       ? initialStartMode
-      : resolveScenarioStartMode({
-          scenario,
+      : resolveLaunchStartMode({
+          launchActionId,
           existingSessionOptions,
         });
 
@@ -147,7 +146,8 @@ export function useSessionStartModalReuseState({
   const [selectedSourceSessionId, setSelectedSourceSessionId] = useState("");
 
   const availableStartModes = useMemo<AgentSessionStartMode[]>(
-    () => (intent ? getAgentScenarioDefinition(intent.scenario).allowedStartModes : ["fresh"]),
+    () =>
+      intent ? [...getSessionLaunchAction(intent.launchActionId).allowedStartModes] : ["fresh"],
     [intent],
   );
 
@@ -163,7 +163,7 @@ export function useSessionStartModalReuseState({
 
   const initializeStartState = useCallback((nextIntent: SessionStartModalIntent): void => {
     const nextState = resolveInitialStartState({
-      scenario: nextIntent.scenario,
+      launchActionId: nextIntent.launchActionId,
       existingSessionOptions: nextIntent.existingSessionOptions ?? [],
       initialStartMode: nextIntent.initialStartMode,
       initialSourceExternalSessionId: nextIntent.initialSourceExternalSessionId,

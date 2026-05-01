@@ -248,11 +248,9 @@ fn task_delete_removes_managed_worktrees_and_related_branches() -> Result<()> {
     build_session.working_directory = worktree_path.to_string();
     let mut qa_session = make_session("parent-1", "qa-session");
     qa_session.role = "qa".to_string();
-    qa_session.scenario = "qa_review".to_string();
     qa_session.working_directory = format!("{worktree_path}/");
     let mut planner_session = make_session("parent-1", "planner-session");
     planner_session.role = "planner".to_string();
-    planner_session.scenario = "planner_initial".to_string();
     planner_session.working_directory = repo_path.to_string();
     let (service, task_state, git_state) = build_service_with_git_state(
         vec![parent],
@@ -907,7 +905,6 @@ fn task_delete_only_removes_task_managed_worktrees() -> Result<()> {
         AgentSessionDocument {
             external_session_id: "build-session".to_string(),
             role: "build".to_string(),
-            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: managed_worktree.to_string_lossy().to_string(),
@@ -916,7 +913,6 @@ fn task_delete_only_removes_task_managed_worktrees() -> Result<()> {
         AgentSessionDocument {
             external_session_id: "qa-session".to_string(),
             role: "qa".to_string(),
-            scenario: "qa_review".to_string(),
             started_at: "2026-03-17T12:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: unrelated_worktree.to_string_lossy().to_string(),
@@ -991,7 +987,6 @@ fn task_delete_reports_partial_cleanup_progress_when_store_delete_fails() -> Res
         state.agent_sessions = vec![AgentSessionDocument {
             external_session_id: "build-session".to_string(),
             role: "build".to_string(),
-            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: managed_worktree.to_string_lossy().to_string(),
@@ -1066,7 +1061,6 @@ fn task_delete_skips_detached_managed_worktree() -> Result<()> {
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: detached_worktree.to_string_lossy().to_string(),

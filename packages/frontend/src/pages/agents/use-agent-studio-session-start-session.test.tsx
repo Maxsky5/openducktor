@@ -40,7 +40,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   },
   taskId: "task-1",
   role: "spec",
-  scenario: "spec_initial",
+  launchActionId: "spec_initial",
   activeSession: null,
   selectedTask: createTaskCardFixture(),
   agentStudioReady: true,
@@ -61,7 +61,7 @@ describe("useAgentStudioSessionStartSession", () => {
     // no-op placeholder to keep test structure consistent with other hook suites
   });
 
-  test("scopes in-flight starts by task, role, and scenario", async () => {
+  test("scopes in-flight starts by task, role, and launch action", async () => {
     const specSelection = createDeferred<{
       selectedModel: typeof MODEL_SELECTION;
       startMode: "fresh";
@@ -100,7 +100,6 @@ describe("useAgentStudioSessionStartSession", () => {
     await harness.update(
       createBaseArgs({
         role: "planner",
-        scenario: "planner_initial",
         startAgentSession,
         executeRequestedSessionStart,
         startingSessionByTaskRef,
@@ -146,7 +145,6 @@ describe("useAgentStudioSessionStartSession", () => {
       createBaseArgs({
         activeWorkspace: null,
         role: "qa",
-        scenario: "qa_review",
         selectedTask: createTaskCardFixture({
           agentWorkflows: {
             spec: { required: false, canSkip: true, available: true, completed: true },
@@ -171,7 +169,6 @@ describe("useAgentStudioSessionStartSession", () => {
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         role: "qa",
-        scenario: "qa_review",
         startMode: "fresh",
         selectedModel: MODEL_SELECTION,
       }),
@@ -209,7 +206,6 @@ describe("useAgentStudioSessionStartSession", () => {
       expect.objectContaining({
         taskId: "task-1",
         role: "spec",
-        scenario: "spec_initial",
         startMode: "reuse",
         sourceExternalSessionId: "session-existing",
       }),

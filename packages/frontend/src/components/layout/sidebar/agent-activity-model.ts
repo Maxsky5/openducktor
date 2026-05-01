@@ -5,7 +5,6 @@ export type AgentActivitySessionItem = {
   taskId: string;
   taskTitle: string;
   role: AgentActivitySessionSummary["role"];
-  scenario: AgentActivitySessionSummary["scenario"];
   status: AgentActivitySessionSummary["status"];
   startedAt: string;
 };
@@ -53,7 +52,6 @@ export const summarizeAgentActivity = ({
       taskId: session.taskId,
       taskTitle: taskTitleById?.[session.taskId] ?? session.taskId,
       role: session.role,
-      scenario: session.scenario,
       status: session.status,
       startedAt: session.startedAt,
     };

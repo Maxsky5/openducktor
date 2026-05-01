@@ -1,9 +1,9 @@
 import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
-import { getAgentScenarioDefinition } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
+import { getSessionLaunchAction } from "./session-start-launch-options";
 import type { SessionStartModalSource } from "./session-start-modal-types";
 import { buildReusableSessionOptions } from "./session-start-reuse-options";
 import type {
@@ -65,10 +65,10 @@ type ExecuteSessionStartFromDecisionArgs = {
   onPostStartActionError?: ((action: SessionStartPostAction, error: Error) => void) | undefined;
 };
 
-const scenarioSupportsReusableSessions = (
-  scenario: SessionStartFlowRequest["scenario"],
+const launchActionSupportsReusableSessions = (
+  launchActionId: SessionStartFlowRequest["launchActionId"],
 ): boolean => {
-  return getAgentScenarioDefinition(scenario).allowedStartModes.some(
+  return getSessionLaunchAction(launchActionId).allowedStartModes.some(
     (mode) => mode === "reuse" || mode === "fork",
   );
 };
@@ -81,7 +81,7 @@ const resolveExistingSessionOptions = (
     return request.existingSessionOptions;
   }
 
-  if (!scenarioSupportsReusableSessions(request.scenario)) {
+  if (!launchActionSupportsReusableSessions(request.launchActionId)) {
     return [];
   }
 
@@ -138,7 +138,7 @@ export const buildSessionStartModalRequest = ({
     source,
     taskId: request.taskId,
     role: request.role,
-    scenario: request.scenario,
+    launchActionId: request.launchActionId,
     postStartAction: request.postStartAction,
     selectedModel,
     initialTargetBranch,
@@ -174,7 +174,7 @@ export const executeSessionStartFromDecision = async ({
     intent: {
       taskId: request.taskId,
       role: request.role,
-      scenario: request.scenario,
+      launchActionId: request.launchActionId,
       startMode: decision.startMode,
       ...(decision.targetBranch ? { targetBranch: decision.targetBranch } : {}),
       postStartAction: request.postStartAction,

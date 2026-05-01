@@ -48,7 +48,6 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeSession: createSession({
     externalSessionId: "external-a",
     role: "spec",
-    scenario: "spec_initial",
   }),
   isTaskHydrating: false,
   isSessionHistoryHydrated: true,
@@ -107,12 +106,10 @@ describe("useAgentChatThreadContext", () => {
     const sessionA = createSession({
       externalSessionId: "external-a",
       role: "spec",
-      scenario: "spec_initial",
     });
     const sessionB = createSession({
       externalSessionId: "external-b",
       role: "planner",
-      scenario: "planner_initial",
     });
     const harness = createHookHarness(
       useAgentChatThreadContext,
@@ -134,12 +131,10 @@ describe("useAgentChatThreadContext", () => {
     const sessionA = createSession({
       externalSessionId: "external-a",
       role: "spec",
-      scenario: "spec_initial",
     });
     const sessionB = createSession({
       externalSessionId: "external-b",
       role: "planner",
-      scenario: "planner_initial",
       historyHydrationState: "not_requested",
     });
     const harness = createHookHarness(
@@ -165,7 +160,6 @@ describe("useAgentChatThreadContext", () => {
     const session = createSession({
       externalSessionId: "external-a",
       role: "spec",
-      scenario: "spec_initial",
     });
     const harness = createHookHarness(
       useAgentChatThreadContext,

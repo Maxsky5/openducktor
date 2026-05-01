@@ -29,7 +29,7 @@ describe("session-start-workflow", () => {
         intent: {
           taskId: "TASK-1",
           role: "build",
-          scenario: "build_after_human_request_changes",
+          launchActionId: "build_implementation_start",
           startMode: "fresh",
           postStartAction: "none",
           beforeStartAction: {
@@ -60,7 +60,7 @@ describe("session-start-workflow", () => {
       intent: {
         taskId: "TASK-1",
         role: "build",
-        scenario: "build_rebase_conflict_resolution",
+        launchActionId: "build_implementation_start",
         startMode: "fresh",
         postStartAction: "none",
         targetWorkingDirectory: "/repo/worktrees/conflict-task-1",
@@ -92,7 +92,7 @@ describe("session-start-workflow", () => {
       intent: {
         taskId: "TASK-2",
         role: "build",
-        scenario: "build_pull_request_generation",
+        launchActionId: "build_pull_request_generation",
         startMode: "reuse",
         sourceExternalSessionId: "builder-session-1",
         targetBranch: {
@@ -144,7 +144,7 @@ describe("session-start-workflow", () => {
       intent: {
         taskId: "TASK-3",
         role: "build",
-        scenario: "build_after_human_request_changes",
+        launchActionId: "build_after_human_request_changes",
         startMode: "fresh",
         postStartAction: "kickoff",
         message: "Update the acceptance criteria and rerun the desktop tests.",

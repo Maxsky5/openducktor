@@ -1,18 +1,14 @@
 import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
-import type {
-  AgentModelSelection,
-  AgentRole,
-  AgentScenario,
-  AgentSessionStartMode,
-} from "@openducktor/core";
-import { assertAgentKickoffScenario } from "@openducktor/core";
+import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { executeSessionStart } from "./session-start-execution";
-import { kickoffPromptForScenario } from "./session-start-prompts";
+import type { SessionLaunchActionId } from "./session-start-launch-options";
+import { getSessionLaunchAction } from "./session-start-launch-options";
+import { kickoffPromptForTemplate } from "./session-start-prompts";
 
 export type SessionStartPostAction = "none" | "kickoff" | "send_message";
 
@@ -24,7 +20,7 @@ export type SessionStartBeforeAction = {
 export type SessionStartWorkflowIntent = {
   taskId: string;
   role: AgentRole;
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
   startMode: AgentSessionStartMode;
   sourceExternalSessionId?: string | null;
   targetBranch?: GitTargetBranch;
@@ -99,12 +95,16 @@ const buildPostStartMessage = async ({
     return message;
   }
 
-  const kickoffScenario = assertAgentKickoffScenario(intent.scenario);
+  const launchAction = getSessionLaunchAction(intent.launchActionId);
+  const kickoffTemplateId = launchAction.kickoffTemplateId;
+  if (!kickoffTemplateId) {
+    throw new Error(`Launch action "${intent.launchActionId}" does not define a kickoff prompt.`);
+  }
   const humanFeedback =
-    kickoffScenario === "build_after_human_request_changes"
+    kickoffTemplateId === "kickoff.build_after_human_request_changes"
       ? (intent.message?.trim() ?? "")
       : undefined;
-  if (kickoffScenario === "build_after_human_request_changes" && !humanFeedback) {
+  if (kickoffTemplateId === "kickoff.build_after_human_request_changes" && !humanFeedback) {
     throw new Error(FEEDBACK_MESSAGE_REQUIRED_ERROR);
   }
   const promptOverrides = activeWorkspace?.workspaceId
@@ -114,7 +114,7 @@ const buildPostStartMessage = async ({
     ? (await loadRepoConfigFromQuery(queryClient, activeWorkspace.workspaceId)).defaultTargetBranch
     : null;
   const git =
-    kickoffScenario === "build_pull_request_generation"
+    kickoffTemplateId === "kickoff.build_pull_request_generation"
       ? {
           targetBranch: canonicalTargetBranch(
             effectiveTaskTargetBranch(
@@ -125,7 +125,7 @@ const buildPostStartMessage = async ({
         }
       : undefined;
 
-  return kickoffPromptForScenario(intent.role, kickoffScenario, intent.taskId, {
+  return kickoffPromptForTemplate(intent.role, kickoffTemplateId, intent.taskId, {
     overrides: promptOverrides ?? {},
     ...(humanFeedback
       ? {
@@ -200,7 +200,6 @@ export const startSessionWorkflow = async ({
       ? await executeSessionStart({
           taskId: intent.taskId,
           role: intent.role,
-          scenario: intent.scenario,
           startMode: "reuse",
           sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "reuse"),
           ...(intent.targetBranch !== undefined
@@ -212,7 +211,6 @@ export const startSessionWorkflow = async ({
         ? await executeSessionStart({
             taskId: intent.taskId,
             role: intent.role,
-            scenario: intent.scenario,
             startMode: "fork",
             selectedModel: requireSelectedModel(selection, "fork"),
             sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "fork"),
@@ -224,7 +222,6 @@ export const startSessionWorkflow = async ({
         : await executeSessionStart({
             taskId: intent.taskId,
             role: intent.role,
-            scenario: intent.scenario,
             startMode: "fresh",
             selectedModel: requireSelectedModel(selection, "fresh"),
             ...(intent.targetBranch !== undefined

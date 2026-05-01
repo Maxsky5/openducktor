@@ -8,11 +8,6 @@ use serde_json::{Map, Value};
 
 use crate::document_storage::{document_presence, latest_qa_verdict, latest_updated_at};
 
-const LEGACY_AGENT_SESSION_SCENARIO_ALIASES: &[(&str, &str)] = &[
-    ("spec_revision", "spec_initial"),
-    ("planner_revision", "planner_initial"),
-];
-
 pub(crate) fn parse_metadata_root(metadata: Option<Value>) -> Map<String, Value> {
     match metadata {
         Some(Value::Object(map)) => map,
@@ -101,30 +96,6 @@ pub(crate) fn metadata_document_summary(
     }
 }
 
-fn normalize_agent_session_entry(entry: &Value) -> Value {
-    let Some(object) = entry.as_object() else {
-        return entry.clone();
-    };
-
-    let Some(scenario_value) = object.get("scenario").and_then(Value::as_str) else {
-        return entry.clone();
-    };
-
-    let Some((_, canonical_scenario)) = LEGACY_AGENT_SESSION_SCENARIO_ALIASES
-        .iter()
-        .find(|(legacy_scenario, _)| *legacy_scenario == scenario_value)
-    else {
-        return entry.clone();
-    };
-
-    let mut normalized = object.clone();
-    normalized.insert(
-        "scenario".to_string(),
-        Value::String((*canonical_scenario).to_string()),
-    );
-    Value::Object(normalized)
-}
-
 pub(crate) fn parse_agent_sessions(value: &Value) -> Result<Vec<AgentSessionDocument>> {
     let entries = value.as_array().ok_or_else(|| {
         anyhow!(
@@ -136,7 +107,7 @@ pub(crate) fn parse_agent_sessions(value: &Value) -> Result<Vec<AgentSessionDocu
         .iter()
         .enumerate()
         .map(|(index, entry)| {
-            AgentSessionDocument::deserialize(normalize_agent_session_entry(entry)).map_err(|error| {
+            AgentSessionDocument::deserialize(entry.clone()).map_err(|error| {
                 anyhow!(
                     "Invalid openducktor.agentSessions[{index}] metadata: {error}. Fix the saved task metadata and retry."
                 )

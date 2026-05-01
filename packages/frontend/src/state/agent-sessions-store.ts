@@ -8,7 +8,6 @@ export type AgentSessionSummary = Pick<
   | "repoPath"
   | "taskId"
   | "role"
-  | "scenario"
   | "status"
   | "startedAt"
   | "workingDirectory"
@@ -20,7 +19,7 @@ export type AgentSessionSummary = Pick<
 };
 
 export type WorkflowAgentSessionSummary = AgentSessionSummary &
-  Pick<WorkflowAgentSessionState, "role" | "scenario">;
+  Pick<WorkflowAgentSessionState, "role">;
 
 export const isWorkflowAgentSessionSummary = (
   session: AgentSessionSummary | null | undefined,
@@ -29,12 +28,12 @@ export const isWorkflowAgentSessionSummary = (
     return false;
   }
 
-  return session.role !== null && session.scenario !== null;
+  return session.role !== null;
 };
 
 export type AgentActivitySessionSummary = Pick<
   WorkflowAgentSessionState,
-  "externalSessionId" | "taskId" | "role" | "scenario" | "status" | "startedAt"
+  "externalSessionId" | "taskId" | "role" | "status" | "startedAt"
 > & {
   repoPath: string;
   hasPendingPermissions: boolean;
@@ -61,7 +60,6 @@ export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionS
   repoPath: session.repoPath,
   taskId: session.taskId,
   role: session.role,
-  scenario: session.scenario,
   status: session.status,
   startedAt: session.startedAt,
   workingDirectory: session.workingDirectory,
@@ -83,7 +81,6 @@ export const toAgentActivitySessionSummary = (
     taskId: session.taskId,
     repoPath: session.repoPath,
     role: session.role,
-    scenario: session.scenario,
     status: session.status,
     startedAt: session.startedAt,
     hasPendingPermissions: session.pendingPermissions.length > 0,
@@ -99,7 +96,6 @@ const areSummariesEquivalent = (
     left?.externalSessionId === right.externalSessionId &&
     left.taskId === right.taskId &&
     left.role === right.role &&
-    left.scenario === right.scenario &&
     left.status === right.status &&
     left.startedAt === right.startedAt &&
     left.workingDirectory === right.workingDirectory &&
@@ -119,7 +115,6 @@ const areActivitySummariesEquivalent = (
     left.taskId === right.taskId &&
     left.repoPath === right.repoPath &&
     left.role === right.role &&
-    left.scenario === right.scenario &&
     left.status === right.status &&
     left.startedAt === right.startedAt &&
     left.hasPendingPermissions === right.hasPendingPermissions &&

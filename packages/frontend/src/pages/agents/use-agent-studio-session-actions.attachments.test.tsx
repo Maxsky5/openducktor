@@ -100,7 +100,7 @@ const createBaseArgs = (): HookArgs => ({
   },
   taskId: "task-1",
   role: "spec",
-  scenario: "spec_initial",
+  launchActionId: "spec_initial",
   activeSession: createAgentSessionFixture({ externalSessionId: "session-existing" }),
   selectedModelSelection: null,
   selectedModelDescriptor: {

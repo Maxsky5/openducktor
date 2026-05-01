@@ -1,5 +1,6 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { SessionLaunchActionId } from "./session-start-launch-options";
 
 export type SessionStartExistingSessionOption = {
   value: string;
@@ -12,13 +13,13 @@ export type SessionStartExistingSessionOption = {
 export type SessionStartRequestReason =
   | "create_session"
   | "composer_send"
-  | "scenario_kickoff"
+  | "launch_kickoff"
   | "rebase_conflict_resolution";
 
 export type NewSessionStartRequest = {
   taskId: string;
   role: AgentRole;
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
   reason: SessionStartRequestReason;
   selectedModel: AgentModelSelection | null;
   targetWorkingDirectory?: string | null;

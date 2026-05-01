@@ -7,7 +7,6 @@ const buildSession = (
     externalSessionId?: string;
     taskId?: string;
     role?: AgentActivitySessionSummary["role"];
-    scenario?: AgentActivitySessionSummary["scenario"];
     startedAt?: string;
     status?: AgentActivitySessionSummary["status"];
     hasPendingPermissions?: boolean;
@@ -18,7 +17,6 @@ const buildSession = (
   taskId: overrides.taskId ?? "task-1",
   repoPath: "/repo",
   role: overrides.role ?? ("spec" as const),
-  scenario: overrides.scenario ?? ("spec_initial" as const),
   status: overrides.status ?? "idle",
   startedAt: overrides.startedAt ?? "2026-02-26T09:00:00.000Z",
   hasPendingPermissions: overrides.hasPendingPermissions ?? false,

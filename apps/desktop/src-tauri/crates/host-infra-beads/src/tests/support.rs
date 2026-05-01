@@ -271,7 +271,6 @@ pub(super) fn make_session(session_id: &str, started_at: &str) -> AgentSessionDo
     AgentSessionDocument {
         external_session_id: session_id.to_string(),
         role: "build".to_string(),
-        scenario: "build_default".to_string(),
         started_at: started_at.to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: "/repo".to_string(),

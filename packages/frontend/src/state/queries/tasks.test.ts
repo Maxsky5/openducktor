@@ -45,7 +45,6 @@ const taskFixture: TaskCard = {
 const sessionFixture: AgentSessionRecord = {
   externalSessionId: "external-1",
   role: "build",
-  scenario: "build_implementation_start",
   runtimeKind: "opencode",
   workingDirectory: "/tmp/repo/worktree",
   startedAt: "2026-03-22T12:00:00.000Z",

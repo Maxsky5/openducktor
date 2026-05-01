@@ -261,7 +261,7 @@ describe("settings-modal-model", () => {
         baseVersion: 1,
         enabled: true,
       },
-      "system.scenario.spec_initial": {
+      "kickoff.build_pull_request_generation": {
         template: "Bad {{task.foo}} and {{unknown.value}}",
         baseVersion: 1,
         enabled: true,
@@ -269,7 +269,8 @@ describe("settings-modal-model", () => {
     };
 
     expect(buildPromptOverrideValidationErrors(overrides)).toEqual({
-      "system.scenario.spec_initial": "Unsupported placeholders: {{task.foo}}, {{unknown.value}}.",
+      "kickoff.build_pull_request_generation":
+        "Unsupported placeholders: {{task.foo}}, {{unknown.value}}.",
     });
   });
 

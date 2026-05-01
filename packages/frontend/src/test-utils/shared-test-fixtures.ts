@@ -86,7 +86,6 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   taskId: "task-1",
   repoPath: "/repo",
   role: "spec",
-  scenario: "spec_initial",
   status: "idle",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,

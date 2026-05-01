@@ -1,12 +1,14 @@
 import type { AgentWorkflowState, TaskCard } from "@openducktor/contracts";
-import {
-  type AgentRole,
-  type AgentScenario,
-  isRecord,
-  isScenarioStartModeAllowed,
-} from "@openducktor/core";
+import { type AgentRole, isRecord } from "@openducktor/core";
 import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import {
+  firstLaunchAction,
+  getSessionLaunchAction,
+  LAUNCH_ACTION_LABELS,
+  LAUNCH_ACTIONS_BY_ROLE,
+  type SessionLaunchActionId,
+} from "@/features/session-start";
 import {
   type AgentSessionOptionSummary,
   buildRoleSessionSequenceById,
@@ -36,7 +38,7 @@ type PersistedTaskTabsState = {
 export type SessionCreateOption = {
   id: string;
   role: AgentRole;
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
   label: string;
   description: string;
   disabled: boolean;
@@ -47,12 +49,11 @@ export type AgentSessionWorkflowSummary = AgentSessionOptionSummary &
 
 type WorkflowSessionSummary = AgentSessionWorkflowSummary & {
   role: AgentRole;
-  scenario: AgentScenario;
 };
 
 const isWorkflowSessionSummary = (
   session: AgentSessionWorkflowSummary | null | undefined,
-): session is WorkflowSessionSummary => session?.role !== null && session?.scenario !== null;
+): session is WorkflowSessionSummary => session?.role !== null;
 
 const ALL_AGENT_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
 
@@ -321,6 +322,7 @@ export const buildWorkflowStateByRole = (params: {
   }));
   const taskAttentionState = deriveTaskAttentionState(params.task);
   const qaRejected = isQaRejectedTask(params.task);
+  const qaApproved = params.task?.documentSummary.qaReport.verdict === "approved";
   const qaRejectedInAiReview =
     params.task &&
     params.task.status === "ai_review" &&
@@ -330,21 +332,12 @@ export const buildWorkflowStateByRole = (params: {
     const workflow = params.roleWorkflowsByTask[role];
     const sessionSummary = params.roleSessionByRole[role];
     const availability = deriveWorkflowAvailability(workflow);
-    const latestRoleSession = sessionSummary.latestSession;
     const liveSession = sessionSummary.liveSession;
     const isLiveSessionActive =
       liveSession === "running" || liveSession === "waiting_input" || liveSession === "error";
     let completion: AgentWorkflowStepState["completion"] = "not_started";
 
-    if (role === "build" && qaRejected) {
-      completion = "done";
-    } else if (
-      role === "build" &&
-      latestRoleSession?.scenario === "build_after_qa_rejected" &&
-      (latestRoleSession.status === "idle" || latestRoleSession.status === "stopped") &&
-      params.roleWorkflowsByTask.qa.completed &&
-      !qaRejected
-    ) {
+    if (role === "build" && (qaRejected || qaApproved)) {
       completion = "done";
     } else if (role === "qa" && qaRejected) {
       completion = "rejected";
@@ -405,7 +398,6 @@ export const buildRoleSessionSummaryMap = (
 
 export const buildSessionSelectorGroups = (params: {
   sessionsForTask: AgentSessionWorkflowSummary[];
-  scenarioLabels: Record<AgentScenario, string>;
   roleLabelByRole: Record<AgentRole, string>;
 }): ComboboxGroup[] => {
   const groups: ComboboxGroup[] = [];
@@ -422,11 +414,10 @@ export const buildSessionSelectorGroups = (params: {
       label: formatAgentSessionOptionLabel({
         session,
         sessionNumber: roleSessionNumberById.get(session.externalSessionId) ?? index + 1,
-        scenarioLabels: params.scenarioLabels,
         roleLabelByRole: params.roleLabelByRole,
       }),
       description: formatAgentSessionOptionDescription(session),
-      searchKeywords: [role, session.scenario, session.externalSessionId],
+      searchKeywords: [role, session.externalSessionId],
     }));
     groups.push({
       label: params.roleLabelByRole[role],
@@ -443,33 +434,31 @@ export const buildSessionCreateOptions = (params: {
   hasHumanFeedback: boolean;
   createSessionDisabled: boolean;
   roleLabelByRole: Record<AgentRole, string>;
-  scenarioLabels: Record<AgentScenario, string>;
 }): SessionCreateOption[] => {
   const options: SessionCreateOption[] = [];
 
   const addFreshOption = (
     role: AgentRole,
-    scenario: AgentScenario,
-    label: string,
+    launchActionId: SessionLaunchActionId,
     description: string,
     disabled: boolean,
   ) => {
     options.push({
-      id: `${role}:${scenario}:fresh`,
+      id: `${role}:${launchActionId}:fresh`,
       role,
-      scenario,
-      label,
+      launchActionId,
+      label: `${params.roleLabelByRole[role]} · ${LAUNCH_ACTION_LABELS[launchActionId]}`,
       description,
       disabled,
     });
   };
 
   if (params.roleEnabledByTask.spec) {
-    if (isScenarioStartModeAllowed("spec_initial", "fresh")) {
+    const launchActionId = firstLaunchAction("spec");
+    if (getSessionLaunchAction(launchActionId).allowedStartModes.includes("fresh")) {
       addFreshOption(
         "spec",
-        "spec_initial",
-        `${params.roleLabelByRole.spec} · Start Spec`,
+        launchActionId,
         "Create a new spec session from scratch",
         params.createSessionDisabled,
       );
@@ -478,11 +467,11 @@ export const buildSessionCreateOptions = (params: {
 
   const canStartPlannerFresh = params.roleEnabledByTask.planner;
   if (canStartPlannerFresh) {
-    if (isScenarioStartModeAllowed("planner_initial", "fresh")) {
+    const launchActionId = firstLaunchAction("planner");
+    if (getSessionLaunchAction(launchActionId).allowedStartModes.includes("fresh")) {
       addFreshOption(
         "planner",
-        "planner_initial",
-        `${params.roleLabelByRole.planner} · Start Planner`,
+        launchActionId,
         "Create a new planner session from scratch",
         params.createSessionDisabled,
       );
@@ -490,46 +479,35 @@ export const buildSessionCreateOptions = (params: {
   }
 
   if (params.roleEnabledByTask.build) {
-    if (isScenarioStartModeAllowed("build_implementation_start", "fresh")) {
+    for (const launchActionId of LAUNCH_ACTIONS_BY_ROLE.build) {
+      if (!getSessionLaunchAction(launchActionId).allowedStartModes.includes("fresh")) {
+        continue;
+      }
+      if (launchActionId === "build_after_qa_rejected" && !params.hasQaRejection) {
+        continue;
+      }
+      if (launchActionId === "build_after_human_request_changes" && !params.hasHumanFeedback) {
+        continue;
+      }
+      if (launchActionId === "build_rebase_conflict_resolution") {
+        continue;
+      }
       addFreshOption(
         "build",
-        "build_implementation_start",
-        `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_implementation_start}`,
-        `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_implementation_start.toLowerCase()}`,
+        launchActionId,
+        `Create a new ${params.roleLabelByRole.build.toLowerCase()} session with ${LAUNCH_ACTION_LABELS[launchActionId].toLowerCase()}`,
         params.createSessionDisabled,
       );
-    }
-    if (params.hasQaRejection) {
-      if (isScenarioStartModeAllowed("build_after_qa_rejected", "fresh")) {
-        addFreshOption(
-          "build",
-          "build_after_qa_rejected",
-          `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_after_qa_rejected}`,
-          `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_after_qa_rejected.toLowerCase()}`,
-          params.createSessionDisabled,
-        );
-      }
-    }
-    if (params.hasHumanFeedback) {
-      if (isScenarioStartModeAllowed("build_after_human_request_changes", "fresh")) {
-        addFreshOption(
-          "build",
-          "build_after_human_request_changes",
-          `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_after_human_request_changes}`,
-          `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_after_human_request_changes.toLowerCase()}`,
-          params.createSessionDisabled,
-        );
-      }
     }
   }
 
   if (params.roleEnabledByTask.qa) {
-    if (isScenarioStartModeAllowed("qa_review", "fresh")) {
+    const launchActionId = firstLaunchAction("qa");
+    if (getSessionLaunchAction(launchActionId).allowedStartModes.includes("fresh")) {
       addFreshOption(
         "qa",
-        "qa_review",
-        `${params.roleLabelByRole.qa} · ${params.scenarioLabels.qa_review}`,
-        `Create ${params.roleLabelByRole.qa.toLowerCase()} session with ${params.scenarioLabels.qa_review.toLowerCase()}`,
+        launchActionId,
+        "Create a new qa session from scratch",
         params.createSessionDisabled,
       );
     }

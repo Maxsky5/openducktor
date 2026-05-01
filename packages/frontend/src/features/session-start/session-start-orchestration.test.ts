@@ -23,14 +23,12 @@ describe("session-start-orchestration", () => {
       externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       role: "build",
-      scenario: "build_after_qa_rejected",
       startedAt: "2026-03-20T12:00:00.000Z",
     });
     const activeSession = createAgentSessionFixture({
       externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       role: "build",
-      scenario: "build_after_qa_rejected",
       startedAt: "2026-03-19T12:00:00.000Z",
     });
 
@@ -39,7 +37,7 @@ describe("session-start-orchestration", () => {
       request: {
         taskId: "TASK-1",
         role: "build",
-        scenario: "build_after_qa_rejected",
+        launchActionId: "build_pull_request_generation",
         postStartAction: "kickoff",
       },
       selectedModel: BUILD_SELECTION,
@@ -73,14 +71,12 @@ describe("session-start-orchestration", () => {
       externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       role: "build",
-      scenario: "build_after_qa_rejected",
       startedAt: "2026-03-20T12:00:00.000Z",
     });
     const olderSession = createAgentSessionFixture({
       externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-03-19T12:00:00.000Z",
     });
 
@@ -89,7 +85,7 @@ describe("session-start-orchestration", () => {
       request: {
         taskId: "TASK-1",
         role: "build",
-        scenario: "build_after_qa_rejected",
+        launchActionId: "build_pull_request_generation",
         postStartAction: "kickoff",
       },
       selectedModel: null,
@@ -99,13 +95,13 @@ describe("session-start-orchestration", () => {
     expect(request.initialSourceExternalSessionId).toBe("builder-session-2");
   });
 
-  test("does not auto-build reusable options for fresh-only scenarios and preserves overrides", () => {
+  test("does not auto-build reusable options for fresh-only launch actions and preserves overrides", () => {
     const request = buildSessionStartModalRequest({
       source: "agent_studio",
       request: {
         taskId: "TASK-1",
         role: "spec",
-        scenario: "spec_initial",
+        launchActionId: "spec_initial",
         postStartAction: "none",
         initialStartMode: "fresh",
         targetWorkingDirectory: "/repo/worktrees/TASK-1",
@@ -116,7 +112,6 @@ describe("session-start-orchestration", () => {
           externalSessionId: "spec-session-1",
           taskId: "TASK-1",
           role: "spec",
-          scenario: "spec_initial",
         }),
       ],
     });
@@ -132,14 +127,12 @@ describe("session-start-orchestration", () => {
       externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       role: "build",
-      scenario: "build_after_qa_rejected",
       startedAt: "2026-03-20T12:00:00.000Z",
     });
     const activeSession = createAgentSessionFixture({
       externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       role: "build",
-      scenario: "build_after_qa_rejected",
       startedAt: "2026-03-19T12:00:00.000Z",
     });
 
@@ -148,7 +141,7 @@ describe("session-start-orchestration", () => {
       request: {
         taskId: "TASK-1",
         role: "build",
-        scenario: "build_after_qa_rejected",
+        launchActionId: "build_implementation_start",
         initialSourceExternalSessionId: "builder-session-2",
         postStartAction: "kickoff",
       },
@@ -166,7 +159,7 @@ describe("session-start-orchestration", () => {
       request: {
         taskId: "TASK-1",
         role: "build",
-        scenario: "build_after_qa_rejected",
+        launchActionId: "build_implementation_start",
         initialTargetBranch: {
           remote: "origin",
           branch: "release/2026.05",
@@ -202,7 +195,7 @@ describe("session-start-orchestration", () => {
       request: {
         taskId: "TASK-1",
         role: "build",
-        scenario: "build_after_qa_rejected",
+        launchActionId: "build_implementation_start",
         postStartAction: "none",
       },
       decision: {
@@ -237,7 +230,7 @@ describe("session-start-orchestration", () => {
       request: {
         taskId: "TASK-1",
         role: "build",
-        scenario: "build_pull_request_generation",
+        launchActionId: "build_implementation_start",
         postStartAction: "none",
       },
       decision: {
@@ -271,7 +264,7 @@ describe("session-start-orchestration", () => {
       request: {
         taskId: "TASK-1",
         role: "build",
-        scenario: "build_after_qa_rejected",
+        launchActionId: "build_implementation_start",
         postStartAction: "kickoff",
       },
       decision: {

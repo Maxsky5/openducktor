@@ -7,7 +7,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   taskId: "task-1",
   repoPath: "/tmp/repo",
   role: "build",
-  scenario: "build_implementation_start",
   status: "idle",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeKind: "opencode",

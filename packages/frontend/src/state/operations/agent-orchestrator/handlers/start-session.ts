@@ -1,14 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
-import {
-  type AgentPromptGitContext,
-  assertAgentKickoffScenario,
-  defaultAgentScenarioForRole,
-} from "@openducktor/core";
+import type { AgentKickoffTemplateId, AgentPromptGitContext } from "@openducktor/core";
 import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
-import { kickoffPromptWithTaskContext } from "../support/scenario";
+import { kickoffPromptWithTaskContext } from "../support/kickoff-prompts";
 import { requireSelectedModelRuntimeKindForStart } from "../support/session-runtime-metadata";
 import type {
   ResolvedRuntimeAndModel,
@@ -92,19 +88,19 @@ const attachSessionListenerAndGuard = async ({
 };
 
 const resolveKickoffGitContext = async ({
-  kickoffScenario,
+  kickoffTemplateId,
   workspaceId,
   kickoffTargetBranch,
   taskCard,
   model,
 }: {
-  kickoffScenario: ReturnType<typeof assertAgentKickoffScenario>;
+  kickoffTemplateId: AgentKickoffTemplateId;
   workspaceId: string;
   kickoffTargetBranch: StartAgentSessionInput["kickoffTargetBranch"];
   taskCard: TaskCard;
   model: Pick<StartSessionDependencies, "model">["model"];
 }): Promise<AgentPromptGitContext | undefined> => {
-  if (kickoffScenario !== "build_pull_request_generation") {
+  if (kickoffTemplateId !== "kickoff.build_pull_request_generation") {
     return undefined;
   }
 
@@ -134,6 +130,7 @@ const resolveKickoffGitContext = async ({
 const maybeSendKickoff = async ({
   sendKickoff,
   startedCtx,
+  kickoffTemplateId,
   kickoffTargetBranch,
   task,
   taskCard,
@@ -141,6 +138,7 @@ const maybeSendKickoff = async ({
   promptOverrides,
 }: {
   sendKickoff: boolean;
+  kickoffTemplateId: AgentKickoffTemplateId | undefined;
   startedCtx: StartedSessionContext;
   kickoffTargetBranch: StartAgentSessionInput["kickoffTargetBranch"];
   task: TaskDependencies;
@@ -151,10 +149,12 @@ const maybeSendKickoff = async ({
   if (!sendKickoff) {
     return;
   }
+  if (!kickoffTemplateId) {
+    throw new Error("Kickoff template id is required before sending a kickoff prompt.");
+  }
 
-  const kickoffScenario = assertAgentKickoffScenario(startedCtx.resolvedScenario);
   const git = await resolveKickoffGitContext({
-    kickoffScenario,
+    kickoffTemplateId,
     workspaceId: startedCtx.workspaceId,
     kickoffTargetBranch,
     taskCard,
@@ -167,7 +167,7 @@ const maybeSendKickoff = async ({
       kind: "text",
       text: kickoffPromptWithTaskContext(
         startedCtx.role,
-        kickoffScenario,
+        kickoffTemplateId,
         {
           taskId: startedCtx.taskId,
           title: taskCard.title,
@@ -199,8 +199,8 @@ export const createStartAgentSession = ({
   model,
 }: StartSessionDependencies) => {
   return async (input: StartAgentSessionInput): Promise<string> => {
-    const { taskId, role, scenario, sendKickoff = false, startMode } = input;
-    const effectiveScenario = scenario ?? defaultAgentScenarioForRole(role);
+    const { taskId, role, kickoffTemplateId, startMode } = input;
+    const sendKickoff = kickoffTemplateId !== undefined;
     const repoPath = requireActiveRepo(repo.activeWorkspace?.repoPath ?? null);
     const workspaceId = repo.activeWorkspace?.workspaceId.trim();
     if (!workspaceId) {
@@ -256,7 +256,7 @@ export const createStartAgentSession = ({
       normalizedSourceSessionId,
       normalizedTargetWorkingDirectory,
       selectedModelKey,
-      effectiveScenario,
+      kickoffTemplateId ?? "no-kickoff-template",
       sendKickoff ? "kickoff" : "no-kickoff",
     ];
     const inFlightKeySuffix = sendKickoff ? "kickoff" : "no-kickoff";
@@ -280,7 +280,6 @@ export const createStartAgentSession = ({
                   : {}),
               }
             : input),
-          scenario: effectiveScenario,
         },
         deps: {
           session,
@@ -301,6 +300,7 @@ export const createStartAgentSession = ({
 
       await maybeSendKickoff({
         sendKickoff,
+        kickoffTemplateId,
         startedCtx: startResult.ctx,
         kickoffTargetBranch: input.kickoffTargetBranch,
         task,

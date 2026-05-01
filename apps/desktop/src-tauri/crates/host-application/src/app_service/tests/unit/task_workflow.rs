@@ -102,7 +102,6 @@ fn assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_rea
             AgentSessionDocument {
                 external_session_id: "spec-session".to_string(),
                 role: "spec".to_string(),
-                scenario: "spec_initial".to_string(),
                 started_at: "2026-03-17T10:00:00Z".to_string(),
                 runtime_kind: "opencode".to_string(),
                 working_directory: repo_path.to_string_lossy().to_string(),
@@ -111,7 +110,6 @@ fn assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_rea
             AgentSessionDocument {
                 external_session_id: "build-session".to_string(),
                 role: "build".to_string(),
-                scenario: "build_implementation_start".to_string(),
                 started_at: "2026-03-17T11:00:00Z".to_string(),
                 runtime_kind: "opencode".to_string(),
                 working_directory: build_worktree.to_string_lossy().to_string(),
@@ -120,7 +118,6 @@ fn assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_rea
             AgentSessionDocument {
                 external_session_id: "qa-session".to_string(),
                 role: "qa".to_string(),
-                scenario: "qa_review".to_string(),
                 started_at: "2026-03-17T12:00:00Z".to_string(),
                 runtime_kind: "opencode".to_string(),
                 working_directory: qa_worktree.to_string_lossy().to_string(),
@@ -335,7 +332,6 @@ fn task_reset_implementation_ignores_stale_persisted_build_session_without_live_
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
@@ -375,7 +371,6 @@ fn task_reset_implementation_ignores_stale_qa_sessions_with_persisted_external_i
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-qa-session".to_string(),
         role: "qa".to_string(),
-        scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
@@ -424,7 +419,6 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
         AgentSessionDocument {
             external_session_id: "external-spec-session".to_string(),
             role: "spec".to_string(),
-            scenario: "spec_authoring".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: repo_path.to_string_lossy().to_string(),
@@ -433,7 +427,6 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
         AgentSessionDocument {
             external_session_id: "external-planner-session".to_string(),
             role: "planner".to_string(),
-            scenario: "plan_authoring".to_string(),
             started_at: "2026-03-17T11:00:01Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: repo_path.to_string_lossy().to_string(),
@@ -442,7 +435,6 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
         AgentSessionDocument {
             external_session_id: "external-build-session".to_string(),
             role: "build".to_string(),
-            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:02Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: repo_path.to_string_lossy().to_string(),
@@ -451,7 +443,6 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
         AgentSessionDocument {
             external_session_id: "external-qa-session".to_string(),
             role: "qa".to_string(),
-            scenario: "qa_review".to_string(),
             started_at: "2026-03-17T11:00:03Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: repo_path.to_string_lossy().to_string(),
@@ -519,7 +510,6 @@ fn task_reset_rejects_live_spec_session_status_with_workspace_runtime_without_ru
     assert_task_reset_rejects_live_session_status(
         TaskStatus::SpecReady,
         "spec",
-        "spec_authoring",
         "Cannot reset task while active spec session(s) exist",
     )
 }
@@ -530,7 +520,6 @@ fn task_reset_rejects_live_planner_session_status_with_workspace_runtime_without
     assert_task_reset_rejects_live_session_status(
         TaskStatus::ReadyForDev,
         "planner",
-        "plan_authoring",
         "Cannot reset task while active planner session(s) exist",
     )
 }
@@ -540,7 +529,6 @@ fn task_reset_rejects_live_build_session_status_with_workspace_runtime_without_r
     assert_task_reset_rejects_live_session_status(
         TaskStatus::InProgress,
         "build",
-        "build_implementation_start",
         "Cannot reset task while active build session(s) exist",
     )
 }
@@ -550,7 +538,6 @@ fn task_reset_rejects_live_qa_session_status_with_workspace_runtime_without_run(
     assert_task_reset_rejects_live_session_status(
         TaskStatus::AiReview,
         "qa",
-        "qa_review",
         "Cannot reset task while active qa session(s) exist",
     )
 }
@@ -558,7 +545,6 @@ fn task_reset_rejects_live_qa_session_status_with_workspace_runtime_without_run(
 fn assert_task_reset_rejects_live_session_status(
     status: TaskStatus,
     role: &str,
-    scenario: &str,
     expected_message: &str,
 ) -> Result<()> {
     let repo_path = unique_temp_path("reset-task-live-spec-shared-runtime-repo");
@@ -590,7 +576,6 @@ fn assert_task_reset_rejects_live_session_status(
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: format!("external-{role}-session"),
         role: role.to_string(),
-        scenario: scenario.to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
@@ -755,7 +740,6 @@ fn task_reset_removes_task_managed_worktrees_for_spec_and_planner_sessions() -> 
         AgentSessionDocument {
             external_session_id: "spec-session".to_string(),
             role: "spec".to_string(),
-            scenario: "spec_authoring".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: spec_worktree.to_string_lossy().to_string(),
@@ -764,7 +748,6 @@ fn task_reset_removes_task_managed_worktrees_for_spec_and_planner_sessions() -> 
         AgentSessionDocument {
             external_session_id: "planner-session".to_string(),
             role: "planner".to_string(),
-            scenario: "plan_authoring".to_string(),
             started_at: "2026-03-17T12:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: planner_worktree.to_string_lossy().to_string(),
@@ -773,7 +756,6 @@ fn task_reset_removes_task_managed_worktrees_for_spec_and_planner_sessions() -> 
         AgentSessionDocument {
             external_session_id: "build-session".to_string(),
             role: "build".to_string(),
-            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T13:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: unrelated_worktree.to_string_lossy().to_string(),
@@ -854,7 +836,6 @@ fn task_reset_removes_stranded_task_managed_worktrees_when_branch_inspection_fai
         AgentSessionDocument {
             external_session_id: "spec-session".to_string(),
             role: "spec".to_string(),
-            scenario: "spec_authoring".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: spec_worktree.to_string_lossy().to_string(),
@@ -863,7 +844,6 @@ fn task_reset_removes_stranded_task_managed_worktrees_when_branch_inspection_fai
         AgentSessionDocument {
             external_session_id: "planner-session".to_string(),
             role: "planner".to_string(),
-            scenario: "plan_authoring".to_string(),
             started_at: "2026-03-17T12:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: planner_worktree.to_string_lossy().to_string(),
@@ -933,7 +913,6 @@ fn task_reset_propagates_non_worktree_branch_errors_for_task_managed_worktrees()
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "spec-session".to_string(),
         role: "spec".to_string(),
-        scenario: "spec_authoring".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: spec_worktree.to_string_lossy().to_string(),
@@ -986,7 +965,6 @@ fn task_delete_reports_qa_specific_message_when_session_role_has_trailing_whites
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-qa-session".to_string(),
         role: "qa ".to_string(),
-        scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
@@ -1089,7 +1067,6 @@ fn task_reset_implementation_rejects_live_qa_session_status_with_workspace_runti
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-qa-session".to_string(),
         role: "qa".to_string(),
-        scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
@@ -1139,7 +1116,6 @@ fn task_delete_ignores_stale_persisted_build_session_without_live_runtime() -> R
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
@@ -1181,7 +1157,6 @@ fn task_reset_fails_when_persisted_session_runtime_kind_is_unknown() -> Result<(
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "unknown-runtime".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
@@ -1228,7 +1203,6 @@ fn task_delete_rejects_live_build_session_status() -> Result<()> {
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
@@ -1281,7 +1255,6 @@ fn task_delete_rejects_live_qa_session_status_with_qa_specific_message() -> Resu
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-qa-session".to_string(),
         role: "qa".to_string(),
-        scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
@@ -1339,7 +1312,6 @@ fn task_delete_rejects_live_qa_session_status_for_task_worktree_cwd_via_repo_run
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-qa-session".to_string(),
         role: "qa".to_string(),
-        scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: qa_worktree.to_string_lossy().to_string(),
@@ -1410,7 +1382,6 @@ fn task_delete_allows_idle_runtime_session_after_status_probe() -> Result<()> {
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
@@ -1469,7 +1440,6 @@ fn assert_task_reset_implementation_rejects_live_build_session_status(
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: repo_path.to_string_lossy().to_string(),
@@ -1548,7 +1518,6 @@ fn task_reset_implementation_allows_idle_runtime_session() -> Result<()> {
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
@@ -1625,7 +1594,6 @@ fn task_reset_implementation_fails_when_status_endpoint_is_unreachable() -> Resu
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "external-build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
@@ -1715,7 +1683,6 @@ fn task_reset_implementation_only_removes_task_managed_worktrees() -> Result<()>
         AgentSessionDocument {
             external_session_id: "build-session".to_string(),
             role: "build".to_string(),
-            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: managed_worktree.to_string_lossy().to_string(),
@@ -1724,7 +1691,6 @@ fn task_reset_implementation_only_removes_task_managed_worktrees() -> Result<()>
         AgentSessionDocument {
             external_session_id: "qa-session".to_string(),
             role: "qa".to_string(),
-            scenario: "qa_review".to_string(),
             started_at: "2026-03-17T12:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: unrelated_worktree.to_string_lossy().to_string(),
@@ -1797,7 +1763,6 @@ fn task_reset_implementation_removes_stranded_managed_worktree_when_branch_inspe
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: managed_worktree.to_string_lossy().to_string(),
@@ -1864,7 +1829,6 @@ fn task_reset_implementation_propagates_non_worktree_branch_errors_for_managed_w
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: managed_worktree.to_string_lossy().to_string(),
@@ -1944,7 +1908,6 @@ fn task_reset_implementation_fails_when_branch_remains_checked_out_in_repo_workt
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
@@ -2026,7 +1989,6 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_branch_delete
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
@@ -2098,7 +2060,6 @@ fn task_reset_implementation_reports_partial_cleanup_progress_when_store_cleanup
         state.agent_sessions = vec![AgentSessionDocument {
             external_session_id: "build-session".to_string(),
             role: "build".to_string(),
-            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: build_worktree.to_string_lossy().to_string(),
@@ -2173,7 +2134,6 @@ fn task_reset_implementation_rejects_branch_still_checked_out_in_remaining_workt
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: build_worktree.to_string_lossy().to_string(),
@@ -2261,7 +2221,6 @@ fn task_reset_implementation_removes_recorded_builder_worktree_outside_current_e
         .agent_sessions = vec![AgentSessionDocument {
         external_session_id: "build-session".to_string(),
         role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
         working_directory: recorded_worktree.to_string_lossy().to_string(),

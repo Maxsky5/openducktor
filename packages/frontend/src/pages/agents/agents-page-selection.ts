@@ -5,7 +5,7 @@ export {
 } from "@/features/session-start";
 
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import {
@@ -13,7 +13,7 @@ import {
   isWorkflowAgentSessionSummary,
   type WorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
-import { AGENT_ROLE_ORDER, firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
+import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
 export {
   toContextStorageKey,
@@ -114,7 +114,6 @@ export const resolveAgentStudioSessionSelection = ({
   roleFromQuery,
   selectedTask,
   fallbackRole,
-  scenarioFromQuery,
 }: {
   sessionsForTask: AgentSessionSummary[];
   sessionParam: string | null;
@@ -122,8 +121,7 @@ export const resolveAgentStudioSessionSelection = ({
   roleFromQuery: AgentRole;
   selectedTask: TaskCard | null;
   fallbackRole: AgentRole;
-  scenarioFromQuery?: AgentScenario | null;
-}): { activeSession: AgentSessionSummary | null; role: AgentRole; scenario: AgentScenario } => {
+}): { activeSession: AgentSessionSummary | null; role: AgentRole } => {
   const runningSession =
     [...sessionsForTask]
       .filter((session) => session.status === "running" || session.status === "starting")
@@ -140,22 +138,9 @@ export const resolveAgentStudioSessionSelection = ({
   };
 
   const toSelection = (role: AgentRole, session: AgentSessionSummary | null) => {
-    const roleScenarios = SCENARIOS_BY_ROLE[role];
-    const explicitScenarioForRole =
-      hasExplicitRoleParam && scenarioFromQuery && roleScenarios.includes(scenarioFromQuery)
-        ? scenarioFromQuery
-        : null;
-
-    const scenario =
-      explicitScenarioForRole ??
-      (session?.scenario && roleScenarios.includes(session.scenario)
-        ? session.scenario
-        : firstScenario(role));
-
     return {
       activeSession: session,
       role,
-      scenario,
     };
   };
 

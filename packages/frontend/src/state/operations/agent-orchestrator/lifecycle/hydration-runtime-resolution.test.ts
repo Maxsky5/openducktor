@@ -15,7 +15,6 @@ const createRecord = (
   runtimeKind,
   externalSessionId: "external-1",
   role,
-  scenario: role === "qa" ? "qa_review" : "build_implementation_start",
   startedAt: "2026-03-01T10:00:00.000Z",
   workingDirectory,
   selectedModel: null,

@@ -50,27 +50,27 @@ type PendingModalRun = {
 
 const requireSelectedModel = (
   selection: AgentModelSelection | null,
-  request: Pick<SessionStartModalRunRequest, "role" | "scenario" | "taskId">,
+  request: Pick<SessionStartModalRunRequest, "role" | "launchActionId" | "taskId">,
 ): AgentModelSelection => {
   if (selection) {
     return selection;
   }
 
   throw new Error(
-    `Starting a ${request.role} ${request.scenario} session for ${request.taskId} requires an explicit model selection.`,
+    `Starting a ${request.role} ${request.launchActionId} session for ${request.taskId} requires an explicit model selection.`,
   );
 };
 
 const requireSourceSessionId = (
   sourceExternalSessionId: string | null,
-  request: Pick<SessionStartModalRunRequest, "role" | "scenario" | "taskId">,
+  request: Pick<SessionStartModalRunRequest, "role" | "launchActionId" | "taskId">,
 ): string => {
   if (sourceExternalSessionId) {
     return sourceExternalSessionId;
   }
 
   throw new Error(
-    `Starting a ${request.role} ${request.scenario} session for ${request.taskId} requires a source session.`,
+    `Starting a ${request.role} ${request.launchActionId} session for ${request.taskId} requires a source session.`,
   );
 };
 
@@ -158,7 +158,7 @@ export function useSessionStartModalRunner({
       );
       if (
         targetBranchValidationError &&
-        supportsTaskTargetBranchSelection(request.role, request.scenario)
+        supportsTaskTargetBranchSelection(request.role, request.launchActionId)
       ) {
         toast.error(INVALID_TASK_TARGET_BRANCH_LABEL, {
           description: targetBranchValidationError,

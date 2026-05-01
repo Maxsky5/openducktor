@@ -26,7 +26,6 @@ const createSession = (overrides: Partial<ReturnType<typeof createAgentSessionFi
     externalSessionId: "ext-session-build-1",
     taskId: "task-1",
     role: "build",
-    scenario: "build_implementation_start",
     status: "idle",
     startedAt: "2026-02-22T12:00:00.000Z",
     ...overrides,
@@ -87,8 +86,8 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
     expect(
       harness.getLatest().shouldInterceptCreateSession({
         id: "build:build_after_human_request_changes:fresh",
+        launchActionId: "build_after_human_request_changes",
         role: "build",
-        scenario: "build_after_human_request_changes",
         label: "Builder",
         description: "Create builder session",
         disabled: false,
@@ -97,8 +96,8 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
     expect(
       harness.getLatest().shouldInterceptCreateSession({
         id: "build:build_implementation_start:fresh",
+        launchActionId: "build_implementation_start",
         role: "build",
-        scenario: "build_implementation_start",
         label: "Builder",
         description: "Create builder session",
         disabled: false,
@@ -107,8 +106,8 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
     expect(
       harness.getLatest().shouldInterceptCreateSession({
         id: "qa:qa_review:fresh",
+        launchActionId: "qa_review",
         role: "qa",
-        scenario: "qa_review",
         label: "QA",
         description: "Create QA session",
         disabled: false,
@@ -160,7 +159,6 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
     const startSessionRequests: Array<{
       taskId: string;
       role: "build";
-      scenario: "build_after_human_request_changes";
       reason: "create_session";
       existingSessionOptions: Array<{ value: string }>;
       initialSourceExternalSessionId?: string | null;
@@ -196,24 +194,23 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
     await updateFeedbackMessage(harness, "  Ship the requested fixes.  ");
     await confirmFeedbackModal(harness);
 
-    expect(startSessionRequests).toEqual([
-      {
-        taskId: "task-1",
-        role: "build",
-        scenario: "build_after_human_request_changes",
-        reason: "create_session",
-        existingSessionOptions: [
-          expect.objectContaining({ value: "session-build-existing" }),
-          expect.objectContaining({ value: "session-build-older" }),
-        ],
-        initialSourceExternalSessionId: "session-build-existing",
-        postStartAction: "kickoff",
-        message: "Ship the requested fixes.",
-        beforeStartAction: {
-          action: "human_request_changes",
-          note: "Ship the requested fixes.",
-        },
+    expect(startSessionRequests).toHaveLength(1);
+    expect(startSessionRequests[0]).toMatchObject({
+      taskId: "task-1",
+      role: "build",
+      launchActionId: "build_after_human_request_changes",
+      reason: "create_session",
+      initialSourceExternalSessionId: "session-build-existing",
+      postStartAction: "kickoff",
+      message: "Ship the requested fixes.",
+      beforeStartAction: {
+        action: "human_request_changes",
+        note: "Ship the requested fixes.",
       },
+    });
+    expect(startSessionRequests[0]?.existingSessionOptions.map((option) => option.value)).toEqual([
+      "session-build-existing",
+      "session-build-older",
     ]);
     expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
 

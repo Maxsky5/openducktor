@@ -1,5 +1,5 @@
 import type { GitBranch, GitTargetBranch, WorkspaceRecord } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
@@ -41,7 +41,6 @@ type AgentStudioOrchestrationActionsContext = {
     taskId: string;
     externalSessionId: string | null;
     role: AgentRole;
-    scenario: AgentScenario | null;
   }) => void;
   openTaskDetails: () => void;
   startAgentSession: AgentStateContextValue["startAgentSession"];
@@ -240,7 +239,7 @@ export function useAgentStudioOrchestrationController({
   const {
     viewTaskId,
     viewRole,
-    viewScenario,
+    viewLaunchActionId,
     viewSelectedTask,
     viewSessionsForTask,
     viewActiveSessionSummary,
@@ -345,7 +344,7 @@ export function useAgentStudioOrchestrationController({
     branches,
     taskId: viewTaskId,
     role: viewRole,
-    scenario: viewScenario,
+    launchActionId: viewLaunchActionId,
     activeSession: viewActiveSession,
     selectedModelSelection,
     selectedModelDescriptor,

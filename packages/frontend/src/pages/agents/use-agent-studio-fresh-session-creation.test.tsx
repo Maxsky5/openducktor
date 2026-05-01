@@ -144,8 +144,8 @@ describe("useAgentStudioFreshSessionCreation", () => {
     await harness.run((state) => {
       state.handleCreateSession({
         id: "planner:planner_initial:fresh",
+        launchActionId: "planner_initial",
         role: "planner",
-        scenario: "planner_initial",
         label: "Planner · Start Planner",
         description: "Create a new planner session from scratch",
         disabled: false,
@@ -174,8 +174,8 @@ describe("useAgentStudioFreshSessionCreation", () => {
     await harness.run((state) => {
       state.handleCreateSession({
         id: "planner:planner_initial:fresh",
+        launchActionId: "planner_initial",
         role: "planner",
-        scenario: "planner_initial",
         label: "Planner · Start Planner",
         description: "Create a new planner session from scratch",
         disabled: false,
@@ -213,8 +213,8 @@ describe("useAgentStudioFreshSessionCreation", () => {
     await harness.run((state) => {
       state.handleCreateSession({
         id: "qa:qa_review:fresh",
+        launchActionId: "qa_review",
         role: "qa",
-        scenario: "qa_review",
         label: "QA · Start QA",
         description: "Create a new QA session",
         disabled: false,
@@ -225,7 +225,6 @@ describe("useAgentStudioFreshSessionCreation", () => {
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         role: "qa",
-        scenario: "qa_review",
         startMode: "fresh",
       }),
     );
@@ -248,7 +247,6 @@ describe("useAgentStudioFreshSessionCreation", () => {
         activeSession: createAgentSessionFixture({
           externalSessionId: "active-build",
           role: "build",
-          scenario: "build_implementation_start",
           taskId: "task-1",
         }),
         startAgentSession,
@@ -266,8 +264,8 @@ describe("useAgentStudioFreshSessionCreation", () => {
     await harness.run((state) => {
       state.handleCreateSession({
         id: "build:build_implementation_start:reuse",
+        launchActionId: "build_implementation_start",
         role: "build",
-        scenario: "build_implementation_start",
         label: "Builder · Continue",
         description: "Reuse latest builder session",
         disabled: false,
@@ -279,7 +277,6 @@ describe("useAgentStudioFreshSessionCreation", () => {
       expect.objectContaining({
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         startMode: "reuse",
         sourceExternalSessionId: "session-existing",
       }),
@@ -303,7 +300,6 @@ describe("useAgentStudioFreshSessionCreation", () => {
         activeSession: createAgentSessionFixture({
           externalSessionId: "active-spec",
           role: "spec",
-          scenario: "spec_initial",
           taskId: "task-1",
         }),
         startAgentSession,
@@ -320,8 +316,8 @@ describe("useAgentStudioFreshSessionCreation", () => {
     await harness.run((state) => {
       state.handleCreateSession({
         id: "build:build_implementation_start:reuse",
+        launchActionId: "build_implementation_start",
         role: "build",
-        scenario: "build_implementation_start",
         label: "Builder · Continue",
         description: "Reuse latest builder session",
         disabled: false,

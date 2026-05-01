@@ -1,4 +1,4 @@
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import {
   AlertTriangle,
   ArrowUpRightFromSquare,
@@ -26,6 +26,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import type { SessionLaunchActionId } from "@/features/session-start";
 import { cn } from "@/lib/utils";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { AgentRoleOption } from "./agent-chat/agent-chat.types";
@@ -51,7 +52,7 @@ type AgentStudioSessionSelectorModel = {
 type AgentSessionCreateOption = {
   id: string;
   role: AgentRole;
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
   label: string;
   description: string;
   disabled: boolean;

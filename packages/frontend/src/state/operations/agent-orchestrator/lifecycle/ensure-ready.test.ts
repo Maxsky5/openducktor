@@ -53,7 +53,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
   role: "build",
-  scenario: "build_implementation_start",
   status: "idle",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
@@ -134,7 +133,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -380,7 +378,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -481,7 +478,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -588,7 +584,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -675,7 +670,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -745,7 +739,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -817,7 +810,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };
@@ -913,7 +905,6 @@ describe("agent-orchestrator-ensure-ready", () => {
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
       };
     };

@@ -289,7 +289,6 @@ describe("opencode-sdk-adapter", () => {
       taskId: "task-1",
       runtimeKind: "opencode",
       role: "spec",
-      scenario: "spec_initial",
       systemPrompt: "system",
     });
 
@@ -316,7 +315,6 @@ describe("opencode-sdk-adapter", () => {
       taskId: "task-1",
       runtimeKind: "opencode",
       role: "build",
-      scenario: "build_implementation_start",
       systemPrompt: "system",
       externalSessionId: "external-session-1",
     });
@@ -368,7 +366,6 @@ describe("opencode-sdk-adapter", () => {
       taskId: "task-1",
       runtimeKind: "opencode",
       role: "spec",
-      scenario: "spec_initial",
       systemPrompt: "system",
     });
 
@@ -442,7 +439,6 @@ describe("opencode-sdk-adapter", () => {
         taskId: "task-1",
         runtimeKind: "opencode",
         role: "spec",
-        scenario: "spec_initial",
         systemPrompt: "system",
       }),
     ).rejects.toThrow("client.global.event()");

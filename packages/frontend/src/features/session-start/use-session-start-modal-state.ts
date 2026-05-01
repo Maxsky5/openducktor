@@ -269,7 +269,7 @@ export function useSessionStartModalState({
 
   const showTargetBranchSelector = supportsTaskTargetBranchSelection(
     intent?.role,
-    intent?.scenario,
+    intent?.launchActionId,
   );
   const selectedInitialTargetBranch = useMemo(
     () => effectiveTaskTargetBranch(intent?.initialTargetBranch, repoSettings?.defaultTargetBranch),

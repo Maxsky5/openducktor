@@ -1,27 +1,15 @@
 import type { TaskCard } from "@openducktor/contracts";
-import {
-  type BuildRequestChangesScenario,
-  resolveBuildRequestChangesScenario,
-} from "@/lib/build-scenarios";
 import type {
   HumanReviewFeedbackModalModel,
   HumanReviewFeedbackState,
 } from "./human-review-feedback-types";
 
-const resolveRequestChangesScenario = (task: TaskCard | undefined): BuildRequestChangesScenario => {
-  return resolveBuildRequestChangesScenario(task);
-};
-
 export const createHumanReviewFeedbackState = (
-  tasks: TaskCard[],
+  _tasks: TaskCard[],
   taskId: string,
 ): HumanReviewFeedbackState => {
-  const task = tasks.find((entry) => entry.id === taskId);
-  const scenario = resolveRequestChangesScenario(task);
-
   return {
     taskId,
-    scenario,
     message: "",
   };
 };

@@ -107,7 +107,6 @@ function makeLiveTranscriptSession(): AgentSessionState {
     taskId: "",
     repoPath: "/repo-a",
     role: null as unknown as AgentSessionState["role"],
-    scenario: null as unknown as AgentSessionState["scenario"],
     status: "running",
     startedAt: "2026-02-22T12:00:00.000Z",
     runtimeId: "runtime-1",

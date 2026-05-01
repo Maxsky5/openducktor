@@ -66,10 +66,10 @@ describe("document contracts", () => {
         {
           externalSessionId: "session-1",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-02-18T17:20:00Z",
           runtimeKind: "opencode",
           workingDirectory: "/repo",
+          selectedModel: null,
         },
       ],
     });
@@ -80,7 +80,10 @@ describe("document contracts", () => {
     expect(parsed.agentSessions[0]).toEqual(
       expect.objectContaining({
         externalSessionId: "session-1",
-        scenario: "build_implementation_start",
+        role: "build",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        selectedModel: null,
       }),
     );
   });

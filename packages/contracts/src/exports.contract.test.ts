@@ -4,11 +4,9 @@ import type {
   AgentPromptOverride,
   AgentPromptTemplateId,
   AgentRole,
-  AgentScenario,
   AgentSessionModelSelection,
   AgentSessionRecord,
   AgentSessionRole,
-  AgentSessionScenario,
   AgentSessionStatus,
   AgentSessionStopTarget,
   AgentSessionTodoPayloadRecord,
@@ -142,12 +140,7 @@ import * as contracts from "./index";
 const EXPECTED_RUNTIME_EXPORTS = [
   "agentRoleSchema",
   "agentRoleValues",
-  "agentScenarioDefinitionByScenario",
-  "agentScenarioSchema",
-  "agentScenarioValues",
   "agentModelDefaultSchema",
-  "agentKickoffScenarioSchema",
-  "agentKickoffScenarioValues",
   "agentToolNameSchema",
   "agentToolNameValues",
   "buildSessionBootstrapSchema",
@@ -165,7 +158,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionQuestionRequestSchema",
   "agentSessionRecordSchema",
   "agentSessionRoleSchema",
-  "agentSessionScenarioSchema",
   "agentSessionStartModeSchema",
   "agentSessionStartModeValues",
   "agentSessionStatusSchema",
@@ -230,13 +222,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitPushBranchResultSchema",
   "gitTargetBranchSchema",
   "defaultSpecTemplateMarkdown",
-  "defaultAgentScenarioForRole",
-  "defaultStartModeForScenario",
   "extractPromptTemplatePlaceholders",
   "fileDiffSchema",
   "fileStatusSchema",
-  "getAgentScenarioDefinition",
-  "getAgentScenariosForRole",
   "gitFileStatusCountsSchema",
   "gitBranchSchema",
   "gitCurrentBranchSchema",
@@ -297,8 +285,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitRebaseBranchResultSchema",
   "gitRebaseAbortRequestSchema",
   "gitRebaseAbortResultSchema",
-  "isAgentKickoffScenario",
-  "isScenarioStartModeAllowed",
   "runtimeCheckSchema",
   "runtimeApprovalCapabilitiesSchema",
   "runtimeApprovalReplyOutcomeSchema",
@@ -427,7 +413,6 @@ type ExportedTypeContract = {
   AgentModelDefault: AgentModelDefault;
   AgentPromptOverride: AgentPromptOverride;
   AgentPromptTemplateId: AgentPromptTemplateId;
-  AgentScenario: AgentScenario;
   AutopilotActionId: AutopilotActionId;
   AutopilotEventId: AutopilotEventId;
   AutopilotRule: AutopilotRule;
@@ -439,7 +424,6 @@ type ExportedTypeContract = {
   AgentSessionTodoPayloadRecord: AgentSessionTodoPayloadRecord;
   AgentSessionRecord: AgentSessionRecord;
   AgentSessionRole: AgentSessionRole;
-  AgentSessionScenario: AgentSessionScenario;
   AgentSessionStatus: AgentSessionStatus;
   AgentSessionStopTarget: AgentSessionStopTarget;
   AgentToolName: AgentToolName;

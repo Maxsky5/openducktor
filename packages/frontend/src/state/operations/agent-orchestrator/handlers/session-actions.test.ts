@@ -18,7 +18,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
   role: "build",
-  scenario: "build_implementation_start",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
@@ -130,7 +129,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       actions.startAgentSession({
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         startMode: "fresh",
         selectedModel: {
           runtimeKind: "opencode",
@@ -1088,7 +1086,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       return {
         externalSessionId: input.externalSessionId,
         role: input.role,
-        scenario: input.scenario,
         startedAt: "2026-02-22T08:00:00.000Z",
         status: "idle",
         runtimeKind: input.runtimeKind,
@@ -1288,7 +1285,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       return {
         externalSessionId: input.externalSessionId,
         role: input.role,
-        scenario: input.scenario,
         startedAt: "2026-02-22T08:00:00.000Z",
         status: "idle",
         runtimeKind: input.runtimeKind,

@@ -49,7 +49,6 @@ const makeTaskMetadataPayload = (specMarkdown = "Spec Body") => ({
     {
       externalSessionId: "external-1",
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-18T17:20:00Z",
       runtimeKind: "opencode",
       workingDirectory: "/repo",
@@ -1698,7 +1697,6 @@ describe("TauriHostClient", () => {
             {
               externalSessionId: "session-opencode-1",
               role: "spec",
-              scenario: "spec_initial",
               startedAt: "2026-02-18T17:20:00Z",
               runtimeKind: "opencode",
               workingDirectory: "/repo",
@@ -1741,8 +1739,7 @@ describe("TauriHostClient", () => {
           agentSessions: [
             {
               externalSessionId: "ext-1",
-              role: "spec",
-              scenario: "spec_revision",
+              role: "invalid-role",
               startedAt: "2026-02-18T17:20:00Z",
               runtimeKind: "opencode",
               workingDirectory: "/repo",
@@ -1754,7 +1751,7 @@ describe("TauriHostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.agentSessionsList("/repo", "task-1")).rejects.toThrow("scenario");
+    await expect(client.agentSessionsList("/repo", "task-1")).rejects.toThrow("role");
   });
 
   test("spec, plan, qa, and session reads share one metadata IPC call per task", async () => {

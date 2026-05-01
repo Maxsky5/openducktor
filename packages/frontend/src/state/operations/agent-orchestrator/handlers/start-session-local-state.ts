@@ -36,7 +36,6 @@ export const buildInitialSession = ({
         `Runtime kind is required to initialize ${startedCtx.role} sessions.`,
       ),
       role: startedCtx.role,
-      scenario: startedCtx.resolvedScenario,
       status: "starting",
       startedAt: startedCtx.summary.startedAt,
       runtimeId: runtime.runtimeId,
@@ -48,7 +47,6 @@ export const buildInitialSession = ({
         buildSessionHeaderMessages({
           externalSessionId: startedCtx.summary.externalSessionId,
           role: startedCtx.role,
-          scenario: startedCtx.resolvedScenario,
           systemPrompt,
           startedAt: startedCtx.summary.startedAt,
         }),

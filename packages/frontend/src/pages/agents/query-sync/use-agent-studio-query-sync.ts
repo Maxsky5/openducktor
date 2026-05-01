@@ -1,4 +1,4 @@
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import type { SetURLSearchParams } from "react-router-dom";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
@@ -22,7 +22,6 @@ export function useAgentStudioQuerySync({
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
-  scenarioFromQuery: AgentScenario | null;
   isRepoNavigationBoundaryPending: boolean;
   navigationPersistenceError: Error | null;
   retryNavigationPersistence: () => void;
@@ -49,7 +48,6 @@ export function useAgentStudioQuerySync({
     sessionParam: navigation.externalSessionId,
     hasExplicitRoleParam,
     roleFromQuery,
-    scenarioFromQuery: navigation.scenario,
     isRepoNavigationBoundaryPending,
     navigationPersistenceError: persistenceError,
     retryNavigationPersistence: retryPersistenceRestore,

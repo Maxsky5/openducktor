@@ -4,11 +4,12 @@ import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { AGENT_ROLE_LABELS } from "@/types";
 
 export {
-  firstScenario,
-  isScenario,
-  kickoffPromptForScenario,
-  SCENARIO_LABELS,
-  SCENARIOS_BY_ROLE,
+  firstLaunchAction,
+  isLaunchActionId,
+  kickoffPromptForLaunchAction,
+  kickoffPromptForTemplate,
+  LAUNCH_ACTION_LABELS,
+  LAUNCH_ACTIONS_BY_ROLE,
 } from "@/features/session-start";
 
 export const ROLE_OPTIONS: Array<{

@@ -28,7 +28,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
   role: "spec",
-  scenario: "spec_initial",
   status: "idle",
   startedAt: "2026-02-20T10:00:00.000Z",
   runtimeId: null,
@@ -333,7 +332,7 @@ describe("agents-page-session-tabs", () => {
 
   test("does not mark builder as in_progress when stopped session exists but builder is not available", () => {
     const roleSessionByRole = buildRoleSessionSummaryMap([
-      buildSession({ role: "build", status: "stopped", scenario: "build_implementation_start" }),
+      buildSession({ role: "build", status: "stopped" }),
     ]);
     const states = buildWorkflowStateByRole({
       task: null,
@@ -356,7 +355,7 @@ describe("agents-page-session-tabs", () => {
 
   test("marks builder as in_progress when builder session exists but is stopped without build_completed", () => {
     const roleSessionByRole = buildRoleSessionSummaryMap([
-      buildSession({ role: "build", status: "stopped", scenario: "build_implementation_start" }),
+      buildSession({ role: "build", status: "stopped" }),
     ]);
     const states = buildWorkflowStateByRole({
       task: null,
@@ -379,7 +378,7 @@ describe("agents-page-session-tabs", () => {
 
   test("uses warning tone for blocked builder tasks even when the latest session is stopped", () => {
     const roleSessionByRole = buildRoleSessionSummaryMap([
-      buildSession({ role: "build", status: "stopped", scenario: "build_implementation_start" }),
+      buildSession({ role: "build", status: "stopped" }),
     ]);
     const states = buildWorkflowStateByRole({
       task: buildTask({ status: "blocked" }),
@@ -425,7 +424,7 @@ describe("agents-page-session-tabs", () => {
 
   test("keeps blocked builder tasks in progress while the live builder session is still running", () => {
     const roleSessionByRole = buildRoleSessionSummaryMap([
-      buildSession({ role: "build", status: "running", scenario: "build_implementation_start" }),
+      buildSession({ role: "build", status: "running" }),
     ]);
     const states = buildWorkflowStateByRole({
       task: buildTask({ status: "blocked" }),
@@ -448,7 +447,7 @@ describe("agents-page-session-tabs", () => {
 
   test("keeps blocked builder tasks failed when the latest builder session errored", () => {
     const roleSessionByRole = buildRoleSessionSummaryMap([
-      buildSession({ role: "build", status: "error", scenario: "build_implementation_start" }),
+      buildSession({ role: "build", status: "error" }),
     ]);
     const states = buildWorkflowStateByRole({
       task: buildTask({ status: "blocked" }),
@@ -557,7 +556,7 @@ describe("agents-page-session-tabs", () => {
 
   test("does not mark unavailable roles as in_progress when a session exists", () => {
     const roleSessionByRole = buildRoleSessionSummaryMap([
-      buildSession({ role: "qa", status: "idle", scenario: "qa_review" }),
+      buildSession({ role: "qa", status: "idle" }),
     ]);
     const states = buildWorkflowStateByRole({
       task: null,
@@ -622,9 +621,7 @@ describe("agents-page-session-tabs", () => {
         build: task.agentWorkflows.builder,
         qa: task.agentWorkflows.qa,
       },
-      roleSessionByRole: buildRoleSessionSummaryMap([
-        buildSession({ role: "qa", status: "idle", scenario: "qa_review" }),
-      ]),
+      roleSessionByRole: buildRoleSessionSummaryMap([buildSession({ role: "qa", status: "idle" })]),
     });
 
     expect(states).toEqual({
@@ -681,8 +678,8 @@ describe("agents-page-session-tabs", () => {
         qa: task.agentWorkflows.qa,
       },
       roleSessionByRole: buildRoleSessionSummaryMap([
-        buildSession({ role: "build", status: "stopped", scenario: "build_after_qa_rejected" }),
-        buildSession({ role: "qa", status: "idle", scenario: "qa_review" }),
+        buildSession({ role: "build", status: "stopped" }),
+        buildSession({ role: "qa", status: "idle" }),
       ]),
     });
 
@@ -697,7 +694,7 @@ describe("agents-page-session-tabs", () => {
   test.each([
     {
       name: "running",
-      session: buildSession({ role: "qa", status: "running", scenario: "qa_review" }),
+      session: buildSession({ role: "qa", status: "running" }),
       expected: { tone: "in_progress" as const, liveSession: "running" as const },
     },
     {
@@ -705,14 +702,13 @@ describe("agents-page-session-tabs", () => {
       session: buildSession({
         role: "qa",
         status: "running",
-        scenario: "qa_review",
         pendingQuestions: [{ requestId: "q-1", questions: [] }],
       }),
       expected: { tone: "waiting_input" as const, liveSession: "waiting_input" as const },
     },
     {
       name: "error",
-      session: buildSession({ role: "qa", status: "error", scenario: "qa_review" }),
+      session: buildSession({ role: "qa", status: "error" }),
       expected: { tone: "failed" as const, liveSession: "error" as const },
     },
   ])("shows qa step as active in ai_review when a new qa review session is $name", ({
@@ -744,7 +740,7 @@ describe("agents-page-session-tabs", () => {
         qa: task.agentWorkflows.qa,
       },
       roleSessionByRole: buildRoleSessionSummaryMap([
-        buildSession({ role: "build", status: "stopped", scenario: "build_after_qa_rejected" }),
+        buildSession({ role: "build", status: "stopped" }),
         session,
       ]),
     });
@@ -787,13 +783,11 @@ describe("agents-page-session-tabs", () => {
         buildSession({
           role: "build",
           status: "stopped",
-          scenario: "build_after_qa_rejected",
           startedAt: "2026-02-22T11:00:00.000Z",
         }),
         buildSession({
           role: "qa",
           status: "idle",
-          scenario: "qa_review",
           startedAt: "2026-02-22T10:00:00.000Z",
         }),
       ]),
@@ -902,34 +896,21 @@ describe("agents-page-session-tabs", () => {
           runtimeKind: "opencode",
           externalSessionId: "spec-1",
           role: "spec",
-          scenario: "spec_initial",
           startedAt: "2026-02-22T09:20:00.000Z",
         }),
         buildSession({
           runtimeKind: "opencode",
           externalSessionId: "spec-2",
           role: "spec",
-          scenario: "spec_initial",
           startedAt: "2026-02-22T08:20:00.000Z",
         }),
         buildSession({
           runtimeKind: "opencode",
           externalSessionId: "planner-1",
           role: "planner",
-          scenario: "planner_initial",
           startedAt: "2026-02-22T10:20:00.000Z",
         }),
       ],
-      scenarioLabels: {
-        spec_initial: "Spec",
-        planner_initial: "Planner",
-        build_implementation_start: "Implementation Start",
-        build_after_human_request_changes: "After Human Request Changes",
-        build_after_qa_rejected: "After QA Rejected",
-        build_pull_request_generation: "Generate Pull Request",
-        build_rebase_conflict_resolution: "Resolve Git Conflict",
-        qa_review: "QA Review",
-      },
       roleLabelByRole: { ...AGENT_ROLE_LABELS },
     });
 
@@ -976,13 +957,11 @@ describe("agents-page-session-tabs", () => {
       buildSession({
         externalSessionId: "build-older",
         role: "build",
-        scenario: "build_implementation_start",
         startedAt: "2026-02-20T09:00:00.000Z",
       }),
       buildSession({
         externalSessionId: "build-newer",
         role: "build",
-        scenario: "build_after_qa_rejected",
         startedAt: "2026-02-20T11:00:00.000Z",
       }),
     ];
@@ -1004,19 +983,9 @@ describe("agents-page-session-tabs", () => {
       hasHumanFeedback: false,
       createSessionDisabled: false,
       roleLabelByRole: { ...AGENT_ROLE_LABELS },
-      scenarioLabels: {
-        spec_initial: "Spec",
-        planner_initial: "Planner",
-        build_implementation_start: "Start Implementation",
-        build_after_human_request_changes: "Apply Human Changes",
-        build_after_qa_rejected: "Fix QA Rejection",
-        build_pull_request_generation: "Generate Pull Request",
-        build_rebase_conflict_resolution: "Resolve Git Conflict",
-        qa_review: "QA Review",
-      },
     });
 
-    expect(options.map((option) => option.scenario)).toEqual([
+    expect(options.map((option) => option.launchActionId)).toEqual([
       "planner_initial",
       "build_implementation_start",
       "build_after_qa_rejected",
@@ -1034,19 +1003,9 @@ describe("agents-page-session-tabs", () => {
       hasHumanFeedback: true,
       createSessionDisabled: false,
       roleLabelByRole: { ...AGENT_ROLE_LABELS },
-      scenarioLabels: {
-        spec_initial: "Spec",
-        planner_initial: "Planner",
-        build_implementation_start: "Start Implementation",
-        build_after_human_request_changes: "Apply Human Changes",
-        build_after_qa_rejected: "Fix QA Rejection",
-        build_pull_request_generation: "Generate Pull Request",
-        build_rebase_conflict_resolution: "Resolve Git Conflict",
-        qa_review: "QA Review",
-      },
     });
 
-    expect(plannerCompletedOptions.map((option) => option.scenario)).toEqual([
+    expect(plannerCompletedOptions.map((option) => option.launchActionId)).toEqual([
       "build_implementation_start",
       "build_after_human_request_changes",
     ]);

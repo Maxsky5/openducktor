@@ -1,8 +1,5 @@
 import {
-  type AgentScenario,
   type AgentSessionStartMode,
-  agentScenarioDefinitionByScenario,
-  agentScenarioValues,
   getMissingRequiredRuntimeSupportedScopes,
   mandatoryRuntimeCapabilityKeys,
   type RuntimeCapabilityClass,
@@ -165,7 +162,7 @@ const getRuntimeCapabilityClassForPath = (
   );
 };
 
-const scenarioScopedConstraintPaths = new Set([
+const launchScopedConstraintPaths = new Set([
   "sessionLifecycle.forkTargets",
   "history.loadable",
   "history.stableItemIds",
@@ -192,15 +189,15 @@ const classifyRuntimeDescriptorSchemaIssue = ({
     capabilityPath.startsWith("sessionLifecycle.supportedStartModes") &&
     message.toLowerCase().includes("fork")
   ) {
-    return "scenario_scoped";
+    return "launch_scoped";
   }
   if (capabilityPath.startsWith("promptInput.supportedParts")) {
     if (message.includes("slash commands") || message.includes("file search")) {
       return "optional_enhancement";
     }
   }
-  if (scenarioScopedConstraintPaths.has(capabilityPath)) {
-    return "scenario_scoped";
+  if (launchScopedConstraintPaths.has(capabilityPath)) {
+    return "launch_scoped";
   }
 
   const mappedCapabilityClass = getRuntimeCapabilityClassForPath(capabilityPath);
@@ -259,44 +256,52 @@ export const getRuntimeDescriptorCapabilityConfigErrors = (
     );
   }
 
-  const scenarioErrors = getRuntimeDescriptorScenarioConfigErrors(runtimeDescriptor);
-  errors.push(...scenarioErrors);
+  const launchErrors = getRuntimeDescriptorLaunchConfigErrors(runtimeDescriptor);
+  errors.push(...launchErrors);
 
   return errors;
 };
 
-const getUnsupportedScenarioStartModes = (
+const launchStartModeRequirements = [
+  { id: "spec_initial", role: "spec", allowedStartModes: ["fresh"] },
+  { id: "planner_initial", role: "planner", allowedStartModes: ["fresh"] },
+  { id: "build_implementation_start", role: "build", allowedStartModes: ["fresh"] },
+  { id: "build_after_qa_rejected", role: "build", allowedStartModes: ["fresh", "reuse"] },
+  { id: "build_after_human_request_changes", role: "build", allowedStartModes: ["fresh", "reuse"] },
+  { id: "build_pull_request_generation", role: "build", allowedStartModes: ["reuse", "fork"] },
+  { id: "build_rebase_conflict_resolution", role: "build", allowedStartModes: ["fresh", "reuse"] },
+  { id: "qa_review", role: "qa", allowedStartModes: ["fresh", "reuse"] },
+] as const satisfies ReadonlyArray<{
+  id: string;
+  role: AgentRole;
+  allowedStartModes: readonly AgentSessionStartMode[];
+}>;
+
+const getUnsupportedLaunchStartModes = (
   runtimeDescriptor: RuntimeDescriptor,
-  scenario: AgentScenario,
+  allowedStartModes: readonly AgentSessionStartMode[],
 ): AgentSessionStartMode[] => {
   const supportedStartModes = runtimeDescriptor.capabilities.sessionLifecycle.supportedStartModes;
-  return agentScenarioDefinitionByScenario[scenario].allowedStartModes.filter(
-    (startMode) => !supportedStartModes.includes(startMode),
-  );
+  return allowedStartModes.filter((startMode) => !supportedStartModes.includes(startMode));
 };
 
-export const runtimeSupportsScenario = (
-  runtimeDescriptor: RuntimeDescriptor,
-  scenario: AgentScenario,
-): boolean => {
-  const scenarioDefinition = agentScenarioDefinitionByScenario[scenario];
-  return (
-    runtimeSupportsRole(runtimeDescriptor, scenarioDefinition.role) &&
-    getUnsupportedScenarioStartModes(runtimeDescriptor, scenario).length === 0
-  );
-};
-
-export const getRuntimeDescriptorScenarioConfigErrors = (
+export const getRuntimeDescriptorLaunchConfigErrors = (
   runtimeDescriptor: RuntimeDescriptor,
 ): string[] => {
-  return agentScenarioValues.flatMap((scenario) => {
-    const missingStartModes = getUnsupportedScenarioStartModes(runtimeDescriptor, scenario);
+  return launchStartModeRequirements.flatMap((launch) => {
+    if (!runtimeSupportsRole(runtimeDescriptor, launch.role)) {
+      return [];
+    }
+    const missingStartModes = getUnsupportedLaunchStartModes(
+      runtimeDescriptor,
+      launch.allowedStartModes,
+    );
     if (missingStartModes.length === 0) {
       return [];
     }
 
     return [
-      `[scenario_scoped] scenario ${scenario} requires start modes: ${missingStartModes.join(", ")}`,
+      `[launch_scoped] launch ${launch.id} requires start modes: ${missingStartModes.join(", ")}`,
     ];
   });
 };

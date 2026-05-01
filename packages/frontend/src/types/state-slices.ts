@@ -20,10 +20,10 @@ import type {
 } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
+  AgentKickoffTemplateId,
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
-  AgentScenario,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
@@ -230,8 +230,7 @@ export type AgentStateContextValue = {
           taskId: string;
           role: AgentRole;
           runtimeKind?: RuntimeKind;
-          scenario?: AgentScenario;
-          sendKickoff?: boolean;
+          kickoffTemplateId?: AgentKickoffTemplateId;
           kickoffTargetBranch?: GitTargetBranch | null;
           startMode: "reuse";
           sourceExternalSessionId: string;
@@ -240,9 +239,8 @@ export type AgentStateContextValue = {
           taskId: string;
           role: AgentRole;
           runtimeKind?: RuntimeKind;
-          scenario?: AgentScenario;
           selectedModel: AgentModelSelection;
-          sendKickoff?: boolean;
+          kickoffTemplateId?: AgentKickoffTemplateId;
           kickoffTargetBranch?: GitTargetBranch | null;
           startMode: "fresh";
           targetWorkingDirectory?: string | null;
@@ -251,9 +249,8 @@ export type AgentStateContextValue = {
           taskId: string;
           role: AgentRole;
           runtimeKind?: RuntimeKind;
-          scenario?: AgentScenario;
           selectedModel: AgentModelSelection;
-          sendKickoff?: boolean;
+          kickoffTemplateId?: AgentKickoffTemplateId;
           kickoffTargetBranch?: GitTargetBranch | null;
           startMode: "fork";
           sourceExternalSessionId: string;

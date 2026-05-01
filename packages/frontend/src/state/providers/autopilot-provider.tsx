@@ -7,7 +7,6 @@ import type {
 } from "@openducktor/contracts";
 import { AUTOPILOT_EVENT_IDS } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { getAgentScenarioDefinition } from "@openducktor/core";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, type ReactElement, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -15,6 +14,7 @@ import {
   AUTOPILOT_ACTION_DEFINITIONS,
   getAutopilotRule,
 } from "@/features/autopilot/autopilot-catalog";
+import { getSessionLaunchAction } from "@/features/session-start/session-start-launch-options";
 import {
   coerceVisibleSelectionToCatalog,
   pickDefaultVisibleSelectionForCatalog,
@@ -235,7 +235,7 @@ const resolveAutopilotStart = async ({
     };
   }
 
-  const { allowedStartModes } = getAgentScenarioDefinition(action.scenario);
+  const { allowedStartModes } = getSessionLaunchAction(action.launchActionId);
   if (!allowedStartModes.includes("reuse")) {
     return {
       startMode: "fresh",
@@ -300,7 +300,7 @@ export const executeAutopilotAction = async ({
       intent: {
         taskId: task.id,
         role: action.role,
-        scenario: action.scenario,
+        launchActionId: action.launchActionId,
         startMode: resolvedStart.startMode,
         ...(resolvedStart.sourceExternalSessionId
           ? { sourceExternalSessionId: resolvedStart.sourceExternalSessionId }

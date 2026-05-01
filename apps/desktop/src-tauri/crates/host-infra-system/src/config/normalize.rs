@@ -131,6 +131,9 @@ fn normalize_prompt_overrides(overrides: &mut PromptOverrides) {
             if normalized_key.is_empty() {
                 return None;
             }
+            if normalized_key.starts_with("system.scenario.") {
+                return None;
+            }
 
             entry.template = entry.template.trim().to_string();
             if entry.base_version == 0 {

@@ -334,6 +334,10 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
                 "kickoff.qa_review": {
                     "template": "   ",
                     "baseVersion": 2
+                },
+                "system.scenario.build_implementation_start": {
+                    "template": "obsolete scenario override",
+                    "baseVersion": 1
                 }
             }
         }),
@@ -405,6 +409,9 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
         .expect("qa review override");
     assert_eq!(qa_review_override.template, "");
     assert_eq!(qa_review_override.base_version, 2);
+    assert!(!repo_config
+        .prompt_overrides
+        .contains_key("system.scenario.build_implementation_start"));
 }
 
 #[test]

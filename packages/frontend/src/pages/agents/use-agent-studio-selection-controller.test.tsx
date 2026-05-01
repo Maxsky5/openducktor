@@ -77,7 +77,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   sessionParam: null,
   hasExplicitRoleParam: false,
   roleFromQuery: "spec",
-  scenarioFromQuery: null,
   selectionIntent: null,
   updateQuery: () => {},
   hydrateRequestedTaskSessionHistory: async () => {},
@@ -234,13 +233,11 @@ describe("useAgentStudioSelectionController", () => {
   test("prefers optimistic selection intent over stale query role and session", async () => {
     const specSession = createSession("task-1", "session-spec", {
       role: "spec",
-      scenario: "spec_initial",
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const plannerSession = createSession("task-1", "session-planner", {
       role: "planner",
-      scenario: "planner_initial",
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -251,12 +248,10 @@ describe("useAgentStudioSelectionController", () => {
         sessionParam: "session-spec",
         hasExplicitRoleParam: true,
         roleFromQuery: "spec",
-        scenarioFromQuery: "spec_initial",
         selectionIntent: {
           taskId: "task-1",
           externalSessionId: "session-planner",
           role: "planner",
-          scenario: "planner_initial",
         },
       }),
     );
@@ -266,7 +261,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.viewRole).toBe("planner");
-      expect(latest.viewScenario).toBe("planner_initial");
+      expect(latest.viewLaunchActionId).toBe("planner_initial");
       expect(latest.viewActiveSession?.externalSessionId).toBe("session-planner");
       expect(latest.activeSession?.externalSessionId).toBe("session-planner");
     } finally {
@@ -282,7 +277,6 @@ describe("useAgentStudioSelectionController", () => {
       runtimeKind: "opencode",
       workingDirectory: "/repo-a",
       role: "build",
-      scenario: "build_implementation_start",
       status: "running",
     });
     const harness = createHookHarness(
@@ -293,7 +287,6 @@ describe("useAgentStudioSelectionController", () => {
         sessionParam: "session-1",
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
-        scenarioFromQuery: "build_implementation_start",
         readSessionModelCatalog,
         readSessionTodos,
         hydrateRequestedTaskSessionHistory,
@@ -341,7 +334,7 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(latest.viewTaskId).toBe("task-2");
       expect(latest.viewRole).toBe("build");
-      expect(latest.viewScenario).toBe("build_implementation_start");
+      expect(latest.viewLaunchActionId).toBe("build_implementation_start");
       expect(clearComposerInput).toHaveBeenCalledTimes(1);
       expect(updateQuery).toHaveBeenCalledTimes(1);
       expect(updateQuery).toHaveBeenCalledWith(
@@ -359,13 +352,11 @@ describe("useAgentStudioSelectionController", () => {
   test("resolves view session from the UI-active task tab", async () => {
     const sessionTaskOne = createSession("task-1", "session-1", {
       role: "planner",
-      scenario: "planner_initial",
       startedAt: "2026-02-22T12:00:00.000Z",
       status: "running",
     });
     const sessionTaskTwo = createSession("task-2", "session-2", {
       role: "qa",
-      scenario: "qa_review",
       startedAt: "2026-02-22T13:00:00.000Z",
       status: "running",
     });
@@ -390,7 +381,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.viewTaskId).toBe("task-2");
       expect(latest.viewActiveSession?.externalSessionId).toBe("session-2");
       expect(latest.viewRole).toBe("qa");
-      expect(latest.viewScenario).toBe("qa_review");
+      expect(latest.viewLaunchActionId).toBe("qa_review");
     } finally {
       await harness.unmount();
     }
@@ -399,13 +390,11 @@ describe("useAgentStudioSelectionController", () => {
   test("tab shows working status when newer idle session exists but older session is running", async () => {
     const olderRunningSession = createSession("task-1", "session-old", {
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "running",
     });
     const newerIdleSession = createSession("task-1", "session-new", {
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -432,7 +421,6 @@ describe("useAgentStudioSelectionController", () => {
   test("idle session is included in latestSessionByTaskId for navigation", async () => {
     const idleSession = createSession("task-1", "session-idle", {
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -459,7 +447,6 @@ describe("useAgentStudioSelectionController", () => {
   test("defaults to build role for open task even when only optional-role session exists", async () => {
     const specSession = createSession("task-1", "session-spec", {
       role: "spec",
-      scenario: "spec_initial",
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -492,7 +479,7 @@ describe("useAgentStudioSelectionController", () => {
 
       expect(latest.viewActiveSession).toBeNull();
       expect(latest.viewRole).toBe("build");
-      expect(latest.viewScenario).toBe("build_implementation_start");
+      expect(latest.viewLaunchActionId).toBe("build_implementation_start");
     } finally {
       await harness.unmount();
     }
@@ -506,13 +493,11 @@ describe("useAgentStudioSelectionController", () => {
     });
     const initialBuildSession = createSession("task-1", "session-build", {
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const newerQaSession = createSession("task-1", "session-qa", {
       role: "qa",
-      scenario: "qa_review",
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -545,7 +530,7 @@ describe("useAgentStudioSelectionController", () => {
 
       expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().viewRole).toBe("build");
-      expect(harness.getLatest().viewScenario).toBe("build_implementation_start");
+      expect(harness.getLatest().viewLaunchActionId).toBe("build_after_human_request_changes");
     } finally {
       await harness.unmount();
     }
@@ -559,13 +544,11 @@ describe("useAgentStudioSelectionController", () => {
     });
     const buildSession = createSession("task-1", "session-build", {
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const qaSession = createSession("task-1", "session-qa", {
       role: "qa",
-      scenario: "qa_review",
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -599,7 +582,7 @@ describe("useAgentStudioSelectionController", () => {
 
       expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().viewRole).toBe("build");
-      expect(harness.getLatest().viewScenario).toBe("build_implementation_start");
+      expect(harness.getLatest().viewLaunchActionId).toBe("build_after_human_request_changes");
     } finally {
       await harness.unmount();
     }
@@ -615,13 +598,11 @@ describe("useAgentStudioSelectionController", () => {
     });
     const buildSession = createSession("task-2", "session-build", {
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const qaSession = createSession("task-2", "session-qa", {
       role: "qa",
-      scenario: "qa_review",
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -652,7 +633,6 @@ describe("useAgentStudioSelectionController", () => {
         task: "task-2",
         session: undefined,
         agent: undefined,
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -672,7 +652,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(harness.getLatest().viewTaskId).toBe("task-2");
       expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-build");
       expect(harness.getLatest().viewRole).toBe("build");
-      expect(harness.getLatest().viewScenario).toBe("build_implementation_start");
+      expect(harness.getLatest().viewLaunchActionId).toBe("build_after_human_request_changes");
     } finally {
       await harness.unmount();
     }

@@ -137,7 +137,7 @@ describe("agent-runtime capability policies", () => {
     ]);
   });
 
-  test("classifies item-level history fidelity invariants as scenario-scoped", () => {
+  test("classifies item-level history fidelity invariants as launch-scoped", () => {
     const descriptor = withCapabilities({
       history: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.history,
@@ -148,12 +148,12 @@ describe("agent-runtime capability policies", () => {
     });
 
     expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
-      "[scenario_scoped] runtime descriptor schema violation at capabilities.history.stableItemIds: Runtime descriptors with item-level history fidelity must expose stable item IDs.",
-      "[scenario_scoped] runtime descriptor schema violation at capabilities.history.exposesCompletionState: Runtime descriptors with item-level history fidelity must expose item completion state.",
+      "[launch_scoped] runtime descriptor schema violation at capabilities.history.stableItemIds: Runtime descriptors with item-level history fidelity must expose stable item IDs.",
+      "[launch_scoped] runtime descriptor schema violation at capabilities.history.exposesCompletionState: Runtime descriptors with item-level history fidelity must expose item completion state.",
     ]);
   });
 
-  test("classifies fork target invariants as scenario-scoped", () => {
+  test("classifies fork target invariants as launch-scoped", () => {
     const descriptor = withCapabilities({
       sessionLifecycle: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
@@ -164,7 +164,7 @@ describe("agent-runtime capability policies", () => {
     });
 
     expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
-      "[scenario_scoped] runtime descriptor schema violation at capabilities.sessionLifecycle.forkTargets: Runtime descriptors that support session forks must declare at least one fork target.",
+      "[launch_scoped] runtime descriptor schema violation at capabilities.sessionLifecycle.forkTargets: Runtime descriptors that support session forks must declare at least one fork target.",
     ]);
   });
 
@@ -257,7 +257,7 @@ describe("agent-runtime capability policies", () => {
     ]);
   });
 
-  test("reports scenario-scoped start mode gaps separately from role scopes", () => {
+  test("reports launch-scoped start mode gaps separately from role scopes", () => {
     const descriptor = withCapabilities({
       sessionLifecycle: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
@@ -268,7 +268,7 @@ describe("agent-runtime capability policies", () => {
     });
 
     expect(getRuntimeDescriptorCapabilityConfigErrors(descriptor)).toContain(
-      "[scenario_scoped] scenario build_pull_request_generation requires start modes: fork",
+      "[launch_scoped] launch build_pull_request_generation requires start modes: fork",
     );
   });
 

@@ -16,7 +16,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
   role: "spec",
-  scenario: "spec_initial",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,

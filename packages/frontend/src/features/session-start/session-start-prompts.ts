@@ -1,16 +1,20 @@
-import { agentScenarioValues, type RepoPromptOverrides } from "@openducktor/contracts";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import {
-  type AgentKickoffScenario,
+  type AgentKickoffTemplateId,
   type AgentPromptGitContext,
   type AgentRole,
-  type AgentScenario,
   type BuildAgentKickoffPromptInput,
   buildAgentKickoffPrompt,
   buildAgentMessagePrompt,
-  defaultAgentScenarioForRole,
-  getAgentScenarioDefinition,
-  getAgentScenariosForRole,
 } from "@openducktor/core";
+import {
+  defaultSessionLaunchActionForRole,
+  getSessionLaunchAction,
+  getSessionLaunchActionsForRole,
+  isSessionLaunchActionId,
+  SESSION_LAUNCH_ACTIONS,
+  type SessionLaunchActionId,
+} from "./session-start-launch-options";
 
 type TaskPromptContext = {
   title?: string;
@@ -27,44 +31,39 @@ type SessionStartPromptOptions = {
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
 };
 
-export const SCENARIOS_BY_ROLE: Record<AgentRole, AgentScenario[]> = {
-  spec: getAgentScenariosForRole("spec"),
-  planner: getAgentScenariosForRole("planner"),
-  build: getAgentScenariosForRole("build"),
-  qa: getAgentScenariosForRole("qa"),
+export const LAUNCH_ACTIONS_BY_ROLE: Record<AgentRole, SessionLaunchActionId[]> = {
+  spec: getSessionLaunchActionsForRole("spec").map((action) => action.id),
+  planner: getSessionLaunchActionsForRole("planner").map((action) => action.id),
+  build: getSessionLaunchActionsForRole("build").map((action) => action.id),
+  qa: getSessionLaunchActionsForRole("qa").map((action) => action.id),
 };
 
-export const SCENARIO_LABELS: Record<AgentScenario, string> = {
-  spec_initial: getAgentScenarioDefinition("spec_initial").label,
-  planner_initial: getAgentScenarioDefinition("planner_initial").label,
-  build_implementation_start: getAgentScenarioDefinition("build_implementation_start").label,
-  build_after_qa_rejected: getAgentScenarioDefinition("build_after_qa_rejected").label,
-  build_after_human_request_changes: getAgentScenarioDefinition("build_after_human_request_changes")
-    .label,
-  build_pull_request_generation: getAgentScenarioDefinition("build_pull_request_generation").label,
-  build_rebase_conflict_resolution: getAgentScenarioDefinition("build_rebase_conflict_resolution")
-    .label,
-  qa_review: getAgentScenarioDefinition("qa_review").label,
+export const LAUNCH_ACTION_LABELS: Record<SessionLaunchActionId, string> = {
+  spec_initial: SESSION_LAUNCH_ACTIONS.spec_initial.label,
+  planner_initial: SESSION_LAUNCH_ACTIONS.planner_initial.label,
+  build_implementation_start: SESSION_LAUNCH_ACTIONS.build_implementation_start.label,
+  build_after_qa_rejected: SESSION_LAUNCH_ACTIONS.build_after_qa_rejected.label,
+  build_after_human_request_changes: SESSION_LAUNCH_ACTIONS.build_after_human_request_changes.label,
+  build_pull_request_generation: SESSION_LAUNCH_ACTIONS.build_pull_request_generation.label,
+  build_rebase_conflict_resolution: SESSION_LAUNCH_ACTIONS.build_rebase_conflict_resolution.label,
+  qa_review: SESSION_LAUNCH_ACTIONS.qa_review.label,
 };
 
-const AGENT_SCENARIO_SET = new Set<string>(agentScenarioValues);
+export const isLaunchActionId = isSessionLaunchActionId;
 
-export const isScenario = (value: string | null): value is AgentScenario =>
-  value != null && AGENT_SCENARIO_SET.has(value);
-
-export const firstScenario = (role: AgentRole): AgentScenario => {
-  return defaultAgentScenarioForRole(role);
+export const firstLaunchAction = (role: AgentRole): SessionLaunchActionId => {
+  return defaultSessionLaunchActionForRole(role);
 };
 
-export const kickoffPromptForScenario = (
+export const kickoffPromptForTemplate = (
   role: AgentRole,
-  scenario: AgentKickoffScenario,
+  templateId: AgentKickoffTemplateId,
   taskId: string,
   options?: SessionStartPromptOptions,
 ): string => {
   return buildAgentKickoffPrompt({
     role,
-    scenario,
+    templateId,
     task: {
       taskId,
       ...(options?.task ?? {}),
@@ -73,6 +72,19 @@ export const kickoffPromptForScenario = (
     ...(options?.git ? { git: options.git } : {}),
     overrides: options?.overrides ?? {},
   });
+};
+
+export const kickoffPromptForLaunchAction = (
+  role: AgentRole,
+  actionId: SessionLaunchActionId,
+  taskId: string,
+  options?: SessionStartPromptOptions,
+): string => {
+  const templateId = getSessionLaunchAction(actionId).kickoffTemplateId;
+  if (!templateId) {
+    throw new Error(`Launch action "${actionId}" does not define a kickoff prompt.`);
+  }
+  return kickoffPromptForTemplate(role, templateId, taskId, options);
 };
 
 export const buildGitConflictResolutionPrompt = (

@@ -120,7 +120,7 @@ const buildModel = () => ({
     {
       id: "build:build_implementation_start",
       role: "build" as const,
-      scenario: "build_implementation_start" as const,
+      launchActionId: "build_implementation_start" as const,
       label: "Builder · Implementation Start",
       description: "Create build session",
       disabled: false,

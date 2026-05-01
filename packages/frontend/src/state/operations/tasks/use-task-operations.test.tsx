@@ -102,7 +102,6 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   taskId: "A",
   repoPath: overrides.repoPath ?? "/repo",
   role: "build",
-  scenario: "build_implementation_start",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,

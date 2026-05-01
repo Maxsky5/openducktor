@@ -19,7 +19,6 @@ const createSession = () =>
     externalSessionId: "session-1",
     taskId: "task-1",
     role: "planner",
-    scenario: "planner_initial",
     runtimeKind: "opencode",
   });
 type SessionFixture = ReturnType<typeof createSession>;
@@ -35,7 +34,7 @@ type QuerySyncState = {
   sessionParam: string;
   hasExplicitRoleParam: boolean;
   roleFromQuery: "planner";
-  scenarioFromQuery: "planner_initial";
+  launchActionId: "planner_initial";
   isRepoNavigationBoundaryPending: boolean;
   navigationPersistenceError: Error | null;
   retryNavigationPersistence: typeof retryNavigationPersistence;
@@ -45,7 +44,7 @@ type QuerySyncState = {
 type SelectionState = {
   viewTaskId: string;
   viewRole: "planner";
-  viewScenario: "planner_initial";
+  viewLaunchActionId: "planner_initial";
   viewSelectedTask: typeof task | null;
   viewSessionsForTask: SessionFixture[];
   viewActiveSession: SessionFixture | null;
@@ -184,7 +183,7 @@ let querySyncState: QuerySyncState = {
   sessionParam: "session-1",
   hasExplicitRoleParam: false,
   roleFromQuery: "planner" as const,
-  scenarioFromQuery: "planner_initial" as const,
+  launchActionId: "planner_initial" as const,
   isRepoNavigationBoundaryPending: false,
   navigationPersistenceError: new Error("navigation failed"),
   retryNavigationPersistence,
@@ -194,7 +193,7 @@ const initialSelectionSession = createSession();
 let selectionState: SelectionState = {
   viewTaskId: "task-1",
   viewRole: "planner" as const,
-  viewScenario: "planner_initial" as const,
+  viewLaunchActionId: "planner_initial" as const,
   viewSelectedTask: task,
   viewSessionsForTask: [initialSelectionSession],
   viewActiveSession: initialSelectionSession,
@@ -335,7 +334,6 @@ const registerModuleMocks = (): void => {
         externalSessionId: entry.externalSessionId,
         taskId: entry.taskId,
         role: entry.role,
-        scenario: entry.scenario,
         status: entry.status,
         startedAt: entry.startedAt,
         workingDirectory: entry.workingDirectory,
@@ -514,7 +512,7 @@ beforeEach(async () => {
     sessionParam: "session-1",
     hasExplicitRoleParam: false,
     roleFromQuery: "planner",
-    scenarioFromQuery: "planner_initial",
+    launchActionId: "planner_initial",
     isRepoNavigationBoundaryPending: false,
     navigationPersistenceError: new Error("navigation failed"),
     retryNavigationPersistence,
@@ -523,7 +521,7 @@ beforeEach(async () => {
   selectionState = {
     viewTaskId: "task-1",
     viewRole: "planner",
-    viewScenario: "planner_initial",
+    viewLaunchActionId: "planner_initial",
     viewSelectedTask: task,
     viewSessionsForTask: [session],
     viewActiveSession: session,

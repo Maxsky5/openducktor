@@ -1,9 +1,9 @@
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type AgentSessionOptionSummary = Pick<
   AgentSessionState,
-  "externalSessionId" | "role" | "scenario" | "startedAt" | "status"
+  "externalSessionId" | "role" | "startedAt" | "status"
 >;
 
 export const compareAgentSessionRecency = (
@@ -40,16 +40,13 @@ export const buildRoleSessionSequenceById = (
 export const formatAgentSessionOptionLabel = (params: {
   session: AgentSessionOptionSummary;
   sessionNumber: number;
-  scenarioLabels: Record<AgentScenario, string>;
   roleLabelByRole: Record<AgentRole, string>;
 }): string => {
-  if (params.session.role === null || params.session.scenario === null) {
+  if (params.session.role === null) {
     throw new Error(`Session ${params.session.externalSessionId} is not a workflow session.`);
   }
-  const scenarioLabel = params.scenarioLabels[params.session.scenario];
   const roleLabel = params.roleLabelByRole[params.session.role];
-  const baseLabel = scenarioLabel === roleLabel ? roleLabel : `${scenarioLabel} · ${roleLabel}`;
-  return `${baseLabel} #${params.sessionNumber}`;
+  return `${roleLabel} #${params.sessionNumber}`;
 };
 
 export const formatAgentSessionOptionDescription = (session: AgentSessionOptionSummary): string => {

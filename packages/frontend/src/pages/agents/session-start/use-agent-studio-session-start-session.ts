@@ -1,9 +1,10 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import type {
   ResolvedSessionStartDecision,
+  SessionLaunchActionId,
   SessionStartFlowRequest,
   SessionStartPostAction,
   SessionStartRequestReason,
@@ -26,7 +27,7 @@ type UseAgentStudioSessionStartSessionArgs = {
   activeWorkspace: ActiveWorkspace | null;
   taskId: string;
   role: AgentRole;
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
   activeSession: AgentSessionState | null;
   selectedTask: Parameters<typeof canStartSessionForRole>[0];
   agentStudioReady: boolean;
@@ -48,7 +49,7 @@ export function useAgentStudioSessionStartSession({
   activeWorkspace,
   taskId,
   role,
-  scenario,
+  launchActionId,
   selectedTask,
   agentStudioReady,
   isActiveTaskHydrated,
@@ -92,7 +93,7 @@ export function useAgentStudioSessionStartSession({
             request: {
               taskId,
               role,
-              scenario,
+              launchActionId,
               postStartAction: params.postStartAction,
             },
             decision,
@@ -120,7 +121,7 @@ export function useAgentStudioSessionStartSession({
         {
           taskId,
           role,
-          scenario,
+          launchActionId,
           postStartAction: params.postStartAction,
           initialTargetBranch: selectedTask?.targetBranch ?? null,
           initialTargetBranchError: selectedTask?.targetBranchError ?? null,
@@ -131,7 +132,7 @@ export function useAgentStudioSessionStartSession({
     [
       activeWorkspace,
       role,
-      scenario,
+      launchActionId,
       queryClient,
       setStartingActivityCountByContext,
       sendAgentMessage,
@@ -160,7 +161,7 @@ export function useAgentStudioSessionStartSession({
       const startKey = buildCreateSessionStartKey({
         taskId,
         role,
-        scenario,
+        launchActionId,
       });
       const inFlightSessionStart = startingSessionByTaskRef.current.get(startKey);
       if (inFlightSessionStart) {
@@ -197,7 +198,7 @@ export function useAgentStudioSessionStartSession({
       isActiveTaskHydrated,
       role,
       selectedTask,
-      scenario,
+      launchActionId,
       startRequestedSession,
       startingSessionByTaskRef,
       taskId,

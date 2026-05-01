@@ -3,7 +3,6 @@ import type { RepoRuntimeRef, RuntimeInstanceSummary } from "@openducktor/contra
 import type {
   AgentModelSelection,
   AgentRole,
-  AgentScenario,
   AgentSessionSummary,
   AgentUserMessageDisplayPart,
   StartAgentSessionInput,
@@ -21,9 +20,8 @@ import type {
  */
 export const WORKFLOW_TOOL_CACHE_TTL_MS = 5 * 60 * 1000;
 
-export type SessionInput = Omit<StartAgentSessionInput, "role" | "scenario"> & {
+export type SessionInput = Omit<StartAgentSessionInput, "role"> & {
   role: AgentRole | null;
-  scenario: AgentScenario | null;
 };
 
 export type QueuedUserMessageSend = {

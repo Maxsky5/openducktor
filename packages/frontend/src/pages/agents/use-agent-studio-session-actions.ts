@@ -1,11 +1,5 @@
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
-import type {
-  AgentModelCatalog,
-  AgentModelSelection,
-  AgentRole,
-  AgentScenario,
-} from "@openducktor/core";
-import { isAgentKickoffScenario } from "@openducktor/core";
+import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useState } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
@@ -17,6 +11,12 @@ import {
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { SessionStartLaunchRequest } from "@/features/session-start";
+import {
+  getSessionLaunchAction,
+  LAUNCH_ACTION_LABELS,
+  resolveBuildContinuationLaunchAction,
+  type SessionLaunchActionId,
+} from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import {
@@ -30,7 +30,6 @@ import type {
   AgentStateContextValue,
   RepoSettingsInput,
 } from "@/types/state-slices";
-import { SCENARIO_LABELS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
   applyAgentStudioSelectionQuery,
@@ -63,7 +62,7 @@ type UseAgentStudioSessionActionsArgs = {
   branches?: GitBranch[];
   taskId: string;
   role: AgentRole;
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
   activeSession: AgentSessionState | null;
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
@@ -85,7 +84,6 @@ type UseAgentStudioSessionActionsArgs = {
     taskId: string;
     externalSessionId: string | null;
     role: AgentRole;
-    scenario: AgentScenario | null;
   }) => void;
   onContextSwitchIntent?: () => void;
 };
@@ -95,7 +93,7 @@ export function useAgentStudioSessionActions({
   branches = [],
   taskId,
   role,
-  scenario,
+  launchActionId,
   activeSession,
   selectedModelSelection,
   selectedModelDescriptor,
@@ -186,6 +184,8 @@ export function useAgentStudioSessionActions({
     hasActiveSession && isSessionWorking && !isWaitingInput && !supportsQueuedUserMessages
       ? `${activeRuntimeDescriptor?.label ?? "Current runtime"} does not support queued messages while the session is working.`
       : null;
+  const kickoffLaunchActionId =
+    role === "build" ? resolveBuildContinuationLaunchAction(selectedTask) : launchActionId;
 
   const {
     isStarting,
@@ -200,7 +200,7 @@ export function useAgentStudioSessionActions({
     branches,
     taskId,
     role,
-    scenario,
+    launchActionId,
     activeSession,
     sessionsForTask,
     selectedTask,
@@ -401,13 +401,11 @@ export function useAgentStudioSessionActions({
           taskId,
           externalSessionId: undefined,
           role: nextRole,
-          scenario,
         });
         scheduleSelectionIntent?.({
           taskId,
           externalSessionId: null,
           role: nextRole,
-          scenario,
         });
         return;
       }
@@ -434,20 +432,17 @@ export function useAgentStudioSessionActions({
         taskId: session.taskId,
         externalSessionId: session.externalSessionId,
         role: session.role,
-        scenario: session.scenario,
       });
       scheduleSelectionIntent?.({
         taskId: session.taskId,
         externalSessionId: session.externalSessionId,
         role: session.role,
-        scenario: session.scenario,
       });
     },
     [
       activeExternalSessionId,
       activeSessionRole,
       onContextSwitchIntent,
-      scenario,
       scheduleSelectionIntent,
       sessionsForTask,
       taskId,
@@ -483,13 +478,11 @@ export function useAgentStudioSessionActions({
         taskId: selectedSession.taskId,
         externalSessionId: selectedSession.externalSessionId,
         role: selectedSession.role,
-        scenario: selectedSession.scenario,
       });
       scheduleSelectionIntent?.({
         taskId: selectedSession.taskId,
         externalSessionId: selectedSession.externalSessionId,
         role: selectedSession.role,
-        scenario: selectedSession.scenario,
       });
     },
     [
@@ -504,19 +497,15 @@ export function useAgentStudioSessionActions({
   );
 
   const selectedRoleAvailable = selectedTask ? canStartSessionForRole(selectedTask, role) : false;
+  const selectedLaunchAction = getSessionLaunchAction(kickoffLaunchActionId);
   const canKickoffNewSession =
     agentStudioReady &&
     Boolean(taskId) &&
     isActiveTaskHydrated &&
     !hasActiveSession &&
     selectedRoleAvailable &&
-    isAgentKickoffScenario(scenario);
-  const kickoffLabel =
-    role === "spec"
-      ? "Start Spec"
-      : role === "planner"
-        ? "Start Planner"
-        : `Start ${SCENARIO_LABELS[scenario]}`;
+    Boolean(selectedLaunchAction.kickoffTemplateId);
+  const kickoffLabel = LAUNCH_ACTION_LABELS[kickoffLaunchActionId];
   const canStopSession = hasActiveSession && isSessionWorking;
 
   return {

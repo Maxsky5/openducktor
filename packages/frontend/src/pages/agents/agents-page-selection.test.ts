@@ -28,7 +28,6 @@ const resolveAgentStudioActiveSession = (args: {
   return resolveAgentStudioSessionSelection({
     ...args,
     fallbackRole: args.roleFromQuery,
-    scenarioFromQuery: null,
   }).activeSession;
 };
 
@@ -542,7 +541,6 @@ describe("agents-page-selection", () => {
 
     expect(selection.activeSession).toBeNull();
     expect(selection.role).toBe("build");
-    expect(selection.scenario).toBe("build_implementation_start");
   });
 
   test("keeps explicit session authority over task-status defaults", () => {
@@ -551,7 +549,6 @@ describe("agents-page-selection", () => {
       externalSessionId: "qa-1",
       taskId: "task-1",
       role: "qa",
-      scenario: "qa_review",
       startedAt: "2026-02-22T12:00:00.000Z",
     });
 
@@ -566,16 +563,14 @@ describe("agents-page-selection", () => {
 
     expect(selection.activeSession?.externalSessionId).toBe("qa-1");
     expect(selection.role).toBe("qa");
-    expect(selection.scenario).toBe("qa_review");
   });
 
-  test("prioritizes explicit scenario for explicit role selection", () => {
+  test("prioritizes explicit launch action for explicit role selection", () => {
     const buildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
       taskId: "task-1",
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-22T12:00:00.000Z",
     });
 
@@ -586,12 +581,10 @@ describe("agents-page-selection", () => {
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
       fallbackRole: "build",
-      scenarioFromQuery: "build_after_qa_rejected",
     });
 
     expect(selection.activeSession?.externalSessionId).toBe("build-1");
     expect(selection.role).toBe("build");
-    expect(selection.scenario).toBe("build_after_qa_rejected");
   });
 
   test("uses most recent overall session for blocked fallback even with unsorted input", () => {
@@ -617,12 +610,10 @@ describe("agents-page-selection", () => {
       roleFromQuery: "spec",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "blocked" }),
       fallbackRole: "spec",
-      scenarioFromQuery: null,
     });
 
     expect(selection.activeSession?.externalSessionId).toBe("qa-newer");
     expect(selection.role).toBe("qa");
-    expect(selection.scenario).toBe("qa_review");
   });
 
   test("prefers the current build session when resolving conflict reuse", () => {

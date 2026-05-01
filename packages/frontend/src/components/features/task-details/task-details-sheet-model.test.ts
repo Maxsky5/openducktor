@@ -231,15 +231,12 @@ describe("task-details-sheet-model", () => {
       },
       {
         resolveSessionOptions: (role) =>
-          role === "build"
-            ? { externalSessionId: "session-build", scenario: "build_implementation_start" }
-            : undefined,
+          role === "build" ? { externalSessionId: "session-build" } : undefined,
       },
     );
 
     expect(onOpenSession).toHaveBeenCalledWith("T-1", "build", {
       externalSessionId: "session-build",
-      scenario: "build_implementation_start",
     });
   });
 });

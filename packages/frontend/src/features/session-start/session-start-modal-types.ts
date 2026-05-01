@@ -1,10 +1,6 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
-import type {
-  AgentModelSelection,
-  AgentRole,
-  AgentScenario,
-  AgentSessionStartMode,
-} from "@openducktor/core";
+import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
+import type { SessionLaunchActionId } from "./session-start-launch-options";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 
 export type SessionStartModalSource = "agent_studio" | "kanban";
@@ -14,7 +10,7 @@ export type SessionStartModalIntent = {
   source: SessionStartModalSource;
   taskId: string;
   role: AgentRole;
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
   initialStartMode?: AgentSessionStartMode;
   existingSessionOptions?: SessionStartExistingSessionOption[];
   initialSourceExternalSessionId?: string | null;

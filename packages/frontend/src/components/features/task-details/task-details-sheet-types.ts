@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
@@ -21,7 +21,7 @@ export type TaskDetailsSheetProps = {
   onOpenSession?: (
     taskId: string,
     role: AgentRole,
-    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null },
   ) => void;
   onDelegate?: (taskId: string) => void;
   onEdit?: (taskId: string) => void;

@@ -1,13 +1,13 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type {
-  AgentModelCatalog,
-  AgentRole,
-  AgentScenario,
-  AgentSessionTodoItem,
-} from "@openducktor/core";
+import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import { useAgentChatSessionHydration } from "@/components/features/agents/agent-chat/use-agent-chat-session-hydration";
 import { useAgentChatSessionRuntimeData } from "@/components/features/agents/agent-chat/use-agent-chat-session-runtime-data";
+import {
+  firstLaunchAction,
+  resolveBuildContinuationLaunchAction,
+  type SessionLaunchActionId,
+} from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useAgentSession } from "@/state/app-state-provider";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -35,12 +35,10 @@ type UseAgentStudioSelectionControllerArgs = {
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
-  scenarioFromQuery: AgentScenario | null;
   selectionIntent: {
     taskId: string;
     externalSessionId: string | null;
     role: AgentRole;
-    scenario: AgentScenario | null;
   } | null;
   updateQuery: (updates: QueryUpdate) => void;
   hydrateRequestedTaskSessionHistory: (input: {
@@ -97,7 +95,7 @@ export type AgentStudioSelectionControllerResult = {
   viewActiveSession: AgentSessionState | null;
   viewSessionRuntimeDataError?: string | null;
   viewRole: AgentRole;
-  viewScenario: AgentScenario;
+  viewLaunchActionId: SessionLaunchActionId;
   isActiveTaskHydrated: boolean;
   isActiveTaskHydrationFailed: boolean;
   isViewSessionHistoryHydrated: boolean;
@@ -193,7 +191,6 @@ export function useAgentStudioSelectionController({
   sessionParam,
   hasExplicitRoleParam,
   roleFromQuery,
-  scenarioFromQuery,
   selectionIntent,
   updateQuery,
   hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
@@ -215,15 +212,12 @@ export function useAgentStudioSelectionController({
   const effectiveRoleFromQuery: AgentRole = isRepoNavigationBoundaryPending
     ? "spec"
     : roleFromQuery;
-  const effectiveScenarioFromQuery = isRepoNavigationBoundaryPending ? null : scenarioFromQuery;
   const effectiveSelectionIntent = isRepoNavigationBoundaryPending ? null : selectionIntent;
   const selectedTaskIdParam = effectiveSelectionIntent?.taskId ?? effectiveTaskIdParam;
   const selectedSessionParam = effectiveSelectionIntent?.externalSessionId ?? effectiveSessionParam;
   const selectedHasExplicitRoleParam =
     effectiveSelectionIntent !== null ? true : effectiveHasExplicitRoleParam;
   const selectedRoleFromQuery = effectiveSelectionIntent?.role ?? effectiveRoleFromQuery;
-  const selectedScenarioFromQuery =
-    effectiveSelectionIntent?.scenario ?? effectiveScenarioFromQuery;
 
   const tasksById = useMemo(() => {
     return new Map(tasks.map((task) => [task.id, task]));
@@ -272,12 +266,10 @@ export function useAgentStudioSelectionController({
       roleFromQuery: selectedRoleFromQuery,
       selectedTask,
       fallbackRole: selectedRoleFromQuery,
-      scenarioFromQuery: selectedScenarioFromQuery,
     }).activeSession;
   }, [
     selectedHasExplicitRoleParam,
     selectedRoleFromQuery,
-    selectedScenarioFromQuery,
     selectedSessionParam,
     selectedTask,
     sessionsForTask,
@@ -369,7 +361,6 @@ export function useAgentStudioSelectionController({
       : null;
   const viewHasExplicitRoleSelection = viewSelectionIntent !== null ? true : hasViewRoleSelection;
   const viewRoleFromSelection = viewSelectionIntent?.role ?? effectiveRoleFromQuery;
-  const viewScenarioFromSelection = viewSelectionIntent?.scenario ?? effectiveScenarioFromQuery;
   const viewSessionParamFromSelection = viewSelectionIntent?.externalSessionId ?? viewSessionParam;
 
   const viewSelection = useMemo(() => {
@@ -380,13 +371,11 @@ export function useAgentStudioSelectionController({
       roleFromQuery: viewRoleFromSelection,
       selectedTask: viewSelectedTask,
       fallbackRole: isViewTaskDetachedFromQuery ? "spec" : viewRoleFromSelection,
-      scenarioFromQuery: viewScenarioFromSelection,
     });
   }, [
     viewHasExplicitRoleSelection,
     isViewTaskDetachedFromQuery,
     viewRoleFromSelection,
-    viewScenarioFromSelection,
     viewSelectedTask,
     viewSessionParamFromSelection,
     viewSessionsForTask,
@@ -399,7 +388,10 @@ export function useAgentStudioSelectionController({
     readSessionTodos,
   });
   const viewRole = viewSelection.role;
-  const viewScenario = viewSelection.scenario;
+  const viewLaunchActionId: SessionLaunchActionId =
+    viewRole === "build"
+      ? resolveBuildContinuationLaunchAction(viewSelectedTask)
+      : firstLaunchAction(viewRole);
   const runtimeAttachmentCandidates = useMemo(
     () =>
       selectRuntimeAttachmentCandidates({
@@ -451,7 +443,7 @@ export function useAgentStudioSelectionController({
     viewActiveSession: viewSessionRuntimeData.session,
     viewSessionRuntimeDataError: viewSessionRuntimeData.runtimeDataError,
     viewRole,
-    viewScenario,
+    viewLaunchActionId,
     isActiveTaskHydrated,
     isActiveTaskHydrationFailed,
     isViewSessionHistoryHydrated: isActiveSessionHistoryHydrated,

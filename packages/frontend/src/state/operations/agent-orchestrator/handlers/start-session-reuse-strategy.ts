@@ -10,11 +10,7 @@ import type {
   StartSessionExecutionDependencies,
 } from "./start-session.types";
 import { requireBuildContinuationTarget, STALE_START_ERROR } from "./start-session-constants";
-import {
-  assertScenarioStartPolicy,
-  resolveReuseValidationError,
-  resolveStartTask,
-} from "./start-session-policies";
+import { resolveReuseValidationError, resolveStartTask } from "./start-session-policies";
 
 type ReuseStrategyInput = {
   ctx: StartSessionContext;
@@ -111,14 +107,10 @@ const createWorkingDirectoryMatchers = ({
 };
 
 const validateReusableSession = async ({
-  ctx,
-  input,
   session,
   matchesQaTarget,
   matchesBuildTarget,
 }: {
-  ctx: StartSessionContext;
-  input: Extract<StartSessionCreationInput, { startMode: "reuse" }>;
   session: Pick<AgentSessionState, "workingDirectory">;
   matchesQaTarget: (workingDirectory: string) => Promise<boolean>;
   matchesBuildTarget: (workingDirectory: string) => Promise<boolean>;
@@ -129,14 +121,6 @@ const validateReusableSession = async ({
     matchesQaTarget: matchesQa,
     matchesBuildTarget: matchesBuild,
   });
-
-  if (!reuseError && input.scenario) {
-    assertScenarioStartPolicy({
-      role: ctx.role,
-      scenario: input.scenario,
-      startMode: input.startMode,
-    });
-  }
 
   return reuseError;
 };
@@ -206,8 +190,6 @@ export const executeReuseStart = async ({
   );
   if (existingSession) {
     const reuseError = await validateReusableSession({
-      ctx,
-      input,
       session: existingSession,
       matchesQaTarget,
       matchesBuildTarget,
@@ -235,8 +217,6 @@ export const executeReuseStart = async ({
   }
 
   const reuseError = await validateReusableSession({
-    ctx,
-    input,
     session: persistedSession,
     matchesQaTarget,
     matchesBuildTarget,

@@ -10,7 +10,6 @@ const makeSession = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionR
   runtimeKind: "opencode",
   externalSessionId: overrides.externalSessionId ?? "session-1",
   role: overrides.role ?? "build",
-  scenario: overrides.scenario ?? "build_implementation_start",
   startedAt: overrides.startedAt ?? "2026-03-06T10:00:00.000Z",
   workingDirectory: overrides.workingDirectory ?? "/repo",
   selectedModel: null,
@@ -30,7 +29,6 @@ describe("getManagedTaskDeleteImpact", () => {
         runtimeKind: "opencode",
         externalSessionId: "qa-1",
         role: "qa",
-        scenario: "qa_review",
         workingDirectory: "/repo/worktrees/task-1",
       }),
       makeSession({
@@ -43,7 +41,6 @@ describe("getManagedTaskDeleteImpact", () => {
         runtimeKind: "opencode",
         externalSessionId: "planner-1",
         role: "planner",
-        scenario: "planner_initial",
         workingDirectory: "/repo/worktrees/task-3",
       }),
       makeSession({ externalSessionId: "build-root", role: "build", workingDirectory: "/repo" }),
@@ -64,7 +61,6 @@ describe("getManagedTaskDeleteImpact", () => {
         runtimeKind: "opencode",
         externalSessionId: "qa-root",
         role: "qa",
-        scenario: "qa_review",
         workingDirectory: "/repo///",
       }),
     ]);

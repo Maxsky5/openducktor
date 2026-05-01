@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { isRoleAvailableForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -14,7 +14,6 @@ type AgentStudioSessionSelectionQueryParams = {
   taskId: string;
   externalSessionId: string | undefined;
   role: AgentRole;
-  scenario?: AgentScenario;
 };
 
 type AgentStudioAsyncActivityContextKeyParams = {
@@ -32,14 +31,11 @@ const buildSessionSelectionQueryUpdate = (params: {
   taskId: string;
   externalSessionId: string | undefined;
   role: AgentRole;
-  scenario?: AgentScenario;
 }): QueryUpdate => {
-  const scenario = params.externalSessionId ? undefined : params.scenario;
   return {
     [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: params.externalSessionId,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
-    [AGENT_STUDIO_QUERY_KEYS.scenario]: scenario,
     [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
   };
@@ -52,7 +48,6 @@ export const buildAgentStudioSelectionQueryUpdate = (
     taskId: params.taskId,
     externalSessionId: params.externalSessionId,
     role: params.role,
-    ...(params.scenario ? { scenario: params.scenario } : {}),
   });
 };
 
@@ -72,7 +67,6 @@ export const buildPreviousSelectionQueryUpdate = (params: {
     [AGENT_STUDIO_QUERY_KEYS.task]: params.activeSession?.taskId ?? params.taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: params.activeSession?.externalSessionId,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
-    [AGENT_STUDIO_QUERY_KEYS.scenario]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
   };
@@ -131,7 +125,7 @@ export const decrementActivityCountRecord = (
 export const buildCreateSessionStartKey = (params: {
   taskId: string;
   role: AgentRole;
-  scenario: AgentScenario;
+  launchActionId: string;
 }): string => {
-  return `${params.taskId}:${params.role}:${params.scenario}`;
+  return `${params.taskId}:${params.role}:${params.launchActionId}`;
 };

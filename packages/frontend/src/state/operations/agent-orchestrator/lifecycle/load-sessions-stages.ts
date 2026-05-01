@@ -21,7 +21,6 @@ import {
 } from "../support/messages";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import {
-  defaultScenarioForRole,
   fromPersistedSessionRecord,
   historyToChatMessages,
   historyToSessionContextUsage,
@@ -113,12 +112,10 @@ export type RuntimeResolutionPlannerStageInput = {
 export type HydrationPromptAssembler = {
   buildHydrationPreludeMessages: (input: {
     record: AgentSessionRecord;
-    resolvedScenario: AgentSessionRecord["scenario"];
     promptOverrides: RepoPromptOverrides;
   }) => Promise<AgentSessionState["messages"]>;
   buildHydrationSystemPrompt: (input: {
     record: AgentSessionRecord;
-    resolvedScenario: AgentSessionRecord["scenario"];
     promptOverrides: RepoPromptOverrides;
   }) => Promise<string>;
 };
@@ -300,7 +297,6 @@ const mergePersistedSessionRecord = (
     externalSessionId: persisted.externalSessionId,
     taskId: persisted.taskId,
     role: persisted.role,
-    scenario: persisted.scenario,
     startedAt: persisted.startedAt,
     workingDirectory: shouldKeepLiveWorkingDirectory
       ? current.workingDirectory
@@ -331,7 +327,6 @@ const toRequestedHistoryRecordFromSession = (
   return {
     externalSessionId: session.externalSessionId,
     role: session.role,
-    scenario: session.scenario,
     startedAt: session.startedAt,
     workingDirectory: session.workingDirectory,
     runtimeKind,
@@ -576,11 +571,9 @@ export const createHydrationPromptAssemblerStage = ({
 }: PromptAssemblerStageInput): HydrationPromptAssembler => {
   const buildHydrationPreludeMessages = async ({
     record,
-    resolvedScenario,
     promptOverrides,
   }: {
     record: AgentSessionRecord;
-    resolvedScenario: AgentSessionRecord["scenario"];
     promptOverrides: RepoPromptOverrides;
   }): Promise<AgentSessionState["messages"]> => {
     if (historyPreludeMode === "none") {
@@ -591,7 +584,6 @@ export const createHydrationPromptAssemblerStage = ({
       return buildSessionHeaderMessages({
         externalSessionId: record.externalSessionId,
         role: record.role,
-        scenario: resolvedScenario,
         systemPrompt: "",
         startedAt: record.startedAt,
         includeSystemPrompt: false,
@@ -600,7 +592,6 @@ export const createHydrationPromptAssemblerStage = ({
 
     const systemPrompt = buildSessionSystemPrompt({
       role: record.role,
-      scenario: resolvedScenario,
       task,
       promptOverrides,
     });
@@ -608,7 +599,6 @@ export const createHydrationPromptAssemblerStage = ({
     return buildSessionHeaderMessages({
       externalSessionId: record.externalSessionId,
       role: record.role,
-      scenario: resolvedScenario,
       systemPrompt,
       startedAt: record.startedAt,
     });
@@ -616,11 +606,9 @@ export const createHydrationPromptAssemblerStage = ({
 
   const buildHydrationSystemPrompt = async ({
     record,
-    resolvedScenario,
     promptOverrides,
   }: {
     record: AgentSessionRecord;
-    resolvedScenario: AgentSessionRecord["scenario"];
     promptOverrides: RepoPromptOverrides;
   }): Promise<string> => {
     if (historyPreludeMode === "none") {
@@ -633,7 +621,6 @@ export const createHydrationPromptAssemblerStage = ({
 
     return buildSessionSystemPrompt({
       role: record.role,
-      scenario: resolvedScenario,
       task,
       promptOverrides,
     });
@@ -695,11 +682,9 @@ export const reconcileLiveSessionsStage = async ({
       if (isStaleRepoOperation()) {
         return;
       }
-      const resolvedScenario = record.scenario ?? defaultScenarioForRole(record.role);
       const selectedModel = normalizePersistedSelection(record.selectedModel);
       const systemPrompt = await promptAssembler.buildHydrationSystemPrompt({
         record,
-        resolvedScenario,
         promptOverrides,
       });
       if (isStaleRepoOperation()) {
@@ -713,7 +698,6 @@ export const reconcileLiveSessionsStage = async ({
         workingDirectory,
         taskId: intent.taskId,
         role: record.role,
-        scenario: resolvedScenario,
         systemPrompt,
         ...(selectedModel ? { model: selectedModel } : {}),
       };
@@ -880,10 +864,8 @@ export const hydrateSessionRecordsStage = async ({
     }
 
     const promptOverrides = await getRepoPromptOverrides();
-    const resolvedScenario = record.scenario ?? defaultScenarioForRole(record.role);
     const preludeMessages = await promptAssembler.buildHydrationPreludeMessages({
       record,
-      resolvedScenario,
       promptOverrides,
     });
     const history = await adapter.loadSessionHistory({

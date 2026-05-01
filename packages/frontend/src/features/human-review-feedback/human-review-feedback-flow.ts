@@ -1,5 +1,8 @@
 import { toast } from "sonner";
-import type { SessionStartExistingSessionOption } from "@/features/session-start";
+import type {
+  SessionLaunchActionId,
+  SessionStartExistingSessionOption,
+} from "@/features/session-start";
 import { buildReusableSessionOptions } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
@@ -9,7 +12,7 @@ export const HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE = "Feedback message is requi
 export type HumanReviewFeedbackStartRequest = {
   taskId: string;
   role: "build";
-  scenario: HumanReviewFeedbackState["scenario"];
+  launchActionId: SessionLaunchActionId;
   initialStartMode?: "fresh" | "reuse" | "fork";
   existingSessionOptions: SessionStartExistingSessionOption[];
   initialSourceExternalSessionId?: string;
@@ -49,7 +52,7 @@ const buildRequestChangesSessionRequest = (
   return {
     taskId: state.taskId,
     role: "build",
-    scenario: state.scenario,
+    launchActionId: "build_after_human_request_changes",
     ...(existingSessionOptions.length === 0 ? { initialStartMode: "fresh" as const } : {}),
     existingSessionOptions,
     ...(latestBuilderSessionId ? { initialSourceExternalSessionId: latestBuilderSessionId } : {}),
