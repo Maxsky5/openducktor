@@ -52,11 +52,11 @@ Key boundary:
 
 ### 2) Start an agent session
 1. Agent Studio triggers `startAgentSession` in `use-agent-orchestrator-operations.ts`.
-2. `start-session.ts` enforces scenario-owned start policy:
+2. `start-session.ts` enforces explicit start-mode policy:
  - `fresh`: create a new session
  - `reuse`: continue an existing session
  - `fork`: create a new session from an existing source session
-3. The session-start modal resolves the final start mode from the scenario definition in `packages/contracts/src/agent-workflow-schemas.ts`.
+3. The session-start modal resolves the final start mode from the selected launch action in `packages/frontend/src/features/session-start/session-start-launch-options.ts`.
 4. For new or forked sessions it concurrently loads task docs, resolves runtime, and loads repo default model.
 5. Runtime acquisition:
   - `build` role: `host.buildStart(repo, task, runtimeKind)` creates a build worktree and starts the configured build runtime; today only `opencode` is implemented.
@@ -98,21 +98,21 @@ Key boundary:
 - Beads and Dolt remain storage infrastructure concerns owned by the Rust host, not by agent runtimes or MCP clients.
 
 ### 4) Generate a pull request
-1. The approval flow starts a Builder session with scenario `build_pull_request_generation`.
-2. That scenario must start from an existing Builder source session and supports `reuse` or `fork`.
+1. The approval flow starts a Builder session with launch action `build_pull_request_generation`.
+2. That launch action must start from an existing Builder source session and supports `reuse` or `fork`.
 3. The Builder uses provider-native git or GitHub tools to create or update the PR.
 4. Once the PR exists, the Builder calls `odt_set_pull_request`.
 5. `odt_set_pull_request` persists canonical PR metadata into task metadata by resolving the provider record from `providerId + number`.
 
 Key boundary:
 - The page layer no longer parses Builder chat output to create a PR.
-- PR generation is now a scenario-driven workflow step.
+- PR generation is now an explicit launch action in the Builder workflow.
 
 ## Source-of-Truth Contracts and Ownership
 | Concern | Source of truth | Owner modules |
 |---|---|---|
 | Task statuses, issue types, action IDs | `packages/contracts/src/task-schemas.ts` | `@openducktor/contracts`, consumed by adapters/frontend/host |
-| Role, scenario, start mode, ODT tool IDs | `packages/contracts/src/agent-workflow-schemas.ts` | `@openducktor/contracts` |
+| Role, start mode, ODT tool IDs | `packages/contracts/src/agent-workflow-schemas.ts` | `@openducktor/contracts` |
 | Role-to-tool allowlist | `AGENT_ROLE_TOOL_POLICY` in `packages/core/src/types/agent-orchestrator.ts` | `@openducktor/core` |
 | ODT/public MCP tool schema validation | `ODT_TOOL_SCHEMAS` exported from `packages/contracts/src/odt-mcp-schemas.ts` and re-exported by `packages/openducktor-mcp/src/lib.ts` | `@openducktor/contracts`, consumed by MCP/host |
 | Transition legality and backend-derived actions/workflows | `apps/desktop/src-tauri/crates/host-application/src/app_service/workflow_rules/mod.rs`, `apps/desktop/src-tauri/crates/host-application/src/app_service/task_workflow/mod.rs`, and `apps/desktop/src-tauri/crates/host-application/src/app_service/odt_mcp.rs` | Rust host application |

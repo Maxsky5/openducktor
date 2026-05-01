@@ -5,7 +5,7 @@ Shared core types for agent orchestration, runtime descriptors, planning inputs,
 
 ## Design Patterns
 - Type aliases mirror contract exports to avoid divergent orchestration vocabulary.
-- Scenario definitions and task actions use literal unions and lookup tables.
+- Workflow roles, start modes, and task actions use literal unions and lookup tables.
 - Tool-call unions model supported ODT workflow mutations explicitly.
 
 ## Data & Control Flow

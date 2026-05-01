@@ -137,8 +137,8 @@ Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 | `provisioningMode` | Whether runtime is `host_managed` or `external` | Host/runtime startup model | Startup flows use this to decide whether the host starts the runtime or connects to one that already exists |
 | `workflow.supportsOdtWorkflowTools` | Workflow requirement | Runtime can execute ODT workflow tools | Workflow roles and tool policy | Built-in OpenDucktor roles rely on this when the runtime runs ODT tools |
 | `workflow.supportedScopes` | Role-scoped requirement | Declares the workflow scopes the runtime implements. For OpenDucktor integration this must include `workspace`, `task`, and `build`. | Runtime validation and host startup | Runtime registration rejects descriptors missing any required workflow scope, and the host fails fast if a runtime does not cover the full workflow scope set |
-| `sessionLifecycle.supportedStartModes` | Baseline and scenario-scoped requirement | Declares whether the runtime can start `fresh`, `reuse`, or `fork` sessions | Session start, Builder continuation, PR-generation scenarios | `fresh` is baseline-required; scenario validation rejects runtimes missing start modes used by registered workflows |
-| `sessionLifecycle.supportsSessionFork` / `forkTargets` | Scenario-scoped requirement | Runtime can fork or branch an existing session and declares whether forks can target only the parent `session` or also `message`/`item` boundaries | Session controls and workflow continuity | Fork support must be internally consistent with supported start modes and target declarations; a session-only fork runtime must not be treated as message/item-boundary capable |
+| `sessionLifecycle.supportedStartModes` | Baseline and launch-action requirement | Declares whether the runtime can start `fresh`, `reuse`, or `fork` sessions | Session start, Builder continuation, PR-generation launch actions | `fresh` is baseline-required; launch validation rejects runtimes missing start modes used by registered workflows |
+| `sessionLifecycle.supportsSessionFork` / `forkTargets` | Launch-action requirement | Runtime can fork or branch an existing session and declares whether forks can target only the parent `session` or also `message`/`item` boundaries | Session controls and workflow continuity | Fork support must be internally consistent with supported start modes and target declarations; a session-only fork runtime must not be treated as message/item-boundary capable |
 | `sessionLifecycle.supportsQueuedUserMessages` | Optional enhancement | Runtime can accept follow-up user messages while the current turn is still running and expose enough transcript state to mirror its queued badge behavior | Agent Studio composer, transcript rendering, and history hydration | Busy-session sends stay enabled only when this flag is true; queued user turns must flow through the standard `user_message` event/history path and update in place as the runtime's pending-assistant boundary moves |
 | `history` group | Baseline/optional fidelity model | Declares whether history is loadable, whether fidelity is `none`, `message`, or `item`, replay style, stable item IDs/order, completion state, and hydrated event types | Session hydration, transcript reconstruction, adapter compatibility | Item-level history claims require stable IDs/order and completion state; runtimes without loadable history must declare `none` fidelity and replay |
 | `approvals` group | Workflow requirement when prompts exist | Declares approval request types, reply outcomes, omitted-permission behavior, pending visibility, mutating-request classification, and read-only auto-reject safety | Permission prompts and read-only role enforcement | Approval request support must include `reject` plus at least one approve outcome; read-only auto-reject requires classification plus reject support |
@@ -154,7 +154,7 @@ The current codebase treats runtime integration in three layers:
 - `Baseline runtime contract`: descriptors must support fresh starts, text prompt input, and internally consistent lifecycle/history/input claims.
 - `Workflow requirements`: ODT workflow tool execution, approval/input semantics, and read-only safety are modeled separately from optional UI surfaces.
 - `Role-scoped workflow coverage`: `workflow.supportedScopes` must include `workspace`, `task`, and `build`. OpenDucktor does not support runtimes that cover only a subset of roles.
-- `Scenario-scoped compatibility`: `sessionLifecycle.supportedStartModes`, `sessionLifecycle.supportsSessionFork`, and `sessionLifecycle.forkTargets` must cover every registered workflow scenario.
+- `Launch-action compatibility`: `sessionLifecycle.supportedStartModes`, `sessionLifecycle.supportsSessionFork`, and `sessionLifecycle.forkTargets` must cover every registered workflow launch action.
 - `Optional enhancement`: the application can work without these. The UI and runtime-health flow gate these features explicitly instead of assuming support.
 
 Slash commands now belong in the optional prompt-input category: the app can function without them, and the UI treats them as additive capability rather than a baseline runtime requirement.
@@ -245,13 +245,13 @@ Workflow roles map onto the runtime system like this:
 - `qa` requires `task` scope and runs against the task/build working directory through the shared runtime orchestration path,
 - `build` requires `build` and `workspace` scope and uses the dedicated Builder startup path.
 
-Required workflow scope coverage lives in `runtimeRequiredScopesByRole` and `requiredRuntimeSupportedScopes` in `packages/contracts/src/agent-runtime-schemas.ts`. Scenario-to-role and start-mode compatibility live in `agentScenarioDefinitionByScenario` in `packages/contracts/src/agent-workflow-schemas.ts`.
+Required workflow scope coverage lives in `runtimeRequiredScopesByRole` and `requiredRuntimeSupportedScopes` in `packages/contracts/src/agent-runtime-schemas.ts`. Launch-action role and start-mode compatibility live in `SESSION_LAUNCH_ACTIONS` in `packages/frontend/src/features/session-start/session-start-launch-options.ts`.
 
 Even though these roles route through different startup paths, every runtime integration must support all of them. OpenDucktor does not allow registering a runtime that handles only `spec`, only `planner`, or any other partial subset.
 
-## Scenario and start-mode compatibility
+## Launch actions and start-mode compatibility
 
-Runtime integrations must support the session start modes used by the scenario registry:
+Runtime integrations must support the session start modes used by the launch-action registry:
 
 - `fresh`: create a new session
 - `reuse`: continue an existing session
@@ -358,7 +358,7 @@ Current startup routing is split like this:
 - `qa` still requires `task` scope, but current orchestration resolves it against the build continuation working directory and either reuses the running build session for that directory or ensures the selected runtime for that working directory,
 - `build_start(repo, task, runtimeKind)` is the build-specific path and returns `BuildSessionBootstrap`, not `RuntimeInstanceSummary`.
 
-Role-to-scope requirements come from `runtimeRequiredScopesByRole` in `packages/contracts/src/agent-runtime-schemas.ts`, while scenario start-mode compatibility comes from `agentScenarioDefinitionByScenario` in `packages/contracts/src/agent-workflow-schemas.ts`.
+Role-to-scope requirements come from `runtimeRequiredScopesByRole` in `packages/contracts/src/agent-runtime-schemas.ts`, while launch-action start-mode compatibility comes from `SESSION_LAUNCH_ACTIONS` in `packages/frontend/src/features/session-start/session-start-launch-options.ts`.
 
 For a new runtime, the build path works like this:
 

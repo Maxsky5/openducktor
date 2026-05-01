@@ -1393,7 +1393,6 @@ describe("KanbanPage session start modal flow", () => {
     expect(latestSessionStartModalModel).toBeNull();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("agent=qa");
-    expect(latestLocation).not.toContain("scenario=");
 
     await act(async () => {
       renderer.unmount();

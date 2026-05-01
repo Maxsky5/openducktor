@@ -430,7 +430,7 @@ fn load_rejects_unknown_prompt_override_id() {
                 "defaultRuntimeKind": "opencode",
                 "promptOverrides": {
                     "system.scenario.build_implementation_start": {
-                        "template": "obsolete scenario override",
+                        "template": "removed prompt override",
                         "baseVersion": 1
                     }
                 }

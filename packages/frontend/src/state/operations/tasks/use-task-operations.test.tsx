@@ -197,7 +197,7 @@ type TaskAndKanbanHarnessState = {
   isFetchingKanban: boolean;
 };
 
-type ScheduledKanbanRefetchScenario = {
+type ScheduledKanbanRefetchCase = {
   initialTasks: TaskCard[];
   expectedVisibleTaskId: string | undefined;
 };
@@ -267,7 +267,7 @@ const createTaskAndKanbanHarness = (initialArgs: LegacyHookArgs, doneVisibleDays
 const assertScheduledKanbanRefetchStaysBackground = async ({
   initialTasks,
   expectedVisibleTaskId,
-}: ScheduledKanbanRefetchScenario): Promise<void> => {
+}: ScheduledKanbanRefetchCase): Promise<void> => {
   const repoPullRequestSyncDeferred = createDeferred<{ ok: boolean }>();
   let repoTaskListCallCount = 0;
   let kanbanTaskListCallCount = 0;

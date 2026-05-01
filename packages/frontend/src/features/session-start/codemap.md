@@ -1,7 +1,7 @@
 # packages/frontend/src/features/session-start/
 
 ## Responsibility
-Shared session-start workflow: modal decisions, runtime selection, reuse/fresh/fork launch logic, kickoff prompts, and scenario resolution.
+Shared session-start workflow: modal decisions, runtime selection, reuse/fresh/fork launch logic, kickoff prompts, and launch-action resolution.
 
 ## Design Patterns
 Decision-making is centralized here so pages can ask for a launch request and get back a consistent session-start outcome plus reuse-state intent.

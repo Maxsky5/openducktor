@@ -9,7 +9,7 @@ Shared runtime schemas, descriptors, config shapes, prompt shapes, and tool-name
 - Contract modules are grouped by runtime descriptors, session/run payloads, MCP, workflow, and host-bridge config.
 
 ## Data & Control Flow
-`src/agent-runtime-schemas.ts`, `src/agent-workflow-schemas.ts`, and `src/runtime-descriptors.ts` define runtime descriptors, roles, scenarios, and capability rules. `src/task-schemas.ts`, `src/odt-mcp-schemas.ts`, and `src/run-schemas.ts` define task, MCP, and host-facing payloads.
+`src/agent-runtime-schemas.ts`, `src/agent-workflow-schemas.ts`, and `src/runtime-descriptors.ts` define runtime descriptors, roles, start modes, and capability rules. `src/task-schemas.ts`, `src/odt-mcp-schemas.ts`, and `src/run-schemas.ts` define task, MCP, and host-facing payloads.
 
 ## Integration Points
 - Imported by `packages/core`, `packages/adapters-*`, `packages/openducktor-mcp`, and `packages/openducktor-web`
