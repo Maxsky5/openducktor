@@ -11,7 +11,11 @@ import type { ComboboxGroup } from "@/components/ui/combobox";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
-import type { AgentSessionWorkflowSummary, SessionCreateOption } from "./agents-page-session-tabs";
+import type {
+  AgentSessionWorkflowSummary,
+  AgentStudioQuickActionOption,
+  SessionCreateOption,
+} from "./agents-page-session-tabs";
 
 export const buildRoleLabelByRole = (roleOptions: AgentRoleOption[]): Record<AgentRole, string> => {
   return roleOptions.reduce(
@@ -59,7 +63,10 @@ export const buildAgentStudioHeaderModel = (args: {
   agentStudioReady: boolean;
   sessionsForTaskLength: number;
   sessionCreateOptions: SessionCreateOption[];
-  onCreateSession: (option: SessionCreateOption) => void;
+  onPrepareMessageFirstSession: (option: SessionCreateOption) => void;
+  quickActions: AgentStudioQuickActionOption[];
+  primaryQuickAction: AgentStudioQuickActionOption | null;
+  onQuickAction: (option: AgentStudioQuickActionOption) => void;
   createSessionDisabled: boolean;
   isStarting: boolean;
   contextSessionsLength: number;
@@ -89,7 +96,10 @@ export const buildAgentStudioHeaderModel = (args: {
       args.sessionSelectorAutofocusByValue[value] ?? false,
   },
   sessionCreateOptions: args.sessionCreateOptions,
-  onCreateSession: args.onCreateSession,
+  onPrepareMessageFirstSession: args.onPrepareMessageFirstSession,
+  quickActions: args.quickActions,
+  primaryQuickAction: args.primaryQuickAction,
+  onQuickAction: args.onQuickAction,
   createSessionDisabled: args.createSessionDisabled,
   isCreatingSession: args.isStarting,
   agentStudioReady: args.agentStudioReady,

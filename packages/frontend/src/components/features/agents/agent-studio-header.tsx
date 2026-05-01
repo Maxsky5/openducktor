@@ -11,6 +11,7 @@ import {
   LoaderCircle,
   Plus,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import { type ReactElement, useMemo, useRef, useState } from "react";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
@@ -26,7 +27,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { SessionLaunchActionId } from "@/features/session-start";
+import type { SessionLaunchActionId, SessionStartPostAction } from "@/features/session-start";
 import { cn } from "@/lib/utils";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { AgentRoleOption } from "./agent-chat/agent-chat.types";
@@ -56,6 +57,18 @@ type AgentSessionCreateOption = {
   label: string;
   description: string;
   disabled: boolean;
+  disabledReason?: string;
+};
+
+type AgentStudioQuickActionOption = {
+  id: string;
+  role: AgentRole;
+  launchActionId: SessionLaunchActionId;
+  label: string;
+  description: string;
+  postStartAction: SessionStartPostAction;
+  disabled: boolean;
+  disabledReason?: string;
 };
 
 export type AgentStudioHeaderModel = {
@@ -68,7 +81,10 @@ export type AgentStudioHeaderModel = {
   onWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
   sessionSelector: AgentStudioSessionSelectorModel;
   sessionCreateOptions: AgentSessionCreateOption[];
-  onCreateSession: (option: AgentSessionCreateOption) => void;
+  onPrepareMessageFirstSession: (option: AgentSessionCreateOption) => void;
+  quickActions: AgentStudioQuickActionOption[];
+  primaryQuickAction: AgentStudioQuickActionOption | null;
+  onQuickAction: (option: AgentStudioQuickActionOption) => void;
   createSessionDisabled: boolean;
   isCreatingSession: boolean;
   agentStudioReady: boolean;
@@ -210,13 +226,17 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
     onWorkflowStepSelect,
     sessionSelector,
     sessionCreateOptions,
-    onCreateSession,
+    onPrepareMessageFirstSession,
+    quickActions,
+    primaryQuickAction,
+    onQuickAction,
     createSessionDisabled,
     isCreatingSession,
     agentStudioReady,
   } = model;
 
   const [isCreateSessionMenuOpen, setIsCreateSessionMenuOpen] = useState(false);
+  const [isQuickActionsMenuOpen, setIsQuickActionsMenuOpen] = useState(false);
   const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
   const sessionHistoryTriggerRef = useRef<HTMLButtonElement | null>(null);
   const preventSessionTriggerRefocusRef = useRef(false);
@@ -252,6 +272,13 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
         {} as Record<AgentRole, AgentSessionCreateOption[]>,
       ),
     [sessionCreateOptions],
+  );
+  const quickActionTriggerTitle = primaryQuickAction
+    ? `Quick actions · ${primaryQuickAction.label}`
+    : "Quick actions";
+  const remainingQuickActions = useMemo(
+    () => quickActions.filter((option) => option.id !== primaryQuickAction?.id),
+    [primaryQuickAction?.id, quickActions],
   );
 
   return (
@@ -388,8 +415,8 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                 size="icon"
                 className="h-9 w-9 rounded-md"
                 disabled={!agentStudioReady || createSessionDisabled || isCreatingSession}
-                title="Create session"
-                aria-label="Create session"
+                title="Prepare new session"
+                aria-label="Prepare new session"
               >
                 <Plus className="size-4" />
               </Button>
@@ -397,7 +424,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
             <PopoverContent align="end" className="w-80 p-0">
               <Command>
                 <CommandList>
-                  <CommandEmpty>No session types available.</CommandEmpty>
+                  <CommandEmpty>No session roles available.</CommandEmpty>
                   {(
                     Object.entries(createOptionsByRole) as [AgentRole, AgentSessionCreateOption[]][]
                   ).map(([role, options]) => (
@@ -410,7 +437,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                             if (option.disabled) {
                               return;
                             }
-                            onCreateSession(option);
+                            onPrepareMessageFirstSession(option);
                             setIsCreateSessionMenuOpen(false);
                           }}
                         >
@@ -420,13 +447,90 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                               {option.label}
                             </p>
                             <p className="truncate text-[11px] text-muted-foreground">
-                              {option.description}
+                              {option.disabledReason ?? option.description}
                             </p>
                           </div>
                         </CommandItem>
                       ))}
                     </CommandGroup>
                   ))}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          <Popover open={isQuickActionsMenuOpen} onOpenChange={setIsQuickActionsMenuOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 max-w-48 gap-2 rounded-md px-3"
+                disabled={!agentStudioReady || quickActions.length === 0}
+                title={quickActionTriggerTitle}
+                aria-label={
+                  primaryQuickAction
+                    ? `Quick actions, primary: ${primaryQuickAction.label}`
+                    : "Quick actions"
+                }
+              >
+                <Zap className="size-4" />
+                <span className="truncate">{primaryQuickAction?.label ?? "Actions"}</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80 p-0">
+              <Command>
+                <CommandList>
+                  <CommandEmpty>No quick actions available.</CommandEmpty>
+                  {primaryQuickAction ? (
+                    <CommandGroup heading="Primary">
+                      <CommandItem
+                        key={primaryQuickAction.id}
+                        disabled={primaryQuickAction.disabled}
+                        onSelect={() => {
+                          if (primaryQuickAction.disabled) {
+                            return;
+                          }
+                          onQuickAction(primaryQuickAction);
+                          setIsQuickActionsMenuOpen(false);
+                        }}
+                      >
+                        <Zap className="size-3.5 text-muted-foreground" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {primaryQuickAction.label}
+                          </p>
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {primaryQuickAction.description}
+                          </p>
+                        </div>
+                      </CommandItem>
+                    </CommandGroup>
+                  ) : null}
+                  <CommandGroup heading={primaryQuickAction ? "More actions" : "Actions"}>
+                    {remainingQuickActions.map((option) => (
+                      <CommandItem
+                        key={option.id}
+                        disabled={option.disabled}
+                        onSelect={() => {
+                          if (option.disabled) {
+                            return;
+                          }
+                          onQuickAction(option);
+                          setIsQuickActionsMenuOpen(false);
+                        }}
+                      >
+                        <Zap className="size-3.5 text-muted-foreground" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {option.label}
+                          </p>
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {option.disabledReason ?? option.description}
+                          </p>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
                 </CommandList>
               </Command>
             </PopoverContent>

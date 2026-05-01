@@ -132,6 +132,8 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       handleWorkflowStepSelect: () => {},
       handleSessionSelectionChange: () => {},
       handleCreateSession: () => {},
+      handlePrepareMessageFirstSession: () => {},
+      handleQuickAction: () => {},
       openTaskDetails: () => {},
       isStarting: false,
       isSending: false,

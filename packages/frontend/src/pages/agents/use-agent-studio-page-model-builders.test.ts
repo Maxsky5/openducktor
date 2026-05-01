@@ -184,8 +184,9 @@ describe("use-agent-studio-page-model-builders", () => {
     });
 
     const optionIds = context.sessionCreateOptions.map((option) => option.id);
-    expect(optionIds).toContain("build:build_after_human_request_changes:fresh");
+    expect(optionIds).toContain("build:build_after_human_request_changes:message_first");
     expect(context.sessionCreateOptions.every((option) => option.disabled)).toBe(true);
+    expect(context.primaryQuickAction).toBeNull();
     expect(context.createSessionDisabled).toBe(true);
   });
 
@@ -216,7 +217,7 @@ describe("use-agent-studio-page-model-builders", () => {
     });
 
     expect(context.sessionCreateOptions.map((option) => option.id)).not.toContain(
-      "build:build_after_human_request_changes:fresh",
+      "build:build_after_human_request_changes:message_first",
     );
   });
 
@@ -246,7 +247,7 @@ describe("use-agent-studio-page-model-builders", () => {
     });
 
     expect(context.sessionCreateOptions.map((option) => option.id)).not.toContain(
-      "build:build_after_qa_rejected:fresh",
+      "build:build_after_qa_rejected:message_first",
     );
   });
 });

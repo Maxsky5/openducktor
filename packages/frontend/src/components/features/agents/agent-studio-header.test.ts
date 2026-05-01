@@ -118,15 +118,46 @@ const buildModel = () => ({
   },
   sessionCreateOptions: [
     {
-      id: "build:build_implementation_start",
+      id: "build:build_implementation_start:message_first",
       role: "build" as const,
       launchActionId: "build_implementation_start" as const,
-      label: "Builder · Implementation Start",
-      description: "Create build session",
+      label: "Builder",
+      description: "Prepare a Builder composer without sending a kickoff.",
       disabled: false,
     },
   ],
-  onCreateSession: () => {},
+  onPrepareMessageFirstSession: () => {},
+  quickActions: [
+    {
+      id: "quick:build_implementation_start",
+      role: "build" as const,
+      launchActionId: "build_implementation_start" as const,
+      label: "Start Implementation",
+      description: "Open the start-session flow for Builder implementation work.",
+      postStartAction: "kickoff" as const,
+      disabled: false,
+    },
+    {
+      id: "quick:build_pull_request_generation",
+      role: "build" as const,
+      launchActionId: "build_pull_request_generation" as const,
+      label: "Generate Pull Request",
+      description: "Reuse or fork a Builder session to create or update a pull request.",
+      postStartAction: "kickoff" as const,
+      disabled: true,
+      disabledReason: "Requires an existing Builder session.",
+    },
+  ],
+  primaryQuickAction: {
+    id: "quick:build_implementation_start",
+    role: "build" as const,
+    launchActionId: "build_implementation_start" as const,
+    label: "Start Implementation",
+    description: "Open the start-session flow for Builder implementation work.",
+    postStartAction: "kickoff" as const,
+    disabled: false,
+  },
+  onQuickAction: () => {},
   createSessionDisabled: false,
   isCreatingSession: false,
   stats: {
@@ -151,7 +182,8 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain('aria-label="Open task details"');
     expect(html).toMatch(/aria-label="Session history[^"]*"/);
     expect(html).toContain(">Open<");
-    expect(html).toContain("Create session");
+    expect(html).toContain("Prepare new session");
+    expect(html).toContain("Quick actions");
     expect(html).not.toMatch(/flex-wrap/);
     expect(html).toContain("mt-1 flex items-center gap-1.5");
     const taskIdIndex = html.indexOf("fairnest-97f");
@@ -327,6 +359,59 @@ describe("AgentStudioHeader", () => {
     ).toBe("none");
   });
 
+  test("opens prepare-session menu and selects message-first role", () => {
+    const onPrepareMessageFirstSession = mock(() => {});
+    render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          onPrepareMessageFirstSession,
+        },
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Prepare new session/i }));
+    expect(screen.getByText("Prepare a Builder composer without sending a kickoff.")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Prepare a Builder composer without sending a kickoff."));
+
+    expect(onPrepareMessageFirstSession).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "build", launchActionId: "build_implementation_start" }),
+    );
+  });
+
+  test("opens quick-actions menu with primary action and disabled reasons", async () => {
+    const onQuickAction = mock(() => {});
+    render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          onQuickAction,
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /Quick actions, primary: Start Implementation/i }),
+      );
+    });
+
+    expect(screen.getByText("Primary")).toBeTruthy();
+    expect(screen.getByText("Generate Pull Request")).toBeTruthy();
+    expect(screen.getByText("Requires an existing Builder session.")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByText("Open the start-session flow for Builder implementation work."),
+      );
+    });
+
+    expect(onQuickAction).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "build", launchActionId: "build_implementation_start" }),
+    );
+  });
+
   test("hides the task details button when no task is selected", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
@@ -355,7 +440,10 @@ describe("AgentStudioHeader", () => {
       /<button[^>]*(aria-label="Session history[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Session history[^"]*")/,
     );
     expect(html).toMatch(
-      /<button[^>]*(aria-label="Create session"[^>]*disabled=""|disabled=""[^>]*aria-label="Create session")/,
+      /<button[^>]*(aria-label="Prepare new session"[^>]*disabled=""|disabled=""[^>]*aria-label="Prepare new session")/,
+    );
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Quick actions[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Quick actions[^"]*")/,
     );
   });
 
@@ -378,7 +466,7 @@ describe("AgentStudioHeader", () => {
     );
   });
 
-  test("disables create session while a session is starting without showing a loader", () => {
+  test("disables prepare session while a session is starting without showing a loader", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
         model: {
@@ -388,11 +476,11 @@ describe("AgentStudioHeader", () => {
       }),
     );
 
-    expect(html).toContain('aria-label="Create session"');
-    expect(html).toContain('disabled="" title="Create session"');
+    expect(html).toContain('aria-label="Prepare new session"');
+    expect(html).toContain('disabled="" title="Prepare new session"');
     expect(html).toContain('class="lucide lucide-plus size-4"');
     expect(html).not.toContain(
-      'title="Create session"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-circle size-4 animate-spin"',
+      'title="Prepare new session"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-circle size-4 animate-spin"',
     );
   });
 

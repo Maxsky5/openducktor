@@ -10,6 +10,8 @@ export type WorkflowHeaderContext = Pick<
   | "sessionSelectorValue"
   | "sessionSelectorGroups"
   | "sessionCreateOptions"
+  | "quickActions"
+  | "primaryQuickAction"
   | "createSessionDisabled"
 >;
 

@@ -2,7 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { useMemo } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { ROLE_OPTIONS } from "./agents-page-constants";
-import type { SessionCreateOption } from "./agents-page-session-tabs";
+import type { AgentStudioQuickActionOption, SessionCreateOption } from "./agents-page-session-tabs";
 import { buildAgentStudioHeaderModel } from "./agents-page-view-model";
 import type {
   AgentStudioWorkflowStepSelect,
@@ -19,7 +19,8 @@ type UseAgentStudioHeaderModelArgs = {
   isStarting: boolean;
   onWorkflowStepSelect: AgentStudioWorkflowStepSelect;
   onSessionSelectionChange: (nextValue: string) => void;
-  onCreateSession: (option: SessionCreateOption) => void;
+  onPrepareMessageFirstSession: (option: SessionCreateOption) => void;
+  onQuickAction: (option: AgentStudioQuickActionOption) => void;
   workflow: WorkflowHeaderContext;
 };
 
@@ -33,7 +34,8 @@ export const useAgentStudioHeaderModel = ({
   isStarting,
   onWorkflowStepSelect,
   onSessionSelectionChange,
-  onCreateSession,
+  onPrepareMessageFirstSession,
+  onQuickAction,
   workflow,
 }: UseAgentStudioHeaderModelArgs): ReturnType<typeof buildAgentStudioHeaderModel> => {
   const activeSessionStatus = activeSession?.status ?? null;
@@ -56,7 +58,10 @@ export const useAgentStudioHeaderModel = ({
         agentStudioReady,
         sessionsForTaskLength,
         sessionCreateOptions: workflow.sessionCreateOptions,
-        onCreateSession,
+        onPrepareMessageFirstSession,
+        quickActions: workflow.quickActions,
+        primaryQuickAction: workflow.primaryQuickAction,
+        onQuickAction,
         createSessionDisabled: workflow.createSessionDisabled,
         isStarting,
         contextSessionsLength,
@@ -67,12 +72,15 @@ export const useAgentStudioHeaderModel = ({
       contextSessionsLength,
       isStarting,
       onOpenTaskDetails,
-      onCreateSession,
+      onPrepareMessageFirstSession,
+      onQuickAction,
       onSessionSelectionChange,
       onWorkflowStepSelect,
       selectedTask,
       sessionsForTaskLength,
       workflow.createSessionDisabled,
+      workflow.primaryQuickAction,
+      workflow.quickActions,
       workflow.selectedInteractionRole,
       workflow.sessionSelectorAutofocusByValue,
       workflow.sessionCreateOptions,

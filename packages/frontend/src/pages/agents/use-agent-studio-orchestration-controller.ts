@@ -340,6 +340,8 @@ export function useAgentStudioOrchestrationController({
     handleWorkflowStepSelect,
     handleSessionSelectionChange,
     handleCreateSession,
+    handlePrepareMessageFirstSession,
+    handleQuickAction,
   } = useAgentStudioSessionActions({
     activeWorkspace,
     branches,
@@ -428,6 +430,8 @@ export function useAgentStudioOrchestrationController({
       handleWorkflowStepSelect,
       handleSessionSelectionChange,
       handleCreateSession,
+      handlePrepareMessageFirstSession,
+      handleQuickAction,
       stopAgentSession,
     },
     modelSelection: {

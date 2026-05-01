@@ -5,15 +5,19 @@ import type { TaskDocumentState } from "@/components/features/task-details/use-t
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentSessionWorkflowSummary,
+  type AgentStudioQuickActionOption,
+  buildAgentStudioQuickActions,
   buildLatestSessionByRoleMap,
   buildRoleEnabledMapForTask,
   buildRoleSessionSummaryMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
   buildWorkflowStateByRole,
+  selectPrimaryAgentStudioQuickAction,
 } from "./agents-page-session-tabs";
 
 export type AgentStudioDocumentsContext = {
@@ -30,7 +34,7 @@ export type AgentStudioSessionContextUsage = {
 
 type BuildWorkflowModelContextArgs = {
   selectedTask: TaskCard | null;
-  sessionsForTask: AgentSessionWorkflowSummary[];
+  sessionsForTask: AgentSessionSummary[];
   activeSession: Pick<AgentSessionState, "externalSessionId" | "role"> | null;
   role: AgentRole;
   isSessionWorking: boolean;
@@ -49,6 +53,8 @@ export type WorkflowModelContext = {
   sessionSelectorAutofocusByValue: Record<string, boolean>;
   sessionSelectorValue: string;
   sessionCreateOptions: ReturnType<typeof buildSessionCreateOptions>;
+  quickActions: AgentStudioQuickActionOption[];
+  primaryQuickAction: AgentStudioQuickActionOption | null;
   selectedInteractionRole: AgentRole;
   selectedRoleAvailable: boolean;
   selectedRoleReadOnlyReason: string | null;
@@ -101,6 +107,12 @@ export const buildWorkflowModelContext = ({
     createSessionDisabled,
     roleLabelByRole,
   });
+  const quickActions = buildAgentStudioQuickActions({
+    selectedTask,
+    sessionsForTask,
+    roleEnabledByTask,
+    createSessionDisabled,
+  });
 
   return {
     latestSessionByRole,
@@ -115,6 +127,8 @@ export const buildWorkflowModelContext = ({
     sessionSelectorAutofocusByValue,
     sessionSelectorValue,
     sessionCreateOptions,
+    quickActions,
+    primaryQuickAction: selectPrimaryAgentStudioQuickAction(quickActions),
     selectedInteractionRole,
     selectedRoleAvailable,
     selectedRoleReadOnlyReason,

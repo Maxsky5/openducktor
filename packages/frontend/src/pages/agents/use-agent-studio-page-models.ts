@@ -10,7 +10,7 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { ROLE_OPTIONS } from "./agents-page-constants";
-import type { SessionCreateOption } from "./agents-page-session-tabs";
+import type { AgentStudioQuickActionOption, SessionCreateOption } from "./agents-page-session-tabs";
 import {
   buildAgentStudioTaskTabsModel,
   buildAgentStudioWorkspaceSidebarModel,
@@ -150,6 +150,8 @@ type AgentStudioSessionActionsContext = {
   handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
+  handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
+  handleQuickAction: (option: AgentStudioQuickActionOption) => void;
   openTaskDetails: () => void;
   isStarting: boolean;
   isSending: boolean;
@@ -312,6 +314,8 @@ export function useAgentStudioPageModels({
     sessionSelectorAutofocusByValue,
     sessionSelectorValue,
     sessionCreateOptions,
+    quickActions,
+    primaryQuickAction,
     selectedInteractionRole,
     selectedRoleAvailable,
     selectedRoleReadOnlyReason,
@@ -340,7 +344,8 @@ export function useAgentStudioPageModels({
     isStarting: sessionActions.isStarting,
     onWorkflowStepSelect: sessionActions.handleWorkflowStepSelect,
     onSessionSelectionChange: sessionActions.handleSessionSelectionChange,
-    onCreateSession: sessionActions.handleCreateSession,
+    onPrepareMessageFirstSession: sessionActions.handlePrepareMessageFirstSession,
+    onQuickAction: sessionActions.handleQuickAction,
     workflow: {
       workflowStateByRole,
       selectedInteractionRole,
@@ -349,6 +354,8 @@ export function useAgentStudioPageModels({
       sessionSelectorValue,
       sessionSelectorGroups,
       sessionCreateOptions,
+      quickActions,
+      primaryQuickAction,
       createSessionDisabled,
     },
   });

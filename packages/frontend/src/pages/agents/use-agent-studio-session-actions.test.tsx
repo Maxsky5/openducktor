@@ -287,6 +287,99 @@ describe("useAgentStudioSessionActions", () => {
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
+  test("prepares a message-first session target without starting or sending", async () => {
+    const updateQuery = mock(() => {});
+    const scheduleSelectionIntent = mock(() => {});
+    const onContextSwitchIntent = mock(() => {});
+    const startAgentSession = mock(async () => "session-new");
+    const sendAgentMessage = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      updateQuery,
+      scheduleSelectionIntent,
+      onContextSwitchIntent,
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.handlePrepareMessageFirstSession({
+        id: "build:build_implementation_start:message_first",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        label: "Builder",
+        description: "Prepare a Builder composer without sending a kickoff.",
+        disabled: false,
+      });
+    });
+
+    expect(updateQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ task: "task-1", session: undefined, agent: "build" }),
+    );
+    expect(scheduleSelectionIntent).toHaveBeenCalledWith({
+      taskId: "task-1",
+      externalSessionId: null,
+      role: "build",
+    });
+    expect(onContextSwitchIntent).toHaveBeenCalled();
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("quick action opens the modal-backed session start flow", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "build",
+      launchActionId: "build_implementation_start",
+      selectedTask: createTask({
+        agentWorkflows: {
+          builder: { required: true, canSkip: false, available: true, completed: false },
+        },
+      }),
+      selectionForNewSession: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "build",
+      },
+    });
+
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.handleQuickAction({
+        id: "quick:build_pull_request_generation",
+        role: "build",
+        launchActionId: "build_pull_request_generation",
+        label: "Generate Pull Request",
+        description: "Reuse or fork a Builder session to create or update a pull request.",
+        postStartAction: "kickoff",
+        disabled: false,
+        existingSessionOptions: [
+          {
+            value: "builder-1",
+            label: "Builder #1",
+            description: "Existing Builder session",
+          },
+        ],
+        initialSourceExternalSessionId: "builder-1",
+        initialStartMode: "reuse",
+      });
+    });
+
+    await harness.waitFor((state) => state.sessionStartModal !== null);
+    expect(harness.getLatest().sessionStartModal?.description).toContain("Generate Pull Request");
+    expect(harness.getLatest().sessionStartModal?.selectedStartMode).toBe("reuse");
+    expect(harness.getLatest().sessionStartModal?.selectedSourceSessionId).toBe("builder-1");
+
+    await harness.unmount();
+  });
+
   test("onSend starts session and sends trimmed message", async () => {
     const startAgentSession = mock(async () => "session-new");
     const sendAgentMessage = mock(async () => {});

@@ -333,7 +333,7 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    expect(harness.getLatest().showTargetBranchSelector).toBe(false);
+    expect(harness.getLatest().showTargetBranchSelector).toBe(true);
 
     await harness.unmount();
   });

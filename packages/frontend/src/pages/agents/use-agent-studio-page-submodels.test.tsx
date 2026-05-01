@@ -47,7 +47,8 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isStarting: false,
   onWorkflowStepSelect: mock(() => {}),
   onSessionSelectionChange: mock(() => {}),
-  onCreateSession: mock(() => {}),
+  onPrepareMessageFirstSession: mock(() => {}),
+  onQuickAction: mock(() => {}),
   workflow: {
     workflowStateByRole: {
       spec: {
@@ -99,6 +100,8 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
       },
     ],
     sessionCreateOptions: [],
+    quickActions: [],
+    primaryQuickAction: null,
     createSessionDisabled: false,
   },
   ...overrides,

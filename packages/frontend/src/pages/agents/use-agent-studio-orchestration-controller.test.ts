@@ -71,6 +71,8 @@ const baseArgs: BuildArgs = {
     handleWorkflowStepSelect: () => {},
     handleSessionSelectionChange: () => {},
     handleCreateSession: () => {},
+    handlePrepareMessageFirstSession: () => {},
+    handleQuickAction: () => {},
     openTaskDetails: () => {},
     isStarting: false,
     isSending: false,
