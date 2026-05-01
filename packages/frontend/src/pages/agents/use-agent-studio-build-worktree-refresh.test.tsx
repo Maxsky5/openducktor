@@ -12,7 +12,7 @@ import {
 enableReactActEnvironment();
 
 type UseAgentStudioBuildWorktreeRefreshHook =
-  typeof import("./use-agent-studio-build-worktree-refresh")["useAgentStudioBuildWorktreeRefresh"];
+  typeof import("@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh")["useAgentStudioBuildWorktreeRefresh"];
 
 let useAgentStudioBuildWorktreeRefresh: UseAgentStudioBuildWorktreeRefreshHook;
 
@@ -54,7 +54,7 @@ const createBaseArgs = (): HookArgs => ({
 
 beforeAll(async () => {
   ({ useAgentStudioBuildWorktreeRefresh } = await import(
-    "./use-agent-studio-build-worktree-refresh"
+    "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh"
   ));
 });
 

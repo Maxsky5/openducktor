@@ -1,48 +1,40 @@
 import { describe, expect, test } from "bun:test";
-import type { ActiveWorkspace } from "@/types/state-slices";
-import { createTaskCardFixture } from "../agent-studio-test-utils";
 import {
-  resolveAgentStudioGitPanelOpenInTarget,
-  resolveTaskWorktreeTaskId,
-} from "./use-agents-page-right-panel-model";
+  resolveBuildToolsOpenInTarget,
+  resolveBuildToolsSelectedTaskId,
+} from "@/features/agent-studio-build-tools/agent-studio-build-tools-worktree-snapshot";
+import { createTaskCardFixture } from "../agent-studio-test-utils";
 
-const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
-  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
-});
-
-describe("resolveTaskWorktreeTaskId", () => {
+describe("resolveBuildToolsSelectedTaskId", () => {
   test("uses the stable tab task id while selected task hydration is still pending", () => {
     expect(
-      resolveTaskWorktreeTaskId({
+      resolveBuildToolsSelectedTaskId({
         viewTaskId: "task-24",
-        viewSelectedTask: null,
+        viewSelectedTaskId: null,
       }),
     ).toBe("task-24");
   });
 
   test("prefers the hydrated selected task id when available", () => {
     expect(
-      resolveTaskWorktreeTaskId({
+      resolveBuildToolsSelectedTaskId({
         viewTaskId: "task-24",
-        viewSelectedTask: createTaskCardFixture({ id: "task-24-hydrated" }),
+        viewSelectedTaskId: createTaskCardFixture({ id: "task-24-hydrated" }).id,
       }),
     ).toBe("task-24-hydrated");
   });
 });
 
-describe("resolveAgentStudioGitPanelOpenInTarget", () => {
+describe("resolveBuildToolsOpenInTarget", () => {
   test("uses the repository root in repository mode even without a worktree path", () => {
     expect(
-      resolveAgentStudioGitPanelOpenInTarget({
+      resolveBuildToolsOpenInTarget({
         contextMode: "repository",
-        activeWorkspace: createActiveWorkspace("/repo"),
+        repoPath: "/repo",
         worktreePath: null,
-        fallbackWorktreePath: null,
+        queriedWorktreePath: null,
         sessionWorkingDirectory: null,
-        taskWorktreeWorkingDirectory: null,
-        isTaskWorktreeResolving: false,
+        isWorktreeResolving: false,
       }),
     ).toEqual({
       path: "/repo",
@@ -52,14 +44,13 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
 
   test("uses the builder worktree in worktree mode", () => {
     expect(
-      resolveAgentStudioGitPanelOpenInTarget({
+      resolveBuildToolsOpenInTarget({
         contextMode: "worktree",
-        activeWorkspace: createActiveWorkspace("/repo"),
+        repoPath: "/repo",
         worktreePath: "/worktrees/task-24",
-        fallbackWorktreePath: null,
+        queriedWorktreePath: null,
         sessionWorkingDirectory: null,
-        taskWorktreeWorkingDirectory: null,
-        isTaskWorktreeResolving: false,
+        isWorktreeResolving: false,
       }),
     ).toEqual({
       path: "/worktrees/task-24",
@@ -69,14 +60,13 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
 
   test("preserves significant leading and trailing spaces in a valid target path", () => {
     expect(
-      resolveAgentStudioGitPanelOpenInTarget({
+      resolveBuildToolsOpenInTarget({
         contextMode: "repository",
-        activeWorkspace: createActiveWorkspace("  /repo with padded name  "),
+        repoPath: "  /repo with padded name  ",
         worktreePath: null,
-        fallbackWorktreePath: null,
+        queriedWorktreePath: null,
         sessionWorkingDirectory: null,
-        taskWorktreeWorkingDirectory: null,
-        isTaskWorktreeResolving: false,
+        isWorktreeResolving: false,
       }),
     ).toEqual({
       path: "  /repo with padded name  ",
@@ -86,14 +76,13 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
 
   test("disables Open In when no worktree-specific path is available", () => {
     expect(
-      resolveAgentStudioGitPanelOpenInTarget({
+      resolveBuildToolsOpenInTarget({
         contextMode: "worktree",
-        activeWorkspace: createActiveWorkspace("/repo"),
+        repoPath: "/repo",
         worktreePath: null,
-        fallbackWorktreePath: null,
+        queriedWorktreePath: null,
         sessionWorkingDirectory: null,
-        taskWorktreeWorkingDirectory: null,
-        isTaskWorktreeResolving: false,
+        isWorktreeResolving: false,
       }),
     ).toEqual({
       path: null,
@@ -103,14 +92,13 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
 
   test("falls back to the active builder working directory before diff worktree resolution completes", () => {
     expect(
-      resolveAgentStudioGitPanelOpenInTarget({
+      resolveBuildToolsOpenInTarget({
         contextMode: "worktree",
-        activeWorkspace: createActiveWorkspace("/repo"),
+        repoPath: "/repo",
         worktreePath: null,
-        fallbackWorktreePath: null,
+        queriedWorktreePath: null,
         sessionWorkingDirectory: "/repo/.worktrees/task-24",
-        taskWorktreeWorkingDirectory: null,
-        isTaskWorktreeResolving: false,
+        isWorktreeResolving: false,
       }),
     ).toEqual({
       path: "/repo/.worktrees/task-24",
@@ -120,14 +108,13 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
 
   test("does not treat the repo root as a valid builder worktree path", () => {
     expect(
-      resolveAgentStudioGitPanelOpenInTarget({
+      resolveBuildToolsOpenInTarget({
         contextMode: "worktree",
-        activeWorkspace: createActiveWorkspace("/repo"),
+        repoPath: "/repo",
         worktreePath: null,
-        fallbackWorktreePath: null,
+        queriedWorktreePath: null,
         sessionWorkingDirectory: "/repo",
-        taskWorktreeWorkingDirectory: null,
-        isTaskWorktreeResolving: false,
+        isWorktreeResolving: false,
       }),
     ).toEqual({
       path: null,
@@ -137,14 +124,13 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
 
   test("uses the canonical task worktree before direct session fallback", () => {
     expect(
-      resolveAgentStudioGitPanelOpenInTarget({
+      resolveBuildToolsOpenInTarget({
         contextMode: "worktree",
-        activeWorkspace: createActiveWorkspace("/repo"),
+        repoPath: "/repo",
         worktreePath: null,
-        fallbackWorktreePath: null,
+        queriedWorktreePath: "/repo/.worktrees/task-24",
         sessionWorkingDirectory: "/repo/.worktrees/older-task-23",
-        taskWorktreeWorkingDirectory: "/repo/.worktrees/task-24",
-        isTaskWorktreeResolving: false,
+        isWorktreeResolving: false,
       }),
     ).toEqual({
       path: "/repo/.worktrees/task-24",
@@ -154,14 +140,13 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
 
   test("shows a resolving message while task worktree resolution is still loading", () => {
     expect(
-      resolveAgentStudioGitPanelOpenInTarget({
+      resolveBuildToolsOpenInTarget({
         contextMode: "worktree",
-        activeWorkspace: createActiveWorkspace("/repo"),
+        repoPath: "/repo",
         worktreePath: null,
-        fallbackWorktreePath: null,
+        queriedWorktreePath: null,
         sessionWorkingDirectory: null,
-        taskWorktreeWorkingDirectory: null,
-        isTaskWorktreeResolving: true,
+        isWorktreeResolving: true,
       }),
     ).toEqual({
       path: null,
@@ -171,14 +156,13 @@ describe("resolveAgentStudioGitPanelOpenInTarget", () => {
 
   test("uses the fallback worktree path before task hydration catches up", () => {
     expect(
-      resolveAgentStudioGitPanelOpenInTarget({
+      resolveBuildToolsOpenInTarget({
         contextMode: "worktree",
-        activeWorkspace: createActiveWorkspace("/repo"),
-        worktreePath: null,
-        fallbackWorktreePath: "/repo/.worktrees/task-24",
+        repoPath: "/repo",
+        worktreePath: "/repo/.worktrees/task-24",
+        queriedWorktreePath: null,
         sessionWorkingDirectory: "/repo",
-        taskWorktreeWorkingDirectory: null,
-        isTaskWorktreeResolving: false,
+        isWorktreeResolving: false,
       }),
     ).toEqual({
       path: "/repo/.worktrees/task-24",

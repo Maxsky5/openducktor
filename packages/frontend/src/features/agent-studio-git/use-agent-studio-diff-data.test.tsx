@@ -34,6 +34,7 @@ const gitFetchRemoteMock = mock(
     output: "From origin",
   }),
 );
+const retryWorktreeResolutionMock = mock(async () => {});
 type GitFetchRemoteMockResult = Awaited<ReturnType<typeof gitFetchRemoteMock>>;
 const gitGetWorktreeStatusMock = mock(
   async (
@@ -108,16 +109,10 @@ type UseAgentStudioDiffDataHook =
 
 let useAgentStudioDiffData: UseAgentStudioDiffDataHook;
 
-type HookArgs = Parameters<UseAgentStudioDiffDataHook>[0] & {
-  taskId?: string | null;
-};
+type HookArgs = Parameters<UseAgentStudioDiffDataHook>[0];
 
 const createHookHarness = (initialProps: HookArgs) => {
-  const { taskId, ...rest } = initialProps;
-  return createSharedHookHarness(useAgentStudioDiffData, {
-    ...rest,
-    taskId: taskId ?? null,
-  });
+  return createSharedHookHarness(useAgentStudioDiffData, initialProps);
 };
 
 const createDeferred = <T,>() => {
@@ -187,8 +182,12 @@ const toWorktreeStatusSummary = (status: GitWorktreeStatus): GitWorktreeStatusSu
 
 const createBaseArgs = (): HookArgs => ({
   repoPath: "/repo",
-  sessionWorkingDirectory: null,
-  taskId: null,
+  worktreePath: null,
+  worktreeResolutionTaskId: null,
+  shouldBlockDiffLoading: false,
+  isWorktreeResolutionResolving: false,
+  worktreeResolutionError: null,
+  retryWorktreeResolution: retryWorktreeResolutionMock,
   defaultTargetBranch: { remote: "origin", branch: "main" },
   branchIdentityKey: null,
   enablePolling: false,
@@ -228,6 +227,7 @@ beforeEach(async () => {
   taskWorktreeEntriesMock.mockClear();
   taskWorktreeGetMock.mockClear();
   gitFetchRemoteMock.mockClear();
+  retryWorktreeResolutionMock.mockClear();
   gitGetWorktreeStatusMock.mockClear();
   gitGetWorktreeStatusSummaryMock.mockClear();
   gitFetchRemoteMock.mockResolvedValue({ outcome: "fetched", output: "From origin" });
@@ -2424,7 +2424,7 @@ describe("useAgentStudioDiffData", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      sessionWorkingDirectory: "/repo/.worktrees/run-1",
+      worktreePath: "/repo/.worktrees/run-1",
     });
 
     try {
@@ -2451,7 +2451,7 @@ describe("useAgentStudioDiffData", () => {
 
       await harness.update({
         ...createBaseArgs(),
-        sessionWorkingDirectory: "/repo/.worktrees/run-2",
+        worktreePath: "/repo/.worktrees/run-2",
       });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
@@ -2643,54 +2643,47 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
-  test("clears stale resolved worktree when task worktree context changes", async () => {
-    taskWorktreeEntriesMock.mockImplementation(async () => [
-      { taskId: "run-1", worktreePath: "/repo/.worktrees/run-1" },
-    ]);
-
+  test("blocks diff loading while the snapshot reports worktree resolution is pending", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
-      taskId: "run-1",
+      worktreeResolutionTaskId: "run-1",
+      shouldBlockDiffLoading: true,
+      isWorktreeResolutionResolving: true,
     });
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
-
-      taskWorktreeEntriesMock.mockImplementation(async () => [
-        { taskId: "run-2", worktreePath: "/repo" },
-      ]);
-      await harness.update({
-        ...createBaseArgs(),
-        taskId: "run-2",
+      await harness.run(async () => {
+        await Promise.resolve();
       });
 
-      await harness.waitFor((state) => state.worktreePath === null);
+      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
       expect(harness.getLatest().worktreePath).toBeNull();
-      expect(harness.getLatest().error).toBeNull();
+      expect(harness.getLatest().isLoading).toBe(true);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("blocks diff loading and reports actionable error when task worktree resolution fails", async () => {
-    taskWorktreeEntriesMock.mockImplementation(async () => {
-      throw new Error("runs_list unavailable");
-    });
-
+  test("refresh retries snapshot-owned worktree resolution before loading diff data", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
-      taskId: "run-1",
+      worktreeResolutionTaskId: "run-1",
+      shouldBlockDiffLoading: true,
+      worktreeResolutionError:
+        "Failed to resolve task worktree path for task run-1. Use Refresh to retry.",
     });
 
     try {
       await harness.mount();
-      await harness.waitFor((state) =>
-        (state.error ?? "").includes("Failed to resolve task worktree path for task run-1"),
-      );
-
       expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
-      expect(harness.getLatest().worktreePath).toBeNull();
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+
+      expect(retryWorktreeResolutionMock).toHaveBeenCalledTimes(1);
+      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -2716,355 +2709,6 @@ describe("useAgentStudioDiffData", () => {
       expect(harness.getLatest().worktreePath).toBeNull();
     } finally {
       await harness.unmount();
-    }
-  });
-
-  test("refresh retries failed task worktree resolution before loading diff data", async () => {
-    let resolveAttempt = 0;
-    taskWorktreeEntriesMock.mockImplementation(async () => {
-      resolveAttempt += 1;
-      if (resolveAttempt === 1) {
-        throw new Error("runs_list unavailable");
-      }
-
-      return [{ taskId: "run-1", worktreePath: "/repo/.worktrees/run-1" }];
-    });
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      taskId: "run-1",
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) =>
-        (state.error ?? "").includes("Failed to resolve task worktree path for task run-1"),
-      );
-      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
-
-      await harness.run((state) => {
-        state.refresh();
-      });
-
-      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
-      expect(taskWorktreeEntriesMock).toHaveBeenCalledTimes(2);
-      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
-        1,
-        "/repo",
-        "origin/main",
-        "uncommitted",
-        "/repo/.worktrees/run-1",
-      );
-      expect(harness.getLatest().error).toBeNull();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("blocks diff loading and reports actionable error when task worktree is missing", async () => {
-    taskWorktreeEntriesMock.mockImplementation(async () => [
-      { taskId: "run-2", worktreePath: "/repo/.worktrees/run-2" },
-    ]);
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      taskId: "run-1",
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) =>
-        (state.error ?? "").includes("Task worktree is not available."),
-      );
-
-      const latest = harness.getLatest();
-      expect(latest.error).toContain("Use Refresh to retry.");
-      expect(latest.worktreePath).toBeNull();
-      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("refresh retries missing task worktree resolution before loading diff data", async () => {
-    let resolveAttempt = 0;
-    taskWorktreeEntriesMock.mockImplementation(async () => {
-      resolveAttempt += 1;
-      if (resolveAttempt === 1) {
-        return [{ taskId: "run-2", worktreePath: "/repo/.worktrees/run-2" }];
-      }
-
-      return [{ taskId: "run-1", worktreePath: "/repo/.worktrees/run-1" }];
-    });
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      taskId: "run-1",
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) =>
-        (state.error ?? "").includes("Task worktree is not available."),
-      );
-      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
-
-      await harness.run((state) => {
-        state.refresh();
-      });
-
-      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
-      expect(taskWorktreeEntriesMock).toHaveBeenCalledTimes(2);
-      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
-        1,
-        "/repo",
-        "origin/main",
-        "uncommitted",
-        "/repo/.worktrees/run-1",
-      );
-      expect(harness.getLatest().error).toBeNull();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("worktree recovery signal retries missing task worktree resolution automatically", async () => {
-    let resolveAttempt = 0;
-    taskWorktreeEntriesMock.mockImplementation(async () => {
-      resolveAttempt += 1;
-      if (resolveAttempt === 1) {
-        return [{ taskId: "run-2", worktreePath: "/repo/.worktrees/run-2" }];
-      }
-
-      return [{ taskId: "run-1", worktreePath: "/repo/.worktrees/run-1" }];
-    });
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      taskId: "run-1",
-      worktreeRecoverySignal: 0,
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) =>
-        (state.error ?? "").includes("Task worktree is not available."),
-      );
-      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
-
-      await harness.update({
-        ...createBaseArgs(),
-        taskId: "run-1",
-        worktreeRecoverySignal: 1,
-      });
-
-      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
-      expect(taskWorktreeEntriesMock).toHaveBeenCalledTimes(2);
-      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
-        1,
-        "/repo",
-        "origin/main",
-        "uncommitted",
-        "/repo/.worktrees/run-1",
-      );
-      expect(harness.getLatest().error).toBeNull();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("worktree recovery signal does not re-resolve after worktree resolution already succeeded", async () => {
-    taskWorktreeEntriesMock.mockResolvedValue([
-      { taskId: "run-1", worktreePath: "/repo/.worktrees/run-1" },
-    ]);
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      taskId: "run-1",
-      worktreeRecoverySignal: 0,
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
-      expect(taskWorktreeEntriesMock).toHaveBeenCalledTimes(1);
-
-      await harness.update({
-        ...createBaseArgs(),
-        taskId: "run-1",
-        worktreeRecoverySignal: 1,
-      });
-
-      await harness.run(async () => {
-        await Promise.resolve();
-      });
-
-      expect(harness.getLatest().worktreePath).toBe("/repo/.worktrees/run-1");
-      expect(harness.getLatest().error).toBeNull();
-      expect(taskWorktreeEntriesMock).toHaveBeenCalledTimes(1);
-      expect(gitGetWorktreeStatusMock).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("worktree recovery signal queued during in-flight resolution retries automatically after failure", async () => {
-    const firstAttempt = createDeferred<Array<{ taskId: string; worktreePath: string }>>();
-    let resolveAttempt = 0;
-    taskWorktreeEntriesMock.mockImplementation(async () => {
-      resolveAttempt += 1;
-      if (resolveAttempt === 1) {
-        return firstAttempt.promise;
-      }
-
-      return [{ taskId: "run-1", worktreePath: "/repo/.worktrees/run-1" }];
-    });
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      taskId: "run-1",
-      worktreeRecoverySignal: 0,
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.isLoading);
-      expect(taskWorktreeEntriesMock).toHaveBeenCalledTimes(1);
-
-      await harness.update({
-        ...createBaseArgs(),
-        taskId: "run-1",
-        worktreeRecoverySignal: 1,
-      });
-
-      firstAttempt.resolve([{ taskId: "run-2", worktreePath: "/repo/.worktrees/run-2" }]);
-
-      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
-
-      expect(taskWorktreeEntriesMock).toHaveBeenCalledTimes(2);
-      expect(harness.getLatest().error).toBeNull();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("queued worktree recovery signal does not leak to a different task worktree context", async () => {
-    const firstAttempt = createDeferred<Array<{ taskId: string; worktreePath: string }>>();
-    let resolveAttempt = 0;
-    taskWorktreeEntriesMock.mockImplementation(async () => {
-      resolveAttempt += 1;
-      if (resolveAttempt === 1) {
-        return firstAttempt.promise;
-      }
-
-      return [{ taskId: "run-2", worktreePath: "/repo/.worktrees/run-2" }];
-    });
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      taskId: "run-1",
-      worktreeRecoverySignal: 0,
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.isLoading);
-      expect(taskWorktreeEntriesMock).toHaveBeenCalledTimes(1);
-
-      await harness.update({
-        ...createBaseArgs(),
-        taskId: "run-1",
-        worktreeRecoverySignal: 1,
-      });
-
-      await harness.update({
-        ...createBaseArgs(),
-        taskId: "run-2",
-        worktreeRecoverySignal: 1,
-      });
-
-      firstAttempt.resolve([{ taskId: "run-3", worktreePath: "/repo/.worktrees/run-3" }]);
-
-      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-2");
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
-
-      expect(taskWorktreeEntriesMock).toHaveBeenCalledTimes(2);
-      expect(harness.getLatest().worktreePath).toBe("/repo/.worktrees/run-2");
-      expect(harness.getLatest().error).toBeNull();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("times out task worktree resolution after 5 seconds and shows retry guidance", async () => {
-    const pendingRunsList = createDeferred<Array<{ taskId: string; worktreePath: string }>>();
-    taskWorktreeEntriesMock.mockImplementation(async () => pendingRunsList.promise);
-
-    const originalSetTimeout = globalThis.setTimeout;
-    const originalClearTimeout = globalThis.clearTimeout;
-    const setTimeoutMock = mock((handler: TimerHandler, _delay?: number) => {
-      if (typeof handler !== "function") {
-        throw new Error("Expected timeout callback function");
-      }
-      return originalSetTimeout(() => {
-        handler();
-      }, 0);
-    });
-    const clearTimeoutMock = mock((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
-      originalClearTimeout(timeoutId);
-    });
-
-    globalThis.setTimeout = setTimeoutMock as unknown as typeof globalThis.setTimeout;
-    globalThis.clearTimeout = clearTimeoutMock as unknown as typeof globalThis.clearTimeout;
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      taskId: "run-1",
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) =>
-        (state.error ?? "").includes("Timed out after 5000ms while loading task worktree."),
-      );
-
-      const latest = harness.getLatest();
-      expect(latest.error).toContain("Use Refresh to retry.");
-      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
-      pendingRunsList.reject(new Error("cleanup"));
-    }
-  });
-
-  test("does not start polling while worktree resolution is still pending", async () => {
-    const pendingRunsList = createDeferred<Array<{ taskId: string; worktreePath: string }>>();
-    taskWorktreeEntriesMock.mockImplementation(async () => pendingRunsList.promise);
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      taskId: "run-1",
-      enablePolling: true,
-    });
-
-    try {
-      await harness.mount();
-      await harness.run(async () => {
-        await Promise.resolve();
-      });
-
-      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
-      expect(gitGetWorktreeStatusSummaryMock).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-      pendingRunsList.reject(new Error("cleanup"));
     }
   });
 

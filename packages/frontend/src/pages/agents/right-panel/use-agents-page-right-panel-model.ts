@@ -1,18 +1,12 @@
 import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
-import { useAgentStudioBuildToolsReadModel } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-read-model";
+import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import { hostClient } from "@/lib/host-client";
-import {
-  canonicalTargetBranch,
-  resolveTaskTargetBranchState,
-  targetBranchFromSelection,
-} from "@/lib/target-branch";
+import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
-import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type {
@@ -41,90 +35,6 @@ export type UseAgentsPageRightPanelModelArgs = {
   onResolveGitConflict: Parameters<typeof useAgentStudioGitActions>[0]["onResolveGitConflict"];
 };
 
-export const resolveTaskWorktreeTaskId = ({
-  viewTaskId,
-  viewSelectedTask,
-}: {
-  viewTaskId: AgentStudioOrchestrationSelectionContext["viewTaskId"];
-  viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
-}): string => viewSelectedTask?.id ?? viewTaskId;
-
-function firstNonRepoWorktreePath(repoPath: string, paths: Array<string | null>): string | null {
-  for (const candidate of paths) {
-    if (!candidate || candidate.trim().length === 0) {
-      continue;
-    }
-
-    if (repoPath.trim().length > 0 && candidate === repoPath) {
-      continue;
-    }
-
-    return candidate;
-  }
-
-  return null;
-}
-
-export const resolveAgentStudioGitPanelOpenInTarget = ({
-  contextMode,
-  activeWorkspace,
-  worktreePath,
-  fallbackWorktreePath,
-  sessionWorkingDirectory,
-  taskWorktreeWorkingDirectory,
-  isTaskWorktreeResolving,
-}: {
-  contextMode: "repository" | "worktree";
-  activeWorkspace: ActiveWorkspace | null;
-  worktreePath: string | null;
-  fallbackWorktreePath: string | null;
-  sessionWorkingDirectory: string | null;
-  taskWorktreeWorkingDirectory: string | null;
-  isTaskWorktreeResolving: boolean;
-}): { path: string | null; disabledReason: string | null } => {
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const repoPath = workspaceRepoPath ?? "";
-  const resolvedContextWorkingDirectory = firstNonRepoWorktreePath(repoPath, [
-    worktreePath,
-    fallbackWorktreePath,
-    taskWorktreeWorkingDirectory,
-    sessionWorkingDirectory,
-  ]);
-
-  if (contextMode === "repository") {
-    if (repoPath.trim().length > 0) {
-      return {
-        path: repoPath,
-        disabledReason: null,
-      };
-    }
-
-    return {
-      path: null,
-      disabledReason: "Repository path is unavailable. Select a repository and try again.",
-    };
-  }
-
-  if (resolvedContextWorkingDirectory) {
-    return {
-      path: resolvedContextWorkingDirectory,
-      disabledReason: null,
-    };
-  }
-
-  if (isTaskWorktreeResolving) {
-    return {
-      path: null,
-      disabledReason: "Resolving builder worktree path...",
-    };
-  }
-
-  return {
-    path: null,
-    disabledReason: "Builder worktree path is unavailable. Refresh the Git panel and try again.",
-  };
-};
-
 export function useAgentsPageRightPanelModel({
   activeWorkspace,
   branches = [],
@@ -148,38 +58,24 @@ export function useAgentsPageRightPanelModel({
   const sessionRole = session.role;
   const sessionStatus = session.status;
 
-  const { diffData, devServerModel, gitPanelContextMode, resolvedGitPanelBranch } =
-    useAgentStudioBuildToolsReadModel({
-      workspaceRepoPath,
-      activeBranch,
-      viewRole,
-      session,
-      viewSelectedTask,
-      panelKind,
-      isPanelOpen,
-      isViewSessionHistoryHydrating,
-      repoSettings,
-      worktreeRecoverySignal,
-    });
-
-  const taskWorktreeRepoPath = workspaceRepoPath ?? "";
-  const taskWorktreeTaskId = resolveTaskWorktreeTaskId({
+  const buildToolsSnapshot = useAgentStudioBuildToolsWorktreeSnapshot({
+    workspaceRepoPath,
+    activeBranch,
+    viewRole,
     viewTaskId,
+    session,
     viewSelectedTask,
+    panelKind,
+    isPanelOpen,
+    isViewSessionHistoryHydrating,
+    repoSettings,
+    worktreeRecoverySignal,
   });
-  const shouldResolveTaskWorktree =
-    panelKind === "build_tools" &&
-    isPanelOpen &&
-    gitPanelContextMode === "worktree" &&
-    taskWorktreeRepoPath.length > 0 &&
-    taskWorktreeTaskId.length > 0;
+  const { diffData, devServerModel, gitPanelContextMode, resolvedGitPanelBranch } =
+    buildToolsSnapshot;
 
   const isActiveBuilderWorking =
     sessionRole === "build" && (sessionStatus === "running" || sessionStatus === "starting");
-  const taskWorktreeQuery = useQuery({
-    ...taskWorktreeQueryOptions(taskWorktreeRepoPath, taskWorktreeTaskId, hostClient),
-    enabled: shouldResolveTaskWorktree,
-  });
   const gitActions = useAgentStudioGitActions({
     repoPath: workspaceRepoPath,
     workingDir: diffData.worktreePath,
@@ -200,11 +96,7 @@ export function useAgentsPageRightPanelModel({
     ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
   });
   const diffModel = useMemo(() => {
-    const taskTargetBranchState = resolveTaskTargetBranchState({
-      taskTargetBranch: viewSelectedTask?.targetBranch,
-      taskTargetBranchError: viewSelectedTask?.targetBranchError ?? null,
-      defaultTargetBranch: repoSettings?.defaultTargetBranch,
-    });
+    const taskTargetBranchState = buildToolsSnapshot.targetBranchState;
     const configuredTargetBranch = canonicalTargetBranch(
       taskTargetBranchState.effectiveTargetBranch,
     );
@@ -222,15 +114,7 @@ export function useAgentsPageRightPanelModel({
         : [],
     });
 
-    const openInTarget = resolveAgentStudioGitPanelOpenInTarget({
-      contextMode: gitPanelContextMode,
-      activeWorkspace,
-      worktreePath: diffData.worktreePath,
-      fallbackWorktreePath: null,
-      sessionWorkingDirectory: session.workingDirectory,
-      taskWorktreeWorkingDirectory: taskWorktreeQuery.data?.workingDirectory ?? null,
-      isTaskWorktreeResolving: taskWorktreeQuery.isPending,
-    });
+    const openInTarget = buildToolsSnapshot.openInTarget;
 
     return {
       ...diffData,
@@ -279,19 +163,16 @@ export function useAgentsPageRightPanelModel({
         : {}),
     };
   }, [
-    activeWorkspace,
+    buildToolsSnapshot.openInTarget,
+    buildToolsSnapshot.targetBranchState,
     branches,
     diffData,
     gitActions,
     gitPanelContextMode,
     onDetectPullRequest,
     detectingPullRequestTaskId,
-    repoSettings?.defaultTargetBranch,
     resolvedGitPanelBranch,
     setTaskTargetBranch,
-    taskWorktreeQuery.data?.workingDirectory,
-    taskWorktreeQuery.isPending,
-    session.workingDirectory,
     viewSelectedTask,
   ]);
 
@@ -309,6 +190,6 @@ export function useAgentsPageRightPanelModel({
   return {
     isRightPanelVisible: Boolean(panelKind && isPanelOpen),
     rightPanelModel,
-    refreshWorktree: diffData.refresh,
+    refreshWorktree: buildToolsSnapshot.refreshWorktree,
   };
 }

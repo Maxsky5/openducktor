@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import { findFirstChangedMessageIndex } from "@/pages/agents/agent-session-message-diff";
 import {
   forEachSessionMessage,
   forEachSessionMessageFrom,
@@ -7,7 +8,6 @@ import {
 import { isReadOnlyShellCommand, isSafeReadToolName } from "@/state/operations/permission-policy";
 
 import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
-import { findFirstChangedMessageIndex } from "./agent-session-message-diff";
 
 type UseAgentStudioBuildWorktreeRefreshArgs = {
   viewRole: string | null;

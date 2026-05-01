@@ -8,33 +8,22 @@ import {
   type DiffRefreshContext,
   useAgentStudioDiffRefreshController,
 } from "./use-agent-studio-diff-refresh-controller";
-import { useAgentStudioWorktreeResolution } from "./use-agent-studio-worktree-resolution";
 
 export function useAgentStudioDiffData({
   repoPath,
-  taskId,
-  sessionWorkingDirectory,
+  worktreePath,
+  worktreeResolutionTaskId,
+  shouldBlockDiffLoading,
+  isWorktreeResolutionResolving,
+  worktreeResolutionError,
+  retryWorktreeResolution,
   defaultTargetBranch,
   preconditionError = null,
   branchIdentityKey = null,
   enablePolling,
-  worktreeRecoverySignal,
 }: UseAgentStudioDiffDataInput): DiffDataState {
   const targetBranch = canonicalTargetBranch(defaultTargetBranch);
   const effectiveRepoPath = preconditionError ? null : repoPath;
-  const {
-    worktreePath,
-    worktreeResolutionTaskId,
-    shouldBlockDiffLoading,
-    isWorktreeResolutionResolving,
-    worktreeResolutionError,
-    retryWorktreeResolution,
-  } = useAgentStudioWorktreeResolution({
-    repoPath: effectiveRepoPath,
-    taskId,
-    sessionWorkingDirectory,
-    ...(worktreeRecoverySignal == null ? {} : { worktreeRecoverySignal }),
-  });
 
   const requestContextKey = useMemo(() => {
     if (!effectiveRepoPath) {
