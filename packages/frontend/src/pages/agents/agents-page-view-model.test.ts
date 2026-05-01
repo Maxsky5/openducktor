@@ -49,7 +49,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   status: "running",
   startedAt: "2026-02-22T12:00:00.000Z",
   runtimeId: null,
-  runtimeRoute: { type: "local_http", endpoint: "http://localhost:1234" },
   workingDirectory: "/repo",
   messages: [],
   draftAssistantText: "",

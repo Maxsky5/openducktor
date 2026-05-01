@@ -202,27 +202,15 @@ describe("settings-modal-normalization", () => {
         agentDefaults: {
           ...createRepoConfig().agentDefaults,
           spec: {
-            runtimeKind: "   ",
             providerId: "openai",
             modelId: "gpt-5",
             variant: "high",
             profileId: "spec",
-          },
+          } as unknown as RepoConfig["agentDefaults"]["spec"],
         },
       }),
     ).toThrow(
       "Specification agent default runtime kind is required when provider and model are configured.",
-    );
-  });
-
-  test("rejects blank repo default runtime kinds", () => {
-    expect(() =>
-      normalizeRepoConfigForSave({
-        ...createRepoConfig(),
-        defaultRuntimeKind: "   ",
-      }),
-    ).toThrow(
-      "Default runtime kind is required. Select a repository default runtime before saving.",
     );
   });
 

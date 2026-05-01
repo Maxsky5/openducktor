@@ -69,7 +69,6 @@ pub struct TaskWorktreeSummary {
 pub struct BuildSessionBootstrap {
     pub runtime_kind: AgentRuntimeKind,
     pub runtime_id: String,
-    pub runtime_route: RuntimeRoute,
     pub working_directory: String,
 }
 

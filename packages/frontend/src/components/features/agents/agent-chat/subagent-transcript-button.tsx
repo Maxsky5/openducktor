@@ -1,4 +1,4 @@
-import type { RuntimeKind, RuntimeRoute } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,6 @@ import {
 type SubagentTranscriptButtonProps = {
   sessionRuntimeKind?: RuntimeKind | null;
   sessionRuntimeId?: string | null;
-  sessionRuntimeRoute?: RuntimeRoute | null;
   sessionWorkingDirectory?: string | null | undefined;
   pendingPermissions?: AgentPermissionRequest[] | undefined;
   meta: SubagentMeta;
@@ -25,7 +24,6 @@ type SubagentTranscriptButtonProps = {
 type TranscriptSourceInput = {
   sessionRuntimeKind: RuntimeKind | null | undefined;
   sessionRuntimeId: string | null | undefined;
-  sessionRuntimeRoute: RuntimeRoute | null | undefined;
   sessionWorkingDirectory: string | null | undefined;
   isLive: boolean;
   pendingPermissions: AgentPermissionRequest[] | undefined;
@@ -50,7 +48,6 @@ const buildTranscriptRequest = (
 const buildTranscriptSource = ({
   sessionRuntimeKind,
   sessionRuntimeId,
-  sessionRuntimeRoute,
   sessionWorkingDirectory,
   isLive,
   pendingPermissions,
@@ -60,17 +57,6 @@ const buildTranscriptSource = ({
 
   if (!sessionRuntimeKind || !runtimeId || !workingDirectory) {
     return null;
-  }
-
-  if (sessionRuntimeRoute) {
-    return {
-      runtimeKind: sessionRuntimeKind,
-      runtimeId,
-      runtimeRoute: sessionRuntimeRoute,
-      workingDirectory,
-      ...(isLive ? { isLive: true } : {}),
-      ...(pendingPermissions ? { pendingPermissions } : {}),
-    };
   }
 
   return {
@@ -85,7 +71,6 @@ const buildTranscriptSource = ({
 export function SubagentTranscriptButton({
   sessionRuntimeKind,
   sessionRuntimeId,
-  sessionRuntimeRoute,
   sessionWorkingDirectory,
   pendingPermissions,
   meta,
@@ -98,7 +83,6 @@ export function SubagentTranscriptButton({
   const transcriptSource = buildTranscriptSource({
     sessionRuntimeKind,
     sessionRuntimeId,
-    sessionRuntimeRoute,
     sessionWorkingDirectory,
     isLive: isLiveSubagentStatus(meta.status),
     pendingPermissions,

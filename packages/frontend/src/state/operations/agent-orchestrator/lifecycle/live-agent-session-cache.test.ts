@@ -1,69 +1,21 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { LiveAgentSessionSnapshot } from "@openducktor/core";
-import {
-  createLiveAgentSessionSnapshotFixture,
-  createLocalHttpRuntimeConnection,
-  createStdioRuntimeConnection,
-} from "../test-utils";
+import { createLiveAgentSessionSnapshotFixture } from "../test-utils";
 import {
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
   liveAgentSessionLookupKey,
-  RuntimeConnectionPreloadIndex,
-  runtimeWorkingDirectoryKey,
 } from "./live-agent-session-cache";
-
-const localRuntimeConnection = createLocalHttpRuntimeConnection();
-
-const stdioRuntimeConnection = createStdioRuntimeConnection("/tmp/runtime-root/");
 
 const createSnapshot = (externalSessionId: string): LiveAgentSessionSnapshot =>
   createLiveAgentSessionSnapshotFixture({ externalSessionId });
 
 describe("live-agent-session-cache", () => {
-  test("builds cache keys from transport identity and normalized working directories", () => {
-    const paddedLocalRuntimeConnection = createLocalHttpRuntimeConnection({
-      endpoint: " http://127.0.0.1:4444 ",
-    });
-
-    expect(getLiveAgentSessionCacheKey("opencode", paddedLocalRuntimeConnection)).toBe(
-      "opencode::local_http:http://127.0.0.1:4444",
+  test("builds cache keys from repo path, runtime kind, and normalized working directories", () => {
+    expect(getLiveAgentSessionCacheKey("/tmp/repo/", "opencode")).toBe("/tmp/repo::opencode");
+    expect(liveAgentSessionLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree/")).toBe(
+      "/tmp/repo::opencode::/tmp/repo/worktree",
     );
-    expect(getLiveAgentSessionCacheKey("opencode", stdioRuntimeConnection)).toBe(
-      "opencode::stdio:runtime-stdio::/tmp/runtime-root",
-    );
-    expect(runtimeWorkingDirectoryKey("opencode", "/tmp/repo/worktree/")).toBe(
-      "opencode::/tmp/repo/worktree",
-    );
-    const preloadIndex = new RuntimeConnectionPreloadIndex();
-    preloadIndex.add("opencode", stdioRuntimeConnection);
-    expect(preloadIndex.hasAny("opencode", "/tmp/runtime-root/")).toBe(true);
-    expect(preloadIndex.hasAny("opencode", "/tmp/other")).toBe(false);
-    expect(preloadIndex.findCandidates("opencode", "/tmp/runtime-root/")).toEqual([
-      stdioRuntimeConnection,
-    ]);
-    expect(
-      liveAgentSessionLookupKey("opencode", stdioRuntimeConnection, "/tmp/repo/worktree/"),
-    ).toBe("opencode::stdio:runtime-stdio::/tmp/runtime-root::/tmp/repo/worktree");
-  });
-
-  test("indexes distinct stdio runtimes sharing a working directory", () => {
-    const runtimeConnectionA = createStdioRuntimeConnection("/tmp/runtime-root", {
-      identity: "runtime-stdio-a",
-    });
-    const runtimeConnectionB = createStdioRuntimeConnection("/tmp/runtime-root", {
-      identity: "runtime-stdio-b",
-    });
-
-    const preloadIndex = new RuntimeConnectionPreloadIndex();
-    preloadIndex.add("opencode", runtimeConnectionA);
-    preloadIndex.add("opencode", runtimeConnectionB);
-
-    expect(preloadIndex.size).toBe(2);
-    expect(preloadIndex.findCandidates("opencode", "/tmp/runtime-root/")).toEqual([
-      runtimeConnectionA,
-      runtimeConnectionB,
-    ]);
   });
 
   test("reuses preloaded single-directory snapshots without scanning", async () => {
@@ -73,20 +25,20 @@ describe("live-agent-session-cache", () => {
       { listLiveAgentSessionSnapshots },
       new Map([
         [
-          liveAgentSessionLookupKey("opencode", localRuntimeConnection, "/tmp/repo/worktree"),
+          liveAgentSessionLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
           preloadedSessions,
         ],
       ]),
     );
 
     const first = await cache.load({
+      repoPath: "/tmp/repo",
       runtimeKind: "opencode",
-      runtimeConnection: localRuntimeConnection,
       directories: ["/tmp/repo/worktree/"],
     });
     const second = await cache.load({
+      repoPath: "/tmp/repo",
       runtimeKind: "opencode",
-      runtimeConnection: localRuntimeConnection,
       directories: ["/tmp/repo/worktree"],
     });
 
@@ -101,13 +53,13 @@ describe("live-agent-session-cache", () => {
     const cache = new LiveAgentSessionCache({ listLiveAgentSessionSnapshots });
 
     const first = await cache.load({
+      repoPath: "/tmp/repo",
       runtimeKind: "opencode",
-      runtimeConnection: localRuntimeConnection,
       directories: ["/tmp/repo/b/", "", " /tmp/repo/a ", "/tmp/repo/b"],
     });
     const second = await cache.load({
+      repoPath: "/tmp/repo",
       runtimeKind: "opencode",
-      runtimeConnection: localRuntimeConnection,
       directories: ["/tmp/repo/a", "/tmp/repo/b"],
     });
 
@@ -115,8 +67,8 @@ describe("live-agent-session-cache", () => {
     expect(second).toBe(scannedSessions);
     expect(listLiveAgentSessionSnapshots).toHaveBeenCalledTimes(1);
     expect(listLiveAgentSessionSnapshots).toHaveBeenCalledWith({
+      repoPath: "/tmp/repo",
       runtimeKind: "opencode",
-      runtimeConnection: localRuntimeConnection,
       directories: ["/tmp/repo/a", "/tmp/repo/b"],
     });
   });
@@ -128,15 +80,15 @@ describe("live-agent-session-cache", () => {
       { listLiveAgentSessionSnapshots },
       new Map([
         [
-          liveAgentSessionLookupKey("opencode", localRuntimeConnection, "/tmp/repo/worktree"),
+          liveAgentSessionLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
           [createSnapshot("external-1")],
         ],
       ]),
     );
 
     const loaded = await cache.load({
+      repoPath: "/tmp/repo",
       runtimeKind: "opencode",
-      runtimeConnection: localRuntimeConnection,
       directories: ["/tmp/repo/worktree", "/tmp/repo/other"],
     });
 
@@ -149,14 +101,14 @@ describe("live-agent-session-cache", () => {
     const cache = new LiveAgentSessionCache({ listLiveAgentSessionSnapshots });
 
     await cache.load({
+      repoPath: "/tmp/repo",
       runtimeKind: "opencode",
-      runtimeConnection: localRuntimeConnection,
       directories: ["", "   "],
     });
 
     expect(listLiveAgentSessionSnapshots).toHaveBeenCalledWith({
+      repoPath: "/tmp/repo",
       runtimeKind: "opencode",
-      runtimeConnection: localRuntimeConnection,
     });
   });
 });

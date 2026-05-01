@@ -44,7 +44,6 @@ const createSessionFixture = (): AgentSessionState => ({
   status: "idle",
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeId: "runtime-1",
-  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
   workingDirectory: "/tmp/repo-a",
   messages: [],
   draftAssistantText: "",

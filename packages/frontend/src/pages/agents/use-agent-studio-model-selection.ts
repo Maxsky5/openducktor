@@ -4,7 +4,6 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
-  AgentRuntimeConnection,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,9 +15,11 @@ import {
   toPrimaryAgentOptions,
 } from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { findFirstChangedSessionMessageIndex } from "@/state/operations/agent-orchestrator/support/messages";
+import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import {
   sessionFileSearchQueryOptions,
   sessionSlashCommandsQueryOptions,
@@ -30,7 +31,6 @@ import {
 } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
-import { resolveAttachedSessionRuntimeQueryState } from "./agent-studio-session-runtime";
 import {
   coerceVisibleSelectionToCatalog,
   emptyDraftSelections,
@@ -69,12 +69,13 @@ type UseAgentStudioModelSelectionArgs = {
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
   readSessionSlashCommands?: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentSlashCommandCatalog>;
   readSessionFileSearch?: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
 };
@@ -104,11 +105,11 @@ type AgentStudioModelSelectionState = {
 
 type ActiveSessionSelectionState = {
   externalSessionId: string | null;
+  repoPath: string;
   status: AgentSessionState["status"] | null;
   selectedModel: AgentModelSelection | null;
   modelCatalog: AgentSessionState["modelCatalog"] | null;
   runtimeKind: AgentSessionState["runtimeKind"] | null;
-  runtimeRoute: AgentSessionState["runtimeRoute"] | null;
   workingDirectory: string;
   isLoadingModelCatalog: boolean;
   liveContextUsage: AgentSessionState["contextUsage"] | null;
@@ -126,11 +127,11 @@ export const resolveActiveSessionSelectionState = (
 
   return {
     externalSessionId,
+    repoPath: activeSession?.repoPath?.trim() ?? activeSessionSummary?.repoPath?.trim() ?? "",
     status: activeSession?.status ?? activeSessionSummary?.status ?? null,
     selectedModel,
     modelCatalog: activeSession?.modelCatalog ?? null,
     runtimeKind: activeSession?.runtimeKind ?? activeSessionSummary?.runtimeKind ?? null,
-    runtimeRoute: activeSession?.runtimeRoute ?? null,
     workingDirectory:
       activeSession?.workingDirectory?.trim() ??
       activeSessionSummary?.workingDirectory?.trim() ??
@@ -204,7 +205,7 @@ export function useAgentStudioModelSelection({
   const activeSessionSelectedModel = activeSessionSelection.selectedModel;
   const activeSessionModelCatalog = activeSessionSelection.modelCatalog;
   const activeSessionRuntimeKind = activeSessionSelection.runtimeKind;
-  const activeSessionRuntimeRoute = activeSessionSelection.runtimeRoute;
+  const activeSessionRepoPath = activeSessionSelection.repoPath;
   const activeSessionWorkingDirectory = activeSessionSelection.workingDirectory;
   const activeSessionIsLoadingModelCatalog = activeSessionSelection.isLoadingModelCatalog;
   const activeSessionLiveContextUsage = activeSessionSelection.liveContextUsage ?? null;
@@ -236,15 +237,15 @@ export function useAgentStudioModelSelection({
       resolveAttachedSessionRuntimeQueryState(
         hasActiveSession
           ? {
+              repoPath: activeSessionRepoPath,
               runtimeKind: activeSessionRuntimeKind,
-              runtimeRoute: activeSessionRuntimeRoute,
               workingDirectory: activeSessionWorkingDirectory,
             }
           : null,
       ),
     [
+      activeSessionRepoPath,
       activeSessionRuntimeKind,
-      activeSessionRuntimeRoute,
       activeSessionWorkingDirectory,
       hasActiveSession,
     ],
@@ -306,7 +307,7 @@ export function useAgentStudioModelSelection({
   const composerCatalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(
       workspaceRepoPath ?? "",
-      composerRuntimeKind ?? "",
+      composerRuntimeKind ?? DEFAULT_RUNTIME_KIND,
       loadCatalogForRepo,
     ),
     enabled:
@@ -328,12 +329,12 @@ export function useAgentStudioModelSelection({
   const activeSessionSlashCommandsQuery = useQuery({
     ...(activeSessionRuntimeQueryInput && readSessionSlashCommands
       ? sessionSlashCommandsQueryOptions(
+          activeSessionRuntimeQueryInput.repoPath,
           activeSessionRuntimeQueryInput.runtimeKind,
-          activeSessionRuntimeQueryInput.runtimeConnection,
           readSessionSlashCommands,
         )
       : {
-          queryKey: ["agent-session-runtime", "slash-commands", "", "", ""] as const,
+          queryKey: ["agent-session-runtime", "slash-commands", "", DEFAULT_RUNTIME_KIND] as const,
           queryFn: async (): Promise<AgentSlashCommandCatalog> => {
             throw new Error("Session slash commands query is disabled.");
           },
@@ -349,7 +350,7 @@ export function useAgentStudioModelSelection({
   const repoSlashCommandsQuery = useQuery({
     ...repoRuntimeSlashCommandsQueryOptions(
       workspaceRepoPath ?? "",
-      composerRuntimeKind ?? "",
+      composerRuntimeKind ?? DEFAULT_RUNTIME_KIND,
       loadSlashCommandsForRepo,
     ),
     enabled:
@@ -472,13 +473,14 @@ export function useAgentStudioModelSelection({
         }
         if (activeSessionRuntimeQueryInput == null || readSessionFileSearch == null) {
           throw new Error(
-            "Active session file search is unavailable until the session runtime connection is ready.",
+            "Active session file search is unavailable until the session runtime is ready.",
           );
         }
         return queryClient.fetchQuery(
           sessionFileSearchQueryOptions(
+            activeSessionRuntimeQueryInput.repoPath,
             activeSessionRuntimeQueryInput.runtimeKind,
-            activeSessionRuntimeQueryInput.runtimeConnection,
+            activeSessionRuntimeQueryInput.workingDirectory,
             query,
             readSessionFileSearch,
           ),

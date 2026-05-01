@@ -4,17 +4,10 @@ import type {
   RepoConfig,
   RepoPromptOverrides,
   RuntimeKind,
-  RuntimeRoute,
   SettingsSnapshot,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
-import {
-  type AgentModelSelection,
-  type AgentRole,
-  type AgentRuntimeConnection,
-  mergePromptOverrides,
-  requireRuntimeConnection,
-} from "@openducktor/core";
+import { type AgentModelSelection, type AgentRole, mergePromptOverrides } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { appQueryClient } from "@/lib/query-client";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
@@ -27,136 +20,7 @@ export type RuntimeInfo = {
   runtimeKind?: RuntimeKind;
   kind?: string;
   runtimeId: string | null;
-  runtimeConnection?: AgentRuntimeConnection;
-  runtimeRoute: RuntimeRoute | null;
   workingDirectory: string;
-};
-
-export const normalizeStdioRuntimeIdentity = (
-  identity: string | null | undefined,
-  context = "Runtime stdio identity",
-): string => {
-  const trimmedIdentity = typeof identity === "string" ? identity.trim() : "";
-  if (trimmedIdentity.length === 0) {
-    throw new Error(`${context} is required.`);
-  }
-
-  return trimmedIdentity;
-};
-
-export const runtimeConnectionToRoute = (
-  runtimeConnection: AgentRuntimeConnection,
-): RuntimeRoute => {
-  switch (runtimeConnection.type) {
-    case "local_http":
-      return {
-        type: "local_http",
-        endpoint: runtimeConnection.endpoint,
-      };
-    case "stdio":
-      return {
-        type: "stdio",
-        identity: normalizeStdioRuntimeIdentity(
-          runtimeConnection.identity,
-          "Runtime connection stdio identity",
-        ),
-      };
-  }
-};
-
-export const runtimeRouteToConnection = (
-  runtimeRoute: RuntimeRoute,
-  workingDirectory: string,
-): AgentRuntimeConnection => {
-  switch (runtimeRoute.type) {
-    case "local_http":
-      return {
-        type: "local_http",
-        endpoint: runtimeRoute.endpoint,
-        workingDirectory,
-      };
-    case "stdio":
-      return {
-        type: "stdio",
-        identity: normalizeStdioRuntimeIdentity(
-          runtimeRoute.identity,
-          "Runtime route stdio identity",
-        ),
-        workingDirectory,
-      };
-  }
-};
-
-export const resolveRuntimeRouteConnection = (
-  runtimeRoute: RuntimeRoute,
-  workingDirectory: string,
-): { runtimeConnection: AgentRuntimeConnection } => {
-  return {
-    runtimeConnection: runtimeRouteToConnection(runtimeRoute, workingDirectory),
-  };
-};
-
-export const runtimeRouteTransportKey = (runtimeRoute: RuntimeRoute | null | undefined): string => {
-  if (!runtimeRoute) {
-    return "unavailable";
-  }
-
-  switch (runtimeRoute.type) {
-    case "local_http":
-      return `local_http:${runtimeRoute.endpoint.trim()}`;
-    case "stdio":
-      return `stdio:${normalizeStdioRuntimeIdentity(
-        runtimeRoute.identity,
-        "Runtime route stdio identity",
-      )}`;
-  }
-};
-
-export const runtimeConnectionTransportKey = (
-  runtimeConnection: AgentRuntimeConnection,
-): string => {
-  switch (runtimeConnection.type) {
-    case "local_http":
-      return `local_http:${runtimeConnection.endpoint.trim()}`;
-    case "stdio":
-      return `stdio:${normalizeStdioRuntimeIdentity(
-        runtimeConnection.identity,
-        "Runtime connection stdio identity",
-      )}`;
-  }
-};
-
-export const describeRuntimeRoute = (runtimeRoute: RuntimeRoute | null | undefined): string => {
-  if (!runtimeRoute) {
-    return "unavailable";
-  }
-
-  switch (runtimeRoute.type) {
-    case "local_http":
-      return runtimeRoute.endpoint;
-    case "stdio":
-      return `stdio:${normalizeStdioRuntimeIdentity(
-        runtimeRoute.identity,
-        "Runtime route stdio identity",
-      )}`;
-  }
-};
-
-export const resolveRuntimeRoute = (runtime: RuntimeInfo): RuntimeRoute => {
-  if (runtime.runtimeRoute) {
-    return runtime.runtimeRoute;
-  }
-
-  return runtimeConnectionToRoute(
-    requireRuntimeConnection(runtime.runtimeConnection, "resolve runtime route"),
-  );
-};
-
-export const resolveRuntimeConnection = (runtime: RuntimeInfo): AgentRuntimeConnection => {
-  return (
-    runtime.runtimeConnection ??
-    runtimeRouteToConnection(resolveRuntimeRoute(runtime), runtime.workingDirectory)
-  );
 };
 
 export type TaskDocuments = {
@@ -274,14 +138,13 @@ export const loadRepoDefaultRuntimeKind = async (
 };
 
 export const requireConfiguredRuntimeKind = (
-  runtimeKind: RuntimeKind | string | null | undefined,
+  runtimeKind: RuntimeKind | null | undefined,
   contextMessage: string,
 ): RuntimeKind => {
-  const normalized = runtimeKind?.trim() ?? "";
-  if (!normalized) {
+  if (!runtimeKind) {
     throw new Error(contextMessage);
   }
-  return normalized;
+  return runtimeKind;
 };
 
 export const createEnsureRuntime = ({
@@ -301,7 +164,7 @@ export const createEnsureRuntime = ({
   ): Promise<RuntimeInfo> => {
     const targetWorkingDirectory = options?.targetWorkingDirectory?.trim() ?? "";
     const workspaceId = options?.workspaceId?.trim() ?? "";
-    const explicitRuntimeKind = options?.runtimeKind?.trim() ?? "";
+    const explicitRuntimeKind = options?.runtimeKind;
     let runtimeKind: RuntimeKind;
     if (explicitRuntimeKind) {
       runtimeKind = requireConfiguredRuntimeKind(
@@ -316,14 +179,10 @@ export const createEnsureRuntime = ({
     }
     const toRuntimeInfo = (input: {
       runtimeId: string | null;
-      runtimeRoute: RuntimeRoute;
-      runtimeConnection: AgentRuntimeConnection;
       workingDirectory: string;
     }): RuntimeInfo => ({
       runtimeKind,
       runtimeId: input.runtimeId,
-      runtimeRoute: input.runtimeRoute,
-      runtimeConnection: input.runtimeConnection,
       workingDirectory: input.workingDirectory,
     });
 
@@ -335,14 +194,8 @@ export const createEnsureRuntime = ({
           ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
             hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
         });
-        const { runtimeConnection } = resolveRuntimeRouteConnection(
-          runtime.runtimeRoute,
-          targetWorkingDirectory,
-        );
         return toRuntimeInfo({
           runtimeId: runtime.runtimeId,
-          runtimeRoute: runtime.runtimeRoute,
-          runtimeConnection,
           workingDirectory: targetWorkingDirectory,
         });
       }
@@ -359,14 +212,8 @@ export const createEnsureRuntime = ({
           tags: { repoPath, taskId, role },
         },
       );
-      const { runtimeConnection } = resolveRuntimeRouteConnection(
-        bootstrap.runtimeRoute,
-        bootstrap.workingDirectory,
-      );
       return toRuntimeInfo({
         runtimeId: bootstrap.runtimeId,
-        runtimeRoute: bootstrap.runtimeRoute,
-        runtimeConnection,
         workingDirectory: bootstrap.workingDirectory,
       });
     }
@@ -386,14 +233,8 @@ export const createEnsureRuntime = ({
         ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
           hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
       });
-      const { runtimeConnection } = resolveRuntimeRouteConnection(
-        runtime.runtimeRoute,
-        workingDirectory,
-      );
       return toRuntimeInfo({
         runtimeId: runtime.runtimeId,
-        runtimeRoute: runtime.runtimeRoute,
-        runtimeConnection,
         workingDirectory,
       });
     }
@@ -405,14 +246,8 @@ export const createEnsureRuntime = ({
         hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
     });
     const workingDirectory = targetWorkingDirectory || runtime.workingDirectory;
-    const { runtimeConnection } = resolveRuntimeRouteConnection(
-      runtime.runtimeRoute,
-      workingDirectory,
-    );
     return toRuntimeInfo({
       runtimeId: runtime.runtimeId,
-      runtimeRoute: runtime.runtimeRoute,
-      runtimeConnection,
       workingDirectory,
     });
   };

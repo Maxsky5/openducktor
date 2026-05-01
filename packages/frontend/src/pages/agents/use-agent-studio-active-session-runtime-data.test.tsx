@@ -34,7 +34,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       session: createAgentSessionFixture({
         externalSessionId: "external-1",
         runtimeKind: "opencode",
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        runtimeId: "runtime-1",
         workingDirectory: "/repo",
         status: "starting",
         modelCatalog: null,
@@ -65,7 +65,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       session: createAgentSessionFixture({
         externalSessionId: "external-1",
         runtimeKind: "opencode",
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        runtimeId: "runtime-1",
         workingDirectory: "/repo",
         modelCatalog: null,
         isLoadingModelCatalog: true,
@@ -100,7 +100,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
     const session = createAgentSessionFixture({
       externalSessionId: "external-1",
       runtimeKind: "opencode",
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+      runtimeId: "runtime-1",
       workingDirectory: "/repo",
       modelCatalog: null,
       isLoadingModelCatalog: true,
@@ -151,7 +151,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       session: createAgentSessionFixture({
         externalSessionId: "external-1",
         runtimeKind: "opencode",
-        runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
+        runtimeId: "runtime-1",
         workingDirectory: "/repo",
         modelCatalog: null,
         isLoadingModelCatalog: false,
@@ -189,7 +189,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       session: createAgentSessionFixture({
         externalSessionId: "external-1",
         runtimeKind: "opencode",
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+        runtimeId: "runtime-1",
         workingDirectory: "/repo",
         modelCatalog: null,
         isLoadingModelCatalog: true,

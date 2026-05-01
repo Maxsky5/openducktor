@@ -258,7 +258,7 @@ export function RepositoryAgentsSection({
                         agentDefaults: {
                           ...repoConfig.agentDefaults,
                           [role]: {
-                            runtimeKind: runtimeKind ?? "",
+                            runtimeKind,
                             providerId: "",
                             modelId: "",
                             variant: "",

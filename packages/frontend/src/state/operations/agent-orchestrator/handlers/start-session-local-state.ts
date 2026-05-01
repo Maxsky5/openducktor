@@ -40,7 +40,6 @@ export const buildInitialSession = ({
       status: "starting",
       startedAt: startedCtx.summary.startedAt,
       runtimeId: runtime.runtimeId,
-      runtimeRoute: runtime.runtimeRoute,
       workingDirectory: runtime.workingDirectory,
       historyHydrationState: "hydrated",
       runtimeRecoveryState: "idle",

@@ -7,22 +7,20 @@ import type {
   AgentEnginePort,
   AgentFileSearchResult,
   AgentModelCatalog,
-  AgentRuntimeConnection,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import { appQueryClient } from "@/lib/query-client";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { DiagnosticsQueryTimeoutError } from "@/state/queries/checks";
 import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
-import { resolveRuntimeRouteConnection } from "../agent-orchestrator/runtime/runtime";
 import { host } from "./host";
-import { ensureRuntimeAndInvalidateReadinessQueries } from "./runtime-readiness-publication";
 
 type ListCatalogInput = {
+  repoPath: string;
   runtimeKind: RuntimeKind;
-  runtimeConnection: AgentRuntimeConnection;
 };
 
 export type RuntimeCatalogAdapter = Pick<
@@ -42,7 +40,6 @@ type RuntimeCatalogDependencies = {
     runtimeKind: RuntimeKind,
     repoPath: string,
   ) => Promise<RepoRuntimeHealthCheck>;
-  ensureRuntime: (runtimeKind: RuntimeKind, repoPath: string) => Promise<RuntimeInstanceSummary>;
   listRuntimesForRepo: (
     runtimeKind: RuntimeKind,
     repoPath: string,
@@ -57,20 +54,25 @@ const RUNTIME_HEALTH_STATUS_TIMEOUT_MS = 3_000;
 
 const toNowIso = (): string => new Date().toISOString();
 
-const toRuntimeInput = (
-  runtime: RuntimeInstanceSummary,
-  runtimeKind: RuntimeKind,
-): ListCatalogInput => ({
+const toRuntimeInput = (repoPath: string, runtimeKind: RuntimeKind): ListCatalogInput => ({
+  repoPath,
   runtimeKind,
-  runtimeConnection: resolveRuntimeRouteConnection(runtime.runtimeRoute, runtime.workingDirectory)
-    .runtimeConnection,
 });
 
 const selectCatalogRuntime = (
   runtimes: RuntimeInstanceSummary[],
   repoPath: string,
-): RuntimeInstanceSummary | null =>
-  runtimes.find((runtime) => runtime.workingDirectory === repoPath) ?? runtimes[0] ?? null;
+  runtimeKind: RuntimeKind,
+): RuntimeInstanceSummary | null => {
+  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+  return (
+    runtimes.find(
+      (runtime) =>
+        runtime.kind === runtimeKind &&
+        normalizeWorkingDirectory(runtime.repoPath) === normalizedRepoPath,
+    ) ?? null
+  );
+};
 
 const withRuntimeHealthTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
   let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
@@ -158,30 +160,29 @@ const buildFrontendObservationTimeoutHealthCheck = async (
 export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies) => {
   const runtimeHealthTimeoutMs = deps.runtimeHealthTimeoutMs ?? RUNTIME_HEALTH_TIMEOUT_MS;
 
-  const fetchCatalog = async (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ): Promise<AgentModelCatalog> => {
-    const existingRuntime =
-      selectCatalogRuntime(await deps.listRuntimesForRepo(runtimeKind, repoPath), repoPath) ?? null;
-    const runtime = existingRuntime ?? (await deps.ensureRuntime(runtimeKind, repoPath));
-    return deps.listAvailableModels(toRuntimeInput(runtime, runtimeKind));
-  };
-
   const resolveCatalogInput = async (
     repoPath: string,
     runtimeKind: RuntimeKind,
   ): Promise<ListCatalogInput> => {
-    const existingRuntime =
-      selectCatalogRuntime(await deps.listRuntimesForRepo(runtimeKind, repoPath), repoPath) ?? null;
-    const runtime = existingRuntime ?? (await deps.ensureRuntime(runtimeKind, repoPath));
-    return toRuntimeInput(runtime, runtimeKind);
+    const existingRuntime = selectCatalogRuntime(
+      await deps.listRuntimesForRepo(runtimeKind, repoPath),
+      repoPath,
+      runtimeKind,
+    );
+    if (!existingRuntime) {
+      throw new Error(
+        `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'.`,
+      );
+    }
+    return toRuntimeInput(repoPath, runtimeKind);
   };
 
   const loadRepoRuntimeCatalog = async (
     repoPath: string,
     runtimeKind: RuntimeKind,
-  ): Promise<AgentModelCatalog> => fetchCatalog(repoPath, runtimeKind);
+  ): Promise<AgentModelCatalog> => {
+    return deps.listAvailableModels(await resolveCatalogInput(repoPath, runtimeKind));
+  };
 
   const loadRepoRuntimeSlashCommands = async (
     repoPath: string,
@@ -247,29 +248,23 @@ export const createHostRuntimeCatalogOperations = (
     repoRuntimeHealth: (runtimeKind, repoPath) => host.repoRuntimeHealth(repoPath, runtimeKind),
     repoRuntimeHealthStatus: (runtimeKind, repoPath) =>
       host.repoRuntimeHealthStatus(repoPath, runtimeKind),
-    ensureRuntime: (runtimeKind, repoPath) =>
-      ensureRuntimeAndInvalidateReadinessQueries({
-        repoPath,
-        runtimeKind,
-        ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-          host.runtimeEnsure(nextRepoPath, nextRuntimeKind),
-      }),
     listRuntimesForRepo: (runtimeKind, repoPath) =>
       ensureRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
     listAvailableModels: (input) =>
       getAdapter(input.runtimeKind).listAvailableModels({
+        repoPath: input.repoPath,
         runtimeKind: input.runtimeKind,
-        runtimeConnection: input.runtimeConnection,
       }),
     listAvailableSlashCommands: (input) =>
       getAdapter(input.runtimeKind).listAvailableSlashCommands({
+        repoPath: input.repoPath,
         runtimeKind: input.runtimeKind,
-        runtimeConnection: input.runtimeConnection,
       }),
     searchFiles: (input) =>
       getAdapter(input.runtimeKind).searchFiles({
+        repoPath: input.repoPath,
         runtimeKind: input.runtimeKind,
-        runtimeConnection: input.runtimeConnection,
+        workingDirectory: input.repoPath,
         query: input.query,
       }),
   });

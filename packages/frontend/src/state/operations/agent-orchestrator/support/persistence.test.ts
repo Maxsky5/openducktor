@@ -84,21 +84,21 @@ describe("agent-orchestrator/support/persistence", () => {
   test("preserves non-default runtime kind across persistence", () => {
     const customRuntimeRecord: AgentSessionRecord = {
       ...recordFixture,
-      runtimeKind: "claude-code",
+      runtimeKind: "opencode",
       selectedModel: {
-        runtimeKind: "claude-code",
+        runtimeKind: "opencode",
         providerId: "anthropic",
         modelId: "claude-3-7-sonnet",
       },
     };
 
     const hydrated = fromPersistedSessionRecord(customRuntimeRecord, "task-1", repoPathFixture);
-    expect(hydrated.runtimeKind).toBe("claude-code");
-    expect(hydrated.selectedModel?.runtimeKind).toBe("claude-code");
+    expect(hydrated.runtimeKind).toBe("opencode");
+    expect(hydrated.selectedModel?.runtimeKind).toBe("opencode");
 
     const persisted = toPersistedSessionRecord(hydrated);
-    expect(persisted.runtimeKind).toBe("claude-code");
-    expect(persisted.selectedModel?.runtimeKind).toBe("claude-code");
+    expect(persisted.runtimeKind).toBe("opencode");
+    expect(persisted.selectedModel?.runtimeKind).toBe("opencode");
   });
 
   test("rejects persisted session records without a top-level runtime kind", () => {
@@ -114,17 +114,6 @@ describe("agent-orchestrator/support/persistence", () => {
     ).toThrow("Persisted session 'external-1' is missing runtime kind metadata.");
   });
 
-  test("rejects persisted session records with blank top-level runtime kind", () => {
-    const invalidRecord: AgentSessionRecord = {
-      ...recordFixture,
-      runtimeKind: "  ",
-    };
-
-    expect(() => fromPersistedSessionRecord(invalidRecord, "task-1", repoPathFixture)).toThrow(
-      "Persisted session 'external-1' is missing runtime kind metadata.",
-    );
-  });
-
   test("rejects persisted selected models without a runtime kind", () => {
     const invalidRecord = {
       ...recordFixture,
@@ -132,21 +121,6 @@ describe("agent-orchestrator/support/persistence", () => {
         providerId: "openai",
         modelId: "gpt-5",
       } as unknown as NonNullable<AgentSessionRecord["selectedModel"]>,
-    };
-
-    expect(() => fromPersistedSessionRecord(invalidRecord, "task-1", repoPathFixture)).toThrow(
-      "Persisted session 'external-1' selected model is missing runtime kind metadata.",
-    );
-  });
-
-  test("rejects persisted selected models with blank runtime kind", () => {
-    const invalidRecord: AgentSessionRecord = {
-      ...recordFixture,
-      selectedModel: {
-        runtimeKind: "\t ",
-        providerId: "openai",
-        modelId: "gpt-5",
-      },
     };
 
     expect(() => fromPersistedSessionRecord(invalidRecord, "task-1", repoPathFixture)).toThrow(
@@ -164,13 +138,11 @@ describe("agent-orchestrator/support/persistence", () => {
             providerId: "openai",
             modelId: "gpt-5",
           },
-        },
+        } as unknown as AgentSessionRecord,
         "task-1",
         repoPathFixture,
       ),
-    ).toThrow(
-      "Persisted session 'external-1' selected model runtime kind does not match session runtime kind.",
-    );
+    ).toThrow("Unsupported runtime kind metadata: claude-code.");
   });
 
   test("rejects persisting sessions without a top-level runtime kind", () => {
@@ -180,17 +152,6 @@ describe("agent-orchestrator/support/persistence", () => {
     delete session.runtimeKind;
 
     expect(() => toPersistedSessionRecord(session as unknown as AgentSessionState)).toThrow(
-      "Session 'external-1' is missing runtime kind metadata.",
-    );
-  });
-
-  test("rejects persisting sessions with blank top-level runtime kind", () => {
-    const session: AgentSessionState = {
-      ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
-      runtimeKind: "\n  ",
-    };
-
-    expect(() => toPersistedSessionRecord(session)).toThrow(
       "Session 'external-1' is missing runtime kind metadata.",
     );
   });
@@ -209,33 +170,18 @@ describe("agent-orchestrator/support/persistence", () => {
     );
   });
 
-  test("rejects persisting selected models with blank runtime kind", () => {
-    const session: AgentSessionState = {
-      ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
-      selectedModel: {
-        runtimeKind: "  ",
-        providerId: "openai",
-        modelId: "gpt-5",
-      },
-    };
-
-    expect(() => toPersistedSessionRecord(session)).toThrow(
-      "Session 'external-1' selected model is missing runtime kind metadata.",
-    );
-  });
-
   test("rejects persisting selected models whose runtime kind disagrees with the session", () => {
-    const session: AgentSessionState = {
+    const session = {
       ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
       selectedModel: {
         runtimeKind: "claude-code",
         providerId: "openai",
         modelId: "gpt-5",
       },
-    } as NonNullable<AgentSessionState>;
+    } as unknown as AgentSessionState;
 
     expect(() => toPersistedSessionRecord(session)).toThrow(
-      "Session 'external-1' selected model runtime kind does not match session runtime kind.",
+      "Unsupported runtime kind metadata: claude-code.",
     );
   });
 

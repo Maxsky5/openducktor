@@ -459,10 +459,6 @@ fn build_start_accepts_stdio_routes_from_runtime_adapter() -> Result<()> {
     );
     assert!(!bootstrap.runtime_id.is_empty());
     assert_eq!(
-        bootstrap.runtime_route,
-        host_domain::RuntimeRoute::stdio("runtime-build-start-stdio")?
-    );
-    assert_eq!(
         bootstrap.working_directory,
         harness.expected_worktree_dir("task-1")
     );

@@ -24,7 +24,7 @@ enableReactActEnvironment();
 
 const CODEX_RUNTIME_DESCRIPTOR = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
-  kind: "codex",
+  kind: "opencode",
   label: "Codex",
   description: "Codex runtime",
 } satisfies RuntimeDescriptor;
@@ -64,7 +64,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
       workspaceId: "repo-two",
       workspaceName: "Repo Two",
       repoPath: "/repo-two",
-      defaultRuntimeKind: "codex",
+      defaultRuntimeKind: "opencode",
       worktreeBasePath: undefined,
       branchPrefix: "odt",
       defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -297,10 +297,10 @@ describe("useSettingsModalController", () => {
     await harness.run((state) => {
       state.setSelectedWorkspaceId("repo-two");
     });
-    await harness.waitFor((state) => state.getCatalogForRuntime("codex") !== null);
+    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null);
 
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
-    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo-two", "codex");
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo-two", "opencode");
 
     await harness.unmount();
   });
@@ -445,39 +445,17 @@ describe("useSettingsModalController", () => {
       await harness.waitFor((state) => state.snapshotDraft !== null);
 
       await harness.run((state) => {
-        state.updateSelectedRepoAgentDefault("spec", "providerId", "openai");
-        state.updateSelectedRepoAgentDefault("spec", "modelId", "gpt-5");
-        state.updateSelectedRepoAgentDefault("spec", "runtimeKind", "   ");
-      });
-
-      let didSave = true;
-      await harness.run(async (state) => {
-        didSave = await state.submit();
-      });
-
-      expect(didSave).toBe(false);
-      expect(harness.getLatest().saveError).toBe(
-        "Specification agent default runtime kind is required when provider and model are configured.",
-      );
-      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("surfaces blank repo default runtime validation errors before saving", async () => {
-    saveSettingsSnapshot = mock(async () => {});
-
-    const harness = createHookHarness(true);
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.snapshotDraft !== null);
-
-      await harness.run((state) => {
         state.updateSelectedRepoConfig((repoConfig) => ({
           ...repoConfig,
-          defaultRuntimeKind: "   ",
+          agentDefaults: {
+            ...repoConfig.agentDefaults,
+            spec: {
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "",
+              profileId: "",
+            } as unknown as NonNullable<typeof repoConfig.agentDefaults.spec>,
+          },
         }));
       });
 
@@ -488,7 +466,7 @@ describe("useSettingsModalController", () => {
 
       expect(didSave).toBe(false);
       expect(harness.getLatest().saveError).toBe(
-        "Default runtime kind is required. Select a repository default runtime before saving.",
+        "Specification agent default runtime kind is required when provider and model are configured.",
       );
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
     } finally {

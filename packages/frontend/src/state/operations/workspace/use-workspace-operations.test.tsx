@@ -707,20 +707,23 @@ describe("use-workspace-operations", () => {
       promptOverrides: {},
       agentDefaults: {},
     }));
-    hostClient.runtimeEnsure = mock(async () => ({
-      kind: "opencode",
-      runtimeId: "runtime-1",
-      repoPath: "/repo-a",
-      taskId: null,
-      role: "workspace" as const,
-      workingDirectory: "/tmp/repo-a",
-      runtimeRoute: {
-        type: "local_http" as const,
-        endpoint: "http://127.0.0.1:3030",
-      },
-      startedAt: "2026-02-22T08:00:00.000Z",
-      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-    }));
+    hostClient.runtimeEnsure = mock(
+      async () =>
+        ({
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/repo-a",
+          taskId: null,
+          role: "workspace" as const,
+          workingDirectory: "/tmp/repo-a",
+          runtimeRoute: {
+            type: "local_http" as const,
+            endpoint: "http://127.0.0.1:3030",
+          },
+          startedAt: "2026-02-22T08:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        }) as const,
+    );
     let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
 
     const SettingsSnapshotProbe = () => {
@@ -796,20 +799,23 @@ describe("use-workspace-operations", () => {
       promptOverrides: {},
       agentDefaults: {},
     }));
-    const runtimeEnsure = mock(async () => ({
-      kind: "opencode",
-      runtimeId: "runtime-1",
-      repoPath: "/repo-a",
-      taskId: null,
-      role: "workspace" as const,
-      workingDirectory: "/tmp/repo-a",
-      runtimeRoute: {
-        type: "local_http" as const,
-        endpoint: "http://127.0.0.1:3030",
-      },
-      startedAt: "2026-02-22T08:00:00.000Z",
-      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-    }));
+    const runtimeEnsure = mock(
+      async () =>
+        ({
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/repo-a",
+          taskId: null,
+          role: "workspace" as const,
+          workingDirectory: "/tmp/repo-a",
+          runtimeRoute: {
+            type: "local_http" as const,
+            endpoint: "http://127.0.0.1:3030",
+          },
+          startedAt: "2026-02-22T08:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        }) as const,
+    );
     const gitGetCurrentBranch = mock(async () => ({
       name: "main",
       detached: false,
@@ -1075,20 +1081,23 @@ describe("use-workspace-operations", () => {
       promptOverrides: {},
       agentDefaults: {},
     }));
-    const runtimeEnsure = mock(async () => ({
-      kind: "opencode",
-      runtimeId: "runtime-1",
-      repoPath: "/repo-a",
-      taskId: null,
-      role: "workspace" as const,
-      workingDirectory: "/tmp/repo-a",
-      runtimeRoute: {
-        type: "local_http" as const,
-        endpoint: "http://127.0.0.1:3030",
-      },
-      startedAt: "2026-02-22T08:00:00.000Z",
-      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-    }));
+    const runtimeEnsure = mock(
+      async () =>
+        ({
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/repo-a",
+          taskId: null,
+          role: "workspace" as const,
+          workingDirectory: "/tmp/repo-a",
+          runtimeRoute: {
+            type: "local_http" as const,
+            endpoint: "http://127.0.0.1:3030",
+          },
+          startedAt: "2026-02-22T08:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        }) as const,
+    );
     const gitGetCurrentBranch = mock(async () => ({
       name: "main",
       detached: false,

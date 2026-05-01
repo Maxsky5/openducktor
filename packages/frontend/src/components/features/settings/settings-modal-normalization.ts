@@ -14,10 +14,7 @@ import {
   DEFAULT_BRANCH_PREFIX,
 } from "@openducktor/contracts";
 import { normalizeRepoScripts } from "@/components/features/settings/settings-model";
-import {
-  normalizeRepoAgentDefaultForSave,
-  normalizeRepoDefaultRuntimeKindForSave,
-} from "@/lib/repo-agent-defaults";
+import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 
 const trimNonEmpty = (value: string): string | null => {
@@ -63,7 +60,7 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
     workspaceId: repo.workspaceId,
     workspaceName: repo.workspaceName.trim(),
     repoPath: repo.repoPath.trim(),
-    defaultRuntimeKind: normalizeRepoDefaultRuntimeKindForSave(repo.defaultRuntimeKind),
+    defaultRuntimeKind: repo.defaultRuntimeKind,
     worktreeBasePath: trimNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,
     branchPrefix: trimNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),

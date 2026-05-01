@@ -288,19 +288,19 @@ describe("agent-runtime capability policies", () => {
   test("runtime selection resolution never falls back to OpenCode implicitly", () => {
     const codex = {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
-      kind: "codex",
+      kind: "codex" as unknown as RuntimeDescriptor["kind"],
       label: "Codex",
-    } satisfies RuntimeDescriptor;
+    } as RuntimeDescriptor;
 
     expect(
       resolveRuntimeKindSelectionState({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, codex],
-        requestedRuntimeKind: "codex",
+        requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
       }),
     ).toEqual({
       status: "resolved",
-      runtimeKind: "codex",
-      requestedRuntimeKind: "codex",
+      runtimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+      requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
     });
     expect(
       resolveRuntimeKindSelectionState({
@@ -311,15 +311,23 @@ describe("agent-runtime capability policies", () => {
     expect(
       resolveRuntimeKindSelectionState({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        requestedRuntimeKind: "codex",
+        requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
       }),
-    ).toEqual({ status: "unknown-request", runtimeKind: null, requestedRuntimeKind: "codex" });
+    ).toEqual({
+      status: "unknown-request",
+      runtimeKind: null,
+      requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+    });
     expect(
       resolveRuntimeKindSelectionState({
         runtimeDefinitions: [],
-        requestedRuntimeKind: "codex",
+        requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
       }),
-    ).toEqual({ status: "no-definitions", runtimeKind: null, requestedRuntimeKind: "codex" });
+    ).toEqual({
+      status: "no-definitions",
+      runtimeKind: null,
+      requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+    });
     expect(
       resolveRuntimeKindSelection({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],

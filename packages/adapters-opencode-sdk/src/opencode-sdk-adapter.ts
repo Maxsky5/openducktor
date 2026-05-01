@@ -61,7 +61,10 @@ import {
   replyPermissionToTarget,
   replyQuestion,
 } from "./message-ops";
-import { toOpencodeRuntimeClientInput } from "./runtime-connection";
+import {
+  type OpencodeRuntimeResolutionInput,
+  toOpencodeRuntimeClientInput,
+} from "./runtime-connection";
 import {
   attachSessionToRuntimeEvents,
   clearWorkflowToolCacheForDirectory,
@@ -77,6 +80,7 @@ import type {
   McpServerStatus,
   OpencodeEventLogger,
   OpencodeSdkAdapterOptions,
+  RepoRuntimeResolverPort,
   RuntimeEventTransportRecord,
   SessionRecord,
 } from "./types";
@@ -195,12 +199,40 @@ export class OpencodeSdkAdapter
   private readonly listeners: SessionEventListeners = new Map();
   private readonly now: () => string;
   private readonly createClient: ClientFactory;
+  private readonly repoRuntimeResolver: RepoRuntimeResolverPort | undefined;
   private readonly logEvent: OpencodeEventLogger | undefined;
 
   constructor(options: OpencodeSdkAdapterOptions = {}) {
     this.now = options.now ?? nowIso;
     this.createClient = options.createClient ?? buildDefaultFactory();
+    this.repoRuntimeResolver = options.repoRuntimeResolver;
     this.logEvent = options.logEvent;
+  }
+
+  private async resolveRuntimeClientInput(
+    input: OpencodeRuntimeResolutionInput,
+    action: string,
+    options: { requireLive?: boolean } = {},
+  ) {
+    if (!this.repoRuntimeResolver) {
+      throw new Error(
+        `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime '${input.runtimeKind}'.`,
+      );
+    }
+    const runtimeRef = {
+      repoPath: input.repoPath,
+      runtimeKind: input.runtimeKind,
+    };
+    const runtime = options.requireLive
+      ? await this.repoRuntimeResolver.requireRepoRuntime(runtimeRef)
+      : await this.repoRuntimeResolver.ensureRepoRuntime(runtimeRef);
+    return toOpencodeRuntimeClientInput({
+      runtime,
+      repoPath: input.repoPath,
+      runtimeKind: input.runtimeKind,
+      workingDirectory: input.workingDirectory,
+      action,
+    });
   }
 
   getRuntimeDefinition(): RuntimeDescriptor {
@@ -213,10 +245,7 @@ export class OpencodeSdkAdapter
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     const runtimeDefinition = this.getRuntimeDefinition();
-    const runtimeClientInput = toOpencodeRuntimeClientInput(
-      input.runtimeConnection,
-      "start session",
-    );
+    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "start session");
     const client = this.createClient(runtimeClientInput);
     const created = await client.session.create({
       directory: input.workingDirectory,
@@ -252,10 +281,9 @@ export class OpencodeSdkAdapter
       return existing.summary;
     }
 
-    const runtimeClientInput = toOpencodeRuntimeClientInput(
-      input.runtimeConnection,
-      "resume session",
-    );
+    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "resume session", {
+      requireLive: true,
+    });
     const client = this.createClient(runtimeClientInput);
     const detail = await client.session.get({
       directory: input.workingDirectory,
@@ -291,10 +319,9 @@ export class OpencodeSdkAdapter
       return existing.summary;
     }
 
-    const runtimeClientInput = toOpencodeRuntimeClientInput(
-      input.runtimeConnection,
-      "attach session",
-    );
+    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "attach session", {
+      requireLive: true,
+    });
     const client = this.createClient(runtimeClientInput);
     const detail = await client.session.get({
       directory: input.workingDirectory,
@@ -370,10 +397,7 @@ export class OpencodeSdkAdapter
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
-    const runtimeClientInput = toOpencodeRuntimeClientInput(
-      input.runtimeConnection,
-      "fork session",
-    );
+    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "fork session");
     const client = this.createClient(runtimeClientInput);
     const forked = await client.session.fork({
       directory: input.workingDirectory,
@@ -413,9 +437,10 @@ export class OpencodeSdkAdapter
   async listLiveAgentSessionSnapshots(
     input: ListLiveAgentSessionsInput,
   ): Promise<LiveAgentSessionSnapshot[]> {
-    const runtimeClientInput = toOpencodeRuntimeClientInput(
-      input.runtimeConnection,
+    const runtimeClientInput = await this.resolveRuntimeClientInput(
+      { ...input, workingDirectory: input.repoPath },
       "list live agent sessions",
+      { requireLive: true },
     );
     const unscopedClient = this.createClient({
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
@@ -484,10 +509,9 @@ export class OpencodeSdkAdapter
   async loadSessionHistory(
     input: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> {
-    const runtimeClientInput = toOpencodeRuntimeClientInput(
-      input.runtimeConnection,
-      "load session history",
-    );
+    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load session history", {
+      requireLive: true,
+    });
     const preservedDisplayPartsByMessageId = new Map(
       [...this.sessions.values()]
         .filter(
@@ -554,7 +578,7 @@ export class OpencodeSdkAdapter
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
     return loadSessionTodos(this.createClient, {
-      ...toOpencodeRuntimeClientInput(input.runtimeConnection, "load session todos"),
+      ...(await this.resolveRuntimeClientInput(input, "load session todos", { requireLive: true })),
       externalSessionId: input.externalSessionId,
     });
   }
@@ -564,17 +588,20 @@ export class OpencodeSdkAdapter
   ): Promise<LiveAgentSessionPendingInputByExternalSessionId> {
     return listLiveAgentSessionPendingInput(
       this.createClient,
-      toOpencodeRuntimeClientInput(
-        input.runtimeConnection,
-        "list live agent session pending input",
-      ),
+      await this.resolveRuntimeClientInput(input, "list live agent session pending input", {
+        requireLive: true,
+      }),
     );
   }
 
   async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {
     return listAvailableModels(
       this.createClient,
-      toOpencodeRuntimeClientInput(input.runtimeConnection, "list available models"),
+      await this.resolveRuntimeClientInput(
+        { ...input, workingDirectory: input.repoPath },
+        "list available models",
+        { requireLive: true },
+      ),
     );
   }
 
@@ -583,7 +610,11 @@ export class OpencodeSdkAdapter
   ): Promise<import("@openducktor/core").AgentSlashCommandCatalog> {
     return listAvailableSlashCommands(
       this.createClient,
-      toOpencodeRuntimeClientInput(input.runtimeConnection, "list available slash commands"),
+      await this.resolveRuntimeClientInput(
+        { ...input, workingDirectory: input.repoPath },
+        "list available slash commands",
+        { requireLive: true },
+      ),
     );
   }
 
@@ -591,7 +622,7 @@ export class OpencodeSdkAdapter
     input: import("@openducktor/core").SearchAgentFilesInput,
   ): Promise<import("@openducktor/core").AgentFileSearchResult[]> {
     return searchFiles(this.createClient, {
-      ...toOpencodeRuntimeClientInput(input.runtimeConnection, "search files"),
+      ...(await this.resolveRuntimeClientInput(input, "search files", { requireLive: true })),
       query: input.query,
     });
   }
@@ -668,9 +699,10 @@ export class OpencodeSdkAdapter
   }
 
   async replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void> {
-    const runtimeClientInput = toOpencodeRuntimeClientInput(
-      input.runtimeConnection,
+    const runtimeClientInput = await this.resolveRuntimeClientInput(
+      input,
       "reply runtime session permission",
+      { requireLive: true },
     );
     await replyPermissionToTarget(
       {
@@ -714,7 +746,8 @@ export class OpencodeSdkAdapter
     input: LoadAgentSessionDiffInput,
   ): Promise<import("@openducktor/contracts").FileDiff[]> {
     return loadSessionDiffOp(
-      toOpencodeRuntimeClientInput(input.runtimeConnection, "load session diff").runtimeEndpoint,
+      (await this.resolveRuntimeClientInput(input, "load session diff", { requireLive: true }))
+        .runtimeEndpoint,
       input.externalSessionId,
       input.runtimeHistoryAnchor,
     );
@@ -724,7 +757,8 @@ export class OpencodeSdkAdapter
     input: LoadAgentFileStatusInput,
   ): Promise<import("@openducktor/contracts").FileStatus[]> {
     return loadFileStatusOp(
-      toOpencodeRuntimeClientInput(input.runtimeConnection, "load file status").runtimeEndpoint,
+      (await this.resolveRuntimeClientInput(input, "load file status", { requireLive: true }))
+        .runtimeEndpoint,
     );
   }
 

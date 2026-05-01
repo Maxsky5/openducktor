@@ -11,6 +11,7 @@ use std::time::Instant;
 #[derive(Clone, Copy)]
 pub(crate) struct RuntimeExistingLookup<'a> {
     pub(crate) repo_key: &'a str,
+    pub(crate) runtime_kind: &'a AgentRuntimeKind,
     pub(crate) role: RuntimeRole,
     pub(crate) task_id: Option<&'a str>,
 }
@@ -171,6 +172,7 @@ mod tests {
                     post_start_policy: Some(RuntimePostStartPolicy {
                         existing_lookup: RuntimeExistingLookup {
                             repo_key: repo_path.as_str(),
+                            runtime_kind: &AgentRuntimeKind::opencode(),
                             role: AppService::WORKSPACE_RUNTIME_ROLE,
                             task_id: None,
                         },
@@ -281,6 +283,7 @@ mod tests {
                     post_start_policy: Some(RuntimePostStartPolicy {
                         existing_lookup: RuntimeExistingLookup {
                             repo_key: repo_path.as_str(),
+                            runtime_kind: &AgentRuntimeKind::opencode(),
                             role: AppService::WORKSPACE_RUNTIME_ROLE,
                             task_id: None,
                         },

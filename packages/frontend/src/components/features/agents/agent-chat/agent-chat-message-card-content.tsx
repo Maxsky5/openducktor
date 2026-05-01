@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor, RuntimeKind, RuntimeRoute } from "@openducktor/contracts";
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import {
   type AgentRole,
   type AgentUserMessageDisplayPart,
@@ -434,7 +434,6 @@ type SubagentMessageProps = {
   meta: SubagentMeta;
   sessionRuntimeKind?: RuntimeKind | null;
   sessionRuntimeId?: string | null;
-  sessionRuntimeRoute?: RuntimeRoute | null;
   sessionWorkingDirectory?: string | null | undefined;
   timeLabel: string;
   subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
@@ -445,7 +444,6 @@ const SubagentMessage = ({
   meta,
   sessionRuntimeKind,
   sessionRuntimeId,
-  sessionRuntimeRoute,
   sessionWorkingDirectory,
   timeLabel,
   subagentPendingPermissions,
@@ -511,7 +509,6 @@ const SubagentMessage = ({
             <SubagentTranscriptButton
               sessionRuntimeKind={sessionRuntimeKind ?? null}
               sessionRuntimeId={sessionRuntimeId ?? null}
-              sessionRuntimeRoute={sessionRuntimeRoute ?? null}
               sessionWorkingDirectory={sessionWorkingDirectory}
               pendingPermissions={subagentPendingPermissions}
               meta={meta}
@@ -542,7 +539,6 @@ type MessageBodyProps = {
   message: AgentChatMessage;
   sessionRuntimeKind?: RuntimeKind | null;
   sessionRuntimeId?: string | null;
-  sessionRuntimeRoute?: RuntimeRoute | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
   timeLabel: string;
@@ -557,7 +553,6 @@ export const MessageBody = ({
   message,
   sessionRuntimeKind,
   sessionRuntimeId,
-  sessionRuntimeRoute,
   assistantAccentColor,
   isStreamingAssistantMessage,
   timeLabel,
@@ -603,7 +598,6 @@ export const MessageBody = ({
         meta={meta}
         sessionRuntimeKind={sessionRuntimeKind ?? null}
         sessionRuntimeId={sessionRuntimeId ?? null}
-        sessionRuntimeRoute={sessionRuntimeRoute ?? null}
         sessionWorkingDirectory={sessionWorkingDirectory}
         timeLabel={timeLabel}
         subagentPendingPermissions={subagentPendingPermissions}

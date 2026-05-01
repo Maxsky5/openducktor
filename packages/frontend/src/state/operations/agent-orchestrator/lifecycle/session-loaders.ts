@@ -1,12 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentModelCatalog,
-  AgentRuntimeConnection,
-  AgentSessionTodoItem,
-} from "@openducktor/core";
+import type { AgentEnginePort, AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { normalizeStdioRuntimeIdentity, runtimeConnectionTransportKey } from "../runtime/runtime";
 import { normalizeWorkingDirectory } from "../support/core";
 import {
   coerceSessionSelectionToCatalog,
@@ -26,15 +20,6 @@ type CreateSessionLoadersArgs = {
   adapter: SessionLoadersAdapter;
   supportsSessionTodos?: (runtimeKind: RuntimeKind) => boolean;
   updateSession: UpdateSession;
-};
-
-const validateLocalHttpRuntimeEndpoint = (runtimeEndpoint: string): string => {
-  const trimmedEndpoint = runtimeEndpoint.trim();
-  if (trimmedEndpoint.length === 0) {
-    throw new Error("Session runtime local_http endpoint is required.");
-  }
-
-  return trimmedEndpoint;
 };
 
 const validateWorkingDirectory = (workingDirectory: string): string => {
@@ -61,51 +46,33 @@ const validateWorkingDirectory = (workingDirectory: string): string => {
   return normalizedWorkingDirectory;
 };
 
-const validateRuntimeConnection = (
-  runtimeConnection: AgentRuntimeConnection,
-): AgentRuntimeConnection => {
-  const workingDirectory = validateWorkingDirectory(runtimeConnection.workingDirectory);
+const toRuntimeLoadKey = (repoPath: string, runtimeKind: RuntimeKind): string =>
+  `${normalizeWorkingDirectory(repoPath)}::${runtimeKind}`;
 
-  switch (runtimeConnection.type) {
-    case "local_http":
-      return {
-        type: "local_http",
-        endpoint: validateLocalHttpRuntimeEndpoint(runtimeConnection.endpoint),
-        workingDirectory,
-      };
-    case "stdio":
-      return {
-        type: "stdio",
-        identity: normalizeStdioRuntimeIdentity(
-          runtimeConnection.identity,
-          "Session runtime stdio identity",
-        ),
-        workingDirectory,
-      };
-  }
-};
-
-const toRuntimeLoadKey = (
+const toSessionLoadKey = (
+  repoPath: string,
   runtimeKind: RuntimeKind,
-  runtimeConnection: AgentRuntimeConnection,
+  workingDirectory: string,
 ): string =>
-  `${runtimeKind}::${runtimeConnectionTransportKey(runtimeConnection)}::${normalizeWorkingDirectory(runtimeConnection.workingDirectory)}`;
+  `${toRuntimeLoadKey(repoPath, runtimeKind)}::${validateWorkingDirectory(workingDirectory)}`;
 
 export const createLoadSessionModelCatalog = ({
   adapter,
   updateSession,
 }: CreateSessionLoadersArgs): ((
   externalSessionId: string,
+  repoPath: string,
   runtimeKind: RuntimeKind,
-  runtimeConnection: AgentRuntimeConnection,
+  workingDirectory: string,
 ) => Promise<void>) => {
   const inFlightCatalogByRuntimeKey = new Map<string, Promise<AgentModelCatalog>>();
   const catalogByRuntimeKey = new Map<string, AgentModelCatalog>();
 
   return async (
     externalSessionId: string,
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
   ): Promise<void> => {
     updateSession(
       externalSessionId,
@@ -118,8 +85,8 @@ export const createLoadSessionModelCatalog = ({
 
     let catalog: AgentModelCatalog | null = null;
     try {
-      const validatedRuntimeConnection = validateRuntimeConnection(runtimeConnection);
-      const runtimeKey = toRuntimeLoadKey(runtimeKind, validatedRuntimeConnection);
+      validateWorkingDirectory(workingDirectory);
+      const runtimeKey = toRuntimeLoadKey(repoPath, runtimeKind);
       const cachedCatalog = catalogByRuntimeKey.get(runtimeKey);
       if (cachedCatalog) {
         catalog = cachedCatalog;
@@ -127,10 +94,7 @@ export const createLoadSessionModelCatalog = ({
         let inFlightCatalog = inFlightCatalogByRuntimeKey.get(runtimeKey);
         if (!inFlightCatalog) {
           inFlightCatalog = adapter
-            .listAvailableModels({
-              runtimeKind,
-              runtimeConnection: validatedRuntimeConnection,
-            })
+            .listAvailableModels({ repoPath, runtimeKind })
             .then((loadedCatalog) => {
               catalogByRuntimeKey.set(runtimeKey, loadedCatalog);
               return loadedCatalog;
@@ -169,15 +133,17 @@ export const createLoadSessionTodos = ({
   updateSession,
 }: CreateSessionLoadersArgs): ((
   externalSessionId: string,
+  repoPath: string,
   runtimeKind: RuntimeKind,
-  runtimeConnection: AgentRuntimeConnection,
+  workingDirectory: string,
 ) => Promise<void>) => {
   const inFlightTodosBySessionKey = new Map<string, Promise<AgentSessionTodoItem[]>>();
 
   return async (
     externalSessionId: string,
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
   ): Promise<void> => {
     if (!supportsSessionTodos(runtimeKind)) {
       updateSession(
@@ -190,14 +156,15 @@ export const createLoadSessionTodos = ({
       );
       return;
     }
-    const validatedRuntimeConnection = validateRuntimeConnection(runtimeConnection);
-    const sessionKey = `${toRuntimeLoadKey(runtimeKind, validatedRuntimeConnection)}::${externalSessionId}`;
+    const normalizedWorkingDirectory = validateWorkingDirectory(workingDirectory);
+    const sessionKey = `${toSessionLoadKey(repoPath, runtimeKind, normalizedWorkingDirectory)}::${externalSessionId}`;
     let inFlightTodos = inFlightTodosBySessionKey.get(sessionKey);
     if (!inFlightTodos) {
       inFlightTodos = adapter
         .loadSessionTodos({
+          repoPath,
           runtimeKind,
-          runtimeConnection: validatedRuntimeConnection,
+          workingDirectory: normalizedWorkingDirectory,
           externalSessionId,
         })
         .finally(() => {

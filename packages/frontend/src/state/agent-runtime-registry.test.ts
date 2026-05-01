@@ -1,6 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeKind } from "@openducktor/contracts";
 import { createAgentRuntimeRegistry, DEFAULT_RUNTIME_KIND } from "./agent-runtime-registry";
+import { host } from "./operations/shared/host";
 
 const createDeferred = <T>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -33,7 +35,7 @@ describe("agent-runtime-registry", () => {
   test("rejects unsupported runtime adapters", () => {
     const registry = createAgentRuntimeRegistry();
 
-    expect(() => registry.getAdapter("test-runtime")).toThrow(
+    expect(() => registry.getAdapter("test-runtime" as RuntimeKind)).toThrow(
       "Unsupported agent runtime 'test-runtime'.",
     );
   });
@@ -53,6 +55,40 @@ describe("agent-runtime-registry", () => {
     await expect(engine.startSession(missingRuntimeInput)).rejects.toThrow(
       "Runtime kind is required to select an agent runtime adapter.",
     );
+  });
+
+  test("requires live repo runtimes using the host runtimeList repo-kind argument order", async () => {
+    const originalRuntimeList = host.runtimeList;
+    const runtimeListCalls: unknown[] = [];
+    host.runtimeList = mock(async (...args: unknown[]) => {
+      runtimeListCalls.push(args);
+      return [
+        {
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/repo",
+          runtimeRoute: { type: "stdio" as const, identity: "runtime-stdio" },
+          startedAt: "2026-02-22T09:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        },
+      ];
+    }) as typeof host.runtimeList;
+
+    try {
+      await expect(
+        createAgentRuntimeRegistry().getAdapter("opencode").listAvailableModels({
+          runtimeKind: "opencode",
+          repoPath: "/repo",
+        }),
+      ).rejects.toThrow("OpenCode runtime route 'stdio' is unsupported");
+
+      expect(runtimeListCalls).toEqual([["/repo", "opencode"]]);
+    } finally {
+      host.runtimeList = originalRuntimeList;
+    }
   });
 
   test("keeps runtime engine methods bound when passed as callbacks", async () => {
@@ -86,41 +122,27 @@ describe("agent-runtime-registry", () => {
 
       await readModels({
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:1",
-          workingDirectory: "/tmp/repo",
-        },
+        repoPath: "/repo",
       });
 
       await readTodos({
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:1",
-          workingDirectory: "/tmp/repo",
-        },
+        repoPath: "/repo",
+        workingDirectory: "/tmp/repo",
         externalSessionId: "external-1",
       });
 
       await replyRuntimePermission({
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:1",
-          workingDirectory: "/tmp/repo",
-        },
+        repoPath: "/repo",
+        workingDirectory: "/tmp/repo",
         requestId: "permission-1",
         reply: "once",
       });
 
       await readSnapshots({
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:1",
-          workingDirectory: "/tmp/repo",
-        },
+        repoPath: "/repo",
         directories: ["/tmp/repo"],
       });
 
@@ -172,11 +194,6 @@ describe("agent-runtime-registry", () => {
         taskId: "",
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4444",
-          workingDirectory: "/repo/worktree",
-        },
         role: "build",
         scenario: "build_implementation_start",
         systemPrompt: "",

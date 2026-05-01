@@ -36,7 +36,6 @@ impl<'a> TaskActivityGuard<'a> {
             let evidence = self
                 .collect_active_task_work_evidence(
                     repo_path,
-                    task_id,
                     &sessions,
                     IMPLEMENTATION_SESSION_ROLES,
                 )
@@ -84,7 +83,7 @@ impl<'a> TaskActivityGuard<'a> {
         session_roles: &[&str],
     ) -> Result<()> {
         let evidence = self
-            .collect_active_task_work_evidence(repo_path, task_id, sessions, session_roles)
+            .collect_active_task_work_evidence(repo_path, sessions, session_roles)
             .with_context(|| {
                 format!("Failed checking live runtime state before {operation_label} {task_id}")
             })?;
@@ -102,12 +101,10 @@ impl<'a> TaskActivityGuard<'a> {
     fn collect_active_task_work_evidence(
         &self,
         repo_path: &str,
-        task_id: &str,
         sessions: &[AgentSessionDocument],
         session_roles: &[&str],
     ) -> Result<TaskActiveWorkEvidence> {
-        let runtime_routes_by_session =
-            TaskRuntimeRouteIndex::collect(self.service, repo_path, task_id)?;
+        let runtime_routes_by_session = TaskRuntimeRouteIndex::collect(self.service, repo_path)?;
         let probe_plan =
             self.build_probe_plan(sessions, session_roles, &runtime_routes_by_session)?;
 
@@ -197,5 +194,143 @@ impl<'a> TaskActivityGuard<'a> {
         let mut active_session_roles = active_roles.into_iter().collect::<Vec<_>>();
         active_session_roles.sort_unstable();
         Ok(active_session_roles)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app_service::test_support::{
+        build_service_with_git_state, builtin_opencode_runtime_descriptor,
+        builtin_opencode_runtime_route, spawn_opencode_session_status_server, unique_temp_path,
+    };
+    use crate::app_service::AgentRuntimeProcess;
+    use host_domain::{AgentRuntimeKind, GitCurrentBranch, RuntimeInstanceSummary, RuntimeRole};
+
+    fn insert_workspace_runtime_for_kind(
+        service: &AppService,
+        runtime_kind: AgentRuntimeKind,
+        runtime_id: &str,
+        repo_path: &str,
+        runtime_route: host_domain::RuntimeRoute,
+    ) {
+        let descriptor = if runtime_kind == AgentRuntimeKind::opencode() {
+            builtin_opencode_runtime_descriptor()
+        } else {
+            let mut descriptor = builtin_opencode_runtime_descriptor();
+            descriptor.kind = runtime_kind.clone();
+            descriptor
+        };
+        let summary = RuntimeInstanceSummary {
+            kind: runtime_kind,
+            runtime_id: runtime_id.to_string(),
+            repo_path: repo_path.to_string(),
+            task_id: None,
+            role: RuntimeRole::Workspace,
+            working_directory: repo_path.to_string(),
+            runtime_route,
+            started_at: "2026-03-17T11:00:00Z".to_string(),
+            descriptor,
+        };
+
+        service
+            .agent_runtimes
+            .lock()
+            .expect("runtime lock poisoned")
+            .insert(
+                runtime_id.to_string(),
+                AgentRuntimeProcess {
+                    summary,
+                    child: None,
+                    _runtime_process_guard: None,
+                    cleanup_target: None,
+                },
+            );
+    }
+
+    fn build_service() -> AppService {
+        let (service, _task_state, _git_state) = build_service_with_git_state(
+            Vec::new(),
+            Vec::new(),
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+                revision: None,
+            },
+        );
+        service
+    }
+
+    #[test]
+    fn active_session_probe_uses_repo_runtime_for_task_worktree_session_cwd() -> Result<()> {
+        let repo_path = unique_temp_path("activity-guard-repo-runtime-task-worktree");
+        let worktree_path = repo_path.join("task-worktree");
+        let repo_path_string = repo_path.to_string_lossy().to_string();
+        let worktree_path_string = worktree_path.to_string_lossy().to_string();
+        let service = build_service();
+        let (port, server_handle) =
+            spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
+        insert_workspace_runtime_for_kind(
+            &service,
+            AgentRuntimeKind::opencode(),
+            "runtime-opencode-repo",
+            repo_path_string.as_str(),
+            builtin_opencode_runtime_route(port),
+        );
+        let sessions = vec![AgentSessionDocument {
+            external_session_id: "external-build-session".to_string(),
+            role: "build".to_string(),
+            scenario: "build_implementation_start".to_string(),
+            started_at: "2026-03-17T11:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: worktree_path_string,
+            selected_model: None,
+        }];
+
+        let evidence = TaskActivityGuard::new(&service).collect_active_task_work_evidence(
+            repo_path_string.as_str(),
+            &sessions,
+            &["build"],
+        )?;
+
+        assert_eq!(evidence.active_session_roles, vec!["build".to_string()]);
+        server_handle
+            .join()
+            .expect("status server thread should finish");
+        Ok(())
+    }
+
+    #[test]
+    fn active_session_probe_does_not_use_runtime_from_another_kind() -> Result<()> {
+        let repo_path = unique_temp_path("activity-guard-runtime-kind-selection");
+        let repo_path_string = repo_path.to_string_lossy().to_string();
+        let service = build_service();
+        insert_workspace_runtime_for_kind(
+            &service,
+            AgentRuntimeKind::from("other-runtime"),
+            "runtime-other-repo",
+            repo_path_string.as_str(),
+            host_domain::RuntimeRoute::LocalHttp {
+                endpoint: "http://127.0.0.1:1".to_string(),
+            },
+        );
+        let sessions = vec![AgentSessionDocument {
+            external_session_id: "external-build-session".to_string(),
+            role: "build".to_string(),
+            scenario: "build_implementation_start".to_string(),
+            started_at: "2026-03-17T11:00:00Z".to_string(),
+            runtime_kind: "opencode".to_string(),
+            working_directory: repo_path_string.clone(),
+            selected_model: None,
+        }];
+
+        let evidence = TaskActivityGuard::new(&service).collect_active_task_work_evidence(
+            repo_path_string.as_str(),
+            &sessions,
+            &["build"],
+        )?;
+
+        assert!(evidence.active_session_roles.is_empty());
+        Ok(())
     }
 }

@@ -27,9 +27,10 @@ export const useSettingsModalCatalogState = ({
   runtimeKinds,
 }: UseSettingsModalCatalogStateArgs): SettingsModalCatalogState => {
   const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
+  const uniqueRuntimeKinds = useMemo(() => Array.from(new Set(runtimeKinds)), [runtimeKinds]);
 
   const catalogQueries = useQueries({
-    queries: runtimeKinds.map((runtimeKind) => ({
+    queries: uniqueRuntimeKinds.map((runtimeKind) => ({
       ...repoRuntimeCatalogQueryOptions(
         selectedRepoPath ?? "",
         runtimeKind,
@@ -41,22 +42,25 @@ export const useSettingsModalCatalogState = ({
 
   const catalogsByRuntime = useMemo<Record<string, AgentModelCatalog | null>>(() => {
     return Object.fromEntries(
-      runtimeKinds.map((runtimeKind, index) => [runtimeKind, catalogQueries[index]?.data ?? null]),
+      uniqueRuntimeKinds.map((runtimeKind, index) => [
+        runtimeKind,
+        catalogQueries[index]?.data ?? null,
+      ]),
     );
-  }, [catalogQueries, runtimeKinds]);
+  }, [catalogQueries, uniqueRuntimeKinds]);
 
   const catalogErrorsByRuntime = useMemo<Record<string, string | null>>(() => {
     return Object.fromEntries(
-      runtimeKinds.map((runtimeKind, index) => {
+      uniqueRuntimeKinds.map((runtimeKind, index) => {
         const queryError = catalogQueries[index]?.error;
         return [runtimeKind, queryError instanceof Error ? queryError.message : null];
       }),
     );
-  }, [catalogQueries, runtimeKinds]);
+  }, [catalogQueries, uniqueRuntimeKinds]);
 
   const loadingRuntimeKinds = useMemo<RuntimeKind[]>(() => {
-    return runtimeKinds.filter((_runtimeKind, index) => catalogQueries[index]?.isLoading);
-  }, [catalogQueries, runtimeKinds]);
+    return uniqueRuntimeKinds.filter((_runtimeKind, index) => catalogQueries[index]?.isLoading);
+  }, [catalogQueries, uniqueRuntimeKinds]);
 
   return {
     catalogsByRuntime,

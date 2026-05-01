@@ -168,10 +168,10 @@ describe("session-start-modal-selection", () => {
         },
         intentSelectedModel: null,
         repoSettings: REPO_SETTINGS,
-        runtimeKind: "alternate-runtime",
+        runtimeKind: "opencode",
       }),
     ).toEqual({
-      runtimeKind: "alternate-runtime",
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
     });

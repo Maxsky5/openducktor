@@ -8,7 +8,6 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
-  AgentRuntimeConnection,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
@@ -21,7 +20,6 @@ import type { SessionRepoReadinessState } from "@/state/operations/agent-orchest
 import type {
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadOptions,
-  RuntimeConnectionPreloadIndex,
 } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
@@ -69,33 +67,34 @@ type CreatePublicOperationsArgs = {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
     preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
-    allowRuntimeEnsure?: boolean;
   }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentModelCatalog>;
   readSessionTodos: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
   readSessionHistory: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
     externalSessionId: string,
   ) => Promise<AgentSessionHistoryMessage[]>;
   attachRuntimeTranscriptSession: AgentOperationsContextValue["attachRuntimeTranscriptSession"];
   readSessionSlashCommands: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentSlashCommandCatalog>;
   readSessionFileSearch: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
   replyRuntimeSessionPermission?: AgentOperationsContextValue["replyRuntimeSessionPermission"];

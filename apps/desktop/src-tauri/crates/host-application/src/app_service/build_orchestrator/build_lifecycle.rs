@@ -111,7 +111,6 @@ impl AppService {
         Ok(BuildSessionBootstrap {
             runtime_kind,
             runtime_id: runtime_summary.runtime_id,
-            runtime_route: runtime_summary.runtime_route,
             working_directory,
         })
     }
@@ -252,10 +251,6 @@ mod tests {
             })
             .expect("local_http routes should remain bootstrap-compatible without explicit ports");
 
-        assert!(matches!(
-            bootstrap.runtime_route,
-            RuntimeRoute::LocalHttp { ref endpoint } if endpoint == "http://127.0.0.1"
-        ));
         assert_eq!(bootstrap.working_directory, "/tmp/worktrees/task-1");
         assert_eq!(bootstrap.runtime_id, "runtime-1");
         let updated_patches = &task_state
@@ -295,11 +290,8 @@ mod tests {
             })
             .expect("non-OpenCode runtimes should accept stdio build bootstrap routes");
 
-        assert!(matches!(
-            bootstrap.runtime_route,
-            RuntimeRoute::Stdio { .. }
-        ));
         assert_eq!(bootstrap.runtime_id, "runtime-1");
+        assert_eq!(bootstrap.working_directory, "/tmp/worktrees/task-1");
         let updated_patches = &task_state
             .lock()
             .expect("task store lock poisoned")

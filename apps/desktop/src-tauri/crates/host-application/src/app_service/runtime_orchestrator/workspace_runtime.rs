@@ -23,11 +23,11 @@ impl AppService {
             &runtimes,
             RuntimeExistingLookup {
                 repo_key,
+                runtime_kind,
                 role: Self::WORKSPACE_RUNTIME_ROLE,
                 task_id: None,
             },
-        )
-        .filter(|runtime| runtime.kind == *runtime_kind))
+        ))
     }
 
     pub(in crate::app_service::runtime_orchestrator) fn ensure_workspace_runtime(
@@ -92,6 +92,7 @@ impl AppService {
                 post_start_policy: Some(RuntimePostStartPolicy {
                     existing_lookup: RuntimeExistingLookup {
                         repo_key: repo_key.as_str(),
+                        runtime_kind: &runtime_kind,
                         role: Self::WORKSPACE_RUNTIME_ROLE,
                         task_id: None,
                     },

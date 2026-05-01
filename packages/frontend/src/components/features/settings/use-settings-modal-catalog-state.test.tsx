@@ -21,13 +21,6 @@ const OPENCODE_DESCRIPTOR = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
 } satisfies RuntimeDescriptor;
 
-const CODEX_DESCRIPTOR = {
-  ...OPENCODE_RUNTIME_DESCRIPTOR,
-  kind: "codex",
-  label: "Codex",
-  description: "Codex runtime",
-} satisfies RuntimeDescriptor;
-
 const OPENCODE_CATALOG: AgentModelCatalog = {
   models: [
     {
@@ -43,21 +36,6 @@ const OPENCODE_CATALOG: AgentModelCatalog = {
   profiles: [{ name: "spec-agent", mode: "primary" }],
 };
 
-const CODEX_CATALOG: AgentModelCatalog = {
-  models: [
-    {
-      id: "anthropic/claude-opus",
-      providerId: "anthropic",
-      providerName: "Anthropic",
-      modelId: "claude-opus",
-      modelName: "Claude Opus",
-      variants: ["extended"],
-    },
-  ],
-  defaultModelsByProvider: { anthropic: "claude-opus" },
-  profiles: [{ name: "planner-agent", mode: "primary" }],
-};
-
 const createHookHarness = (
   initialProps: HookArgs,
   loadRepoRuntimeCatalog: (
@@ -66,10 +44,10 @@ const createHookHarness = (
   ) => Promise<AgentModelCatalog>,
 ) => {
   const runtimeDefinitionsContext = {
-    runtimeDefinitions: [OPENCODE_DESCRIPTOR, CODEX_DESCRIPTOR],
+    runtimeDefinitions: [OPENCODE_DESCRIPTOR],
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
-    refreshRuntimeDefinitions: async () => [OPENCODE_DESCRIPTOR, CODEX_DESCRIPTOR],
+    refreshRuntimeDefinitions: async () => [OPENCODE_DESCRIPTOR],
     loadRepoRuntimeCatalog,
     loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
     loadRepoRuntimeFileSearch: async () => [],
@@ -121,13 +99,8 @@ describe("useSettingsModalCatalogState", () => {
     await missingRepoHarness.unmount();
   });
 
-  test("fetches only the requested runtime kinds and exposes per-runtime getters", async () => {
-    const loadRepoRuntimeCatalog = mock(async (_repoPath: string, runtimeKind: RuntimeKind) => {
-      if (runtimeKind === "opencode") {
-        return OPENCODE_CATALOG;
-      }
-      return CODEX_CATALOG;
-    });
+  test("fetches the requested runtime kind and exposes runtime getters", async () => {
+    const loadRepoRuntimeCatalog = mock(async () => OPENCODE_CATALOG);
 
     const harness = createHookHarness(
       {
@@ -143,22 +116,36 @@ describe("useSettingsModalCatalogState", () => {
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo", "opencode");
     expect(harness.getLatest().getCatalogForRuntime("opencode")).toEqual(OPENCODE_CATALOG);
-    expect(harness.getLatest().getCatalogForRuntime("codex")).toBeNull();
     expect(harness.getLatest().isCatalogLoadingForRuntime("opencode")).toBe(false);
-    expect(harness.getLatest().isCatalogLoadingForRuntime("codex")).toBe(false);
 
     await harness.unmount();
   });
 
-  test("fetches a newly referenced runtime on demand when the target list grows", async () => {
-    const loadRepoRuntimeCatalog = mock(async (_repoPath: string, runtimeKind: RuntimeKind) => {
-      if (runtimeKind === "opencode") {
-        return OPENCODE_CATALOG;
-      }
-      return CODEX_CATALOG;
-    });
+  test("deduplicates repeated runtime kinds", async () => {
+    const loadRepoRuntimeCatalog = mock(async () => OPENCODE_CATALOG);
 
     const harness = createHookHarness(
+      {
+        enabled: true,
+        selectedRepoPath: "/repo",
+        runtimeKinds: ["opencode", "opencode"],
+      },
+      loadRepoRuntimeCatalog,
+    );
+    await harness.mount();
+    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null);
+
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
+    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo", "opencode");
+
+    await harness.unmount();
+  });
+
+  test("exposes loading and errors for the requested runtime", async () => {
+    const catalogDeferred = createDeferred<AgentModelCatalog>();
+    const loadRepoRuntimeCatalog = mock(async () => catalogDeferred.promise);
+
+    const loadingHarness = createHookHarness(
       {
         enabled: true,
         selectedRepoPath: "/repo",
@@ -166,87 +153,38 @@ describe("useSettingsModalCatalogState", () => {
       },
       loadRepoRuntimeCatalog,
     );
-    await harness.mount();
-    await harness.waitFor((state) => state.getCatalogForRuntime("opencode") !== null);
-
-    loadRepoRuntimeCatalog.mockClear();
-
-    await harness.update({
-      enabled: true,
-      selectedRepoPath: "/repo",
-      runtimeKinds: ["opencode", "codex"],
-    });
-    await harness.waitFor((state) => state.getCatalogForRuntime("codex") !== null);
-
-    expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
-    expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith("/repo", "codex");
-
-    await harness.unmount();
-  });
-
-  test("keeps loading and errors scoped to the runtime that is pending or failed", async () => {
-    const codexDeferred = createDeferred<AgentModelCatalog>();
-    const loadRepoRuntimeCatalog = mock(async (_repoPath: string, runtimeKind: RuntimeKind) => {
-      if (runtimeKind === "opencode") {
-        return OPENCODE_CATALOG;
-      }
-      if (runtimeKind === "codex") {
-        return codexDeferred.promise;
-      }
-      throw new Error(`Unexpected runtime kind: ${runtimeKind}`);
-    });
-
-    const loadingHarness = createHookHarness(
-      {
-        enabled: true,
-        selectedRepoPath: "/repo",
-        runtimeKinds: ["opencode", "codex"],
-      },
-      loadRepoRuntimeCatalog,
-    );
     await loadingHarness.mount();
-    await loadingHarness.waitFor(
-      (state) =>
-        state.getCatalogForRuntime("opencode") !== null &&
-        state.isCatalogLoadingForRuntime("codex"),
-    );
+    await loadingHarness.waitFor((state) => state.isCatalogLoadingForRuntime("opencode"));
 
     expect(loadingHarness.getLatest().isLoadingCatalog).toBe(true);
-    expect(loadingHarness.getLatest().isCatalogLoadingForRuntime("opencode")).toBe(false);
+    expect(loadingHarness.getLatest().getCatalogForRuntime("opencode")).toBeNull();
 
-    codexDeferred.resolve(CODEX_CATALOG);
-    await loadingHarness.waitFor((state) => state.isCatalogLoadingForRuntime("codex") === false);
+    catalogDeferred.resolve(OPENCODE_CATALOG);
+    await loadingHarness.waitFor((state) => state.isCatalogLoadingForRuntime("opencode") === false);
 
-    expect(loadingHarness.getLatest().getCatalogForRuntime("codex")).toEqual(CODEX_CATALOG);
+    expect(loadingHarness.getLatest().getCatalogForRuntime("opencode")).toEqual(OPENCODE_CATALOG);
 
     await loadingHarness.unmount();
 
-    const failingLoadRepoRuntimeCatalog = mock(
-      async (_repoPath: string, runtimeKind: RuntimeKind) => {
-        if (runtimeKind === "opencode") {
-          return OPENCODE_CATALOG;
-        }
-        throw new Error("codex failed");
-      },
-    );
+    const failingLoadRepoRuntimeCatalog = mock(async () => {
+      throw new Error("catalog failed");
+    });
 
     const errorHarness = createHookHarness(
       {
         enabled: true,
         selectedRepoPath: "/repo",
-        runtimeKinds: ["opencode", "codex"],
+        runtimeKinds: ["opencode"],
       },
       failingLoadRepoRuntimeCatalog,
     );
     await errorHarness.mount();
     await errorHarness.waitFor(
-      (state) => state.getCatalogErrorForRuntime("codex") === "codex failed",
+      (state) => state.getCatalogErrorForRuntime("opencode") === "catalog failed",
     );
 
-    expect(errorHarness.getLatest().getCatalogForRuntime("opencode")).toEqual(OPENCODE_CATALOG);
-    expect(errorHarness.getLatest().getCatalogErrorForRuntime("opencode")).toBeNull();
-    expect(errorHarness.getLatest().getCatalogForRuntime("codex")).toBeNull();
-    expect(errorHarness.getLatest().getCatalogErrorForRuntime("codex")).toBe("codex failed");
+    expect(errorHarness.getLatest().getCatalogForRuntime("opencode")).toBeNull();
+    expect(errorHarness.getLatest().getCatalogErrorForRuntime("opencode")).toBe("catalog failed");
 
     await errorHarness.unmount();
   });

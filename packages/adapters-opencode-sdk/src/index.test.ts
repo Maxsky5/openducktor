@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
-import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
-import { OpencodeSdkAdapter } from "./index";
+import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
 import type { SessionRecord } from "./types";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
 
@@ -14,6 +14,50 @@ const defaultRuntimeConnection = {
   endpoint: "http://127.0.0.1:12345",
   workingDirectory: "/repo",
 } as const;
+
+const defaultRepoRuntimeInput = {
+  repoPath: "/repo",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo",
+};
+
+const OpencodeSdkAdapter = class extends BaseOpencodeSdkAdapter {
+  constructor(options: ConstructorParameters<typeof BaseOpencodeSdkAdapter>[0] = {}) {
+    super({
+      repoRuntimeResolver: {
+        ensureRepoRuntime: async ({ repoPath, runtimeKind }) => ({
+          kind: runtimeKind,
+          runtimeId: "runtime-opencode-1",
+          repoPath,
+          taskId: null,
+          role: "workspace",
+          workingDirectory: defaultRuntimeConnection.workingDirectory,
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: defaultRuntimeConnection.endpoint,
+          },
+          startedAt: "2026-02-17T12:00:00Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        }),
+        requireRepoRuntime: async ({ repoPath, runtimeKind }) => ({
+          kind: runtimeKind,
+          runtimeId: "runtime-opencode-1",
+          repoPath,
+          taskId: null,
+          role: "workspace",
+          workingDirectory: defaultRuntimeConnection.workingDirectory,
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: defaultRuntimeConnection.endpoint,
+          },
+          startedAt: "2026-02-17T12:00:00Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        }),
+      },
+      ...options,
+    });
+  }
+};
 
 const DEFAULT_ODT_RUNTIME_TOOL_IDS = [
   ...ODT_MCP_TOOL_NAMES,
@@ -403,7 +447,7 @@ const makeMockClient = ({
 };
 
 const startDefaultSession = async (
-  adapter: OpencodeSdkAdapter,
+  adapter: BaseOpencodeSdkAdapter,
   _sessionId = "session-opencode-1",
   role: "spec" | "planner" | "build" | "qa" = "spec",
   model?: {
@@ -429,21 +473,21 @@ const startDefaultSession = async (
     role,
     scenario,
     systemPrompt: "system prompt",
-    runtimeConnection: defaultRuntimeConnection,
     ...(model ? { model } : {}),
   });
 };
 
 const defaultLoadSessionTodosInput = {
+  repoPath: "/repo",
   runtimeKind: "opencode" as const,
-  runtimeConnection: defaultRuntimeConnection,
+  workingDirectory: "/repo",
   externalSessionId: "session-opencode-1",
 };
 
 const createLoadSessionTodosHarness = (
   mockInput: MakeMockClientInput,
 ): {
-  adapter: OpencodeSdkAdapter;
+  adapter: BaseOpencodeSdkAdapter;
   session: MockSession;
   createClientCalls: unknown[];
 } => {
@@ -504,11 +548,6 @@ describe("OpencodeSdkAdapter", () => {
       role: "build",
       scenario: "build_implementation_start",
       systemPrompt: "system",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12000",
-        workingDirectory: "/repo",
-      },
     });
     await adapter.startSession({
       repoPath: "/repo",
@@ -518,25 +557,20 @@ describe("OpencodeSdkAdapter", () => {
       role: "qa",
       scenario: "qa_review",
       systemPrompt: "system",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12000",
-        workingDirectory: "/other",
-      },
     });
 
     expect(listCalls).toBe(1);
     expect(abortSignals).toHaveLength(1);
     expect(createClientCalls).toEqual([
       {
-        runtimeEndpoint: "http://127.0.0.1:12000",
+        runtimeEndpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
       {
-        runtimeEndpoint: "http://127.0.0.1:12000",
+        runtimeEndpoint: "http://127.0.0.1:12345",
       },
       {
-        runtimeEndpoint: "http://127.0.0.1:12000",
+        runtimeEndpoint: "http://127.0.0.1:12345",
         workingDirectory: "/other",
       },
     ]);
@@ -566,11 +600,6 @@ describe("OpencodeSdkAdapter", () => {
       role: "planner",
       scenario: "planner_initial",
       systemPrompt: "system",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12000",
-        workingDirectory: "/repo",
-      },
     });
 
     expect(summary.externalSessionId).toBe("session-opencode-1");
@@ -717,7 +746,6 @@ describe("OpencodeSdkAdapter", () => {
       role: "build",
       scenario: "build_implementation_start",
       systemPrompt: "system",
-      runtimeConnection: defaultRuntimeConnection,
     });
 
     expect(mock.session.getCalls).toHaveLength(1);
@@ -746,7 +774,6 @@ describe("OpencodeSdkAdapter", () => {
         role: "build",
         scenario: "build_implementation_start",
         systemPrompt: "system",
-        runtimeConnection: defaultRuntimeConnection,
       }),
     ).rejects.toThrow("client.global.event()");
 
@@ -771,7 +798,7 @@ describe("OpencodeSdkAdapter", () => {
               agent: "build",
               prompt: "Inspect repo",
               description: "Starting A",
-            } as Part,
+            } as unknown as Part,
           ],
         },
         {
@@ -803,7 +830,7 @@ describe("OpencodeSdkAdapter", () => {
                 },
                 title: "Task",
               },
-            } as Part,
+            } as unknown as Part,
           ],
         },
       ],
@@ -822,7 +849,6 @@ describe("OpencodeSdkAdapter", () => {
       role: "build",
       scenario: "build_implementation_start",
       systemPrompt: "system",
-      runtimeConnection: defaultRuntimeConnection,
     });
 
     const sessions = (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
@@ -1422,7 +1448,7 @@ describe("OpencodeSdkAdapter", () => {
               type: "text",
               text: "Use the selected agent",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            } as unknown as Part,
           ],
         },
         {
@@ -1447,7 +1473,7 @@ describe("OpencodeSdkAdapter", () => {
               type: "reasoning",
               text: "Reasoning block",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            } as unknown as Part,
             {
               id: "text-1",
               sessionID: "session-opencode-1",
@@ -1455,7 +1481,7 @@ describe("OpencodeSdkAdapter", () => {
               type: "text",
               text: "Final answer",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            } as unknown as Part,
           ],
         },
       ],
@@ -1466,8 +1492,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const history = await adapter.loadSessionHistory({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
       limit: 100,
     });
@@ -1520,7 +1545,7 @@ describe("OpencodeSdkAdapter", () => {
               agent: "build",
               prompt: "Inspect repo",
               description: "Starting A",
-            } as Part,
+            } as unknown as Part,
             {
               id: "tool-a",
               sessionID: "session-opencode-1",
@@ -1547,7 +1572,7 @@ describe("OpencodeSdkAdapter", () => {
                 },
                 title: "Task",
               },
-            } as Part,
+            } as unknown as Part,
           ],
         },
       ],
@@ -1558,8 +1583,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const history = await adapter.loadSessionHistory({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
       limit: 100,
     });
@@ -1687,12 +1711,14 @@ describe("OpencodeSdkAdapter", () => {
 
     await startDefaultSession(adapter, "session-opencode-1", "build");
     const history = await adapter.loadSessionHistory({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
       limit: 100,
     });
-    releaseStream?.();
+    const finishStream = releaseStream as (() => void) | null;
+    if (finishStream) {
+      finishStream();
+    }
     await flushAsync();
 
     expect(history).toHaveLength(1);
@@ -1817,12 +1843,14 @@ describe("OpencodeSdkAdapter", () => {
 
     await startDefaultSession(adapter, "session-opencode-1", "build");
     const history = await adapter.loadSessionHistory({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
       limit: 100,
     });
-    releaseStream?.();
+    const finishStream = releaseStream as (() => void) | null;
+    if (finishStream) {
+      finishStream();
+    }
     await flushAsync();
 
     expect(history).toHaveLength(1);
@@ -1893,7 +1921,7 @@ describe("OpencodeSdkAdapter", () => {
                 },
                 title: "Task",
               },
-            } as Part,
+            } as unknown as Part,
           ],
         },
       ],
@@ -1904,8 +1932,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const history = await adapter.loadSessionHistory({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
       limit: 100,
     });
@@ -1993,8 +2020,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const history = await adapter.loadSessionHistory({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
       limit: 100,
     });
@@ -2058,8 +2084,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const history = await adapter.loadSessionHistory({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
       limit: 100,
     });
@@ -2140,8 +2165,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const history = await adapter.loadSessionHistory({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
       limit: 100,
     });
@@ -2190,7 +2214,6 @@ describe("OpencodeSdkAdapter", () => {
       input: {
         repoPath: "/repo",
         runtimeKind: "opencode",
-        runtimeConnection: defaultRuntimeConnection,
         workingDirectory: "/repo/feature-worktree",
         taskId: "task-1",
         role: "spec",
@@ -2220,8 +2243,7 @@ describe("OpencodeSdkAdapter", () => {
     } as unknown as SessionRecord);
 
     const history = await adapter.loadSessionHistory({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
       limit: 100,
     });
@@ -2279,7 +2301,6 @@ describe("OpencodeSdkAdapter", () => {
         externalSessionId: "session-runtime-a",
         repoPath: "/repo",
         runtimeKind: "opencode",
-        runtimeConnection: defaultRuntimeConnection,
         workingDirectory: "/repo/feature-worktree",
         taskId: "task-1",
         role: "spec",
@@ -2314,11 +2335,6 @@ describe("OpencodeSdkAdapter", () => {
         externalSessionId: "session-runtime-b",
         repoPath: "/repo",
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:12000",
-          workingDirectory: "/repo",
-        },
         workingDirectory: "/repo/other-worktree",
         taskId: "task-1",
         role: "spec",
@@ -2348,8 +2364,7 @@ describe("OpencodeSdkAdapter", () => {
     } as unknown as SessionRecord);
 
     const history = await adapter.loadSessionHistory({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
       limit: 100,
     });
@@ -3341,8 +3356,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const todos = await adapter.loadSessionTodos({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
     });
 
@@ -3447,15 +3461,12 @@ describe("OpencodeSdkAdapter", () => {
 
     await expect(
       adapter.loadSessionTodos({
+        repoPath: "/repo",
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:12345",
-          workingDirectory: "   ",
-        },
+        workingDirectory: "   ",
         externalSessionId: "session-opencode-1",
       }),
-    ).rejects.toThrow("Runtime connection workingDirectory is required to load session todos.");
+    ).rejects.toThrow("Session workingDirectory is required to load session todos.");
 
     expect(mock.session.todoCalls).toEqual([]);
     expect(createClientCalls).toEqual([]);
@@ -3474,12 +3485,8 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const todos = await adapter.loadSessionTodos({
-      runtimeKind: "opencode",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12345",
-        workingDirectory: "  /repo  ",
-      },
+      ...defaultRepoRuntimeInput,
+      workingDirectory: "  /repo  ",
       externalSessionId: "session-opencode-1",
     });
 
@@ -3511,8 +3518,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
     });
 
     expect(catalog.models).toHaveLength(1);
@@ -3552,8 +3558,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
     });
 
     expect(catalog.profiles).toEqual(
@@ -3594,8 +3599,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
     });
 
     expect(catalog.profiles).toEqual(
@@ -3639,8 +3643,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
     });
 
     expect(catalog.profiles).toEqual(
@@ -3681,8 +3684,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
     });
 
     expect(catalog.profiles).toEqual([
@@ -3713,8 +3715,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
-      runtimeKind: "opencode",
-      runtimeConnection: defaultRuntimeConnection,
+      ...defaultRepoRuntimeInput,
     });
 
     expect(catalog.profiles).toEqual([
@@ -3742,8 +3743,8 @@ describe("OpencodeSdkAdapter", () => {
 
     await expect(
       adapter.listAvailableModels({
+        repoPath: "/repo",
         runtimeKind: "opencode",
-        runtimeConnection: defaultRuntimeConnection,
       }),
     ).rejects.toThrow("agent index unavailable");
   });

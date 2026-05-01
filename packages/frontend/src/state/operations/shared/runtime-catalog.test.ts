@@ -3,6 +3,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoRuntimeHealthCheck,
   type RepoRuntimeStartupStatus,
+  type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
@@ -12,7 +13,7 @@ import type {
 import { createRuntimeCatalogOperations } from "./runtime-catalog";
 
 type CatalogDependencies = Parameters<typeof createRuntimeCatalogOperations>[0];
-type RuntimeSummary = Awaited<ReturnType<CatalogDependencies["ensureRuntime"]>>;
+type RuntimeSummary = RuntimeInstanceSummary;
 
 const runtimeFixture: RuntimeSummary = {
   kind: "opencode",
@@ -139,8 +140,7 @@ const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDepend
       failureKind: "timeout",
     },
   }),
-  ensureRuntime: async () => runtimeFixture,
-  listRuntimesForRepo: async () => [],
+  listRuntimesForRepo: async () => [runtimeFixture],
   listAvailableModels: async () => catalogFixture,
   listAvailableSlashCommands: async () => slashCommandCatalogFixture,
   searchFiles: async () => fileSearchResultsFixture,
@@ -149,11 +149,11 @@ const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDepend
 
 describe("runtime-catalog", () => {
   test("loads repo model catalog from runtime coordinates", async () => {
-    const ensureRuntime = mock(async () => runtimeFixture);
+    const listRuntimesForRepo = mock(async () => [runtimeFixture]);
     const listAvailableModels = mock(async () => catalogFixture);
     const operations = createRuntimeCatalogOperations(
       createDeps({
-        ensureRuntime,
+        listRuntimesForRepo,
         listAvailableModels,
       }),
     );
@@ -161,39 +161,77 @@ describe("runtime-catalog", () => {
     await expect(operations.loadRepoRuntimeCatalog("/tmp/repo", "opencode")).resolves.toEqual(
       catalogFixture,
     );
-    expect(ensureRuntime).toHaveBeenCalledWith("opencode", "/tmp/repo");
+    expect(listRuntimesForRepo).toHaveBeenCalledWith("opencode", "/tmp/repo");
     expect(listAvailableModels).toHaveBeenCalledWith({
+      repoPath: "/tmp/repo",
       runtimeKind: "opencode",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-        workingDirectory: "/tmp/repo/worktree",
-      },
     });
   });
 
-  test("reuses a cached repo runtime for slash commands before ensuring again", async () => {
-    const ensureRuntime = mock(async () => runtimeFixture);
+  test("fails fast when no runtime matches the requested repo path", async () => {
+    const listRuntimesForRepo = mock(async () => [
+      {
+        ...runtimeFixture,
+        repoPath: "/tmp/other-repo",
+        workingDirectory: "/tmp/other-repo",
+      },
+    ]);
+    const listAvailableModels = mock(async () => catalogFixture);
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        listRuntimesForRepo,
+        listAvailableModels,
+      }),
+    );
+
+    await expect(operations.loadRepoRuntimeCatalog("/tmp/repo", "opencode")).rejects.toThrow(
+      "No live repo runtime found for repo '/tmp/repo' and runtime 'opencode'.",
+    );
+    expect(listAvailableModels).not.toHaveBeenCalled();
+  });
+
+  test("fails fast when returned runtimes do not match the requested runtime kind", async () => {
+    const listRuntimesForRepo = mock(async () => [
+      {
+        ...runtimeFixture,
+        kind: "other-runtime" as RuntimeInstanceSummary["kind"],
+        descriptor: {
+          ...runtimeFixture.descriptor,
+          kind: "other-runtime" as RuntimeInstanceSummary["descriptor"]["kind"],
+        },
+      },
+    ]);
+    const listAvailableModels = mock(async () => catalogFixture);
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        listRuntimesForRepo,
+        listAvailableModels,
+      }),
+    );
+
+    await expect(operations.loadRepoRuntimeCatalog("/tmp/repo", "opencode")).rejects.toThrow(
+      "No live repo runtime found for repo '/tmp/repo' and runtime 'opencode'.",
+    );
+    expect(listAvailableModels).not.toHaveBeenCalled();
+  });
+
+  test("requires an existing live repo runtime for slash commands", async () => {
+    const listRuntimesForRepo = mock(async () => [runtimeFixture]);
     const listAvailableSlashCommands = mock(async () => slashCommandCatalogFixture);
     const operations = createRuntimeCatalogOperations(
       createDeps({
-        ensureRuntime,
+        listRuntimesForRepo,
         listAvailableSlashCommands,
-        listRuntimesForRepo: async () => [runtimeFixture],
       }),
     );
 
     await expect(operations.loadRepoRuntimeSlashCommands("/tmp/repo", "opencode")).resolves.toEqual(
       slashCommandCatalogFixture,
     );
-    expect(ensureRuntime).not.toHaveBeenCalled();
+    expect(listRuntimesForRepo).toHaveBeenCalledWith("opencode", "/tmp/repo");
     expect(listAvailableSlashCommands).toHaveBeenCalledWith({
+      repoPath: "/tmp/repo",
       runtimeKind: "opencode",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-        workingDirectory: "/tmp/repo/worktree",
-      },
     });
   });
 
@@ -209,12 +247,8 @@ describe("runtime-catalog", () => {
       operations.loadRepoRuntimeFileSearch("/tmp/repo", "opencode", "src"),
     ).resolves.toEqual(fileSearchResultsFixture);
     expect(searchFiles).toHaveBeenCalledWith({
+      repoPath: "/tmp/repo",
       runtimeKind: "opencode",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-        workingDirectory: "/tmp/repo/worktree",
-      },
       query: "src",
     });
   });

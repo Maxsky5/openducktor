@@ -54,7 +54,7 @@ const OPENCODE_DESCRIPTOR = {
 
 const CODEX_DESCRIPTOR = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
-  kind: "codex",
+  kind: "opencode",
   label: "Codex",
   description: "Codex runtime",
 } satisfies RuntimeDescriptor;
@@ -81,7 +81,6 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
 describe("settings-modal-model", () => {
   test("normalizes null defaults to empty values", () => {
     expect(ensureDraftAgentDefault(null)).toEqual({
-      runtimeKind: "",
       providerId: "",
       modelId: "",
       variant: "",
@@ -104,7 +103,7 @@ describe("settings-modal-model", () => {
     const defaults = {
       ...emptyDefaults,
       planner: {
-        runtimeKind: "opencode",
+        runtimeKind: "opencode" as const,
         providerId: "openai",
         modelId: "gpt-5",
         variant: "default",
@@ -124,7 +123,7 @@ describe("settings-modal-model", () => {
     const defaults = {
       ...emptyDefaults,
       spec: {
-        runtimeKind: "opencode",
+        runtimeKind: "opencode" as const,
         providerId: "openai",
         modelId: "gpt-5",
         variant: "default",
@@ -145,7 +144,7 @@ describe("settings-modal-model", () => {
     expect(
       resolveRepoAgentDefaultRuntimeKind({
         selectedRepoConfig: createRepoConfig({
-          defaultRuntimeKind: "codex",
+          defaultRuntimeKind: "opencode",
           agentDefaults: {
             spec: undefined,
             planner: undefined,
@@ -156,7 +155,7 @@ describe("settings-modal-model", () => {
         runtimeDefinitions: [OPENCODE_DESCRIPTOR, CODEX_DESCRIPTOR],
         role: "spec",
       }),
-    ).toBe("codex");
+    ).toBe("opencode");
   });
 
   test("derives unique catalog targets from mixed role overrides", () => {
@@ -166,14 +165,14 @@ describe("settings-modal-model", () => {
           defaultRuntimeKind: "opencode",
           agentDefaults: {
             spec: {
-              runtimeKind: "codex",
+              runtimeKind: "opencode",
               providerId: "openai",
               modelId: "gpt-5",
               variant: "default",
               profileId: "spec-agent",
             },
             planner: {
-              runtimeKind: "codex",
+              runtimeKind: "opencode",
               providerId: "openai",
               modelId: "gpt-5",
               variant: "default",
@@ -185,7 +184,7 @@ describe("settings-modal-model", () => {
         }),
         [OPENCODE_DESCRIPTOR, CODEX_DESCRIPTOR],
       ),
-    ).toEqual(["codex", "opencode"]);
+    ).toEqual(["opencode"]);
   });
 
   test("returns an empty target list when no runtime definitions are available", () => {
@@ -196,10 +195,10 @@ describe("settings-modal-model", () => {
     expect(
       getNeededCatalogRuntimeKinds(
         createRepoConfig({
-          defaultRuntimeKind: "missing-runtime",
+          defaultRuntimeKind: "opencode",
           agentDefaults: {
             spec: {
-              runtimeKind: "also-missing",
+              runtimeKind: "opencode",
               providerId: "openai",
               modelId: "gpt-5",
               variant: "default",
@@ -212,7 +211,7 @@ describe("settings-modal-model", () => {
         }),
         [CODEX_DESCRIPTOR],
       ),
-    ).toEqual([]);
+    ).toEqual(["opencode"]);
   });
 
   test("clears prompt override by removing only the stored value", () => {

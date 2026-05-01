@@ -226,11 +226,11 @@ describe("useAgentStudioModelSelection", () => {
   test("prefers hydrated session runtime fields while preserving summary selection fallback", () => {
     const hydratedSession = createActiveSession({
       runtimeKind: "opencode",
-      runtimeRoute: { type: "local_http", endpoint: "http://localhost:3000" },
       workingDirectory: "/repo/session-worktree",
     });
     const summary = {
       externalSessionId: "external-1",
+      repoPath: "/repo",
       taskId: "task-1",
       role: "spec" as const,
       scenario: "spec_initial" as const,
@@ -253,10 +253,6 @@ describe("useAgentStudioModelSelection", () => {
     expect(state.externalSessionId).toBe("external-1");
     expect(state.selectedModel).toEqual(hydratedSession.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
-    expect(state.runtimeRoute).toEqual({
-      type: "local_http",
-      endpoint: "http://localhost:3000",
-    });
     expect(state.workingDirectory).toBe("/repo/session-worktree");
     expect(state.isLoadingModelCatalog).toBe(false);
     expect(state.hasSelection).toBe(true);
@@ -265,6 +261,7 @@ describe("useAgentStudioModelSelection", () => {
   test("keeps summary selection available while the hydrated session is missing", () => {
     const summary = {
       externalSessionId: "external-1",
+      repoPath: "/repo",
       taskId: "task-1",
       role: "spec" as const,
       scenario: "spec_initial" as const,
@@ -288,7 +285,6 @@ describe("useAgentStudioModelSelection", () => {
     expect(state.selectedModel).toEqual(summary.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.workingDirectory).toBe("/repo");
-    expect(state.runtimeRoute).toBeNull();
     expect(state.isLoadingModelCatalog).toBe(true);
     expect(state.hasSelection).toBe(true);
   });
@@ -408,6 +404,7 @@ describe("useAgentStudioModelSelection", () => {
         activeSession: null,
         activeSessionSummary: {
           externalSessionId: "external-1",
+          repoPath: "/repo",
           taskId: "task-1",
           role: "spec",
           scenario: "spec_initial",
@@ -526,12 +523,9 @@ describe("useAgentStudioModelSelection", () => {
 
       expect(results).toEqual(FILE_SEARCH_RESULTS);
       expect(readSessionFileSearch).toHaveBeenCalledWith(
+        "/repo",
         "opencode",
-        {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4444",
-          workingDirectory: "/repo/session-worktree",
-        },
+        "/repo/session-worktree",
         "",
       );
     } finally {
@@ -562,11 +556,7 @@ describe("useAgentStudioModelSelection", () => {
       await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
       expect(readSessionSlashCommands).toHaveBeenCalledTimes(1);
-      expect(readSessionSlashCommands).toHaveBeenCalledWith("opencode", {
-        type: "stdio",
-        identity: "runtime-stdio",
-        workingDirectory: "/repo/session-worktree",
-      });
+      expect(readSessionSlashCommands).toHaveBeenCalledWith("/repo", "opencode");
       expect(harness.getLatest().slashCommandsError).toBeNull();
     } finally {
       await harness.unmount();
@@ -597,7 +587,7 @@ describe("useAgentStudioModelSelection", () => {
     try {
       await harness.mount();
       await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
-        "Active session file search is unavailable until the session runtime connection is ready.",
+        "Active session file search is unavailable until the session runtime is ready.",
       );
       expect(readSessionFileSearch).not.toHaveBeenCalled();
     } finally {
@@ -630,12 +620,9 @@ describe("useAgentStudioModelSelection", () => {
       );
       expect(readSessionFileSearch).toHaveBeenCalledTimes(1);
       expect(readSessionFileSearch).toHaveBeenCalledWith(
+        "/repo",
         "opencode",
-        {
-          type: "stdio",
-          identity: "runtime-stdio",
-          workingDirectory: "/repo/session-worktree",
-        },
+        "/repo/session-worktree",
         "src",
       );
     } finally {

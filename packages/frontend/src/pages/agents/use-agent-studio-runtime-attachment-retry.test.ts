@@ -6,19 +6,16 @@ import {
 } from "./use-agent-studio-runtime-attachment-retry";
 
 describe("selectRuntimeAttachmentCandidates", () => {
-  test("includes matching runtime instances for the selected session", () => {
+  test("includes matching runtime availability for the selected session", () => {
     const candidates = selectRuntimeAttachmentCandidates({
       repoPath: "/repo",
       session: {
         runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree-a",
       },
       runtimeSources: [
         {
           kind: "opencode",
-          runtimeId: "runtime-1",
-          workingDirectory: "/repo",
-          route: "http://127.0.0.1:4444",
+          repoPath: "/repo",
         },
       ],
     });
@@ -26,9 +23,7 @@ describe("selectRuntimeAttachmentCandidates", () => {
     expect(candidates).toEqual([
       {
         runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/repo",
-        route: "http://127.0.0.1:4444",
+        repoPath: "/repo",
       },
     ]);
   });
@@ -38,14 +33,11 @@ describe("selectRuntimeAttachmentCandidates", () => {
       repoPath: "/repo",
       session: {
         runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree-a",
       },
       runtimeSources: [
         {
           kind: "opencode",
-          runtimeId: "runtime-1",
-          workingDirectory: "/repo",
-          route: "http://127.0.0.1:4444",
+          repoPath: "/repo",
         },
       ],
     });
@@ -54,20 +46,15 @@ describe("selectRuntimeAttachmentCandidates", () => {
       repoPath: "/repo",
       session: {
         runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree-a",
       },
       runtimeSources: [
         {
           kind: "opencode",
-          runtimeId: "runtime-1",
-          workingDirectory: "/repo",
-          route: "http://127.0.0.1:4444",
+          repoPath: "/repo",
         },
         {
           kind: "opencode",
-          runtimeId: "runtime-unrelated",
-          workingDirectory: "/repo/worktree-z",
-          route: "http://127.0.0.1:5555",
+          repoPath: "/unrelated-repo",
         },
       ],
     });
@@ -80,14 +67,11 @@ describe("selectRuntimeAttachmentCandidates", () => {
       repoPath: "/repo",
       session: {
         runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree-a",
       },
       runtimeSources: [
         {
           kind: "opencode",
-          runtimeId: "runtime-1",
-          workingDirectory: "/repo",
-          route: "http://127.0.0.1:4444",
+          repoPath: "/repo",
         },
       ],
     });
@@ -96,19 +80,42 @@ describe("selectRuntimeAttachmentCandidates", () => {
       repoPath: "/repo/",
       session: {
         runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree-a/",
       },
       runtimeSources: [
         {
           kind: "opencode",
-          runtimeId: "runtime-1",
-          workingDirectory: "/repo/",
-          route: "http://127.0.0.1:4444",
+          repoPath: "/repo/",
         },
       ],
     });
 
     expect(withEquivalentPathFormatting).toEqual(baseline);
+  });
+
+  test("deduplicates duplicate runtime summaries", () => {
+    const candidates = selectRuntimeAttachmentCandidates({
+      repoPath: "/repo",
+      session: {
+        runtimeKind: "opencode",
+      },
+      runtimeSources: [
+        {
+          kind: "opencode",
+          repoPath: "/repo",
+        },
+        {
+          kind: "opencode",
+          repoPath: "/repo/",
+        },
+      ],
+    });
+
+    expect(candidates).toEqual([
+      {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+      },
+    ]);
   });
 
   test("compares candidates structurally", () => {
@@ -117,17 +124,13 @@ describe("selectRuntimeAttachmentCandidates", () => {
         [
           {
             runtimeKind: "opencode",
-            runtimeId: "runtime-1",
-            workingDirectory: "/repo",
-            route: "http://127.0.0.1:4444",
+            repoPath: "/repo",
           },
         ],
         [
           {
             runtimeKind: "opencode",
-            runtimeId: "runtime-1",
-            workingDirectory: "/repo",
-            route: "http://127.0.0.1:4444",
+            repoPath: "/repo",
           },
         ],
       ),
@@ -137,17 +140,13 @@ describe("selectRuntimeAttachmentCandidates", () => {
         [
           {
             runtimeKind: "opencode",
-            runtimeId: "runtime-1",
-            workingDirectory: "/repo",
-            route: "http://127.0.0.1:4444",
+            repoPath: "/repo",
           },
         ],
         [
           {
             runtimeKind: "opencode",
-            runtimeId: "runtime-2",
-            workingDirectory: "/repo",
-            route: "http://127.0.0.1:4444",
+            repoPath: "/other-repo",
           },
         ],
       ),

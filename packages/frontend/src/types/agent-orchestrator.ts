@@ -3,7 +3,6 @@ import type {
   RepoPromptOverrides,
   RuntimeInstanceSummary,
   RuntimeKind,
-  RuntimeRoute,
 } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
@@ -17,9 +16,6 @@ import type {
   AgentUserMessageState,
   LiveAgentSessionSnapshot,
 } from "@openducktor/core";
-import type { RuntimeConnectionPreloadIndex } from "@/state/operations/agent-orchestrator/lifecycle/live-agent-session-cache";
-
-export type { RuntimeConnectionPreloadIndex };
 
 export type AgentChatMessageMeta =
   | {
@@ -173,7 +169,6 @@ export type AgentSessionState = {
   status: "starting" | "running" | "idle" | "error" | "stopped";
   startedAt: string;
   runtimeId: string | null;
-  runtimeRoute: RuntimeRoute | null;
   workingDirectory: string;
   historyHydrationState?: AgentSessionHistoryHydrationState;
   runtimeRecoveryState?: AgentSessionRuntimeRecoveryState;
@@ -222,7 +217,5 @@ export type AgentSessionLoadOptions = {
   allowLiveSessionResume?: boolean;
   persistedRecords?: AgentSessionRecord[];
   preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-  preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
   preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
-  allowRuntimeEnsure?: boolean;
 };

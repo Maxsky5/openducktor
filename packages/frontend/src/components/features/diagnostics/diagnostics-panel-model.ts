@@ -23,7 +23,6 @@ import {
   getRepoStoreStatusLabel,
   isRepoStoreReady,
 } from "@/lib/repo-store-health";
-import { describeRuntimeRoute } from "@/state/operations/agent-orchestrator/runtime/runtime";
 import {
   buildTimeoutToastDescription,
   hasBeadsCheckFailure,
@@ -242,7 +241,10 @@ const buildRuntimeRows = (runtimeHealth: RuntimeHealthState): DiagnosticKeyValue
       },
       {
         label: "Route",
-        value: describeRuntimeRoute(instance.runtimeRoute),
+        value:
+          instance.runtimeRoute.type === "local_http"
+            ? instance.runtimeRoute.endpoint
+            : instance.runtimeRoute.identity,
         mono: true,
         valueClassName: "text-muted-foreground",
       },

@@ -1,16 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { LiveAgentSessionSnapshot } from "@openducktor/core";
-import {
-  createLiveAgentSessionSnapshotFixture,
-  createLocalHttpRuntimeConnection,
-  createStdioRuntimeConnection,
-} from "../test-utils";
+import { createLiveAgentSessionSnapshotFixture } from "../test-utils";
 import { liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
 
-const localRuntimeConnection = createLocalHttpRuntimeConnection();
-
-const stdioRuntimeConnection = createStdioRuntimeConnection("/tmp/runtime-root/");
+const repoPath = "/tmp/repo";
+const repoTwoPath = "/tmp/repo-two";
+const workingDirectory = "/tmp/repo/worktree";
+const repoOneWorkingDirectory = "/tmp/repo-one/worktree";
 
 const createSnapshot = (
   externalSessionId: string,
@@ -21,13 +18,13 @@ const createSnapshot = (
 describe("live-agent-session-store", () => {
   test("returns matching snapshots for the same repo and lookup key", () => {
     const store = new LiveAgentSessionStore();
-    const expectedSnapshot = createSnapshot("external-1", "/tmp/repo/worktree");
+    const expectedSnapshot = createSnapshot("external-1", workingDirectory);
 
     store.replaceRepoSnapshots(
-      "/tmp/repo",
+      repoPath,
       new Map([
         [
-          liveAgentSessionLookupKey("opencode", localRuntimeConnection, "/tmp/repo/worktree/"),
+          liveAgentSessionLookupKey(repoPath, "opencode", `${workingDirectory}/`),
           [expectedSnapshot],
         ],
       ]),
@@ -36,10 +33,9 @@ describe("live-agent-session-store", () => {
 
     expect(
       store.readSnapshot({
-        repoPath: "/tmp/repo",
+        repoPath,
         runtimeKind: "opencode",
-        runtimeConnection: localRuntimeConnection,
-        workingDirectory: "/tmp/repo/worktree",
+        workingDirectory,
         externalSessionId: "external-1",
         nowMs: 5_500,
       }),
@@ -48,13 +44,13 @@ describe("live-agent-session-store", () => {
 
   test("treats repo snapshots as isolated and clearable", () => {
     const store = new LiveAgentSessionStore();
-    const repoOneSnapshot = createSnapshot("external-1", "/tmp/repo-one/worktree");
+    const repoOneSnapshot = createSnapshot("external-1", repoOneWorkingDirectory);
 
     store.replaceRepoSnapshots(
       "/tmp/repo-one",
       new Map([
         [
-          liveAgentSessionLookupKey("opencode", localRuntimeConnection, "/tmp/repo-one/worktree"),
+          liveAgentSessionLookupKey("/tmp/repo-one", "opencode", repoOneWorkingDirectory),
           [repoOneSnapshot],
         ],
       ]),
@@ -63,10 +59,9 @@ describe("live-agent-session-store", () => {
 
     expect(
       store.readSnapshot({
-        repoPath: "/tmp/repo-two",
+        repoPath: repoTwoPath,
         runtimeKind: "opencode",
-        runtimeConnection: localRuntimeConnection,
-        workingDirectory: "/tmp/repo-one/worktree",
+        workingDirectory: repoOneWorkingDirectory,
         externalSessionId: "external-1",
         nowMs: 1_500,
       }),
@@ -78,8 +73,7 @@ describe("live-agent-session-store", () => {
       store.readSnapshot({
         repoPath: "/tmp/repo-one",
         runtimeKind: "opencode",
-        runtimeConnection: localRuntimeConnection,
-        workingDirectory: "/tmp/repo-one/worktree",
+        workingDirectory: repoOneWorkingDirectory,
         externalSessionId: "external-1",
         nowMs: 1_500,
       }),
@@ -88,25 +82,19 @@ describe("live-agent-session-store", () => {
 
   test("expires stale snapshots using the default or provided max age", () => {
     const store = new LiveAgentSessionStore();
-    const snapshot = createSnapshot("external-1", "/tmp/repo/worktree");
+    const snapshot = createSnapshot("external-1", workingDirectory);
 
     store.replaceRepoSnapshots(
-      "/tmp/repo",
-      new Map([
-        [
-          liveAgentSessionLookupKey("opencode", stdioRuntimeConnection, "/tmp/repo/worktree"),
-          [snapshot],
-        ],
-      ]),
+      repoPath,
+      new Map([[liveAgentSessionLookupKey(repoPath, "opencode", workingDirectory), [snapshot]]]),
       10_000,
     );
 
     expect(
       store.readSnapshot({
-        repoPath: "/tmp/repo",
+        repoPath,
         runtimeKind: "opencode",
-        runtimeConnection: stdioRuntimeConnection,
-        workingDirectory: "/tmp/repo/worktree/",
+        workingDirectory: `${workingDirectory}/`,
         externalSessionId: "external-1",
         nowMs: 15_000,
       }),
@@ -114,10 +102,9 @@ describe("live-agent-session-store", () => {
 
     expect(
       store.readSnapshot({
-        repoPath: "/tmp/repo",
+        repoPath,
         runtimeKind: "opencode",
-        runtimeConnection: stdioRuntimeConnection,
-        workingDirectory: "/tmp/repo/worktree/",
+        workingDirectory: `${workingDirectory}/`,
         externalSessionId: "external-1",
         nowMs: 15_001,
       }),
@@ -125,10 +112,9 @@ describe("live-agent-session-store", () => {
 
     expect(
       store.readSnapshot({
-        repoPath: "/tmp/repo",
+        repoPath,
         runtimeKind: "opencode",
-        runtimeConnection: stdioRuntimeConnection,
-        workingDirectory: "/tmp/repo/worktree/",
+        workingDirectory: `${workingDirectory}/`,
         externalSessionId: "external-1",
         maxAgeMs: 10_000,
         nowMs: 20_000,
@@ -137,10 +123,9 @@ describe("live-agent-session-store", () => {
 
     expect(
       store.readSnapshot({
-        repoPath: "/tmp/repo",
+        repoPath,
         runtimeKind: "opencode",
-        runtimeConnection: stdioRuntimeConnection,
-        workingDirectory: "/tmp/repo/worktree/",
+        workingDirectory: `${workingDirectory}/`,
         externalSessionId: "external-1",
         maxAgeMs: 9_999,
         nowMs: 20_000,
@@ -152,11 +137,11 @@ describe("live-agent-session-store", () => {
     const store = new LiveAgentSessionStore();
 
     store.replaceRepoSnapshots(
-      "/tmp/repo",
+      repoPath,
       new Map([
         [
-          liveAgentSessionLookupKey("opencode", localRuntimeConnection, "/tmp/repo/worktree"),
-          [createSnapshot("external-1", "/tmp/repo/worktree")],
+          liveAgentSessionLookupKey(repoPath, "opencode", workingDirectory),
+          [createSnapshot("external-1", workingDirectory)],
         ],
       ]),
       1_000,
@@ -164,10 +149,9 @@ describe("live-agent-session-store", () => {
 
     expect(
       store.readSnapshot({
-        repoPath: "/tmp/repo",
+        repoPath,
         runtimeKind: "opencode",
-        runtimeConnection: localRuntimeConnection,
-        workingDirectory: "/tmp/repo/worktree",
+        workingDirectory,
         externalSessionId: "missing",
         nowMs: 1_500,
       }),

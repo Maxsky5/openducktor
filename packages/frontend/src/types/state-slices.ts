@@ -23,7 +23,6 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
-  AgentRuntimeConnection,
   AgentScenario,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
@@ -32,11 +31,7 @@ import type {
   LiveAgentSessionSnapshot,
 } from "@openducktor/core";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import type {
-  AgentSessionLoadOptions,
-  AgentSessionState,
-  RuntimeConnectionPreloadIndex,
-} from "./agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
@@ -189,40 +184,41 @@ export type AgentStateContextValue = {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
     preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
-    allowRuntimeEnsure?: boolean;
   }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentModelCatalog>;
   readSessionTodos: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
     externalSessionId: string,
   ) => Promise<AgentSessionTodoItem[]>;
   readSessionHistory: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
     externalSessionId: string,
   ) => Promise<AgentSessionHistoryMessage[]>;
   attachRuntimeTranscriptSession: (input: {
     repoPath: string;
     externalSessionId: string;
     runtimeKind: RuntimeKind;
-    runtimeId: string;
-    runtimeConnection: AgentRuntimeConnection;
+    runtimeId?: string;
+    workingDirectory: string;
     pendingPermissions?: AgentSessionState["pendingPermissions"];
   }) => Promise<void>;
   readSessionSlashCommands: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<AgentSlashCommandCatalog>;
   readSessionFileSearch: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
   removeAgentSession: (externalSessionId: string) => Promise<void>;
@@ -275,8 +271,9 @@ export type AgentStateContextValue = {
     message?: string,
   ) => Promise<void>;
   replyRuntimeSessionPermission: (input: {
+    repoPath: string;
     runtimeKind: RuntimeKind;
-    runtimeConnection: AgentRuntimeConnection;
+    workingDirectory: string;
     targetExternalSessionId: string;
     requestId: string;
     reply: "once" | "always" | "reject";

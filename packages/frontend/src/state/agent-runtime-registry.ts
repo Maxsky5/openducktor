@@ -9,6 +9,8 @@ import type {
   AgentWorkspaceInspectionPort,
 } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND, validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import { host } from "./operations/shared/host";
 import type { RuntimeCatalogAdapter } from "./operations/shared/runtime-catalog";
 
 type RegisteredRuntimeAdapter = AgentCatalogPort &
@@ -29,7 +31,26 @@ type AgentRuntimeRegistry = {
 export { DEFAULT_RUNTIME_KIND };
 
 export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
-  const opencodeAdapter = new OpencodeSdkAdapter() as RegisteredRuntimeAdapter;
+  const opencodeAdapter = new OpencodeSdkAdapter({
+    repoRuntimeResolver: {
+      ensureRepoRuntime: ({ repoPath, runtimeKind }) => host.runtimeEnsure(repoPath, runtimeKind),
+      requireRepoRuntime: async ({ repoPath, runtimeKind }) => {
+        const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+        const runtimes = await host.runtimeList(repoPath, runtimeKind);
+        const runtime = runtimes.find(
+          (entry) =>
+            entry.kind === runtimeKind &&
+            normalizeWorkingDirectory(entry.repoPath) === normalizedRepoPath,
+        );
+        if (!runtime) {
+          throw new Error(
+            `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'.`,
+          );
+        }
+        return runtime;
+      },
+    },
+  }) as RegisteredRuntimeAdapter;
   const adapters = new Map<RuntimeKind, RegisteredRuntimeAdapter>([["opencode", opencodeAdapter]]);
   const registeredRuntimeKinds = Array.from(adapters.keys());
 

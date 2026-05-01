@@ -29,7 +29,7 @@ export function AgentRuntimeCombobox({
       disabled={disabled}
       {...(className ? { className } : {})}
       {...(triggerClassName ? { triggerClassName } : {})}
-      onValueChange={onValueChange}
+      onValueChange={(nextValue) => onValueChange(nextValue as RuntimeKind)}
     />
   );
 }

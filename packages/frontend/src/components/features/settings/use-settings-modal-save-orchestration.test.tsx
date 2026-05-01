@@ -338,7 +338,12 @@ describe("useSettingsModalSaveOrchestration", () => {
     if (!repoConfig) {
       throw new Error("Expected repo settings fixture");
     }
-    repoConfig.defaultRuntimeKind = "   ";
+    repoConfig.agentDefaults.spec = {
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "",
+      profileId: "",
+    } as unknown as NonNullable<typeof repoConfig.agentDefaults.spec>;
     const harness = createHookHarness(
       createArgs(
         {
@@ -361,7 +366,7 @@ describe("useSettingsModalSaveOrchestration", () => {
 
     expect(didSave).toBe(false);
     expect(harness.getLatest().saveError).toBe(
-      "Default runtime kind is required. Select a repository default runtime before saving.",
+      "Specification agent default runtime kind is required when provider and model are configured.",
     );
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
 

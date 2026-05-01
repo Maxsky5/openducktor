@@ -4,19 +4,12 @@ import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
-import {
-  type RuntimeInfo,
-  resolveRuntimeConnection,
-  runtimeRouteToConnection,
-} from "../runtime/runtime";
+import type { RuntimeInfo } from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import { shouldReattachListenerForAttachedSession, throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import { isWorkflowAgentSession } from "../support/session-purpose";
-import {
-  assertSessionRuntimeKindMatchesEnsuredRuntime,
-  requireSessionRuntimeKind,
-} from "../support/session-runtime-metadata";
+import { requireSessionRuntimeKindForPersistence } from "../support/session-runtime-metadata";
 
 type EnsureSessionReadyDependencies = {
   activeWorkspace: ActiveWorkspace | null;
@@ -130,22 +123,22 @@ export const createEnsureSessionReady = ({
     };
 
     const loadLiveSnapshot = async ({
+      repoPath,
       runtimeKind,
-      runtimeConnection,
       workingDirectory,
       externalSessionId,
     }: {
+      repoPath: string;
       runtimeKind: AgentSessionState["runtimeKind"];
-      runtimeConnection: import("@openducktor/core").AgentRuntimeConnection | null;
       workingDirectory: string;
       externalSessionId: string;
     }) => {
-      if (!runtimeKind || runtimeConnection === null || workingDirectory.trim().length === 0) {
+      if (!runtimeKind || workingDirectory.trim().length === 0) {
         return null;
       }
       const snapshots = await adapter.listLiveAgentSessionSnapshots({
+        repoPath,
         runtimeKind,
-        runtimeConnection,
         directories: [workingDirectory],
       });
       return snapshots.find((entry) => entry.externalSessionId === externalSessionId) ?? null;
@@ -170,89 +163,71 @@ export const createEnsureSessionReady = ({
         attachSessionListener(repoPath, externalSessionId);
       }
       if (session.status !== "error") {
-        let attachedRuntimeKind: NonNullable<AgentSessionState["runtimeKind"]> =
-          session.runtimeKind ?? requireSessionRuntimeKind(session);
-        let attachedRuntimeId = session.runtimeId;
-        let attachedRuntimeRoute = session.runtimeRoute;
-        let attachedWorkingDirectory = session.workingDirectory;
+        const attachedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
+        const attachedRuntimeId = session.runtimeId;
+        const attachedWorkingDirectory = session.workingDirectory;
 
-        if (!attachedRuntimeKind || attachedRuntimeRoute === null) {
-          const requestedRuntimeKind = requireSessionRuntimeKind(session);
-          const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
-            workspaceId,
-            targetWorkingDirectory: session.workingDirectory,
-            runtimeKind: requestedRuntimeKind,
-          });
-          assertNotStale();
-          attachedRuntimeKind = assertSessionRuntimeKindMatchesEnsuredRuntime({
-            externalSessionId: session.externalSessionId,
-            requestedRuntimeKind,
-            ensuredRuntimeKind: runtime.runtimeKind,
-          });
-
-          attachedRuntimeId = runtime.runtimeId;
-          attachedRuntimeRoute = runtime.runtimeRoute;
-          attachedWorkingDirectory = runtime.workingDirectory;
-
+        const liveSnapshot = await loadLiveSnapshot({
+          repoPath,
+          runtimeKind: attachedRuntimeKind,
+          workingDirectory: attachedWorkingDirectory,
+          externalSessionId: session.externalSessionId,
+        });
+        assertNotStale();
+        if (liveSnapshot) {
+          const pendingPermissions = liveSnapshot.pendingPermissions;
+          const pendingQuestions = liveSnapshot.pendingQuestions;
+          const liveSessionTitle = normalizeLiveSessionTitle(liveSnapshot.title);
+          updateSession(
+            externalSessionId,
+            (current) => ({
+              ...current,
+              status: toLiveSessionState(liveSnapshot.status),
+              runtimeId: attachedRuntimeId,
+              workingDirectory: attachedWorkingDirectory,
+              ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
+              pendingPermissions,
+              pendingQuestions,
+              runtimeKind: attachedRuntimeKind,
+            }),
+            { persist: false },
+          );
+          if (!allowPendingInput && hasPendingInput({ pendingPermissions, pendingQuestions })) {
+            throw new Error(PENDING_INPUT_NOT_READY_ERROR);
+          }
+          return;
+        }
+        if (attachedRuntimeId === null || !adapter.listLiveAgentSessionSnapshots) {
           updateSession(
             externalSessionId,
             (current) => ({
               ...current,
               runtimeId: attachedRuntimeId,
-              runtimeRoute: attachedRuntimeRoute,
               workingDirectory: attachedWorkingDirectory,
+              pendingPermissions: [],
+              pendingQuestions: [],
               runtimeKind: attachedRuntimeKind,
             }),
             { persist: false },
           );
+          return;
         }
-
-        const liveSnapshot = await loadLiveSnapshot({
-          runtimeKind: attachedRuntimeKind,
-          runtimeConnection:
-            attachedRuntimeRoute === null
-              ? null
-              : runtimeRouteToConnection(attachedRuntimeRoute, attachedWorkingDirectory),
-          workingDirectory: attachedWorkingDirectory,
-          externalSessionId: session.externalSessionId,
-        });
-        assertNotStale();
-        const pendingPermissions = liveSnapshot?.pendingPermissions ?? [];
-        const pendingQuestions = liveSnapshot?.pendingQuestions ?? [];
-        const liveSessionTitle = normalizeLiveSessionTitle(liveSnapshot?.title);
-        updateSession(
+      }
+      if (session.runtimeId !== null) {
+        const existingUnsubscriber = unsubscribersRef.current.get(externalSessionId);
+        await stopSessionOrThrow({
+          operation: "ensure-ready-stop-attached-error-session",
+          cleanupErrorMessage: `Failed to stop attached error session '${externalSessionId}' before preparing it`,
           externalSessionId,
-          (current) => ({
-            ...current,
-            status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : current.status,
-            runtimeId: attachedRuntimeId,
-            runtimeRoute: attachedRuntimeRoute,
-            workingDirectory: attachedWorkingDirectory,
-            ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
-            pendingPermissions,
-            pendingQuestions,
-            runtimeKind: attachedRuntimeKind,
-          }),
-          { persist: false },
-        );
-        if (!allowPendingInput && hasPendingInput({ pendingPermissions, pendingQuestions })) {
-          throw new Error(PENDING_INPUT_NOT_READY_ERROR);
+          taskId: session.taskId,
+          role: session.role,
+        });
+        if (existingUnsubscriber) {
+          existingUnsubscriber();
+          unsubscribersRef.current.delete(externalSessionId);
         }
-        return;
+        assertNotStale();
       }
-      const existingUnsubscriber = unsubscribersRef.current.get(externalSessionId);
-      await stopSessionOrThrow({
-        operation: "ensure-ready-stop-attached-error-session",
-        cleanupErrorMessage: `Failed to stop attached error session '${externalSessionId}' before preparing it`,
-        externalSessionId,
-        taskId: session.taskId,
-        role: session.role,
-      });
-      if (existingUnsubscriber) {
-        existingUnsubscriber();
-        unsubscribersRef.current.delete(externalSessionId);
-      }
-      assertNotStale();
     }
 
     const task = taskRef.current.find((entry) => entry.id === session.taskId);
@@ -268,24 +243,17 @@ export const createEnsureSessionReady = ({
       loadRepoPromptOverrides,
     });
     assertNotStale();
-    const requestedRuntimeKind = requireSessionRuntimeKind(session);
+    const requestedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
     const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
       workspaceId,
       targetWorkingDirectory: session.workingDirectory,
       runtimeKind: requestedRuntimeKind,
     });
     assertNotStale();
-    const resolvedRuntimeKind = assertSessionRuntimeKindMatchesEnsuredRuntime({
-      externalSessionId: session.externalSessionId,
-      requestedRuntimeKind,
-      ensuredRuntimeKind: runtime.runtimeKind,
-    });
-    const runtimeConnection = resolveRuntimeConnection(runtime);
     await adapter.resumeSession({
       externalSessionId: session.externalSessionId,
       repoPath,
-      runtimeKind: resolvedRuntimeKind,
-      runtimeConnection,
+      runtimeKind: requestedRuntimeKind,
       workingDirectory: runtime.workingDirectory,
       taskId: session.taskId,
       role: session.role,
@@ -312,8 +280,8 @@ export const createEnsureSessionReady = ({
     assertNotStale();
 
     const liveSnapshot = await loadLiveSnapshot({
-      runtimeKind: resolvedRuntimeKind,
-      runtimeConnection,
+      repoPath,
+      runtimeKind: requestedRuntimeKind,
       workingDirectory: runtime.workingDirectory,
       externalSessionId: session.externalSessionId,
     });
@@ -325,9 +293,8 @@ export const createEnsureSessionReady = ({
     updateSession(externalSessionId, (current) => ({
       ...current,
       status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : "idle",
-      runtimeKind: resolvedRuntimeKind,
+      runtimeKind: requestedRuntimeKind,
       runtimeId: runtime.runtimeId,
-      runtimeRoute: runtime.runtimeRoute,
       workingDirectory: runtime.workingDirectory,
       ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
       promptOverrides: promptContext.promptOverrides,

@@ -1,97 +1,17 @@
-import type { RuntimeKind } from "@openducktor/contracts";
-import { useEffect, useRef } from "react";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import { normalizeWorkingDirectory } from "@/state/operations/agent-orchestrator/support/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  haveSameRuntimeAttachmentCandidates,
+  type RuntimeAttachmentCandidate,
+  type RuntimeAttachmentSource,
+  refreshRuntimeAttachmentSources,
+  selectRuntimeAttachmentCandidates,
+  useRuntimeAttachmentRetry,
+} from "@/state/operations/shared/runtime-attachment-retry";
 
-const RUNTIME_ATTACHMENT_POLLING_INTERVAL_MS = 2_000;
-
-export type RuntimeAttachmentSource = {
-  kind: RuntimeKind;
-  runtimeId: string;
-  workingDirectory: string;
-  route: string;
-};
-
-export type RuntimeAttachmentCandidate = {
-  runtimeKind: RuntimeKind;
-  runtimeId: string;
-  workingDirectory: string;
-  route: string;
-};
-
-const compareRuntimeAttachmentCandidates = (
-  left: RuntimeAttachmentCandidate,
-  right: RuntimeAttachmentCandidate,
-): number => {
-  if (left.runtimeKind !== right.runtimeKind) {
-    return left.runtimeKind.localeCompare(right.runtimeKind);
-  }
-  if (left.runtimeId !== right.runtimeId) {
-    return left.runtimeId.localeCompare(right.runtimeId);
-  }
-  if (left.workingDirectory !== right.workingDirectory) {
-    return left.workingDirectory.localeCompare(right.workingDirectory);
-  }
-  return left.route.localeCompare(right.route);
-};
-
-const cloneRuntimeAttachmentCandidates = (
-  candidates: RuntimeAttachmentCandidate[],
-): RuntimeAttachmentCandidate[] => candidates.map((candidate) => ({ ...candidate }));
-
-export const haveSameRuntimeAttachmentCandidates = (
-  left: RuntimeAttachmentCandidate[],
-  right: RuntimeAttachmentCandidate[],
-): boolean => {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((candidate, index) => {
-    const other = right[index];
-    return (
-      other !== undefined &&
-      candidate.runtimeKind === other.runtimeKind &&
-      candidate.runtimeId === other.runtimeId &&
-      candidate.workingDirectory === other.workingDirectory &&
-      candidate.route === other.route
-    );
-  });
-};
-
-export const selectRuntimeAttachmentCandidates = ({
-  repoPath,
-  session,
-  runtimeSources,
-}: {
-  repoPath: string;
-  session: Pick<AgentSessionState, "runtimeKind" | "workingDirectory"> | null;
-  runtimeSources: RuntimeAttachmentSource[];
-}): RuntimeAttachmentCandidate[] => {
-  if (!session?.runtimeKind) {
-    return [];
-  }
-
-  const sessionWorkingDirectory = normalizeWorkingDirectory(session.workingDirectory);
-  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-
-  return runtimeSources
-    .filter((runtimeSource) => {
-      const sourceWorkingDirectory = normalizeWorkingDirectory(runtimeSource.workingDirectory);
-      return (
-        runtimeSource.kind === session.runtimeKind &&
-        (sourceWorkingDirectory === sessionWorkingDirectory ||
-          sourceWorkingDirectory === normalizedRepoPath)
-      );
-    })
-    .map((runtimeSource) => ({
-      runtimeKind: runtimeSource.kind,
-      runtimeId: runtimeSource.runtimeId,
-      workingDirectory: normalizeWorkingDirectory(runtimeSource.workingDirectory),
-      route: runtimeSource.route,
-    }))
-    .sort(compareRuntimeAttachmentCandidates);
+export {
+  haveSameRuntimeAttachmentCandidates,
+  refreshRuntimeAttachmentSources,
+  selectRuntimeAttachmentCandidates,
 };
 
 export function useAgentStudioRuntimeAttachmentRetry({
@@ -118,58 +38,7 @@ export function useAgentStudioRuntimeAttachmentRetry({
   refreshRuntimeAttachmentSources: () => Promise<void>;
   repoReadinessState: SessionRepoReadinessState;
 }): void {
-  const lastAttachmentAttemptRef = useRef<{
-    externalSessionId: string;
-    attachmentKey: string;
-    candidates: RuntimeAttachmentCandidate[];
-  } | null>(null);
-  const attachmentAttemptCounterRef = useRef(0);
-
-  useEffect(() => {
-    if (!activeExternalSessionId) {
-      attachmentAttemptCounterRef.current = 0;
-      lastAttachmentAttemptRef.current = null;
-      return;
-    }
-
-    if (lastAttachmentAttemptRef.current?.externalSessionId !== activeExternalSessionId) {
-      attachmentAttemptCounterRef.current = 0;
-      lastAttachmentAttemptRef.current = null;
-    }
-
-    if (!shouldWaitForSessionRuntime || !activeRuntimeAttachmentKey) {
-      return;
-    }
-
-    const lastAttachmentAttempt = lastAttachmentAttemptRef.current;
-    if (
-      lastAttachmentAttempt?.attachmentKey === activeRuntimeAttachmentKey &&
-      haveSameRuntimeAttachmentCandidates(
-        lastAttachmentAttempt.candidates,
-        runtimeAttachmentCandidates,
-      )
-    ) {
-      return;
-    }
-
-    attachmentAttemptCounterRef.current += 1;
-    const recoveryDedupKey = `${activeRuntimeAttachmentKey}::attempt:${attachmentAttemptCounterRef.current}`;
-
-    lastAttachmentAttemptRef.current = {
-      externalSessionId: activeExternalSessionId,
-      attachmentKey: activeRuntimeAttachmentKey,
-      candidates: cloneRuntimeAttachmentCandidates(runtimeAttachmentCandidates),
-    };
-
-    void ensureSessionReadyForView({
-      taskId: activeTaskId,
-      externalSessionId: activeExternalSessionId,
-      repoReadinessState,
-      recoveryDedupKey,
-    }).catch(() => {
-      // The operation layer surfaces actionable errors.
-    });
-  }, [
+  useRuntimeAttachmentRetry({
     activeRuntimeAttachmentKey,
     activeExternalSessionId,
     activeTaskId,
@@ -177,31 +46,8 @@ export function useAgentStudioRuntimeAttachmentRetry({
     repoReadinessState,
     runtimeAttachmentCandidates,
     shouldWaitForSessionRuntime,
-  ]);
-
-  useEffect(() => {
-    if (!activeExternalSessionId || !shouldWaitForSessionRuntime) {
-      return;
-    }
-
-    void refreshRuntimeAttachmentSources().catch(() => {
-      // The refresh path is best-effort; attachment attempts surface actionable failures.
-    });
-
-    const intervalId = window.setInterval(() => {
-      void refreshRuntimeAttachmentSources().catch(() => {
-        // The refresh path is best-effort; attachment attempts surface actionable failures.
-      });
-    }, RUNTIME_ATTACHMENT_POLLING_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [activeExternalSessionId, refreshRuntimeAttachmentSources, shouldWaitForSessionRuntime]);
+    refreshRuntimeAttachmentSources,
+  });
 }
 
-export const refreshRuntimeAttachmentSources = async (
-  refetchRuntimeLists: Array<() => Promise<unknown>>,
-): Promise<void> => {
-  await Promise.all(Array.from(new Set(refetchRuntimeLists)).map((refetch) => refetch()));
-};
+export type { RuntimeAttachmentCandidate, RuntimeAttachmentSource };

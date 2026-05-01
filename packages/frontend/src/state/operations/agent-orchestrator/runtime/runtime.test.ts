@@ -10,25 +10,11 @@ import {
 } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { createDeferred, withTimeout } from "../test-utils";
-import {
-  createEnsureRuntime,
-  describeRuntimeRoute,
-  loadRepoDefaultModel,
-  loadRepoPromptOverrides,
-  resolveRuntimeRouteConnection,
-  runtimeConnectionToRoute,
-  runtimeConnectionTransportKey,
-  runtimeRouteToConnection,
-  runtimeRouteTransportKey,
-} from "./runtime";
+import { createEnsureRuntime, loadRepoDefaultModel, loadRepoPromptOverrides } from "./runtime";
 
 const buildBootstrapFixture: BuildSessionBootstrap = {
   runtimeKind: "opencode",
   runtimeId: "runtime-build",
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:4444",
-  },
   workingDirectory: "/tmp/repo/worktree",
 };
 
@@ -100,107 +86,6 @@ describe("agent-orchestrator-runtime", () => {
     };
   });
 
-  test("resolves runtime route connections through one shared boundary helper", () => {
-    expect(
-      resolveRuntimeRouteConnection(
-        {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4555",
-        },
-        "/tmp/repo/worktree",
-      ),
-    ).toEqual({
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4555",
-        workingDirectory: "/tmp/repo/worktree",
-      },
-    });
-
-    expect(
-      resolveRuntimeRouteConnection(
-        {
-          type: "stdio",
-          identity: "runtime-stdio",
-        },
-        "/tmp/repo/worktree",
-      ),
-    ).toEqual({
-      runtimeConnection: {
-        type: "stdio",
-        identity: "runtime-stdio",
-        workingDirectory: "/tmp/repo/worktree",
-      },
-    });
-  });
-
-  test("preserves and normalizes stdio identity across route and connection helpers", () => {
-    expect(
-      runtimeConnectionToRoute({
-        type: "stdio",
-        identity: " runtime-stdio ",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-    ).toEqual({ type: "stdio", identity: "runtime-stdio" });
-    expect(
-      runtimeRouteToConnection(
-        {
-          type: "stdio",
-          identity: " runtime-stdio ",
-        },
-        "/tmp/repo/worktree",
-      ),
-    ).toEqual({
-      type: "stdio",
-      identity: "runtime-stdio",
-      workingDirectory: "/tmp/repo/worktree",
-    });
-    expect(
-      runtimeConnectionTransportKey({
-        type: "stdio",
-        identity: "runtime-stdio-a",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-    ).toBe("stdio:runtime-stdio-a");
-    expect(runtimeRouteTransportKey({ type: "stdio", identity: "runtime-stdio-b" })).toBe(
-      "stdio:runtime-stdio-b",
-    );
-    expect(describeRuntimeRoute({ type: "stdio", identity: " runtime-stdio " })).toBe(
-      "stdio:runtime-stdio",
-    );
-  });
-
-  test("rejects missing or blank stdio identity before building route descriptions or keys", () => {
-    const blankRoute = { type: "stdio", identity: " " } as const;
-    const missingRoute = { type: "stdio" } as unknown as Parameters<
-      typeof runtimeRouteTransportKey
-    >[0];
-    const blankConnection = {
-      type: "stdio",
-      identity: "",
-      workingDirectory: "/tmp/repo/worktree",
-    } as const;
-
-    expect(() => runtimeRouteTransportKey(blankRoute)).toThrow(
-      "Runtime route stdio identity is required.",
-    );
-    expect(() => runtimeRouteTransportKey(missingRoute)).toThrow(
-      "Runtime route stdio identity is required.",
-    );
-    expect(() => describeRuntimeRoute(blankRoute)).toThrow(
-      "Runtime route stdio identity is required.",
-    );
-    expect(() => runtimeConnectionTransportKey(blankConnection)).toThrow(
-      "Runtime connection stdio identity is required.",
-    );
-    expect(() => runtimeConnectionToRoute(blankConnection)).toThrow(
-      "Runtime connection stdio identity is required.",
-    );
-    expect(() => runtimeRouteToConnection(blankRoute, "/tmp/repo/worktree")).toThrow(
-      "Runtime route stdio identity is required.",
-    );
-  });
-
   test("starts build bootstrap and refreshes task data when no target worktree is provided", async () => {
     let refreshCalls = 0;
     let buildStartCalls = 0;
@@ -225,12 +110,6 @@ describe("agent-orchestrator-runtime", () => {
     expect(runtime).toEqual({
       runtimeKind: "opencode",
       runtimeId: "runtime-build",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-        workingDirectory: "/tmp/repo/worktree",
-      },
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/tmp/repo/worktree",
     });
     expect(buildStartCalls).toBe(1);
@@ -258,12 +137,6 @@ describe("agent-orchestrator-runtime", () => {
     expect(raceResult).toEqual({
       runtimeKind: "opencode",
       runtimeId: "runtime-build",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-        workingDirectory: "/tmp/repo/worktree",
-      },
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/tmp/repo/worktree",
     });
     await expect(runtimePromise).resolves.toEqual(raceResult);
@@ -315,34 +188,6 @@ describe("agent-orchestrator-runtime", () => {
     expect(runtimeHost.taskWorktreeGet).not.toHaveBeenCalled();
   });
 
-  test("fails before runtime ensure when repo default runtime is blank", async () => {
-    repoConfigLoader = async () =>
-      createRepoConfig({
-        defaultRuntimeKind: " " as never,
-        agentDefaults: {},
-      });
-    runtimeHost.buildStart = mock(async () => buildBootstrapFixture);
-    runtimeHost.runtimeEnsure = mock(async () => sharedRuntimeFixture);
-    runtimeHost.taskWorktreeGet = mock(async () => taskWorktreeFixture);
-
-    const ensureRuntime = createEnsureRuntime({
-      hostClient: runtimeHost,
-      repoConfigLoader,
-      refreshTaskData: async () => {},
-    });
-
-    await expect(
-      ensureRuntime("/tmp/repo", "task-1", "spec", {
-        workspaceId: "workspace-1",
-      }),
-    ).rejects.toThrow(
-      "Runtime kind is not configured for spec sessions. Select a spec agent runtime or repository default runtime before starting a session.",
-    );
-    expect(runtimeHost.buildStart).not.toHaveBeenCalled();
-    expect(runtimeHost.runtimeEnsure).not.toHaveBeenCalled();
-    expect(runtimeHost.taskWorktreeGet).not.toHaveBeenCalled();
-  });
-
   test("uses shared repo runtime for build role when a target working directory is provided", async () => {
     let buildStartCalls = 0;
     let repoRuntimeEnsureCalls = 0;
@@ -370,12 +215,6 @@ describe("agent-orchestrator-runtime", () => {
     expect(runtime).toEqual({
       runtimeKind: "opencode",
       runtimeId: "runtime-shared",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4666",
-        workingDirectory: "/tmp/repo/conflict-worktree",
-      },
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4666" },
       workingDirectory: "/tmp/repo/conflict-worktree",
     });
     expect(buildStartCalls).toBe(0);
@@ -408,12 +247,6 @@ describe("agent-orchestrator-runtime", () => {
     expect(runtime).toEqual({
       runtimeKind: "opencode",
       runtimeId: "runtime-shared",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4666",
-        workingDirectory: "/tmp/repo/worktree",
-      },
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4666" },
       workingDirectory: "/tmp/repo/worktree",
     });
     expect(continuationCalls).toBe(1);

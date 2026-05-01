@@ -1,8 +1,4 @@
-import { resolveRuntimeConnection } from "../runtime/runtime";
-import {
-  assertSelectedModelRuntimeKindMatchesEnsuredRuntime,
-  requireSelectedModelRuntimeKindForStart,
-} from "../support/session-runtime-metadata";
+import { requireSelectedModelRuntimeKindForStart } from "../support/session-runtime-metadata";
 import type {
   StartOrReuseResult,
   StartSessionContext,
@@ -57,15 +53,9 @@ export const executeFreshStart = async ({
     scenario: resolved.resolvedScenario,
     startMode: input.startMode,
   });
-  const runtimeKind = assertSelectedModelRuntimeKindMatchesEnsuredRuntime({
-    selectedModelRuntimeKind,
-    ensuredRuntimeKind: resolved.runtime.runtimeKind,
-  });
-
   const summary = await deps.runtime.adapter.startSession({
     repoPath: ctx.repoPath,
-    runtimeKind,
-    runtimeConnection: resolveRuntimeConnection(resolved.runtime),
+    runtimeKind: selectedModelRuntimeKind,
     workingDirectory: resolved.runtime.workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,

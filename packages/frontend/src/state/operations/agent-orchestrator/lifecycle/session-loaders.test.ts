@@ -50,7 +50,6 @@ const createSession = (
   status: "idle",
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeId: "runtime-1",
-  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
   workingDirectory: "/tmp/repo",
   messages: [],
   draftAssistantText: "",
@@ -90,25 +89,31 @@ const createStateHarness = (session: AgentSessionState) => {
   };
 };
 
-const runtimeConnection = {
-  type: "local_http",
-  endpoint: "http://127.0.0.1:4444",
-  workingDirectory: "/tmp/repo",
-} as const;
+const repoPath = "/tmp/repo";
+const workingDirectory = "/tmp/repo/worktree";
 
 describe("agent-orchestrator/lifecycle/session-loaders", () => {
   test("loads model catalog and clears loading state", async () => {
     const deferredCatalog = createDeferred<AgentModelCatalog>();
     const harness = createStateHarness(createSession());
+    const modelCatalogInputs: Array<{ repoPath: string; runtimeKind: string }> = [];
     const loadSessionModelCatalog = createLoadSessionModelCatalog({
       adapter: {
-        listAvailableModels: async () => deferredCatalog.promise,
+        listAvailableModels: async (input) => {
+          modelCatalogInputs.push(input);
+          return deferredCatalog.promise;
+        },
         loadSessionTodos: async () => [],
       },
       updateSession: harness.updateSession,
     });
 
-    const loadPromise = loadSessionModelCatalog("external-1", "opencode", runtimeConnection);
+    const loadPromise = loadSessionModelCatalog(
+      "external-1",
+      repoPath,
+      "opencode",
+      workingDirectory,
+    );
 
     expect(harness.getState()["external-1"]?.isLoadingModelCatalog).toBe(true);
 
@@ -118,6 +123,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     const session = harness.getState()["external-1"];
     expect(session?.isLoadingModelCatalog).toBe(false);
     expect(session?.modelCatalog).toEqual(catalogFixture);
+    expect(modelCatalogInputs).toEqual([{ repoPath, runtimeKind: "opencode" }]);
     expect(session?.selectedModel).toEqual({
       runtimeKind: "opencode",
       providerId: "openai",
@@ -139,7 +145,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     });
 
     await expect(
-      loadSessionModelCatalog("external-1", "opencode", runtimeConnection),
+      loadSessionModelCatalog("external-1", repoPath, "opencode", workingDirectory),
     ).rejects.toThrow("catalog failed");
 
     const session = harness.getState()["external-1"];
@@ -147,10 +153,11 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(session ? getSessionMessageCount(session) : null).toBe(0);
   });
 
-  test("dedupes in-flight model catalog loads for the same runtime connection", async () => {
+  test("dedupes in-flight model catalog loads for the same repo-scoped runtime across worktrees", async () => {
     const deferredCatalog = createDeferred<AgentModelCatalog>();
     const harness = createStateHarness(createSession());
     let catalogLoads = 0;
+    const otherWorkingDirectory = "/tmp/repo/other-worktree";
     const loadSessionModelCatalog = createLoadSessionModelCatalog({
       adapter: {
         listAvailableModels: async () => {
@@ -162,8 +169,13 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    const firstLoad = loadSessionModelCatalog("external-1", "opencode", runtimeConnection);
-    const secondLoad = loadSessionModelCatalog("external-1", "opencode", runtimeConnection);
+    const firstLoad = loadSessionModelCatalog("external-1", repoPath, "opencode", workingDirectory);
+    const secondLoad = loadSessionModelCatalog(
+      "external-1",
+      repoPath,
+      "opencode",
+      otherWorkingDirectory,
+    );
 
     deferredCatalog.resolve(catalogFixture);
     await Promise.all([firstLoad, secondLoad]);
@@ -172,7 +184,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(harness.getState()["external-1"]?.modelCatalog).toEqual(catalogFixture);
   });
 
-  test("rejects empty local_http model catalog endpoints before adapter call", async () => {
+  test("rejects empty working directory before adapter call", async () => {
     const harness = createStateHarness(createSession());
     let listAvailableModelsCalled = false;
     const loadSessionModelCatalog = createLoadSessionModelCatalog({
@@ -187,12 +199,8 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     });
 
     await expect(
-      loadSessionModelCatalog("external-1", "opencode", {
-        type: "local_http",
-        endpoint: "   ",
-        workingDirectory: "/tmp/repo",
-      }),
-    ).rejects.toThrow("Session runtime local_http endpoint is required.");
+      loadSessionModelCatalog("external-1", repoPath, "opencode", "   "),
+    ).rejects.toThrow("Session runtime workingDirectory is required.");
 
     const session = harness.getState()["external-1"];
     expect(listAvailableModelsCalled).toBe(false);
@@ -200,15 +208,15 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(session ? getSessionMessageCount(session) : null).toBe(0);
   });
 
-  test("accepts stdio model catalog connections without forcing an endpoint", async () => {
-    const harness = createStateHarness(
-      createSession({ runtimeRoute: { type: "stdio", identity: "runtime-stdio" } }),
-    );
-    let receivedConnection: unknown = null;
+  test("passes repo-scoped model catalog inputs to the adapter", async () => {
+    const harness = createStateHarness(createSession());
+    let receivedRepoPath: string | null = null;
+    let receivedRuntimeKind: string | null = null;
     const loadSessionModelCatalog = createLoadSessionModelCatalog({
       adapter: {
-        listAvailableModels: async ({ runtimeConnection }) => {
-          receivedConnection = runtimeConnection;
+        listAvailableModels: async ({ repoPath: adapterRepoPath, runtimeKind }) => {
+          receivedRepoPath = adapterRepoPath;
+          receivedRuntimeKind = runtimeKind;
           return catalogFixture;
         },
         loadSessionTodos: async () => [],
@@ -216,17 +224,13 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionModelCatalog("external-1", "opencode", {
-      type: "stdio",
-      identity: " runtime-stdio ",
-      workingDirectory: "/tmp/repo",
-    });
+    await loadSessionModelCatalog("external-1", repoPath, "opencode", workingDirectory);
 
-    expect(receivedConnection).toEqual({
-      type: "stdio",
-      identity: "runtime-stdio",
-      workingDirectory: "/tmp/repo",
-    });
+    if (receivedRepoPath === null || receivedRuntimeKind === null) {
+      throw new Error("Expected the model catalog adapter to receive repo-scoped runtime inputs.");
+    }
+    expect(receivedRepoPath as string).toBe(repoPath);
+    expect(receivedRuntimeKind as string).toBe("opencode");
     expect(harness.getState()["external-1"]?.modelCatalog).toEqual(catalogFixture);
   });
 
@@ -237,20 +241,38 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
         { id: "b", content: "B", status: "pending", priority: "medium" },
       ]),
     );
+    const loadSessionTodosInputs: Array<{
+      repoPath: string;
+      runtimeKind: string;
+      workingDirectory: string;
+      externalSessionId: string;
+    }> = [];
     const loadSessionTodos = createLoadSessionTodos({
       adapter: {
         listAvailableModels: async () => catalogFixture,
-        loadSessionTodos: async () => [
-          { id: "b", content: "B updated", status: "in_progress", priority: "high" },
-          { id: "c", content: "C", status: "pending", priority: "low" },
-          { id: "a", content: "A updated", status: "completed", priority: "medium" },
-        ],
+        loadSessionTodos: async (input) => {
+          loadSessionTodosInputs.push(input);
+          return [
+            { id: "b", content: "B updated", status: "in_progress", priority: "high" },
+            { id: "c", content: "C", status: "pending", priority: "low" },
+            { id: "a", content: "A updated", status: "completed", priority: "medium" },
+          ];
+        },
       },
       supportsSessionTodos: () => true,
       updateSession: harness.updateSession,
     });
 
-    await loadSessionTodos("external-1", "opencode", runtimeConnection);
+    await loadSessionTodos("external-1", repoPath, "opencode", workingDirectory);
+
+    expect(loadSessionTodosInputs).toEqual([
+      {
+        repoPath,
+        runtimeKind: "opencode",
+        workingDirectory,
+        externalSessionId: "external-1",
+      },
+    ]);
 
     const mergedTodos = harness.getState()["external-1"]?.todos ?? [];
     expect(mergedTodos.map((entry) => entry.id)).toEqual(["a", "b", "c"]);
@@ -274,11 +296,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     });
 
     await expect(
-      loadSessionTodos("external-1", "opencode", {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-        workingDirectory: "/tmp/repo/../escape",
-      }),
+      loadSessionTodos("external-1", repoPath, "opencode", "/tmp/repo/../escape"),
     ).rejects.toThrow("Session runtime workingDirectory must not contain traversal segments.");
     expect(loadSessionTodosCalled).toBe(false);
   });
@@ -299,8 +317,8 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    const firstLoad = loadSessionTodos("external-1", "opencode", runtimeConnection);
-    const secondLoad = loadSessionTodos("external-1", "opencode", runtimeConnection);
+    const firstLoad = loadSessionTodos("external-1", repoPath, "opencode", workingDirectory);
+    const secondLoad = loadSessionTodos("external-1", repoPath, "opencode", workingDirectory);
 
     deferredTodos.resolve([
       { id: "todo-1", content: "Todo", status: "pending", priority: "medium" },
@@ -330,7 +348,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionTodos("external-1", "opencode", runtimeConnection);
+    await loadSessionTodos("external-1", repoPath, "opencode", workingDirectory);
 
     expect(loadSessionTodosCalled).toBe(false);
     expect(harness.getState()["external-1"]?.todos).toEqual([]);

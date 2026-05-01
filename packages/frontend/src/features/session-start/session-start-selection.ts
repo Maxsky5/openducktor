@@ -5,7 +5,6 @@ import {
   normalizeVisibleCatalogProfileId,
   pickCatalogDefaultModel,
   pickVisibleCatalogDefaultProfileId,
-  runtimeKindForCatalog,
 } from "@/lib/model-catalog-selection";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
@@ -45,7 +44,7 @@ export const pickDefaultVisibleSelectionForCatalog = (
   }
   const profileId = pickVisibleCatalogDefaultProfileId(catalog);
   const variant = normalizeCatalogVariant(defaultModel, undefined);
-  const runtimeKind = runtimeKindForCatalog(catalog);
+  const runtimeKind = catalog.runtime?.kind;
   if (!runtimeKind) {
     return null;
   }
@@ -74,7 +73,7 @@ export const coerceVisibleSelectionToCatalog = (
 
   const variant = normalizeCatalogVariant(model, selection.variant);
   const profileId = normalizeVisibleCatalogProfileId(catalog, selection.profileId);
-  const runtimeKind = selection.runtimeKind ?? runtimeKindForCatalog(catalog);
+  const runtimeKind = selection.runtimeKind ?? catalog.runtime?.kind;
   if (!runtimeKind) {
     return null;
   }

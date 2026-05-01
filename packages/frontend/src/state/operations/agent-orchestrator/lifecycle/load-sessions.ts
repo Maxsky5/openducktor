@@ -195,10 +195,8 @@ export const createLoadAgentSessions = ({
         intent,
         ...(options ? { options } : {}),
         adapter,
-        sessionsRef,
         ...(liveAgentSessionStore ? { liveAgentSessionStore } : {}),
         recordsToHydrate,
-        historyHydrationSessionIds,
       });
       const promptAssembler = createHydrationPromptAssemblerStage({
         taskId,
@@ -238,13 +236,15 @@ export const createLoadAgentSessions = ({
       }
 
       await hydrateSessionRecordsStage({
+        loadMode: intent.mode,
+        repoPath: intent.repoPath,
         adapter,
         setSessionsById,
         updateSession,
         isStaleRepoOperation,
         recordsToHydrate,
         historyHydrationSessionIds: effectiveHistoryHydrationSessionIds,
-        failOnRuntimeResolutionError: intent.mode === "reconcile_live",
+        failOnRuntimeResolutionError: true,
         runtimePlanner,
         promptAssembler,
         getRepoPromptOverrides,

@@ -2,7 +2,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 const WORKTREE_RUNTIME_ROLES = new Set<AgentSessionState["role"]>(["build", "qa"]);
 
-type RuntimeAttachmentState = Pick<AgentSessionState, "runtimeId" | "runtimeRoute">;
+type RuntimeAttachmentState = Pick<AgentSessionState, "runtimeId">;
 type WorktreeRuntimeRole = Pick<AgentSessionState, "role">;
 
 export const requiresLiveWorktreeRuntime = (
@@ -18,7 +18,7 @@ export const hasAttachedSessionRuntime = (
     return false;
   }
 
-  return session.runtimeId !== null || session.runtimeRoute !== null;
+  return !!session.runtimeId;
 };
 
 export const isWaitingForAttachedWorktreeRuntime = (

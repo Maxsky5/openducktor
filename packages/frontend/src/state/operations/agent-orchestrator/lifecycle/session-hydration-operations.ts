@@ -8,7 +8,6 @@ import type {
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadOptions,
   AgentSessionState,
-  RuntimeConnectionPreloadIndex,
 } from "@/types/agent-orchestrator";
 import {
   getAgentSessionHistoryHydrationState,
@@ -47,9 +46,7 @@ export type SessionHydrationOperations = {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedRuntimeConnections?: RuntimeConnectionPreloadIndex;
     preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
-    allowRuntimeEnsure?: boolean;
   }) => Promise<void>;
   loadAgentSessions: LoadAgentSessions;
 };
@@ -167,9 +164,7 @@ export const createSessionHydrationOperations = ({
       taskId,
       persistedRecords,
       preloadedRuntimeLists,
-      preloadedRuntimeConnections,
       preloadedLiveAgentSessionsByKey,
-      allowRuntimeEnsure,
     }) =>
       loadAgentSessions(
         taskId,
@@ -178,9 +173,7 @@ export const createSessionHydrationOperations = ({
             mode: "reconcile_live",
             historyPolicy: "none",
             ...(preloadedRuntimeLists ? { preloadedRuntimeLists } : {}),
-            ...(preloadedRuntimeConnections ? { preloadedRuntimeConnections } : {}),
             ...(preloadedLiveAgentSessionsByKey ? { preloadedLiveAgentSessionsByKey } : {}),
-            ...(allowRuntimeEnsure !== undefined ? { allowRuntimeEnsure } : {}),
           },
           persistedRecords,
         ),

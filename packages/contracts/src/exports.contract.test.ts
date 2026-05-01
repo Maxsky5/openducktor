@@ -334,6 +334,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "repoRuntimeHealthRuntimeSchema",
   "repoRuntimeHealthStateSchema",
   "repoRuntimeMcpStatusSchema",
+  "repoRuntimeRefSchema",
   "repoRuntimeStartupStageSchema",
   "repoRuntimeStartupStatusSchema",
   "runtimeRouteSchema",

@@ -37,7 +37,7 @@ const testToastApi: DiagnosticsToastApi = {
 
 const SECOND_RUNTIME_DESCRIPTOR: RuntimeDescriptor = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
-  kind: "mock-runtime",
+  kind: "opencode",
   label: "Mock Runtime",
 };
 
@@ -176,22 +176,6 @@ describe("useAgentStudioReadiness", () => {
         isLoadingRuntimeDefinitions: false,
         runtimeDefinitionsError: null,
         runtimeHealthByRuntime: {
-          "mock-runtime": makeRepoHealth({
-            status: "error",
-            runtime: {
-              status: "error",
-              stage: "startup_failed",
-              observation: null,
-              instance: null,
-              startedAt: null,
-              updatedAt: "2026-02-20T12:01:00.000Z",
-              elapsedMs: null,
-              attempts: null,
-              detail: "mock runtime failed",
-              failureKind: "error",
-              failureReason: null,
-            },
-          }),
           opencode: makeRepoHealth({
             status: "checking",
             runtime: {

@@ -487,40 +487,6 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
             },
         );
     }
-    service
-        .runs
-        .lock()
-        .expect("run state lock poisoned")
-        .insert(
-            "run-1".to_string(),
-            crate::app_service::RunProcess {
-                summary: serde_json::from_value(json!({
-                    "runId": "run-1",
-                    "runtimeKind": "opencode",
-                    "runtimeRoute": {
-                        "type": "local_http",
-                        "endpoint": "http://127.0.0.1:3001",
-                    },
-                    "repoPath": repo_path.to_string_lossy().to_string(),
-                    "taskId": "task-1",
-                    "branch": "odt/task-1",
-                    "worktreePath": repo_path.to_string_lossy().to_string(),
-                    "port": 3001,
-                    "state": "completed",
-                    "lastMessage": null,
-                    "startedAt": "2026-03-17T11:00:00Z",
-                }))?,
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: repo_path.to_string_lossy().to_string(),
-                task_id: "task-1".to_string(),
-                worktree_path: repo_path.to_string_lossy().to_string(),
-                repo_config: host_infra_system::RepoConfig {
-                    branch_prefix: "odt".to_string(),
-                    ..Default::default()
-                },
-            },
-        );
 
     let reset = service.task_reset(&repo_path.to_string_lossy(), "task-1")?;
 
@@ -545,56 +511,7 @@ fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> 
     assert!(!state.direct_merge_records.contains_key("task-1"));
     assert!(state.agent_sessions.is_empty());
     drop(state);
-    assert!(service
-        .runs
-        .lock()
-        .expect("run state lock poisoned")
-        .is_empty());
     Ok(())
-}
-
-#[test]
-fn task_reset_rejects_live_spec_session_status_with_task_runtime_without_run() -> Result<()> {
-    assert_task_reset_rejects_live_session_status(
-        TaskStatus::SpecReady,
-        "spec",
-        "spec_authoring",
-        "Cannot reset task while active spec session(s) exist",
-        false,
-    )
-}
-
-#[test]
-fn task_reset_rejects_live_planner_session_status_with_task_runtime_without_run() -> Result<()> {
-    assert_task_reset_rejects_live_session_status(
-        TaskStatus::ReadyForDev,
-        "planner",
-        "plan_authoring",
-        "Cannot reset task while active planner session(s) exist",
-        false,
-    )
-}
-
-#[test]
-fn task_reset_rejects_live_build_session_status_with_task_runtime_without_run() -> Result<()> {
-    assert_task_reset_rejects_live_session_status(
-        TaskStatus::InProgress,
-        "build",
-        "build_implementation_start",
-        "Cannot reset task while active build session(s) exist",
-        false,
-    )
-}
-
-#[test]
-fn task_reset_rejects_live_qa_session_status_with_task_runtime_without_run() -> Result<()> {
-    assert_task_reset_rejects_live_session_status(
-        TaskStatus::AiReview,
-        "qa",
-        "qa_review",
-        "Cannot reset task while active qa session(s) exist",
-        false,
-    )
 }
 
 #[test]
@@ -604,7 +521,6 @@ fn task_reset_rejects_live_spec_session_status_with_workspace_runtime_without_ru
         "spec",
         "spec_authoring",
         "Cannot reset task while active spec session(s) exist",
-        true,
     )
 }
 
@@ -616,7 +532,6 @@ fn task_reset_rejects_live_planner_session_status_with_workspace_runtime_without
         "planner",
         "plan_authoring",
         "Cannot reset task while active planner session(s) exist",
-        true,
     )
 }
 
@@ -627,7 +542,6 @@ fn task_reset_rejects_live_build_session_status_with_workspace_runtime_without_r
         "build",
         "build_implementation_start",
         "Cannot reset task while active build session(s) exist",
-        true,
     )
 }
 
@@ -638,7 +552,6 @@ fn task_reset_rejects_live_qa_session_status_with_workspace_runtime_without_run(
         "qa",
         "qa_review",
         "Cannot reset task while active qa session(s) exist",
-        true,
     )
 }
 
@@ -647,7 +560,6 @@ fn assert_task_reset_rejects_live_session_status(
     role: &str,
     scenario: &str,
     expected_message: &str,
-    use_workspace_runtime: bool,
 ) -> Result<()> {
     let repo_path = unique_temp_path("reset-task-live-spec-shared-runtime-repo");
     fs::create_dir_all(&repo_path)?;
@@ -687,26 +599,7 @@ fn assert_task_reset_rejects_live_session_status(
     let status_payload = format!(r#"{{"external-{role}-session":{{"type":"busy"}}}}"#);
     let status_payload = Box::leak(status_payload.into_boxed_str());
     let (port, server_handle) = spawn_opencode_session_status_server(status_payload)?;
-    let runtime_role = match role {
-        "spec" => RuntimeRole::Spec,
-        "planner" => RuntimeRole::Planner,
-        "build" => RuntimeRole::Build,
-        "qa" => RuntimeRole::Qa,
-        other => panic!("unsupported role fixture: {other}"),
-    };
-    if use_workspace_runtime {
-        insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
-    } else {
-        insert_task_runtime_for_kind_role(
-            &service,
-            AgentRuntimeKind::opencode(),
-            "task-1",
-            runtime_role,
-            &repo_path.to_string_lossy(),
-            &repo_path.to_string_lossy(),
-            builtin_opencode_runtime_route(port),
-        )?;
-    }
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
 
     let error = service
         .task_reset(&repo_path.to_string_lossy(), "task-1")
@@ -1101,15 +994,7 @@ fn task_delete_reports_qa_specific_message_when_session_role_has_trailing_whites
     }];
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-qa-session":{"type":"busy"}}"#)?;
-    insert_task_runtime_for_kind_role(
-        &service,
-        AgentRuntimeKind::opencode(),
-        "task-1",
-        RuntimeRole::Qa,
-        &repo_path.to_string_lossy(),
-        &repo_path.to_string_lossy(),
-        builtin_opencode_runtime_route(port),
-    )?;
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
 
     let error = service
         .task_delete(&repo_path.to_string_lossy(), "task-1", false)
@@ -1173,7 +1058,7 @@ fn task_reset_reports_completed_cleanup_steps_when_later_cleanup_fails() -> Resu
 }
 
 #[test]
-fn task_reset_implementation_rejects_live_qa_session_status_with_task_runtime_without_run(
+fn task_reset_implementation_rejects_live_qa_session_status_with_workspace_runtime_without_run(
 ) -> Result<()> {
     let repo_path = unique_temp_path("reset-implementation-live-qa-shared-runtime-repo");
     fs::create_dir_all(&repo_path)?;
@@ -1212,15 +1097,7 @@ fn task_reset_implementation_rejects_live_qa_session_status_with_task_runtime_wi
     }];
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-qa-session":{"type":"busy"}}"#)?;
-    insert_task_runtime_for_kind_role(
-        &service,
-        AgentRuntimeKind::opencode(),
-        "task-1",
-        RuntimeRole::Qa,
-        &repo_path.to_string_lossy(),
-        &repo_path.to_string_lossy(),
-        builtin_opencode_runtime_route(port),
-    )?;
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
 
     let error = service
         .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
@@ -1359,159 +1236,11 @@ fn task_delete_rejects_live_build_session_status() -> Result<()> {
     }];
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
-    service
-        .runs
-        .lock()
-        .expect("run state lock poisoned")
-        .insert(
-            "run-1".to_string(),
-            crate::app_service::RunProcess {
-                summary: serde_json::from_value(json!({
-                    "runId": "run-1",
-                    "runtimeKind": "opencode",
-                    "runtimeRoute": {
-                        "type": "local_http",
-                        "endpoint": format!("http://127.0.0.1:{port}"),
-                    },
-                    "repoPath": repo_path.to_string_lossy().to_string(),
-                    "taskId": "task-1",
-                    "branch": "odt/task-1",
-                    "worktreePath": repo_path.to_string_lossy().to_string(),
-                    "port": port,
-                    "state": "running",
-                    "lastMessage": null,
-                    "startedAt": "2026-03-17T11:00:00Z",
-                }))?,
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: repo_path.to_string_lossy().to_string(),
-                task_id: "task-1".to_string(),
-                worktree_path: repo_path.to_string_lossy().to_string(),
-                repo_config: host_infra_system::RepoConfig {
-                    branch_prefix: "odt".to_string(),
-                    ..Default::default()
-                },
-            },
-        );
-
-    let error = service
-        .task_delete(&repo_path.to_string_lossy(), "task-1", false)
-        .expect_err("live runtime should block delete");
-    assert!(error
-        .to_string()
-        .contains("Cannot delete tasks with active builder work in progress"));
-    server_handle
-        .join()
-        .expect("status server thread should finish");
-    Ok(())
-}
-
-#[test]
-fn task_delete_rejects_live_build_session_status_with_task_runtime_without_run() -> Result<()> {
-    let repo_path = unique_temp_path("delete-task-live-shared-runtime-repo");
-    fs::create_dir_all(&repo_path)?;
-    init_git_repo(&repo_path)?;
-
-    let task = make_task("task-1", "task", TaskStatus::InProgress);
-    let (service, task_state, _git_state) = build_service_with_git_state(
-        vec![task],
-        Vec::new(),
-        host_domain::GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-    );
-    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        &repo_path.to_string_lossy(),
-        host_infra_system::RepoConfig {
-            branch_prefix: "odt".to_string(),
-            ..Default::default()
-        },
-    )?;
-    task_state
-        .lock()
-        .expect("task store lock poisoned")
-        .agent_sessions = vec![AgentSessionDocument {
-        external_session_id: "external-build-session".to_string(),
-        role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
-        started_at: "2026-03-17T11:00:00Z".to_string(),
-        runtime_kind: "opencode".to_string(),
-        working_directory: repo_path.to_string_lossy().to_string(),
-        selected_model: None,
-    }];
-    let (port, server_handle) =
-        spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
-    insert_task_runtime_for_kind_role(
-        &service,
-        AgentRuntimeKind::opencode(),
-        "task-1",
-        RuntimeRole::Build,
-        &repo_path.to_string_lossy(),
-        &repo_path.to_string_lossy(),
-        builtin_opencode_runtime_route(port),
-    )?;
-
-    let error = service
-        .task_delete(&repo_path.to_string_lossy(), "task-1", false)
-        .expect_err("live shared-runtime session should block delete");
-    assert!(error
-        .to_string()
-        .contains("Cannot delete tasks with active builder work in progress"));
-    server_handle
-        .join()
-        .expect("status server thread should finish");
-    Ok(())
-}
-
-#[test]
-fn task_delete_rejects_live_build_session_status_with_workspace_runtime_without_run() -> Result<()>
-{
-    let repo_path = unique_temp_path("delete-task-live-workspace-runtime-repo");
-    fs::create_dir_all(&repo_path)?;
-    init_git_repo(&repo_path)?;
-
-    let task = make_task("task-1", "task", TaskStatus::InProgress);
-    let (service, task_state, _git_state) = build_service_with_git_state(
-        vec![task],
-        Vec::new(),
-        host_domain::GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-    );
-    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        &repo_path.to_string_lossy(),
-        host_infra_system::RepoConfig {
-            branch_prefix: "odt".to_string(),
-            ..Default::default()
-        },
-    )?;
-    task_state
-        .lock()
-        .expect("task store lock poisoned")
-        .agent_sessions = vec![AgentSessionDocument {
-        external_session_id: "external-build-session".to_string(),
-        role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
-        started_at: "2026-03-17T11:00:00Z".to_string(),
-        runtime_kind: "opencode".to_string(),
-        working_directory: repo_path.to_string_lossy().to_string(),
-        selected_model: None,
-    }];
-    let (port, server_handle) =
-        spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
     insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
 
     let error = service
         .task_delete(&repo_path.to_string_lossy(), "task-1", false)
-        .expect_err("live workspace-runtime session should block delete");
+        .expect_err("live runtime should block delete");
     assert!(error
         .to_string()
         .contains("Cannot delete tasks with active builder work in progress"));
@@ -1560,15 +1289,7 @@ fn task_delete_rejects_live_qa_session_status_with_qa_specific_message() -> Resu
     }];
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-qa-session":{"type":"busy"}}"#)?;
-    insert_task_runtime_for_kind_role(
-        &service,
-        AgentRuntimeKind::opencode(),
-        "task-1",
-        RuntimeRole::Qa,
-        &repo_path.to_string_lossy(),
-        &repo_path.to_string_lossy(),
-        builtin_opencode_runtime_route(port),
-    )?;
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
 
     let error = service
         .task_delete(&repo_path.to_string_lossy(), "task-1", false)
@@ -1583,10 +1304,14 @@ fn task_delete_rejects_live_qa_session_status_with_qa_specific_message() -> Resu
 }
 
 #[test]
-fn task_delete_rejects_live_qa_session_status_with_workspace_runtime() -> Result<()> {
-    let repo_path = unique_temp_path("task-delete-live-qa-workspace-runtime-repo");
+fn task_delete_rejects_live_qa_session_status_for_task_worktree_cwd_via_repo_runtime() -> Result<()>
+{
+    let repo_path = unique_temp_path("task-delete-qa-repo-runtime-task-worktree-cwd");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
+    let worktree_base = repo_path.join("worktrees");
+    let qa_worktree = worktree_base.join("task-1-qa");
+    fs::create_dir_all(&qa_worktree)?;
 
     let task = make_task("task-1", "task", TaskStatus::Open);
     let (service, task_state, _git_state) = build_service_with_git_state(
@@ -1604,6 +1329,7 @@ fn task_delete_rejects_live_qa_session_status_with_workspace_runtime() -> Result
         &repo_path.to_string_lossy(),
         host_infra_system::RepoConfig {
             branch_prefix: "odt".to_string(),
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             ..Default::default()
         },
     )?;
@@ -1616,7 +1342,7 @@ fn task_delete_rejects_live_qa_session_status_with_workspace_runtime() -> Result
         scenario: "qa_review".to_string(),
         started_at: "2026-03-17T11:00:00Z".to_string(),
         runtime_kind: "opencode".to_string(),
-        working_directory: repo_path.to_string_lossy().to_string(),
+        working_directory: qa_worktree.to_string_lossy().to_string(),
         selected_model: None,
     }];
     let (port, server_handle) =
@@ -1632,105 +1358,30 @@ fn task_delete_rejects_live_qa_session_status_with_workspace_runtime() -> Result
     server_handle
         .join()
         .expect("status server thread should finish");
-    Ok(())
-}
-
-#[test]
-fn task_delete_rejects_live_build_session_when_stale_run_route_has_workspace_runtime() -> Result<()>
-{
-    let repo_path = unique_temp_path("delete-task-live-shared-runtime-fallback-repo");
-    fs::create_dir_all(&repo_path)?;
-    init_git_repo(&repo_path)?;
-
-    let task = make_task("task-1", "task", TaskStatus::InProgress);
-    let (service, task_state, _git_state) = build_service_with_git_state(
-        vec![task],
-        Vec::new(),
-        host_domain::GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
+    let runtimes = service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned");
+    let workspace_runtime = runtimes
+        .values()
+        .find(|runtime| runtime.summary.kind == AgentRuntimeKind::opencode())
+        .expect("repo workspace runtime should be registered");
+    assert_eq!(workspace_runtime.summary.task_id, None);
+    assert_eq!(workspace_runtime.summary.role, RuntimeRole::Workspace);
+    assert_eq!(
+        workspace_runtime.summary.working_directory,
+        repo_path.to_string_lossy()
     );
-    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        &repo_path.to_string_lossy(),
-        host_infra_system::RepoConfig {
-            branch_prefix: "odt".to_string(),
-            ..Default::default()
-        },
-    )?;
-    task_state
-        .lock()
-        .expect("task store lock poisoned")
-        .agent_sessions = vec![AgentSessionDocument {
-        external_session_id: "external-build-session".to_string(),
-        role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
-        started_at: "2026-03-17T11:00:00Z".to_string(),
-        runtime_kind: "opencode".to_string(),
-        working_directory: repo_path.to_string_lossy().to_string(),
-        selected_model: None,
-    }];
-    let (port, server_handle) =
-        spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
-    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
-
-    let stale_route_port = {
-        let listener = TcpListener::bind("127.0.0.1:0")?;
-        listener.local_addr()?.port()
-    };
-    service
-        .runs
-        .lock()
-        .expect("run state lock poisoned")
-        .insert(
-            "run-stale".to_string(),
-            crate::app_service::RunProcess {
-                summary: serde_json::from_value(json!({
-                    "runId": "run-stale",
-                    "runtimeKind": "opencode",
-                    "runtimeRoute": {
-                        "type": "local_http",
-                        "endpoint": format!("http://127.0.0.1:{stale_route_port}"),
-                    },
-                    "repoPath": repo_path.to_string_lossy().to_string(),
-                    "taskId": "task-1",
-                    "branch": "odt/task-1",
-                    "worktreePath": repo_path.to_string_lossy().to_string(),
-                    "port": stale_route_port,
-                    "state": "running",
-                    "lastMessage": null,
-                    "startedAt": "2026-03-17T11:00:00Z",
-                }))?,
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: repo_path.to_string_lossy().to_string(),
-                task_id: "task-1".to_string(),
-                worktree_path: repo_path.to_string_lossy().to_string(),
-                repo_config: host_infra_system::RepoConfig {
-                    branch_prefix: "odt".to_string(),
-                    ..Default::default()
-                },
-            },
-        );
-
-    let error = service
-        .task_delete(&repo_path.to_string_lossy(), "task-1", false)
-        .expect_err("live shared runtime should still block delete");
-    assert!(error
-        .to_string()
-        .contains("Cannot delete tasks with active builder work in progress"));
-    server_handle
-        .join()
-        .expect("status server thread should finish");
+    assert_ne!(
+        workspace_runtime.summary.working_directory,
+        qa_worktree.to_string_lossy()
+    );
     Ok(())
 }
 
 #[test]
-fn task_delete_clears_stale_runs_after_successful_delete() -> Result<()> {
-    let repo_path = unique_temp_path("delete-task-clears-stale-runs-repo");
+fn task_delete_allows_idle_runtime_session_after_status_probe() -> Result<()> {
+    let repo_path = unique_temp_path("delete-task-idle-runtime-session-repo");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
 
@@ -1767,50 +1418,12 @@ fn task_delete_clears_stale_runs_after_successful_delete() -> Result<()> {
     }];
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"idle"}}"#)?;
-    service
-        .runs
-        .lock()
-        .expect("run state lock poisoned")
-        .insert(
-            "run-1".to_string(),
-            crate::app_service::RunProcess {
-                summary: serde_json::from_value(json!({
-                    "runId": "run-1",
-                    "runtimeKind": "opencode",
-                    "runtimeRoute": {
-                        "type": "local_http",
-                        "endpoint": format!("http://127.0.0.1:{port}"),
-                    },
-                    "repoPath": repo_path.to_string_lossy().to_string(),
-                    "taskId": "task-1",
-                    "branch": "odt/task-1",
-                    "worktreePath": repo_path.to_string_lossy().to_string(),
-                    "port": port,
-                    "state": "running",
-                    "lastMessage": null,
-                    "startedAt": "2026-03-17T11:00:00Z",
-                }))?,
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: repo_path.to_string_lossy().to_string(),
-                task_id: "task-1".to_string(),
-                worktree_path: repo_path.to_string_lossy().to_string(),
-                repo_config: host_infra_system::RepoConfig {
-                    branch_prefix: "odt".to_string(),
-                    ..Default::default()
-                },
-            },
-        );
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
 
     service.task_delete(&repo_path.to_string_lossy(), "task-1", false)?;
     server_handle
         .join()
         .expect("status server thread should finish");
-    assert!(service
-        .runs
-        .lock()
-        .expect("run state lock poisoned")
-        .is_empty());
     Ok(())
 }
 
@@ -1864,40 +1477,7 @@ fn assert_task_reset_implementation_rejects_live_build_session_status(
     }];
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
-    service
-        .runs
-        .lock()
-        .expect("run state lock poisoned")
-        .insert(
-            "run-1".to_string(),
-            crate::app_service::RunProcess {
-                summary: serde_json::from_value(json!({
-                    "runId": "run-1",
-                    "runtimeKind": "opencode",
-                    "runtimeRoute": {
-                        "type": "local_http",
-                        "endpoint": format!("http://127.0.0.1:{port}"),
-                    },
-                    "repoPath": repo_path.to_string_lossy().to_string(),
-                    "taskId": "task-1",
-                    "branch": "odt/task-1",
-                    "worktreePath": repo_path.to_string_lossy().to_string(),
-                    "port": port,
-                    "state": "running",
-                    "lastMessage": null,
-                    "startedAt": "2026-03-17T11:00:00Z",
-                }))?,
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: repo_path.to_string_lossy().to_string(),
-                task_id: "task-1".to_string(),
-                worktree_path: repo_path.to_string_lossy().to_string(),
-                repo_config: host_infra_system::RepoConfig {
-                    branch_prefix: "odt".to_string(),
-                    ..Default::default()
-                },
-            },
-        );
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
 
     let error = service
         .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
@@ -1912,101 +1492,8 @@ fn assert_task_reset_implementation_rejects_live_build_session_status(
 }
 
 #[test]
-fn task_reset_implementation_rejects_live_build_session_when_stale_run_route_has_workspace_runtime(
-) -> Result<()> {
-    let repo_path = unique_temp_path("reset-implementation-live-shared-runtime-fallback-repo");
-    fs::create_dir_all(&repo_path)?;
-    init_git_repo(&repo_path)?;
-
-    let task = make_task("task-1", "task", TaskStatus::InProgress);
-    let (service, task_state, _git_state) = build_service_with_git_state(
-        vec![task],
-        Vec::new(),
-        host_domain::GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-    );
-    let _ = service.workspace_add(&repo_path.to_string_lossy())?;
-    workspace_update_repo_config_by_repo_path(
-        &service,
-        &repo_path.to_string_lossy(),
-        host_infra_system::RepoConfig {
-            branch_prefix: "odt".to_string(),
-            ..Default::default()
-        },
-    )?;
-    task_state
-        .lock()
-        .expect("task store lock poisoned")
-        .agent_sessions = vec![AgentSessionDocument {
-        external_session_id: "external-build-session".to_string(),
-        role: "build".to_string(),
-        scenario: "build_implementation_start".to_string(),
-        started_at: "2026-03-17T11:00:00Z".to_string(),
-        runtime_kind: "opencode".to_string(),
-        working_directory: repo_path.to_string_lossy().to_string(),
-        selected_model: None,
-    }];
-    let (port, server_handle) =
-        spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"busy"}}"#)?;
-    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
-
-    let stale_route_port = {
-        let listener = TcpListener::bind("127.0.0.1:0")?;
-        listener.local_addr()?.port()
-    };
-    service
-        .runs
-        .lock()
-        .expect("run state lock poisoned")
-        .insert(
-            "run-stale".to_string(),
-            crate::app_service::RunProcess {
-                summary: serde_json::from_value(json!({
-                    "runId": "run-stale",
-                    "runtimeKind": "opencode",
-                    "runtimeRoute": {
-                        "type": "local_http",
-                        "endpoint": format!("http://127.0.0.1:{stale_route_port}"),
-                    },
-                    "repoPath": repo_path.to_string_lossy().to_string(),
-                    "taskId": "task-1",
-                    "branch": "odt/task-1",
-                    "worktreePath": repo_path.to_string_lossy().to_string(),
-                    "port": stale_route_port,
-                    "state": "running",
-                    "lastMessage": null,
-                    "startedAt": "2026-03-17T11:00:00Z",
-                }))?,
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: repo_path.to_string_lossy().to_string(),
-                task_id: "task-1".to_string(),
-                worktree_path: repo_path.to_string_lossy().to_string(),
-                repo_config: host_infra_system::RepoConfig {
-                    branch_prefix: "odt".to_string(),
-                    ..Default::default()
-                },
-            },
-        );
-
-    let error = service
-        .task_reset_implementation(&repo_path.to_string_lossy(), "task-1")
-        .expect_err("live shared runtime should still block reset");
-    assert!(error
-        .to_string()
-        .contains("Cannot reset implementation while builder work is active"));
-    server_handle
-        .join()
-        .expect("status server thread should finish");
-    Ok(())
-}
-
-#[test]
-fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idle() -> Result<()> {
-    let repo_path = unique_temp_path("reset-implementation-stale-build-run-repo");
+fn task_reset_implementation_allows_idle_runtime_session() -> Result<()> {
+    let repo_path = unique_temp_path("reset-implementation-idle-runtime-session-repo");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
     let worktree_base = repo_path.join("worktrees");
@@ -2070,41 +1557,7 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
 
     let (port, server_handle) =
         spawn_opencode_session_status_server(r#"{"external-build-session":{"type":"idle"}}"#)?;
-    service
-        .runs
-        .lock()
-        .expect("run state lock poisoned")
-        .insert(
-            "run-1".to_string(),
-            crate::app_service::RunProcess {
-                summary: serde_json::from_value(json!({
-                    "runId": "run-1",
-                    "runtimeKind": "opencode",
-                    "runtimeRoute": {
-                        "type": "local_http",
-                        "endpoint": format!("http://127.0.0.1:{port}"),
-                    },
-                    "repoPath": workspace.repo_path.clone(),
-                    "taskId": "task-1",
-                    "branch": "odt/task-1",
-                    "worktreePath": build_worktree.to_string_lossy().to_string(),
-                    "port": port,
-                    "state": "running",
-                    "lastMessage": null,
-                    "startedAt": "2026-03-17T11:00:00Z",
-                }))?,
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: workspace.repo_path.clone(),
-                task_id: "task-1".to_string(),
-                worktree_path: build_worktree.to_string_lossy().to_string(),
-                repo_config: host_infra_system::RepoConfig {
-                    branch_prefix: "odt".to_string(),
-                    worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-                    ..Default::default()
-                },
-            },
-        );
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
 
     let updated = service.task_reset_implementation(workspace.repo_path.as_str(), "task-1")?;
     server_handle
@@ -2112,17 +1565,12 @@ fn task_reset_implementation_ignores_stale_build_run_when_runtime_session_is_idl
         .expect("status server thread should finish");
 
     assert_eq!(updated.status, TaskStatus::ReadyForDev);
-    assert!(service
-        .runs
-        .lock()
-        .expect("run state lock poisoned")
-        .is_empty());
     Ok(())
 }
 
 #[test]
 fn task_reset_implementation_fails_when_status_endpoint_is_unreachable() -> Result<()> {
-    let repo_path = unique_temp_path("reset-implementation-stale-build-run-unreachable-repo");
+    let repo_path = unique_temp_path("reset-implementation-unreachable-runtime-status-repo");
     fs::create_dir_all(&repo_path)?;
     init_git_repo(&repo_path)?;
     let worktree_base = repo_path.join("worktrees");
@@ -2187,42 +1635,7 @@ fn task_reset_implementation_fails_when_status_endpoint_is_unreachable() -> Resu
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
     drop(listener);
-
-    service
-        .runs
-        .lock()
-        .expect("run state lock poisoned")
-        .insert(
-            "run-1".to_string(),
-            crate::app_service::RunProcess {
-                summary: serde_json::from_value(json!({
-                    "runId": "run-1",
-                    "runtimeKind": "opencode",
-                    "runtimeRoute": {
-                        "type": "local_http",
-                        "endpoint": format!("http://127.0.0.1:{port}"),
-                    },
-                    "repoPath": workspace.repo_path.clone(),
-                    "taskId": "task-1",
-                    "branch": "odt/task-1",
-                    "worktreePath": build_worktree.to_string_lossy().to_string(),
-                    "port": port,
-                    "state": "running",
-                    "lastMessage": null,
-                    "startedAt": "2026-03-17T11:00:00Z",
-                }))?,
-                child: None,
-                _runtime_process_guard: None,
-                repo_path: workspace.repo_path.clone(),
-                task_id: "task-1".to_string(),
-                worktree_path: build_worktree.to_string_lossy().to_string(),
-                repo_config: host_infra_system::RepoConfig {
-                    branch_prefix: "odt".to_string(),
-                    worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-                    ..Default::default()
-                },
-            },
-        );
+    insert_workspace_runtime(&service, &repo_path.to_string_lossy(), port)?;
 
     let error = service
         .task_reset_implementation(workspace.repo_path.as_str(), "task-1")

@@ -14,7 +14,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/repo-a",
         messages: [],
         draftAssistantText: "",
@@ -50,7 +49,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: null,
         workingDirectory: "/repo-a/worktree",
         messages: [],
         draftAssistantText: "",
@@ -87,7 +85,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/repo-a",
         messages: [],
         draftAssistantText: "",
@@ -122,8 +119,7 @@ describe("deriveAgentStudioTaskHydrationState", () => {
         status: "idle",
         startedAt: "2026-02-22T08:00:00.000Z",
         runtimeKind: "opencode",
-        runtimeId: null,
-        runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
+        runtimeId: "runtime-1",
         workingDirectory: "/repo-a/worktree",
         messages: [],
         draftAssistantText: "",
@@ -159,7 +155,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: null,
         workingDirectory: "/repo-a/worktree",
         messages: [
           {
@@ -204,7 +199,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/repo-a",
         messages: [
           {
@@ -250,7 +244,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         runtimeKind: "opencode",
         runtimeId: null,
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
         workingDirectory: "/repo-a",
         messages: [],
         draftAssistantText: "",

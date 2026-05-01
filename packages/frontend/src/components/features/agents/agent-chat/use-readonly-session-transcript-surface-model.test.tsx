@@ -41,19 +41,11 @@ let actualRuntimeData: Awaited<typeof import("./use-agent-chat-session-runtime-d
 let actualSurfaceModel: Awaited<typeof import("./use-agent-chat-surface-model")>;
 let originalHostRuntimeList: typeof import("@/state/operations/host").host.runtimeList;
 
-function makeRuntimeRoute() {
-  return {
-    type: "local_http" as const,
-    endpoint: "http://127.0.0.1:4096",
-  };
-}
-
 function makeTranscriptSource(): RuntimeSessionTranscriptSource {
   return {
     runtimeKind: "opencode",
     runtimeId: "runtime-1",
     workingDirectory: "/repo-a",
-    runtimeRoute: makeRuntimeRoute(),
   };
 }
 
@@ -99,7 +91,6 @@ function makeLiveTranscriptSession(): AgentSessionState {
     status: "running",
     startedAt: "2026-02-22T12:00:00.000Z",
     runtimeId: "runtime-1",
-    runtimeRoute: makeRuntimeRoute(),
     workingDirectory: "/repo-a",
     messages: [],
     draftAssistantText: "",
@@ -124,7 +115,7 @@ function makeRuntime(): RuntimeInstanceSummary {
     taskId: null,
     role: "workspace",
     workingDirectory: "/repo-a",
-    runtimeRoute: makeRuntimeRoute(),
+    runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
     startedAt: "2026-02-22T11:59:00.000Z",
     descriptor: {} as RuntimeInstanceSummary["descriptor"],
   } satisfies RuntimeInstanceSummary;
@@ -306,7 +297,10 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   });
 
   test("loads a runtime transcript without task-owned session records", async () => {
-    const transcriptSource = makeTranscriptSource();
+    const transcriptSource = {
+      ...makeTranscriptSource(),
+      workingDirectory: "/repo-a/worktree",
+    };
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -334,12 +328,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       });
 
       expect(readSessionHistory).toHaveBeenCalledWith(
+        "/repo-a",
         "opencode",
-        {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4096",
-          workingDirectory: "/repo-a",
-        },
+        "/repo-a/worktree",
         "session-subagent-1",
       );
       const session = latestSurfaceModelArgs?.session as AgentSessionState;
@@ -412,12 +403,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         externalSessionId: "session-subagent-1",
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4096",
-          workingDirectory: "/repo-a",
-        },
         pendingPermissions: [pendingPermission],
+        workingDirectory: "/repo-a",
       });
       expect(readSessionHistory).not.toHaveBeenCalled();
     } finally {
@@ -547,12 +534,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       });
 
       expect(replyRuntimeSessionPermission).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
         runtimeKind: "opencode",
-        runtimeConnection: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4096",
-          workingDirectory: "/repo-a",
-        },
+        workingDirectory: "/repo-a",
         targetExternalSessionId: "session-subagent-1",
         requestId: "permission-1",
         reply: "once",
@@ -631,7 +615,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       expect(readSessionHistory).not.toHaveBeenCalled();
       expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
       expect(harness.getLatest().model.thread.emptyState).toEqual({
-        title: "Failed to load conversation: No opencode runtime is attached for /repo-a.",
+        title: "Failed to load conversation: No opencode runtime is attached for runtime-1.",
       });
     } finally {
       await harness.unmount();

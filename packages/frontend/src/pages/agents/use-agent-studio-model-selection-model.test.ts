@@ -119,7 +119,7 @@ describe("use-agent-studio-model-selection-model", () => {
     expect(
       toRoleDefaultSelection(
         {
-          runtimeKind: "  ",
+          runtimeKind: "opencode",
           providerId: "anthropic",
           modelId: "claude-sonnet",
           variant: "",

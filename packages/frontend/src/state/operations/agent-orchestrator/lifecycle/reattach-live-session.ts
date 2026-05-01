@@ -1,5 +1,5 @@
 import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
-import type { AgentRuntimeConnection, LiveAgentSessionSnapshot } from "@openducktor/core";
+import type { LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
@@ -24,14 +24,15 @@ type CreateReattachLiveSessionArgs = {
   promptOverrides: import("@openducktor/contracts").RepoPromptOverrides;
   resolveHydrationRuntime: (record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>;
   listLiveAgentSessions: (
+    repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeConnection: AgentRuntimeConnection,
+    workingDirectory: string,
     directories: string[],
   ) => Promise<LiveAgentSessionSnapshot[]>;
   attachMissingLiveSession?: (input: {
     record: AgentSessionRecord;
     runtimeKind: RuntimeKind;
-    runtimeConnection: AgentRuntimeConnection;
+    workingDirectory: string;
   }) => Promise<void>;
   allowAttachMissingSession?: boolean;
   isStaleRepoOperation: () => boolean;
@@ -82,7 +83,7 @@ export const createReattachLiveSession = ({
     const externalSessionId = record.externalSessionId;
     const attachedExistingSession = adapter.hasSession(record.externalSessionId);
     const liveAgentSessions = await awaitUnlessStale(
-      listLiveAgentSessions(runtimeResolution.runtimeKind, runtimeResolution.runtimeConnection, [
+      listLiveAgentSessions(repoPath, runtimeResolution.runtimeKind, record.workingDirectory, [
         record.workingDirectory,
       ]),
     );
@@ -112,7 +113,7 @@ export const createReattachLiveSession = ({
         attachMissingLiveSession({
           record,
           runtimeKind: runtimeResolution.runtimeKind,
-          runtimeConnection: runtimeResolution.runtimeConnection,
+          workingDirectory: runtimeResolution.workingDirectory,
         }),
       );
       if (resumeResult === STALE_REPO_ABORT) {
@@ -130,8 +131,7 @@ export const createReattachLiveSession = ({
         ...current,
         runtimeKind: runtimeResolution.runtimeKind,
         runtimeId: runtimeResolution.runtimeId,
-        runtimeRoute: runtimeResolution.runtimeRoute,
-        workingDirectory: runtimeResolution.runtimeConnection.workingDirectory,
+        workingDirectory: runtimeResolution.workingDirectory,
         runtimeRecoveryState: "idle",
         status: nextStatus,
         ...(liveSessionTitle ? { title: liveSessionTitle } : {}),

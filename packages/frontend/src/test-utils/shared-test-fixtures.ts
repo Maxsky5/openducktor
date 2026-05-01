@@ -90,7 +90,6 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   status: "idle",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
-  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
   workingDirectory: "/tmp/repo/worktree",
   historyHydrationState: "hydrated",
   runtimeRecoveryState: "idle",
