@@ -276,21 +276,11 @@ export type AgentStateContextValue = {
   replyRuntimeSessionPermission: (input: {
     repoPath: string;
     runtimeKind: RuntimeKind;
-    runtimeId?: string | null;
     workingDirectory: string;
     targetExternalSessionId: string;
     requestId: string;
     reply: "once" | "always" | "reject";
     message?: string;
-  }) => Promise<void>;
-  replyRuntimeSessionQuestion: (input: {
-    repoPath: string;
-    runtimeKind: RuntimeKind;
-    runtimeId?: string | null;
-    workingDirectory: string;
-    targetExternalSessionId: string;
-    requestId: string;
-    answers: string[][];
   }) => Promise<void>;
   answerAgentQuestion: (
     externalSessionId: string,

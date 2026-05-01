@@ -1387,7 +1387,6 @@ describe("load-sessions-stages", () => {
       {
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
-        runtimeId: "runtime-stdio",
         workingDirectory: "/tmp/repo/worktree",
         externalSessionId: "external-1",
         limit: 600,

@@ -45,10 +45,7 @@ import { mergeHydratedMessages } from "./support/hydrated-message-merge";
 import { getSessionMessageCount } from "./support/messages";
 import { createRuntimeTranscriptSession } from "./support/runtime-transcript-session";
 import { isTranscriptAgentSession } from "./support/session-purpose";
-import {
-  clearSubagentPendingPermissionFromSessions,
-  clearSubagentPendingQuestionFromSessions,
-} from "./support/subagent-permission-overlay";
+import { clearSubagentPendingPermissionFromSessions } from "./support/subagent-permission-overlay";
 
 const hasAttachedRuntime = (
   session: Pick<AgentSessionState, "runtimeId"> | null | undefined,
@@ -222,7 +219,6 @@ export function useAgentOrchestratorOperations({
     async (input: {
       repoPath: string;
       runtimeKind: RuntimeKind;
-      runtimeId?: string | null;
       workingDirectory: string;
       targetExternalSessionId: string;
       requestId: string;
@@ -232,41 +228,12 @@ export function useAgentOrchestratorOperations({
       await agentEngine.replyRuntimeSessionPermission({
         repoPath: input.repoPath,
         runtimeKind: input.runtimeKind,
-        ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
         workingDirectory: input.workingDirectory,
         requestId: input.requestId,
         reply: input.reply,
         ...(input.message ? { message: input.message } : {}),
       });
       clearSubagentPendingPermissionFromSessions({
-        sessionsRef,
-        updateSession,
-        targetExternalSessionId: input.targetExternalSessionId,
-        requestId: input.requestId,
-      });
-    },
-    [agentEngine, sessionsRef, updateSession],
-  );
-
-  const replyRuntimeSessionQuestion = useCallback(
-    async (input: {
-      repoPath: string;
-      runtimeKind: RuntimeKind;
-      runtimeId?: string | null;
-      workingDirectory: string;
-      targetExternalSessionId: string;
-      requestId: string;
-      answers: string[][];
-    }) => {
-      await agentEngine.replyRuntimeSessionQuestion({
-        repoPath: input.repoPath,
-        runtimeKind: input.runtimeKind,
-        ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
-        workingDirectory: input.workingDirectory,
-        requestId: input.requestId,
-        answers: input.answers,
-      });
-      clearSubagentPendingQuestionFromSessions({
         sessionsRef,
         updateSession,
         targetExternalSessionId: input.targetExternalSessionId,
@@ -339,12 +306,11 @@ export function useAgentOrchestratorOperations({
       runtimeKind: RuntimeKind,
       workingDirectory: string,
       externalSessionId: string,
-      runtimeId?: string | null,
+      _runtimeId?: string | null,
     ) =>
       agentEngine.loadSessionTodos({
         repoPath,
         runtimeKind,
-        ...(runtimeId ? { runtimeId } : {}),
         workingDirectory,
         externalSessionId,
       }),
@@ -357,12 +323,11 @@ export function useAgentOrchestratorOperations({
       runtimeKind: RuntimeKind,
       workingDirectory: string,
       externalSessionId: string,
-      runtimeId?: string | null,
+      _runtimeId?: string | null,
     ) =>
       agentEngine.loadSessionHistory({
         repoPath,
         runtimeKind,
-        ...(runtimeId ? { runtimeId } : {}),
         workingDirectory,
         externalSessionId,
       }),
@@ -612,7 +577,6 @@ export function useAgentOrchestratorOperations({
         const history = await agentEngine.loadSessionHistory({
           repoPath: input.repoPath,
           runtimeKind: input.runtimeKind,
-          runtimeId,
           workingDirectory: input.workingDirectory,
           externalSessionId: input.externalSessionId,
         });
@@ -1012,7 +976,6 @@ export function useAgentOrchestratorOperations({
       readSessionSlashCommands,
       readSessionFileSearch,
       replyRuntimeSessionPermission,
-      replyRuntimeSessionQuestion,
       removeAgentSession,
       removeAgentSessions,
       sessionActions,
@@ -1042,7 +1005,6 @@ export function useAgentOrchestratorOperations({
     readSessionSlashCommands,
     readSessionFileSearch,
     replyRuntimeSessionPermission,
-    replyRuntimeSessionQuestion,
     removeAgentSessions,
     removeAgentSession,
     sessionActions,

@@ -889,7 +889,6 @@ export const hydrateSessionRecordsStage = async ({
     const history = await adapter.loadSessionHistory({
       repoPath,
       runtimeKind,
-      runtimeId,
       workingDirectory,
       externalSessionId: record.externalSessionId,
       limit: INITIAL_SESSION_HISTORY_LIMIT,

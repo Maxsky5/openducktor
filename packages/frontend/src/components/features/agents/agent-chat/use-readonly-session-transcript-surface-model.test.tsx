@@ -27,7 +27,6 @@ const attachRuntimeTranscriptSession = mock(async () => {});
 const replyAgentPermission = mock(async () => {});
 const replyRuntimeSessionPermission = mock(async () => {});
 const answerAgentQuestion = mock(async () => {});
-const replyRuntimeSessionQuestion = mock(async () => {});
 const useAgentSessionMock = mock(
   (_externalSessionId: string | null): AgentSessionState | null => null,
 );
@@ -191,7 +190,6 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     replyAgentPermission.mockClear();
     replyRuntimeSessionPermission.mockClear();
     answerAgentQuestion.mockClear();
-    replyRuntimeSessionQuestion.mockClear();
     useAgentSessionMock.mockClear();
     useAgentSessionMock.mockImplementation(
       (_externalSessionId: string | null): AgentSessionState | null => null,
@@ -220,7 +218,6 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         replyAgentPermission,
         replyRuntimeSessionPermission,
         answerAgentQuestion,
-        replyRuntimeSessionQuestion,
       }),
       useAgentSession: useAgentSessionMock,
       useChecksState: () => ({
@@ -565,7 +562,6 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       expect(replyRuntimeSessionPermission).toHaveBeenCalledWith({
         repoPath: "/repo-a",
         runtimeKind: "opencode",
-        runtimeId: "runtime-1",
         workingDirectory: "/repo-a",
         targetExternalSessionId: "session-subagent-1",
         requestId: "permission-1",
@@ -620,16 +616,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         await pendingQuestions.onSubmit("question-1", [["A"]]);
       });
 
-      expect(replyRuntimeSessionQuestion).toHaveBeenCalledWith({
-        repoPath: "/repo-a",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/repo-a",
-        targetExternalSessionId: "session-subagent-1",
-        requestId: "question-1",
-        answers: [["A"]],
-      });
-      expect(answerAgentQuestion).not.toHaveBeenCalled();
+      expect(answerAgentQuestion).toHaveBeenCalledWith("session-subagent-1", "question-1", [["A"]]);
       await harness.waitFor(() => {
         const nextSession = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
         return nextSession?.pendingQuestions.length === 0;

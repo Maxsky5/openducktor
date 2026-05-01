@@ -25,7 +25,6 @@ import type {
   ReplyPermissionInput,
   ReplyQuestionInput,
   ReplyRuntimeSessionPermissionInput,
-  ReplyRuntimeSessionQuestionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
   StartAgentSessionInput,
@@ -61,7 +60,6 @@ import {
   replyPermission,
   replyPermissionToTarget,
   replyQuestion,
-  replyQuestionToTarget,
 } from "./message-ops";
 import {
   type OpencodeRuntimeResolutionInput,
@@ -224,7 +222,6 @@ export class OpencodeSdkAdapter
     const runtimeRef = {
       repoPath: input.repoPath,
       runtimeKind: input.runtimeKind,
-      ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
     };
     const runtime = options.requireLive
       ? await this.repoRuntimeResolver.requireRepoRuntime(runtimeRef)
@@ -233,7 +230,6 @@ export class OpencodeSdkAdapter
       runtime,
       repoPath: input.repoPath,
       runtimeKind: input.runtimeKind,
-      ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
       workingDirectory: input.workingDirectory,
       action,
     });
@@ -726,25 +722,6 @@ export class OpencodeSdkAdapter
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     await replyQuestion(session, input);
-    this.clearPendingSubagentInputEvent(input.requestId);
-  }
-
-  async replyRuntimeSessionQuestion(input: ReplyRuntimeSessionQuestionInput): Promise<void> {
-    const runtimeClientInput = await this.resolveRuntimeClientInput(
-      input,
-      "reply runtime session question",
-      { requireLive: true },
-    );
-    await replyQuestionToTarget(
-      {
-        client: this.createClient(runtimeClientInput),
-        workingDirectory: runtimeClientInput.workingDirectory,
-      },
-      {
-        requestId: input.requestId,
-        answers: input.answers,
-      },
-    );
     this.clearPendingSubagentInputEvent(input.requestId);
   }
 

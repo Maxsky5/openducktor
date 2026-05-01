@@ -100,7 +100,6 @@ type CreatePublicOperationsArgs = {
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
   replyRuntimeSessionPermission?: AgentOperationsContextValue["replyRuntimeSessionPermission"];
-  replyRuntimeSessionQuestion?: AgentOperationsContextValue["replyRuntimeSessionQuestion"];
   removeAgentSession: (externalSessionId: string) => Promise<void>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => Promise<void>;
   sessionActions: SessionActions;
@@ -123,10 +122,6 @@ const missingRuntimeSessionPermissionReply = async (): Promise<void> => {
   throw new Error("Runtime session permission replies are unavailable.");
 };
 
-const missingRuntimeSessionQuestionReply = async (): Promise<void> => {
-  throw new Error("Runtime session question replies are unavailable.");
-};
-
 export const createOrchestratorPublicOperations = ({
   bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory,
@@ -140,7 +135,6 @@ export const createOrchestratorPublicOperations = ({
   readSessionSlashCommands,
   readSessionFileSearch,
   replyRuntimeSessionPermission = missingRuntimeSessionPermissionReply,
-  replyRuntimeSessionQuestion = missingRuntimeSessionQuestionReply,
   removeAgentSession,
   removeAgentSessions,
   sessionActions,
@@ -166,7 +160,6 @@ export const createOrchestratorPublicOperations = ({
   readSessionSlashCommands,
   readSessionFileSearch,
   replyRuntimeSessionPermission,
-  replyRuntimeSessionQuestion,
   removeAgentSession,
   removeAgentSessions: (input) => removeAgentSessions(input),
   startAgentSession: (input: StartAgentSessionInput): Promise<string> =>

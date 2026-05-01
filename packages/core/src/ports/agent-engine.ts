@@ -27,7 +27,6 @@ type RepoRuntimeOperationInput = {
 };
 
 type RepoRuntimeSessionOperationInput = RepoRuntimeOperationInput & {
-  runtimeId?: string | null;
   workingDirectory: string;
 };
 
@@ -170,11 +169,6 @@ export type ReplyRuntimeSessionPermissionInput = RepoRuntimeSessionOperationInpu
   message?: string;
 };
 
-export type ReplyRuntimeSessionQuestionInput = RepoRuntimeSessionOperationInput & {
-  requestId: RuntimePendingInputRequestId;
-  answers: string[][];
-};
-
 export type ReplyQuestionInput = {
   externalSessionId: ExternalSessionId;
   requestId: RuntimePendingInputRequestId;
@@ -223,7 +217,6 @@ export interface AgentSessionPort {
   replyPermission(input: ReplyPermissionInput): Promise<void>;
   replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
-  replyRuntimeSessionQuestion(input: ReplyRuntimeSessionQuestionInput): Promise<void>;
   subscribeEvents(
     externalSessionId: ExternalSessionId,
     listener: (event: AgentEvent) => void,

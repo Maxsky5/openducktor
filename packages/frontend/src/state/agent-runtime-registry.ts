@@ -33,38 +33,20 @@ export { DEFAULT_RUNTIME_KIND };
 export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
   const opencodeAdapter = new OpencodeSdkAdapter({
     repoRuntimeResolver: {
-      ensureRepoRuntime: async ({ repoPath, runtimeKind, runtimeId }) => {
-        if (!runtimeId) {
-          return host.runtimeEnsure(repoPath, runtimeKind);
-        }
-        const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-        const runtimes = await host.runtimeList(repoPath, runtimeKind);
-        const runtime = runtimes.find(
-          (entry) =>
-            entry.kind === runtimeKind &&
-            entry.runtimeId === runtimeId &&
-            normalizeWorkingDirectory(entry.repoPath) === normalizedRepoPath,
-        );
-        if (!runtime) {
-          throw new Error(
-            `No live repo runtime found for repo '${repoPath}', runtime '${runtimeKind}', and runtime id '${runtimeId}'.`,
-          );
-        }
-        return runtime;
+      ensureRepoRuntime: async ({ repoPath, runtimeKind }) => {
+        return host.runtimeEnsure(repoPath, runtimeKind);
       },
-      requireRepoRuntime: async ({ repoPath, runtimeKind, runtimeId }) => {
+      requireRepoRuntime: async ({ repoPath, runtimeKind }) => {
         const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
         const runtimes = await host.runtimeList(repoPath, runtimeKind);
         const runtime = runtimes.find(
           (entry) =>
             entry.kind === runtimeKind &&
-            (!runtimeId || entry.runtimeId === runtimeId) &&
             normalizeWorkingDirectory(entry.repoPath) === normalizedRepoPath,
         );
         if (!runtime) {
-          const runtimeIdMessage = runtimeId ? ` and runtime id '${runtimeId}'` : "";
           throw new Error(
-            `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'${runtimeIdMessage}.`,
+            `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'.`,
           );
         }
         return runtime;
@@ -133,7 +115,6 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     this.replyPermission = this.replyPermission.bind(this);
     this.replyRuntimeSessionPermission = this.replyRuntimeSessionPermission.bind(this);
     this.replyQuestion = this.replyQuestion.bind(this);
-    this.replyRuntimeSessionQuestion = this.replyRuntimeSessionQuestion.bind(this);
     this.subscribeEvents = this.subscribeEvents.bind(this);
     this.stopSession = this.stopSession.bind(this);
     this.loadSessionDiff = this.loadSessionDiff.bind(this);
@@ -298,14 +279,6 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     return this.getAdapter(this.requireSessionRuntimeKind(input.externalSessionId)).replyQuestion(
       input,
     );
-  }
-
-  replyRuntimeSessionQuestion(
-    input: Parameters<AgentEnginePort["replyRuntimeSessionQuestion"]>[0],
-  ) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "runtime session question reply"),
-    ).replyRuntimeSessionQuestion(input);
   }
 
   subscribeEvents(

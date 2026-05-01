@@ -70,7 +70,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
     replyAgentPermission,
     replyRuntimeSessionPermission,
     answerAgentQuestion,
-    replyRuntimeSessionQuestion,
   } = useAgentOperations();
   const liveSession = useAgentSession(requestedExternalSessionId ?? null);
   const isMountedRef = useRef(true);
@@ -453,7 +452,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
         await replyRuntimeSessionPermission({
           repoPath: activeWorkspace.repoPath,
           runtimeKind: source.runtimeKind,
-          runtimeId: resolvedSource.runtimeId,
           workingDirectory: source.workingDirectory,
           targetExternalSessionId,
           requestId,
@@ -497,56 +495,29 @@ export function useReadonlySessionTranscriptSurfaceModel({
 
   const replyTranscriptQuestion = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
-      const targetExternalSessionId = externalSessionId;
-      if (source) {
-        if (!activeWorkspace || !targetExternalSessionId || !resolvedSource.runtimeId) {
-          throw new Error("Runtime transcript question target is unavailable.");
-        }
-        setIsSubmittingQuestionByRequestId((current) => ({ ...current, [requestId]: true }));
-        try {
-          await replyRuntimeSessionQuestion({
-            repoPath: activeWorkspace.repoPath,
-            runtimeKind: source.runtimeKind,
-            runtimeId: resolvedSource.runtimeId,
-            workingDirectory: source.workingDirectory,
-            targetExternalSessionId,
-            requestId,
-            answers,
-          });
-          setRepliedRuntimeQuestionRequestIds((current) => {
-            if (current.has(requestId)) {
-              return current;
-            }
-            const next = new Set(current);
-            next.add(requestId);
-            return next;
-          });
-        } finally {
-          setIsSubmittingQuestionByRequestId((current) => {
-            const next = { ...current };
-            delete next[requestId];
-            return next;
-          });
-        }
-        return;
+      if (!externalSessionId) {
+        throw new Error("Runtime transcript question target is unavailable.");
       }
-
-      if (liveSession && targetExternalSessionId) {
-        await answerAgentQuestion(targetExternalSessionId, requestId, answers);
-        return;
+      setIsSubmittingQuestionByRequestId((current) => ({ ...current, [requestId]: true }));
+      try {
+        await answerAgentQuestion(externalSessionId, requestId, answers);
+        setRepliedRuntimeQuestionRequestIds((current) => {
+          if (current.has(requestId)) {
+            return current;
+          }
+          const next = new Set(current);
+          next.add(requestId);
+          return next;
+        });
+      } finally {
+        setIsSubmittingQuestionByRequestId((current) => {
+          const next = { ...current };
+          delete next[requestId];
+          return next;
+        });
       }
-
-      throw new Error("Runtime transcript question target is unavailable.");
     },
-    [
-      activeWorkspace,
-      answerAgentQuestion,
-      externalSessionId,
-      liveSession,
-      replyRuntimeSessionQuestion,
-      resolvedSource.runtimeId,
-      source,
-    ],
+    [answerAgentQuestion, externalSessionId],
   );
 
   const model = useAgentChatSurfaceModel({
