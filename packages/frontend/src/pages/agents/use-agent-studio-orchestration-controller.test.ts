@@ -80,7 +80,7 @@ const baseArgs: BuildArgs = {
     canKickoffNewSession: false,
     kickoffLabel: "Kickoff",
     canStopSession: false,
-    startScenarioKickoff: async () => {},
+    startLaunchKickoff: async () => {},
     onSend: async () => true,
     onSubmitQuestionAnswers: async () => {},
     isSubmittingQuestionByRequestId: {},

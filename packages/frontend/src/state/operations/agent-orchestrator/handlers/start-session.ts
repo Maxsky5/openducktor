@@ -1,13 +1,7 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentKickoffTemplateId, AgentPromptGitContext } from "@openducktor/core";
-import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
-import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
-import { kickoffPromptWithTaskContext } from "../support/kickoff-prompts";
 import { requireSelectedModelRuntimeKindForStart } from "../support/session-runtime-metadata";
 import type {
-  ResolvedRuntimeAndModel,
   RuntimeDependencies,
   SessionDependencies,
   StartAgentSessionInput,
@@ -16,7 +10,6 @@ import type {
   StartSessionContext,
   StartSessionCreationInput,
   StartSessionDependencies,
-  TaskDependencies,
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
 import { executeForkStart } from "./start-session-fork-strategy";
@@ -28,7 +21,6 @@ import {
   resolveFreshStartTargetWorkingDirectoryForStart,
   serializeSelectedModelKey,
 } from "./start-session-runtime";
-import { createSessionStartTags } from "./start-session-support";
 
 export type { StartAgentSessionInput, StartSessionDependencies } from "./start-session.types";
 
@@ -87,110 +79,6 @@ const attachSessionListenerAndGuard = async ({
   });
 };
 
-const resolveKickoffGitContext = async ({
-  kickoffTemplateId,
-  workspaceId,
-  kickoffTargetBranch,
-  taskCard,
-  model,
-}: {
-  kickoffTemplateId: AgentKickoffTemplateId;
-  workspaceId: string;
-  kickoffTargetBranch: StartAgentSessionInput["kickoffTargetBranch"];
-  taskCard: TaskCard;
-  model: Pick<StartSessionDependencies, "model">["model"];
-}): Promise<AgentPromptGitContext | undefined> => {
-  if (kickoffTemplateId !== "kickoff.build_pull_request_generation") {
-    return undefined;
-  }
-
-  if (kickoffTargetBranch) {
-    return {
-      targetBranch: canonicalTargetBranch(kickoffTargetBranch),
-    };
-  }
-
-  if (taskCard.targetBranchError) {
-    throw new Error(
-      `Task "${taskCard.id}" has invalid target branch metadata: ${taskCard.targetBranchError}`,
-    );
-  }
-
-  const repoDefaultTargetBranch = model.loadRepoDefaultTargetBranch
-    ? await model.loadRepoDefaultTargetBranch(workspaceId)
-    : null;
-
-  return {
-    targetBranch: canonicalTargetBranch(
-      effectiveTaskTargetBranch(taskCard.targetBranch, repoDefaultTargetBranch),
-    ),
-  };
-};
-
-const maybeSendKickoff = async ({
-  sendKickoff,
-  startedCtx,
-  kickoffTemplateId,
-  kickoffTargetBranch,
-  task,
-  taskCard,
-  model,
-  promptOverrides,
-}: {
-  sendKickoff: boolean;
-  kickoffTemplateId: AgentKickoffTemplateId | undefined;
-  startedCtx: StartedSessionContext;
-  kickoffTargetBranch: StartAgentSessionInput["kickoffTargetBranch"];
-  task: TaskDependencies;
-  taskCard: TaskCard;
-  model: Pick<StartSessionDependencies, "model">["model"];
-  promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
-}): Promise<void> => {
-  if (!sendKickoff) {
-    return;
-  }
-  if (!kickoffTemplateId) {
-    throw new Error("Kickoff template id is required before sending a kickoff prompt.");
-  }
-
-  const git = await resolveKickoffGitContext({
-    kickoffTemplateId,
-    workspaceId: startedCtx.workspaceId,
-    kickoffTargetBranch,
-    taskCard,
-    model,
-  });
-
-  throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
-  await task.sendAgentMessage(startedCtx.summary.externalSessionId, [
-    {
-      kind: "text",
-      text: kickoffPromptWithTaskContext(
-        startedCtx.role,
-        kickoffTemplateId,
-        {
-          taskId: startedCtx.taskId,
-          title: taskCard.title,
-          issueType: taskCard.issueType,
-          status: taskCard.status,
-          qaRequired: taskCard.aiReviewEnabled,
-          description: taskCard.description,
-        },
-        git,
-        promptOverrides,
-      ),
-    },
-  ]);
-  throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
-  runOrchestratorSideEffect(
-    "start-session-refresh-task-data-after-kickoff",
-    task.refreshTaskData(startedCtx.repoPath, startedCtx.taskId),
-    {
-      tags: createSessionStartTags(startedCtx),
-    },
-  );
-};
-
 export const createStartAgentSession = ({
   repo,
   session,
@@ -199,8 +87,7 @@ export const createStartAgentSession = ({
   model,
 }: StartSessionDependencies) => {
   return async (input: StartAgentSessionInput): Promise<string> => {
-    const { taskId, role, kickoffTemplateId, startMode } = input;
-    const sendKickoff = kickoffTemplateId !== undefined;
+    const { taskId, role, startMode } = input;
     const repoPath = requireActiveRepo(repo.activeWorkspace?.repoPath ?? null);
     const workspaceId = repo.activeWorkspace?.workspaceId.trim();
     if (!workspaceId) {
@@ -245,9 +132,6 @@ export const createStartAgentSession = ({
       freshStartTarget?.normalizedTargetWorkingDirectory ?? "";
     const selectedModelKey =
       input.startMode === "reuse" ? "" : serializeSelectedModelKey(input.selectedModel);
-    const kickoffTargetBranchKey = input.kickoffTargetBranch
-      ? canonicalTargetBranch(input.kickoffTargetBranch)
-      : "";
     const inFlightKeyParts = [
       repoPath,
       taskId,
@@ -256,13 +140,8 @@ export const createStartAgentSession = ({
       normalizedSourceSessionId,
       normalizedTargetWorkingDirectory,
       selectedModelKey,
-      kickoffTemplateId ?? "no-kickoff-template",
-      sendKickoff ? "kickoff" : "no-kickoff",
     ];
-    const inFlightKeySuffix = sendKickoff ? "kickoff" : "no-kickoff";
-    const inFlightKey = kickoffTargetBranchKey
-      ? [...inFlightKeyParts.slice(0, -1), kickoffTargetBranchKey, inFlightKeySuffix].join("::")
-      : inFlightKeyParts.join("::");
+    const inFlightKey = inFlightKeyParts.join("::");
     const existingInFlight = session.inFlightStartsByWorkspaceTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
       return existingInFlight;
@@ -296,17 +175,6 @@ export const createStartAgentSession = ({
         startedCtx: startResult.ctx,
         session,
         runtime,
-      });
-
-      await maybeSendKickoff({
-        sendKickoff,
-        kickoffTemplateId,
-        startedCtx: startResult.ctx,
-        kickoffTargetBranch: input.kickoffTargetBranch,
-        task,
-        taskCard: startResult.taskCard,
-        model,
-        promptOverrides: startResult.promptOverrides,
       });
 
       return startResult.ctx.summary.externalSessionId;

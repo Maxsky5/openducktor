@@ -1,4 +1,3 @@
-import type { GitTargetBranch } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { AgentStateContextValue } from "@/types/state-slices";
 
@@ -7,7 +6,6 @@ type StartAgentSessionInput = Parameters<AgentStateContextValue["startAgentSessi
 type SessionStartExecutionRequestBase = {
   taskId: string;
   role: AgentRole;
-  kickoffTargetBranch?: GitTargetBranch | null;
 };
 
 export type ReuseSessionStartExecutionRequest = SessionStartExecutionRequestBase & {
@@ -41,13 +39,11 @@ const prepareFreshSessionStartInput = ({
   role,
   selectedModel,
   targetWorkingDirectory,
-  kickoffTargetBranch,
 }: FreshSessionStartExecutionRequest): StartAgentSessionInput => ({
   taskId,
   role,
   selectedModel,
   startMode: "fresh",
-  ...(kickoffTargetBranch !== undefined ? { kickoffTargetBranch } : {}),
   ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
 });
 
@@ -55,13 +51,11 @@ const prepareReuseSessionStartInput = ({
   taskId,
   role,
   sourceExternalSessionId,
-  kickoffTargetBranch,
 }: ReuseSessionStartExecutionRequest): StartAgentSessionInput => ({
   taskId,
   role,
   startMode: "reuse",
   sourceExternalSessionId,
-  ...(kickoffTargetBranch !== undefined ? { kickoffTargetBranch } : {}),
 });
 
 const prepareForkSessionStartInput = ({
@@ -69,14 +63,12 @@ const prepareForkSessionStartInput = ({
   role,
   selectedModel,
   sourceExternalSessionId,
-  kickoffTargetBranch,
 }: ForkSessionStartExecutionRequest): StartAgentSessionInput => ({
   taskId,
   role,
   selectedModel,
   startMode: "fork",
   sourceExternalSessionId,
-  ...(kickoffTargetBranch !== undefined ? { kickoffTargetBranch } : {}),
 });
 
 export const prepareSessionStartInput = (

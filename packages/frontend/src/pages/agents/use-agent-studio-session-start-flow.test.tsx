@@ -442,7 +442,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("startScenarioKickoff uses the internal modal flow when no external request hook is provided", async () => {
+  test("startLaunchKickoff uses the internal modal flow when no external request hook is provided", async () => {
     const startAgentSession = mock(async () => "session-new");
     const sendAgentMessage = mock(async () => {});
     const harness = createInternalModalHookHarness({
@@ -457,7 +457,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.mount();
 
     await harness.run((state) => {
-      void state.startScenarioKickoff();
+      void state.startLaunchKickoff();
     });
     await confirmSessionStartModal({
       harness,
@@ -799,7 +799,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("startScenarioKickoff for human changes opens the feedback modal instead of starting immediately", async () => {
+  test("startLaunchKickoff for human changes opens the feedback modal instead of starting immediately", async () => {
     const startAgentSession = mock(async () => "session-build-human");
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
@@ -820,7 +820,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.startScenarioKickoff();
+      await state.startLaunchKickoff();
     });
 
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
@@ -832,7 +832,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("startScenarioKickoff for human changes waits for task hydration", async () => {
+  test("startLaunchKickoff for human changes waits for task hydration", async () => {
     const startAgentSession = mock(async () => "session-build-human");
     const sendAgentMessage = mock(async () => {});
 
@@ -855,7 +855,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.startScenarioKickoff();
+      await state.startLaunchKickoff();
     });
 
     expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();

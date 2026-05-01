@@ -202,9 +202,6 @@ export const startSessionWorkflow = async ({
           role: intent.role,
           startMode: "reuse",
           sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "reuse"),
-          ...(intent.targetBranch !== undefined
-            ? { kickoffTargetBranch: intent.targetBranch }
-            : {}),
           startAgentSession,
         })
       : intent.startMode === "fork"
@@ -214,9 +211,6 @@ export const startSessionWorkflow = async ({
             startMode: "fork",
             selectedModel: requireSelectedModel(selection, "fork"),
             sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "fork"),
-            ...(intent.targetBranch !== undefined
-              ? { kickoffTargetBranch: intent.targetBranch }
-              : {}),
             startAgentSession,
           })
         : await executeSessionStart({
@@ -224,9 +218,6 @@ export const startSessionWorkflow = async ({
             role: intent.role,
             startMode: "fresh",
             selectedModel: requireSelectedModel(selection, "fresh"),
-            ...(intent.targetBranch !== undefined
-              ? { kickoffTargetBranch: intent.targetBranch }
-              : {}),
             ...(intent.targetWorkingDirectory !== undefined
               ? { targetWorkingDirectory: intent.targetWorkingDirectory }
               : {}),

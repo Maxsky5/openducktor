@@ -334,10 +334,6 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
                 "kickoff.qa_review": {
                     "template": "   ",
                     "baseVersion": 2
-                },
-                "system.scenario.build_implementation_start": {
-                    "template": "obsolete scenario override",
-                    "baseVersion": 1
                 }
             }
         }),
@@ -409,9 +405,61 @@ fn load_normalizes_repo_config_values_when_runtime_kinds_are_explicit() {
         .expect("qa review override");
     assert_eq!(qa_review_override.template, "");
     assert_eq!(qa_review_override.base_version, 2);
-    assert!(!repo_config
-        .prompt_overrides
-        .contains_key("system.scenario.build_implementation_start"));
+}
+
+#[test]
+fn load_rejects_unknown_prompt_override_id() {
+    let _env_lock = lock_env();
+    let harness = TestStoreHarness::new("reject-unknown-prompt-override");
+    let store = harness.store();
+    let root = harness.root();
+    let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+    let repo = root.join("repo");
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    let (workspace_id, workspace_name, repo_path) = workspace_identity(&repo);
+
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    let payload = json!({
+        "version": 2,
+        "activeWorkspace": workspace_id,
+        "workspaces": {
+            "repo": {
+                "workspaceId": "repo",
+                "workspaceName": workspace_name,
+                "repoPath": repo_path,
+                "defaultRuntimeKind": "opencode",
+                "promptOverrides": {
+                    "system.scenario.build_implementation_start": {
+                        "template": "obsolete scenario override",
+                        "baseVersion": 1
+                    }
+                }
+            }
+        },
+        "recentWorkspaces": []
+    });
+    fs::write(
+        store.path(),
+        serde_json::to_string_pretty(&payload).expect("serialize payload"),
+    )
+    .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
+
+    let error = store
+        .load()
+        .expect_err("unknown prompt override ids should fail fast");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("Unknown prompt template id: system.scenario.build_implementation_start"),
+        "{message}"
+    );
 }
 
 #[test]

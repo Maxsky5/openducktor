@@ -126,7 +126,7 @@ export function useAgentStudioSessionActions({
   canKickoffNewSession: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
-  startScenarioKickoff: () => Promise<void>;
+  startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
@@ -193,7 +193,7 @@ export function useAgentStudioSessionActions({
     humanReviewFeedbackModal,
     startSessionRequest,
     startSession,
-    startScenarioKickoff,
+    startLaunchKickoff,
     handleCreateSession,
   } = useAgentStudioSessionStartFlow({
     activeWorkspace,
@@ -521,7 +521,7 @@ export function useAgentStudioSessionActions({
     canKickoffNewSession,
     kickoffLabel,
     canStopSession,
-    startScenarioKickoff,
+    startLaunchKickoff,
     onSend,
     onSubmitQuestionAnswers,
     handleWorkflowStepSelect,

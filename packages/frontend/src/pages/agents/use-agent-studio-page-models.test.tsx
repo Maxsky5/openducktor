@@ -141,7 +141,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       canKickoffNewSession: false,
       kickoffLabel: "Start Spec",
       canStopSession: true,
-      startScenarioKickoff: async () => {},
+      startLaunchKickoff: async () => {},
       onSend: async () => true,
       onSubmitQuestionAnswers: async () => {},
       isSubmittingQuestionByRequestId: {},
@@ -232,7 +232,7 @@ describe("useAgentStudioPageModels", () => {
         },
         sessionActions: {
           onSend,
-          startScenarioKickoff: onKickoff,
+          startLaunchKickoff: onKickoff,
           stopAgentSession: onStopSession,
         },
       }),

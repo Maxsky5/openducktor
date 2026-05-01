@@ -84,7 +84,7 @@ export function useAgentStudioSessionStartFlow({
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   startSessionRequest: (request: AgentStudioSessionStartRequest) => Promise<string | undefined>;
   startSession: (reason: SessionStartRequestReason) => Promise<string | undefined>;
-  startScenarioKickoff: () => Promise<void>;
+  startLaunchKickoff: () => Promise<void>;
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
   const queryClient = useQueryClient();
@@ -230,7 +230,7 @@ export function useAgentStudioSessionStartFlow({
       startSessionRequest,
     });
 
-  const startScenarioKickoff = useCallback(async (): Promise<void> => {
+  const startLaunchKickoff = useCallback(async (): Promise<void> => {
     if (!taskId || !agentStudioReady) {
       return;
     }
@@ -312,7 +312,7 @@ export function useAgentStudioSessionStartFlow({
     humanReviewFeedbackModal,
     startSessionRequest,
     startSession,
-    startScenarioKickoff,
+    startLaunchKickoff,
     handleCreateSession: handleCreateSessionWithHumanFeedback,
   };
 }

@@ -1,13 +1,11 @@
 import type {
   AgentSessionRecord,
-  GitTargetBranch,
   RepoPromptOverrides,
   TaskCard,
   TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
-  AgentKickoffTemplateId,
   AgentModelSelection,
   AgentRole,
   AgentUserMessagePart,
@@ -21,8 +19,6 @@ export type StartAgentSessionInput =
       taskId: string;
       role: AgentRole;
       selectedModel?: never;
-      kickoffTemplateId?: AgentKickoffTemplateId;
-      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "reuse";
       sourceExternalSessionId: string;
     }
@@ -30,8 +26,6 @@ export type StartAgentSessionInput =
       taskId: string;
       role: AgentRole;
       selectedModel: AgentModelSelection;
-      kickoffTemplateId?: AgentKickoffTemplateId;
-      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "fresh";
       targetWorkingDirectory?: string | null;
     }
@@ -39,8 +33,6 @@ export type StartAgentSessionInput =
       taskId: string;
       role: AgentRole;
       selectedModel: AgentModelSelection;
-      kickoffTemplateId?: AgentKickoffTemplateId;
-      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "fork";
       sourceExternalSessionId: string;
     };
@@ -83,7 +75,6 @@ export type TaskDependencies = {
 
 export type ModelDependencies = {
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-  loadRepoDefaultTargetBranch?: (workspaceId: string) => Promise<GitTargetBranch | null>;
 };
 
 export type RepoDependencies = {
