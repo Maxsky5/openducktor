@@ -1,6 +1,14 @@
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { Check, Copy, Play, RefreshCw, Square } from "lucide-react";
-import { cloneElement, memo, type ReactElement, useCallback, useMemo, useState } from "react";
+import {
+  cloneElement,
+  memo,
+  type ReactElement,
+  useCallback,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 import { AgentStudioDevServerTerminal } from "@/components/features/agents/agent-studio-dev-server-terminal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,6 +40,11 @@ export type AgentStudioDevServerPanelModel = {
   onStop: () => void;
   onRestart: () => void;
 };
+
+export const DEV_SERVER_DISABLED_REASON =
+  "Create or resume a Builder worktree before starting repository dev servers.";
+export const DEV_SERVER_EMPTY_REASON =
+  "Configure one or more builder dev server commands in repository settings to stream them here.";
 
 const statusIndicatorClassName = (status: DevServerScriptState["status"]): string => {
   if (status === "running") {
@@ -76,6 +89,7 @@ const getEmptyTerminalMessage = (script: DevServerScriptState): string => {
 const renderCompactStartButton = ({
   button,
   disabledReason,
+  disabledReasonId,
 }: {
   button: ReactElement<{
     className?: string;
@@ -84,12 +98,12 @@ const renderCompactStartButton = ({
     [key: string]: unknown;
   }>;
   disabledReason: string | null;
+  disabledReasonId: string;
 }): ReactElement => {
   if (!disabledReason) {
     return button;
   }
 
-  const disabledReasonId = "agent-studio-dev-server-disabled-reason";
   const tooltipTriggerButton = cloneElement(button, {
     disabled: undefined,
     onClick: undefined,
@@ -135,6 +149,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
       : null);
   const selectedScriptTerminalChunkCount = selectedScriptTerminalBuffer?.entries.length ?? 0;
   const panelError = model.error ?? rendererError;
+  const disabledReasonId = useId();
   const { copied: copiedWorktreePath, copyToClipboard: copyWorktreePath } = useCopyToClipboard({
     getSuccessDescription: (value) => value,
     errorLogContext: "AgentStudioDevServerPanel",
@@ -142,11 +157,11 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
 
   const headerSummary = useMemo(() => {
     if (model.mode === "empty") {
-      return "Configure one or more builder dev server commands in repository settings to stream them here.";
+      return DEV_SERVER_EMPTY_REASON;
     }
 
     if (model.mode === "disabled") {
-      return "Create or resume a Builder worktree before starting repository dev servers.";
+      return DEV_SERVER_DISABLED_REASON;
     }
 
     if (model.mode === "loading") {
@@ -189,6 +204,8 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
         {startLabel}
       </Button>
     );
+    // `disabledReason` is only produced for the stable `empty`/`disabled` modes.
+    // It cannot overlap with the transient loading/start-pending button labels.
 
     return (
       <div
@@ -196,7 +213,11 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
         data-testid="agent-studio-dev-server-compact-panel"
       >
         <div className="flex items-center">
-          {renderCompactStartButton({ button: startButton, disabledReason: model.disabledReason })}
+          {renderCompactStartButton({
+            button: startButton,
+            disabledReason: model.disabledReason,
+            disabledReasonId,
+          })}
         </div>
         {panelError ? (
           <div

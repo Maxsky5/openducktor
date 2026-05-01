@@ -8,6 +8,8 @@ import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio
 import {
   AgentStudioDevServerPanel,
   type AgentStudioDevServerPanelModel,
+  DEV_SERVER_DISABLED_REASON,
+  DEV_SERVER_EMPTY_REASON,
 } from "./agent-studio-dev-server-panel";
 
 if (typeof document === "undefined") {
@@ -132,8 +134,7 @@ describe("AgentStudioDevServerPanel", () => {
       <AgentStudioDevServerPanel
         model={baseModel({
           mode: "disabled",
-          disabledReason:
-            "Create or resume a Builder worktree before starting repository dev servers.",
+          disabledReason: DEV_SERVER_DISABLED_REASON,
           worktreePath: null,
         })}
       />,
@@ -146,19 +147,15 @@ describe("AgentStudioDevServerPanel", () => {
 
       expect(button.disabled).toBe(false);
       expect(button.getAttribute("aria-disabled")).toBe("true");
-      expect(button.getAttribute("aria-describedby")).toBe(
-        "agent-studio-dev-server-disabled-reason",
-      );
+      const disabledReasonId = button.getAttribute("aria-describedby");
+      expect(disabledReasonId).toBeTruthy();
       expect(button.getAttribute("class")).toContain("cursor-not-allowed");
       expect(button.getAttribute("class")).toContain("opacity-50");
       expect(screen.queryByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeNull();
       expect(screen.queryByTestId("agent-studio-dev-server-compact-message")).toBeNull();
-      expect(
-        screen.getByText(
-          "Create or resume a Builder worktree before starting repository dev servers.",
-          { selector: "span.sr-only" },
-        ).textContent,
-      ).toContain("Create or resume a Builder worktree before starting repository dev servers.");
+      expect(document.getElementById(disabledReasonId ?? "")?.textContent).toContain(
+        DEV_SERVER_DISABLED_REASON,
+      );
     } finally {
       view.unmount();
     }
@@ -169,8 +166,7 @@ describe("AgentStudioDevServerPanel", () => {
       <AgentStudioDevServerPanel
         model={baseModel({
           mode: "empty",
-          disabledReason:
-            "Configure one or more builder dev server commands in repository settings to stream them here.",
+          disabledReason: DEV_SERVER_EMPTY_REASON,
           worktreePath: null,
         })}
       />,
@@ -183,20 +179,14 @@ describe("AgentStudioDevServerPanel", () => {
 
       expect(button.disabled).toBe(false);
       expect(button.getAttribute("aria-disabled")).toBe("true");
-      expect(button.getAttribute("aria-describedby")).toBe(
-        "agent-studio-dev-server-disabled-reason",
-      );
+      const disabledReasonId = button.getAttribute("aria-describedby");
+      expect(disabledReasonId).toBeTruthy();
       expect(button.getAttribute("class")).toContain("cursor-not-allowed");
       expect(button.getAttribute("class")).toContain("opacity-50");
       expect(screen.queryByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeNull();
       expect(screen.queryByTestId("agent-studio-dev-server-compact-message")).toBeNull();
-      expect(
-        screen.getByText(
-          "Configure one or more builder dev server commands in repository settings to stream them here.",
-          { selector: "span.sr-only" },
-        ).textContent,
-      ).toContain(
-        "Configure one or more builder dev server commands in repository settings to stream them here.",
+      expect(document.getElementById(disabledReasonId ?? "")?.textContent).toContain(
+        DEV_SERVER_EMPTY_REASON,
       );
     } finally {
       view.unmount();

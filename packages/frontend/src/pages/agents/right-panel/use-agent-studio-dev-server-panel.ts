@@ -2,9 +2,11 @@ import type { DevServerEvent, DevServerGroupState } from "@openducktor/contracts
 import { devServerEventSchema } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  AgentStudioDevServerPanelMode,
-  AgentStudioDevServerPanelModel,
+import {
+  type AgentStudioDevServerPanelMode,
+  type AgentStudioDevServerPanelModel,
+  DEV_SERVER_DISABLED_REASON,
+  DEV_SERVER_EMPTY_REASON,
 } from "@/components/features/agents/agent-studio-dev-server-panel";
 import { errorMessage } from "@/lib/errors";
 import { hostClient, subscribeDevServerEvents } from "@/lib/host-client";
@@ -436,10 +438,9 @@ export function useAgentStudioDevServerPanel({
   let disabledReason: string | null = null;
 
   if (mode === "disabled") {
-    disabledReason = "Create or resume a Builder worktree before starting repository dev servers.";
+    disabledReason = DEV_SERVER_DISABLED_REASON;
   } else if (mode === "empty") {
-    disabledReason =
-      "Configure one or more builder dev server commands in repository settings to stream them here.";
+    disabledReason = DEV_SERVER_EMPTY_REASON;
   }
 
   return {
