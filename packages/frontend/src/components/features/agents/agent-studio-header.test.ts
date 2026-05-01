@@ -381,7 +381,7 @@ describe("AgentStudioHeader", () => {
     );
   });
 
-  test("opens quick-actions menu with primary action and disabled reasons", async () => {
+  test("runs the primary quick action from the main split button", async () => {
     const onQuickAction = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
@@ -394,8 +394,28 @@ describe("AgentStudioHeader", () => {
 
     await act(async () => {
       fireEvent.click(
-        screen.getByRole("button", { name: /Quick actions, primary: Start Implementation/i }),
+        screen.getByRole("button", { name: /Run quick action: Start Implementation/i }),
       );
+    });
+
+    expect(onQuickAction).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "build", launchActionId: "build_implementation_start" }),
+    );
+  });
+
+  test("opens quick-actions menu from the arrow with primary action and disabled reasons", async () => {
+    const onQuickAction = mock(() => {});
+    render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          onQuickAction,
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Open quick actions menu/i }));
     });
 
     expect(screen.getByText("Primary")).toBeTruthy();
@@ -448,11 +468,8 @@ describe("AgentStudioHeader", () => {
 
     await act(async () => {
       fireEvent.click(
-        screen.getByRole("button", { name: /Quick actions, primary: Resolve Git Conflict/i }),
+        screen.getByRole("button", { name: /Run quick action: Resolve Git Conflict/i }),
       );
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByText("Ask Builder to resolve the active git conflict."));
     });
 
     expect(onResolveGitConflictQuickAction).toHaveBeenCalled();
@@ -492,7 +509,10 @@ describe("AgentStudioHeader", () => {
       /<button[^>]*(aria-label="Agent Studio is not ready\."[^>]*disabled=""|disabled=""[^>]*aria-label="Agent Studio is not ready\.")/,
     );
     expect(html).toMatch(
-      /<button[^>]*(aria-label="Quick actions[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Quick actions[^"]*")/,
+      /<button[^>]*(aria-label="Run quick action:[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Run quick action:[^"]*")/,
+    );
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Open quick actions menu"[^>]*disabled=""|disabled=""[^>]*aria-label="Open quick actions menu")/,
     );
   });
 

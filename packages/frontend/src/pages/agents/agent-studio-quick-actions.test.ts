@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { TaskAction } from "@openducktor/contracts";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -57,6 +58,71 @@ describe("agent-studio-quick-actions", () => {
         ?.initialSourceExternalSessionId,
     ).toBe("builder-1");
     expect(selectPrimaryAgentStudioQuickAction(options)?.launchActionId).toBe("spec_initial");
+    expect(selectPrimaryAgentStudioQuickAction(options)?.label).toBe("Start Spec");
+  });
+
+  test("selects the primary quick action from task workflow priority", () => {
+    const baseTask = {
+      id: "task-1",
+      availableActions: ["set_spec", "set_plan", "build_start", "qa_start"] satisfies TaskAction[],
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: false },
+        planner: { required: true, canSkip: false, available: true, completed: false },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: true, canSkip: false, available: true, completed: false },
+      },
+    };
+
+    const specReadyTask = buildTask({ ...baseTask, status: "spec_ready" });
+    const specReadyOptions = buildAgentStudioQuickActions({
+      selectedTask: specReadyTask,
+      sessionsForTask: [],
+      roleEnabledByTask: buildRoleEnabledMapForTask(specReadyTask),
+      createSessionDisabled: false,
+    });
+    expect(selectPrimaryAgentStudioQuickAction(specReadyOptions)).toMatchObject({
+      launchActionId: "planner_initial",
+      label: "Start Planner",
+    });
+
+    const readyForDevTask = buildTask({ ...baseTask, status: "ready_for_dev" });
+    const readyForDevOptions = buildAgentStudioQuickActions({
+      selectedTask: readyForDevTask,
+      sessionsForTask: [],
+      roleEnabledByTask: buildRoleEnabledMapForTask(readyForDevTask),
+      createSessionDisabled: false,
+    });
+    expect(selectPrimaryAgentStudioQuickAction(readyForDevOptions)).toMatchObject({
+      launchActionId: "build_implementation_start",
+      label: "Start Implementation",
+    });
+
+    const humanReviewTask = buildTask({
+      ...baseTask,
+      status: "human_review",
+      availableActions: [
+        "set_spec",
+        "set_plan",
+        "build_start",
+        "qa_start",
+        "human_request_changes",
+      ],
+    });
+    const humanReviewOptions = buildAgentStudioQuickActions({
+      selectedTask: humanReviewTask,
+      sessionsForTask: [],
+      roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
+      createSessionDisabled: false,
+    });
+    expect(selectPrimaryAgentStudioQuickAction(humanReviewOptions)).toMatchObject({
+      launchActionId: "build_after_human_request_changes",
+      label: "Request Changes",
+    });
+    expect(
+      humanReviewOptions.filter(
+        (option) => option.launchActionId === "build_after_human_request_changes",
+      ),
+    ).toHaveLength(1);
   });
 
   test("surfaces active git conflict resolution as the primary quick action", () => {

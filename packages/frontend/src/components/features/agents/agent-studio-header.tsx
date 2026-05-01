@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowUpRightFromSquare,
   Check,
+  ChevronDown,
   ChevronRight,
   Circle,
   CircleDashed,
@@ -353,6 +354,8 @@ function QuickActionsMenu({
   onResolveGitConflictQuickAction,
 }: QuickActionsMenuProps): ReactElement {
   const triggerTitle = primaryAction ? `Quick actions · ${primaryAction.label}` : "Quick actions";
+  const canRunPrimaryAction = agentStudioReady && primaryAction !== null && !primaryAction.disabled;
+  const canOpenActionsMenu = agentStudioReady && options.length > 0;
   const remainingActions = useMemo(
     () => options.filter((option) => option.id !== primaryAction?.id),
     [primaryAction?.id, options],
@@ -374,41 +377,59 @@ function QuickActionsMenu({
   };
 
   return (
-    <Popover open={isOpen} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-9 max-w-48 gap-2 rounded-md px-3"
-          disabled={!agentStudioReady || options.length === 0}
-          title={triggerTitle}
-          aria-label={
-            primaryAction ? `Quick actions, primary: ${primaryAction.label}` : "Quick actions"
+    <div className="flex items-center gap-0">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-9 max-w-48 gap-2 rounded-r-none border-r-0 px-3"
+        disabled={!canRunPrimaryAction}
+        title={triggerTitle}
+        aria-label={
+          primaryAction ? `Run quick action: ${primaryAction.label}` : "Run primary quick action"
+        }
+        onClick={() => {
+          if (primaryAction) {
+            selectAction(primaryAction);
           }
-        >
-          <Zap className="size-4" />
-          <span className="truncate">{primaryAction?.label ?? "Actions"}</span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
-        <Command>
-          <CommandList>
-            <CommandEmpty>No quick actions available.</CommandEmpty>
-            {primaryAction ? (
-              <CommandGroup heading="Primary">
-                <QuickActionCommandItem option={primaryAction} onSelect={selectAction} />
+        }}
+      >
+        <Zap className="size-4" />
+        <span className="truncate">{primaryAction?.label ?? "Actions"}</span>
+      </Button>
+      <Popover open={isOpen} onOpenChange={onOpenChange}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 rounded-l-none px-2"
+            disabled={!canOpenActionsMenu}
+            title="Open quick actions menu"
+            aria-label="Open quick actions menu"
+          >
+            <ChevronDown className="size-3.5 opacity-80" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-80 p-0">
+          <Command>
+            <CommandList>
+              <CommandEmpty>No quick actions available.</CommandEmpty>
+              {primaryAction ? (
+                <CommandGroup heading="Primary">
+                  <QuickActionCommandItem option={primaryAction} onSelect={selectAction} />
+                </CommandGroup>
+              ) : null}
+              <CommandGroup heading={primaryAction ? "More actions" : "Actions"}>
+                {remainingActions.map((option) => (
+                  <QuickActionCommandItem key={option.id} option={option} onSelect={selectAction} />
+                ))}
               </CommandGroup>
-            ) : null}
-            <CommandGroup heading={primaryAction ? "More actions" : "Actions"}>
-              {remainingActions.map((option) => (
-                <QuickActionCommandItem key={option.id} option={option} onSelect={selectAction} />
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
 
