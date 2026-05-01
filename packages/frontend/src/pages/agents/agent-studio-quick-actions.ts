@@ -13,6 +13,7 @@ import {
   type SessionStartExistingSessionOption,
   type SessionStartPostAction,
 } from "@/features/session-start";
+import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 
 export type AgentStudioQuickActionOption = {
@@ -56,14 +57,55 @@ const canStartRoleWorkflow = (params: {
   role: AgentRole;
   roleEnabledByTask: Record<AgentRole, boolean>;
 }): boolean => {
-  if (!params.roleEnabledByTask[params.role]) {
+  if (params.role === "build") {
+    return params.roleEnabledByTask.build && !params.task.agentWorkflows.builder.completed;
+  }
+
+  if (params.role === "qa") {
+    const qaWorkflow = params.task.agentWorkflows.qa;
+    return (
+      !qaWorkflow.completed && (params.roleEnabledByTask.qa || params.task.status === "ai_review")
+    );
+  }
+
+  const workflow = params.task.agentWorkflows[params.role];
+  return params.roleEnabledByTask[params.role] && !workflow.completed;
+};
+
+const canOfferBuildQuickAction = (params: {
+  task: TaskCard;
+  availableWorkflowActions: Set<TaskWorkflowAction>;
+  roleEnabledByTask: Record<AgentRole, boolean>;
+}): boolean => {
+  if (
+    !canStartRoleWorkflow({
+      task: params.task,
+      role: "build",
+      roleEnabledByTask: params.roleEnabledByTask,
+    })
+  ) {
     return false;
   }
 
-  if (params.role === "build") {
-    return !params.task.agentWorkflows.builder.completed;
+  return params.availableWorkflowActions.has("build_start") || params.task.status === "in_progress";
+};
+
+const canOfferQaQuickAction = (params: {
+  task: TaskCard;
+  availableWorkflowActions: Set<TaskWorkflowAction>;
+  roleEnabledByTask: Record<AgentRole, boolean>;
+}): boolean => {
+  if (
+    !canStartRoleWorkflow({
+      task: params.task,
+      role: "qa",
+      roleEnabledByTask: params.roleEnabledByTask,
+    })
+  ) {
+    return false;
   }
-  return !params.task.agentWorkflows[params.role].completed;
+
+  return params.availableWorkflowActions.has("qa_start") || params.task.status === "ai_review";
 };
 
 const quickActionLabelForWorkflowAction = (action: TaskWorkflowAction, task: TaskCard): string => {
@@ -74,6 +116,9 @@ const quickActionLabelForWorkflowAction = (action: TaskWorkflowAction, task: Tas
     return "Start Planner";
   }
   if (action === "build_start") {
+    if (isQaRejectedTask(task)) {
+      return "Address QA Feedbacks";
+    }
     return task.status === "human_review" ? "Apply Human Changes" : "Start Implementation";
   }
   if (action === "qa_start") {
@@ -120,6 +165,14 @@ const orderQuickActions = (
   );
   if (task.status === "human_review") {
     launchActionPriority.set("build_pull_request_generation", -1);
+  }
+  if (task.status === "ai_review" && !task.agentWorkflows.qa.completed) {
+    launchActionPriority.set("qa_review", -1);
+  }
+  if (isQaRejectedTask(task)) {
+    launchActionPriority.set("build_after_qa_rejected", -1);
+  } else if (task.status === "in_progress" && !task.agentWorkflows.builder.completed) {
+    launchActionPriority.set("build_implementation_start", -1);
   }
   const fallbackPriority = launchActionPriority.size + 1;
 
@@ -218,8 +271,11 @@ export const buildAgentStudioQuickActions = (params: {
   }
 
   if (
-    availableWorkflowActions.has("build_start") &&
-    canStartRoleWorkflow({ task, role: "build", roleEnabledByTask: params.roleEnabledByTask })
+    canOfferBuildQuickAction({
+      task,
+      availableWorkflowActions,
+      roleEnabledByTask: params.roleEnabledByTask,
+    })
   ) {
     const launchActionId = resolveBuildContinuationLaunchAction(task);
     options.push(
@@ -234,8 +290,11 @@ export const buildAgentStudioQuickActions = (params: {
   }
 
   if (
-    availableWorkflowActions.has("qa_start") &&
-    canStartRoleWorkflow({ task, role: "qa", roleEnabledByTask: params.roleEnabledByTask })
+    canOfferQaQuickAction({
+      task,
+      availableWorkflowActions,
+      roleEnabledByTask: params.roleEnabledByTask,
+    })
   ) {
     options.push(
       createLifecycleOption(
@@ -295,5 +354,5 @@ export const buildAgentStudioQuickActions = (params: {
 export const selectPrimaryAgentStudioQuickAction = (
   options: AgentStudioQuickActionOption[],
 ): AgentStudioQuickActionOption | null => {
-  return options.find((option) => !option.disabled) ?? null;
+  return options[0] ?? null;
 };

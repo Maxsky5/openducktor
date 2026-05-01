@@ -156,6 +156,87 @@ describe("agent-studio-quick-actions", () => {
     });
   });
 
+  test("keeps the best primary quick action label when a session disables starting", () => {
+    const task = buildTask({
+      id: "task-1",
+      status: "in_progress",
+      availableActions: ["set_spec", "set_plan"],
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: true, canSkip: false, available: false, completed: false },
+      },
+    });
+
+    const options = buildAgentStudioQuickActions({
+      selectedTask: task,
+      sessionsForTask: [],
+      roleEnabledByTask: buildRoleEnabledMapForTask(task),
+      createSessionDisabled: true,
+    });
+
+    expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
+      launchActionId: "build_implementation_start",
+      label: "Start Implementation",
+      disabled: true,
+      disabledReason: "Wait for the current session to finish.",
+    });
+  });
+
+  test("uses status-specific primary quick actions for QA review and QA rejection", () => {
+    const aiReviewTask = buildTask({
+      id: "task-1",
+      status: "ai_review",
+      availableActions: [],
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: false, completed: true },
+        planner: { required: true, canSkip: false, available: false, completed: true },
+        builder: { required: true, canSkip: false, available: false, completed: true },
+        qa: { required: true, canSkip: false, available: false, completed: false },
+      },
+    });
+    const aiReviewOptions = buildAgentStudioQuickActions({
+      selectedTask: aiReviewTask,
+      sessionsForTask: [
+        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+      ],
+      roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTask),
+      createSessionDisabled: false,
+    });
+    expect(selectPrimaryAgentStudioQuickAction(aiReviewOptions)).toMatchObject({
+      launchActionId: "qa_review",
+      label: "Request QA Review",
+    });
+
+    const qaRejectedTask = buildTask({
+      id: "task-1",
+      status: "in_progress",
+      availableActions: [],
+      documentSummary: {
+        spec: { has: true },
+        plan: { has: true },
+        qaReport: { has: true, verdict: "rejected" },
+      },
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: false, completed: true },
+        planner: { required: true, canSkip: false, available: false, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: true, canSkip: false, available: false, completed: false },
+      },
+    });
+    const qaRejectedOptions = buildAgentStudioQuickActions({
+      selectedTask: qaRejectedTask,
+      sessionsForTask: [],
+      roleEnabledByTask: buildRoleEnabledMapForTask(qaRejectedTask),
+      createSessionDisabled: false,
+    });
+    expect(selectPrimaryAgentStudioQuickAction(qaRejectedOptions)).toMatchObject({
+      launchActionId: "build_after_qa_rejected",
+      label: "Address QA Feedbacks",
+    });
+  });
+
   test("surfaces active git conflict resolution as the primary quick action", () => {
     const task = buildTask({
       id: "task-1",
@@ -238,6 +319,10 @@ describe("agent-studio-quick-actions", () => {
       disabled: true,
       disabledReason: "Requires an existing Builder session.",
     });
-    expect(selectPrimaryAgentStudioQuickAction(options)).toBeNull();
+    expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
+      launchActionId: "build_pull_request_generation",
+      label: "Generate Pull Request",
+      disabled: true,
+    });
   });
 });

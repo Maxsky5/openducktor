@@ -189,7 +189,12 @@ describe("use-agent-studio-page-model-builders", () => {
     const optionIds = context.sessionCreateOptions.map((option) => option.id);
     expect(optionIds).toContain("build:build_after_human_request_changes:message_first");
     expect(context.sessionCreateOptions.every((option) => option.disabled)).toBe(true);
-    expect(context.primaryQuickAction).toBeNull();
+    expect(context.primaryQuickAction).toMatchObject({
+      launchActionId: "build_pull_request_generation",
+      label: "Generate Pull Request",
+      disabled: true,
+      disabledReason: "Wait for the current session to finish.",
+    });
     expect(context.createSessionDisabled).toBe(true);
   });
 
