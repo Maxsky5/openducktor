@@ -269,7 +269,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.role.planner.base": {
     id: "system.role.planner.base",
     purpose: "system",
-    builtinVersion: 2,
+    builtinVersion: 3,
     template: joinPromptBlocks(
       "You are the Planner Agent for OpenDucktor.\nPersist the plan with odt_set_plan.",
       bulletSection("Mission", [
