@@ -132,6 +132,60 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain(">Activity<");
   });
 
+  test("auto-opens failed ODT workflow tool error details", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-wf-failed",
+          role: "tool",
+          content: "Tool openducktor_odt_set_spec failed",
+          timestamp: "2026-02-22T10:20:36.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-wf-failed",
+            callId: "call-wf-failed",
+            tool: "openducktor_odt_set_spec",
+            status: "error",
+            input: { taskId: "task-x" },
+            error: "Task already has a spec",
+          },
+        },
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toMatch(/<details\b[^>]*\bopen\b/);
+    expect(html).toContain("Task already has a spec");
+  });
+
+  test("keeps regular failed tool errors collapsed", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-regular-failed",
+          role: "tool",
+          content: "Tool bash failed",
+          timestamp: "2026-02-22T10:20:37.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-regular-failed",
+            callId: "call-regular-failed",
+            tool: "bash",
+            status: "error",
+            input: { command: "invalid-cmd" },
+            error: "command not found",
+          },
+        },
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).not.toMatch(/<details\b[^>]*\bopen\b/);
+    expect(html).toContain("command not found");
+  });
+
   test("renders expandable details for regular read_task tool rows", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
