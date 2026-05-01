@@ -122,60 +122,63 @@ const createHookHarness = (initialProps: HookArgs) => {
       createElement(
         QueryProvider,
         { useIsolatedClient: true },
-        createElement(RuntimeDefinitionsContext.Provider, {
-          value: {
-            runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
-            isLoadingRuntimeDefinitions: false,
-            runtimeDefinitionsError: null,
-            refreshRuntimeDefinitions: async () => [
-              OPENCODE_RUNTIME_DESCRIPTOR,
-              QUEUED_RUNTIME_DESCRIPTOR,
-            ],
-            loadRepoRuntimeCatalog: async () => ({
-              runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-              models: [
-                {
-                  id: "openai/gpt-5",
-                  providerId: "openai",
-                  providerName: "OpenAI",
-                  modelId: "gpt-5",
-                  modelName: "GPT-5",
-                  variants: ["default"],
-                  contextWindow: 200_000,
-                  outputLimit: 8_192,
-                },
+        createElement(
+          RuntimeDefinitionsContext.Provider,
+          {
+            value: {
+              runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
+              isLoadingRuntimeDefinitions: false,
+              runtimeDefinitionsError: null,
+              refreshRuntimeDefinitions: async () => [
+                OPENCODE_RUNTIME_DESCRIPTOR,
+                QUEUED_RUNTIME_DESCRIPTOR,
               ],
-              defaultModelsByProvider: {
-                openai: "gpt-5",
-              },
-              profiles: [
-                {
-                  name: "spec",
-                  mode: "primary" as const,
-                  hidden: false,
+              loadRepoRuntimeCatalog: async () => ({
+                runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+                models: [
+                  {
+                    id: "openai/gpt-5",
+                    providerId: "openai",
+                    providerName: "OpenAI",
+                    modelId: "gpt-5",
+                    modelName: "GPT-5",
+                    variants: ["default"],
+                    contextWindow: 200_000,
+                    outputLimit: 8_192,
+                  },
+                ],
+                defaultModelsByProvider: {
+                  openai: "gpt-5",
                 },
-                {
-                  name: "planner",
-                  mode: "primary" as const,
-                  hidden: false,
-                },
-                {
-                  name: "build",
-                  mode: "primary" as const,
-                  hidden: false,
-                },
-                {
-                  name: "qa",
-                  mode: "primary" as const,
-                  hidden: false,
-                },
-              ],
-            }),
-            loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-            loadRepoRuntimeFileSearch: async () => [],
+                profiles: [
+                  {
+                    name: "spec",
+                    mode: "primary" as const,
+                    hidden: false,
+                  },
+                  {
+                    name: "planner",
+                    mode: "primary" as const,
+                    hidden: false,
+                  },
+                  {
+                    name: "build",
+                    mode: "primary" as const,
+                    hidden: false,
+                  },
+                  {
+                    name: "qa",
+                    mode: "primary" as const,
+                    hidden: false,
+                  },
+                ],
+              }),
+              loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+              loadRepoRuntimeFileSearch: async () => [],
+            },
           },
           children,
-        }),
+        ),
       ),
     );
 

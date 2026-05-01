@@ -534,16 +534,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const agentStudioHeaderModel = useMemo(
     () => ({
       ...orchestration.agentStudioHeaderModel,
-      onQuickAction: (
-        option: Parameters<typeof orchestration.agentStudioHeaderModel.onQuickAction>[0],
-      ) => {
-        if (option.launchActionId === "build_rebase_conflict_resolution") {
-          void gitConflictQuickActionContext?.resolveWithBuilder();
-          return;
-        }
-
-        orchestration.agentStudioHeaderModel.onQuickAction(option);
-      },
+      onResolveGitConflictQuickAction: gitConflictQuickActionContext
+        ? () => {
+            void gitConflictQuickActionContext.resolveWithBuilder();
+          }
+        : null,
     }),
     [gitConflictQuickActionContext, orchestration.agentStudioHeaderModel],
   );

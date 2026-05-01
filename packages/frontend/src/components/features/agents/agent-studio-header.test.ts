@@ -158,6 +158,7 @@ const buildModel = () => ({
     disabled: false,
   },
   onQuickAction: () => {},
+  onResolveGitConflictQuickAction: null,
   createSessionDisabled: false,
   isCreatingSession: false,
   stats: {
@@ -410,6 +411,52 @@ describe("AgentStudioHeader", () => {
     expect(onQuickAction).toHaveBeenCalledWith(
       expect.objectContaining({ role: "build", launchActionId: "build_implementation_start" }),
     );
+  });
+
+  test("routes git conflict quick action through the conflict handler", async () => {
+    const onQuickAction = mock(() => {});
+    const onResolveGitConflictQuickAction = mock(() => {});
+    render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          quickActions: [
+            {
+              id: "quick:build_rebase_conflict_resolution",
+              role: "build" as const,
+              launchActionId: "build_rebase_conflict_resolution" as const,
+              label: "Resolve Git Conflict",
+              description: "Ask Builder to resolve the active git conflict.",
+              postStartAction: "send_message" as const,
+              disabled: false,
+            },
+          ],
+          primaryQuickAction: {
+            id: "quick:build_rebase_conflict_resolution",
+            role: "build" as const,
+            launchActionId: "build_rebase_conflict_resolution" as const,
+            label: "Resolve Git Conflict",
+            description: "Ask Builder to resolve the active git conflict.",
+            postStartAction: "send_message" as const,
+            disabled: false,
+          },
+          onQuickAction,
+          onResolveGitConflictQuickAction,
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /Quick actions, primary: Resolve Git Conflict/i }),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Ask Builder to resolve the active git conflict."));
+    });
+
+    expect(onResolveGitConflictQuickAction).toHaveBeenCalled();
+    expect(onQuickAction).not.toHaveBeenCalled();
   });
 
   test("hides the task details button when no task is selected", () => {

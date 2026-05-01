@@ -24,10 +24,8 @@ import type {
   AgentStateContextValue,
   RepoSettingsInput,
 } from "@/types/state-slices";
-import type {
-  AgentStudioQuickActionOption,
-  SessionCreateOption,
-} from "../agents-page-session-tabs";
+import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
+import type { SessionCreateOption } from "../agents-page-session-tabs";
 import { useAgentStudioFreshSessionCreation } from "../use-agent-studio-fresh-session-creation";
 import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";
 import {

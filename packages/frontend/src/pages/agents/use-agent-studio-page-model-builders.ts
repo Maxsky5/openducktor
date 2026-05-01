@@ -8,16 +8,18 @@ import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
-  type AgentSessionWorkflowSummary,
   type AgentStudioQuickActionOption,
   buildAgentStudioQuickActions,
+  selectPrimaryAgentStudioQuickAction,
+} from "./agent-studio-quick-actions";
+import {
+  type AgentSessionWorkflowSummary,
   buildLatestSessionByRoleMap,
   buildRoleEnabledMapForTask,
   buildRoleSessionSummaryMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
   buildWorkflowStateByRole,
-  selectPrimaryAgentStudioQuickAction,
 } from "./agents-page-session-tabs";
 
 export type AgentStudioDocumentsContext = {

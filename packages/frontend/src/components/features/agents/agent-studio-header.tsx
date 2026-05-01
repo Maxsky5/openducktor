@@ -85,6 +85,7 @@ export type AgentStudioHeaderModel = {
   quickActions: AgentStudioQuickActionOption[];
   primaryQuickAction: AgentStudioQuickActionOption | null;
   onQuickAction: (option: AgentStudioQuickActionOption) => void;
+  onResolveGitConflictQuickAction: (() => void) | null;
   createSessionDisabled: boolean;
   isCreatingSession: boolean;
   agentStudioReady: boolean;
@@ -217,6 +218,200 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   return "Blocked by workflow state";
 };
 
+type PrepareSessionMenuProps = {
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
+  options: AgentSessionCreateOption[];
+  disabledReason: string | null;
+  triggerTitle: string;
+  onPrepareMessageFirstSession: (option: AgentSessionCreateOption) => void;
+};
+
+function PrepareSessionMenu({
+  isOpen,
+  onOpenChange,
+  options,
+  disabledReason,
+  triggerTitle,
+  onPrepareMessageFirstSession,
+}: PrepareSessionMenuProps): ReactElement {
+  const optionsByRole = useMemo(
+    () =>
+      options.reduce(
+        (acc, option) => {
+          if (!acc[option.role]) {
+            acc[option.role] = [];
+          }
+          acc[option.role].push(option);
+          return acc;
+        },
+        {} as Record<AgentRole, AgentSessionCreateOption[]>,
+      ),
+    [options],
+  );
+
+  return (
+    <Popover open={isOpen} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="default"
+          size="icon"
+          className="h-9 w-9 rounded-md"
+          disabled={disabledReason !== null}
+          title={triggerTitle}
+          aria-label={triggerTitle}
+        >
+          <Plus className="size-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <Command>
+          <CommandList>
+            <CommandEmpty>No session roles available.</CommandEmpty>
+            {(Object.entries(optionsByRole) as [AgentRole, AgentSessionCreateOption[]][]).map(
+              ([role, roleOptions]) => (
+                <CommandGroup key={role} heading={role.toUpperCase()}>
+                  {roleOptions.map((option) => (
+                    <CommandItem
+                      key={option.id}
+                      disabled={option.disabled}
+                      onSelect={() => {
+                        if (option.disabled) {
+                          return;
+                        }
+                        onPrepareMessageFirstSession(option);
+                        onOpenChange(false);
+                      }}
+                    >
+                      <Sparkles className="size-3.5 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {option.label}
+                        </p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {option.disabledReason ?? option.description}
+                        </p>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ),
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+type QuickActionsMenuProps = {
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
+  agentStudioReady: boolean;
+  options: AgentStudioQuickActionOption[];
+  primaryAction: AgentStudioQuickActionOption | null;
+  onQuickAction: (option: AgentStudioQuickActionOption) => void;
+  onResolveGitConflictQuickAction: (() => void) | null;
+};
+
+const isGitConflictResolutionQuickAction = (option: AgentStudioQuickActionOption): boolean => {
+  return option.launchActionId === "build_rebase_conflict_resolution";
+};
+
+type QuickActionCommandItemProps = {
+  option: AgentStudioQuickActionOption;
+  onSelect: (option: AgentStudioQuickActionOption) => void;
+};
+
+function QuickActionCommandItem({ option, onSelect }: QuickActionCommandItemProps): ReactElement {
+  return (
+    <CommandItem
+      disabled={option.disabled}
+      onSelect={() => {
+        onSelect(option);
+      }}
+    >
+      <Zap className="size-3.5 text-muted-foreground" />
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-foreground">{option.label}</p>
+        <p className="truncate text-[11px] text-muted-foreground">
+          {option.disabledReason ?? option.description}
+        </p>
+      </div>
+    </CommandItem>
+  );
+}
+
+function QuickActionsMenu({
+  isOpen,
+  onOpenChange,
+  agentStudioReady,
+  options,
+  primaryAction,
+  onQuickAction,
+  onResolveGitConflictQuickAction,
+}: QuickActionsMenuProps): ReactElement {
+  const triggerTitle = primaryAction ? `Quick actions · ${primaryAction.label}` : "Quick actions";
+  const remainingActions = useMemo(
+    () => options.filter((option) => option.id !== primaryAction?.id),
+    [primaryAction?.id, options],
+  );
+  const selectAction = (option: AgentStudioQuickActionOption): void => {
+    if (option.disabled) {
+      return;
+    }
+    if (isGitConflictResolutionQuickAction(option)) {
+      if (!onResolveGitConflictQuickAction) {
+        throw new Error("Git conflict quick action handler is not configured.");
+      }
+      onResolveGitConflictQuickAction();
+      onOpenChange(false);
+      return;
+    }
+    onQuickAction(option);
+    onOpenChange(false);
+  };
+
+  return (
+    <Popover open={isOpen} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-9 max-w-48 gap-2 rounded-md px-3"
+          disabled={!agentStudioReady || options.length === 0}
+          title={triggerTitle}
+          aria-label={
+            primaryAction ? `Quick actions, primary: ${primaryAction.label}` : "Quick actions"
+          }
+        >
+          <Zap className="size-4" />
+          <span className="truncate">{primaryAction?.label ?? "Actions"}</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <Command>
+          <CommandList>
+            <CommandEmpty>No quick actions available.</CommandEmpty>
+            {primaryAction ? (
+              <CommandGroup heading="Primary">
+                <QuickActionCommandItem option={primaryAction} onSelect={selectAction} />
+              </CommandGroup>
+            ) : null}
+            <CommandGroup heading={primaryAction ? "More actions" : "Actions"}>
+              {remainingActions.map((option) => (
+                <QuickActionCommandItem key={option.id} option={option} onSelect={selectAction} />
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }): ReactElement {
   const {
     taskTitle,
@@ -230,6 +425,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
     quickActions,
     primaryQuickAction,
     onQuickAction,
+    onResolveGitConflictQuickAction,
     createSessionDisabled,
     isCreatingSession,
     agentStudioReady,
@@ -258,27 +454,6 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
   const selectedSessionOption = useMemo(
     () => sessionSelectorOptions.find((option) => option.value === sessionSelector.value) ?? null,
     [sessionSelector.value, sessionSelectorOptions],
-  );
-  const createOptionsByRole = useMemo(
-    () =>
-      sessionCreateOptions.reduce(
-        (acc, option) => {
-          if (!acc[option.role]) {
-            acc[option.role] = [];
-          }
-          acc[option.role].push(option);
-          return acc;
-        },
-        {} as Record<AgentRole, AgentSessionCreateOption[]>,
-      ),
-    [sessionCreateOptions],
-  );
-  const quickActionTriggerTitle = primaryQuickAction
-    ? `Quick actions · ${primaryQuickAction.label}`
-    : "Quick actions";
-  const remainingQuickActions = useMemo(
-    () => quickActions.filter((option) => option.id !== primaryQuickAction?.id),
-    [primaryQuickAction?.id, quickActions],
   );
   const prepareSessionDisabledReason = !agentStudioReady
     ? "Agent Studio is not ready."
@@ -419,134 +594,23 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
               </Command>
             </PopoverContent>
           </Popover>
-          <Popover open={isCreateSessionMenuOpen} onOpenChange={setIsCreateSessionMenuOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="default"
-                size="icon"
-                className="h-9 w-9 rounded-md"
-                disabled={prepareSessionDisabledReason !== null}
-                title={prepareSessionTriggerTitle}
-                aria-label={prepareSessionTriggerTitle}
-              >
-                <Plus className="size-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-80 p-0">
-              <Command>
-                <CommandList>
-                  <CommandEmpty>No session roles available.</CommandEmpty>
-                  {(
-                    Object.entries(createOptionsByRole) as [AgentRole, AgentSessionCreateOption[]][]
-                  ).map(([role, options]) => (
-                    <CommandGroup key={role} heading={role.toUpperCase()}>
-                      {options.map((option) => (
-                        <CommandItem
-                          key={option.id}
-                          disabled={option.disabled}
-                          onSelect={() => {
-                            if (option.disabled) {
-                              return;
-                            }
-                            onPrepareMessageFirstSession(option);
-                            setIsCreateSessionMenuOpen(false);
-                          }}
-                        >
-                          <Sparkles className="size-3.5 text-muted-foreground" />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-foreground">
-                              {option.label}
-                            </p>
-                            <p className="truncate text-[11px] text-muted-foreground">
-                              {option.disabledReason ?? option.description}
-                            </p>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  ))}
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-          <Popover open={isQuickActionsMenuOpen} onOpenChange={setIsQuickActionsMenuOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 max-w-48 gap-2 rounded-md px-3"
-                disabled={!agentStudioReady || quickActions.length === 0}
-                title={quickActionTriggerTitle}
-                aria-label={
-                  primaryQuickAction
-                    ? `Quick actions, primary: ${primaryQuickAction.label}`
-                    : "Quick actions"
-                }
-              >
-                <Zap className="size-4" />
-                <span className="truncate">{primaryQuickAction?.label ?? "Actions"}</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-80 p-0">
-              <Command>
-                <CommandList>
-                  <CommandEmpty>No quick actions available.</CommandEmpty>
-                  {primaryQuickAction ? (
-                    <CommandGroup heading="Primary">
-                      <CommandItem
-                        key={primaryQuickAction.id}
-                        disabled={primaryQuickAction.disabled}
-                        onSelect={() => {
-                          if (primaryQuickAction.disabled) {
-                            return;
-                          }
-                          onQuickAction(primaryQuickAction);
-                          setIsQuickActionsMenuOpen(false);
-                        }}
-                      >
-                        <Zap className="size-3.5 text-muted-foreground" />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {primaryQuickAction.label}
-                          </p>
-                          <p className="truncate text-[11px] text-muted-foreground">
-                            {primaryQuickAction.description}
-                          </p>
-                        </div>
-                      </CommandItem>
-                    </CommandGroup>
-                  ) : null}
-                  <CommandGroup heading={primaryQuickAction ? "More actions" : "Actions"}>
-                    {remainingQuickActions.map((option) => (
-                      <CommandItem
-                        key={option.id}
-                        disabled={option.disabled}
-                        onSelect={() => {
-                          if (option.disabled) {
-                            return;
-                          }
-                          onQuickAction(option);
-                          setIsQuickActionsMenuOpen(false);
-                        }}
-                      >
-                        <Zap className="size-3.5 text-muted-foreground" />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {option.label}
-                          </p>
-                          <p className="truncate text-[11px] text-muted-foreground">
-                            {option.disabledReason ?? option.description}
-                          </p>
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
+          <PrepareSessionMenu
+            isOpen={isCreateSessionMenuOpen}
+            onOpenChange={setIsCreateSessionMenuOpen}
+            options={sessionCreateOptions}
+            disabledReason={prepareSessionDisabledReason}
+            triggerTitle={prepareSessionTriggerTitle}
+            onPrepareMessageFirstSession={onPrepareMessageFirstSession}
+          />
+          <QuickActionsMenu
+            isOpen={isQuickActionsMenuOpen}
+            onOpenChange={setIsQuickActionsMenuOpen}
+            agentStudioReady={agentStudioReady}
+            options={quickActions}
+            primaryAction={primaryQuickAction}
+            onQuickAction={onQuickAction}
+            onResolveGitConflictQuickAction={onResolveGitConflictQuickAction}
+          />
         </div>
       </div>
 

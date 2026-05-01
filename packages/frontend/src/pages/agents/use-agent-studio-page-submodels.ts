@@ -1,8 +1,9 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { useMemo } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import { ROLE_OPTIONS } from "./agents-page-constants";
-import type { AgentStudioQuickActionOption, SessionCreateOption } from "./agents-page-session-tabs";
+import type { SessionCreateOption } from "./agents-page-session-tabs";
 import { buildAgentStudioHeaderModel } from "./agents-page-view-model";
 import type {
   AgentStudioWorkflowStepSelect,
@@ -21,6 +22,7 @@ type UseAgentStudioHeaderModelArgs = {
   onSessionSelectionChange: (nextValue: string) => void;
   onPrepareMessageFirstSession: (option: SessionCreateOption) => void;
   onQuickAction: (option: AgentStudioQuickActionOption) => void;
+  onResolveGitConflictQuickAction?: (() => void) | null;
   workflow: WorkflowHeaderContext;
 };
 
@@ -36,6 +38,7 @@ export const useAgentStudioHeaderModel = ({
   onSessionSelectionChange,
   onPrepareMessageFirstSession,
   onQuickAction,
+  onResolveGitConflictQuickAction,
   workflow,
 }: UseAgentStudioHeaderModelArgs): ReturnType<typeof buildAgentStudioHeaderModel> => {
   const activeSessionStatus = activeSession?.status ?? null;
@@ -62,6 +65,7 @@ export const useAgentStudioHeaderModel = ({
         quickActions: workflow.quickActions,
         primaryQuickAction: workflow.primaryQuickAction,
         onQuickAction,
+        onResolveGitConflictQuickAction: onResolveGitConflictQuickAction ?? null,
         createSessionDisabled: workflow.createSessionDisabled,
         isStarting,
         contextSessionsLength,
@@ -74,6 +78,7 @@ export const useAgentStudioHeaderModel = ({
       onOpenTaskDetails,
       onPrepareMessageFirstSession,
       onQuickAction,
+      onResolveGitConflictQuickAction,
       onSessionSelectionChange,
       onWorkflowStepSelect,
       selectedTask,

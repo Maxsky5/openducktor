@@ -8,9 +8,10 @@ import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agen
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { ROLE_OPTIONS } from "./agents-page-constants";
-import type { AgentStudioQuickActionOption, SessionCreateOption } from "./agents-page-session-tabs";
+import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
   buildAgentStudioTaskTabsModel,
   buildAgentStudioWorkspaceSidebarModel,
@@ -349,6 +350,7 @@ export function useAgentStudioPageModels({
     onSessionSelectionChange: sessionActions.handleSessionSelectionChange,
     onPrepareMessageFirstSession: sessionActions.handlePrepareMessageFirstSession,
     onQuickAction: sessionActions.handleQuickAction,
+    onResolveGitConflictQuickAction: null,
     workflow: {
       workflowStateByRole,
       selectedInteractionRole,
