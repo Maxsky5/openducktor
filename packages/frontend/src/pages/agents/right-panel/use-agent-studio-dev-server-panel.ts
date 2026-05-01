@@ -433,12 +433,14 @@ export function useAgentStudioDevServerPanel({
 
   const error =
     actionError ?? subscriptionError ?? (stateQuery.error ? errorMessage(stateQuery.error) : null);
-  const disabledReason =
-    mode === "disabled"
-      ? "Create or resume a Builder worktree before starting repository dev servers."
-      : mode === "empty"
-        ? "Configure one or more builder dev server commands in repository settings to stream them here."
-        : null;
+  let disabledReason: string | null = null;
+
+  if (mode === "disabled") {
+    disabledReason = "Create or resume a Builder worktree before starting repository dev servers.";
+  } else if (mode === "empty") {
+    disabledReason =
+      "Configure one or more builder dev server commands in repository settings to stream them here.";
+  }
 
   return {
     mode,
