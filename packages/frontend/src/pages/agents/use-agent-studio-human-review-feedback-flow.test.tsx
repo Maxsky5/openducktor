@@ -159,7 +159,6 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
     const startSessionRequests: Array<{
       taskId: string;
       role: "build";
-      reason: "create_session";
       existingSessionOptions: Array<{ value: string }>;
       initialSourceExternalSessionId?: string | null;
       initialStartMode?: "fresh" | "reuse" | "fork";
@@ -199,7 +198,6 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       taskId: "task-1",
       role: "build",
       launchActionId: "build_after_human_request_changes",
-      reason: "create_session",
       initialSourceExternalSessionId: "session-build-existing",
       postStartAction: "kickoff",
       message: "Ship the requested fixes.",

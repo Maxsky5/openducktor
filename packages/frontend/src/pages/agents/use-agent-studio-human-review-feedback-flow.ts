@@ -25,7 +25,6 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
     request: SessionStartLaunchRequest & {
       role: "build";
       launchActionId: SessionLaunchActionId;
-      reason: "create_session";
       existingSessionOptions: SessionStartExistingSessionOption[];
       initialSourceExternalSessionId?: string | null;
       postStartAction: SessionStartPostAction;
@@ -98,7 +97,6 @@ export function useAgentStudioHumanReviewFeedbackFlow({
             taskId: request.taskId,
             role: request.role,
             launchActionId: request.launchActionId,
-            reason: "create_session" as const,
             existingSessionOptions: request.existingSessionOptions,
             ...(request.initialSourceExternalSessionId !== undefined
               ? { initialSourceExternalSessionId: request.initialSourceExternalSessionId }

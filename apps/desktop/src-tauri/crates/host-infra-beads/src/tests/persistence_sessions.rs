@@ -111,9 +111,23 @@ fn upsert_agent_session_updates_existing_session_without_duplication() -> Result
         session_1.get("externalSessionId").and_then(Value::as_str),
         Some("session-1")
     );
-    assert!(session_1.get("sessionId").is_none());
-    assert!(session_1.get("scenario").is_none());
-    assert!(session_1.get("baseUrl").is_none());
+    let mut session_keys = session_1
+        .as_object()
+        .expect("session should be an object")
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    session_keys.sort_unstable();
+    assert_eq!(
+        session_keys,
+        vec![
+            "externalSessionId",
+            "role",
+            "runtimeKind",
+            "startedAt",
+            "workingDirectory"
+        ]
+    );
     Ok(())
 }
 

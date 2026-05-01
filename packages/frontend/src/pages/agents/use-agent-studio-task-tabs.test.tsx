@@ -194,8 +194,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-2",
         session: undefined,
         agent: undefined,
-        autostart: undefined,
-        start: undefined,
       });
 
       await harness.unmount();
@@ -259,8 +257,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-2",
         session: undefined,
         agent: undefined,
-        autostart: undefined,
-        start: undefined,
       });
 
       await harness.unmount();
@@ -369,8 +365,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-1",
         session: undefined,
         agent: undefined,
-        autostart: undefined,
-        start: undefined,
       });
 
       await harness.unmount();
@@ -466,8 +460,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-2",
         session: undefined,
         agent: undefined,
-        autostart: undefined,
-        start: undefined,
       });
 
       await harness.unmount();
@@ -613,8 +605,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-b",
         session: undefined,
         agent: undefined,
-        autostart: undefined,
-        start: undefined,
       });
       expect(updateCalls.some((call) => call.task === "task-a")).toBeFalse();
 
@@ -801,8 +791,6 @@ describe("useAgentStudioTaskTabs", () => {
         task: "task-1",
         session: undefined,
         agent: undefined,
-        autostart: undefined,
-        start: undefined,
       });
 
       await harness.unmount();

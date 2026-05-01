@@ -633,8 +633,6 @@ describe("useAgentStudioSelectionController", () => {
         task: "task-2",
         session: undefined,
         agent: undefined,
-        autostart: undefined,
-        start: undefined,
       });
 
       await harness.update(

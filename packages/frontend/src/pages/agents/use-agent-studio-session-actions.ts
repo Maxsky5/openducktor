@@ -256,7 +256,7 @@ export function useAgentStudioSessionActions({
       try {
         let targetExternalSessionId: string | null | undefined = activeExternalSessionId;
         if (!targetExternalSessionId) {
-          targetExternalSessionId = await startSession("composer_send");
+          targetExternalSessionId = await startSession();
         }
 
         if (!targetExternalSessionId) {

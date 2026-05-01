@@ -10,17 +10,10 @@ export type SessionStartExistingSessionOption = {
   selectedModel?: AgentModelSelection | null;
 };
 
-export type SessionStartRequestReason =
-  | "create_session"
-  | "composer_send"
-  | "launch_kickoff"
-  | "rebase_conflict_resolution";
-
 export type NewSessionStartRequest = {
   taskId: string;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
-  reason: SessionStartRequestReason;
   selectedModel: AgentModelSelection | null;
   targetWorkingDirectory?: string | null;
   initialTargetBranch?: GitTargetBranch | null;

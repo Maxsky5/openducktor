@@ -9,7 +9,7 @@ import {
 } from "./use-agent-studio-session-action-helpers";
 
 describe("use-agent-studio-session-action-helpers", () => {
-  test("buildAgentStudioSelectionQueryUpdate clears autostart and start", () => {
+  test("buildAgentStudioSelectionQueryUpdate selects the requested session", () => {
     expect(
       buildAgentStudioSelectionQueryUpdate({
         taskId: "task-1",
@@ -20,8 +20,6 @@ describe("use-agent-studio-session-action-helpers", () => {
       task: "task-1",
       session: "session-1",
       agent: "spec",
-      autostart: undefined,
-      start: undefined,
     });
   });
 
@@ -44,8 +42,6 @@ describe("use-agent-studio-session-action-helpers", () => {
         task: "task-1",
         session: "session-1",
         agent: "build",
-        autostart: undefined,
-        start: undefined,
       },
     ]);
   });
@@ -67,8 +63,6 @@ describe("use-agent-studio-session-action-helpers", () => {
       task: "task-existing",
       session: "session-existing",
       agent: "spec",
-      autostart: undefined,
-      start: undefined,
     });
   });
 

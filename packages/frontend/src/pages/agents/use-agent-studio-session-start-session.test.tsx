@@ -94,7 +94,7 @@ describe("useAgentStudioSessionStartSession", () => {
 
     let specStartPromise: Promise<string | undefined> | undefined;
     await harness.run((state) => {
-      specStartPromise = state.startSession("composer_send");
+      specStartPromise = state.startSession();
     });
 
     await harness.update(
@@ -108,7 +108,7 @@ describe("useAgentStudioSessionStartSession", () => {
 
     let plannerStartPromise: Promise<string | undefined> | undefined;
     await harness.run((state) => {
-      plannerStartPromise = state.startSession("composer_send");
+      plannerStartPromise = state.startSession();
     });
 
     expect(executeRequestedSessionStart).toHaveBeenCalledTimes(2);
@@ -162,7 +162,7 @@ describe("useAgentStudioSessionStartSession", () => {
 
     let externalSessionId: string | undefined;
     await harness.run(async (state) => {
-      externalSessionId = await state.startSession("composer_send");
+      externalSessionId = await state.startSession();
     });
 
     expect(externalSessionId).toBe("session-new");
@@ -199,7 +199,7 @@ describe("useAgentStudioSessionStartSession", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.startSession("composer_send");
+      await state.startSession();
     });
 
     expect(startAgentSession).toHaveBeenCalledWith(

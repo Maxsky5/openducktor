@@ -95,7 +95,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         expect.objectContaining({
           taskId: "task-1",
           role: "build",
-          reason: "rebase_conflict_resolution",
           postStartAction: "send_message",
           initialStartMode: "reuse",
           initialSourceExternalSessionId: "build-1",

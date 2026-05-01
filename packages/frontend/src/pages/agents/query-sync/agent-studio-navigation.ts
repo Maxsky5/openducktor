@@ -10,16 +10,15 @@ export const AGENT_STUDIO_QUERY_KEYS = {
   task: "task",
   session: "session",
   agent: "agent",
-  autostart: "autostart",
-  start: "start",
 } as const;
+
+const LEGACY_AGENT_STUDIO_QUERY_KEYS = ["autostart", "start"] as const;
 
 const AGENT_STUDIO_MANAGED_URL_QUERY_KEYS = [
   AGENT_STUDIO_QUERY_KEYS.task,
   AGENT_STUDIO_QUERY_KEYS.session,
   AGENT_STUDIO_QUERY_KEYS.agent,
-  AGENT_STUDIO_QUERY_KEYS.autostart,
-  AGENT_STUDIO_QUERY_KEYS.start,
+  ...LEGACY_AGENT_STUDIO_QUERY_KEYS,
 ] as const;
 
 const AGENT_STUDIO_PERSISTED_CONTEXT_KEYS = {

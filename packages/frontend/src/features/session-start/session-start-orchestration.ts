@@ -6,11 +6,7 @@ import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slic
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import type { SessionStartModalSource } from "./session-start-modal-types";
 import { buildReusableSessionOptions } from "./session-start-reuse-options";
-import type {
-  NewSessionStartDecision,
-  NewSessionStartRequest,
-  SessionStartRequestReason,
-} from "./session-start-types";
+import type { NewSessionStartDecision, NewSessionStartRequest } from "./session-start-types";
 import {
   type SessionStartBeforeAction,
   type SessionStartPostAction,
@@ -19,16 +15,14 @@ import {
 } from "./session-start-workflow";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 
-export type SessionStartFlowRequest = Omit<NewSessionStartRequest, "selectedModel" | "reason"> & {
+export type SessionStartFlowRequest = Omit<NewSessionStartRequest, "selectedModel"> & {
   initialStartMode?: AgentSessionStartMode;
   postStartAction: SessionStartPostAction;
   message?: string;
   beforeStartAction?: SessionStartBeforeAction;
 };
 
-export type SessionStartLaunchRequest = SessionStartFlowRequest & {
-  reason: SessionStartRequestReason;
-};
+export type SessionStartLaunchRequest = SessionStartFlowRequest;
 
 export type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;
 

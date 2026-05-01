@@ -14,6 +14,7 @@ import type { AgentRole } from "@openducktor/core";
 import { createElement } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import type { ComboboxOption } from "@/components/ui/combobox";
+import { SESSION_LAUNCH_ACTIONS, sessionLaunchActionIds } from "./session-launch-actions";
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
 
@@ -262,20 +263,7 @@ export const getRuntimeDescriptorCapabilityConfigErrors = (
   return errors;
 };
 
-const launchStartModeRequirements = [
-  { id: "spec_initial", role: "spec", allowedStartModes: ["fresh"] },
-  { id: "planner_initial", role: "planner", allowedStartModes: ["fresh"] },
-  { id: "build_implementation_start", role: "build", allowedStartModes: ["fresh"] },
-  { id: "build_after_qa_rejected", role: "build", allowedStartModes: ["fresh", "reuse"] },
-  { id: "build_after_human_request_changes", role: "build", allowedStartModes: ["fresh", "reuse"] },
-  { id: "build_pull_request_generation", role: "build", allowedStartModes: ["reuse", "fork"] },
-  { id: "build_rebase_conflict_resolution", role: "build", allowedStartModes: ["fresh", "reuse"] },
-  { id: "qa_review", role: "qa", allowedStartModes: ["fresh", "reuse"] },
-] as const satisfies ReadonlyArray<{
-  id: string;
-  role: AgentRole;
-  allowedStartModes: readonly AgentSessionStartMode[];
-}>;
+const launchStartModeRequirements = sessionLaunchActionIds.map((id) => SESSION_LAUNCH_ACTIONS[id]);
 
 const getUnsupportedLaunchStartModes = (
   runtimeDescriptor: RuntimeDescriptor,

@@ -1079,8 +1079,6 @@ describe("useAgentStudioSessionActions", () => {
       task: "task-2",
       session: "session-2",
       agent: "spec",
-      autostart: undefined,
-      start: undefined,
     });
 
     await harness.unmount();
@@ -1107,8 +1105,6 @@ describe("useAgentStudioSessionActions", () => {
       task: "task-1",
       session: undefined,
       agent: "planner",
-      autostart: undefined,
-      start: undefined,
     });
 
     await harness.unmount();

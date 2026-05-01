@@ -10,7 +10,6 @@ import type {
   SessionLaunchActionId,
   SessionStartFlowRequest,
   SessionStartLaunchRequest,
-  SessionStartRequestReason,
 } from "@/features/session-start";
 import {
   buildSessionStartModalRequest,
@@ -83,7 +82,7 @@ export function useAgentStudioSessionStartFlow({
   sessionStartModal: SessionStartModalModel | null;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   startSessionRequest: (request: AgentStudioSessionStartRequest) => Promise<string | undefined>;
-  startSession: (reason: SessionStartRequestReason) => Promise<string | undefined>;
+  startSession: () => Promise<string | undefined>;
   startLaunchKickoff: () => Promise<void>;
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
@@ -246,7 +245,6 @@ export function useAgentStudioSessionStartFlow({
     }
 
     const workflow = await runSessionStart({
-      reason: "launch_kickoff",
       postStartAction: "kickoff",
     });
     if (!workflow) {

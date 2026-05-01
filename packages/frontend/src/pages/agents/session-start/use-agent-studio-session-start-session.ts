@@ -7,7 +7,6 @@ import type {
   SessionLaunchActionId,
   SessionStartFlowRequest,
   SessionStartPostAction,
-  SessionStartRequestReason,
   SessionStartWorkflowResult,
 } from "@/features/session-start";
 import { executeSessionStartFromDecision } from "@/features/session-start";
@@ -62,16 +61,14 @@ export function useAgentStudioSessionStartSession({
   onPostStartActionError,
   executeRequestedSessionStart,
 }: UseAgentStudioSessionStartSessionArgs): {
-  startSession: (reason: SessionStartRequestReason) => Promise<string | undefined>;
+  startSession: () => Promise<string | undefined>;
   runSessionStart: (params: {
-    reason: SessionStartRequestReason;
     postStartAction: SessionStartPostAction;
   }) => Promise<SessionStartWorkflowResult | undefined>;
 } {
   const queryClient = useQueryClient();
   const startRequestedSession = useCallback(
     async (params: {
-      reason: SessionStartRequestReason;
       postStartAction: SessionStartPostAction;
     }): Promise<SessionStartWorkflowResult | undefined> => {
       const startContextKey = buildAgentStudioAsyncActivityContextKey({
@@ -148,7 +145,6 @@ export function useAgentStudioSessionStartSession({
 
   const runSessionStart = useCallback(
     async (params: {
-      reason: SessionStartRequestReason;
       postStartAction: SessionStartPostAction;
     }): Promise<SessionStartWorkflowResult | undefined> => {
       if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
@@ -205,16 +201,12 @@ export function useAgentStudioSessionStartSession({
     ],
   );
 
-  const startSession = useCallback(
-    async (reason: SessionStartRequestReason): Promise<string | undefined> => {
-      const workflow = await runSessionStart({
-        reason,
-        postStartAction: "none",
-      });
-      return workflow?.externalSessionId;
-    },
-    [runSessionStart],
-  );
+  const startSession = useCallback(async (): Promise<string | undefined> => {
+    const workflow = await runSessionStart({
+      postStartAction: "none",
+    });
+    return workflow?.externalSessionId;
+  }, [runSessionStart]);
 
   return {
     startSession,

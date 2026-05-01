@@ -17,8 +17,6 @@ const toTaskIntentQueryUpdate = (taskId: string): QueryUpdate => {
     [AGENT_STUDIO_QUERY_KEYS.task]: taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
-    [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
-    [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
   };
 };
 
@@ -26,8 +24,6 @@ const toClearTaskQueryUpdate = (): QueryUpdate => ({
   [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
   [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
   [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
-  [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
-  [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
 });
 
 export function useAgentStudioTaskTabs(args: {

@@ -363,7 +363,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.mount();
     let startPromise: Promise<string | undefined> | undefined;
     await harness.run(async (state) => {
-      startPromise = state.startSession("composer_send");
+      startPromise = state.startSession();
     });
     await confirmSessionStartModal({
       harness,
@@ -380,8 +380,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-new",
       agent: "spec",
-      autostart: undefined,
-      start: undefined,
     });
 
     await harness.unmount();
@@ -404,7 +402,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     let startPromise: Promise<string | undefined> | undefined;
     await harness.run((state) => {
-      startPromise = state.startSession("composer_send");
+      startPromise = state.startSession();
     });
     expect(harness.getLatest().isStarting).toBe(false);
     await confirmSessionStartModal({
@@ -434,8 +432,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-new",
       agent: "planner",
-      autostart: undefined,
-      start: undefined,
     });
     expect(harness.getLatest().isStarting).toBe(false);
 
@@ -538,8 +534,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-plan",
       agent: "planner",
-      autostart: undefined,
-      start: undefined,
     });
 
     await harness.unmount();
@@ -710,8 +704,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-build-rework",
       agent: "build",
-      autostart: undefined,
-      start: undefined,
     });
 
     await harness.unmount();

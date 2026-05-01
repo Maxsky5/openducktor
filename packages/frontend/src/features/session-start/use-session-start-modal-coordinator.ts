@@ -6,8 +6,7 @@ import { AGENT_ROLE_LABELS } from "@/types";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import { orderStartModesForDisplay } from "./session-start-display";
 import { getSessionLaunchAction, type SessionLaunchActionId } from "./session-start-launch-options";
-import type { SessionStartModalIntent, SessionStartPostAction } from "./session-start-modal-types";
-import type { SessionStartRequestReason } from "./session-start-types";
+import type { SessionStartModalIntent } from "./session-start-modal-types";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
 
 const startModeLabelFor = (startMode: "fresh" | "reuse" | "fork"): string => {
@@ -47,18 +46,6 @@ export const buildSessionStartModalDescription = ({
     return `Choose how to ${allowedModeLabels.join(conjunction)} for ${actionLabel}.`;
   }
   return `${startModeLabelFor(launchAction.defaultStartMode)} for ${actionLabel}.`;
-};
-
-export const toSessionStartPostAction = (
-  reason: SessionStartRequestReason,
-): SessionStartPostAction => {
-  if (reason === "composer_send" || reason === "rebase_conflict_resolution") {
-    return "send_message";
-  }
-  if (reason === "launch_kickoff") {
-    return "kickoff";
-  }
-  return "none";
 };
 
 export type SessionStartModalOpenRequest = Omit<

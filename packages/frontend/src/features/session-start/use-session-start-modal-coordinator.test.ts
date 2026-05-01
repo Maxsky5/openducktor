@@ -3,7 +3,6 @@ import { orderStartModesForDisplay } from "./session-start-display";
 import {
   buildSessionStartModalDescription,
   buildSessionStartModalTitle,
-  toSessionStartPostAction,
 } from "./use-session-start-modal-coordinator";
 
 describe("use-session-start-modal-coordinator", () => {
@@ -37,11 +36,5 @@ describe("use-session-start-modal-coordinator", () => {
     ).toBe(
       "Choose how to reuse an existing session or fork an existing session for Generate Pull Request.",
     );
-  });
-
-  test("maps session-start reasons to post actions", () => {
-    expect(toSessionStartPostAction("create_session")).toBe("none");
-    expect(toSessionStartPostAction("composer_send")).toBe("send_message");
-    expect(toSessionStartPostAction("launch_kickoff")).toBe("kickoff");
   });
 });

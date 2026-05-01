@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  countPromptErrorsByRoleTab,
-  PROMPT_TEMPLATE_LABELS,
-  resolvePromptRoleTab,
-} from "./settings-modal-constants";
+import { countPromptErrorsByRoleTab, resolvePromptRoleTab } from "./settings-modal-constants";
 
 describe("settings-modal-constants", () => {
   test("maps template ids to prompt role tabs", () => {

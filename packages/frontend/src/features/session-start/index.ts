@@ -38,7 +38,6 @@ export type {
   NewSessionStartDecision,
   NewSessionStartRequest,
   SessionStartExistingSessionOption,
-  SessionStartRequestReason,
 } from "./session-start-types";
 export {
   type SessionStartBeforeAction,
@@ -51,7 +50,6 @@ export type { SessionStartModalOpenRequest } from "./use-session-start-modal-coo
 export {
   buildSessionStartModalDescription,
   buildSessionStartModalTitle,
-  toSessionStartPostAction,
   useSessionStartModalCoordinator,
 } from "./use-session-start-modal-coordinator";
 export type { SessionStartModalDecision } from "./use-session-start-modal-runner";
