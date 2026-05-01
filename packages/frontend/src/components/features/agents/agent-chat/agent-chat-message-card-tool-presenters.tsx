@@ -339,7 +339,7 @@ export const RegularToolMessage = ({
   return (
     <div className="space-y-1 px-1 py-0.5">
       {hasExpandableDetails ? (
-        <details className="group" open={lifecyclePhase === "failed"}>
+        <details className="group">
           <summary className="list-none [&::-webkit-details-marker]:hidden">{summaryRow}</summary>
           <div className="ml-5 mt-1 space-y-2">
             {hasInput && meta.input ? (
@@ -363,10 +363,7 @@ export const RegularToolMessage = ({
               </details>
             ) : null}
             {hasError && meta.error ? (
-              <details
-                className="rounded border border-destructive-border bg-destructive-surface"
-                open={lifecyclePhase === "failed"}
-              >
+              <details className="rounded border border-destructive-border bg-destructive-surface">
                 <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-destructive-muted">
                   Error
                 </summary>
