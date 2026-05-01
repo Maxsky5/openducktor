@@ -383,6 +383,44 @@ describe("opencode-sdk-adapter", () => {
     expect(events.some((event) => event.type === "session_finished")).toBe(true);
   });
 
+  test("clears only the matching child pending input bucket by request id", async () => {
+    const mockClient = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mockClient.client,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "spec",
+      scenario: "spec_initial",
+      systemPrompt: "system",
+    });
+
+    const session = (adapter as any).sessions.get("external-session-1") as {
+      pendingSubagentInputEventsByExternalSessionId: Map<
+        string,
+        Array<{ requestId: string; type: "permission_required" | "question_required" }>
+      >;
+    };
+    session.pendingSubagentInputEventsByExternalSessionId.set("child-a", [
+      { type: "permission_required", requestId: "request-1" },
+    ]);
+    session.pendingSubagentInputEventsByExternalSessionId.set("child-b", [
+      { type: "question_required", requestId: "request-1" },
+    ]);
+
+    (adapter as any).clearPendingSubagentInputEvent("child-a", "request-1");
+
+    expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-a")).toBeUndefined();
+    expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-b")).toEqual([
+      { type: "question_required", requestId: "request-1" },
+    ]);
+  });
+
   test("startSession fails fast when the sdk client lacks global event streaming", async () => {
     const mock = makeMockClient();
     const unsupportedClient = {

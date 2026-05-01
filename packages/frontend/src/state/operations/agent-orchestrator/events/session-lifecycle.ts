@@ -282,22 +282,6 @@ const isLinkedChildPermissionOwnedByAttachedListener = (
   return localChildSessionId ? context.store.isSessionListenerAttached(localChildSessionId) : false;
 };
 
-const isLinkedChildQuestionOwnedByAttachedListener = (
-  context: Pick<SessionLifecycleEventContext, "store">,
-  event: QuestionRequiredEvent,
-): boolean => {
-  const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
-  if (!childExternalSessionId || !context.store.isSessionListenerAttached) {
-    return false;
-  }
-
-  const localChildSessionId = resolveLocalSessionIdByExternalId(
-    context.store.sessionsRef.current,
-    childExternalSessionId,
-  );
-  return localChildSessionId ? context.store.isSessionListenerAttached(localChildSessionId) : false;
-};
-
 const autoRejectMutatingPermission = (
   context: SessionLifecycleEventContext,
   event: PermissionRequiredEvent,
@@ -626,9 +610,6 @@ export const handleQuestionRequired = (
   if (isLinkedChildQuestionObservedByParent(context, event)) {
     patchParentSubagentSessionLink(context, event);
     recordParentSubagentPendingQuestion(context, event);
-    if (isLinkedChildQuestionOwnedByAttachedListener(context, event)) {
-      return;
-    }
     return;
   }
 

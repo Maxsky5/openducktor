@@ -262,7 +262,7 @@ const loadHydratedSubagentPendingInputOverlay = async ({
             snapshot.pendingQuestions;
         }
       } catch (error) {
-        throw new Error(
+        console.warn(
           `Failed to hydrate pending input for subagent session '${childExternalSessionId}': ${errorMessage(error)}`,
         );
       }

@@ -6,7 +6,10 @@ import {
   processOpencodeEvent,
   subscribeOpencodeEvents,
 } from "./event-stream";
-import type { SubagentSessionLink } from "./event-stream/shared";
+import {
+  flushPendingSubagentInputEventsForSession,
+  type SubagentSessionLink,
+} from "./event-stream/shared";
 import type { SessionInput, SessionRecord } from "./types";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
@@ -137,6 +140,87 @@ const runEventStreamWithSession = async (
 const runEventStream = async (events: Event[]): Promise<AgentEvent[]> => {
   return (await runEventStreamWithSession(events)).emitted;
 };
+
+test("flushPendingSubagentInputEventsForSession preserves original timestamps", () => {
+  const emitted: AgentEvent[] = [];
+  const runtime = {
+    externalSessionId: "external-session-1",
+    input: makeSessionInput() as any,
+    now: () => "2026-02-22T12:30:00.000Z",
+    emit: (_externalSessionId: string, event: AgentEvent) => {
+      emitted.push(event);
+    },
+    getSession: () => undefined,
+    subagentCorrelationKeyByPartId: new Map<string, string>(),
+    subagentCorrelationKeyByExternalSessionId: new Map<string, string>([
+      ["external-child-session", "part:assistant-1:subtask-1"],
+    ]),
+    pendingSubagentCorrelationKeysBySignature: new Map<string, string[]>(),
+    pendingSubagentCorrelationKeys: [],
+    pendingSubagentSessionsByExternalSessionId: new Map(),
+    pendingSubagentPartEmissionsByExternalSessionId: new Map(),
+    pendingSubagentInputEventsByExternalSessionId: new Map([
+      [
+        "external-child-session",
+        [
+          {
+            type: "permission_required",
+            externalSessionId: "external-session-1",
+            timestamp: "2026-02-22T12:00:00.000Z",
+            requestId: "perm-child-1",
+            permission: "write",
+            patterns: ["src/**"],
+            childExternalSessionId: "external-child-session",
+          },
+          {
+            type: "question_required",
+            externalSessionId: "external-session-1",
+            timestamp: "2026-02-22T12:05:00.000Z",
+            requestId: "question-child-1",
+            questions: [
+              {
+                header: "Scope",
+                question: "Pick target",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+            childExternalSessionId: "external-child-session",
+          },
+        ],
+      ],
+    ]),
+  };
+
+  flushPendingSubagentInputEventsForSession(runtime as any, "external-child-session");
+
+  expect(emitted).toEqual([
+    {
+      type: "permission_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:00:00.000Z",
+      requestId: "perm-child-1",
+      permission: "write",
+      patterns: ["src/**"],
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    },
+    {
+      type: "question_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:05:00.000Z",
+      requestId: "question-child-1",
+      questions: [
+        {
+          header: "Scope",
+          question: "Pick target",
+          options: [{ label: "A", description: "Option A" }],
+        },
+      ],
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    },
+  ]);
+});
 
 const assistantRoleEvent = (messageId: string): Event =>
   ({

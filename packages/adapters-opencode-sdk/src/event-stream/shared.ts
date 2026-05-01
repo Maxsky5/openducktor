@@ -73,7 +73,6 @@ export const flushPendingSubagentInputEventsForSession = (
   for (const event of pending) {
     runtime.emit(runtime.externalSessionId, {
       ...event,
-      timestamp: runtime.now(),
       subagentCorrelationKey,
     });
   }

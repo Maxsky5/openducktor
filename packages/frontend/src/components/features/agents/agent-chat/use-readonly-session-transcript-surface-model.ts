@@ -435,6 +435,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const pendingPermissionRequests =
     permissionSession?.pendingPermissions ?? EMPTY_PENDING_PERMISSIONS;
   const questionSession = runtimeData.session;
+  const activeQuestionSessionId = questionSession?.externalSessionId ?? null;
   const pendingQuestionRequests = questionSession?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
   const replyTranscriptPermission = useCallback(
     async (
@@ -467,12 +468,12 @@ export function useReadonlySessionTranscriptSurfaceModel({
 
   const replyTranscriptQuestion = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
-      if (!externalSessionId) {
+      if (!activeQuestionSessionId) {
         throw new Error("Runtime transcript question target is unavailable.");
       }
       setIsSubmittingQuestionByRequestId((current) => ({ ...current, [requestId]: true }));
       try {
-        await answerAgentQuestion(externalSessionId, requestId, answers);
+        await answerAgentQuestion(activeQuestionSessionId, requestId, answers);
         setRepliedRuntimeQuestionRequestIds((current) => {
           if (current.has(requestId)) {
             return current;
@@ -489,7 +490,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
         });
       }
     },
-    [answerAgentQuestion, externalSessionId],
+    [activeQuestionSessionId, answerAgentQuestion],
   );
 
   const model = useAgentChatSurfaceModel({
@@ -510,6 +511,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
         runtimeReadiness.isReady &&
         !resolvedSource.isPending &&
         !resolvedSource.error &&
+        activeQuestionSessionId === externalSessionId &&
         pendingQuestionRequests.length > 0,
       isSubmittingByRequestId: isSubmittingQuestionByRequestId,
       onSubmit: replyTranscriptQuestion,

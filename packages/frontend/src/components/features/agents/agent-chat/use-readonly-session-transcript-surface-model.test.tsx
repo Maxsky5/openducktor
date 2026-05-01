@@ -618,6 +618,48 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     }
   });
 
+  test("keeps question submission disabled when the active session id does not match the transcript target", async () => {
+    const transcriptSourceWithPendingQuestion = makeTranscriptSourceWithPendingQuestion();
+    useAgentSessionMock.mockImplementation(() => ({
+      ...makeLiveTranscriptSession(),
+      externalSessionId: "session-other",
+    }));
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        externalSessionId: "session-requested",
+        source: transcriptSourceWithPendingQuestion,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => {
+        const pendingQuestions = latestSurfaceModelArgs?.pendingQuestions as
+          | { canSubmit: boolean }
+          | undefined;
+        return pendingQuestions !== undefined;
+      });
+
+      const pendingQuestions = latestSurfaceModelArgs?.pendingQuestions as {
+        canSubmit: boolean;
+      };
+      expect(pendingQuestions.canSubmit).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("surfaces a failed empty state when transcript history cannot load", async () => {
     const transcriptSource = makeTranscriptSource();
     readSessionHistory.mockImplementationOnce(async () => {

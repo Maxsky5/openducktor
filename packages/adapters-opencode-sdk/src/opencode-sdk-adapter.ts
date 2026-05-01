@@ -694,13 +694,13 @@ export class OpencodeSdkAdapter
   async replyPermission(input: ReplyPermissionInput): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     await replyPermission(session, input);
-    this.clearPendingSubagentInputEvent(input.requestId);
+    this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     await replyQuestion(session, input);
-    this.clearPendingSubagentInputEvent(input.requestId);
+    this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
   }
 
   subscribeEvents(
@@ -747,25 +747,22 @@ export class OpencodeSdkAdapter
     emitSessionEvent(this.listeners, externalSessionId, event);
   }
 
-  private clearPendingSubagentInputEvent(requestId: string): void {
+  private clearPendingSubagentInputEvent(externalSessionId: string, requestId: string): void {
     for (const session of this.sessions.values()) {
-      for (const [
-        childExternalSessionId,
-        pending,
-      ] of session.pendingSubagentInputEventsByExternalSessionId) {
-        const nextPending = pending.filter((event) => event.requestId !== requestId);
-        if (nextPending.length === pending.length) {
-          continue;
-        }
-        if (nextPending.length === 0) {
-          session.pendingSubagentInputEventsByExternalSessionId.delete(childExternalSessionId);
-          continue;
-        }
-        session.pendingSubagentInputEventsByExternalSessionId.set(
-          childExternalSessionId,
-          nextPending,
-        );
+      const pending = session.pendingSubagentInputEventsByExternalSessionId.get(externalSessionId);
+      if (!pending) {
+        continue;
       }
+
+      const nextPending = pending.filter((event) => event.requestId !== requestId);
+      if (nextPending.length === pending.length) {
+        continue;
+      }
+      if (nextPending.length === 0) {
+        session.pendingSubagentInputEventsByExternalSessionId.delete(externalSessionId);
+        continue;
+      }
+      session.pendingSubagentInputEventsByExternalSessionId.set(externalSessionId, nextPending);
     }
   }
 
