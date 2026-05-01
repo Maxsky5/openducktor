@@ -554,6 +554,10 @@ export const toStatusSnapshotKey = (snapshot: ScopeSnapshot): string | null => {
     return "<empty>";
   }
 
+  if (snapshot.hashVersion !== null && snapshot.statusHash !== null) {
+    return `${snapshot.hashVersion}:${snapshot.statusHash}`;
+  }
+
   return snapshot.fileStatuses
     .map((fileStatus) => `${fileStatus.path}:${fileStatus.status}:${fileStatus.staged ? 1 : 0}`)
     .join("|");

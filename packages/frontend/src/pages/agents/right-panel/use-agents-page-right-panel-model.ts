@@ -55,6 +55,18 @@ type BuildAgentsPageDiffModelArgs = {
   openDirectoryInTool?: (path: string, toolId: SystemOpenInToolId) => Promise<void>;
 };
 
+function collectUnmergedFilePaths(
+  fileStatuses: BuildAgentsPageDiffModelSnapshot["diffData"]["fileStatuses"],
+): string[] {
+  const paths: string[] = [];
+  for (const status of fileStatuses) {
+    if (status.status === "unmerged") {
+      paths.push(status.path);
+    }
+  }
+  return paths;
+}
+
 export function buildAgentsPageDiffModel({
   branches,
   buildToolsSnapshot,
@@ -67,25 +79,35 @@ export function buildAgentsPageDiffModel({
 }: BuildAgentsPageDiffModelArgs) {
   const { diffData, gitPanelContextMode, openInTarget, resolvedGitPanelBranch, targetBranchState } =
     buildToolsSnapshot;
-  const configuredTargetBranch = canonicalTargetBranch(targetBranchState.effectiveTargetBranch);
   const targetBranchValidationError = targetBranchState.validationError;
   const pullRequestDetectionTask =
     viewSelectedTask && !viewSelectedTask.pullRequest && canDetectTaskPullRequest(viewSelectedTask)
       ? viewSelectedTask
       : null;
-  const targetBranchOptions = toBranchSelectorOptions(branches, {
-    valueFormat: "full_ref",
-    includeOptions: configuredTargetBranch
-      ? [
-          {
-            value: targetBranchState.selectionValue,
-            label: configuredTargetBranch,
-            secondaryLabel: "configured",
-            searchKeywords: configuredTargetBranch.split("/").filter(Boolean),
-          },
-        ]
-      : [],
-  });
+  let targetBranchUpdateModel = {};
+  if (gitPanelContextMode === "worktree" && viewSelectedTask && setTaskTargetBranch) {
+    const configuredTargetBranch = canonicalTargetBranch(targetBranchState.effectiveTargetBranch);
+    const targetBranchOptions = toBranchSelectorOptions(branches, {
+      valueFormat: "full_ref",
+      includeOptions: configuredTargetBranch
+        ? [
+            {
+              value: targetBranchState.selectionValue,
+              label: configuredTargetBranch,
+              secondaryLabel: "configured",
+              searchKeywords: configuredTargetBranch.split("/").filter(Boolean),
+            },
+          ]
+        : [],
+    });
+    targetBranchUpdateModel = {
+      targetBranchOptions,
+      targetBranchSelectionValue: targetBranchState.selectionValue,
+      onUpdateTargetBranch: async (selection: string) => {
+        await setTaskTargetBranch(viewSelectedTask.id, targetBranchFromSelection(selection));
+      },
+    };
+  }
 
   return {
     ...diffData,
@@ -105,15 +127,7 @@ export function buildAgentsPageDiffModel({
         }
       : {}),
     pullRequest: viewSelectedTask?.pullRequest ?? null,
-    ...(viewSelectedTask && setTaskTargetBranch
-      ? {
-          targetBranchOptions,
-          targetBranchSelectionValue: targetBranchState.selectionValue,
-          onUpdateTargetBranch: async (selection: string) => {
-            await setTaskTargetBranch(viewSelectedTask.id, targetBranchFromSelection(selection));
-          },
-        }
-      : {}),
+    ...targetBranchUpdateModel,
     ...(viewSelectedTask && detectingPullRequestTaskId === viewSelectedTask.id
       ? { isDetectingPullRequest: true }
       : {}),
@@ -173,6 +187,10 @@ export function useAgentsPageRightPanelModel({
 
   const isActiveBuilderWorking =
     sessionRole === "build" && (sessionStatus === "running" || sessionStatus === "starting");
+  const detectedConflictedFiles = useMemo(
+    () => collectUnmergedFilePaths(diffData.fileStatuses),
+    [diffData.fileStatuses],
+  );
   const gitActions = useAgentStudioGitActions({
     repoPath: workspaceRepoPath,
     workingDir: diffData.worktreePath,
@@ -183,9 +201,7 @@ export function useAgentsPageRightPanelModel({
     statusHash: diffData.statusHash,
     diffHash: diffData.diffHash,
     upstreamAheadBehind: diffData.upstreamAheadBehind ?? null,
-    detectedConflictedFiles: diffData.fileStatuses
-      .filter((status) => status.status === "unmerged")
-      .map((status) => status.path),
+    detectedConflictedFiles,
     worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
     refreshDiffData: diffData.refresh,
     isDiffDataLoading: diffData.isLoading,

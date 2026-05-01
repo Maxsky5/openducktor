@@ -4,6 +4,7 @@ import {
   applySummarySnapshot,
   createInitialDiffBatchState,
   getSummaryReloadDecision,
+  toStatusSnapshotKey,
 } from "./agent-studio-diff-data-model";
 
 const createScopeSnapshot = (overrides: Partial<ScopeSnapshot> = {}): ScopeSnapshot => ({
@@ -152,5 +153,15 @@ describe("agent-studio-diff-data-model", () => {
     expect(nextState.byScope.uncommitted.fileDiffs).toEqual([]);
     expect(nextState.byScope.uncommitted.diffHash).toBeNull();
     expect(nextState.byScope.uncommitted.branch).toBe("feature/task-11");
+  });
+
+  test("uses status hashes for compact status snapshot keys", () => {
+    expect(toStatusSnapshotKey(createScopeSnapshot({ statusHash: "status-compact" }))).toBe(
+      "1:status-compact",
+    );
+    expect(toStatusSnapshotKey(createScopeSnapshot({ hashVersion: null, statusHash: null }))).toBe(
+      "src/main.ts:M:0",
+    );
+    expect(toStatusSnapshotKey(createScopeSnapshot({ fileStatuses: [] }))).toBe("<empty>");
   });
 });
