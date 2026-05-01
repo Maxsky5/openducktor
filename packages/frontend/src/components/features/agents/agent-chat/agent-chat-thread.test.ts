@@ -641,6 +641,76 @@ describe("AgentChatThread", () => {
     }
   });
 
+  test("keeps the latest user turn uncontained after a running session completes", async () => {
+    const externalSessionId = "session-completed-scroll";
+    const messages = Array.from({ length: 12 }, (_, index) => [
+      buildMessage("user", `Command ${index + 1}`, {
+        id: `user-${index + 1}`,
+      }),
+      buildMessage("assistant", `Result ${index + 1}`, {
+        id: `assistant-${index + 1}`,
+      }),
+    ]).flat();
+    const runningSession = buildSession({
+      externalSessionId,
+      messages,
+      pendingQuestions: [],
+      pendingPermissions: [],
+      status: "running",
+    });
+    const model = {
+      ...buildBaseModel(),
+      isSessionWorking: true,
+      session: runningSession,
+    };
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model,
+      }),
+    );
+    await act(flush);
+
+    const getTurnStyle = (rowKey: string): string | null => {
+      const row = rendered.container.querySelector(`[data-row-key="${rowKey}"]`);
+      const turn = row?.parentElement;
+      if (!(turn instanceof HTMLDivElement)) {
+        return null;
+      }
+
+      return turn.getAttribute("style") ?? "";
+    };
+
+    const runningLatestTurnStyle = getTurnStyle(`${externalSessionId}:user-12`);
+    expect(runningLatestTurnStyle).not.toBeNull();
+    expect(runningLatestTurnStyle).not.toContain("content-visibility");
+
+    rendered.rerender(
+      createElement(AgentChatThread, {
+        model: {
+          ...model,
+          isSessionWorking: false,
+          session: buildSession({
+            externalSessionId,
+            messages,
+            pendingQuestions: [],
+            pendingPermissions: [],
+            status: "idle",
+          }),
+        },
+      }),
+    );
+    await act(flush);
+
+    const completedOlderTurnStyle = getTurnStyle(`${externalSessionId}:user-3`);
+    const completedLatestTurnStyle = getTurnStyle(`${externalSessionId}:user-12`);
+    expect(completedOlderTurnStyle).not.toBeNull();
+    expect(completedOlderTurnStyle).toContain("content-visibility");
+    expect(completedLatestTurnStyle).not.toBeNull();
+    expect(completedLatestTurnStyle).not.toContain("content-visibility");
+
+    rendered.unmount();
+  });
+
   test("adds bottom spacing before the composer when the last bottom-stack item is a question", async () => {
     const rendered = render(
       createElement(AgentChatThread, {

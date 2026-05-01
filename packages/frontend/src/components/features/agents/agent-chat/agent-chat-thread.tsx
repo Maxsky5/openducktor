@@ -680,13 +680,15 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     },
     [registerRowElement],
   );
-  const activeTurnKey = useMemo(() => {
-    if (!session || !isSessionWorking || !transcriptState.lastUserMessageId) {
+  // Keep the newest turn measured after completion too. Re-applying content-visibility to the
+  // just-finished turn can make the browser anchor around the prompt and jump away from the bottom.
+  const latestUserTurnKey = useMemo(() => {
+    if (!session || !transcriptState.lastUserMessageId) {
       return null;
     }
 
     return `${session.externalSessionId}:${transcriptState.lastUserMessageId}`;
-  }, [isSessionWorking, session, transcriptState.lastUserMessageId]);
+  }, [session, transcriptState.lastUserMessageId]);
   const activeStreamingAssistantMessageId = transcriptState.activeStreamingAssistantMessageId;
   const showSessionLoadingOverlay = useAgentChatLoadingOverlay({
     externalSessionId: activeExternalSessionId,
@@ -696,9 +698,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     return stagedWindowTurns.map((turn) => ({
       key: turn.key,
       rows: stagedRows.slice(turn.start, turn.end + 1),
-      isActive: turn.key === activeTurnKey,
+      isActive: turn.key === latestUserTurnKey,
     }));
-  }, [activeTurnKey, stagedRows, stagedWindowTurns]);
+  }, [latestUserTurnKey, stagedRows, stagedWindowTurns]);
   const allowTurnContainment = !hasAttachmentMessages;
   const bottomStackRef = useRef<HTMLDivElement | null>(null);
   const bottomStackHeightRef = useRef<number | null>(null);
