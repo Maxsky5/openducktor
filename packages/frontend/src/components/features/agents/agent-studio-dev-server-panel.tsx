@@ -1,6 +1,6 @@
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { Check, Copy, Play, RefreshCw, Square } from "lucide-react";
-import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
+import { cloneElement, memo, type ReactElement, useCallback, useMemo, useState } from "react";
 import { AgentStudioDevServerTerminal } from "@/components/features/agents/agent-studio-dev-server-terminal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -77,25 +77,34 @@ const renderCompactStartButton = ({
   button,
   disabledReason,
 }: {
-  button: ReactElement;
+  button: ReactElement<{
+    className?: string;
+    onClick?: (() => void) | undefined;
+    disabled?: boolean | undefined;
+    [key: string]: unknown;
+  }>;
   disabledReason: string | null;
 }): ReactElement => {
   if (!disabledReason) {
     return button;
   }
 
+  const disabledReasonId = "agent-studio-dev-server-disabled-reason";
+  const tooltipTriggerButton = cloneElement(button, {
+    disabled: undefined,
+    onClick: undefined,
+    className: cn(button.props.className, "cursor-not-allowed opacity-50"),
+    "aria-disabled": "true",
+    "aria-describedby": disabledReasonId,
+  });
+
   return (
     <TooltipProvider>
+      <span id={disabledReasonId} className="sr-only">
+        {disabledReason}
+      </span>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <span
-            className="inline-flex w-full cursor-not-allowed"
-            data-testid="agent-studio-dev-server-disabled-start-trigger"
-          >
-            {button}
-            <span className="sr-only">{disabledReason}</span>
-          </span>
-        </TooltipTrigger>
+        <TooltipTrigger asChild>{tooltipTriggerButton}</TooltipTrigger>
         <TooltipContent side="top">
           <p>{disabledReason}</p>
         </TooltipContent>

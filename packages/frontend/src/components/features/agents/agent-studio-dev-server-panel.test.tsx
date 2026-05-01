@@ -143,10 +143,16 @@ describe("AgentStudioDevServerPanel", () => {
       const button = screen.getByTestId(
         "agent-studio-dev-server-start-button",
       ) as HTMLButtonElement;
-      expect(button.disabled).toBe(true);
-      expect(screen.getByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeTruthy();
-      expect(screen.queryByTestId("agent-studio-dev-server-compact-message")).toBeNull();
 
+      expect(button.disabled).toBe(false);
+      expect(button.getAttribute("aria-disabled")).toBe("true");
+      expect(button.getAttribute("aria-describedby")).toBe(
+        "agent-studio-dev-server-disabled-reason",
+      );
+      expect(button.getAttribute("class")).toContain("cursor-not-allowed");
+      expect(button.getAttribute("class")).toContain("opacity-50");
+      expect(screen.queryByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeNull();
+      expect(screen.queryByTestId("agent-studio-dev-server-compact-message")).toBeNull();
       expect(
         screen.getByText(
           "Create or resume a Builder worktree before starting repository dev servers.",
@@ -175,10 +181,15 @@ describe("AgentStudioDevServerPanel", () => {
         "agent-studio-dev-server-start-button",
       ) as HTMLButtonElement;
 
-      expect(button.disabled).toBe(true);
-      expect(screen.getByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeTruthy();
+      expect(button.disabled).toBe(false);
+      expect(button.getAttribute("aria-disabled")).toBe("true");
+      expect(button.getAttribute("aria-describedby")).toBe(
+        "agent-studio-dev-server-disabled-reason",
+      );
+      expect(button.getAttribute("class")).toContain("cursor-not-allowed");
+      expect(button.getAttribute("class")).toContain("opacity-50");
+      expect(screen.queryByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeNull();
       expect(screen.queryByTestId("agent-studio-dev-server-compact-message")).toBeNull();
-
       expect(
         screen.getByText(
           "Configure one or more builder dev server commands in repository settings to stream them here.",
