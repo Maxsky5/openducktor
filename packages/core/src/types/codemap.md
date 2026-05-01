@@ -9,7 +9,7 @@ Shared core types for agent orchestration, runtime descriptors, planning inputs,
 - Tool-call unions model supported ODT workflow mutations explicitly.
 
 ## Data & Control Flow
-`agent-orchestrator.ts` models sessions, runtime connections, event payloads, and tool-call shapes. `planner.ts` defines planner-facing spec/plan inputs and `PlannerTools`.
+`agent-orchestrator.ts` models sessions, runtime refs, event payloads, runtime pending input, and tool-call shapes. `planner.ts` defines planner-facing spec/plan inputs and `PlannerTools`.
 
 ## Integration Points
 - Used by `packages/core` services and ports, plus adapter implementations and UI orchestration

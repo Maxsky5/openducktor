@@ -1,7 +1,7 @@
 # packages/frontend/src/components/features/agents/
 
 ## Responsibility
-Agent Studio feature UI: chat surface, session tabs, workspace sidebar, dev-server panel, git panel, right-panel composition, and session-start modal entry points.
+Agent Studio feature UI: chat surface, session tabs, workspace sidebar, dev-server panel, git panel, right-panel composition, runtime attachment retry handling, and session-start modal entry points.
 
 ## Design Patterns
 Heavy model/view separation. Hooks and `*.types.ts` files build structured models; renderers stay mostly presentational.

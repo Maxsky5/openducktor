@@ -1,7 +1,7 @@
 # apps/desktop/src-tauri/
 
 ## Responsibility
-Tauri host root for the desktop app, dedicated web-host binary, generated host artifacts, and Rust workspace crates. It owns startup, Tauri command registration, and the bridge between the UI shell, headless HTTP/SSE path, and host services.
+Tauri host root for the desktop app, dedicated web-host binary, generated host artifacts, and Rust workspace crates. It owns startup, command registration, and the bridge between the UI shell, headless HTTP/SSE path, and host services.
 
 ## Design
 Split into `src/` for Tauri-facing entrypoints plus the web-host binary, `crates/` for hexagonal host logic, and `gen/` for generated bindings/schemas. Startup is fail-fast, blocking work is pushed off the UI thread, and runtime/config validation happens before the app continues.

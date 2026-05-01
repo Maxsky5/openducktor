@@ -4,10 +4,10 @@
 Shared host/runtime mutation helpers used by workspace and agent-orchestrator operations.
 
 ## Design Patterns
-Pure policy and adapter helpers stay here: permission rules, prompt overrides, runtime catalog, runtime readiness publication, and host access wrappers.
+Pure policy and adapter helpers stay here: permission rules, prompt overrides, runtime catalog, runtime readiness publication, runtime attachment retry, and host access wrappers.
 
 ## Data & Control Flow
-Feature-specific operations call into these helpers to resolve policy, merge prompt overrides, or publish runtime readiness without duplicating logic.
+Feature-specific operations call into these helpers to resolve policy, merge prompt overrides, publish runtime readiness, or retry runtime attachment without duplicating logic.
 
 ## Integration Points
-`host.ts`, `permission-policy.ts`, `prompt-overrides.ts`, `runtime-catalog.ts`, and `runtime-readiness-publication.ts`.
+`host.ts`, `permission-policy.ts`, `prompt-overrides.ts`, `runtime-catalog.ts`, `runtime-readiness-publication.ts`, and `runtime-attachment-retry.ts`.

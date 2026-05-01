@@ -1,7 +1,7 @@
 # packages/frontend/src/pages/kanban/
 
 ## Responsibility
-Kanban route composition for task intake, board rendering, collapsed columns, task dialogs, approvals, resets, PR linking, and session-start entry points.
+Kanban route composition for task intake, board rendering, collapsed columns, task dialogs, approvals, resets, PR linking, human-review feedback, and session-start entry points.
 
 ## Design Patterns
 Page-model hooks gather host/query data, then the page renders a single board shell plus focused modals/sheets driven by those models.

@@ -4,7 +4,7 @@
 Beads-backed `TaskStore` adapter and repo-store lifecycle coordinator.
 
 ## Design
-`BeadsTaskStore` composes lifecycle, metadata, document, session, and task-operation helpers. Caches are local to the adapter so task queries stay cheap while remaining repo-scoped.
+`BeadsTaskStore` composes lifecycle, metadata, document, session, and task-operation helpers. Caches are local to the adapter so task queries stay cheap while remaining repo-scoped, and agent-session persistence stays limited to durable metadata fields.
 
 ## Flow
 TaskStore calls flow through the store implementation into Beads lifecycle verification/provisioning, then into Beads CLI commands and metadata/document writes.

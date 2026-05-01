@@ -9,7 +9,7 @@ MCP server package that exposes OpenDucktor workflow tools over stdio and forwar
 - Tool execution is normalized into structured MCP results and errors.
 
 ## Data & Control Flow
-`src/index.ts` parses CLI args, resolves host/store context, registers tools, and connects stdio transport. `src/odt-task-store.ts` validates tool input and calls the host bridge; `src/host-bridge-client.ts` performs health/invoke HTTP calls; `src/store-context.ts` discovers and validates bridge context.
+`src/index.ts` parses CLI args, resolves host/store context, registers tool schemas/handlers, and connects stdio transport. `src/odt-task-store.ts` validates tool input and calls the host bridge; `src/host-bridge-client.ts` performs health/invoke HTTP calls; `src/store-context.ts` discovers and validates bridge context.
 
 ## Integration Points
 - `@openducktor/contracts`

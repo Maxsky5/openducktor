@@ -1,7 +1,7 @@
 # apps/desktop/src-tauri/src/
 
 ## Responsibility
-Tauri-facing shell for desktop and local web-host execution. It contains command wrappers, headless server glue, the dedicated web-host binary, and app-level startup plumbing.
+Tauri-facing shell for desktop and local web-host execution. It contains command wrappers, headless server glue, the dedicated web-host binary, and startup plumbing for the desktop/web-host split.
 
 ## Design
 Commands are grouped by domain under `commands/`; local web mode uses `headless/` to register the same operations over HTTP/SSE, and `bin/openducktor_web_host.rs` provides the standalone web-host entrypoint. Shared helpers keep command handlers thin and push real work into `AppService`, while generated schemas keep IPC shapes aligned.

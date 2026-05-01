@@ -1,7 +1,7 @@
 # packages/frontend/src/pages/agents/shell/
 
 ## Responsibility
-Top-level Agent Studio shell model and layout glue for tabs, chat header, right panel, task details, and session modals.
+Top-level Agent Studio shell model and layout glue for tabs, chat header, right panel, task details, runtime hydration, and session modals.
 
 ## Design Patterns
 The shell hook composes multiple page-model hooks (`useAgentStudioQuerySync`, orchestration, right-panel, readiness, session-start) into one renderable model.

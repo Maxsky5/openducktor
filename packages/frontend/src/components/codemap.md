@@ -1,7 +1,7 @@
 # packages/frontend/src/components/
 
 ## Responsibility
-Reusable UI and feature widgets used across pages, including layout chrome, shadcn primitives, error screens, and feature-specific panels/modals.
+Reusable UI and feature widgets used across pages, including layout chrome, shadcn primitives, error screens, markdown/document preview controls, and feature-specific panels/modals.
 
 ## Design Patterns
 Component groups are organized by concern (`layout`, `features`, `ui`, `errors`) and usually pair renderers with local model/controller hooks.

@@ -4,7 +4,7 @@
 Core application-service implementation for runtimes, tasks, workflows, workspace policy, and host coordination.
 
 ## Design
-The module tree splits by concern: build orchestration, runtime orchestration/registry, OpenCode runtime process lifecycle, MCP bridge process/registry, task workflow/document service, dev-server management, startup metrics, and policy enforcement. Runtime definitions, routes, and live connections are handled as distinct inputs at the service boundary.
+The module tree splits by concern: build orchestration, runtime orchestration/registry, OpenCode runtime process lifecycle, MCP bridge process/registry, task workflow/document service, dev-server management, startup metrics, and policy enforcement. Runtime definitions, routes, and live connections are handled as distinct inputs at the service boundary, and the service keeps workspace policy separate from runtime startup state.
 
 ## Flow
 `AppService` receives a command request, resolves repo/runtime state, executes the appropriate sub-service, and returns typed `host_domain` results or actionable errors.

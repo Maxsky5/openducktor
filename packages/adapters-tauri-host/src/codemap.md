@@ -6,10 +6,10 @@ Typed host-side clients that wrap Tauri commands for workspace, tasks, runtime/b
 ## Design Patterns
 - Command-per-method wrappers with schema parsing at the boundary.
 - `index.ts` is the composition root for the host client surface.
-- Small utilities centralize invoke normalization and task metadata freshness.
+- Small utilities centralize invoke normalization, workspace-client composition, and task metadata freshness.
 
 ## Data & Control Flow
-`workspace-client.ts`, `task-client.ts`, `git-client.ts`, `system-client.ts`, and `filesystem-client.ts` translate Tauri command payloads; `build-runtime-client.ts` handles runtime/build/status flows; `task-metadata-cache.ts` dedupes reads.
+`workspace-client.ts`, `task-client.ts`, `git-client.ts`, `system-client.ts`, and `filesystem-client.ts` translate Tauri command payloads; `build-runtime-client.ts` handles runtime/build/status flows; `task-metadata-cache.ts` dedupes reads and invalidates on repository/task changes.
 
 ## Integration Points
 - `@openducktor/contracts`
