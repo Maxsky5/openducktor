@@ -4,7 +4,7 @@ import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
 import { AgentStudioDevServerTerminal } from "@/components/features/agents/agent-studio-dev-server-terminal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -157,20 +157,22 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
       >
         <div className="flex items-center">
           {model.disabledReason ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span
-                  className="inline-flex w-full cursor-not-allowed"
-                  data-testid="agent-studio-dev-server-disabled-start-trigger"
-                >
-                  {startButton}
-                  <span className="sr-only">{model.disabledReason}</span>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p>{model.disabledReason}</p>
-              </TooltipContent>
-            </Tooltip>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="inline-flex w-full cursor-not-allowed"
+                    data-testid="agent-studio-dev-server-disabled-start-trigger"
+                  >
+                    {startButton}
+                    <span className="sr-only">{model.disabledReason}</span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p>{model.disabledReason}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           ) : (
             startButton
           )}

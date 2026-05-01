@@ -4,7 +4,6 @@ import type { DevServerScriptState } from "@openducktor/contracts";
 import { render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import {
   AgentStudioDevServerPanel,
@@ -111,11 +110,7 @@ const failedScript: DevServerScriptState = {
 
 describe("AgentStudioDevServerPanel", () => {
   test("renders compact start row while stopped", () => {
-    const view = render(
-      <TooltipProvider>
-        <AgentStudioDevServerPanel model={baseModel()} />
-      </TooltipProvider>,
-    );
+    const view = render(<AgentStudioDevServerPanel model={baseModel()} />);
 
     try {
       expect(screen.getByTestId("agent-studio-dev-server-start-button").textContent).toContain(
@@ -134,16 +129,14 @@ describe("AgentStudioDevServerPanel", () => {
 
   test("renders disabled compact row when no worktree is available", () => {
     const view = render(
-      <TooltipProvider>
-        <AgentStudioDevServerPanel
-          model={baseModel({
-            mode: "disabled",
-            disabledReason:
-              "Create or resume a Builder worktree before starting repository dev servers.",
-            worktreePath: null,
-          })}
-        />
-      </TooltipProvider>,
+      <AgentStudioDevServerPanel
+        model={baseModel({
+          mode: "disabled",
+          disabledReason:
+            "Create or resume a Builder worktree before starting repository dev servers.",
+          worktreePath: null,
+        })}
+      />,
     );
 
     try {
@@ -167,16 +160,14 @@ describe("AgentStudioDevServerPanel", () => {
 
   test("renders empty compact row with a tooltip instead of inline copy", () => {
     const view = render(
-      <TooltipProvider>
-        <AgentStudioDevServerPanel
-          model={baseModel({
-            mode: "empty",
-            disabledReason:
-              "Configure one or more builder dev server commands in repository settings to stream them here.",
-            worktreePath: null,
-          })}
-        />
-      </TooltipProvider>,
+      <AgentStudioDevServerPanel
+        model={baseModel({
+          mode: "empty",
+          disabledReason:
+            "Configure one or more builder dev server commands in repository settings to stream them here.",
+          worktreePath: null,
+        })}
+      />,
     );
 
     try {
