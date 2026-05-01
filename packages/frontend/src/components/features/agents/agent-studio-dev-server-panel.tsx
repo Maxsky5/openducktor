@@ -4,6 +4,7 @@ import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
 import { AgentStudioDevServerTerminal } from "@/components/features/agents/agent-studio-dev-server-terminal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ export type AgentStudioDevServerPanelModel = {
   mode: AgentStudioDevServerPanelMode;
   isExpanded: boolean;
   isLoading: boolean;
+  disabledReason: string | null;
   repoPath: string | null;
   taskId: string | null;
   worktreePath: string | null;
@@ -133,8 +135,20 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
     const isDisabled = model.mode === "disabled";
     const isLoading = model.mode === "loading";
     const startDisabled = isEmpty || isDisabled || isLoading || isActionPending;
-    const showCompactMessage = model.mode !== "stopped";
     const startLabel = getStartLabel(isLoading, model.isStartPending);
+    const startButton = (
+      <Button
+        type="button"
+        size="sm"
+        className="w-full justify-center rounded-lg"
+        disabled={startDisabled}
+        onClick={model.onStart}
+        data-testid="agent-studio-dev-server-start-button"
+      >
+        <Play className="size-4" />
+        {startLabel}
+      </Button>
+    );
 
     return (
       <div
@@ -142,26 +156,25 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
         data-testid="agent-studio-dev-server-compact-panel"
       >
         <div className="flex items-center">
-          <Button
-            type="button"
-            size="sm"
-            className="w-full justify-center rounded-lg"
-            disabled={startDisabled}
-            onClick={model.onStart}
-            data-testid="agent-studio-dev-server-start-button"
-          >
-            <Play className="size-4" />
-            {startLabel}
-          </Button>
+          {model.disabledReason ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-flex w-full cursor-not-allowed"
+                  data-testid="agent-studio-dev-server-disabled-start-trigger"
+                >
+                  {startButton}
+                  <span className="sr-only">{model.disabledReason}</span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>{model.disabledReason}</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            startButton
+          )}
         </div>
-        {showCompactMessage ? (
-          <div
-            className="mt-3 text-sm text-muted-foreground"
-            data-testid="agent-studio-dev-server-compact-message"
-          >
-            {headerSummary}
-          </div>
-        ) : null}
         {panelError ? (
           <div
             className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"

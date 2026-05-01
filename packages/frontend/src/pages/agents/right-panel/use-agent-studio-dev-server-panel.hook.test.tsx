@@ -194,8 +194,59 @@ describe("useAgentStudioDevServerPanel", () => {
       await waitFor(() => {
         expect(getLatest().mode).toBe("empty");
       });
+      expect(getLatest().disabledReason).toBe(
+        "Configure one or more builder dev server commands in repository settings to stream them here.",
+      );
       expect(getStateCalls).toBe(0);
       expect(devServerEventListener).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("returns a disabled reason when a builder worktree is unavailable", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    devServerGetState = async () =>
+      buildState({
+        worktreePath: null,
+      });
+
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (latest === null) {
+        throw new Error("Hook result not ready");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useAgentStudioDevServerPanel(args);
+      return null;
+    };
+
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness
+          args={{
+            repoPath: "/repo",
+            taskId: "task-7",
+            repoSettings,
+            enabled: true,
+          }}
+        />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(getLatest().mode).toBe("disabled");
+      });
+      expect(getLatest().disabledReason).toBe(
+        "Create or resume a Builder worktree before starting repository dev servers.",
+      );
     } finally {
       view.unmount();
     }

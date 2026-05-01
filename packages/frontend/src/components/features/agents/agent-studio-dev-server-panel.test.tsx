@@ -1,12 +1,19 @@
 import { describe, expect, test } from "bun:test";
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerScriptState } from "@openducktor/contracts";
+import { render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import {
   AgentStudioDevServerPanel,
   type AgentStudioDevServerPanelModel,
 } from "./agent-studio-dev-server-panel";
+
+if (typeof document === "undefined") {
+  GlobalRegistrator.register();
+}
 
 const buildTerminalBuffer = (script: DevServerScriptState): AgentStudioDevServerTerminalBuffer => ({
   entries: script.bufferedTerminalChunks,
@@ -20,6 +27,7 @@ const baseModel = (
   mode: "stopped",
   isExpanded: false,
   isLoading: false,
+  disabledReason: null,
   repoPath: "/repo",
   taskId: "task-7",
   worktreePath: "/tmp/worktree/task-7",
@@ -103,29 +111,94 @@ const failedScript: DevServerScriptState = {
 
 describe("AgentStudioDevServerPanel", () => {
   test("renders compact start row while stopped", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioDevServerPanel, { model: baseModel() }),
+    const view = render(
+      <TooltipProvider>
+        <AgentStudioDevServerPanel model={baseModel()} />
+      </TooltipProvider>,
     );
 
-    expect(html).toContain("Start dev servers");
-    expect(html).not.toContain("Start the configured builder dev servers for this task worktree.");
-    expect(html).not.toContain("Restart");
+    try {
+      expect(screen.getByTestId("agent-studio-dev-server-start-button").textContent).toContain(
+        "Start dev servers",
+      );
+      expect(screen.queryByTestId("agent-studio-dev-server-compact-message")).toBeNull();
+      expect(screen.queryByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeNull();
+      expect(
+        screen.queryByText("Start the configured builder dev servers for this task worktree."),
+      ).toBeNull();
+      expect(screen.queryByText("Restart")).toBeNull();
+    } finally {
+      view.unmount();
+    }
   });
 
   test("renders disabled compact row when no worktree is available", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioDevServerPanel, {
-        model: baseModel({
-          mode: "disabled",
-          worktreePath: null,
-        }),
-      }),
+    const view = render(
+      <TooltipProvider>
+        <AgentStudioDevServerPanel
+          model={baseModel({
+            mode: "disabled",
+            disabledReason:
+              "Create or resume a Builder worktree before starting repository dev servers.",
+            worktreePath: null,
+          })}
+        />
+      </TooltipProvider>,
     );
 
-    expect(html).toContain(
-      "Create or resume a Builder worktree before starting repository dev servers.",
+    try {
+      const button = screen.getByTestId(
+        "agent-studio-dev-server-start-button",
+      ) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+      expect(screen.getByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeTruthy();
+      expect(screen.queryByTestId("agent-studio-dev-server-compact-message")).toBeNull();
+
+      expect(
+        screen.getByText(
+          "Create or resume a Builder worktree before starting repository dev servers.",
+          { selector: "span.sr-only" },
+        ).textContent,
+      ).toContain("Create or resume a Builder worktree before starting repository dev servers.");
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("renders empty compact row with a tooltip instead of inline copy", () => {
+    const view = render(
+      <TooltipProvider>
+        <AgentStudioDevServerPanel
+          model={baseModel({
+            mode: "empty",
+            disabledReason:
+              "Configure one or more builder dev server commands in repository settings to stream them here.",
+            worktreePath: null,
+          })}
+        />
+      </TooltipProvider>,
     );
-    expect(html).toContain("disabled");
+
+    try {
+      const button = screen.getByTestId(
+        "agent-studio-dev-server-start-button",
+      ) as HTMLButtonElement;
+
+      expect(button.disabled).toBe(true);
+      expect(screen.getByTestId("agent-studio-dev-server-disabled-start-trigger")).toBeTruthy();
+      expect(screen.queryByTestId("agent-studio-dev-server-compact-message")).toBeNull();
+
+      expect(
+        screen.getByText(
+          "Configure one or more builder dev server commands in repository settings to stream them here.",
+          { selector: "span.sr-only" },
+        ).textContent,
+      ).toContain(
+        "Configure one or more builder dev server commands in repository settings to stream them here.",
+      );
+    } finally {
+      view.unmount();
+    }
   });
 
   test("renders expanded terminal tabs and terminal surface while active", () => {

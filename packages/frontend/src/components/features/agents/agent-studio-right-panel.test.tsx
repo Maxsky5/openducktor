@@ -124,6 +124,7 @@ const devServerModel: AgentStudioDevServerPanelModel = {
   mode: "active",
   isExpanded: true,
   isLoading: false,
+  disabledReason: null,
   repoPath: "/repo",
   taskId: "task-12",
   worktreePath: "/tmp/worktree/task-12",
