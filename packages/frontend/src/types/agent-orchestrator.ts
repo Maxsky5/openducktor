@@ -184,6 +184,8 @@ export type AgentSessionState = {
   subagentPendingPermissionsByExternalSessionId?:
     | Record<string, AgentPermissionRequest[]>
     | undefined;
+  /** Live-only parent-session overlay keyed by child runtime session id. */
+  subagentPendingQuestionsByExternalSessionId?: Record<string, AgentQuestionRequest[]> | undefined;
   todos: AgentSessionTodoItem[];
   modelCatalog: AgentModelCatalog | null;
   selectedModel: AgentModelSelection | null;

@@ -452,6 +452,9 @@ export type AgentEvent =
       externalSessionId: ExternalSessionId;
       timestamp: string;
       requestId: RuntimePendingInputRequestId;
+      parentExternalSessionId?: string;
+      childExternalSessionId?: string;
+      subagentCorrelationKey?: string;
       questions: Array<{
         header: string;
         question: string;

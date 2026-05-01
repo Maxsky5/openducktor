@@ -20,6 +20,17 @@ const pendingPermission = {
   patterns: ["src/app.ts"],
 };
 
+const pendingQuestion = {
+  requestId: "question-1",
+  questions: [
+    {
+      header: "Choose path",
+      question: "Which path should the subagent use?",
+      options: [{ label: "A", description: "Path A" }],
+    },
+  ],
+};
+
 describe("SubagentTranscriptButton", () => {
   test("opens a read-only session view request for subagent cards", () => {
     const onOpenTranscript = mock(() => {});
@@ -30,6 +41,7 @@ describe("SubagentTranscriptButton", () => {
         sessionRuntimeId="runtime-1"
         sessionWorkingDirectory="/repo-a"
         pendingPermissions={[pendingPermission]}
+        pendingQuestions={[pendingQuestion]}
         meta={createSubagentMeta()}
         onOpenTranscript={onOpenTranscript}
       />,
@@ -50,6 +62,7 @@ describe("SubagentTranscriptButton", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/repo-a",
         pendingPermissions: [pendingPermission],
+        pendingQuestions: [pendingQuestion],
       },
     });
   });

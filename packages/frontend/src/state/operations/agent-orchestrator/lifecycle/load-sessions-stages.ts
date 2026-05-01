@@ -36,8 +36,11 @@ import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 import { isSubagentMessage } from "../support/subagent-messages";
 import {
   EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID,
+  EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
   mergeSubagentPendingPermissionOverlay,
+  mergeSubagentPendingQuestionOverlay,
   type SubagentPendingPermissionsByExternalSessionId,
+  type SubagentPendingQuestionsByExternalSessionId,
 } from "../support/subagent-permission-overlay";
 import {
   createHydrationRuntimeResolver,
@@ -184,23 +187,26 @@ const readSubagentSessionIds = (
   return Array.from(externalSessionIds);
 };
 
-type HydratedSubagentPendingPermissionOverlay = {
+type HydratedSubagentPendingInputOverlay = {
   scannedChildExternalSessionIds: string[];
   pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsByExternalSessionId;
+  pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId;
 };
 
-const EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY = Object.freeze({
+const EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY = Object.freeze({
   scannedChildExternalSessionIds: [],
   pendingPermissionsByChildExternalSessionId:
     EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID,
-}) satisfies HydratedSubagentPendingPermissionOverlay;
+  pendingQuestionsByChildExternalSessionId: EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
+}) satisfies HydratedSubagentPendingInputOverlay;
 
-const toHydratedSubagentPendingPermissionOverlay = (
+const toHydratedSubagentPendingInputOverlay = (
   scannedChildExternalSessionIds: string[],
   pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsByExternalSessionId,
-): HydratedSubagentPendingPermissionOverlay => {
+  pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId,
+): HydratedSubagentPendingInputOverlay => {
   if (scannedChildExternalSessionIds.length === 0) {
-    return EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY;
+    return EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY;
   }
 
   return {
@@ -209,10 +215,14 @@ const toHydratedSubagentPendingPermissionOverlay = (
       Object.keys(pendingPermissionsByChildExternalSessionId).length > 0
         ? pendingPermissionsByChildExternalSessionId
         : EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID,
+    pendingQuestionsByChildExternalSessionId:
+      Object.keys(pendingQuestionsByChildExternalSessionId).length > 0
+        ? pendingQuestionsByChildExternalSessionId
+        : EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
   };
 };
 
-const loadHydratedSubagentPendingPermissionOverlay = async ({
+const loadHydratedSubagentPendingInputOverlay = async ({
   record,
   messages,
   runtimeResolution,
@@ -222,14 +232,15 @@ const loadHydratedSubagentPendingPermissionOverlay = async ({
   messages: AgentSessionState["messages"];
   runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }>;
   runtimePlanner: HydrationRuntimePlanner;
-}): Promise<HydratedSubagentPendingPermissionOverlay> => {
+}): Promise<HydratedSubagentPendingInputOverlay> => {
   const childExternalSessionIds = readSubagentSessionIds(record.externalSessionId, messages);
   if (childExternalSessionIds.length === 0) {
-    return EMPTY_HYDRATED_SUBAGENT_PENDING_PERMISSION_OVERLAY;
+    return EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY;
   }
 
   const pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsByExternalSessionId =
     {};
+  const pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId = {};
   const scannedChildExternalSessionIds: string[] = [];
   await Promise.all(
     childExternalSessionIds.map(async (childExternalSessionId) => {
@@ -246,17 +257,22 @@ const loadHydratedSubagentPendingPermissionOverlay = async ({
           pendingPermissionsByChildExternalSessionId[childExternalSessionId] =
             snapshot.pendingPermissions;
         }
+        if (snapshot && snapshot.pendingQuestions.length > 0) {
+          pendingQuestionsByChildExternalSessionId[childExternalSessionId] =
+            snapshot.pendingQuestions;
+        }
       } catch (error) {
         console.warn(
-          `Failed to hydrate pending permissions for subagent session '${childExternalSessionId}': ${errorMessage(error)}`,
+          `Failed to hydrate pending input for subagent session '${childExternalSessionId}': ${errorMessage(error)}`,
         );
       }
     }),
   );
 
-  return toHydratedSubagentPendingPermissionOverlay(
+  return toHydratedSubagentPendingInputOverlay(
     scannedChildExternalSessionIds,
     pendingPermissionsByChildExternalSessionId,
+    pendingQuestionsByChildExternalSessionId,
   );
 };
 
@@ -898,8 +914,8 @@ export const hydrateSessionRecordsStage = async ({
         selectedModel,
       }),
     ]);
-    const hydratedSubagentPendingPermissionsByExternalSessionId =
-      await loadHydratedSubagentPendingPermissionOverlay({
+    const hydratedSubagentPendingInputByExternalSessionId =
+      await loadHydratedSubagentPendingInputOverlay({
         record,
         messages: hydratedMessages,
         runtimeResolution,
@@ -926,9 +942,16 @@ export const hydrateSessionRecordsStage = async ({
           subagentPendingPermissionsByExternalSessionId: mergeSubagentPendingPermissionOverlay({
             current: current.subagentPendingPermissionsByExternalSessionId,
             scannedChildExternalSessionIds:
-              hydratedSubagentPendingPermissionsByExternalSessionId.scannedChildExternalSessionIds,
+              hydratedSubagentPendingInputByExternalSessionId.scannedChildExternalSessionIds,
             pendingPermissionsByChildExternalSessionId:
-              hydratedSubagentPendingPermissionsByExternalSessionId.pendingPermissionsByChildExternalSessionId,
+              hydratedSubagentPendingInputByExternalSessionId.pendingPermissionsByChildExternalSessionId,
+          }),
+          subagentPendingQuestionsByExternalSessionId: mergeSubagentPendingQuestionOverlay({
+            current: current.subagentPendingQuestionsByExternalSessionId,
+            scannedChildExternalSessionIds:
+              hydratedSubagentPendingInputByExternalSessionId.scannedChildExternalSessionIds,
+            pendingQuestionsByChildExternalSessionId:
+              hydratedSubagentPendingInputByExternalSessionId.pendingQuestionsByChildExternalSessionId,
           }),
           contextUsage: historyToSessionContextUsage(history, selectedModel),
           messages: mergeHydratedMessages(

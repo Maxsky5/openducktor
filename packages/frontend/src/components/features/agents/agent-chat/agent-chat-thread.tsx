@@ -48,6 +48,8 @@ type AgentChatThreadMotionRowProps = {
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
   subagentPendingPermissions: AgentSessionState["pendingPermissions"];
   subagentPendingPermissionCount: number;
+  subagentPendingQuestions: AgentSessionState["pendingQuestions"];
+  subagentPendingQuestionCount: number;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
 };
 
@@ -65,6 +67,8 @@ type AgentChatTranscriptProps = {
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
   subagentPendingPermissionsByExternalSessionId: AgentChatThreadModel["subagentPendingPermissionsByExternalSessionId"];
   subagentPendingPermissionCountByExternalSessionId: AgentChatThreadModel["subagentPendingPermissionCountByExternalSessionId"];
+  subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
+  subagentPendingQuestionCountByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionCountByExternalSessionId"];
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
@@ -131,6 +135,7 @@ type AgentChatBottomStackProps = {
 
 const EMPTY_ROWS: AgentChatWindowRow[] = [];
 const EMPTY_PENDING_PERMISSIONS: AgentSessionState["pendingPermissions"] = [];
+const EMPTY_PENDING_QUESTIONS: AgentSessionState["pendingQuestions"] = [];
 const TURN_CONTENT_VISIBILITY_STYLE = {
   contentVisibility: "auto",
   containIntrinsicSize: "auto 500px",
@@ -175,6 +180,32 @@ const readSubagentPendingPermissions = (
     : EMPTY_PENDING_PERMISSIONS;
 };
 
+const readSubagentPendingQuestionCount = (
+  row: AgentChatWindowRow,
+  countsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionCountByExternalSessionId"],
+): number => {
+  if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
+    return 0;
+  }
+
+  const externalSessionId = row.message.meta.externalSessionId;
+  return externalSessionId ? (countsByExternalSessionId?.[externalSessionId] ?? 0) : 0;
+};
+
+const readSubagentPendingQuestions = (
+  row: AgentChatWindowRow,
+  pendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"],
+): AgentSessionState["pendingQuestions"] => {
+  if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
+    return EMPTY_PENDING_QUESTIONS;
+  }
+
+  const externalSessionId = row.message.meta.externalSessionId;
+  return externalSessionId
+    ? (pendingQuestionsByExternalSessionId?.[externalSessionId] ?? EMPTY_PENDING_QUESTIONS)
+    : EMPTY_PENDING_QUESTIONS;
+};
+
 const AgentChatThreadMotionRow = memo(
   function AgentChatThreadMotionRow({
     row,
@@ -186,6 +217,8 @@ const AgentChatThreadMotionRow = memo(
     sessionRuntimeId,
     subagentPendingPermissions,
     subagentPendingPermissionCount,
+    subagentPendingQuestions,
+    subagentPendingQuestionCount,
     resolveRowRef,
   }: AgentChatThreadMotionRowProps): ReactElement {
     return (
@@ -200,6 +233,8 @@ const AgentChatThreadMotionRow = memo(
           sessionRuntimeId={sessionRuntimeId}
           subagentPendingPermissions={subagentPendingPermissions}
           subagentPendingPermissionCount={subagentPendingPermissionCount}
+          subagentPendingQuestions={subagentPendingQuestions}
+          subagentPendingQuestionCount={subagentPendingQuestionCount}
         />
       </div>
     );
@@ -212,6 +247,8 @@ const AgentChatThreadMotionRow = memo(
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
       previousProps.subagentPendingPermissions === nextProps.subagentPendingPermissions &&
       previousProps.subagentPendingPermissionCount === nextProps.subagentPendingPermissionCount &&
+      previousProps.subagentPendingQuestions === nextProps.subagentPendingQuestions &&
+      previousProps.subagentPendingQuestionCount === nextProps.subagentPendingQuestionCount &&
       previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
       previousProps.sessionAgentColors === nextProps.sessionAgentColors &&
       previousProps.resolveRowRef === nextProps.resolveRowRef &&
@@ -230,6 +267,8 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionRuntimeId,
   subagentPendingPermissionsByExternalSessionId,
   subagentPendingPermissionCountByExternalSessionId,
+  subagentPendingQuestionsByExternalSessionId,
+  subagentPendingQuestionCountByExternalSessionId,
   resolveRowRef,
   allowTurnContainment,
 }: {
@@ -242,6 +281,8 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
   subagentPendingPermissionsByExternalSessionId: AgentChatThreadModel["subagentPendingPermissionsByExternalSessionId"];
   subagentPendingPermissionCountByExternalSessionId: AgentChatThreadModel["subagentPendingPermissionCountByExternalSessionId"];
+  subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
+  subagentPendingQuestionCountByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionCountByExternalSessionId"];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   allowTurnContainment: boolean;
 }): ReactElement {
@@ -267,6 +308,14 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
             row,
             subagentPendingPermissionCountByExternalSessionId,
           )}
+          subagentPendingQuestions={readSubagentPendingQuestions(
+            row,
+            subagentPendingQuestionsByExternalSessionId,
+          )}
+          subagentPendingQuestionCount={readSubagentPendingQuestionCount(
+            row,
+            subagentPendingQuestionCountByExternalSessionId,
+          )}
           resolveRowRef={resolveRowRef}
         />
       ))}
@@ -288,6 +337,8 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   sessionRuntimeId,
   subagentPendingPermissionsByExternalSessionId,
   subagentPendingPermissionCountByExternalSessionId,
+  subagentPendingQuestionsByExternalSessionId,
+  subagentPendingQuestionCountByExternalSessionId,
   messagesContainerRef,
   messagesContentRef,
   renderedTurns,
@@ -384,6 +435,12 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 subagentPendingPermissionCountByExternalSessionId={
                   subagentPendingPermissionCountByExternalSessionId
                 }
+                subagentPendingQuestionsByExternalSessionId={
+                  subagentPendingQuestionsByExternalSessionId
+                }
+                subagentPendingQuestionCountByExternalSessionId={
+                  subagentPendingQuestionCountByExternalSessionId
+                }
                 resolveRowRef={resolveRowRef}
                 allowTurnContainment={allowTurnContainment}
               />
@@ -479,6 +536,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     sessionAgentColors,
     subagentPendingPermissionsByExternalSessionId,
     subagentPendingPermissionCountByExternalSessionId,
+    subagentPendingQuestionsByExternalSessionId,
+    subagentPendingQuestionCountByExternalSessionId,
     canSubmitQuestionAnswers,
     isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers,
@@ -701,6 +760,10 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         }
         subagentPendingPermissionCountByExternalSessionId={
           subagentPendingPermissionCountByExternalSessionId
+        }
+        subagentPendingQuestionsByExternalSessionId={subagentPendingQuestionsByExternalSessionId}
+        subagentPendingQuestionCountByExternalSessionId={
+          subagentPendingQuestionCountByExternalSessionId
         }
         sessionSelectedModel={sessionSelectedModel}
         sessionWorkingDirectory={sessionWorkingDirectory}

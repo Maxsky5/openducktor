@@ -438,6 +438,8 @@ type SubagentMessageProps = {
   timeLabel: string;
   subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
   subagentPendingPermissionCount?: number;
+  subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
+  subagentPendingQuestionCount?: number;
 };
 
 const SubagentMessage = ({
@@ -448,13 +450,15 @@ const SubagentMessage = ({
   timeLabel,
   subagentPendingPermissions,
   subagentPendingPermissionCount = 0,
+  subagentPendingQuestions,
+  subagentPendingQuestionCount = 0,
 }: SubagentMessageProps): ReactElement => {
   const summary = readSubagentSummary(meta);
   const isRunning = meta.status === "running";
-  const isWaitingForPermission = Boolean(
+  const isWaitingForInput = Boolean(
     meta.externalSessionId &&
       (meta.status === "pending" || meta.status === "running") &&
-      subagentPendingPermissionCount > 0,
+      subagentPendingPermissionCount + subagentPendingQuestionCount > 0,
   );
   const durationMs =
     meta.status !== "pending" &&
@@ -478,12 +482,12 @@ const SubagentMessage = ({
             <span
               className={cn(
                 "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                isWaitingForPermission
+                isWaitingForInput
                   ? SUBAGENT_WAITING_PERMISSION_CLASS_NAME
                   : subagentStatusClassName(meta.status),
               )}
             >
-              {isWaitingForPermission ? "Waiting for permission" : subagentStatusLabel(meta.status)}
+              {isWaitingForInput ? "Waiting for input" : subagentStatusLabel(meta.status)}
             </span>
             {meta.executionMode ? (
               <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -491,7 +495,7 @@ const SubagentMessage = ({
               </span>
             ) : null}
             <div className="ml-auto inline-flex shrink-0 items-center gap-2 pt-0.5 text-[11px] text-muted-foreground">
-              {isRunning && !isWaitingForPermission ? (
+              {isRunning && !isWaitingForInput ? (
                 <LoaderCircle className="size-3 animate-spin" />
               ) : null}
               {durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
@@ -511,6 +515,7 @@ const SubagentMessage = ({
               sessionRuntimeId={sessionRuntimeId ?? null}
               sessionWorkingDirectory={sessionWorkingDirectory}
               pendingPermissions={subagentPendingPermissions}
+              pendingQuestions={subagentPendingQuestions}
               meta={meta}
             />
           </div>
@@ -547,6 +552,8 @@ type MessageBodyProps = {
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
   subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
   subagentPendingPermissionCount?: number;
+  subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
+  subagentPendingQuestionCount?: number;
 };
 
 export const MessageBody = ({
@@ -561,6 +568,8 @@ export const MessageBody = ({
   workflowToolAliasesByCanonical,
   subagentPendingPermissions,
   subagentPendingPermissionCount = 0,
+  subagentPendingQuestions,
+  subagentPendingQuestionCount = 0,
 }: MessageBodyProps): ReactElement => {
   const meta = message.meta;
 
@@ -602,6 +611,8 @@ export const MessageBody = ({
         timeLabel={timeLabel}
         subagentPendingPermissions={subagentPendingPermissions}
         subagentPendingPermissionCount={subagentPendingPermissionCount}
+        subagentPendingQuestions={subagentPendingQuestions}
+        subagentPendingQuestionCount={subagentPendingQuestionCount}
       />
     );
   }

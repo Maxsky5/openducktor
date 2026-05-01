@@ -24,7 +24,6 @@ import type {
   LoadAgentSessionTodosInput,
   ReplyPermissionInput,
   ReplyQuestionInput,
-  ReplyRuntimeSessionPermissionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
   StartAgentSessionInput,
@@ -58,7 +57,6 @@ import {
   loadSessionHistory,
   loadSessionTodos,
   replyPermission,
-  replyPermissionToTarget,
   replyQuestion,
 } from "./message-ops";
 import {
@@ -696,30 +694,13 @@ export class OpencodeSdkAdapter
   async replyPermission(input: ReplyPermissionInput): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     await replyPermission(session, input);
-  }
-
-  async replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void> {
-    const runtimeClientInput = await this.resolveRuntimeClientInput(
-      input,
-      "reply runtime session permission",
-      { requireLive: true },
-    );
-    await replyPermissionToTarget(
-      {
-        client: this.createClient(runtimeClientInput),
-        workingDirectory: runtimeClientInput.workingDirectory,
-      },
-      {
-        requestId: input.requestId,
-        reply: input.reply,
-        ...(input.message ? { message: input.message } : {}),
-      },
-    );
+    this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     await replyQuestion(session, input);
+    this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
   }
 
   subscribeEvents(
@@ -764,6 +745,25 @@ export class OpencodeSdkAdapter
 
   private emit(externalSessionId: string, event: AgentEvent): void {
     emitSessionEvent(this.listeners, externalSessionId, event);
+  }
+
+  private clearPendingSubagentInputEvent(externalSessionId: string, requestId: string): void {
+    for (const session of this.sessions.values()) {
+      const pending = session.pendingSubagentInputEventsByExternalSessionId.get(externalSessionId);
+      if (!pending) {
+        continue;
+      }
+
+      const nextPending = pending.filter((event) => event.requestId !== requestId);
+      if (nextPending.length === pending.length) {
+        continue;
+      }
+      if (nextPending.length === 0) {
+        session.pendingSubagentInputEventsByExternalSessionId.delete(externalSessionId);
+        continue;
+      }
+      session.pendingSubagentInputEventsByExternalSessionId.set(externalSessionId, nextPending);
+    }
   }
 
   private async resolveSessionToolSelection(

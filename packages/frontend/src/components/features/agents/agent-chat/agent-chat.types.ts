@@ -45,6 +45,8 @@ export type AgentChatThreadModel = {
   sessionAgentColors: Record<string, string>;
   subagentPendingPermissionsByExternalSessionId?: AgentSessionState["subagentPendingPermissionsByExternalSessionId"];
   subagentPendingPermissionCountByExternalSessionId?: Record<string, number>;
+  subagentPendingQuestionsByExternalSessionId?: AgentSessionState["subagentPendingQuestionsByExternalSessionId"];
+  subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;

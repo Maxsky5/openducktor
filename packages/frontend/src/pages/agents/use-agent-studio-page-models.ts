@@ -44,6 +44,7 @@ type AgentStudioCoreContext = {
 };
 
 const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS: Record<string, number> = Object.freeze({});
+const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS: Record<string, number> = Object.freeze({});
 
 const arePermissionCountMapsEqual = (
   left: Record<string, number>,
@@ -95,6 +96,44 @@ const useStablePendingPermissionCounts = (
     previousRef.current = nextCounts;
     return nextCounts;
   }, [sessions, subagentPendingPermissionsByExternalSessionId]);
+};
+
+const useStablePendingQuestionCounts = (
+  sessions: AgentSessionSummary[],
+  subagentPendingQuestionsByExternalSessionId:
+    | AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
+    | undefined,
+): Record<string, number> => {
+  const previousRef = useRef<Record<string, number>>(EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS);
+  return useMemo(() => {
+    const next: Record<string, number> = {};
+    for (const session of sessions) {
+      const pendingQuestionCount = session.pendingQuestions.length;
+      if (pendingQuestionCount > 0) {
+        next[session.externalSessionId] = pendingQuestionCount;
+      }
+    }
+
+    if (subagentPendingQuestionsByExternalSessionId) {
+      for (const [externalSessionId, pendingQuestions] of Object.entries(
+        subagentPendingQuestionsByExternalSessionId,
+      )) {
+        const pendingQuestionCount = pendingQuestions.length;
+        if (pendingQuestionCount > 0) {
+          next[externalSessionId] = pendingQuestionCount;
+        }
+      }
+    }
+
+    const nextCounts = Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS;
+    const previous = previousRef.current;
+    if (arePermissionCountMapsEqual(previous, nextCounts)) {
+      return previous;
+    }
+
+    previousRef.current = nextCounts;
+    return nextCounts;
+  }, [sessions, subagentPendingQuestionsByExternalSessionId]);
 };
 
 type AgentStudioTaskTabsContext = {
@@ -204,6 +243,10 @@ export function useAgentStudioPageModels({
   const subagentPendingPermissionCountByExternalSessionId = useStablePendingPermissionCounts(
     core.allSessionSummaries,
     core.activeSession?.subagentPendingPermissionsByExternalSessionId,
+  );
+  const subagentPendingQuestionCountByExternalSessionId = useStablePendingQuestionCounts(
+    core.allSessionSummaries,
+    core.activeSession?.subagentPendingQuestionsByExternalSessionId,
   );
   const workflowActiveExternalSessionId = core.activeSession?.externalSessionId ?? null;
   const workflowActiveSessionRole = core.activeSession?.role ?? null;
@@ -512,6 +555,9 @@ export function useAgentStudioPageModels({
     subagentPendingPermissionsByExternalSessionId:
       core.activeSession?.subagentPendingPermissionsByExternalSessionId,
     subagentPendingPermissionCountByExternalSessionId,
+    subagentPendingQuestionsByExternalSessionId:
+      core.activeSession?.subagentPendingQuestionsByExternalSessionId,
+    subagentPendingQuestionCountByExternalSessionId,
   });
   const composerModel = surfaceModel.composer;
 

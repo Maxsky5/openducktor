@@ -6,7 +6,10 @@ import {
   processOpencodeEvent,
   subscribeOpencodeEvents,
 } from "./event-stream";
-import type { SubagentSessionLink } from "./event-stream/shared";
+import {
+  flushPendingSubagentInputEventsForSession,
+  type SubagentSessionLink,
+} from "./event-stream/shared";
 import type { SessionInput, SessionRecord } from "./types";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
@@ -98,6 +101,7 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   pendingSubagentCorrelationKeys: [],
   pendingSubagentSessionsByExternalSessionId: new Map(),
   pendingSubagentPartEmissionsByExternalSessionId: new Map(),
+  pendingSubagentInputEventsByExternalSessionId: new Map(),
 });
 
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
@@ -136,6 +140,90 @@ const runEventStreamWithSession = async (
 const runEventStream = async (events: Event[]): Promise<AgentEvent[]> => {
   return (await runEventStreamWithSession(events)).emitted;
 };
+
+test("flushPendingSubagentInputEventsForSession preserves original timestamps", () => {
+  const emitted: AgentEvent[] = [];
+  const runtime = {
+    externalSessionId: "external-session-1",
+    input: makeSessionInput() as any,
+    now: () => "2026-02-22T12:30:00.000Z",
+    emit: (_externalSessionId: string, event: AgentEvent) => {
+      emitted.push(event);
+    },
+    getSession: () => undefined,
+    subagentCorrelationKeyByPartId: new Map<string, string>(),
+    subagentCorrelationKeyByExternalSessionId: new Map<string, string>([
+      ["external-child-session", "part:assistant-1:subtask-1"],
+    ]),
+    pendingSubagentCorrelationKeysBySignature: new Map<string, string[]>(),
+    pendingSubagentCorrelationKeys: [],
+    pendingSubagentSessionsByExternalSessionId: new Map(),
+    pendingSubagentPartEmissionsByExternalSessionId: new Map(),
+    pendingSubagentInputEventsByExternalSessionId: new Map([
+      [
+        "external-child-session",
+        [
+          {
+            type: "permission_required",
+            externalSessionId: "external-session-1",
+            timestamp: "2026-02-22T12:00:00.000Z",
+            requestId: "perm-child-1",
+            permission: "write",
+            patterns: ["src/**"],
+            childExternalSessionId: "external-child-session",
+          },
+          {
+            type: "question_required",
+            externalSessionId: "external-session-1",
+            timestamp: "2026-02-22T12:05:00.000Z",
+            requestId: "question-child-1",
+            questions: [
+              {
+                header: "Scope",
+                question: "Pick target",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+            childExternalSessionId: "external-child-session",
+          },
+        ],
+      ],
+    ]),
+  };
+
+  flushPendingSubagentInputEventsForSession(runtime as any, "external-child-session");
+
+  expect(emitted).toEqual([
+    {
+      type: "permission_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:00:00.000Z",
+      requestId: "perm-child-1",
+      permission: "write",
+      patterns: ["src/**"],
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    },
+    {
+      type: "question_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:05:00.000Z",
+      requestId: "question-child-1",
+      questions: [
+        {
+          header: "Scope",
+          question: "Pick target",
+          options: [{ label: "A", description: "Option A" }],
+        },
+      ],
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    },
+  ]);
+  expect(
+    runtime.pendingSubagentInputEventsByExternalSessionId.get("external-child-session"),
+  ).toBeUndefined();
+});
 
 const assistantRoleEvent = (messageId: string): Event =>
   ({
@@ -2615,8 +2703,207 @@ describe("event-stream", () => {
     expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
     expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
     expect(permissionEvents[0].subagentCorrelationKey).toBeUndefined();
+    expect(questionEvents[0].childExternalSessionId).toBe("external-session-1");
+    expect(questionEvents[0].parentExternalSessionId).toBeUndefined();
+    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
     expect(questionEvents[0].questions).toHaveLength(1);
     expect(questionEvents[0].questions[0]?.header).toBe("Scope");
+  });
+
+  test("subscribeOpencodeEvents forwards known child question events to parent subscribers", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "question.asked",
+          properties: {
+            sessionID: "external-child-session",
+            id: "question-child-1",
+            questions: [
+              {
+                header: "Scope",
+                question: "Pick target",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+          },
+        } as unknown as Event,
+      ],
+      undefined,
+      (childExternalSessionId) =>
+        childExternalSessionId === "external-child-session"
+          ? {
+              parentExternalSessionId: "external-session-1",
+              childExternalSessionId,
+              subagentCorrelationKey: "part:assistant-1:subtask-1",
+            }
+          : undefined,
+    );
+
+    const questionEvents = emitted.filter((event) => event.type === "question_required");
+    expect(questionEvents).toHaveLength(1);
+    expect(questionEvents[0]).toMatchObject({
+      type: "question_required",
+      externalSessionId: "external-session-1",
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    });
+  });
+
+  test("forwards child question events with parent id before the child link is known", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "question.asked",
+          properties: {
+            sessionID: "external-child-session",
+            info: {
+              parentID: "external-session-1",
+            },
+            id: "question-child-1",
+            questions: [
+              {
+                header: "Scope",
+                question: "Pick target",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+          },
+        } as unknown as Event,
+      ],
+      undefined,
+      () => undefined,
+    );
+
+    const questionEvents = emitted.filter((event) => event.type === "question_required");
+    expect(questionEvents).toHaveLength(1);
+    expect(questionEvents[0]).toMatchObject({
+      type: "question_required",
+      externalSessionId: "external-session-1",
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+    });
+    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
+  });
+
+  test("re-emits unresolved child question events after subagent correlation binds", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "question.asked",
+          properties: {
+            sessionID: "external-child-session",
+            info: {
+              parentID: "external-session-1",
+            },
+            id: "question-child-1",
+            questions: [
+              {
+                header: "Scope",
+                question: "Pick target",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+          },
+        } as unknown as Event,
+        {
+          type: "session.updated",
+          properties: {
+            info: {
+              id: "external-child-session",
+              parentID: "external-session-1",
+              time: {
+                created: Date.parse("2026-02-22T12:00:11.000Z"),
+              },
+            },
+          },
+        } as unknown as Event,
+      ],
+      (session) => {
+        session.pendingSubagentCorrelationKeys.push("part:assistant-1:subtask-1");
+      },
+      () => undefined,
+    );
+
+    const questionEvents = emitted.filter((event) => event.type === "question_required");
+    expect(questionEvents).toHaveLength(2);
+    expect(questionEvents[0]).toMatchObject({
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+    });
+    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
+    expect(questionEvents[1]).toMatchObject({
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    });
+  });
+
+  test("re-emits unresolved child question events when message parts bind the child session", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-question-bind"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-question-bind",
+        partId: "subtask-a",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting A",
+      }),
+      {
+        type: "question.asked",
+        properties: {
+          sessionID: "external-child-session",
+          info: {
+            parentID: "external-session-1",
+          },
+          id: "question-child-1",
+          questions: [
+            {
+              header: "Scope",
+              question: "Pick target",
+              options: [{ label: "A", description: "Option A" }],
+            },
+          ],
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "subtask-a",
+            sessionID: "external-session-1",
+            messageID: "assistant-subagent-question-bind",
+            type: "tool",
+            tool: "delegate",
+            state: {
+              status: "completed",
+              input: {
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+              output: {
+                result: "Finished A",
+                externalSessionId: "external-child-session",
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const questionEvents = emitted.filter((event) => event.type === "question_required");
+    expect(questionEvents).toHaveLength(2);
+    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
+    expect(questionEvents[1]).toMatchObject({
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-subagent-question-bind:subtask-a",
+    });
   });
 
   test("subscribeOpencodeEvents forwards known child permission events to parent subscribers", async () => {
@@ -2653,6 +2940,38 @@ describe("event-stream", () => {
       parentExternalSessionId: "external-session-1",
       subagentCorrelationKey: "part:assistant-1:subtask-1",
     });
+  });
+
+  test("forwards child permission events with parent id before the child link is known", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "permission.asked",
+          properties: {
+            sessionID: "external-child-session",
+            info: {
+              parentID: "external-session-1",
+            },
+            id: "perm-child-1",
+            permission: "read",
+            patterns: ["src/**"],
+          },
+        } as unknown as Event,
+      ],
+      undefined,
+      () => undefined,
+    );
+
+    const permissionEvents = emitted.filter((event) => event.type === "permission_required");
+    expect(permissionEvents).toHaveLength(1);
+    expect(permissionEvents[0]).toMatchObject({
+      type: "permission_required",
+      externalSessionId: "external-session-1",
+      requestId: "perm-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+    });
+    expect(permissionEvents[0].subagentCorrelationKey).toBeUndefined();
   });
 
   test("subscribeOpencodeEvents ignores child permission links for other parents", async () => {

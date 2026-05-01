@@ -221,6 +221,7 @@ export const registerSession = (input: {
     pendingSubagentCorrelationKeys: [],
     pendingSubagentSessionsByExternalSessionId: new Map(),
     pendingSubagentPartEmissionsByExternalSessionId: new Map(),
+    pendingSubagentInputEventsByExternalSessionId: new Map(),
   });
 
   if (input.subscribeToEvents !== false) {

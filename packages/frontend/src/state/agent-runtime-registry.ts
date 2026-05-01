@@ -33,7 +33,9 @@ export { DEFAULT_RUNTIME_KIND };
 export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
   const opencodeAdapter = new OpencodeSdkAdapter({
     repoRuntimeResolver: {
-      ensureRepoRuntime: ({ repoPath, runtimeKind }) => host.runtimeEnsure(repoPath, runtimeKind),
+      ensureRepoRuntime: async ({ repoPath, runtimeKind }) => {
+        return host.runtimeEnsure(repoPath, runtimeKind);
+      },
       requireRepoRuntime: async ({ repoPath, runtimeKind }) => {
         const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
         const runtimes = await host.runtimeList(repoPath, runtimeKind);
@@ -111,7 +113,6 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     this.updateSessionModel = this.updateSessionModel.bind(this);
     this.sendUserMessage = this.sendUserMessage.bind(this);
     this.replyPermission = this.replyPermission.bind(this);
-    this.replyRuntimeSessionPermission = this.replyRuntimeSessionPermission.bind(this);
     this.replyQuestion = this.replyQuestion.bind(this);
     this.subscribeEvents = this.subscribeEvents.bind(this);
     this.stopSession = this.stopSession.bind(this);
@@ -263,14 +264,6 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     return this.getAdapter(this.requireSessionRuntimeKind(input.externalSessionId)).replyPermission(
       input,
     );
-  }
-
-  replyRuntimeSessionPermission(
-    input: Parameters<AgentEnginePort["replyRuntimeSessionPermission"]>[0],
-  ) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "runtime session permission reply"),
-    ).replyRuntimeSessionPermission(input);
   }
 
   replyQuestion(input: Parameters<AgentEnginePort["replyQuestion"]>[0]) {

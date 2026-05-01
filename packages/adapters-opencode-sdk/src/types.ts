@@ -10,6 +10,7 @@ import type {
 } from "@openducktor/core";
 import type {
   PendingPartDelta,
+  PendingSubagentInputEvent,
   PendingSubagentPartEmission,
   PendingSubagentSessionBinding,
 } from "./event-stream/shared";
@@ -64,6 +65,7 @@ export type SessionRecord = {
   pendingSubagentCorrelationKeys: string[];
   pendingSubagentSessionsByExternalSessionId: Map<string, PendingSubagentSessionBinding>;
   pendingSubagentPartEmissionsByExternalSessionId: Map<string, PendingSubagentPartEmission[]>;
+  pendingSubagentInputEventsByExternalSessionId: Map<string, PendingSubagentInputEvent[]>;
   /** Cached workflow tool selection (toolId -> enabled). */
   workflowToolSelectionCache?: Record<string, boolean>;
   /** Timestamp when cache was last populated. */

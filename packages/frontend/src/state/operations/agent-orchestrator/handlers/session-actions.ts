@@ -27,7 +27,10 @@ import { appendSessionMessage } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import { isWorkflowAgentSession } from "../support/session-purpose";
-import { clearSubagentPendingPermissionFromSessions } from "../support/subagent-permission-overlay";
+import {
+  clearSubagentPendingPermissionFromSessions,
+  clearSubagentPendingQuestionFromSessions,
+} from "../support/subagent-permission-overlay";
 import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {
@@ -506,6 +509,12 @@ export const createAgentSessionActions = ({
       },
       { persist: true },
     );
+    clearSubagentPendingQuestionFromSessions({
+      sessionsRef,
+      updateSession,
+      targetExternalSessionId: externalSessionId,
+      requestId,
+    });
   };
 
   return {

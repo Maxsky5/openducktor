@@ -8,9 +8,12 @@ import type { OpencodeSdkAdapterOptions } from "./types";
 const defaultRepoPath = "/repo";
 const defaultWorkingDirectory = "/repo";
 
-const makeRuntimeSummary = (routeType: "local_http" | "stdio"): RuntimeInstanceSummary => ({
+const makeRuntimeSummary = (
+  routeType: "local_http" | "stdio",
+  runtimeId = "runtime-opencode-1",
+): RuntimeInstanceSummary => ({
   kind: "opencode",
-  runtimeId: "runtime-opencode-1",
+  runtimeId,
   repoPath: defaultRepoPath,
   taskId: null,
   role: "workspace",
@@ -94,6 +97,7 @@ const makeMockClient = (): {
   statusCalls: unknown[];
   permissionListCalls: unknown[];
   questionListCalls: unknown[];
+  questionReplyCalls: unknown[];
 } => {
   const createCalls: unknown[] = [];
   const abortCalls: unknown[] = [];
@@ -102,6 +106,7 @@ const makeMockClient = (): {
   const statusCalls: unknown[] = [];
   const permissionListCalls: unknown[] = [];
   const questionListCalls: unknown[] = [];
+  const questionReplyCalls: unknown[] = [];
 
   const client = {
     session: {
@@ -234,6 +239,10 @@ const makeMockClient = (): {
           error: undefined,
         };
       },
+      reply: async (input: unknown) => {
+        questionReplyCalls.push(input);
+        return { data: true, error: undefined };
+      },
     },
     global: {
       event: async () => {
@@ -256,6 +265,7 @@ const makeMockClient = (): {
     statusCalls,
     permissionListCalls,
     questionListCalls,
+    questionReplyCalls,
   };
 };
 
@@ -371,6 +381,47 @@ describe("opencode-sdk-adapter", () => {
     expect(mock.abortCalls).toHaveLength(1);
     expect(adapter.hasSession("external-session-1")).toBe(false);
     expect(events.some((event) => event.type === "session_finished")).toBe(true);
+  });
+
+  test("clears only the matching child pending input bucket by request id", async () => {
+    const mockClient = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mockClient.client,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "spec",
+      scenario: "spec_initial",
+      systemPrompt: "system",
+    });
+
+    const session = (adapter as any).sessions.get("external-session-1") as {
+      pendingSubagentInputEventsByExternalSessionId: Map<
+        string,
+        Array<{ requestId: string; type: "permission_required" | "question_required" }>
+      >;
+    };
+    session.pendingSubagentInputEventsByExternalSessionId.set("child-a", [
+      { type: "permission_required", requestId: "request-1" },
+      { type: "question_required", requestId: "request-2" },
+    ]);
+    session.pendingSubagentInputEventsByExternalSessionId.set("child-b", [
+      { type: "question_required", requestId: "request-1" },
+    ]);
+
+    (adapter as any).clearPendingSubagentInputEvent("child-a", "request-1");
+
+    expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-a")).toEqual([
+      { type: "question_required", requestId: "request-2" },
+    ]);
+    expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-b")).toEqual([
+      { type: "question_required", requestId: "request-1" },
+    ]);
   });
 
   test("startSession fails fast when the sdk client lacks global event streaming", async () => {

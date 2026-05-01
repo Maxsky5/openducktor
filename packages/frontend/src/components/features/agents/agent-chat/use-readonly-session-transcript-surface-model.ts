@@ -11,7 +11,7 @@ import { createRuntimeTranscriptSession } from "@/state/operations/agent-orchest
 import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-runtime";
 import { runtimeListQueryOptions } from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
+import type { AgentPermissionRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { useAgentChatSessionRuntimeData } from "./use-agent-chat-session-runtime-data";
@@ -21,7 +21,7 @@ import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
 const DEFAULT_SHOW_THINKING_MESSAGES = false;
 const EMPTY_PENDING_PERMISSIONS = Object.freeze([]) as unknown as AgentPermissionRequest[];
-const NOOP_SUBMIT_ANSWERS = async (_requestId: string, _answers: string[][]): Promise<void> => {};
+const EMPTY_PENDING_QUESTIONS = Object.freeze([]) as unknown as AgentQuestionRequest[];
 
 type UseReadonlySessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;
@@ -68,17 +68,24 @@ export function useReadonlySessionTranscriptSurfaceModel({
     readSessionTodos,
     attachRuntimeTranscriptSession,
     replyAgentPermission,
-    replyRuntimeSessionPermission,
+    answerAgentQuestion,
   } = useAgentOperations();
   const liveSession = useAgentSession(requestedExternalSessionId ?? null);
   const isMountedRef = useRef(true);
   const attachLiveTranscriptKeyRef = useRef<string | null>(null);
   const visiblePendingPermissionsRef = useRef<AgentPermissionRequest[]>([]);
+  const visiblePendingQuestionsRef = useRef<AgentQuestionRequest[]>([]);
   const [isAttachingLiveTranscript, setIsAttachingLiveTranscript] = useState(false);
   const [liveTranscriptAttachError, setLiveTranscriptAttachError] = useState<string | null>(null);
   const [repliedRuntimePermissionRequestIds, setRepliedRuntimePermissionRequestIds] = useState<
     Set<string>
   >(() => new Set());
+  const [repliedRuntimeQuestionRequestIds, setRepliedRuntimeQuestionRequestIds] = useState<
+    Set<string>
+  >(() => new Set());
+  const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
+    Record<string, boolean>
+  >({});
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -174,9 +181,13 @@ export function useReadonlySessionTranscriptSurfaceModel({
     const hasTranscriptIdentity = Boolean(externalSessionId || source?.runtimeId);
     if (!hasTranscriptIdentity) {
       setRepliedRuntimePermissionRequestIds(new Set());
+      setRepliedRuntimeQuestionRequestIds(new Set());
+      setIsSubmittingQuestionByRequestId({});
       return;
     }
     setRepliedRuntimePermissionRequestIds(new Set());
+    setRepliedRuntimeQuestionRequestIds(new Set());
+    setIsSubmittingQuestionByRequestId({});
     setLiveTranscriptAttachError(null);
   }, [externalSessionId, source?.runtimeId]);
 
@@ -201,6 +212,24 @@ export function useReadonlySessionTranscriptSurfaceModel({
   useEffect(() => {
     visiblePendingPermissionsRef.current = visiblePendingPermissions;
   }, [visiblePendingPermissions]);
+
+  const visiblePendingQuestions = useMemo(() => {
+    const byRequestId = new Map<string, AgentQuestionRequest>();
+    for (const request of source?.pendingQuestions ?? []) {
+      byRequestId.set(request.requestId, request);
+    }
+    for (const request of liveSession?.pendingQuestions ?? []) {
+      byRequestId.set(request.requestId, request);
+    }
+    for (const requestId of repliedRuntimeQuestionRequestIds) {
+      byRequestId.delete(requestId);
+    }
+    return Array.from(byRequestId.values());
+  }, [liveSession?.pendingQuestions, repliedRuntimeQuestionRequestIds, source?.pendingQuestions]);
+
+  useEffect(() => {
+    visiblePendingQuestionsRef.current = visiblePendingQuestions;
+  }, [visiblePendingQuestions]);
 
   const liveTranscriptAttachKey = useMemo(() => {
     if (
@@ -262,6 +291,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       ...(resolvedSource.runtimeId ? { runtimeId: resolvedSource.runtimeId } : {}),
       workingDirectory: source.workingDirectory,
       pendingPermissions: visiblePendingPermissionsRef.current,
+      pendingQuestions: visiblePendingQuestionsRef.current,
     })
       .catch((error: unknown) => {
         if (
@@ -328,6 +358,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       return {
         ...liveSession,
         pendingPermissions: visiblePendingPermissions,
+        pendingQuestions: visiblePendingQuestions,
       };
     }
     if (source?.isLive === true) {
@@ -346,6 +377,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       history: historyQuery.data,
       isLive: false,
       pendingPermissions: visiblePendingPermissions,
+      pendingQuestions: visiblePendingQuestions,
     });
   }, [
     activeWorkspace,
@@ -355,6 +387,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     resolvedSource,
     source,
     visiblePendingPermissions,
+    visiblePendingQuestions,
   ]);
 
   const runtimeData = useAgentChatSessionRuntimeData({
@@ -401,47 +434,29 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const activePermissionSessionId = permissionSession?.externalSessionId ?? null;
   const pendingPermissionRequests =
     permissionSession?.pendingPermissions ?? EMPTY_PENDING_PERMISSIONS;
+  const questionSession = runtimeData.session;
+  const activeQuestionSessionId = questionSession?.externalSessionId ?? null;
+  const pendingQuestionRequests = questionSession?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
   const replyTranscriptPermission = useCallback(
     async (
       targetExternalSessionId: string,
       requestId: string,
       reply: "once" | "always" | "reject",
     ): Promise<void> => {
-      if (source && activeWorkspace && externalSessionId) {
-        await replyRuntimeSessionPermission({
-          repoPath: activeWorkspace.repoPath,
-          runtimeKind: source.runtimeKind,
-          workingDirectory: source.workingDirectory,
-          targetExternalSessionId,
-          requestId,
-          reply,
-        });
-        setRepliedRuntimePermissionRequestIds((current) => {
-          if (current.has(requestId)) {
-            return current;
-          }
-          const next = new Set(current);
-          next.add(requestId);
-          return next;
-        });
-        return;
+      if (!targetExternalSessionId) {
+        throw new Error("Runtime transcript permission target is unavailable.");
       }
-
-      if (liveSession) {
-        await replyAgentPermission(targetExternalSessionId, requestId, reply);
-        return;
-      }
-
-      throw new Error("Runtime transcript permission target is unavailable.");
+      await replyAgentPermission(targetExternalSessionId, requestId, reply);
+      setRepliedRuntimePermissionRequestIds((current) => {
+        if (current.has(requestId)) {
+          return current;
+        }
+        const next = new Set(current);
+        next.add(requestId);
+        return next;
+      });
     },
-    [
-      activeWorkspace,
-      externalSessionId,
-      liveSession,
-      replyAgentPermission,
-      replyRuntimeSessionPermission,
-      source,
-    ],
+    [replyAgentPermission],
   );
   const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
     useAgentSessionPermissionActions({
@@ -450,6 +465,33 @@ export function useReadonlySessionTranscriptSurfaceModel({
       agentStudioReady: runtimeReadiness.isReady,
       replyAgentPermission: replyTranscriptPermission,
     });
+
+  const replyTranscriptQuestion = useCallback(
+    async (requestId: string, answers: string[][]): Promise<void> => {
+      if (!activeQuestionSessionId) {
+        throw new Error("Runtime transcript question target is unavailable.");
+      }
+      setIsSubmittingQuestionByRequestId((current) => ({ ...current, [requestId]: true }));
+      try {
+        await answerAgentQuestion(activeQuestionSessionId, requestId, answers);
+        setRepliedRuntimeQuestionRequestIds((current) => {
+          if (current.has(requestId)) {
+            return current;
+          }
+          const next = new Set(current);
+          next.add(requestId);
+          return next;
+        });
+      } finally {
+        setIsSubmittingQuestionByRequestId((current) => {
+          const next = { ...current };
+          delete next[requestId];
+          return next;
+        });
+      }
+    },
+    [activeQuestionSessionId, answerAgentQuestion],
+  );
 
   const model = useAgentChatSurfaceModel({
     mode: "non_interactive",
@@ -465,12 +507,22 @@ export function useReadonlySessionTranscriptSurfaceModel({
     runtimeReadiness,
     emptyState,
     pendingQuestions: {
-      canSubmit: false,
-      isSubmittingByRequestId: {},
-      onSubmit: NOOP_SUBMIT_ANSWERS,
+      canSubmit:
+        runtimeReadiness.isReady &&
+        !resolvedSource.isPending &&
+        !resolvedSource.error &&
+        activeQuestionSessionId === externalSessionId &&
+        pendingQuestionRequests.length > 0,
+      isSubmittingByRequestId: isSubmittingQuestionByRequestId,
+      onSubmit: replyTranscriptQuestion,
     },
     permissions: {
-      canReply: activePermissionSessionId !== null && pendingPermissionRequests.length > 0,
+      canReply:
+        runtimeReadiness.isReady &&
+        !resolvedSource.isPending &&
+        !resolvedSource.error &&
+        activePermissionSessionId !== null &&
+        pendingPermissionRequests.length > 0,
       isSubmittingByRequestId: isSubmittingPermissionByRequestId,
       errorByRequestId: permissionReplyErrorByRequestId,
       onReply: onReplyPermission,

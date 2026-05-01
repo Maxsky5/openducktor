@@ -126,6 +126,8 @@ export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => 
     pendingSubagentSessionsByExternalSessionId: session.pendingSubagentSessionsByExternalSessionId,
     pendingSubagentPartEmissionsByExternalSessionId:
       session.pendingSubagentPartEmissionsByExternalSessionId,
+    pendingSubagentInputEventsByExternalSessionId:
+      session.pendingSubagentInputEventsByExternalSessionId,
   };
 
   if (handleMessageEvent(input.event, runtime)) {
@@ -189,12 +191,16 @@ export const isRelevantSubscriberEvent = (
           )
         : undefined;
 
+    if (event.type === "question.asked" && parentExternalSessionId) {
+      return parentExternalSessionId === subscriber.externalSessionId;
+    }
+
     if (parentExternalSessionId === subscriber.externalSessionId) {
       return true;
     }
 
     if (
-      event.type === "permission.asked" &&
+      (event.type === "permission.asked" || event.type === "question.asked") &&
       options?.isKnownChildExternalSessionId?.(eventExternalSessionId)
     ) {
       return true;
