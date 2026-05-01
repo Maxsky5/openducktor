@@ -1,11 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import { toast } from "sonner";
 import {
   executeSessionStartFromDecision,
   type ResolvedSessionStartDecision,
+  type SessionLaunchActionId,
   type SessionStartFlowRequest,
 } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
@@ -67,13 +68,12 @@ export function useAgentStudioFreshSessionCreation({
 } {
   const queryClient = useQueryClient();
   const applyFreshSessionSelectionQuery = useCallback(
-    (externalSessionId: string, nextRole: AgentRole, nextScenario: AgentScenario): void => {
+    (externalSessionId: string, nextRole: AgentRole): void => {
       updateQuery(
         buildAgentStudioSelectionQueryUpdate({
           taskId,
           externalSessionId,
           role: nextRole,
-          scenario: nextScenario,
         }),
       );
     },
@@ -83,7 +83,7 @@ export function useAgentStudioFreshSessionCreation({
   const runFreshSessionCreation = useCallback(
     async (params: {
       nextRole: AgentRole;
-      nextScenario: AgentScenario;
+      nextLaunchActionId: SessionLaunchActionId;
     }): Promise<string | undefined> => {
       const startContextKey = buildAgentStudioAsyncActivityContextKey({
         activeWorkspace,
@@ -116,7 +116,7 @@ export function useAgentStudioFreshSessionCreation({
               request: {
                 taskId,
                 role: params.nextRole,
-                scenario: params.nextScenario,
+                launchActionId: params.nextLaunchActionId,
                 postStartAction: "kickoff",
               },
               decision,
@@ -148,11 +148,7 @@ export function useAgentStudioFreshSessionCreation({
               onContextSwitchIntent?.();
             }
 
-            applyFreshSessionSelectionQuery(
-              externalSessionId,
-              params.nextRole,
-              params.nextScenario,
-            );
+            applyFreshSessionSelectionQuery(externalSessionId, params.nextRole);
             return externalSessionId;
           } catch (error) {
             const roleLabel = AGENT_ROLE_LABELS[params.nextRole] ?? params.nextRole.toUpperCase();
@@ -172,7 +168,7 @@ export function useAgentStudioFreshSessionCreation({
         {
           taskId,
           role: params.nextRole,
-          scenario: params.nextScenario,
+          launchActionId: params.nextLaunchActionId,
           postStartAction: "kickoff",
         },
         executeStartedSession,
@@ -197,7 +193,7 @@ export function useAgentStudioFreshSessionCreation({
 
   const handleCreateSession = useCallback(
     (option: SessionCreateOption): void => {
-      const { role: nextRole, scenario: nextScenario } = option;
+      const { role: nextRole, launchActionId: nextLaunchActionId } = option;
       if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
         return;
       }
@@ -213,7 +209,7 @@ export function useAgentStudioFreshSessionCreation({
       const startKey = buildCreateSessionStartKey({
         taskId,
         role: nextRole,
-        scenario: nextScenario,
+        launchActionId: nextLaunchActionId,
       });
       if (startingSessionByTaskRef.current.has(startKey)) {
         return;
@@ -221,7 +217,7 @@ export function useAgentStudioFreshSessionCreation({
 
       const startPromise = runFreshSessionCreation({
         nextRole,
-        nextScenario,
+        nextLaunchActionId,
       });
 
       startingSessionByTaskRef.current.set(startKey, startPromise);

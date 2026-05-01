@@ -1,20 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { resolveScenarioStartMode } from "./session-start-mode";
+import { resolveLaunchStartMode } from "./session-start-mode";
 
-describe("resolveScenarioStartMode", () => {
-  test("keeps the scenario default when it does not require an existing session", () => {
+describe("resolveLaunchStartMode", () => {
+  test("keeps the default fresh mode when it does not require an existing session", () => {
     expect(
-      resolveScenarioStartMode({
-        scenario: "build_implementation_start",
+      resolveLaunchStartMode({
+        launchActionId: "build_implementation_start",
         existingSessionOptions: [],
       }),
     ).toBe("fresh");
   });
 
-  test("keeps the scenario default when reusable sessions exist", () => {
+  test("prefers reuse when reusable sessions exist", () => {
     expect(
-      resolveScenarioStartMode({
-        scenario: "build_after_human_request_changes",
+      resolveLaunchStartMode({
+        launchActionId: "build_after_human_request_changes",
         existingSessionOptions: [
           {
             value: "session-1",
@@ -28,17 +28,17 @@ describe("resolveScenarioStartMode", () => {
 
   test("falls back to the first allowed non-reuse mode when no reusable sessions exist", () => {
     expect(
-      resolveScenarioStartMode({
-        scenario: "build_after_human_request_changes",
+      resolveLaunchStartMode({
+        launchActionId: "build_implementation_start",
         existingSessionOptions: [],
       }),
     ).toBe("fresh");
   });
 
-  test("keeps reuse as the default when the scenario allows reuse and fork", () => {
+  test("keeps reuse as the default when the launch action allows reuse and fork", () => {
     expect(
-      resolveScenarioStartMode({
-        scenario: "build_pull_request_generation",
+      resolveLaunchStartMode({
+        launchActionId: "build_pull_request_generation",
         existingSessionOptions: [],
       }),
     ).toBe("reuse");

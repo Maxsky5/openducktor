@@ -5,7 +5,8 @@ import type {
   AutopilotSettings,
 } from "@openducktor/contracts";
 import { AUTOPILOT_EVENT_IDS, createDefaultAutopilotSettings } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
+import type { SessionLaunchActionId } from "@/features/session-start/session-start-launch-options";
 
 export const AUTOPILOT_DISABLED_VALUE = "disabled" as const;
 
@@ -16,7 +17,7 @@ export type AutopilotActionDefinition = {
   label: string;
   description: string;
   role: AgentRole;
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
 };
 
 export type AutopilotEventDefinition = {
@@ -33,35 +34,35 @@ export const AUTOPILOT_ACTION_DEFINITIONS: Record<AutopilotActionId, AutopilotAc
     description:
       "Start the Planner workflow when a task becomes ready for implementation planning.",
     role: "planner",
-    scenario: "planner_initial",
+    launchActionId: "planner_initial",
   },
   startBuilder: {
     id: "startBuilder",
     label: "Start Builder",
     description: "Start or continue Builder implementation when planning is complete.",
     role: "build",
-    scenario: "build_implementation_start",
+    launchActionId: "build_implementation_start",
   },
   startQa: {
     id: "startQa",
     label: "Start QA",
     description: "Start or continue QA review once implementation reaches AI review.",
     role: "qa",
-    scenario: "qa_review",
+    launchActionId: "qa_review",
   },
   startReviewQaFeedbacks: {
     id: "startReviewQaFeedbacks",
     label: "Start Review QA Feedbacks",
     description: "Resume Builder to address rejected QA findings at the root cause.",
     role: "build",
-    scenario: "build_after_qa_rejected",
+    launchActionId: "build_after_qa_rejected",
   },
   startGeneratePullRequest: {
     id: "startGeneratePullRequest",
     label: "Start Generate Pull Request",
     description: "Fork from the latest Builder session to generate or update the pull request.",
     role: "build",
-    scenario: "build_pull_request_generation",
+    launchActionId: "build_pull_request_generation",
   },
 };
 

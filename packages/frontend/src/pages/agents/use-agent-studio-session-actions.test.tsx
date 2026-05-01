@@ -212,7 +212,7 @@ const createBaseArgs = (): HookArgs => {
     },
     taskId: "task-1",
     role: "spec",
-    scenario: "spec_initial",
+    launchActionId: "spec_initial",
     activeSession: null,
     selectedModelSelection: null,
     selectedModelDescriptor: null,
@@ -304,7 +304,6 @@ describe("useAgentStudioSessionActions", () => {
     expect(startAgentSession).toHaveBeenCalledWith({
       taskId: "task-1",
       role: "spec",
-      scenario: "spec_initial",
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -1033,7 +1032,6 @@ describe("useAgentStudioSessionActions", () => {
       runtimeKind: "opencode",
       externalSessionId: "session-existing",
       role: "spec",
-      scenario: "spec_initial",
     });
 
     const harness = createHookHarness({
@@ -1081,9 +1079,6 @@ describe("useAgentStudioSessionActions", () => {
       task: "task-2",
       session: "session-2",
       agent: "spec",
-      scenario: undefined,
-      autostart: undefined,
-      start: undefined,
     });
 
     await harness.unmount();
@@ -1095,7 +1090,6 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      scenario: "spec_initial",
       sessionsForTask: [],
       updateQuery: (updates) => {
         updateCalls.push(updates);
@@ -1111,9 +1105,6 @@ describe("useAgentStudioSessionActions", () => {
       task: "task-1",
       session: undefined,
       agent: "planner",
-      scenario: "spec_initial",
-      autostart: undefined,
-      start: undefined,
     });
 
     await harness.unmount();
@@ -1147,7 +1138,6 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      scenario: "spec_initial",
       activeSession: createSession({ externalSessionId: "session-spec", role: "spec" }),
       selectedTask: createTask(),
       startAgentSession,
@@ -1162,8 +1152,8 @@ describe("useAgentStudioSessionActions", () => {
       await harness.run((state) => {
         state.handleCreateSession({
           id: "spec:spec_initial:fresh",
+          launchActionId: "spec_initial",
           role: "spec",
-          scenario: "spec_initial",
           label: "Spec · Start Spec",
           description: "Create a new spec session from scratch",
           disabled: false,
@@ -1177,11 +1167,11 @@ describe("useAgentStudioSessionActions", () => {
     }
   });
 
-  test("does not expose kickoff for internal rebase conflict scenario", async () => {
+  test("does not expose kickoff for message-only rebase conflict launch action", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "build",
-      scenario: "build_rebase_conflict_resolution",
+      launchActionId: "build_rebase_conflict_resolution",
       selectedTask: createTask(),
       activeSession: null,
       sessionsForTask: [],
@@ -1190,6 +1180,23 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
 
     expect(harness.getLatest().canKickoffNewSession).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("keeps kickoff available for build launch actions with kickoff prompts", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "build",
+      launchActionId: "build_after_human_request_changes",
+      selectedTask: createTask({ status: "human_review" }),
+      activeSession: null,
+      sessionsForTask: [],
+    });
+
+    await harness.mount();
+
+    expect(harness.getLatest().canKickoffNewSession).toBe(true);
 
     await harness.unmount();
   });

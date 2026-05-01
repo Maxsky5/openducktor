@@ -457,21 +457,12 @@ const startDefaultSession = async (
     profileId?: string;
   },
 ): Promise<void> => {
-  const scenario =
-    role === "qa"
-      ? "qa_review"
-      : role === "planner"
-        ? "planner_initial"
-        : role === "build"
-          ? "build_implementation_start"
-          : "spec_initial";
   await adapter.startSession({
     repoPath: "/repo",
     workingDirectory: "/repo",
     taskId: "task-1",
     runtimeKind: "opencode",
     role,
-    scenario,
     systemPrompt: "system prompt",
     ...(model ? { model } : {}),
   });
@@ -546,7 +537,6 @@ describe("OpencodeSdkAdapter", () => {
       taskId: "task-1",
       runtimeKind: "opencode",
       role: "build",
-      scenario: "build_implementation_start",
       systemPrompt: "system",
     });
     await adapter.startSession({
@@ -555,7 +545,6 @@ describe("OpencodeSdkAdapter", () => {
       taskId: "task-2",
       runtimeKind: "opencode",
       role: "qa",
-      scenario: "qa_review",
       systemPrompt: "system",
     });
 
@@ -598,7 +587,6 @@ describe("OpencodeSdkAdapter", () => {
       taskId: "task-1",
       runtimeKind: "opencode",
       role: "planner",
-      scenario: "planner_initial",
       systemPrompt: "system",
     });
 
@@ -744,7 +732,6 @@ describe("OpencodeSdkAdapter", () => {
       taskId: "task-1",
       runtimeKind: "opencode",
       role: "build",
-      scenario: "build_implementation_start",
       systemPrompt: "system",
     });
 
@@ -772,7 +759,6 @@ describe("OpencodeSdkAdapter", () => {
         taskId: "task-1",
         runtimeKind: "opencode",
         role: "build",
-        scenario: "build_implementation_start",
         systemPrompt: "system",
       }),
     ).rejects.toThrow("client.global.event()");
@@ -847,7 +833,6 @@ describe("OpencodeSdkAdapter", () => {
       taskId: "task-1",
       runtimeKind: "opencode",
       role: "build",
-      scenario: "build_implementation_start",
       systemPrompt: "system",
     });
 
@@ -1362,7 +1347,10 @@ describe("OpencodeSdkAdapter", () => {
 
     expect(mock.tool.listCalls).toEqual([]);
     expect(mock.session.promptCalls).toHaveLength(0);
-    expect(mock.session.promptAsyncCalls[0]?.tools).toMatchObject({
+    const promptAsyncCall = mock.session.promptAsyncCalls[0] as
+      | { tools?: Record<string, boolean> }
+      | undefined;
+    expect(promptAsyncCall?.tools).toMatchObject({
       edit: false,
       write: false,
       apply_patch: false,
@@ -2217,7 +2205,6 @@ describe("OpencodeSdkAdapter", () => {
         workingDirectory: "/repo/feature-worktree",
         taskId: "task-1",
         role: "spec",
-        scenario: "spec_initial",
         systemPrompt: "System prompt",
       },
       messageMetadataById: new Map([
@@ -2304,7 +2291,6 @@ describe("OpencodeSdkAdapter", () => {
         workingDirectory: "/repo/feature-worktree",
         taskId: "task-1",
         role: "spec",
-        scenario: "spec_initial",
         systemPrompt: "System prompt",
       },
       messageMetadataById: new Map([
@@ -2338,7 +2324,6 @@ describe("OpencodeSdkAdapter", () => {
         workingDirectory: "/repo/other-worktree",
         taskId: "task-1",
         role: "spec",
-        scenario: "spec_initial",
         systemPrompt: "System prompt",
       },
       messageMetadataById: new Map([

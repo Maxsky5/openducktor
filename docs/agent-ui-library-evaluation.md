@@ -20,7 +20,7 @@ What is the best React library strategy for OpenDucktor agent pages (Spec, Plann
 - Limitation for this project:
   - OpenDucktor agent UX is tightly coupled to local OpenCode runtime lifecycle, Beads workflow
     transitions, and Tauri host commands.
-  - The app needs custom role/scenario controls and tool-result semantics that are not generic chat UI.
+  - The app needs custom role/launch controls and tool-result semantics that are not generic chat UI.
 
 ## Decision
 Use **project-native shadcn + Tailwind composition** for the agent UI layer and pair it with:

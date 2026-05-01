@@ -1,6 +1,4 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentScenario, AgentSessionStartMode } from "@openducktor/core";
-import { getAgentScenarioDefinition, isScenarioStartModeAllowed } from "@openducktor/core";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { StartSessionContext, TaskDependencies } from "./start-session.types";
 
@@ -19,26 +17,6 @@ export const resolveStartTask = ({
     throw new Error(unavailableRoleErrorMessage(resolvedTask, ctx.role));
   }
   return resolvedTask;
-};
-
-export const assertScenarioStartPolicy = ({
-  role,
-  scenario,
-  startMode,
-}: {
-  role: StartSessionContext["role"];
-  scenario: AgentScenario;
-  startMode: AgentSessionStartMode;
-}): void => {
-  const definition = getAgentScenarioDefinition(scenario);
-  if (definition.role !== role) {
-    throw new Error(
-      `Scenario "${scenario}" belongs to role "${definition.role}", but start was requested for role "${role}".`,
-    );
-  }
-  if (!isScenarioStartModeAllowed(scenario, startMode)) {
-    throw new Error(`Scenario "${scenario}" does not allow start mode "${startMode}".`);
-  }
 };
 
 export const resolveReuseValidationError = ({

@@ -55,7 +55,6 @@ export const createRuntimeTranscriptSession = ({
     repoPath,
     runtimeKind,
     role: null,
-    scenario: null,
     status: isLive ? "running" : "idle",
     startedAt,
     runtimeId,

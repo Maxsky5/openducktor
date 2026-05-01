@@ -1,12 +1,12 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import type {
   ResolvedSessionStartDecision,
+  SessionLaunchActionId,
   SessionStartFlowRequest,
   SessionStartPostAction,
-  SessionStartRequestReason,
   SessionStartWorkflowResult,
 } from "@/features/session-start";
 import { executeSessionStartFromDecision } from "@/features/session-start";
@@ -26,7 +26,7 @@ type UseAgentStudioSessionStartSessionArgs = {
   activeWorkspace: ActiveWorkspace | null;
   taskId: string;
   role: AgentRole;
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
   activeSession: AgentSessionState | null;
   selectedTask: Parameters<typeof canStartSessionForRole>[0];
   agentStudioReady: boolean;
@@ -48,7 +48,7 @@ export function useAgentStudioSessionStartSession({
   activeWorkspace,
   taskId,
   role,
-  scenario,
+  launchActionId,
   selectedTask,
   agentStudioReady,
   isActiveTaskHydrated,
@@ -61,16 +61,14 @@ export function useAgentStudioSessionStartSession({
   onPostStartActionError,
   executeRequestedSessionStart,
 }: UseAgentStudioSessionStartSessionArgs): {
-  startSession: (reason: SessionStartRequestReason) => Promise<string | undefined>;
+  startSession: () => Promise<string | undefined>;
   runSessionStart: (params: {
-    reason: SessionStartRequestReason;
     postStartAction: SessionStartPostAction;
   }) => Promise<SessionStartWorkflowResult | undefined>;
 } {
   const queryClient = useQueryClient();
   const startRequestedSession = useCallback(
     async (params: {
-      reason: SessionStartRequestReason;
       postStartAction: SessionStartPostAction;
     }): Promise<SessionStartWorkflowResult | undefined> => {
       const startContextKey = buildAgentStudioAsyncActivityContextKey({
@@ -92,7 +90,7 @@ export function useAgentStudioSessionStartSession({
             request: {
               taskId,
               role,
-              scenario,
+              launchActionId,
               postStartAction: params.postStartAction,
             },
             decision,
@@ -120,7 +118,7 @@ export function useAgentStudioSessionStartSession({
         {
           taskId,
           role,
-          scenario,
+          launchActionId,
           postStartAction: params.postStartAction,
           initialTargetBranch: selectedTask?.targetBranch ?? null,
           initialTargetBranchError: selectedTask?.targetBranchError ?? null,
@@ -131,7 +129,7 @@ export function useAgentStudioSessionStartSession({
     [
       activeWorkspace,
       role,
-      scenario,
+      launchActionId,
       queryClient,
       setStartingActivityCountByContext,
       sendAgentMessage,
@@ -147,7 +145,6 @@ export function useAgentStudioSessionStartSession({
 
   const runSessionStart = useCallback(
     async (params: {
-      reason: SessionStartRequestReason;
       postStartAction: SessionStartPostAction;
     }): Promise<SessionStartWorkflowResult | undefined> => {
       if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
@@ -160,7 +157,7 @@ export function useAgentStudioSessionStartSession({
       const startKey = buildCreateSessionStartKey({
         taskId,
         role,
-        scenario,
+        launchActionId,
       });
       const inFlightSessionStart = startingSessionByTaskRef.current.get(startKey);
       if (inFlightSessionStart) {
@@ -197,23 +194,19 @@ export function useAgentStudioSessionStartSession({
       isActiveTaskHydrated,
       role,
       selectedTask,
-      scenario,
+      launchActionId,
       startRequestedSession,
       startingSessionByTaskRef,
       taskId,
     ],
   );
 
-  const startSession = useCallback(
-    async (reason: SessionStartRequestReason): Promise<string | undefined> => {
-      const workflow = await runSessionStart({
-        reason,
-        postStartAction: "none",
-      });
-      return workflow?.externalSessionId;
-    },
-    [runSessionStart],
-  );
+  const startSession = useCallback(async (): Promise<string | undefined> => {
+    const workflow = await runSessionStart({
+      postStartAction: "none",
+    });
+    return workflow?.externalSessionId;
+  }, [runSessionStart]);
 
   return {
     startSession,

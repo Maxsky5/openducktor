@@ -1,14 +1,11 @@
 import {
   type AgentPromptTemplateId,
-  isAgentKickoffScenario,
   type RepoPromptOverrides,
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
-  type AgentKickoffScenario,
   type AgentRole,
-  type AgentScenario,
   type AgentToolName,
 } from "../types/agent-orchestrator";
 
@@ -23,14 +20,15 @@ export type AgentPromptTaskContext = {
 
 export type BuildAgentPromptInput = {
   role: AgentRole;
-  scenario: AgentScenario;
   task: AgentPromptTaskContext;
   overrides?: RepoPromptOverrides;
 };
 
+export type AgentKickoffTemplateId = Extract<AgentPromptTemplateId, `kickoff.${string}`>;
+
 export type BuildAgentKickoffPromptInput = {
   role: AgentRole;
-  scenario: AgentKickoffScenario;
+  templateId: AgentKickoffTemplateId;
   task: {
     taskId: string;
     title?: string;
@@ -227,11 +225,12 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.role.spec.base": {
     id: "system.role.spec.base",
     purpose: "system",
-    builtinVersion: 2,
+    builtinVersion: 3,
     template: joinPromptBlocks(
       "You are the Spec Agent for OpenDucktor.\nPersist the canonical spec with the native odt_set_spec MCP tool.",
       bulletSection("Mission", [
         "Turn the user problem into a clear, repo-grounded specification that explains why the work matters and what must be true when it is done.",
+        "Understand the problem and why it matters before locking scope.",
       ]),
       bulletSection("Operating stance", [
         "Discovery first: understand the user goal, motivation, constraints, and success criteria before diving into implementation details.",
@@ -240,11 +239,13 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       ]),
       bulletSection("Workflow", [
         "Review the task, existing documents, relevant repo files, and repo-level guidance docs before locking conclusions.",
+        "Review the task description, existing artifacts, repo guidance, and relevant repo evidence first.",
         "Distinguish locked decisions, assumptions, deferred ideas, and open questions explicitly.",
         "Ask targeted clarification when ambiguity materially changes scope, UX, data contracts, security posture, validation, or rollout.",
         "Ask at most one targeted question at a time, only after completing all non-blocked repo research.",
         "When you ask a question, include a recommended default and explain what would change based on the answer.",
         "If uncertainty remains, record explicit assumptions or [NEEDS CLARIFICATION] items instead of silently guessing, and avoid carrying more than 3 open clarification markers into a supposedly ready spec.",
+        "Produce complete specification markdown focused on user value, scope, requirements, edge cases, constraints, risks, acceptance criteria, and validation, then self-check it for completeness, clarity, and consistency.",
       ]),
       bulletSection("Quality bar", [
         "Use a structure that clearly covers goals, non-goals, user outcomes, functional requirements, edge cases, constraints, risks, acceptance criteria, and validation.",
@@ -262,6 +263,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
         "The spec is implementation-ready, concrete, and still clearly separate from the implementation plan.",
         "Resolved clarifications are folded into the canonical spec and remaining open questions are explicit.",
         "Persist the canonical markdown with odt_set_spec once the spec is complete.",
+        "Call odt_set_spec exactly once with the updated markdown when the canonical spec is ready; do not turn this run into implementation planning or detailed solution design.",
         "You operate in read-only mode for repository mutation. Never modify files, git state, or environment.",
       ]),
     ),
@@ -269,11 +271,12 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.role.planner.base": {
     id: "system.role.planner.base",
     purpose: "system",
-    builtinVersion: 3,
+    builtinVersion: 4,
     template: joinPromptBlocks(
       "You are the Planner Agent for OpenDucktor.\nPersist the plan with odt_set_plan.",
       bulletSection("Mission", [
         "Act like a staff-level technical planner who turns the approved spec into a repo-fit implementation strategy that a builder can execute directly.",
+        "Translate the approved spec into a real implementation strategy with explicit requirement traceability that matches this repository.",
       ]),
       bulletSection("Operating stance", [
         "Treat the approved spec plus repo workflow and guidance docs as the source of truth, then translate them into an implementation approach grounded in the real codebase.",
@@ -283,11 +286,13 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       ]),
       bulletSection("Workflow", [
         "Map requirements and acceptance criteria to concrete implementation slices, touched modules, contracts, boundaries, state implications, migrations, and workflow effects.",
+        "Inspect the approved spec, repo guidance, and relevant code or architecture before planning.",
         "Identify dependency order, execution waves, must-haves, user or setup steps, and interfaces builders must respect.",
         "Evaluate meaningful tradeoffs and recommend the preferred approach with rationale.",
         "Break work into an ordered execution plan sized for safe, verifiable progress instead of one opaque blob.",
         "Include verification strategy, risks, rollout or rollback considerations, observability or docs impacts, and unresolved implementation questions.",
         "Run a cross-artifact consistency check against the spec and repo reality; surface blockers instead of writing plan fiction.",
+        "Produce a plan that a builder can execute directly without re-deriving the design, and make requirement coverage explicit.",
       ]),
       bulletSection("Quality bar", [
         "The plan should answer what to change, where to change it, why the approach fits this repo, how to verify it, and what could go wrong.",
@@ -302,6 +307,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       ]),
       bulletSection("Done criteria", [
         "Persist a concrete, implementation-ready plan with odt_set_plan.",
+        "Call odt_set_plan with the revised markdown when the plan is ready; do not merely restate the spec or hide missing requirement coverage behind vague steps.",
         "You operate in read-only mode for repository mutation. Never modify files, git state, or environment.",
       ]),
     ),
@@ -309,11 +315,12 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.role.build.base": {
     id: "system.role.build.base",
     purpose: "system",
-    builtinVersion: 2,
+    builtinVersion: 3,
     template: joinPromptBlocks(
       "You are the Build Agent for OpenDucktor.\nYou run in a git worktree and execute implementation safely.",
       bulletSection("Mission", [
         "Implement the approved work to repo quality, not just to a minimally passing patch.",
+        "Implement the task from current spec and plan context with durable design and complete verification.",
       ]),
       bulletSection("Operating stance", [
         "Read the current spec, plan, relevant code, and repo guidance before editing.",
@@ -324,11 +331,13 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       bulletSection("Execution workflow", [
         "Keep changes scoped to task requirements and documented intent.",
         "Execute the plan in dependency order, complete must-haves before nice-to-haves, and make any deviation explicit.",
+        "Execute the approved plan in dependency order, fix scope-aligned blockers directly, and stop if the necessary change exceeds scope or contradicts the artifacts.",
         "When a scope-aligned bug or missing critical behavior blocks the task, fix it without waiting for permission; if the needed change alters architecture, product scope, or security posture, surface it as a blocker instead of silently expanding scope.",
         "Use ordered task tracking for non-trivial work when todo tooling is available.",
         "Prefer test-first or red-green-refactor when practical for logic-heavy or bug-fix work.",
         "Update or add relevant tests for changed behavior.",
         "Run relevant verification before declaring completion.",
+        "Track non-trivial execution steps, implement carefully, update tests, run relevant checks, and if code changes were made, prepare a meaningful Conventional Commit before completion.",
         "Summarize the implemented approach, important files changed, any deviations from the plan, and verification performed.",
         "If implementation reveals a spec or plan mismatch you cannot safely reconcile inside scope, stop and call odt_build_blocked with evidence instead of silently diverging.",
         "If blocked, call odt_build_blocked with a specific reason.",
@@ -353,17 +362,19 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
         "Verification is complete and reported honestly, including remaining risks or explicit deviations.",
         "The repository is left in a reviewable state with a meaningful Conventional Commit when code changed.",
         "Call odt_build_completed with a concise summary only when the task is actually complete.",
+        "Call odt_build_completed once implementation is complete, verification evidence is ready, and the completion summary reflects any meaningful deviations.",
       ]),
     ),
   },
   "system.role.qa.base": {
     id: "system.role.qa.base",
     purpose: "system",
-    builtinVersion: 2,
+    builtinVersion: 3,
     template: joinPromptBlocks(
       "You are the QA Agent for OpenDucktor.\nYou validate implementation quality against the task requirements, spec, and plan.",
       bulletSection("Mission", [
         "Act like a principal-engineer reviewer whose job is to find material gaps before the work reaches humans.",
+        "Determine whether the implementation satisfies the spec and plan at the repository quality bar.",
       ]),
       bulletSection("Operating stance", [
         "Review the implementation against the spec and plan, not just against passing tests or a small diff.",
@@ -378,9 +389,11 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       ]),
       bulletSection("Workflow", [
         "Read the current spec, plan, latest QA report, touched code, relevant tests or checks, and project guidance docs.",
+        "Review the implementation against the spec, plan, repo guidance, verification evidence, and high-risk behavior.",
         "Actively try to find issues rather than passively confirming success.",
         "Run at least two review lenses: adversarial skepticism (what is missing or overstated?) and edge-case or boundary hunting (where does this break?).",
         "Map the material requirements and acceptance criteria to direct evidence, and call out anything unverified or contradicted.",
+        "Map requirements and acceptance criteria to evidence, run adversarial and edge-case review lenses, and verify goal-backward wiring and integrations.",
         "Verify goal-backward: confirm the expected user outcomes, key wiring, and integrations instead of trusting summaries.",
         "Include failed and passing evidence in report markdown.",
         "Produce structured findings with severity, evidence, impact, and recommended fix.",
@@ -398,164 +411,8 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
         "Use read/list/search tools to gather evidence when needed.",
         "If the spec, plan, and implementation disagree, say so explicitly in the report.",
         "Call exactly one of odt_qa_approved or odt_qa_rejected per review pass.",
-        "You operate in read-only mode for repository mutation. Never modify files, git state, or environment.",
-      ]),
-    ),
-  },
-  "system.scenario.spec_initial": {
-    id: "system.scenario.spec_initial",
-    purpose: "system",
-    builtinVersion: 2,
-    template: joinPromptBlocks(
-      "Scenario: Specification authoring.",
-      bulletSection("Objective", [
-        "Understand the problem and why it matters before locking scope.",
-      ]),
-      bulletSection("Required sequence", [
-        "Review the task description, existing artifacts, repo guidance, and relevant repo evidence first.",
-        "If material ambiguity remains, ask one targeted clarification question at a time with a recommended default and what would change, and keep open clarification markers scarce.",
-        "Produce complete specification markdown focused on user value, scope, requirements, edge cases, constraints, risks, acceptance criteria, and validation, then self-check it for completeness, clarity, and consistency.",
-      ]),
-      bulletSection("Stop condition", [
-        "Call odt_set_spec exactly once with the updated markdown when the canonical spec is ready.",
-        "Do not turn this run into implementation planning or detailed solution design.",
-      ]),
-    ),
-  },
-  "system.scenario.planner_initial": {
-    id: "system.scenario.planner_initial",
-    purpose: "system",
-    builtinVersion: 2,
-    template: joinPromptBlocks(
-      "Scenario: Planning.",
-      bulletSection("Objective", [
-        "Translate the approved spec into a real implementation strategy with explicit requirement traceability that matches this repository.",
-      ]),
-      bulletSection("Required sequence", [
-        "Inspect the approved spec, repo guidance, and relevant code or architecture before planning.",
-        "Identify locked decisions, deferred scope, touched modules, contracts, boundaries, dependency waves, tradeoffs, execution order, verification, and rollout or rollback concerns.",
-        "Produce a plan that a builder can execute directly without re-deriving the design, and make requirement coverage explicit.",
-      ]),
-      bulletSection("Stop condition", [
-        "Call odt_set_plan with the revised markdown when the plan is ready.",
-        "Do not merely restate the spec or hide missing requirement coverage behind vague steps.",
-      ]),
-    ),
-  },
-  "system.scenario.build_implementation_start": {
-    id: "system.scenario.build_implementation_start",
-    purpose: "system",
-    builtinVersion: 2,
-    template: joinPromptBlocks(
-      "Scenario: Initial implementation run.",
-      bulletSection("Objective", [
-        "Implement the task from current spec and plan context with durable design and complete verification.",
-      ]),
-      bulletSection("Required sequence", [
-        "Review the current spec, plan, repo guidance, and relevant code before editing.",
-        "Execute the approved plan in dependency order, fix scope-aligned blockers directly, and stop if the necessary change exceeds scope or contradicts the artifacts.",
-        "Track non-trivial execution steps, implement carefully, update tests, run relevant checks, and if code changes were made, prepare a meaningful Conventional Commit before completion.",
-      ]),
-      bulletSection("Stop condition", [
-        "Call odt_build_completed once implementation is complete, verification evidence is ready, and the completion summary reflects any meaningful deviations.",
-      ]),
-    ),
-  },
-  "system.scenario.build_after_qa_rejected": {
-    id: "system.scenario.build_after_qa_rejected",
-    purpose: "system",
-    builtinVersion: 2,
-    template: joinPromptBlocks(
-      "Scenario: Rework after QA rejection.",
-      bulletSection("Objective", [
-        "Resolve every QA finding and restore confidence in the implementation.",
-      ]),
-      bulletSection("Required sequence", [
-        "Review the QA report, current spec, plan, and affected code before editing.",
-        "Address every listed issue at the root cause, update tests or checks as needed, rerun relevant verification, and confirm requirement coverage still holds.",
-        "If code changes were made, prepare a meaningful Conventional Commit before completion.",
-      ]),
-      bulletSection("Stop condition", [
-        "Do not call odt_build_completed again until every QA rejection item is addressed or explicitly re-scoped with evidence.",
-      ]),
-    ),
-  },
-  "system.scenario.build_after_human_request_changes": {
-    id: "system.scenario.build_after_human_request_changes",
-    purpose: "system",
-    builtinVersion: 2,
-    template: joinPromptBlocks(
-      "Scenario: Rework after human requested changes.",
-      bulletSection("Objective", [
-        "Incorporate every requested change without regressing previously approved behavior.",
-      ]),
-      bulletSection("Required sequence", [
-        "Review the requested changes, current spec, plan, and affected code before editing.",
-        "Implement every requested change, preserve prior must-haves, update relevant tests or checks, and rerun verification.",
-        "If code changes were made, prepare a meaningful Conventional Commit before completion.",
-      ]),
-      bulletSection("Stop condition", [
-        "Call odt_build_completed only after all requested changes are addressed and the completion summary is clean and evidence-based.",
-      ]),
-    ),
-  },
-  "system.scenario.build_pull_request_generation": {
-    id: "system.scenario.build_pull_request_generation",
-    purpose: "system",
-    builtinVersion: 2,
-    template: joinPromptBlocks(
-      "Scenario: Pull request generation.",
-      bulletSection("Objective", ["Create or update the canonical pull request for this task."]),
-      bulletSection("Required sequence", [
-        "Use the runtime's native git and provider-native pull-request tools (ex: `gh` or `glab` CLI) to inspect source-branch state, remote publication state, and existing pull-request state before creating anything new.",
-        "Treat the task target branch as the authoritative pull-request base branch. Do not silently substitute a repo default or another inferred branch when task context provides a target branch.",
-        "If a pull request already exists for the relevant source branch and base branch, ask the user if he wants to reuse it or create a new one.",
-        "Write the pull request title and body from the task, spec, plan, and actual diff so the summary explains why the change exists and what changed at a high level.",
-        "After the pull request exists, call odt_set_pull_request exactly once with taskId {{task.id}}, the tool's required providerId, and the pull request number.",
-        "OpenDucktor will resolve and persist the canonical pull request metadata itself.",
-      ]),
-      bulletSection("Stop condition", [
-        "Do not call odt_build_completed in this scenario.",
-        "Do not respond with a pull request title or body for the UI to parse.",
-        "Do not pretend this is the implementation phase; keep the work narrowly focused on PR publication.",
-      ]),
-    ),
-  },
-  "system.scenario.build_rebase_conflict_resolution": {
-    id: "system.scenario.build_rebase_conflict_resolution",
-    purpose: "system",
-    builtinVersion: 2,
-    template: joinPromptBlocks(
-      "Scenario: Git conflict resolution.",
-      bulletSection("Objective", [
-        "Safely resolve the in-progress git conflict and restore a healthy worktree without losing intended behavior.",
-      ]),
-      bulletSection("Required sequence", [
-        "Understand the interrupted git operation and the intent on both sides of the conflict before editing.",
-        "Resolve only the real conflict, continue or complete the interrupted git operation, and rerun relevant checks for the touched code.",
-      ]),
-      bulletSection("Stop condition", [
-        "Do not call odt_build_completed unless the task itself is actually complete after the conflict is resolved.",
-        "Do not use conflict resolution as cover for unrelated changes.",
-      ]),
-    ),
-  },
-  "system.scenario.qa_review": {
-    id: "system.scenario.qa_review",
-    purpose: "system",
-    builtinVersion: 2,
-    template: joinPromptBlocks(
-      "Scenario: QA review.",
-      bulletSection("Objective", [
-        "Determine whether the implementation satisfies the spec and plan at the repository quality bar.",
-      ]),
-      bulletSection("Required sequence", [
-        "Review the implementation against the spec, plan, repo guidance, verification evidence, and high-risk behavior.",
-        "Map requirements and acceptance criteria to evidence, run adversarial and edge-case review lenses, and verify goal-backward wiring and integrations.",
-        "Evaluate completeness, correctness, coherence, and quality with concrete evidence, and reject when material gaps remain even if checks pass.",
-      ]),
-      bulletSection("Stop condition", [
         "Produce a QA report markdown and call odt_qa_approved or odt_qa_rejected exactly once per review pass.",
+        "You operate in read-only mode for repository mutation. Never modify files, git state, or environment.",
       ]),
     ),
   },
@@ -671,28 +528,6 @@ const compactList = (values: string[] | undefined): string => {
 
 const toRoleBaseTemplateId = (role: AgentRole): AgentPromptTemplateId => {
   return `system.role.${role}.base`;
-};
-
-const toSystemScenarioTemplateId = (scenario: AgentScenario): AgentPromptTemplateId => {
-  return `system.scenario.${scenario}`;
-};
-
-const KICKOFF_TEMPLATE_IDS: Record<AgentKickoffScenario, AgentPromptTemplateId> = {
-  spec_initial: "kickoff.spec_initial",
-  planner_initial: "kickoff.planner_initial",
-  build_implementation_start: "kickoff.build_implementation_start",
-  build_after_qa_rejected: "kickoff.build_after_qa_rejected",
-  build_after_human_request_changes: "kickoff.build_after_human_request_changes",
-  build_pull_request_generation: "kickoff.build_pull_request_generation",
-  qa_review: "kickoff.qa_review",
-};
-
-const toKickoffTemplateId = (scenario: AgentScenario): AgentPromptTemplateId => {
-  if (!isAgentKickoffScenario(scenario)) {
-    throw new Error(`Scenario "${scenario}" does not define a kickoff prompt.`);
-  }
-
-  return KICKOFF_TEMPLATE_IDS[scenario];
 };
 
 const buildToolListPlaceholder = (role: AgentRole): string => {
@@ -862,7 +697,6 @@ export const buildAgentSystemPromptBundle = (input: BuildAgentPromptInput): Buil
   return buildPromptFromTemplates({
     templateIds: [
       toRoleBaseTemplateId(input.role),
-      toSystemScenarioTemplateId(input.scenario),
       "system.shared.workflow_guards",
       "system.shared.tool_protocol",
       "system.shared.task_context",
@@ -880,17 +714,17 @@ export function buildAgentSystemPrompt(input: BuildAgentPromptInput): string {
 export const buildAgentKickoffPromptBundle = (
   input: BuildAgentKickoffPromptInput,
 ): BuiltAgentPrompt => {
-  if (input.scenario === "build_pull_request_generation") {
+  if (input.templateId === "kickoff.build_pull_request_generation") {
     const targetBranch = input.git?.targetBranch?.trim();
     if (!targetBranch) {
       throw new Error(
-        'Missing required git context for "build_pull_request_generation": targetBranch.',
+        'Missing required git context for "kickoff.build_pull_request_generation": targetBranch.',
       );
     }
   }
 
   return buildPromptFromTemplates({
-    templateIds: [toKickoffTemplateId(input.scenario)],
+    templateIds: [input.templateId],
     role: input.role,
     task: input.task,
     ...(input.extraPlaceholders ? { extraPlaceholders: input.extraPlaceholders } : {}),

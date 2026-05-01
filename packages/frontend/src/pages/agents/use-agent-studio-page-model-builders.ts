@@ -6,7 +6,6 @@ import type { ComboboxGroup } from "@/components/ui/combobox";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { SCENARIO_LABELS } from "./agents-page-constants";
 import {
   type AgentSessionWorkflowSummary,
   buildLatestSessionByRoleMap,
@@ -80,7 +79,6 @@ export const buildWorkflowModelContext = ({
     : `${roleLabelByRole[selectedInteractionRole]} is unavailable for this task right now.`;
   const sessionSelectorGroups = buildSessionSelectorGroups({
     sessionsForTask,
-    scenarioLabels: SCENARIO_LABELS,
     roleLabelByRole,
   });
   const sessionSelectorAutofocusByValue = Object.fromEntries(
@@ -102,7 +100,6 @@ export const buildWorkflowModelContext = ({
     hasHumanFeedback: isTaskAwaitingHumanFeedback(selectedTask),
     createSessionDisabled,
     roleLabelByRole,
-    scenarioLabels: SCENARIO_LABELS,
   });
 
   return {

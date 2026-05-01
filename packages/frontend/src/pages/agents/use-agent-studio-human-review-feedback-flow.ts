@@ -9,6 +9,7 @@ import {
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import { useHumanReviewFeedbackController } from "@/features/human-review-feedback/use-human-review-feedback-controller";
 import type {
+  SessionLaunchActionId,
   SessionStartExistingSessionOption,
   SessionStartLaunchRequest,
   SessionStartPostAction,
@@ -23,8 +24,7 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
   startSessionRequest: (
     request: SessionStartLaunchRequest & {
       role: "build";
-      scenario: "build_after_human_request_changes";
-      reason: "create_session";
+      launchActionId: SessionLaunchActionId;
       existingSessionOptions: SessionStartExistingSessionOption[];
       initialSourceExternalSessionId?: string | null;
       postStartAction: SessionStartPostAction;
@@ -63,7 +63,7 @@ export function useAgentStudioHumanReviewFeedbackFlow({
   });
 
   const shouldInterceptCreateSession = useCallback((option: SessionCreateOption): boolean => {
-    return option.role === "build" && option.scenario === "build_after_human_request_changes";
+    return option.role === "build" && option.launchActionId === "build_after_human_request_changes";
   }, []);
 
   const dismissHumanReviewFeedback = useCallback((): void => {
@@ -96,8 +96,7 @@ export function useAgentStudioHumanReviewFeedbackFlow({
           const startRequest = {
             taskId: request.taskId,
             role: request.role,
-            scenario: request.scenario,
-            reason: "create_session" as const,
+            launchActionId: request.launchActionId,
             existingSessionOptions: request.existingSessionOptions,
             ...(request.initialSourceExternalSessionId !== undefined
               ? { initialSourceExternalSessionId: request.initialSourceExternalSessionId }

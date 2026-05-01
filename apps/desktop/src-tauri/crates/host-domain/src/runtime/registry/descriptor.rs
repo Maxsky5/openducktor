@@ -141,7 +141,7 @@ impl RuntimeDescriptor {
         errors.extend(self.capabilities.pending_visibility_errors());
         errors.extend(self.capabilities.prompt_input_errors());
         errors.extend(self.capabilities.optional_surface_errors());
-        errors.extend(self.capabilities.scenario_config_errors());
+        errors.extend(self.capabilities.launch_config_errors());
 
         errors
     }

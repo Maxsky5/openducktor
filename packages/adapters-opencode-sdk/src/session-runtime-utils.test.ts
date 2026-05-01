@@ -15,12 +15,11 @@ describe("session-runtime-utils", () => {
   test("toSessionInput preserves required fields and optional model", () => {
     const withModel = toSessionInput({
       repoPath: "/repo",
+      runtimeKind: "opencode",
       workingDirectory: "/repo",
       taskId: "task-1",
       role: "spec",
-      scenario: "spec_initial",
       systemPrompt: "prompt",
-      baseUrl: "http://127.0.0.1:12345",
       model: {
         providerId: "openai",
         modelId: "gpt-5",
@@ -30,12 +29,11 @@ describe("session-runtime-utils", () => {
 
     const withoutModel = toSessionInput({
       repoPath: "/repo",
+      runtimeKind: "opencode",
       workingDirectory: "/repo",
       taskId: "task-2",
       role: "build",
-      scenario: "build_implementation_start",
       systemPrompt: "prompt",
-      baseUrl: "http://127.0.0.1:12345",
     });
 
     expect(withModel.model?.modelId).toBe("gpt-5");

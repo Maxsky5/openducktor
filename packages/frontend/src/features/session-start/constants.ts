@@ -1,12 +1,14 @@
-import type { AgentScenario } from "@openducktor/core";
+import type { SessionLaunchActionId } from "./session-start-launch-options";
 
-export const BUILD_TARGET_BRANCH_SCENARIOS = new Set<AgentScenario>(["build_implementation_start"]);
+export const BUILD_TARGET_BRANCH_LAUNCH_ACTIONS = new Set<SessionLaunchActionId>([
+  "build_implementation_start",
+]);
 
 export const supportsTaskTargetBranchSelection = (
   role: string | null | undefined,
-  scenario: AgentScenario | null | undefined,
+  launchActionId: SessionLaunchActionId | null | undefined,
 ): boolean => {
-  return role === "build" && scenario !== undefined && scenario !== null
-    ? BUILD_TARGET_BRANCH_SCENARIOS.has(scenario)
+  return role === "build" && launchActionId !== undefined && launchActionId !== null
+    ? BUILD_TARGET_BRANCH_LAUNCH_ACTIONS.has(launchActionId)
     : false;
 };

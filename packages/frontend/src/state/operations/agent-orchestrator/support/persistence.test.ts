@@ -13,7 +13,6 @@ const recordFixture: AgentSessionRecord = {
   runtimeKind: "opencode",
   externalSessionId: "external-1",
   role: "build",
-  scenario: "build_implementation_start",
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
   selectedModel: {
@@ -69,13 +68,12 @@ describe("agent-orchestrator/support/persistence", () => {
     expect("pendingQuestions" in persisted).toBe(false);
   });
 
-  test("persists compact session fields and keeps scenario", () => {
+  test("persists compact session fields", () => {
     const session: AgentSessionState = {
       ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
       status: "error",
     };
     const persisted = toPersistedSessionRecord(session);
-    expect(persisted.scenario).toBe("build_implementation_start");
     expect(persisted.runtimeKind).toBe("opencode");
     expect(persisted.selectedModel).toEqual(recordFixture.selectedModel);
     expect("taskId" in persisted).toBe(false);

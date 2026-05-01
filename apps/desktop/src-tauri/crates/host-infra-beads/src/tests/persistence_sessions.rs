@@ -111,12 +111,23 @@ fn upsert_agent_session_updates_existing_session_without_duplication() -> Result
         session_1.get("externalSessionId").and_then(Value::as_str),
         Some("session-1")
     );
-    assert!(session_1.get("sessionId").is_none());
+    let mut session_keys = session_1
+        .as_object()
+        .expect("session should be an object")
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    session_keys.sort_unstable();
     assert_eq!(
-        session_1.get("scenario").and_then(Value::as_str),
-        Some("build_default")
+        session_keys,
+        vec![
+            "externalSessionId",
+            "role",
+            "runtimeKind",
+            "startedAt",
+            "workingDirectory"
+        ]
     );
-    assert!(session_1.get("baseUrl").is_none());
     Ok(())
 }
 
@@ -184,7 +195,6 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
                     "externalSessionId": "ext-1",
                 "taskId": "task-1",
                 "role": "build",
-                "scenario": "default",
                 "status": "completed",
                 "startedAt": "2026-02-20T09:00:00Z",
                 "updatedAt": "2026-02-20T10:00:00Z",

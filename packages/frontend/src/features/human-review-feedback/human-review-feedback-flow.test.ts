@@ -13,7 +13,6 @@ const createBuilderSession = (overrides: Partial<AgentSessionState> = {}) =>
   createAgentSessionFixture({
     role: "build",
     taskId: "TASK-1",
-    scenario: "build_implementation_start",
     ...overrides,
   });
 
@@ -21,7 +20,6 @@ const createState = (
   overrides: Partial<HumanReviewFeedbackState> = {},
 ): HumanReviewFeedbackState => ({
   taskId: "TASK-1",
-  scenario: "build_after_human_request_changes",
   message: "Apply the requested changes.",
   ...overrides,
 });
@@ -84,7 +82,7 @@ describe("human-review-feedback-flow", () => {
       expect.objectContaining({
         taskId: "TASK-1",
         role: "build",
-        scenario: "build_after_human_request_changes",
+        launchActionId: "build_after_human_request_changes",
         initialSourceExternalSessionId: "builder-session-2",
         postStartAction: "kickoff",
         message: "Use the standard request-changes workflow.",
@@ -134,12 +132,11 @@ describe("human-review-feedback-flow", () => {
     expect(startRequestChangesSession).toHaveBeenCalledTimes(1);
   });
 
-  test("submitHumanReviewFeedback preserves the human-request-changes scenario in the handoff request", async () => {
+  test("submitHumanReviewFeedback preserves the human-request-changes launch action in the handoff request", async () => {
     const startRequestChangesSession = mock(async () => "session-new");
 
     await submitHumanReviewFeedback({
       state: createState({
-        scenario: "build_after_human_request_changes",
         message: "Address the requested changes in the shared flow.",
       }),
       builderSessions: [createBuilderSession({ externalSessionId: "builder-session-1" })],
@@ -148,7 +145,7 @@ describe("human-review-feedback-flow", () => {
 
     expect(startRequestChangesSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        scenario: "build_after_human_request_changes",
+        launchActionId: "build_after_human_request_changes",
         message: "Address the requested changes in the shared flow.",
       }),
     );

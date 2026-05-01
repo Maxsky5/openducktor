@@ -35,7 +35,7 @@ export const isWorkflowAgentSession = (
     return false;
   }
 
-  return !isTranscriptAgentSession(session) && session.role !== null && session.scenario !== null;
+  return !isTranscriptAgentSession(session) && session.role !== null;
 };
 
 export const shouldIncludeAgentSessionInActivity = (

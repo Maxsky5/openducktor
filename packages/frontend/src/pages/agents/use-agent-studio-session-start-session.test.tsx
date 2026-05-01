@@ -40,7 +40,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   },
   taskId: "task-1",
   role: "spec",
-  scenario: "spec_initial",
+  launchActionId: "spec_initial",
   activeSession: null,
   selectedTask: createTaskCardFixture(),
   agentStudioReady: true,
@@ -61,7 +61,7 @@ describe("useAgentStudioSessionStartSession", () => {
     // no-op placeholder to keep test structure consistent with other hook suites
   });
 
-  test("scopes in-flight starts by task, role, and scenario", async () => {
+  test("scopes in-flight starts by task, role, and launch action", async () => {
     const specSelection = createDeferred<{
       selectedModel: typeof MODEL_SELECTION;
       startMode: "fresh";
@@ -94,13 +94,12 @@ describe("useAgentStudioSessionStartSession", () => {
 
     let specStartPromise: Promise<string | undefined> | undefined;
     await harness.run((state) => {
-      specStartPromise = state.startSession("composer_send");
+      specStartPromise = state.startSession();
     });
 
     await harness.update(
       createBaseArgs({
         role: "planner",
-        scenario: "planner_initial",
         startAgentSession,
         executeRequestedSessionStart,
         startingSessionByTaskRef,
@@ -109,7 +108,7 @@ describe("useAgentStudioSessionStartSession", () => {
 
     let plannerStartPromise: Promise<string | undefined> | undefined;
     await harness.run((state) => {
-      plannerStartPromise = state.startSession("composer_send");
+      plannerStartPromise = state.startSession();
     });
 
     expect(executeRequestedSessionStart).toHaveBeenCalledTimes(2);
@@ -146,7 +145,6 @@ describe("useAgentStudioSessionStartSession", () => {
       createBaseArgs({
         activeWorkspace: null,
         role: "qa",
-        scenario: "qa_review",
         selectedTask: createTaskCardFixture({
           agentWorkflows: {
             spec: { required: false, canSkip: true, available: true, completed: true },
@@ -164,14 +162,13 @@ describe("useAgentStudioSessionStartSession", () => {
 
     let externalSessionId: string | undefined;
     await harness.run(async (state) => {
-      externalSessionId = await state.startSession("composer_send");
+      externalSessionId = await state.startSession();
     });
 
     expect(externalSessionId).toBe("session-new");
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         role: "qa",
-        scenario: "qa_review",
         startMode: "fresh",
         selectedModel: MODEL_SELECTION,
       }),
@@ -202,14 +199,13 @@ describe("useAgentStudioSessionStartSession", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.startSession("composer_send");
+      await state.startSession();
     });
 
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         taskId: "task-1",
         role: "spec",
-        scenario: "spec_initial",
         startMode: "reuse",
         sourceExternalSessionId: "session-existing",
       }),

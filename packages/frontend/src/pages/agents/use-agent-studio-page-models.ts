@@ -159,7 +159,7 @@ type AgentStudioSessionActionsContext = {
   canKickoffNewSession: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
-  startScenarioKickoff: () => Promise<void>;
+  startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
@@ -409,7 +409,7 @@ export function useAgentStudioPageModels({
         title: "Send a message to start a new session automatically.",
         actionLabel: sessionActions.kickoffLabel,
         onAction: (): void => {
-          void sessionActions.startScenarioKickoff();
+          void sessionActions.startLaunchKickoff();
         },
         isActionPending: sessionActions.isStarting,
       };
@@ -423,7 +423,7 @@ export function useAgentStudioPageModels({
     core.taskId,
     sessionActions.isStarting,
     sessionActions.kickoffLabel,
-    sessionActions.startScenarioKickoff,
+    sessionActions.startLaunchKickoff,
   ]);
 
   const runtimeReadiness = useMemo(

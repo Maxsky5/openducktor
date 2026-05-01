@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import {
   forwardRef,
   type ReactElement,
@@ -30,7 +30,7 @@ type TaskDetailsSheetControllerProps = Omit<
   onOpenSession: (
     taskId: string,
     role: AgentRole,
-    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null },
   ) => void;
 };
 

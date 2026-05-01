@@ -102,7 +102,6 @@ const persistedSessionFixture: AgentSessionRecord = {
   runtimeKind: "opencode",
   externalSessionId: "external-1",
   role: "build",
-  scenario: "build_implementation_start",
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
   selectedModel: null,
@@ -510,7 +509,6 @@ describe("use-agent-orchestrator-operations", () => {
         return {
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-02-22T08:00:00.000Z",
           status: "running",
           runtimeKind: "opencode",
@@ -732,7 +730,6 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: "external-in-memory",
           startedAt: "2026-02-22T08:00:00.000Z",
           role: "build",
-          scenario: "build_after_human_request_changes",
           status: "idle",
         } as const;
       };
@@ -758,7 +755,6 @@ describe("use-agent-orchestrator-operations", () => {
           firstSessionId = await harness.getLatest().startAgentSession({
             taskId: "task-1",
             role: "build",
-            scenario: "build_after_human_request_changes",
             startMode: "fresh",
             selectedModel: BUILD_SELECTION,
           });
@@ -769,7 +765,6 @@ describe("use-agent-orchestrator-operations", () => {
           secondSessionId = await harness.getLatest().startAgentSession({
             taskId: "task-1",
             role: "build",
-            scenario: "build_after_human_request_changes",
             startMode: "reuse",
             sourceExternalSessionId: "external-in-memory",
           });
@@ -808,7 +803,6 @@ describe("use-agent-orchestrator-operations", () => {
         externalSessionId: string;
         startedAt: string;
         role: "build";
-        scenario: "build_after_human_request_changes";
         status: "idle";
       }>();
 
@@ -885,14 +879,12 @@ describe("use-agent-orchestrator-operations", () => {
           const firstStart = operations.startAgentSession({
             taskId: "task-1",
             role: "build",
-            scenario: "build_after_human_request_changes",
             startMode: "fresh",
             selectedModel: BUILD_SELECTION,
           });
           const secondStart = operations.startAgentSession({
             taskId: "task-1",
             role: "build",
-            scenario: "build_after_human_request_changes",
             startMode: "fresh",
             selectedModel: BUILD_SELECTION,
           });
@@ -902,7 +894,6 @@ describe("use-agent-orchestrator-operations", () => {
             externalSessionId: "external-concurrent",
             startedAt: "2026-02-22T08:00:00.000Z",
             role: "build",
-            scenario: "build_after_human_request_changes",
             status: "idle",
           });
 
@@ -954,7 +945,6 @@ describe("use-agent-orchestrator-operations", () => {
         {
           ...persistedBuildSessionFixture,
           role: "build",
-          scenario: "build_after_human_request_changes",
         },
       ];
       host.agentSessionUpsert = async () => {};
@@ -1003,7 +993,6 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: "external-unexpected",
           startedAt: "2026-02-22T08:00:00.000Z",
           role: "spec",
-          scenario: "spec_initial",
           status: "idle",
         };
       };
@@ -1024,7 +1013,6 @@ describe("use-agent-orchestrator-operations", () => {
               {
                 ...persistedSessionFixture,
                 role: "spec",
-                scenario: "spec_initial",
                 workingDirectory: "/tmp/repo/worktree",
               },
             ],
@@ -1041,7 +1029,6 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId = await harness.getLatest().startAgentSession({
             taskId: "task-1",
             role: "build",
-            scenario: "build_after_human_request_changes",
             startMode: "reuse",
             sourceExternalSessionId: "external-1",
           });
@@ -1098,7 +1085,6 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: "external-should-not-start",
           startedAt: "2026-02-22T08:00:00.000Z",
           role: "build",
-          scenario: "build_implementation_start",
           status: "idle",
         } as const;
       };
@@ -1165,132 +1151,6 @@ describe("use-agent-orchestrator-operations", () => {
     });
   });
 
-  test("keeps kickoff start successful when repo changes during background refresh", async () => {
-    await withSuppressedRendererWarning(async () => {
-      let startCalls = 0;
-      let refreshCalls = 0;
-      const refreshDeferred = createDeferred<void>();
-
-      const originalAgentSessionsList = host.agentSessionsList;
-      const originalAgentSessionUpsert = host.agentSessionUpsert;
-      const originalSpecGet = host.specGet;
-      const originalPlanGet = host.planGet;
-      const originalQaGetReport = host.qaGetReport;
-      const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
-
-      const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
-      const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
-      const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
-      const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
-      const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
-      const originalStopSession = OpencodeSdkAdapter.prototype.stopSession;
-      const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
-      const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-
-      host.agentSessionsList = async () => [];
-      host.agentSessionUpsert = async () => {};
-      host.specGet = async () => ({ markdown: "", updatedAt: null });
-      host.planGet = async () => ({ markdown: "", updatedAt: null });
-      host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-      host.workspaceGetRepoConfig = async () => ({
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/tmp/repo-a",
-        defaultRuntimeKind: "opencode" as const,
-        branchPrefix: "obp",
-        defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
-        },
-        hooks: {
-          preStart: [],
-          postComplete: [],
-        },
-        devServers: [],
-        worktreeCopyPaths: [],
-        promptOverrides: {},
-        agentDefaults: {},
-      });
-
-      OpencodeSdkAdapter.prototype.hasSession = () => true;
-      OpencodeSdkAdapter.prototype.startSession = async () => {
-        startCalls += 1;
-        return {
-          runtimeKind: "opencode",
-          externalSessionId: "external-kickoff",
-          startedAt: "2026-02-22T08:00:00.000Z",
-          role: "build",
-          scenario: "build_implementation_start",
-          status: "idle",
-        };
-      };
-      OpencodeSdkAdapter.prototype.subscribeEvents = (_externalSessionId, _listener) => () => {};
-      OpencodeSdkAdapter.prototype.sendUserMessage = async () => {};
-      OpencodeSdkAdapter.prototype.stopSession = async () => {};
-      OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-        runtimeKind: "opencode",
-        externalSessionId: input.externalSessionId,
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: input.role,
-        scenario: input.scenario,
-        status: "idle",
-      });
-      OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-        models: [],
-        defaultModelsByProvider: {},
-        profiles: [],
-      });
-      OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
-
-      const harness = createHookHarness({
-        activeRepo: "/tmp/repo-a",
-        tasks: [taskFixture],
-        refreshTaskData: async () => {
-          refreshCalls += 1;
-          await refreshDeferred.promise;
-        },
-      });
-
-      try {
-        await harness.mount();
-
-        const startPromise = harness.getLatest().startAgentSession({
-          taskId: "task-1",
-          role: "build",
-          sendKickoff: true,
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        });
-
-        await harness.waitFor(() => refreshCalls === 1);
-        await harness.updateArgs({ activeRepo: "/tmp/repo-b" });
-        refreshDeferred.resolve();
-
-        await expect(startPromise).resolves.toBe("external-kickoff");
-        expect(refreshCalls).toBe(1);
-        expect(startCalls).toBe(1);
-      } finally {
-        await harness.unmount();
-
-        host.agentSessionsList = originalAgentSessionsList;
-        host.agentSessionUpsert = originalAgentSessionUpsert;
-        host.specGet = originalSpecGet;
-        host.planGet = originalPlanGet;
-        host.qaGetReport = originalQaGetReport;
-        host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-
-        OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
-        OpencodeSdkAdapter.prototype.startSession = originalStartSession;
-        OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
-        OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
-        OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
-        OpencodeSdkAdapter.prototype.stopSession = originalStopSession;
-        OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
-        OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-      }
-    });
-  });
-
   test("blocks free-form sends while an attached error session is waiting for input", async () => {
     await withSuppressedRendererWarning(async () => {
       let subscribeCalls = 0;
@@ -1342,7 +1202,6 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: "external-1",
           startedAt: "2026-02-22T08:00:00.000Z",
           role: "build",
-          scenario: "build_implementation_start",
           status: "idle",
         };
       };
@@ -1366,7 +1225,6 @@ describe("use-agent-orchestrator-operations", () => {
               {
                 ...persistedSessionFixture,
                 role: "spec",
-                scenario: "spec_initial",
               },
             ],
           },
@@ -1526,7 +1384,6 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: "external-updated-runs",
           startedAt: "2026-02-22T08:00:00.000Z",
           role: "build",
-          scenario: "build_implementation_start",
           status: "idle",
         };
       };
@@ -1684,7 +1541,6 @@ describe("use-agent-orchestrator-operations", () => {
         {
           ...persistedSessionFixture,
           role: "build",
-          scenario: "build_after_human_request_changes",
           workingDirectory: "/tmp/repo/worktree",
         },
       ];
@@ -1704,7 +1560,6 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: "external-unexpected",
           startedAt: "2026-02-22T08:00:00.000Z",
           role: "build",
-          scenario: "build_after_human_request_changes",
           status: "idle",
         };
       };
@@ -1725,7 +1580,6 @@ describe("use-agent-orchestrator-operations", () => {
               {
                 ...persistedSessionFixture,
                 role: "build",
-                scenario: "build_after_human_request_changes",
                 workingDirectory: "/tmp/repo/worktree",
               },
             ],
@@ -1749,7 +1603,6 @@ describe("use-agent-orchestrator-operations", () => {
           reusedSessionId = await harness.getLatest().startAgentSession({
             taskId: "task-1",
             role: "build",
-            scenario: "build_after_human_request_changes",
             startMode: "reuse",
             sourceExternalSessionId: "external-1",
           });
@@ -1789,7 +1642,6 @@ describe("use-agent-orchestrator-operations", () => {
           ...persistedSessionFixture,
           externalSessionId: "external-spec",
           role: "spec",
-          scenario: "spec_initial",
         },
       ];
 
@@ -1848,7 +1700,6 @@ describe("use-agent-orchestrator-operations", () => {
               repoPath: "/tmp/repo",
               runtimeKind: "opencode",
               role: null,
-              scenario: null,
               status: "idle",
               startedAt: "2026-02-22T08:00:00.000Z",
               runtimeId: null,
@@ -1917,7 +1768,6 @@ describe("use-agent-orchestrator-operations", () => {
               repoPath: "/tmp/repo",
               runtimeKind: "opencode",
               role: null,
-              scenario: null,
               status: "idle",
               startedAt: "2026-02-22T08:00:00.000Z",
               runtimeId: null,
@@ -1945,7 +1795,6 @@ describe("use-agent-orchestrator-operations", () => {
               repoPath: "/tmp/repo",
               runtimeKind: "opencode",
               role: null,
-              scenario: null,
               status: "idle",
               startedAt: "2026-02-22T08:00:00.000Z",
               runtimeId: null,
@@ -2071,7 +1920,6 @@ describe("use-agent-orchestrator-operations", () => {
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
-        scenario: input.scenario,
         status: "running",
       });
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
@@ -2169,7 +2017,6 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: input.externalSessionId,
           startedAt: "2026-02-22T08:00:00.000Z",
           role: input.role,
-          scenario: input.scenario,
           status: "idle",
         };
       };
@@ -2240,7 +2087,6 @@ describe("use-agent-orchestrator-operations", () => {
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
-        scenario: input.scenario,
         status: "running",
       };
     };
@@ -2251,7 +2097,6 @@ describe("use-agent-orchestrator-operations", () => {
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
-        scenario: input.scenario,
         status: "running",
       };
     };
@@ -2387,7 +2232,6 @@ describe("use-agent-orchestrator-operations", () => {
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
-      scenario: input.scenario,
       status: "running",
     });
     OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
@@ -2395,7 +2239,6 @@ describe("use-agent-orchestrator-operations", () => {
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
-      scenario: input.scenario,
       status: "running",
     });
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
@@ -2481,7 +2324,6 @@ describe("use-agent-orchestrator-operations", () => {
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T09:00:00.000Z",
         role: input.role,
-        scenario: input.scenario,
         status: "running",
       };
     };
@@ -2652,7 +2494,6 @@ describe("use-agent-orchestrator-operations", () => {
         externalSessionId: "external-subagent",
         startedAt: "2026-02-22T09:00:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "running",
       });
       await harness.run(async () => {
@@ -2667,7 +2508,6 @@ describe("use-agent-orchestrator-operations", () => {
         purpose: "transcript",
         taskId: "",
         role: null,
-        scenario: null,
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
@@ -2681,7 +2521,6 @@ describe("use-agent-orchestrator-operations", () => {
       expect(transcriptSession?.purpose).toBe("transcript");
       expect(transcriptSession?.taskId).toBe("");
       expect(transcriptSession?.role).toBeNull();
-      expect(transcriptSession?.scenario).toBeNull();
       expect(transcriptSession?.status).toBe("running");
       expect(transcriptSession?.pendingQuestions).toEqual([
         {
@@ -2740,7 +2579,6 @@ describe("use-agent-orchestrator-operations", () => {
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T09:00:00.000Z",
         role: input.role,
-        scenario: input.scenario,
         status: "running",
       };
     };
@@ -2785,7 +2623,6 @@ describe("use-agent-orchestrator-operations", () => {
             repoPath: "/tmp/repo",
             runtimeKind: "opencode",
             role: null,
-            scenario: null,
             status: "idle",
             startedAt: "2026-02-22T08:00:00.000Z",
             runtimeId: "stale-runtime",
@@ -2917,7 +2754,6 @@ describe("use-agent-orchestrator-operations", () => {
         externalSessionId: "external-subagent",
         startedAt: "2026-02-22T09:00:00.000Z",
         role: "build",
-        scenario: "build_implementation_start",
         status: "running",
       });
       await harness.run(async () => {
@@ -2975,7 +2811,6 @@ describe("use-agent-orchestrator-operations", () => {
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
-      scenario: input.scenario,
       status: "running",
     });
     OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
@@ -2983,7 +2818,6 @@ describe("use-agent-orchestrator-operations", () => {
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
-      scenario: input.scenario,
       status: "running",
     });
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
@@ -3093,7 +2927,6 @@ describe("use-agent-orchestrator-operations", () => {
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
-      scenario: input.scenario,
       status: "running",
     });
     OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
@@ -3101,7 +2934,6 @@ describe("use-agent-orchestrator-operations", () => {
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
-      scenario: input.scenario,
       status: "running",
     });
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
@@ -3187,7 +3019,6 @@ describe("use-agent-orchestrator-operations", () => {
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
-      scenario: input.scenario,
       status: "running",
     });
     OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
@@ -3195,7 +3026,6 @@ describe("use-agent-orchestrator-operations", () => {
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
-      scenario: input.scenario,
       status: "running",
     });
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
@@ -3272,14 +3102,12 @@ describe("use-agent-orchestrator-operations", () => {
       const recoveredContents = recoveredSession
         ? sessionMessagesToArray(recoveredSession).map((message) => message.content)
         : [];
-      expect(recoveredContents).toEqual(
-        expect.arrayContaining([
-          "Recovered history tail",
-          "Local transcript still present",
-          expect.stringContaining("Session started (build - build_implementation_start)"),
-          expect.stringContaining("System prompt:"),
-        ]),
+      expect(recoveredContents).toContain("Recovered history tail");
+      expect(recoveredContents).toContain("Local transcript still present");
+      expect(recoveredContents.every((content) => !content.startsWith("Session started"))).toBe(
+        true,
       );
+      expect(recoveredContents.some((content) => content.includes("System prompt:"))).toBe(true);
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
@@ -3364,7 +3192,6 @@ describe("use-agent-orchestrator-operations", () => {
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
-        scenario: input.scenario,
         status: "running",
       });
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
@@ -3468,7 +3295,6 @@ describe("use-agent-orchestrator-operations", () => {
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
-        scenario: input.scenario,
         status: "running",
       });
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
@@ -3693,7 +3519,6 @@ describe("use-agent-orchestrator-operations", () => {
           externalSessionId: input.externalSessionId,
           startedAt: "2026-02-22T08:00:00.000Z",
           role: input.role,
-          scenario: input.scenario,
           status: "running",
         };
       };
@@ -3799,7 +3624,6 @@ describe("use-agent-orchestrator-operations", () => {
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
-        scenario: input.scenario,
         status: "running",
       });
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({

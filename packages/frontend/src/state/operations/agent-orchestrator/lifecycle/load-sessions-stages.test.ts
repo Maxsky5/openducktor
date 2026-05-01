@@ -25,7 +25,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
   role: "build",
-  scenario: "build_implementation_start",
   status: "idle",
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeKind: "opencode",
@@ -50,7 +49,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
 const createRecord = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord => ({
   externalSessionId: "external-1",
   role: "build",
-  scenario: "build_implementation_start",
   startedAt: "2026-03-01T09:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
   runtimeKind: "opencode",
@@ -1131,7 +1129,6 @@ describe("load-sessions-stages", () => {
     const existingSession = createSession({
       purpose: "transcript",
       role: "spec",
-      scenario: "spec_initial",
     });
     const stateHarness = createStateHarness({ "external-1": existingSession });
 
@@ -1150,7 +1147,6 @@ describe("load-sessions-stages", () => {
     const nextSession = stateHarness.getState()["external-1"];
     expect(nextSession?.purpose).toBe("transcript");
     expect(nextSession?.role).toBe("spec");
-    expect(nextSession?.scenario).toBe("spec_initial");
   });
 
   test("keeps requested-history persisted workflow records as primary sessions", async () => {
@@ -1158,7 +1154,6 @@ describe("load-sessions-stages", () => {
       "external-1": createSession({
         purpose: "transcript",
         role: null,
-        scenario: null,
       }),
     });
 
@@ -1179,7 +1174,6 @@ describe("load-sessions-stages", () => {
     const requestedSession = stateHarness.getState()["external-1"];
     expect(requestedSession?.purpose).toBe("primary");
     expect(requestedSession?.role).toBe("build");
-    expect(requestedSession?.scenario).toBe("build_implementation_start");
   });
 
   test("keeps recovered workflow records primary when runtime attachment is retried", async () => {
@@ -1187,7 +1181,6 @@ describe("load-sessions-stages", () => {
       "external-1": createSession({
         purpose: "transcript",
         role: null,
-        scenario: null,
       }),
     });
 
@@ -1208,7 +1201,6 @@ describe("load-sessions-stages", () => {
     const recoveredSession = stateHarness.getState()["external-1"];
     expect(recoveredSession?.purpose).toBe("primary");
     expect(recoveredSession?.role).toBe("build");
-    expect(recoveredSession?.scenario).toBe("build_implementation_start");
   });
 
   test("marks requested-history hydration failed when runtime resolution fails", async () => {
@@ -1225,7 +1217,6 @@ describe("load-sessions-stages", () => {
           attachSession: async (input) => ({
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-03-01T09:00:00.000Z",
             status: "idle",
             runtimeKind: input.runtimeKind,
@@ -1233,7 +1224,6 @@ describe("load-sessions-stages", () => {
           resumeSession: async (input) => ({
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-03-01T09:00:00.000Z",
             status: "idle",
             runtimeKind: input.runtimeKind,
@@ -1282,7 +1272,6 @@ describe("load-sessions-stages", () => {
           attachSession: async (input) => ({
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-03-01T09:00:00.000Z",
             status: "idle",
             runtimeKind: input.runtimeKind,
@@ -1290,7 +1279,6 @@ describe("load-sessions-stages", () => {
           resumeSession: async (input) => ({
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-03-01T09:00:00.000Z",
             status: "idle",
             runtimeKind: input.runtimeKind,
@@ -1346,7 +1334,6 @@ describe("load-sessions-stages", () => {
           attachSession: async (input) => ({
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-03-01T09:00:00.000Z",
             status: "idle",
             runtimeKind: input.runtimeKind,
@@ -1354,7 +1341,6 @@ describe("load-sessions-stages", () => {
           resumeSession: async (input) => ({
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-03-01T09:00:00.000Z",
             status: "idle",
             runtimeKind: input.runtimeKind,
@@ -1409,7 +1395,6 @@ describe("load-sessions-stages", () => {
         attachSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1417,7 +1402,6 @@ describe("load-sessions-stages", () => {
         resumeSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1463,7 +1447,6 @@ describe("load-sessions-stages", () => {
         attachSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1471,7 +1454,6 @@ describe("load-sessions-stages", () => {
         resumeSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1521,7 +1503,6 @@ describe("load-sessions-stages", () => {
         attachSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1529,7 +1510,6 @@ describe("load-sessions-stages", () => {
         resumeSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1551,7 +1531,6 @@ describe("load-sessions-stages", () => {
           externalSessionId: "external-1",
           title: "   ",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-03-01T09:00:00.000Z",
           status: { type: "busy" },
           pendingPermissions: [],
@@ -1608,7 +1587,6 @@ describe("load-sessions-stages", () => {
         attachSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1616,7 +1594,6 @@ describe("load-sessions-stages", () => {
         resumeSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1720,7 +1697,6 @@ describe("load-sessions-stages", () => {
         attachSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1728,7 +1704,6 @@ describe("load-sessions-stages", () => {
         resumeSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1834,7 +1809,6 @@ describe("load-sessions-stages", () => {
           attachSession: async (input) => ({
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-03-01T09:00:00.000Z",
             status: "idle",
             runtimeKind: input.runtimeKind,
@@ -1842,7 +1816,6 @@ describe("load-sessions-stages", () => {
           resumeSession: async (input) => ({
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-03-01T09:00:00.000Z",
             status: "idle",
             runtimeKind: input.runtimeKind,
@@ -1904,7 +1877,6 @@ describe("load-sessions-stages", () => {
       externalSessionId: "external-1",
       title: "Builder Session",
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-03-01T09:00:00.000Z",
       status: { type: "busy" as const },
       pendingPermissions: [],
@@ -1934,7 +1906,6 @@ describe("load-sessions-stages", () => {
         attachSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1942,7 +1913,6 @@ describe("load-sessions-stages", () => {
         resumeSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1991,7 +1961,6 @@ describe("load-sessions-stages", () => {
         attachSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -1999,7 +1968,6 @@ describe("load-sessions-stages", () => {
         resumeSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -2049,7 +2017,6 @@ describe("load-sessions-stages", () => {
         attachSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -2057,7 +2024,6 @@ describe("load-sessions-stages", () => {
         resumeSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -2109,7 +2075,6 @@ describe("load-sessions-stages", () => {
         attachSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -2117,7 +2082,6 @@ describe("load-sessions-stages", () => {
         resumeSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -2169,7 +2133,6 @@ describe("load-sessions-stages", () => {
         attachSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -2177,7 +2140,6 @@ describe("load-sessions-stages", () => {
         resumeSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -2236,7 +2198,6 @@ describe("load-sessions-stages", () => {
         attachSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -2244,7 +2205,6 @@ describe("load-sessions-stages", () => {
         resumeSession: async (input) => ({
           externalSessionId: input.externalSessionId,
           role: input.role,
-          scenario: input.scenario,
           startedAt: "2026-03-01T09:00:00.000Z",
           status: "idle",
           runtimeKind: input.runtimeKind,
@@ -2271,24 +2231,19 @@ describe("load-sessions-stages", () => {
     });
 
     const prelude = await assembler.buildHydrationPreludeMessages({
-      record: createRecord({ role: "planner", scenario: "planner_initial" }),
-      resolvedScenario: "planner_initial",
+      record: createRecord({ role: "planner" }),
       promptOverrides: {},
     });
     const systemPrompt = await assembler.buildHydrationSystemPrompt({
-      record: createRecord({ role: "planner", scenario: "planner_initial" }),
-      resolvedScenario: "planner_initial",
+      record: createRecord({ role: "planner" }),
       promptOverrides: {},
     });
 
     expect(systemPrompt).toBe("");
-    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(1);
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(0);
     expect(
       sessionMessageAt({ externalSessionId: "external-1", messages: prelude }, 0),
-    ).toMatchObject({
-      id: "history:session-start:external-1",
-      content: "Session started (planner - planner_initial)",
-    });
+    ).toBeUndefined();
   });
 
   test("prompt assembler can skip synthetic prelude messages entirely", async () => {
@@ -2299,13 +2254,11 @@ describe("load-sessions-stages", () => {
     });
 
     const prelude = await assembler.buildHydrationPreludeMessages({
-      record: createRecord({ role: "planner", scenario: "planner_initial" }),
-      resolvedScenario: "planner_initial",
+      record: createRecord({ role: "planner" }),
       promptOverrides: {},
     });
     const systemPrompt = await assembler.buildHydrationSystemPrompt({
-      record: createRecord({ role: "planner", scenario: "planner_initial" }),
-      resolvedScenario: "planner_initial",
+      record: createRecord({ role: "planner" }),
       promptOverrides: {},
     });
 
@@ -2320,20 +2273,18 @@ describe("load-sessions-stages", () => {
     });
 
     const systemPrompt = await assembler.buildHydrationSystemPrompt({
-      record: createRecord({ role: "planner", scenario: "planner_initial" }),
-      resolvedScenario: "planner_initial",
+      record: createRecord({ role: "planner" }),
       promptOverrides: {},
     });
     const prelude = await assembler.buildHydrationPreludeMessages({
-      record: createRecord({ role: "planner", scenario: "planner_initial" }),
-      resolvedScenario: "planner_initial",
+      record: createRecord({ role: "planner" }),
       promptOverrides: {},
     });
 
     expect(systemPrompt.length).toBeGreaterThan(0);
-    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(2);
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(1);
     expect(
-      sessionMessageAt({ externalSessionId: "external-1", messages: prelude }, 1),
+      sessionMessageAt({ externalSessionId: "external-1", messages: prelude }, 0),
     ).toMatchObject({
       id: "history:system-prompt:external-1",
       content: `System prompt:\n\n${systemPrompt}`,

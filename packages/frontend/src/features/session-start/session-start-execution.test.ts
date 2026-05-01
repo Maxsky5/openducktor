@@ -14,7 +14,6 @@ describe("session-start-execution", () => {
     const result = await prepareSessionStartInput({
       taskId: "TASK-1",
       role: "build",
-      scenario: "build_after_human_request_changes",
       startMode: "reuse",
       sourceExternalSessionId: "session-build-1",
     });
@@ -22,7 +21,6 @@ describe("session-start-execution", () => {
     expect(result).toEqual({
       taskId: "TASK-1",
       role: "build",
-      scenario: "build_after_human_request_changes",
       startMode: "reuse",
       sourceExternalSessionId: "session-build-1",
     });
@@ -32,7 +30,6 @@ describe("session-start-execution", () => {
     const result = await prepareSessionStartInput({
       taskId: "TASK-1",
       role: "qa",
-      scenario: "qa_review",
       startMode: "fresh",
       selectedModel: BUILD_SELECTION,
     });
@@ -40,7 +37,6 @@ describe("session-start-execution", () => {
     expect(result).toEqual({
       taskId: "TASK-1",
       role: "qa",
-      scenario: "qa_review",
       selectedModel: BUILD_SELECTION,
       startMode: "fresh",
     });
@@ -52,7 +48,6 @@ describe("session-start-execution", () => {
     await executeSessionStart({
       taskId: "TASK-1",
       role: "spec",
-      scenario: "spec_initial",
       startMode: "fresh",
       selectedModel: BUILD_SELECTION,
       startAgentSession,
@@ -67,7 +62,6 @@ describe("session-start-execution", () => {
     await executeSessionStart({
       taskId: "TASK-1",
       role: "build",
-      scenario: "build_after_human_request_changes",
       startMode: "reuse",
       sourceExternalSessionId: "session-build-1",
       startAgentSession,

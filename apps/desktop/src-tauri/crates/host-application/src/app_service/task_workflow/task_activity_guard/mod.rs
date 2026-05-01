@@ -280,7 +280,6 @@ mod tests {
         let sessions = vec![AgentSessionDocument {
             external_session_id: "external-build-session".to_string(),
             role: "build".to_string(),
-            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: worktree_path_string,
@@ -317,7 +316,6 @@ mod tests {
         let sessions = vec![AgentSessionDocument {
             external_session_id: "external-build-session".to_string(),
             role: "build".to_string(),
-            scenario: "build_implementation_start".to_string(),
             started_at: "2026-03-17T11:00:00Z".to_string(),
             runtime_kind: "opencode".to_string(),
             working_directory: repo_path_string.clone(),

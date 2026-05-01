@@ -1,7 +1,5 @@
 import type {
-  AgentKickoffScenario as ContractsAgentKickoffScenario,
   AgentRole as ContractsAgentRole,
-  AgentScenario as ContractsAgentScenario,
   AgentSessionStartMode as ContractsAgentSessionStartMode,
   AgentToolName as ContractsAgentToolName,
   KnownGitProviderId as ContractsKnownGitProviderId,
@@ -14,37 +12,13 @@ import type {
   RuntimeKind,
   TaskPriority,
 } from "@openducktor/contracts";
-import {
-  defaultAgentScenarioForRole as defaultContractsAgentScenarioForRole,
-  defaultStartModeForScenario as defaultContractsStartModeForScenario,
-  getAgentScenarioDefinition as getContractsAgentScenarioDefinition,
-  getAgentScenariosForRole as getContractsAgentScenariosForRole,
-  isAgentKickoffScenario as isContractsAgentKickoffScenario,
-  isScenarioStartModeAllowed as isContractsScenarioStartModeAllowed,
-} from "@openducktor/contracts";
 
 export type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 
 export type AgentRole = ContractsAgentRole;
-export type AgentScenario = ContractsAgentScenario;
-export type AgentKickoffScenario = ContractsAgentKickoffScenario;
 export type KnownGitProviderId = ContractsKnownGitProviderId;
 export type AgentSessionStartMode = ContractsAgentSessionStartMode;
 export type AgentToolName = ContractsAgentToolName;
-export const isAgentKickoffScenario = isContractsAgentKickoffScenario;
-export const getAgentScenarioDefinition = getContractsAgentScenarioDefinition;
-export const getAgentScenariosForRole = getContractsAgentScenariosForRole;
-export const defaultAgentScenarioForRole = defaultContractsAgentScenarioForRole;
-export const isScenarioStartModeAllowed = isContractsScenarioStartModeAllowed;
-export const defaultStartModeForScenario = defaultContractsStartModeForScenario;
-
-export const assertAgentKickoffScenario = (scenario: AgentScenario): AgentKickoffScenario => {
-  if (!isContractsAgentKickoffScenario(scenario)) {
-    throw new Error(`Scenario "${scenario}" does not support kickoff prompts.`);
-  }
-
-  return scenario;
-};
 
 export type AgentModelSelection = {
   runtimeKind?: RuntimeKind;
@@ -283,7 +257,6 @@ export type AgentSessionContext = RepoRuntimeRef & {
   workingDirectory: string;
   taskId: string;
   role: AgentRole;
-  scenario: AgentScenario;
   systemPrompt: string;
   model?: AgentModelSelection;
 };

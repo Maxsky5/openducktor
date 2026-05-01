@@ -18,7 +18,6 @@ const session = createAgentSessionFixture({
   externalSessionId: "session-1",
   taskId: "task-1",
   role: "planner",
-  scenario: "planner_initial",
 });
 const onSelectTab = () => {};
 const onCreateTab = () => {};
@@ -81,7 +80,7 @@ const baseArgs: BuildArgs = {
     canKickoffNewSession: false,
     kickoffLabel: "Kickoff",
     canStopSession: false,
-    startScenarioKickoff: async () => {},
+    startLaunchKickoff: async () => {},
     onSend: async () => true,
     onSubmitQuestionAnswers: async () => {},
     isSubmittingQuestionByRequestId: {},
@@ -229,7 +228,6 @@ describe("buildAgentStudioPageModelsArgs", () => {
       externalSessionId: "session-2",
       taskId: "task-1",
       role: "planner",
-      scenario: "planner_initial",
     });
     const mapped = buildAgentStudioPageModelsArgs({
       ...baseArgs,

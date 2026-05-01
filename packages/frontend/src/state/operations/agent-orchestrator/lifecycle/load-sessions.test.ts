@@ -42,7 +42,6 @@ const persistedSessionRecord = (
   input: {
     externalSessionId: string;
     role: AgentSessionRecord["role"];
-    scenario: AgentSessionRecord["scenario"];
     startedAt: string;
     workingDirectory: string;
     runtimeKind?: AgentSessionRecord["runtimeKind"];
@@ -53,7 +52,6 @@ const persistedSessionRecord = (
     runtimeKind,
     externalSessionId,
     role,
-    scenario,
     startedAt,
     workingDirectory,
     selectedModel,
@@ -64,7 +62,6 @@ const persistedSessionRecord = (
     runtimeKind: runtimeKind ?? "opencode",
     externalSessionId,
     role,
-    scenario,
     startedAt,
     workingDirectory,
     selectedModel: selectedModel ?? null,
@@ -81,7 +78,6 @@ const createAdapter = (
   resumeSession: async (input) => ({
     externalSessionId: input.externalSessionId,
     role: input.role,
-    scenario: input.scenario,
     startedAt: "2026-02-22T08:00:00.000Z",
     status: "idle",
     runtimeKind: input.runtimeKind,
@@ -89,7 +85,6 @@ const createAdapter = (
   attachSession: async (input) => ({
     externalSessionId: input.externalSessionId,
     role: input.role,
-    scenario: input.scenario,
     startedAt: "2026-02-22T08:00:00.000Z",
     status: "idle",
     runtimeKind: input.runtimeKind,
@@ -249,7 +244,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -289,7 +283,6 @@ describe("agent-orchestrator-load-sessions", () => {
       taskId: "task-1",
       repoPath: "/tmp/repo",
       role: "build",
-      scenario: "build_implementation_start",
       status: "idle",
       startedAt: "2026-02-22T08:00:00.000Z",
       runtimeKind: "opencode",
@@ -371,7 +364,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:02.000Z",
@@ -412,7 +404,6 @@ describe("agent-orchestrator-load-sessions", () => {
       taskId: "task-1",
       repoPath: "/tmp/repo",
       role: "build",
-      scenario: "build_implementation_start",
       status: "idle",
       startedAt: "2026-02-22T08:00:00.000Z",
       runtimeKind: "opencode",
@@ -455,7 +446,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:01.000Z",
         workingDirectory: "/tmp/repo/worktree",
@@ -493,7 +483,6 @@ describe("agent-orchestrator-load-sessions", () => {
             externalSessionId: "external-1",
             title: "Session",
             role: "build",
-            scenario: "build_implementation_start",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "idle" },
             pendingPermissions: [],
@@ -543,7 +532,6 @@ describe("agent-orchestrator-load-sessions", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "build",
-          scenario: "build_implementation_start",
           status: "idle",
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeKind: "opencode",
@@ -584,7 +572,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:01.000Z",
         workingDirectory: "/tmp/repo/worktree",
@@ -710,7 +697,6 @@ describe("agent-orchestrator-load-sessions", () => {
       taskId: "task-1",
       repoPath: "/tmp/repo",
       role: "build",
-      scenario: "build_implementation_start",
       status: "stopped",
       startedAt: "2026-02-22T08:00:00.000Z",
       runtimeKind: "opencode",
@@ -797,7 +783,6 @@ describe("agent-orchestrator-load-sessions", () => {
           externalSessionId: "external-live",
           taskId: "task-1",
           role: "build",
-          scenario: "build_implementation_start",
           status: "running",
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
@@ -865,7 +850,6 @@ describe("agent-orchestrator-load-sessions", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "build",
-          scenario: "build_implementation_start",
           status: "stopped",
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeKind: "opencode",
@@ -939,7 +923,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo/worktree",
@@ -991,7 +974,6 @@ describe("agent-orchestrator-load-sessions", () => {
       externalSessionId: "external-stale",
       taskId: "task-1",
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-22T08:00:00.000Z",
       updatedAt: "2026-02-22T08:00:00.000Z",
       workingDirectory: "/tmp/repo/worktree",
@@ -1105,7 +1087,6 @@ describe("agent-orchestrator-load-sessions", () => {
       externalSessionId: "external-1",
       taskId: "task-1",
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-22T08:00:00.000Z",
       updatedAt: "2026-02-22T08:00:00.000Z",
       workingDirectory: "/tmp/repo/worktree",
@@ -1233,7 +1214,6 @@ describe("agent-orchestrator-load-sessions", () => {
       externalSessionId: "external-1",
       taskId: "task-1",
       role: "build",
-      scenario: "build_implementation_start",
       startedAt: "2026-02-22T08:00:00.000Z",
       updatedAt: "2026-02-22T08:00:00.000Z",
       workingDirectory: "/tmp/repo/worktree",
@@ -1243,7 +1223,6 @@ describe("agent-orchestrator-load-sessions", () => {
       externalSessionId: "external-2",
       taskId: "task-1",
       role: "qa",
-      scenario: "qa_review",
       startedAt: "2026-02-22T08:00:00.000Z",
       updatedAt: "2026-02-22T08:00:00.000Z",
       workingDirectory: "/tmp/repo/worktree",
@@ -1349,7 +1328,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
-        scenario: "planner_initial",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
@@ -1415,7 +1393,6 @@ describe("agent-orchestrator-load-sessions", () => {
               externalSessionId: "external-1",
               title: "PLANNER task-1",
               role: "planner",
-              scenario: "planner_initial",
               workingDirectory: "/tmp/repo/worktree",
               startedAt: "2026-02-22T08:00:00.000Z",
               status: { type: "busy" },
@@ -1463,7 +1440,6 @@ describe("agent-orchestrator-load-sessions", () => {
           return {
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-02-22T08:00:00.000Z",
             status: "running",
             runtimeKind: input.runtimeKind,
@@ -1475,7 +1451,6 @@ describe("agent-orchestrator-load-sessions", () => {
           return {
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-02-22T08:00:00.000Z",
             status: "running",
             runtimeKind: input.runtimeKind,
@@ -1538,15 +1513,11 @@ describe("agent-orchestrator-load-sessions", () => {
       ],
     });
     expect(hydratedSession?.pendingQuestions).toHaveLength(1);
-    expect(
-      hydratedSession
-        ? sessionMessagesToArray(hydratedSession).map((message) => message.content)
-        : [],
-    ).toEqual([
-      "Session started (planner - planner_initial)",
-      expect.stringContaining("System prompt:"),
-      "Requested history",
-    ]);
+    const hydratedContents = hydratedSession
+      ? sessionMessagesToArray(hydratedSession).map((message) => message.content)
+      : [];
+    expect(hydratedContents[0]).toContain("System prompt:");
+    expect(hydratedContents.slice(1)).toEqual(["Requested history"]);
     expect(historyLoads).toBe(1);
     expect(resumeCalls).toBe(0);
     expect(attachCalls).toBe(1);
@@ -1595,7 +1566,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
-        scenario: "planner_initial",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
@@ -1659,7 +1629,6 @@ describe("agent-orchestrator-load-sessions", () => {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
             role: "planner",
-            scenario: "planner_initial",
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
@@ -1693,7 +1662,6 @@ describe("agent-orchestrator-load-sessions", () => {
           return {
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-02-22T08:00:00.000Z",
             status: "running",
             runtimeKind: input.runtimeKind,
@@ -1725,13 +1693,11 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(resumeCalls).toBe(1);
     expect(historyLoads).toBe(1);
     expect(state["external-1"]?.historyHydrationState).toBe("hydrated");
-    expect(
-      sessionMessagesToArray(getSession(state, "external-1")).map((message) => message.content),
-    ).toEqual([
-      "Session started (planner - planner_initial)",
-      expect.stringContaining("System prompt:"),
-      "Hydrated from reconcile",
-    ]);
+    const reconciledContents = sessionMessagesToArray(getSession(state, "external-1")).map(
+      (message) => message.content,
+    );
+    expect(reconciledContents[0]).toContain("System prompt:");
+    expect(reconciledContents.slice(1)).toEqual(["Hydrated from reconcile"]);
   });
 
   test("still hydrates on first live_if_empty reattach when a live message lands before hydration gating", async () => {
@@ -1747,7 +1713,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
-        scenario: "planner_initial",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
@@ -1811,7 +1776,6 @@ describe("agent-orchestrator-load-sessions", () => {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
             role: "planner",
-            scenario: "planner_initial",
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
@@ -1845,7 +1809,6 @@ describe("agent-orchestrator-load-sessions", () => {
           return {
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-02-22T08:00:00.000Z",
             status: "running",
             runtimeKind: input.runtimeKind,
@@ -1890,11 +1853,11 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(resumeCalls).toBe(1);
     expect(historyLoads).toBe(1);
     expect(state["external-1"]?.historyHydrationState).toBe("hydrated");
-    expect(
-      sessionMessagesToArray(getSession(state, "external-1")).map((message) => message.content),
-    ).toEqual([
-      "Session started (planner - planner_initial)",
-      expect.stringContaining("System prompt:"),
+    const liveReconciledContents = sessionMessagesToArray(getSession(state, "external-1")).map(
+      (message) => message.content,
+    );
+    expect(liveReconciledContents[0]).toContain("System prompt:");
+    expect(liveReconciledContents.slice(1)).toEqual([
       "Hydrated from reconcile",
       "Live message before hydration",
     ]);
@@ -1944,7 +1907,6 @@ describe("agent-orchestrator-load-sessions", () => {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
             role: "planner",
-            scenario: "planner_initial",
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
@@ -1957,7 +1919,6 @@ describe("agent-orchestrator-load-sessions", () => {
           return {
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-02-22T08:00:00.000Z",
             status: "running",
             runtimeKind: input.runtimeKind,
@@ -1989,7 +1950,6 @@ describe("agent-orchestrator-load-sessions", () => {
           externalSessionId: "external-1",
           taskId: "task-1",
           role: "planner",
-          scenario: "planner_initial",
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
           workingDirectory: "/tmp/repo",
@@ -2037,7 +1997,6 @@ describe("agent-orchestrator-load-sessions", () => {
           repoPath: "/tmp/repo",
           runtimeKind: "opencode",
           role: "build",
-          scenario: "build_implementation_start",
           status: "idle",
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeId: "runtime-1",
@@ -2127,7 +2086,6 @@ describe("agent-orchestrator-load-sessions", () => {
           externalSessionId: "external-1",
           taskId: "task-1",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
           workingDirectory: "/tmp/repo/worktree",
@@ -2146,7 +2104,6 @@ describe("agent-orchestrator-load-sessions", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "build",
-          scenario: "build_implementation_start",
           status: "running",
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeKind: "opencode",
@@ -2232,7 +2189,6 @@ describe("agent-orchestrator-load-sessions", () => {
           externalSessionId: "external-live",
           taskId: "task-1",
           role: "build",
-          scenario: "build_implementation_start",
           status: "running",
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
@@ -2288,7 +2244,6 @@ describe("agent-orchestrator-load-sessions", () => {
           return {
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-02-22T08:00:00.000Z",
             status: "running",
             runtimeKind: input.runtimeKind,
@@ -2351,7 +2306,6 @@ describe("agent-orchestrator-load-sessions", () => {
           externalSessionId: "external-child-1",
           taskId: "task-1",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-02-22T08:00:00.000Z",
           workingDirectory: "/tmp/repo/worktree",
         }),
@@ -2376,7 +2330,6 @@ describe("agent-orchestrator-load-sessions", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "build",
-          scenario: "build_implementation_start",
           status: "running",
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeKind: "opencode",
@@ -2468,7 +2421,6 @@ describe("agent-orchestrator-load-sessions", () => {
           externalSessionId: "external-1",
           taskId: "task-1",
           role: "build",
-          scenario: "build_implementation_start",
           status: "running",
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
@@ -2491,7 +2443,6 @@ describe("agent-orchestrator-load-sessions", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "build",
-          scenario: "build_implementation_start",
           status: "running",
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeKind: "opencode",
@@ -2571,7 +2522,6 @@ describe("agent-orchestrator-load-sessions", () => {
           externalSessionId: "external-live",
           taskId: "task-1",
           role: "build",
-          scenario: "build_implementation_start",
           status: "running",
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
@@ -2691,7 +2641,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -2779,7 +2728,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
-        scenario: "planner_initial",
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -2861,20 +2809,12 @@ describe("agent-orchestrator-load-sessions", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "planner",
-          scenario: "planner_initial",
           status: "idle",
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeId: null,
           runId: null,
           workingDirectory: "/tmp/repo",
-          messages: [
-            {
-              id: "history:session-start:external-1",
-              role: "system",
-              content: "Session started (planner - planner_initial)",
-              timestamp: "2026-02-22T08:00:00.000Z",
-            },
-          ],
+          messages: [],
           draftAssistantText: "",
           draftAssistantMessageId: null,
           draftReasoningText: "",
@@ -2913,7 +2853,6 @@ describe("agent-orchestrator-load-sessions", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "planner",
-        scenario: "planner_initial",
         status: "idle",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -2943,20 +2882,12 @@ describe("agent-orchestrator-load-sessions", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "planner",
-          scenario: "planner_initial",
           status: "idle",
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeId: "runtime-1",
           runId: null,
           workingDirectory: "/tmp/repo",
-          messages: [
-            {
-              id: "history:session-start:external-1",
-              role: "system",
-              content: "Session started (planner - planner_initial)",
-              timestamp: "2026-02-22T08:00:00.000Z",
-            },
-          ],
+          messages: [],
           draftAssistantText: "",
           draftAssistantMessageId: null,
           draftReasoningText: "",
@@ -3001,7 +2932,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
-        scenario: "planner_initial",
         status: "idle",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -3045,7 +2975,6 @@ describe("agent-orchestrator-load-sessions", () => {
       taskId: "task-1",
       repoPath: "/tmp/repo",
       role: "build",
-      scenario: "build_implementation_start",
       status: "stopped",
       startedAt: "2026-02-22T08:00:00.000Z",
       runtimeId: "runtime-1",
@@ -3125,7 +3054,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -3182,7 +3110,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(historyLoads).toBe(1);
     expect(sessionMessagesToArray(getSession(state, "external-1")).length).toBeGreaterThan(0);
     expect(sessionMessageAt(getSession(state, "external-1"), 0)?.id).toBe(
-      "history:session-start:external-1",
+      "history:system-prompt:external-1",
     );
   });
 
@@ -3195,7 +3123,6 @@ describe("agent-orchestrator-load-sessions", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "build" as const,
-          scenario: "build_implementation_start" as const,
           status: "running" as const,
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeId: null,
@@ -3294,7 +3221,6 @@ describe("agent-orchestrator-load-sessions", () => {
       externalSessionId: "external-session-1",
       taskId: "task-1",
       role: "build",
-      scenario: "build_implementation_start",
       status: "stopped",
       startedAt: "2026-02-22T08:00:00.000Z",
       updatedAt: "2026-02-22T08:00:00.000Z",
@@ -3380,7 +3306,6 @@ describe("agent-orchestrator-load-sessions", () => {
         taskId: "task-1",
         repoPath: "/tmp/repo",
         role: "build",
-        scenario: "build_implementation_start",
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -3458,7 +3383,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-qa-1",
         taskId: "task-1",
         role: "qa",
-        scenario: "qa_review",
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -3555,7 +3479,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-qa-root",
         taskId: "task-1",
         role: "qa",
-        scenario: "qa_review",
         status: "stopped",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -3619,7 +3542,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["external-qa-root"]?.runtimeId).toBe("runtime-root");
     expect(
       state["external-qa-root"] ? sessionMessagesToArray(state["external-qa-root"]) : undefined,
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 
   test("fails fast when the runtime list cache has no live repo runtime during hydration", async () => {
@@ -3680,7 +3603,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
-        scenario: "planner_initial",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
@@ -3771,7 +3693,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -3888,7 +3809,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-qa-worktree",
         taskId: "task-1",
         role: "qa",
-        scenario: "qa_review",
         status: "stopped",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -3988,11 +3908,11 @@ describe("agent-orchestrator-load-sessions", () => {
           historyLoads += 1;
           return [
             {
-              messageId: "history:session-start:external-1",
+              messageId: "history:runtime-history:external-1",
               parts: [
                 {
                   kind: "text",
-                  messageId: "history:session-start:external-1",
+                  messageId: "history:runtime-history:external-1",
                   partId: "part-1",
                   text: "Resumed history",
                   completed: true,
@@ -4009,7 +3929,6 @@ describe("agent-orchestrator-load-sessions", () => {
           return {
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-02-22T08:00:00.000Z",
             status: "running",
             runtimeKind: input.runtimeKind,
@@ -4045,7 +3964,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
-        scenario: "planner_initial",
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -4140,7 +4058,6 @@ describe("agent-orchestrator-load-sessions", () => {
           return {
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-02-22T08:00:00.000Z",
             status: "running",
             runtimeKind: input.runtimeKind,
@@ -4176,7 +4093,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
-        scenario: "planner_initial",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
@@ -4244,7 +4160,6 @@ describe("agent-orchestrator-load-sessions", () => {
           return {
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-02-22T08:00:00.000Z",
             status: "running",
             runtimeKind: input.runtimeKind,
@@ -4278,7 +4193,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
-        scenario: "planner_initial",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
@@ -4390,7 +4304,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
-        scenario: "planner_initial",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
@@ -4470,7 +4383,6 @@ describe("agent-orchestrator-load-sessions", () => {
           return {
             externalSessionId: input.externalSessionId,
             role: input.role,
-            scenario: input.scenario,
             startedAt: "2026-02-22T08:00:00.000Z",
             status: "running",
             runtimeKind: input.runtimeKind,
@@ -4518,7 +4430,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo/worktree",
@@ -4617,7 +4528,6 @@ describe("agent-orchestrator-load-sessions", () => {
           externalSessionId: "external-stale",
           taskId: "task-1",
           role: "build",
-          scenario: "build_implementation_start",
           status: "running",
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
@@ -4698,7 +4608,6 @@ describe("agent-orchestrator-load-sessions", () => {
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "build",
-        scenario: "build_implementation_start",
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
@@ -4767,7 +4676,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(
       state["external-1"] ? sessionMessagesToArray(state["external-1"]) : undefined,
-    ).toHaveLength(2);
+    ).toHaveLength(1);
     expect(specCalls).toBe(0);
     expect(planCalls).toBe(0);
     expect(qaCalls).toBe(0);
@@ -4828,7 +4737,6 @@ describe("agent-orchestrator-load-sessions", () => {
       persistedSessionRecord({
         externalSessionId: "external-1",
         role: "build",
-        scenario: "build_implementation_start",
         startedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory,
       }),
@@ -4948,7 +4856,6 @@ describe("agent-orchestrator-load-sessions", () => {
       persistedSessionRecord({
         externalSessionId: "external-1",
         role: "build",
-        scenario: "build_implementation_start",
         startedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory,
       }),
@@ -5012,7 +4919,6 @@ describe("agent-orchestrator-load-sessions", () => {
       taskId: "task-1",
       repoPath: "/tmp/repo",
       role: "build",
-      scenario: "build_implementation_start",
       status: "idle",
       startedAt: "2026-02-22T08:00:00.000Z",
       runtimeKind: "opencode",

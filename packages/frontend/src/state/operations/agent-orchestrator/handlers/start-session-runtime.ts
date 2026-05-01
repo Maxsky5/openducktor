@@ -1,7 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentScenario } from "@openducktor/core";
+import type { AgentModelSelection } from "@openducktor/core";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
-import { inferScenario } from "../support/scenario";
 import { createSessionPromptContext, loadSessionPromptInputs } from "../support/session-prompt";
 import type {
   ResolvedRuntimeAndModel,
@@ -11,37 +10,28 @@ import type {
 } from "./start-session.types";
 import { requireBuildContinuationTarget, STALE_START_ERROR } from "./start-session-constants";
 
-export const resolveScenarioAndPrompt = async ({
+export const resolvePromptContext = async ({
   ctx,
-  scenario,
   taskCard,
   deps,
 }: {
   ctx: StartSessionContext;
-  scenario: AgentScenario | undefined;
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "model">;
-}): Promise<
-  Pick<ResolvedRuntimeAndModel, "resolvedScenario" | "systemPrompt" | "promptOverrides">
-> => {
+}): Promise<Pick<ResolvedRuntimeAndModel, "systemPrompt" | "promptOverrides">> => {
   const { promptOverrides } = await loadSessionPromptInputs({
     workspaceId: ctx.workspaceId,
     loadRepoPromptOverrides: deps.model.loadRepoPromptOverrides,
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
-  const resolvedScenario = scenario ?? inferScenario(ctx.role, taskCard);
-  throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
-
   const { systemPrompt } = createSessionPromptContext({
     role: ctx.role,
-    scenario: resolvedScenario,
     task: taskCard,
     promptOverrides,
   });
 
   return {
-    resolvedScenario,
     systemPrompt,
     promptOverrides,
   };
@@ -49,22 +39,19 @@ export const resolveScenarioAndPrompt = async ({
 
 export const resolveRuntimeAndModel = async ({
   ctx,
-  scenario,
   targetWorkingDirectory,
   requestedRuntimeKind,
   taskCard,
   deps,
 }: {
   ctx: StartSessionContext;
-  scenario: AgentScenario | undefined;
   targetWorkingDirectory?: string | null;
   requestedRuntimeKind?: AgentModelSelection["runtimeKind"] | null;
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
 }): Promise<ResolvedRuntimeAndModel> => {
-  const promptContext = await resolveScenarioAndPrompt({
+  const promptContext = await resolvePromptContext({
     ctx,
-    scenario,
     taskCard,
     deps,
   });

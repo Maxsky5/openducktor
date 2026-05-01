@@ -67,14 +67,6 @@ export const PROMPT_TEMPLATE_LABELS: Record<AgentPromptTemplateId, string> = {
   "system.role.planner.base": "Planner Role Base",
   "system.role.build.base": "Builder Role Base",
   "system.role.qa.base": "QA Role Base",
-  "system.scenario.spec_initial": "Spec Scenario",
-  "system.scenario.planner_initial": "Planner Scenario",
-  "system.scenario.build_implementation_start": "Builder Start Scenario",
-  "system.scenario.build_after_qa_rejected": "Builder After QA Rejection",
-  "system.scenario.build_after_human_request_changes": "Builder After Human Changes",
-  "system.scenario.build_pull_request_generation": "Builder Pull Request Generation",
-  "system.scenario.build_rebase_conflict_resolution": "Builder Git Conflict Scenario",
-  "system.scenario.qa_review": "QA Review Scenario",
   "kickoff.spec_initial": "Spec Kickoff",
   "kickoff.planner_initial": "Planner Kickoff",
   "kickoff.build_implementation_start": "Builder Kickoff",
@@ -101,22 +93,6 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string>
     "Base system instructions used for every Builder run, focused on plan-faithful execution, durable implementation, verification, and meaningful commits.",
   "system.role.qa.base":
     "Base system instructions used for every QA run, focused on principal-level evidence-based review, requirement coverage, and adversarial edge-case hunting.",
-  "system.scenario.spec_initial":
-    "Scenario-specific system instructions appended when starting a discovery-first specification pass with clarification control and requirements self-checking.",
-  "system.scenario.planner_initial":
-    "Scenario-specific system instructions appended when starting an implementation planning pass with requirement traceability and dependency sequencing.",
-  "system.scenario.build_implementation_start":
-    "Scenario-specific system instructions appended when Builder starts implementation from the approved spec and plan with dependency-order execution and blocker discipline.",
-  "system.scenario.build_after_qa_rejected":
-    "Scenario-specific system instructions appended when Builder resumes to address all QA findings at the root cause.",
-  "system.scenario.build_after_human_request_changes":
-    "Scenario-specific system instructions appended when Builder resumes to incorporate human-requested changes while preserving prior must-haves.",
-  "system.scenario.build_pull_request_generation":
-    "Scenario-specific system instructions appended when Builder forks from an implementation session to generate or update a pull request.",
-  "system.scenario.build_rebase_conflict_resolution":
-    "Scenario-specific system instructions appended when a fresh Builder session is started to resolve an in-progress git conflict.",
-  "system.scenario.qa_review":
-    "Scenario-specific system instructions appended when QA starts an evidence-based review with requirement mapping, adversarial review, and goal-backward verification.",
   "kickoff.spec_initial":
     "Initial kickoff message sent when a Spec session is created, reinforcing discovery, deferred-scope handling, and requirements-quality checks.",
   "kickoff.planner_initial":

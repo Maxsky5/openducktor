@@ -1436,7 +1436,6 @@ describe("runtime schemas", () => {
     const parsed = agentSessionRecordSchema.parse({
       externalSessionId: "session-opencode-1",
       role: "spec",
-      scenario: "spec_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
       runtimeKind: "opencode",
       workingDirectory: "/repo",
@@ -1450,7 +1449,6 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.role).toBe("spec");
-    expect(parsed.scenario).toBe("spec_initial");
     expect(parsed.externalSessionId).toBe("session-opencode-1");
     expect(parsed.runtimeKind).toBe("opencode");
     expect(parsed.selectedModel?.modelId).toBe("gpt-5");
@@ -1460,14 +1458,12 @@ describe("runtime schemas", () => {
     const parsed = agentSessionRecordSchema.parse({
       externalSessionId: "obp-session-2",
       role: "planner",
-      scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
       runtimeKind: "opencode",
       workingDirectory: "/repo",
     });
 
     expect(parsed.role).toBe("planner");
-    expect(parsed.scenario).toBe("planner_initial");
     expect(parsed.externalSessionId).toBe("obp-session-2");
     expect(parsed.runtimeKind).toBe("opencode");
     expect(parsed.selectedModel).toBeNull();
@@ -1478,7 +1474,6 @@ describe("runtime schemas", () => {
       sessionId: "obp-session-2",
       externalSessionId: "obp-session-2",
       role: "planner",
-      scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
       runtimeKind: "opencode",
       workingDirectory: "/repo",
@@ -1488,7 +1483,6 @@ describe("runtime schemas", () => {
     expect(parsed).toEqual({
       externalSessionId: "obp-session-2",
       role: "planner",
-      scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
       runtimeKind: "opencode",
       workingDirectory: "/repo",
@@ -1500,7 +1494,6 @@ describe("runtime schemas", () => {
     const result = agentSessionRecordSchema.safeParse({
       externalSessionId: " ",
       role: "planner",
-      scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
       runtimeKind: "opencode",
       workingDirectory: "/repo",
@@ -1592,7 +1585,6 @@ describe("runtime schemas", () => {
       agentSessionRecordSchema.parse({
         externalSessionId: "obp-session-3",
         role: "planner",
-        scenario: "planner_initial",
         startedAt: "2026-02-18T17:11:00.000Z",
         workingDirectory: "/repo",
       }),
@@ -1602,7 +1594,6 @@ describe("runtime schemas", () => {
       agentSessionRecordSchema.parse({
         externalSessionId: "obp-session-4",
         role: "planner",
-        scenario: "planner_initial",
         startedAt: "2026-02-18T17:11:00.000Z",
         runtimeKind: "opencode",
         workingDirectory: "/repo",

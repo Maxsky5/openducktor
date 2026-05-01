@@ -6,7 +6,7 @@ import type {
   StartSessionExecutionDependencies,
 } from "./start-session.types";
 import { registerStartedSession } from "./start-session-persistence";
-import { assertScenarioStartPolicy, resolveStartTask } from "./start-session-policies";
+import { resolveStartTask } from "./start-session-policies";
 import { stopSessionOnStaleAndThrow } from "./start-session-rollback";
 import {
   resolveFreshStartTargetWorkingDirectory,
@@ -41,32 +41,24 @@ export const executeFreshStart = async ({
 
   const resolved = await resolveRuntimeAndModel({
     ctx,
-    scenario: input.scenario,
     requestedRuntimeKind: selectedModelRuntimeKind,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
     taskCard,
     deps,
   });
 
-  assertScenarioStartPolicy({
-    role: ctx.role,
-    scenario: resolved.resolvedScenario,
-    startMode: input.startMode,
-  });
   const summary = await deps.runtime.adapter.startSession({
     repoPath: ctx.repoPath,
     runtimeKind: selectedModelRuntimeKind,
     workingDirectory: resolved.runtime.workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
-    scenario: resolved.resolvedScenario,
     systemPrompt: resolved.systemPrompt,
     model: selectedModelWithRuntime,
   });
 
   const startedCtx = {
     ...ctx,
-    resolvedScenario: resolved.resolvedScenario,
     summary,
   };
 

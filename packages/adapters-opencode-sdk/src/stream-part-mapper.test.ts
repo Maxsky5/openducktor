@@ -297,7 +297,7 @@ describe("stream-part-mapper", () => {
   });
 
   test("derives preview hints for current tool families", () => {
-    const scenarios = [
+    const cases = [
       {
         label: "shell",
         part: createToolPart({
@@ -373,13 +373,13 @@ describe("stream-part-mapper", () => {
       },
     ] as const;
 
-    for (const scenario of scenarios) {
-      const mapped = mapPartToAgentStreamPart(scenario.part);
+    for (const testCase of cases) {
+      const mapped = mapPartToAgentStreamPart(testCase.part);
       expect(mapped).toBeTruthy();
       if (!mapped || mapped.kind !== "tool") {
-        throw new Error(`Expected mapped tool part for ${scenario.label}.`);
+        throw new Error(`Expected mapped tool part for ${testCase.label}.`);
       }
-      expect(mapped.preview).toBe(scenario.expectedPreview);
+      expect(mapped.preview).toBe(testCase.expectedPreview);
     }
   });
 
@@ -803,7 +803,7 @@ describe("stream-part-mapper", () => {
   });
 
   test("normalizes tool statuses across known and fallback values", () => {
-    const scenarios = [
+    const cases = [
       { rawStatus: "completed", hasEndedTiming: false, expectedStatus: "completed" },
       { rawStatus: "completed", hasEndedTiming: true, expectedStatus: "completed" },
       { rawStatus: "error", hasEndedTiming: false, expectedStatus: "error" },
@@ -824,11 +824,11 @@ describe("stream-part-mapper", () => {
       { rawStatus: "   ", hasEndedTiming: true, expectedStatus: "completed" },
     ] as const;
 
-    for (const [index, scenario] of scenarios.entries()) {
+    for (const [index, testCase] of cases.entries()) {
       const part = createToolPart({
         id: `status-${index}`,
-        status: scenario.rawStatus,
-        time: scenario.hasEndedTiming ? { start: 1, end: 2 } : { start: 1 },
+        status: testCase.rawStatus,
+        time: testCase.hasEndedTiming ? { start: 1, end: 2 } : { start: 1 },
       });
       const mapped = mapPartToAgentStreamPart(part);
 
@@ -836,7 +836,7 @@ describe("stream-part-mapper", () => {
       if (!mapped || mapped.kind !== "tool") {
         throw new Error("Expected mapped tool part.");
       }
-      expect(mapped.status).toBe(scenario.expectedStatus);
+      expect(mapped.status).toBe(testCase.expectedStatus);
     }
   });
 

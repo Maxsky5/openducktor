@@ -49,7 +49,6 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     runtimeKind: "opencode",
     externalSessionId: "external-a",
     role: "spec",
-    scenario: "spec_initial",
   }),
   isTaskHydrating: false,
   isSessionHistoryHydrating: false,
@@ -107,13 +106,11 @@ describe("useAgentStudioThreadContext", () => {
       runtimeKind: "opencode",
       externalSessionId: "external-a",
       role: "spec",
-      scenario: "spec_initial",
     });
     const sessionB = createSession({
       runtimeKind: "opencode",
       externalSessionId: "external-b",
       role: "planner",
-      scenario: "planner_initial",
     });
     const harness = createHookHarness(
       useAgentStudioThreadContext,
@@ -135,7 +132,6 @@ describe("useAgentStudioThreadContext", () => {
       runtimeKind: "opencode",
       externalSessionId: "external-a",
       role: "spec",
-      scenario: "spec_initial",
     });
     const harness = createHookHarness(
       useAgentStudioThreadContext,
@@ -153,7 +149,6 @@ describe("useAgentStudioThreadContext", () => {
       runtimeKind: "opencode",
       externalSessionId: "external-a",
       role: "spec",
-      scenario: "spec_initial",
     });
     const harness = createHookHarness(
       useAgentStudioThreadContext,
@@ -192,7 +187,6 @@ describe("useAgentStudioThreadContext", () => {
       runtimeKind: "opencode",
       externalSessionId: "external-a",
       role: "spec",
-      scenario: "spec_initial",
     });
     const harness = createHookHarness(
       useAgentStudioThreadContext,
@@ -213,7 +207,6 @@ describe("useAgentStudioThreadContext", () => {
       runtimeKind: "opencode",
       externalSessionId: "external-a",
       role: "spec",
-      scenario: "spec_initial",
     });
     const harness = createHookHarness(
       useAgentStudioThreadContext,

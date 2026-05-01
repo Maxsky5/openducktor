@@ -40,7 +40,6 @@ const createSessionFixture = (): AgentSessionState => ({
   taskId: "task-1",
   repoPath: "/tmp/repo-a",
   role: "build",
-  scenario: "build_implementation_start",
   status: "idle",
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeId: "runtime-1",

@@ -95,7 +95,6 @@ const baseSession: AgentSessionState = {
   taskId: "task-1",
   repoPath: "/repo",
   role: "spec",
-  scenario: "spec_initial",
   status: "running",
   startedAt: "2026-02-20T10:00:30.000Z",
   runtimeId: "runtime-1",

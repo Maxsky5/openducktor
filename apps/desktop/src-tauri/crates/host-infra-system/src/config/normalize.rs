@@ -8,6 +8,25 @@ use anyhow::{anyhow, Result};
 use host_domain::RuntimeRegistry;
 use std::collections::HashSet;
 
+const VALID_PROMPT_TEMPLATE_IDS: &[&str] = &[
+    "system.shared.workflow_guards",
+    "system.shared.tool_protocol",
+    "system.shared.task_context",
+    "system.role.spec.base",
+    "system.role.planner.base",
+    "system.role.build.base",
+    "system.role.qa.base",
+    "kickoff.spec_initial",
+    "kickoff.planner_initial",
+    "kickoff.build_implementation_start",
+    "kickoff.build_after_qa_rejected",
+    "kickoff.build_after_human_request_changes",
+    "kickoff.build_pull_request_generation",
+    "kickoff.qa_review",
+    "message.build_rebase_conflict_resolution",
+    "permission.read_only.reject",
+];
+
 fn normalize_required_string(value: &mut String, field_name: &str) -> Result<()> {
     *value = value.trim().to_string();
     if value.is_empty() {
@@ -123,13 +142,16 @@ fn normalize_agent_model_default(
     Ok(())
 }
 
-fn normalize_prompt_overrides(overrides: &mut PromptOverrides) {
+fn normalize_prompt_overrides(overrides: &mut PromptOverrides) -> Result<()> {
     *overrides = std::mem::take(overrides)
         .into_iter()
-        .filter_map(|(key, mut entry)| {
+        .filter_map(|(key, mut entry)| -> Option<Result<_>> {
             let normalized_key = key.trim();
             if normalized_key.is_empty() {
                 return None;
+            }
+            if !VALID_PROMPT_TEMPLATE_IDS.contains(&normalized_key) {
+                return Some(Err(anyhow!("Unknown prompt template id: {normalized_key}")));
             }
 
             entry.template = entry.template.trim().to_string();
@@ -137,9 +159,10 @@ fn normalize_prompt_overrides(overrides: &mut PromptOverrides) {
                 entry.base_version = 1;
             }
 
-            Some((normalized_key.to_string(), entry))
+            Some(Ok((normalized_key.to_string(), entry)))
         })
-        .collect();
+        .collect::<Result<PromptOverrides>>()?;
+    Ok(())
 }
 
 fn normalize_git_provider_repository(value: &mut Option<GitProviderRepository>) {
@@ -213,7 +236,7 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) -> Result<()> {
     repo.hooks = normalize_hook_set(std::mem::take(&mut repo.hooks));
     normalize_repo_dev_servers(&mut repo.dev_servers)?;
     normalize_hook_commands(&mut repo.worktree_copy_paths);
-    normalize_prompt_overrides(&mut repo.prompt_overrides);
+    normalize_prompt_overrides(&mut repo.prompt_overrides)?;
     normalize_agent_model_default(&mut repo.agent_defaults.spec, "Specification agent default")?;
     normalize_agent_model_default(&mut repo.agent_defaults.planner, "Planner agent default")?;
     normalize_agent_model_default(&mut repo.agent_defaults.build, "Builder agent default")?;
@@ -280,7 +303,7 @@ fn normalize_workspace_order(config: &mut GlobalConfig) {
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
     normalize_kanban_settings(&mut config.kanban);
     normalize_autopilot_settings(&mut config.autopilot);
-    normalize_prompt_overrides(&mut config.global_prompt_overrides);
+    normalize_prompt_overrides(&mut config.global_prompt_overrides)?;
     config.active_workspace = normalize_optional_non_empty(config.active_workspace.take());
     let mut normalized_recent = Vec::new();
     for workspace_id in std::mem::take(&mut config.recent_workspaces) {

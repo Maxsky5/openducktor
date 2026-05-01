@@ -10,7 +10,6 @@ const activeSession = {
   taskId: "task-1",
   taskTitle: "Add SSO",
   role: "build" as const,
-  scenario: "build_implementation_start" as const,
   status: "running" as const,
   startedAt: "2026-02-26T10:00:00.000Z",
 };
@@ -21,7 +20,6 @@ const waitingSession = {
   taskId: "task-2",
   taskTitle: "Validate QA flow",
   role: "qa" as const,
-  scenario: "qa_review" as const,
   status: "idle" as const,
   startedAt: "2026-02-26T09:00:00.000Z",
 };
@@ -47,12 +45,8 @@ describe("AgentActivityCard", () => {
     expect(html).toContain(">1<");
     expect(html).toContain("Add SSO");
     expect(html).toContain("Validate QA flow");
-    expect(html).toContain(
-      'href="/agents?task=task-1&amp;session=session-1&amp;agent=build&amp;scenario=build_implementation_start"',
-    );
-    expect(html).toContain(
-      'href="/agents?task=task-2&amp;session=session-2&amp;agent=qa&amp;scenario=qa_review"',
-    );
+    expect(html).toContain('href="/agents?task=task-1&amp;session=session-1&amp;agent=build"');
+    expect(html).toContain('href="/agents?task=task-2&amp;session=session-2&amp;agent=qa"');
   });
 
   test("does not render redundant empty waiting text when there are no waiting sessions", () => {

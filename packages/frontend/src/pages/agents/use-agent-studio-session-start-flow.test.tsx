@@ -175,7 +175,7 @@ const createBaseArgs = (): HookArgs => ({
   },
   taskId: "task-1",
   role: "spec",
-  scenario: "spec_initial",
+  launchActionId: "spec_initial",
   activeSession: null,
   sessionsForTask: [],
   selectedTask: createTask(),
@@ -350,7 +350,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       taskId: "task-1",
       externalSessionId: "session-active",
       role: "spec",
-      scenario: "spec_initial",
     });
 
     const harness = createHookHarness({
@@ -364,7 +363,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.mount();
     let startPromise: Promise<string | undefined> | undefined;
     await harness.run(async (state) => {
-      startPromise = state.startSession("composer_send");
+      startPromise = state.startSession();
     });
     await confirmSessionStartModal({
       harness,
@@ -381,8 +380,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-new",
       agent: "spec",
-      autostart: undefined,
-      start: undefined,
     });
 
     await harness.unmount();
@@ -394,7 +391,6 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "planner",
-      scenario: "planner_initial",
       selectionForNewSession: null,
       startAgentSession,
       updateQuery: (updates) => {
@@ -406,7 +402,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     let startPromise: Promise<string | undefined> | undefined;
     await harness.run((state) => {
-      startPromise = state.startSession("composer_send");
+      startPromise = state.startSession();
     });
     expect(harness.getLatest().isStarting).toBe(false);
     await confirmSessionStartModal({
@@ -423,7 +419,6 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(startAgentSession).toHaveBeenCalledWith({
       taskId: "task-1",
       role: "planner",
-      scenario: "planner_initial",
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -437,21 +432,18 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-new",
       agent: "planner",
-      autostart: undefined,
-      start: undefined,
     });
     expect(harness.getLatest().isStarting).toBe(false);
 
     await harness.unmount();
   });
 
-  test("startScenarioKickoff uses the internal modal flow when no external request hook is provided", async () => {
+  test("startLaunchKickoff uses the internal modal flow when no external request hook is provided", async () => {
     const startAgentSession = mock(async () => "session-new");
     const sendAgentMessage = mock(async () => {});
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "planner",
-      scenario: "planner_initial",
       selectionForNewSession: null,
       input: "",
       startAgentSession,
@@ -461,7 +453,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.mount();
 
     await harness.run((state) => {
-      void state.startScenarioKickoff();
+      void state.startLaunchKickoff();
     });
     await confirmSessionStartModal({
       harness,
@@ -473,7 +465,6 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(startAgentSession).toHaveBeenCalledWith({
       taskId: "task-1",
       role: "planner",
-      scenario: "planner_initial",
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -493,7 +484,6 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      scenario: "spec_initial",
       activeSession: createSession({ externalSessionId: "session-spec", role: "spec" }),
       selectedTask: createPromptTask({
         agentWorkflows: {
@@ -514,8 +504,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.run((state) => {
       state.handleCreateSession({
         id: "planner:planner_initial:fresh",
+        launchActionId: "planner_initial",
         role: "planner",
-        scenario: "planner_initial",
         label: "Planner · Start Planner",
         description: "Create a new planner session from scratch",
         disabled: false,
@@ -531,7 +521,6 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(startAgentSession).toHaveBeenCalledWith({
       taskId: "task-1",
       role: "planner",
-      scenario: "planner_initial",
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -545,9 +534,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-plan",
       agent: "planner",
-      scenario: undefined,
-      autostart: undefined,
-      start: undefined,
     });
 
     await harness.unmount();
@@ -566,7 +552,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         taskId: "task-1",
         externalSessionId: "session-spec",
         role: "spec",
-        scenario: "spec_initial",
       }),
       startAgentSession,
       sendAgentMessage,
@@ -579,8 +564,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.run((state) => {
       state.handleCreateSession({
         id: "planner:planner_initial:fresh",
+        launchActionId: "planner_initial",
         role: "planner",
-        scenario: "planner_initial",
         label: "Planner · Start Planner",
         description: "Create a new planner session from scratch",
         disabled: false,
@@ -618,8 +603,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.run((state) => {
       state.handleCreateSession({
         id: "planner:planner_initial:fresh",
+        launchActionId: "planner_initial",
         role: "planner",
-        scenario: "planner_initial",
         label: "Planner · New Session",
         description: "Create a fresh planner session",
         disabled: false,
@@ -635,7 +620,6 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.update({
       ...createBaseArgs(),
       role: "planner",
-      scenario: "planner_initial",
       startAgentSession,
       sendAgentMessage,
       activeSession: null,
@@ -661,12 +645,10 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "qa",
-      scenario: "qa_review",
       activeSession: createSession({
         taskId: "task-1",
         externalSessionId: "session-qa",
         role: "qa",
-        scenario: "qa_review",
       }),
       selectedTask: createTask({
         status: "in_progress",
@@ -693,8 +675,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.run(async (state) => {
       state.handleCreateSession({
         id: "build:build_after_qa_rejected:fresh",
+        launchActionId: "build_after_qa_rejected",
         role: "build",
-        scenario: "build_after_qa_rejected",
         label: "Builder · Fix QA Rejection",
         description: "Create a new builder session in the existing worktree",
         disabled: false,
@@ -712,7 +694,6 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(startAgentSession).toHaveBeenCalledWith({
       taskId: "task-1",
       role: "build",
-      scenario: "build_after_qa_rejected",
       selectedModel: {
         ...MODEL_SELECTION,
         profileId: "builder",
@@ -723,9 +704,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-build-rework",
       agent: "build",
-      scenario: undefined,
-      autostart: undefined,
-      start: undefined,
     });
 
     await harness.unmount();
@@ -741,14 +719,12 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      scenario: "spec_initial",
       startAgentSession,
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
           externalSessionId: "session-build-latest",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ],
@@ -758,8 +734,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.run(async (state) => {
       state.handleCreateSession({
         id: "build:build_after_human_request_changes:fresh",
+        launchActionId: "build_after_human_request_changes",
         role: "build",
-        scenario: "build_after_human_request_changes",
         label: "Builder · Apply Human Changes",
         description: "Create a new builder session after human review",
         disabled: false,
@@ -788,7 +764,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         createSession({
           externalSessionId: "session-build-existing",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ],
@@ -799,8 +774,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.run((state) => {
       state.handleCreateSession({
         id: "build:build_after_human_request_changes:fresh",
+        launchActionId: "build_after_human_request_changes",
         role: "build",
-        scenario: "build_after_human_request_changes",
         label: "Builder · Apply Human Changes",
         description: "Create a new builder session after human review",
         disabled: false,
@@ -816,13 +791,13 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("startScenarioKickoff for human changes opens the feedback modal instead of starting immediately", async () => {
+  test("startLaunchKickoff for human changes opens the feedback modal instead of starting immediately", async () => {
     const startAgentSession = mock(async () => "session-build-human");
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "build",
-      scenario: "build_after_human_request_changes",
+      launchActionId: "build_after_human_request_changes",
       startAgentSession,
       sendAgentMessage,
       selectedTask: createTask({ status: "human_review" }),
@@ -830,7 +805,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         createSession({
           externalSessionId: "session-build-existing",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ],
@@ -838,7 +812,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.startScenarioKickoff();
+      await state.startLaunchKickoff();
     });
 
     await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
@@ -850,14 +824,14 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("startScenarioKickoff for human changes waits for task hydration", async () => {
+  test("startLaunchKickoff for human changes waits for task hydration", async () => {
     const startAgentSession = mock(async () => "session-build-human");
     const sendAgentMessage = mock(async () => {});
 
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "build",
-      scenario: "build_after_human_request_changes",
+      launchActionId: "build_after_human_request_changes",
       isActiveTaskHydrated: false,
       startAgentSession,
       sendAgentMessage,
@@ -866,7 +840,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         createSession({
           externalSessionId: "session-build-existing",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ],
@@ -874,7 +847,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await state.startScenarioKickoff();
+      await state.startLaunchKickoff();
     });
 
     expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
@@ -890,20 +863,17 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      scenario: "spec_initial",
       startAgentSession,
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
           externalSessionId: "session-build-latest",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
         createSession({
           externalSessionId: "session-build-older",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-02-22T11:00:00.000Z",
         }),
       ],
@@ -914,8 +884,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.run((state) => {
       state.handleCreateSession({
         id: "build:build_after_human_request_changes:fresh",
+        launchActionId: "build_after_human_request_changes",
         role: "build",
-        scenario: "build_after_human_request_changes",
         label: "Builder · Apply Human Changes",
         description: "Create a new builder session after human review",
         disabled: false,
@@ -947,13 +917,11 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      scenario: "spec_initial",
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
         createSession({
           externalSessionId: "session-build-latest",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ],
@@ -964,8 +932,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.run((state) => {
       state.handleCreateSession({
         id: "build:build_after_human_request_changes:fresh",
+        launchActionId: "build_after_human_request_changes",
         role: "build",
-        scenario: "build_after_human_request_changes",
         label: "Builder · Apply Human Changes",
         description: "Create a new builder session after human review",
         disabled: false,

@@ -33,8 +33,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
   startSessionRequest: (
     request: SessionStartLaunchRequest & {
       role: "build";
-      scenario: "build_rebase_conflict_resolution";
-      reason: "rebase_conflict_resolution";
+      launchActionId: "build_rebase_conflict_resolution";
       postStartAction: "send_message";
       message: string;
       targetWorkingDirectory?: string | null;
@@ -63,8 +62,7 @@ export function useAgentStudioRebaseConflictResolution({
       startSessionRequest({
         taskId: request.taskId,
         role: request.role,
-        scenario: request.scenario,
-        reason: "rebase_conflict_resolution",
+        launchActionId: "build_rebase_conflict_resolution" as const,
         postStartAction: "send_message",
         message: request.message,
         initialStartMode: request.initialStartMode,

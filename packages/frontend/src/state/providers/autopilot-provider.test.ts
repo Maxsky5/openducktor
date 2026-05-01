@@ -26,7 +26,6 @@ const createBuilderSessionRecord = (
 ): AgentSessionRecord => ({
   externalSessionId: "external-builder-session-1",
   role: "build",
-  scenario: "build_implementation_start",
   startedAt: "2026-02-22T10:00:00.000Z",
   runtimeKind: "opencode",
   workingDirectory: "/tmp/repo/worktree",
@@ -223,7 +222,7 @@ describe("autopilot provider helpers", () => {
     ).toEqual([{ eventId: "taskProgressedToAiReview", task: currentTask }]);
   });
 
-  test("maps spec_ready automation to the planner scenario", async () => {
+  test("maps spec_ready automation to the planner launch action", async () => {
     const args = createExecuteArgs(createTask({ id: "TASK-PLAN", status: "spec_ready" }));
 
     await executeAutopilotAction({
@@ -236,7 +235,6 @@ describe("autopilot provider helpers", () => {
         intent: expect.objectContaining({
           taskId: "TASK-PLAN",
           role: "planner",
-          scenario: "planner_initial",
           startMode: "fresh",
         }),
       }),
@@ -329,7 +327,6 @@ describe("autopilot provider helpers", () => {
           createBuilderSessionRecord({
             externalSessionId: "qa-session-1",
             role: "qa",
-            scenario: "qa_review",
             workingDirectory: "/tmp/repo/current-worktree",
             selectedModel: {
               runtimeKind: "opencode",

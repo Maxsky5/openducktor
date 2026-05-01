@@ -1,15 +1,12 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
-import { agentRoleSchema, agentScenarioSchema } from "./agent-workflow-schemas";
+import { agentRoleSchema } from "./agent-workflow-schemas";
 
 export const agentSessionStatusSchema = z.enum(["starting", "running", "idle", "error", "stopped"]);
 export type AgentSessionStatus = z.infer<typeof agentSessionStatusSchema>;
 
 export const agentSessionRoleSchema = agentRoleSchema;
 export type AgentSessionRole = z.infer<typeof agentSessionRoleSchema>;
-
-export const agentSessionScenarioSchema = agentScenarioSchema;
-export type AgentSessionScenario = z.infer<typeof agentSessionScenarioSchema>;
 
 const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
@@ -71,7 +68,6 @@ export type AgentSessionQuestionRequest = z.infer<typeof agentSessionQuestionReq
 const agentSessionRecordShape = {
   externalSessionId: nonEmptyStringSchema,
   role: agentSessionRoleSchema,
-  scenario: agentSessionScenarioSchema,
   startedAt: z.string(),
   runtimeKind: runtimeKindSchema,
   workingDirectory: z.string(),

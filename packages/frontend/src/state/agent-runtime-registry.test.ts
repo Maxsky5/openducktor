@@ -48,7 +48,6 @@ describe("agent-runtime-registry", () => {
       workingDirectory: "/repo",
       taskId: "task-1",
       role: "spec",
-      scenario: "spec_initial",
       systemPrompt: "Prompt",
     } as unknown as Parameters<typeof engine.startSession>[0];
 
@@ -159,7 +158,6 @@ describe("agent-runtime-registry", () => {
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T09:00:00.000Z",
         role: input.role,
-        scenario: input.scenario,
         status: "running",
       };
     };
@@ -179,7 +177,6 @@ describe("agent-runtime-registry", () => {
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
         role: "build",
-        scenario: "build_implementation_start",
         systemPrompt: "",
       });
 

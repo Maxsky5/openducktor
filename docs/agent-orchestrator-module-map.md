@@ -97,14 +97,14 @@ Must not own:
 `handlers/start-session.ts`
 
 - Owns session start and reuse policy.
-- Enforces scenario-driven start-mode rules.
+- Enforces launch-action start-mode rules.
 - Supports all three start modes:
   - `fresh`
   - `reuse`
   - `fork`
 - Uses stale-repo guards across async boundaries.
 - Rolls back newly created remote sessions when the repo context becomes stale.
-- Builder PR generation now goes through this same path using scenario `build_pull_request_generation`, which supports `reuse` and `fork` from an existing Builder session.
+- Builder PR generation now goes through this same path using launch action `build_pull_request_generation`, which supports `reuse` and `fork` from an existing Builder session.
 
 `handlers/public-operations.ts`
 
@@ -193,11 +193,11 @@ These invariants must hold after any change:
 - bootstrap, reconcile, and requested-history hydration must remain separate intents
 - avoid reintroducing one generic “loader” path with ad hoc flags
 
-2. Session start policy is scenario-owned
-- callers choose a scenario
-- allowed start modes come from `packages/contracts/src/agent-workflow-schemas.ts`
+2. Session start policy is launch-action-owned
+- callers choose a launch action
+- allowed start modes come from `packages/frontend/src/features/session-start/session-start-launch-options.ts`
 - UI resolves the actual mode and source session when needed
-- page code must not hardcode builder follow-up or PR-generation behavior outside the scenario registry
+- page code must not hardcode builder follow-up or PR-generation behavior outside the launch-action registry
 
 3. Live runtime state wins over persisted hints
 - for live resumed sessions, runtime status + runtime pending input are authoritative

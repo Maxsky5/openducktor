@@ -1,5 +1,17 @@
 export { executeSessionStart } from "./session-start-execution";
-export { resolveScenarioStartMode } from "./session-start-mode";
+export {
+  defaultSessionLaunchActionForRole,
+  getSessionLaunchAction,
+  getSessionLaunchActionsForRole,
+  isLaunchStartModeAllowed,
+  resolveBuildContinuationLaunchAction,
+  resolveBuildRequestChangesLaunchAction,
+  SESSION_LAUNCH_ACTIONS,
+  type SessionLaunchAction,
+  type SessionLaunchActionId,
+  sessionLaunchActionIds,
+} from "./session-start-launch-options";
+export { resolveLaunchStartMode } from "./session-start-mode";
 export {
   buildSessionStartModalRequest,
   executeSessionStartFromDecision,
@@ -9,11 +21,12 @@ export {
 } from "./session-start-orchestration";
 export {
   buildGitConflictResolutionPrompt,
-  firstScenario,
-  isScenario,
-  kickoffPromptForScenario,
-  SCENARIO_LABELS,
-  SCENARIOS_BY_ROLE,
+  firstLaunchAction,
+  isLaunchActionId,
+  kickoffPromptForLaunchAction,
+  kickoffPromptForTemplate,
+  LAUNCH_ACTION_LABELS,
+  LAUNCH_ACTIONS_BY_ROLE,
 } from "./session-start-prompts";
 export { buildReusableSessionOptions } from "./session-start-reuse-options";
 export {
@@ -25,7 +38,6 @@ export type {
   NewSessionStartDecision,
   NewSessionStartRequest,
   SessionStartExistingSessionOption,
-  SessionStartRequestReason,
 } from "./session-start-types";
 export {
   type SessionStartBeforeAction,
@@ -38,7 +50,6 @@ export type { SessionStartModalOpenRequest } from "./use-session-start-modal-coo
 export {
   buildSessionStartModalDescription,
   buildSessionStartModalTitle,
-  toSessionStartPostAction,
   useSessionStartModalCoordinator,
 } from "./use-session-start-modal-coordinator";
 export type { SessionStartModalDecision } from "./use-session-start-modal-runner";

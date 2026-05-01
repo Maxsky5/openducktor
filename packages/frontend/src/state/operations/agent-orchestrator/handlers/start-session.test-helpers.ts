@@ -88,9 +88,6 @@ export const toStartSessionDependencies = (
     },
     model: {
       loadRepoPromptOverrides: deps.loadRepoPromptOverrides,
-      ...(deps.loadRepoDefaultTargetBranch
-        ? { loadRepoDefaultTargetBranch: deps.loadRepoDefaultTargetBranch }
-        : {}),
     },
   };
 };

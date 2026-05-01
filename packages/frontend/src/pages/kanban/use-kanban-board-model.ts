@@ -1,5 +1,5 @@
 import type { KanbanEmptyColumnDisplay, TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { mapToKanbanColumns } from "@openducktor/core";
 import { useMemo } from "react";
 import {
@@ -197,7 +197,6 @@ export const buildTaskSessionsByTaskId = (
         ...(session.runtimeKind ? { runtimeKind: session.runtimeKind } : {}),
         externalSessionId: session.externalSessionId,
         role: session.role,
-        scenario: session.scenario,
         status: session.status,
         startedAt: session.startedAt,
         presentationState: toKanbanSessionPresentationState(session),
@@ -217,7 +216,7 @@ type UseKanbanBoardModelArgs = {
   onOpenSession: (
     taskId: string,
     role: AgentRole,
-    options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
+    options?: { externalSessionId?: string | null },
   ) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;

@@ -102,7 +102,6 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   taskId: "A",
   repoPath: overrides.repoPath ?? "/repo",
   role: "build",
-  scenario: "build_implementation_start",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
@@ -198,7 +197,7 @@ type TaskAndKanbanHarnessState = {
   isFetchingKanban: boolean;
 };
 
-type ScheduledKanbanRefetchScenario = {
+type ScheduledKanbanRefetchCase = {
   initialTasks: TaskCard[];
   expectedVisibleTaskId: string | undefined;
 };
@@ -268,7 +267,7 @@ const createTaskAndKanbanHarness = (initialArgs: LegacyHookArgs, doneVisibleDays
 const assertScheduledKanbanRefetchStaysBackground = async ({
   initialTasks,
   expectedVisibleTaskId,
-}: ScheduledKanbanRefetchScenario): Promise<void> => {
+}: ScheduledKanbanRefetchCase): Promise<void> => {
   const repoPullRequestSyncDeferred = createDeferred<{ ok: boolean }>();
   let repoTaskListCallCount = 0;
   let kanbanTaskListCallCount = 0;

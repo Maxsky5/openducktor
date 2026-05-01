@@ -64,12 +64,10 @@ describe("agent-orchestrator/handlers/start-session-support", () => {
       taskId: "task-1",
       role: "build",
       isStaleRepoOperation: () => false,
-      resolvedScenario: "build_implementation_start",
       summary: {
         runtimeKind: "opencode",
         externalSessionId: "external-1",
         role: "build",
-        scenario: "build_implementation_start",
         startedAt: "2026-02-22T08:00:10.000Z",
         status: "idle",
       },
@@ -79,7 +77,6 @@ describe("agent-orchestrator/handlers/start-session-support", () => {
       repoPath: "/tmp/repo",
       taskId: "task-1",
       role: "build",
-      scenario: "build_implementation_start",
       externalSessionId: "external-1",
     });
   });

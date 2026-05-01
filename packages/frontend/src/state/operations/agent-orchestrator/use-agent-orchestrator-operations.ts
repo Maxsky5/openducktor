@@ -21,7 +21,6 @@ import {
   createAgentSessionActions,
   createEnsureRuntime,
   createLoadAgentSessions,
-  loadRepoDefaultTargetBranch,
   loadRepoPromptOverrides,
   loadTaskDocuments,
   loadTaskWorktree,
@@ -531,7 +530,6 @@ export function useAgentOrchestratorOperations({
               purpose: "transcript",
               taskId: "",
               role: null,
-              scenario: null,
               systemPrompt: "",
             });
 
@@ -905,7 +903,6 @@ export function useAgentOrchestratorOperations({
         ensureRuntime,
         loadTaskDocuments,
         loadRepoPromptOverrides,
-        loadRepoDefaultTargetBranch,
         loadAgentSessions,
         clearTurnDuration,
         refreshTaskData,

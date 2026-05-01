@@ -266,7 +266,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Started ${input.role} session (${input.scenario})`,
+      startedMessage: `Started ${input.role} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
@@ -304,7 +304,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage: `Resumed ${input.role} session (${input.scenario})`,
+      startedMessage: `Resumed ${input.role} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
@@ -345,7 +345,7 @@ export class OpencodeSdkAdapter
       startedMessage:
         input.purpose === "transcript"
           ? "Attached transcript session"
-          : `Attached ${input.role} session (${input.scenario})`,
+          : `Attached ${input.role} session`,
       emitStartedEvent: false,
       subscribeToEvents: false,
       now: this.now,
@@ -415,7 +415,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Forked ${input.role} session (${input.scenario})`,
+      startedMessage: `Forked ${input.role} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),

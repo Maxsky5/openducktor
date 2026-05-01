@@ -119,7 +119,6 @@ const useHookHarness = (args: LegacyHookArgs) => {
       taskId: "",
       externalSessionId: null,
       role: null,
-      scenario: null,
     },
   );
 
@@ -217,7 +216,6 @@ describe("useRepoNavigationPersistence", () => {
           taskId: "task-from-context",
           role: "qa",
           externalSessionId: "session-from-context",
-          scenario: "qa_review",
         },
       });
 
@@ -228,7 +226,6 @@ describe("useRepoNavigationPersistence", () => {
             taskId: "",
             externalSessionId: null,
             role: "planner",
-            scenario: "planner_initial",
           },
         }),
       );
@@ -239,7 +236,6 @@ describe("useRepoNavigationPersistence", () => {
         taskId: "",
         externalSessionId: null,
         role: "planner",
-        scenario: "planner_initial",
       });
 
       await harness.unmount();
@@ -267,7 +263,6 @@ describe("useRepoNavigationPersistence", () => {
           taskId: "task-from-cleanup",
           externalSessionId: "session-from-cleanup",
           role: "spec",
-          scenario: null,
         });
       });
 
@@ -312,7 +307,6 @@ describe("useRepoNavigationPersistence", () => {
           taskId: "task-without-role",
           externalSessionId: "session-without-role",
           role: null,
-          scenario: null,
         });
       });
 
@@ -364,7 +358,6 @@ describe("useRepoNavigationPersistence", () => {
         taskId: "",
         externalSessionId: null,
         role: null,
-        scenario: null,
       });
 
       memoryStorage.setItem(
@@ -494,7 +487,6 @@ describe("useRepoNavigationPersistence", () => {
           taskId: "task-a",
           externalSessionId: "session-a",
           role: "build",
-          scenario: "build_implementation_start",
         },
       });
 
@@ -512,7 +504,6 @@ describe("useRepoNavigationPersistence", () => {
         taskId: "task-b",
         externalSessionId: "session-b",
         role: "planner",
-        scenario: null,
       });
 
       const repoBWrites = writes.filter(
@@ -557,7 +548,6 @@ describe("useRepoNavigationPersistence", () => {
         taskId: "task-a",
         externalSessionId: "session-a",
         role: "spec",
-        scenario: null,
       });
 
       await harness.unmount();
@@ -594,7 +584,6 @@ describe("useRepoNavigationPersistence", () => {
         taskId: "task-a",
         externalSessionId: "session-a",
         role: "spec",
-        scenario: null,
       });
 
       await harness.unmount();
@@ -647,7 +636,6 @@ describe("useRepoNavigationPersistence", () => {
           taskId: "task-from-cleanup",
           externalSessionId: "session-from-cleanup",
           role: "spec",
-          scenario: null,
         });
       });
 

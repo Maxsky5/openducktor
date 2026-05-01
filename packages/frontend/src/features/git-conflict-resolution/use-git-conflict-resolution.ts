@@ -10,12 +10,12 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { getGitConflictCopy } from "./conflict-copy";
-import { BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO } from "./constants";
+import { BUILD_REBASE_CONFLICT_RESOLUTION_LAUNCH_ACTION } from "./constants";
 
 export type StartGitConflictResolutionSessionInput = {
   taskId: string;
   role: "build";
-  scenario: typeof BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO;
+  launchActionId: "build_rebase_conflict_resolution";
   message: string;
   existingSessionOptions: ReturnType<typeof buildReusableSessionOptions>;
   initialStartMode: "fresh" | "reuse";
@@ -125,7 +125,7 @@ export function useGitConflictResolution({
       const externalSessionId = await startConflictResolutionSession({
         taskId: taskContext.taskId,
         role: "build",
-        scenario: BUILD_REBASE_CONFLICT_RESOLUTION_SCENARIO,
+        launchActionId: BUILD_REBASE_CONFLICT_RESOLUTION_LAUNCH_ACTION,
         message,
         existingSessionOptions: buildReusableSessionOptions({
           sessions: validBuilderSessions,

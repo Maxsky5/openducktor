@@ -84,7 +84,6 @@ describe("createAgentSessionsStore activity snapshots", () => {
       status: "running",
       purpose: "transcript",
       role: "build",
-      scenario: "build_implementation_start",
     });
 
     store.setSessionsById({ [session.externalSessionId]: session });

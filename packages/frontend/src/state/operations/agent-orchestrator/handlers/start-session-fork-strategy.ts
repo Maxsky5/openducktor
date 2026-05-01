@@ -12,13 +12,13 @@ import type {
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
 import { registerStartedSession } from "./start-session-persistence";
-import { assertScenarioStartPolicy, resolveStartTask } from "./start-session-policies";
+import { resolveStartTask } from "./start-session-policies";
 import { resolveLoadedSourceSession } from "./start-session-reuse-strategy";
 import {
   rollbackStartedSessionBeforeRegistration,
   stopSessionOnStaleAndThrow,
 } from "./start-session-rollback";
-import { resolveScenarioAndPrompt } from "./start-session-runtime";
+import { resolvePromptContext } from "./start-session-runtime";
 
 // Match the requested-history hydration cap so newly forked child sessions load
 // enough history to render immediately without pulling an unbounded transcript.
@@ -77,17 +77,10 @@ export const executeForkStart = async ({
     );
   }
 
-  const promptContext = await resolveScenarioAndPrompt({
+  const promptContext = await resolvePromptContext({
     ctx,
-    scenario: input.scenario,
     taskCard,
     deps,
-  });
-
-  assertScenarioStartPolicy({
-    role: ctx.role,
-    scenario: promptContext.resolvedScenario,
-    startMode: input.startMode,
   });
 
   const runtimeKind = sourceRuntimeKind;
@@ -98,7 +91,6 @@ export const executeForkStart = async ({
     workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
-    scenario: promptContext.resolvedScenario,
     systemPrompt: promptContext.systemPrompt,
     ...(sourceSession.runtimeId ? { runtimeId: sourceSession.runtimeId } : {}),
     ...(selectedModel ? { model: selectedModel } : {}),
@@ -107,7 +99,6 @@ export const executeForkStart = async ({
 
   const startedCtx = {
     ...ctx,
-    resolvedScenario: promptContext.resolvedScenario,
     summary,
   };
 
@@ -153,11 +144,8 @@ export const executeForkStart = async ({
           externalSessionId: summary.externalSessionId,
           messages: buildSessionHeaderMessages({
             externalSessionId: summary.externalSessionId,
-            role: ctx.role,
-            scenario: promptContext.resolvedScenario,
             systemPrompt: promptContext.systemPrompt,
             startedAt: summary.startedAt,
-            eventLabel: "forked",
           }),
         },
         0,

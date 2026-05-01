@@ -15,7 +15,6 @@ const toSessionHref = (session: AgentActivitySessionItem): string => {
     task: session.taskId,
     session: session.externalSessionId,
     agent: session.role,
-    scenario: session.scenario,
   });
   return `/agents?${params.toString()}`;
 };

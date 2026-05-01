@@ -141,7 +141,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       canKickoffNewSession: false,
       kickoffLabel: "Start Spec",
       canStopSession: true,
-      startScenarioKickoff: async () => {},
+      startLaunchKickoff: async () => {},
       onSend: async () => true,
       onSubmitQuestionAnswers: async () => {},
       isSubmittingQuestionByRequestId: {},
@@ -232,7 +232,7 @@ describe("useAgentStudioPageModels", () => {
         },
         sessionActions: {
           onSend,
-          startScenarioKickoff: onKickoff,
+          startLaunchKickoff: onKickoff,
           stopAgentSession: onStopSession,
         },
       }),
@@ -406,7 +406,6 @@ describe("useAgentStudioPageModels", () => {
 
     const qaSession = createSession("session-qa", "external-qa", {
       role: "qa",
-      scenario: "qa_review",
     });
     const qaHarness = createHookHarness(
       createHookArgs({
@@ -451,7 +450,6 @@ describe("useAgentStudioPageModels", () => {
   test("uses active session role to select workspace document when URL role is stale", async () => {
     const plannerSession = createSession("session-1", "external-1", {
       role: "planner",
-      scenario: "planner_initial",
     });
     const harness = createHookHarness(
       createHookArgs({
@@ -478,7 +476,6 @@ describe("useAgentStudioPageModels", () => {
   test("keeps build workspace document selection aligned to the resolved active session", async () => {
     const buildSession = createSession("session-build", "external-build", {
       role: "build",
-      scenario: "build_implementation_start",
     });
     const harness = createHookHarness(
       createHookArgs({
@@ -1065,7 +1062,6 @@ describe("useAgentStudioPageModels", () => {
     });
     const runningPlannerSession = createSession("session-plan", "external-plan", {
       role: "planner",
-      scenario: "planner_initial",
       status: "running",
     });
 

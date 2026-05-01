@@ -17,22 +17,15 @@ describe("types", () => {
     const sessionInput: SessionInput = {
       repoPath: "/repo",
       runtimeKind: "opencode",
-      runtimeConnection: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:12345",
-        workingDirectory: "/repo",
-      },
       workingDirectory: "/repo",
       taskId: "task-1",
       role: "spec",
-      scenario: "spec_initial",
       systemPrompt: "system",
     };
     const sessionRecord: SessionRecord = {
       summary: {
         externalSessionId: "external-session-1",
         role: "spec",
-        scenario: "spec_initial",
         startedAt: "2026-02-22T12:00:00.000Z",
         status: "running",
       },

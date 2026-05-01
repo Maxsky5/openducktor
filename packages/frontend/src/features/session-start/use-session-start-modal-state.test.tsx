@@ -121,7 +121,7 @@ describe("useSessionStartModalState", () => {
         source: "agent_studio",
         taskId: "TASK-1",
         role: "build",
-        scenario: "build_implementation_start",
+        launchActionId: "build_implementation_start",
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -160,7 +160,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-2",
         role: "spec",
-        scenario: "spec_initial",
+        launchActionId: "spec_initial",
         postStartAction: "kickoff",
         title: "Start Spec Session",
       });
@@ -187,7 +187,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-3",
         role: "spec",
-        scenario: "spec_initial",
+        launchActionId: "spec_initial",
         postStartAction: "kickoff",
         title: "Start Spec Session",
       });
@@ -210,7 +210,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-3",
         role: "spec",
-        scenario: "spec_initial",
+        launchActionId: "spec_initial",
         postStartAction: "kickoff",
         title: "Start Spec Session",
       });
@@ -237,7 +237,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-3",
         role: "spec",
-        scenario: "spec_initial",
+        launchActionId: "spec_initial",
         initialStartMode: "reuse",
         postStartAction: "kickoff",
         title: "Start Spec Session",
@@ -259,7 +259,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-5",
         role: "build",
-        scenario: "build_implementation_start",
+        launchActionId: "build_implementation_start",
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -281,7 +281,7 @@ describe("useSessionStartModalState", () => {
         source: "agent_studio",
         taskId: "TASK-6",
         role: "build",
-        scenario: "build_after_qa_rejected",
+        launchActionId: "build_after_human_request_changes",
         initialTargetBranch: {
           remote: "origin",
           branch: "release/2026.04",
@@ -298,7 +298,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-6B",
         role: "build",
-        scenario: "build_after_human_request_changes",
+        launchActionId: "build_after_human_request_changes",
         existingSessionOptions: [
           {
             value: "session-build-1",
@@ -319,7 +319,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-6C",
         role: "build",
-        scenario: "build_pull_request_generation",
+        launchActionId: "build_pull_request_generation",
         existingSessionOptions: [
           {
             value: "session-build-pr",
@@ -348,7 +348,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-7",
         role: "build",
-        scenario: "build_implementation_start",
+        launchActionId: "build_implementation_start",
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -373,7 +373,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-8",
         role: "build",
-        scenario: "build_implementation_start",
+        launchActionId: "build_implementation_start",
         initialTargetBranch: {
           branch: "@{upstream}",
         },
@@ -405,7 +405,7 @@ describe("useSessionStartModalState", () => {
         source: "agent_studio",
         taskId: "TASK-4",
         role: "spec",
-        scenario: "spec_initial",
+        launchActionId: "spec_initial",
         postStartAction: "none",
         title: "Start Spec Session",
       });
@@ -444,7 +444,7 @@ describe("useSessionStartModalState", () => {
         source: "agent_studio",
         taskId: "TASK-5",
         role: "spec",
-        scenario: "spec_initial",
+        launchActionId: "spec_initial",
         postStartAction: "none",
         title: "Start Spec Session",
       });
@@ -471,7 +471,7 @@ describe("useSessionStartModalState", () => {
         source: "agent_studio",
         taskId: "TASK-5B",
         role: "spec",
-        scenario: "spec_initial",
+        launchActionId: "spec_initial",
         postStartAction: "none",
         title: "Start Spec Session",
       });
@@ -510,7 +510,7 @@ describe("useSessionStartModalState", () => {
         source: "agent_studio",
         taskId: "TASK-5",
         role: "spec",
-        scenario: "spec_initial",
+        launchActionId: "spec_initial",
         postStartAction: "none",
         selectedModel: {
           runtimeKind: "opencode",
@@ -534,7 +534,7 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
-  test("forces fresh mode for fresh-only scenarios even when reuse is requested", async () => {
+  test("forces fresh mode for fresh-only launch actions even when reuse is requested", async () => {
     const harness = createHookHarness(createBaseProps());
 
     await harness.mount();
@@ -544,7 +544,7 @@ describe("useSessionStartModalState", () => {
         source: "agent_studio",
         taskId: "TASK-6",
         role: "spec",
-        scenario: "spec_initial",
+        launchActionId: "spec_initial",
         postStartAction: "none",
         title: "Start Spec Session",
       });
@@ -556,7 +556,7 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
-  test("initializes reusable session selection for reuse-capable scenarios", async () => {
+  test("initializes reusable session selection for reuse-capable launch actions", async () => {
     const harness = createHookHarness(createBaseProps());
 
     await harness.mount();
@@ -566,7 +566,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-7",
         role: "qa",
-        scenario: "qa_review",
+        launchActionId: "qa_review",
         existingSessionOptions: [
           {
             value: "session-2",
@@ -602,7 +602,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-7A",
         role: "build",
-        scenario: "build_after_human_request_changes",
+        launchActionId: "build_pull_request_generation",
         existingSessionOptions: [
           {
             value: "session-fallback",
@@ -646,7 +646,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-8",
         role: "qa",
-        scenario: "qa_review",
+        launchActionId: "qa_review",
         existingSessionOptions: [],
         postStartAction: "kickoff",
         title: "Start QA Session",
@@ -674,7 +674,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-9",
         role: "build",
-        scenario: "build_after_human_request_changes",
+        launchActionId: "build_after_human_request_changes",
         existingSessionOptions: [
           {
             value: "session-newer",
@@ -747,7 +747,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-PR",
         role: "build",
-        scenario: "build_pull_request_generation",
+        launchActionId: "build_pull_request_generation",
         existingSessionOptions: [
           {
             value: "session-pr-2",
@@ -848,7 +848,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-10",
         role: "build",
-        scenario: "build_after_human_request_changes",
+        launchActionId: "build_after_human_request_changes",
         existingSessionOptions: [
           {
             value: "session-with-model",
@@ -902,7 +902,7 @@ describe("useSessionStartModalState", () => {
         source: "kanban",
         taskId: "TASK-10A",
         role: "build",
-        scenario: "build_after_human_request_changes",
+        launchActionId: "build_after_human_request_changes",
         existingSessionOptions: [
           {
             value: "session-valid",

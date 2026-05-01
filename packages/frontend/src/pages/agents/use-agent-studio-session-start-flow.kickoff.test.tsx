@@ -98,7 +98,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: null,
   taskId: "task-1",
   role: "spec",
-  scenario: "spec_initial",
+  launchActionId: "spec_initial",
   activeSession: null,
   sessionsForTask: [],
   selectedTask: createTaskCardFixture(),
@@ -154,7 +154,7 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      void state.startScenarioKickoff();
+      void state.startLaunchKickoff();
     });
     await harness.waitFor(
       (state) =>

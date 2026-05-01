@@ -63,7 +63,6 @@ export const createBuildSessionFixture = (overrides = {}) =>
       externalSessionId: "ext-build",
       taskId: "task-1",
       role: "build",
-      scenario: "build_after_human_request_changes",
       status: "idle",
       startedAt: "2026-02-22T08:20:00.000Z",
       runtimeKind: "opencode",

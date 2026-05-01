@@ -516,12 +516,12 @@ fn runtime_descriptor_validation_reports_capability_invariants() {
     assert_eq!(
         descriptor.validate_for_openducktor(),
         vec![
-            "[scenario_scoped] fork start mode requires sessionLifecycle.supportsSessionFork"
+            "[launch_scoped] fork start mode requires sessionLifecycle.supportsSessionFork"
                 .to_string(),
-            "[scenario_scoped] fork targets must be empty when session fork is unsupported"
+            "[launch_scoped] fork targets must be empty when session fork is unsupported"
                 .to_string(),
-            "[scenario_scoped] item-level history requires stable item ids".to_string(),
-            "[scenario_scoped] item-level history requires completion state exposure".to_string(),
+            "[launch_scoped] item-level history requires stable item ids".to_string(),
+            "[launch_scoped] item-level history requires completion state exposure".to_string(),
             "[workflow] approval requests require reject reply outcome".to_string(),
             "[workflow] read-only auto-reject safety requires reject reply outcome".to_string(),
             "[optional_enhancement] slash command support requires slash_command prompt part"
@@ -533,7 +533,7 @@ fn runtime_descriptor_validation_reports_capability_invariants() {
 }
 
 #[test]
-fn runtime_descriptor_validation_reports_scenario_start_mode_gaps() {
+fn runtime_descriptor_validation_reports_launch_start_mode_gaps() {
     let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
     let supported_start_modes = vec![
         RuntimeSessionStartMode::Fresh,
@@ -556,7 +556,7 @@ fn runtime_descriptor_validation_reports_scenario_start_mode_gaps() {
     assert_eq!(
         descriptor.validate_for_openducktor(),
         vec![
-            "[scenario_scoped] scenario build_pull_request_generation requires start modes: fork"
+            "[launch_scoped] launch action build_pull_request_generation requires start modes: fork"
                 .to_string()
         ]
     );

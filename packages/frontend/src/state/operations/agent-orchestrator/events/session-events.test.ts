@@ -16,7 +16,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   taskId: "task-1",
   repoPath: overrides.repoPath ?? "/tmp/repo",
   role: "spec",
-  scenario: "spec_initial",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
@@ -467,7 +466,7 @@ describe("agent-orchestrator-session-events", () => {
   });
 
   test("runs completion side effects once for duplicate completed tool events", async () => {
-    const scenarios = [
+    const cases = [
       {
         name: "workflow mutation tool refresh",
         tool: "odt_set_plan",
@@ -482,7 +481,7 @@ describe("agent-orchestrator-session-events", () => {
       },
     ] as const;
 
-    for (const scenario of scenarios) {
+    for (const testCase of cases) {
       const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
       let refreshTaskDataCalls = 0;
       const refreshTaskDataArgs: Array<[string, string | undefined]> = [];
@@ -553,9 +552,9 @@ describe("agent-orchestrator-session-events", () => {
           messageId: "tool-msg-dup",
           partId: "part-dup",
           callId: "call-dup",
-          tool: scenario.tool,
+          tool: testCase.tool,
           status: "completed",
-          output: scenario.output,
+          output: testCase.output,
           error: "",
         },
       });
@@ -569,17 +568,17 @@ describe("agent-orchestrator-session-events", () => {
           messageId: "tool-msg-dup",
           partId: "part-dup",
           callId: "call-dup",
-          tool: scenario.tool,
+          tool: testCase.tool,
           status: "completed",
-          output: scenario.output,
+          output: testCase.output,
           error: "",
         },
       });
 
       await Promise.resolve();
 
-      expect(refreshTaskDataCalls).toBe(scenario.expectedRefreshTaskDataCalls);
-      if (scenario.expectedRefreshTaskDataCalls > 0) {
+      expect(refreshTaskDataCalls).toBe(testCase.expectedRefreshTaskDataCalls);
+      if (testCase.expectedRefreshTaskDataCalls > 0) {
         expect(refreshTaskDataArgs).toEqual([["/tmp/repo", "task-1"]]);
       }
     }

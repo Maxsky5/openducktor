@@ -3,7 +3,6 @@ import { orderStartModesForDisplay } from "./session-start-display";
 import {
   buildSessionStartModalDescription,
   buildSessionStartModalTitle,
-  toSessionStartPostAction,
 } from "./use-session-start-modal-coordinator";
 
 describe("use-session-start-modal-coordinator", () => {
@@ -23,31 +22,19 @@ describe("use-session-start-modal-coordinator", () => {
     expect(buildSessionStartModalTitle("qa")).toBe("Start QA Session");
   });
 
-  test("builds scenario and start-mode specific descriptions", () => {
-    expect(
-      buildSessionStartModalDescription({
-        scenario: "spec_initial",
-      }),
-    ).toBe("Start a fresh session for Spec.");
+  test("builds launch-action and start-mode specific descriptions", () => {
+    expect(buildSessionStartModalDescription({ launchActionId: "spec_initial" })).toBe(
+      "Start a fresh session for Spec.",
+    );
 
     expect(
-      buildSessionStartModalDescription({
-        scenario: "build_after_human_request_changes",
-      }),
+      buildSessionStartModalDescription({ launchActionId: "build_after_human_request_changes" }),
     ).toBe("Choose how to start fresh or reuse an existing session for Apply Human Changes.");
 
     expect(
-      buildSessionStartModalDescription({
-        scenario: "build_pull_request_generation",
-      }),
+      buildSessionStartModalDescription({ launchActionId: "build_pull_request_generation" }),
     ).toBe(
       "Choose how to reuse an existing session or fork an existing session for Generate Pull Request.",
     );
-  });
-
-  test("maps session-start reasons to post actions", () => {
-    expect(toSessionStartPostAction("create_session")).toBe("none");
-    expect(toSessionStartPostAction("composer_send")).toBe("send_message");
-    expect(toSessionStartPostAction("scenario_kickoff")).toBe("kickoff");
   });
 });

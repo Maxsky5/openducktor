@@ -113,7 +113,6 @@ mod tests {
             "session": {
                 "externalSessionId": "external-session-1",
                 "role": "build",
-                "scenario": "build_default",
                 "startedAt": "2026-02-20T12:00:00Z",
                 "runtimeKind": "opencode",
                 "workingDirectory": "/repo/worktree/task-1"
@@ -136,7 +135,6 @@ mod tests {
             "taskId": "task-1",
             "session": {
                 "role": "build",
-                "scenario": "build_default",
                 "startedAt": "2026-02-20T12:00:00Z",
                 "runtimeKind": "opencode",
                 "workingDirectory": "/repo/worktree/task-1"

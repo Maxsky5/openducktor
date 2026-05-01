@@ -1,4 +1,4 @@
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { useQueries } from "@tanstack/react-query";
 import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
@@ -133,7 +133,7 @@ const EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID: ActiveTaskSessionContextByTa
 const noopOpenSession = (
   _taskId: string,
   _role: AgentRole,
-  _options?: { externalSessionId?: string | null; scenario?: AgentScenario | null },
+  _options?: { externalSessionId?: string | null },
 ): void => {};
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
@@ -182,7 +182,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     taskId: string;
     externalSessionId: string | null;
     role: AgentRole;
-    scenario: AgentScenario | null;
   } | null>(null);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
@@ -191,7 +190,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     sessionParam,
     hasExplicitRoleParam,
     roleFromQuery,
-    scenarioFromQuery,
     isRepoNavigationBoundaryPending,
     navigationPersistenceError,
     retryNavigationPersistence,
@@ -214,12 +212,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     setContextSwitchVersion((current) => current + 1);
   }, []);
   const scheduleSelectionIntent = useCallback(
-    (intent: {
-      taskId: string;
-      externalSessionId: string | null;
-      role: AgentRole;
-      scenario: AgentScenario | null;
-    }): void => {
+    (intent: { taskId: string; externalSessionId: string | null; role: AgentRole }): void => {
       setSelectionIntent(intent);
     },
     [],
@@ -272,7 +265,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     sessionParam,
     hasExplicitRoleParam,
     roleFromQuery,
-    scenarioFromQuery,
     selectionIntent,
     updateQuery: scheduleQueryUpdate,
     agentStudioReadinessState: readiness.agentStudioReadinessState,
@@ -296,26 +288,14 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       return;
     }
 
-    const normalizedQueryScenario = sessionParam ? null : scenarioFromQuery;
-    const normalizedIntentScenario = selectionIntent.externalSessionId
-      ? null
-      : selectionIntent.scenario;
     if (
       selectionIntent.taskId === taskIdParam &&
       selectionIntent.externalSessionId === sessionParam &&
-      selectionIntent.role === roleFromQuery &&
-      normalizedIntentScenario === normalizedQueryScenario
+      selectionIntent.role === roleFromQuery
     ) {
       setSelectionIntent(null);
     }
-  }, [
-    isRepoNavigationBoundaryPending,
-    roleFromQuery,
-    scenarioFromQuery,
-    selectionIntent,
-    sessionParam,
-    taskIdParam,
-  ]);
+  }, [isRepoNavigationBoundaryPending, roleFromQuery, selectionIntent, sessionParam, taskIdParam]);
 
   const openTaskDetails = useCallback((): void => {
     if (!selection.viewSelectedTask) {

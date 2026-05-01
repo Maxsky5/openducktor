@@ -191,7 +191,6 @@ export const registerSession = (input: {
   const summary: AgentSessionSummary = {
     externalSessionId: input.externalSessionId,
     role: input.sessionInput.role,
-    scenario: input.sessionInput.scenario,
     startedAt: input.startedAt,
     status: "running",
   };

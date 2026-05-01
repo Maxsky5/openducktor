@@ -1,11 +1,9 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import {
-  type AgentModelSelection,
-  type AgentRole,
-  type AgentScenario,
-  type AgentSessionHistoryMessage,
-  type AgentUserMessageDisplayPart,
-  defaultAgentScenarioForRole,
+import type {
+  AgentModelSelection,
+  AgentRole,
+  AgentSessionHistoryMessage,
+  AgentUserMessageDisplayPart,
 } from "@openducktor/core";
 import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type {
@@ -58,7 +56,6 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
   return {
     externalSessionId: session.externalSessionId,
     role: session.role,
-    scenario: session.scenario,
     startedAt: session.startedAt,
     runtimeKind,
     workingDirectory: session.workingDirectory,
@@ -80,10 +77,6 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
   };
 };
 
-export const defaultScenarioForRole = (role: AgentRole): AgentScenario => {
-  return defaultAgentScenarioForRole(role);
-};
-
 export const fromPersistedSessionRecord = (
   session: AgentSessionRecord,
   fallbackTaskId: string,
@@ -97,7 +90,6 @@ export const fromPersistedSessionRecord = (
       purpose: "primary",
       taskId: fallbackTaskId,
       role: session.role,
-      scenario: session.scenario,
       // Persisted Beads records are durable session metadata only.
       // Live state must always be derived from the runtime on hydration/reconciliation.
       status: "stopped",

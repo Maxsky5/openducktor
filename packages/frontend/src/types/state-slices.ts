@@ -23,7 +23,6 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
-  AgentScenario,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
@@ -230,9 +229,6 @@ export type AgentStateContextValue = {
           taskId: string;
           role: AgentRole;
           runtimeKind?: RuntimeKind;
-          scenario?: AgentScenario;
-          sendKickoff?: boolean;
-          kickoffTargetBranch?: GitTargetBranch | null;
           startMode: "reuse";
           sourceExternalSessionId: string;
         }
@@ -240,10 +236,7 @@ export type AgentStateContextValue = {
           taskId: string;
           role: AgentRole;
           runtimeKind?: RuntimeKind;
-          scenario?: AgentScenario;
           selectedModel: AgentModelSelection;
-          sendKickoff?: boolean;
-          kickoffTargetBranch?: GitTargetBranch | null;
           startMode: "fresh";
           targetWorkingDirectory?: string | null;
         }
@@ -251,10 +244,7 @@ export type AgentStateContextValue = {
           taskId: string;
           role: AgentRole;
           runtimeKind?: RuntimeKind;
-          scenario?: AgentScenario;
           selectedModel: AgentModelSelection;
-          sendKickoff?: boolean;
-          kickoffTargetBranch?: GitTargetBranch | null;
           startMode: "fork";
           sourceExternalSessionId: string;
         },

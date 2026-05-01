@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import type {
   KanbanSessionPresentationState,
   KanbanTaskSession,
@@ -7,7 +7,6 @@ import type {
 
 export type SessionTargetOptions = {
   externalSessionId?: string | null;
-  scenario?: AgentScenario | null;
 };
 
 type PrimarySessionOrderingCandidate = {
@@ -107,14 +106,12 @@ export const resolveSessionTargetOptions = (
   const historicalSession = resolveLatestHistoricalSessionByRole(task, role);
   const externalSessionId =
     activeSession?.externalSessionId ?? historicalSession?.externalSessionId;
-  const scenario = activeSession?.scenario ?? historicalSession?.scenario;
 
-  if (!externalSessionId && !scenario) {
+  if (!externalSessionId) {
     return undefined;
   }
 
   return {
-    ...(externalSessionId ? { externalSessionId } : {}),
-    ...(scenario ? { scenario } : {}),
+    externalSessionId,
   };
 };

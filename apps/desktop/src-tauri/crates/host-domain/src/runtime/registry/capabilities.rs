@@ -64,6 +64,61 @@ impl fmt::Display for RuntimeSessionStartMode {
     }
 }
 
+struct LaunchStartModeRequirement {
+    id: &'static str,
+    modes: &'static [RuntimeSessionStartMode],
+}
+
+const LAUNCH_START_MODE_REQUIREMENTS: &[LaunchStartModeRequirement] = &[
+    LaunchStartModeRequirement {
+        id: "spec_initial",
+        modes: &[RuntimeSessionStartMode::Fresh],
+    },
+    LaunchStartModeRequirement {
+        id: "planner_initial",
+        modes: &[RuntimeSessionStartMode::Fresh],
+    },
+    LaunchStartModeRequirement {
+        id: "build_implementation_start",
+        modes: &[RuntimeSessionStartMode::Fresh],
+    },
+    LaunchStartModeRequirement {
+        id: "build_after_qa_rejected",
+        modes: &[
+            RuntimeSessionStartMode::Fresh,
+            RuntimeSessionStartMode::Reuse,
+        ],
+    },
+    LaunchStartModeRequirement {
+        id: "build_after_human_request_changes",
+        modes: &[
+            RuntimeSessionStartMode::Fresh,
+            RuntimeSessionStartMode::Reuse,
+        ],
+    },
+    LaunchStartModeRequirement {
+        id: "build_pull_request_generation",
+        modes: &[
+            RuntimeSessionStartMode::Reuse,
+            RuntimeSessionStartMode::Fork,
+        ],
+    },
+    LaunchStartModeRequirement {
+        id: "build_rebase_conflict_resolution",
+        modes: &[
+            RuntimeSessionStartMode::Fresh,
+            RuntimeSessionStartMode::Reuse,
+        ],
+    },
+    LaunchStartModeRequirement {
+        id: "qa_review",
+        modes: &[
+            RuntimeSessionStartMode::Fresh,
+            RuntimeSessionStartMode::Reuse,
+        ],
+    },
+];
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeForkTarget {
@@ -383,25 +438,25 @@ impl RuntimeCapabilities {
             && !self.session_lifecycle.supports_session_fork
         {
             errors.push(
-                "[scenario_scoped] fork start mode requires sessionLifecycle.supportsSessionFork"
+                "[launch_scoped] fork start mode requires sessionLifecycle.supportsSessionFork"
                     .to_string(),
             );
         }
         if self.session_lifecycle.supports_session_fork {
             if !supported_start_modes.contains(&RuntimeSessionStartMode::Fork) {
                 errors.push(
-                    "[scenario_scoped] session fork support requires fork start mode".to_string(),
+                    "[launch_scoped] session fork support requires fork start mode".to_string(),
                 );
             }
             if self.session_lifecycle.fork_targets.is_empty() {
                 errors.push(
-                    "[scenario_scoped] session fork support requires at least one fork target"
+                    "[launch_scoped] session fork support requires at least one fork target"
                         .to_string(),
                 );
             }
         } else if !self.session_lifecycle.fork_targets.is_empty() {
             errors.push(
-                "[scenario_scoped] fork targets must be empty when session fork is unsupported"
+                "[launch_scoped] fork targets must be empty when session fork is unsupported"
                     .to_string(),
             );
         }
@@ -413,33 +468,32 @@ impl RuntimeCapabilities {
         if matches!(self.history.fidelity, RuntimeHistoryFidelity::Item) {
             if !self.history.loadable {
                 errors.push(
-                    "[scenario_scoped] item-level history requires loadable history".to_string(),
+                    "[launch_scoped] item-level history requires loadable history".to_string(),
                 );
             }
             if !self.history.stable_item_ids {
                 errors.push(
-                    "[scenario_scoped] item-level history requires stable item ids".to_string(),
+                    "[launch_scoped] item-level history requires stable item ids".to_string(),
                 );
             }
             if !self.history.stable_item_order {
                 errors.push(
-                    "[scenario_scoped] item-level history requires stable item order".to_string(),
+                    "[launch_scoped] item-level history requires stable item order".to_string(),
                 );
             }
             if !self.history.exposes_completion_state {
                 errors.push(
-                    "[scenario_scoped] item-level history requires completion state exposure"
+                    "[launch_scoped] item-level history requires completion state exposure"
                         .to_string(),
                 );
             }
         }
         if !self.history.loadable {
             if !matches!(self.history.fidelity, RuntimeHistoryFidelity::None) {
-                errors
-                    .push("[scenario_scoped] unloaded history must use none fidelity".to_string());
+                errors.push("[launch_scoped] unloaded history must use none fidelity".to_string());
             }
             if !matches!(self.history.replay, RuntimeHistoryReplay::None) {
-                errors.push("[scenario_scoped] unloaded history must use none replay".to_string());
+                errors.push("[launch_scoped] unloaded history must use none replay".to_string());
             }
             if !self.history.hydrated_event_types.is_empty() {
                 errors.push(
@@ -619,26 +673,26 @@ impl RuntimeCapabilities {
         Vec::new()
     }
 
-    pub(super) fn scenario_config_errors(&self) -> Vec<String> {
-        let required_pull_request_modes = [
-            RuntimeSessionStartMode::Reuse,
-            RuntimeSessionStartMode::Fork,
-        ];
-        let missing_pull_request_modes = required_pull_request_modes
+    pub(super) fn launch_config_errors(&self) -> Vec<String> {
+        LAUNCH_START_MODE_REQUIREMENTS
             .iter()
-            .copied()
-            .filter(|mode| !self.session_lifecycle.supported_start_modes.contains(mode))
-            .collect::<Vec<_>>();
-        if missing_pull_request_modes.is_empty() {
-            return Vec::new();
-        }
-        vec![format!(
-            "[scenario_scoped] scenario build_pull_request_generation requires start modes: {}",
-            missing_pull_request_modes
-                .into_iter()
-                .map(|mode| mode.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        )]
+            .filter_map(|requirement| {
+                let missing_modes = requirement
+                    .modes
+                    .iter()
+                    .copied()
+                    .filter(|mode| !self.session_lifecycle.supported_start_modes.contains(mode))
+                    .map(|mode| mode.to_string())
+                    .collect::<Vec<_>>();
+                if missing_modes.is_empty() {
+                    return None;
+                }
+                Some(format!(
+                    "[launch_scoped] launch action {} requires start modes: {}",
+                    requirement.id,
+                    missing_modes.join(", ")
+                ))
+            })
+            .collect()
     }
 }

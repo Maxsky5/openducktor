@@ -79,14 +79,14 @@ describe("session-tool-parts", () => {
       },
     ] as const;
 
-    for (const scenario of cases) {
+    for (const testCase of cases) {
       const decision = resolveToolRefreshDecision(
-        buildToolPart(scenario.tool),
-        scenario.status,
-        scenario.previousStatus,
-        scenario.aliases,
+        buildToolPart(testCase.tool),
+        testCase.status,
+        testCase.previousStatus,
+        testCase.aliases,
       );
-      expect(decision).toEqual(scenario.expected);
+      expect(decision).toEqual(testCase.expected);
     }
   });
 });

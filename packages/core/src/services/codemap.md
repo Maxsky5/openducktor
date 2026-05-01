@@ -15,7 +15,7 @@ Reusable core workflow services for runtime connection validation, OpenDucktor t
 - `odt-workflow-tools.ts` resolves canonical and aliased `odt_*` tool ids and role-scoped tool selections.
 - `runtime-connections.ts` validates runtime connection presence, type, endpoint, and working directory.
 - `planner-spec-service.ts`, `agent-session-todos.ts`, `agent-system-prompts.ts`, and `agent-user-message-parts.ts` transform workflow data into core-facing structures.
-- `agent-system-prompts.ts` assembles role, scenario, kickoff, message, and permission prompts from task context, git context, workflow guards, and repo guidance.
+- `agent-system-prompts.ts` assembles role, kickoff, message, and permission prompts from task context, git context, workflow guards, and repo guidance.
 
 ## Integration Points
 

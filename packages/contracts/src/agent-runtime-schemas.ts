@@ -598,17 +598,17 @@ export type RuntimeCapabilityClass =
   | "baseline"
   | "workflow"
   | "role_scoped"
-  | "scenario_scoped"
+  | "launch_scoped"
   | "optional_enhancement";
 
 export const runtimeCapabilityClasses = {
   "workflow.supportsOdtWorkflowTools": "workflow",
   "workflow.supportedScopes": "role_scoped",
   "sessionLifecycle.supportedStartModes": "baseline",
-  "sessionLifecycle.supportsSessionFork": "scenario_scoped",
+  "sessionLifecycle.supportsSessionFork": "launch_scoped",
   "sessionLifecycle.supportsQueuedUserMessages": "optional_enhancement",
-  "history.fidelity": "scenario_scoped",
-  "history.replay": "scenario_scoped",
+  "history.fidelity": "launch_scoped",
+  "history.replay": "launch_scoped",
   "approvals.supportedRequestTypes": "workflow",
   "approvals.supportedReplyOutcomes": "workflow",
   "approvals.readOnlyAutoRejectSafe": "workflow",

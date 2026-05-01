@@ -19,7 +19,6 @@ const buildSession = (overrides: Partial<ReturnType<typeof createAgentSessionFix
     runtimeKind: "opencode",
     taskId: "task-1",
     role: "build",
-    scenario: "build_implementation_start",
     status: "running",
     ...overrides,
   });
@@ -49,7 +48,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
     externalSessionId: "planner-1",
     taskId: "task-1",
     role: "planner",
-    scenario: "planner_initial",
     status: "running",
   });
 
@@ -97,8 +95,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         expect.objectContaining({
           taskId: "task-1",
           role: "build",
-          scenario: "build_rebase_conflict_resolution",
-          reason: "rebase_conflict_resolution",
           postStartAction: "send_message",
           initialStartMode: "reuse",
           initialSourceExternalSessionId: "build-1",
@@ -182,7 +178,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(resolved).toBe(true);
       expect(args.startSessionRequest).toHaveBeenCalledWith(
         expect.objectContaining({
-          scenario: "build_rebase_conflict_resolution",
           initialStartMode: "reuse",
           initialSourceExternalSessionId: "build-1",
           targetWorkingDirectory: "/repo/worktrees/task-1",
@@ -217,7 +212,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(resolved).toBe(true);
       expect(args.startSessionRequest).toHaveBeenCalledWith(
         expect.objectContaining({
-          scenario: "build_rebase_conflict_resolution",
           initialStartMode: "fresh",
           targetWorkingDirectory: "/repo/worktrees/task-1",
         }),

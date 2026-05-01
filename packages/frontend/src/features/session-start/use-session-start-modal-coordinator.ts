@@ -1,19 +1,12 @@
 import type { GitBranch } from "@openducktor/contracts";
-import {
-  type AgentModelCatalog,
-  type AgentRole,
-  type AgentScenario,
-  defaultStartModeForScenario,
-  getAgentScenarioDefinition,
-} from "@openducktor/core";
+import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import { orderStartModesForDisplay } from "./session-start-display";
-import type { SessionStartModalIntent, SessionStartPostAction } from "./session-start-modal-types";
-import { SCENARIO_LABELS } from "./session-start-prompts";
-import type { SessionStartRequestReason } from "./session-start-types";
+import { getSessionLaunchAction, type SessionLaunchActionId } from "./session-start-launch-options";
+import type { SessionStartModalIntent } from "./session-start-modal-types";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
 
 const startModeLabelFor = (startMode: "fresh" | "reuse" | "fork"): string => {
@@ -32,14 +25,13 @@ export const buildSessionStartModalTitle = (role: AgentRole): string => {
 };
 
 export const buildSessionStartModalDescription = ({
-  scenario,
+  launchActionId,
 }: {
-  scenario: AgentScenario;
+  launchActionId: SessionLaunchActionId;
 }): string => {
-  const scenarioLabel = SCENARIO_LABELS[scenario] ?? scenario;
-  const allowedStartModes = orderStartModesForDisplay(
-    getAgentScenarioDefinition(scenario).allowedStartModes,
-  );
+  const launchAction = getSessionLaunchAction(launchActionId);
+  const actionLabel = launchAction.label;
+  const allowedStartModes = orderStartModesForDisplay(launchAction.allowedStartModes);
   if (allowedStartModes.length > 1) {
     const allowedModeLabels = allowedStartModes.map((mode) => {
       if (mode === "fresh") {
@@ -51,21 +43,9 @@ export const buildSessionStartModalDescription = ({
       return "fork an existing session";
     });
     const conjunction = allowedModeLabels.length === 2 ? " or " : ", ";
-    return `Choose how to ${allowedModeLabels.join(conjunction)} for ${scenarioLabel}.`;
+    return `Choose how to ${allowedModeLabels.join(conjunction)} for ${actionLabel}.`;
   }
-  return `${startModeLabelFor(defaultStartModeForScenario(scenario))} for ${scenarioLabel}.`;
-};
-
-export const toSessionStartPostAction = (
-  reason: SessionStartRequestReason,
-): SessionStartPostAction => {
-  if (reason === "composer_send" || reason === "rebase_conflict_resolution") {
-    return "send_message";
-  }
-  if (reason === "scenario_kickoff") {
-    return "kickoff";
-  }
-  return "none";
+  return `${startModeLabelFor(launchAction.defaultStartMode)} for ${actionLabel}.`;
 };
 
 export type SessionStartModalOpenRequest = Omit<
@@ -113,7 +93,7 @@ export function useSessionStartModalCoordinator({
         description:
           request.description ??
           buildSessionStartModalDescription({
-            scenario: request.scenario,
+            launchActionId: request.launchActionId,
           }),
       });
     },

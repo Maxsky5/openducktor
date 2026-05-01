@@ -144,7 +144,6 @@ pub struct AgentSessionModelSelection {
 pub struct AgentSessionDocument {
     pub external_session_id: String,
     pub role: String,
-    pub scenario: String,
     pub started_at: String,
     pub runtime_kind: String,
     pub working_directory: String,
@@ -156,7 +155,6 @@ pub struct AgentSessionDocument {
 struct AgentSessionDocumentSerde {
     external_session_id: String,
     role: String,
-    scenario: String,
     started_at: String,
     runtime_kind: String,
     working_directory: String,
@@ -170,11 +168,10 @@ impl Serialize for AgentSessionDocument {
         S: Serializer,
     {
         use serde::ser::SerializeStruct;
-        let field_count = if self.selected_model.is_some() { 7 } else { 6 };
+        let field_count = if self.selected_model.is_some() { 6 } else { 5 };
         let mut state = serializer.serialize_struct("AgentSessionDocument", field_count)?;
         state.serialize_field("externalSessionId", &self.external_session_id)?;
         state.serialize_field("role", &self.role)?;
-        state.serialize_field("scenario", &self.scenario)?;
         state.serialize_field("startedAt", &self.started_at)?;
         state.serialize_field("runtimeKind", &self.runtime_kind)?;
         state.serialize_field("workingDirectory", &self.working_directory)?;
@@ -194,7 +191,6 @@ impl<'de> Deserialize<'de> for AgentSessionDocument {
         let AgentSessionDocumentSerde {
             external_session_id,
             role,
-            scenario,
             started_at,
             runtime_kind,
             working_directory,
@@ -211,7 +207,6 @@ impl<'de> Deserialize<'de> for AgentSessionDocument {
         Ok(Self {
             external_session_id,
             role,
-            scenario,
             started_at,
             runtime_kind,
             working_directory,

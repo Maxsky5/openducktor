@@ -1,6 +1,5 @@
 import type {
   AgentSessionRecord,
-  GitTargetBranch,
   RepoPromptOverrides,
   TaskCard,
   TaskWorktreeSummary,
@@ -9,7 +8,6 @@ import type {
   AgentEnginePort,
   AgentModelSelection,
   AgentRole,
-  AgentScenario,
   AgentUserMessagePart,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
@@ -20,30 +18,21 @@ export type StartAgentSessionInput =
   | {
       taskId: string;
       role: AgentRole;
-      scenario?: AgentScenario;
       selectedModel?: never;
-      sendKickoff?: boolean;
-      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "reuse";
       sourceExternalSessionId: string;
     }
   | {
       taskId: string;
       role: AgentRole;
-      scenario?: AgentScenario;
       selectedModel: AgentModelSelection;
-      sendKickoff?: boolean;
-      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "fresh";
       targetWorkingDirectory?: string | null;
     }
   | {
       taskId: string;
       role: AgentRole;
-      scenario?: AgentScenario;
       selectedModel: AgentModelSelection;
-      sendKickoff?: boolean;
-      kickoffTargetBranch?: GitTargetBranch | null;
       startMode: "fork";
       sourceExternalSessionId: string;
     };
@@ -86,7 +75,6 @@ export type TaskDependencies = {
 
 export type ModelDependencies = {
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-  loadRepoDefaultTargetBranch?: (workspaceId: string) => Promise<GitTargetBranch | null>;
 };
 
 export type RepoDependencies = {
@@ -111,7 +99,6 @@ export type SessionStartTags = {
   repoPath: string;
   taskId: string;
   role: AgentRole;
-  scenario: AgentScenario;
   externalSessionId: string;
 };
 
@@ -125,7 +112,6 @@ export type StartSessionContext = {
 
 export type StartedSessionContext = StartSessionContext & {
   summary: SessionStartSummary;
-  resolvedScenario: AgentScenario;
 };
 
 export type StartSessionExecutionDependencies = Pick<
@@ -133,9 +119,7 @@ export type StartSessionExecutionDependencies = Pick<
   "session" | "runtime" | "task" | "model"
 >;
 
-export type StartSessionCreationInput = {
-  scenario: AgentScenario | undefined;
-} & (
+export type StartSessionCreationInput =
   | {
       startMode: "reuse";
       selectedModel?: never;
@@ -150,13 +134,11 @@ export type StartSessionCreationInput = {
       startMode: "fork";
       selectedModel: AgentModelSelection;
       sourceExternalSessionId: string;
-    }
-);
+    };
 
 export type ResolvedRuntimeAndModel = {
   taskCard: TaskCard;
   runtime: RuntimeInfo;
-  resolvedScenario: AgentScenario;
   systemPrompt: string;
   promptOverrides: RepoPromptOverrides;
 };

@@ -10,7 +10,6 @@ const sessionFixture: AgentSessionState = {
   taskId: "task-1",
   repoPath: "/tmp/repo",
   role: "build",
-  scenario: "build_implementation_start",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,

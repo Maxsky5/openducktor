@@ -153,7 +153,6 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
             "sessionId": "session-opencode-1",
             "externalSessionId": "session-opencode-1",
             "role": "spec",
-            "scenario": "spec_initial",
             "startedAt": "2026-02-18T17:20:00Z",
             "runtimeKind": "opencode",
             "workingDirectory": "/repo",
@@ -179,7 +178,6 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
             "sessionId": "session-opencode-1",
             "externalSessionId": "session-opencode-1",
             "role": "spec",
-            "scenario": "spec_initial",
             "startedAt": "2026-02-18T17:20:00Z",
             "runtimeKind": "opencode",
             "workingDirectory": "/repo",
@@ -200,7 +198,6 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
         {
             "sessionId": "legacy-session-only",
             "role": "planner",
-            "scenario": "planner_revision",
             "startedAt": "2026-02-18T17:22:00Z",
             "runtimeKind": "opencode",
             "workingDirectory": "/repo",
@@ -217,7 +214,6 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
             "sessionId": "legacy-session",
             "externalSessionId": "other-session",
             "role": "planner",
-            "scenario": "planner_revision",
             "startedAt": "2026-02-18T17:22:00Z",
             "runtimeKind": "opencode",
             "workingDirectory": "/repo",
@@ -234,7 +230,6 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
         {
             "externalSessionId": "   ",
             "role": "planner",
-            "scenario": "planner_initial",
             "startedAt": "2026-02-18T17:22:00Z",
             "runtimeKind": "opencode",
             "workingDirectory": "/repo",
@@ -245,21 +240,6 @@ fn markdown_and_qa_entry_parsers_reject_invalid_entries() {
     assert!(blank_external_id_error
         .to_string()
         .contains("externalSessionId is required"));
-
-    let legacy_scenario_sessions = parse_agent_sessions(&json!([
-        {
-            "externalSessionId": "legacy-planner-session",
-            "role": "planner",
-            "scenario": "planner_revision",
-            "startedAt": "2026-02-18T17:22:00Z",
-            "runtimeKind": "opencode",
-            "workingDirectory": "/repo",
-            "selectedModel": null
-        }
-    ]))
-    .expect("legacy scenario agent sessions");
-    assert_eq!(legacy_scenario_sessions.len(), 1);
-    assert_eq!(legacy_scenario_sessions[0].scenario, "planner_initial");
 }
 
 #[test]
@@ -382,7 +362,6 @@ fn metadata_parsing_benchmark_scaffold() {
                 json!({
                     "externalSessionId": format!("session-opencode-{index}"),
                     "role": "build",
-                    "scenario": "build_default",
                     "startedAt": "2026-02-18T17:20:00Z",
                     "runtimeKind": "opencode",
                     "workingDirectory": "/repo",

@@ -10,7 +10,6 @@ const createState = (
   overrides: Partial<HumanReviewFeedbackState> = {},
 ): HumanReviewFeedbackState => ({
   taskId: "TASK-1",
-  scenario: "build_after_human_request_changes",
   message: "Apply the requested changes.",
   ...overrides,
 });

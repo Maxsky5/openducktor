@@ -238,7 +238,6 @@ export const createEnsureSessionReady = ({
     const promptContext = await loadSessionPromptContext({
       workspaceId,
       role: session.role,
-      scenario: session.scenario,
       task,
       loadRepoPromptOverrides,
     });
@@ -257,7 +256,6 @@ export const createEnsureSessionReady = ({
       workingDirectory: runtime.workingDirectory,
       taskId: session.taskId,
       role: session.role,
-      scenario: session.scenario,
       systemPrompt: promptContext.systemPrompt,
       ...(session.selectedModel ? { model: session.selectedModel } : {}),
     });

@@ -36,12 +36,10 @@ export const createSessionStartTags = ({
   repoPath,
   taskId,
   role,
-  resolvedScenario,
   summary,
 }: StartedSessionContext): SessionStartTags => ({
   repoPath,
   taskId,
   role,
-  scenario: resolvedScenario,
   externalSessionId: summary.externalSessionId,
 });

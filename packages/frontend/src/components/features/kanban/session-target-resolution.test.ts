@@ -15,7 +15,6 @@ describe("session-target-resolution", () => {
         {
           externalSessionId: "external-build-newer",
           role: "build",
-          scenario: "build_implementation_start",
           startedAt: "2026-03-21T10:00:00.000Z",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktrees/build",
@@ -24,7 +23,6 @@ describe("session-target-resolution", () => {
         {
           externalSessionId: "external-spec",
           role: "spec",
-          scenario: "spec_initial",
           startedAt: "2026-03-20T10:00:00.000Z",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktrees/spec",
@@ -33,7 +31,6 @@ describe("session-target-resolution", () => {
         {
           externalSessionId: "external-build-older",
           role: "build",
-          scenario: "build_after_qa_rejected",
           startedAt: "2026-03-19T10:00:00.000Z",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktrees/build-older",
@@ -51,7 +48,6 @@ describe("session-target-resolution", () => {
         runtimeKind: "opencode",
         externalSessionId: "build-older",
         role: "build",
-        scenario: "build_implementation_start",
         status: "running",
         startedAt: "2026-03-20T10:00:00.000Z",
         presentationState: "active",
@@ -60,7 +56,6 @@ describe("session-target-resolution", () => {
         runtimeKind: "opencode",
         externalSessionId: "build-newer",
         role: "build",
-        scenario: "build_after_human_request_changes",
         status: "running",
         startedAt: "2026-03-21T10:00:00.000Z",
         presentationState: "active",
@@ -76,7 +71,6 @@ describe("session-target-resolution", () => {
         runtimeKind: "opencode",
         externalSessionId: "build-running",
         role: "build",
-        scenario: "build_implementation_start",
         status: "running",
         startedAt: "2026-03-21T10:00:00.000Z",
         presentationState: "active",
@@ -85,7 +79,6 @@ describe("session-target-resolution", () => {
         runtimeKind: "opencode",
         externalSessionId: "build-waiting",
         role: "build",
-        scenario: "build_implementation_start",
         status: "idle",
         startedAt: "2026-03-20T10:00:00.000Z",
         presentationState: "waiting_input",
@@ -104,7 +97,6 @@ describe("session-target-resolution", () => {
         {
           externalSessionId: "external-spec-history",
           role: "spec",
-          scenario: "spec_initial",
           startedAt: "2026-03-20T10:00:00.000Z",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktrees/spec",
@@ -117,7 +109,6 @@ describe("session-target-resolution", () => {
         runtimeKind: "opencode",
         externalSessionId: "spec-active",
         role: "spec",
-        scenario: "spec_initial",
         status: "running",
         startedAt: "2026-03-21T10:00:00.000Z",
         presentationState: "active",
@@ -128,7 +119,6 @@ describe("session-target-resolution", () => {
 
     expect(options).toEqual({
       externalSessionId: "spec-active",
-      scenario: "spec_initial",
     });
   });
 
@@ -139,7 +129,6 @@ describe("session-target-resolution", () => {
         {
           externalSessionId: "external-qa-history",
           role: "qa",
-          scenario: "qa_review",
           startedAt: "2026-03-18T10:00:00.000Z",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktrees/qa",
@@ -150,7 +139,6 @@ describe("session-target-resolution", () => {
 
     expect(resolveSessionTargetOptions(task, [], "qa")).toEqual({
       externalSessionId: "external-qa-history",
-      scenario: "qa_review",
     });
   });
 });

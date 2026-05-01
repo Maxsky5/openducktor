@@ -5,7 +5,6 @@ describe("settings-modal-constants", () => {
   test("maps template ids to prompt role tabs", () => {
     expect(resolvePromptRoleTab("system.role.spec.base")).toBe("spec");
     expect(resolvePromptRoleTab("kickoff.build_after_qa_rejected")).toBe("build");
-    expect(resolvePromptRoleTab("system.scenario.qa_review")).toBe("qa");
     expect(resolvePromptRoleTab("system.shared.workflow_guards")).toBe("shared");
   });
 

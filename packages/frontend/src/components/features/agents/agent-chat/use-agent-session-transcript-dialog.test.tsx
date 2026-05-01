@@ -10,7 +10,7 @@ let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;
 
 const removeAgentSession = mock(async () => {});
-let agentSessionState: Pick<AgentSessionState, "purpose" | "role" | "scenario"> | null = null;
+let agentSessionState: Pick<AgentSessionState, "purpose" | "role"> | null = null;
 let latestDialogProps: {
   externalSessionId: string | null;
   source: RuntimeSessionTranscriptSource | null;
@@ -116,7 +116,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
     agentSessionState = {
       purpose: "transcript",
       role: "build",
-      scenario: "build_implementation_start",
     };
 
     const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
@@ -164,7 +163,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
     agentSessionState = {
       purpose: "primary",
       role: "build",
-      scenario: "build_implementation_start",
     };
 
     const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
