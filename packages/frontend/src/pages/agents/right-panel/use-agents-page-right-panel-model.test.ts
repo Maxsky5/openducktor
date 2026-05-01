@@ -3,7 +3,69 @@ import {
   resolveBuildToolsOpenInTarget,
   resolveBuildToolsSelectedTaskId,
 } from "@/features/agent-studio-build-tools/agent-studio-build-tools-worktree-snapshot";
+import type { DiffDataState } from "@/features/agent-studio-git";
+import {
+  INVALID_TASK_TARGET_BRANCH_LABEL,
+  resolveTaskTargetBranchState,
+} from "@/lib/target-branch";
 import { createTaskCardFixture } from "../agent-studio-test-utils";
+import { buildAgentsPageDiffModel } from "./use-agents-page-right-panel-model";
+
+type BuildDiffModelArgs = Parameters<typeof buildAgentsPageDiffModel>[0];
+
+const refreshDiff = async (_mode?: string): Promise<void> => {};
+
+const createEmptyScopeState = (): DiffDataState["scopeStatesByScope"]["target"] => ({
+  branch: null,
+  gitConflict: null,
+  fileDiffs: [],
+  fileStatuses: [],
+  uncommittedFileCount: 0,
+  commitsAheadBehind: null,
+  upstreamAheadBehind: null,
+  upstreamStatus: "tracking",
+  error: null,
+  hashVersion: null,
+  statusHash: null,
+  diffHash: null,
+});
+
+const createDiffData = (): DiffDataState => ({
+  branch: "main",
+  worktreePath: "/repo",
+  targetBranch: "origin/main",
+  diffScope: "uncommitted",
+  gitConflict: null,
+  scopeStatesByScope: {
+    target: createEmptyScopeState(),
+    uncommitted: createEmptyScopeState(),
+  },
+  loadedScopesByScope: { target: false, uncommitted: false },
+  commitsAheadBehind: null,
+  upstreamAheadBehind: null,
+  upstreamStatus: "tracking",
+  fileDiffs: [],
+  fileStatuses: [],
+  statusSnapshotKey: null,
+  hashVersion: null,
+  statusHash: null,
+  diffHash: null,
+  uncommittedFileCount: 0,
+  isLoading: false,
+  error: null,
+  refresh: refreshDiff,
+  setDiffScope: () => {},
+});
+
+const createGitActions = (
+  overrides: Partial<BuildDiffModelArgs["gitActions"]> = {},
+): BuildDiffModelArgs["gitActions"] =>
+  ({
+    isGitActionsLocked: false,
+    gitActionsLockReason: null,
+    showLockReasonBanner: false,
+    ...overrides,
+  }) as BuildDiffModelArgs["gitActions"];
 
 describe("resolveBuildToolsSelectedTaskId", () => {
   test("uses the stable tab task id while selected task hydration is still pending", () => {
@@ -168,5 +230,37 @@ describe("resolveBuildToolsOpenInTarget", () => {
       path: "/repo/.worktrees/task-24",
       disabledReason: null,
     });
+  });
+});
+
+describe("buildAgentsPageDiffModel", () => {
+  test("locks git actions from snapshot target-branch validation", () => {
+    const validationError = "Invalid openducktor.targetBranch metadata: missing field `branch`.";
+    const diffModel = buildAgentsPageDiffModel({
+      branches: [],
+      buildToolsSnapshot: {
+        diffData: createDiffData(),
+        gitPanelContextMode: "repository",
+        openInTarget: { path: "/repo", disabledReason: null },
+        resolvedGitPanelBranch: "main",
+        targetBranchState: resolveTaskTargetBranchState({
+          taskTargetBranch: null,
+          taskTargetBranchError: validationError,
+          defaultTargetBranch: null,
+        }),
+      },
+      gitActions: createGitActions(),
+      viewSelectedTask: createTaskCardFixture({
+        id: "task-24",
+        targetBranchError: validationError,
+      }),
+      detectingPullRequestTaskId: null,
+      onDetectPullRequest: () => {},
+    });
+
+    expect(diffModel.targetBranch).toBe(INVALID_TASK_TARGET_BRANCH_LABEL);
+    expect(diffModel.isGitActionsLocked).toBe(true);
+    expect(diffModel.gitActionsLockReason).toBe(validationError);
+    expect(diffModel.showLockReasonBanner).toBe(true);
   });
 });

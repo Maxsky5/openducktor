@@ -35,6 +35,101 @@ export type UseAgentsPageRightPanelModelArgs = {
   onResolveGitConflict: Parameters<typeof useAgentStudioGitActions>[0]["onResolveGitConflict"];
 };
 
+type BuildAgentsPageDiffModelSnapshot = Pick<
+  ReturnType<typeof useAgentStudioBuildToolsWorktreeSnapshot>,
+  | "diffData"
+  | "gitPanelContextMode"
+  | "openInTarget"
+  | "resolvedGitPanelBranch"
+  | "targetBranchState"
+>;
+
+type BuildAgentsPageDiffModelArgs = {
+  branches: GitBranch[];
+  buildToolsSnapshot: BuildAgentsPageDiffModelSnapshot;
+  gitActions: ReturnType<typeof useAgentStudioGitActions>;
+  viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
+  setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
+  detectingPullRequestTaskId: string | null;
+  onDetectPullRequest: (taskId: string) => void;
+  openDirectoryInTool?: (path: string, toolId: SystemOpenInToolId) => Promise<void>;
+};
+
+export function buildAgentsPageDiffModel({
+  branches,
+  buildToolsSnapshot,
+  gitActions,
+  viewSelectedTask,
+  setTaskTargetBranch,
+  detectingPullRequestTaskId,
+  onDetectPullRequest,
+  openDirectoryInTool = hostClient.systemOpenDirectoryInTool,
+}: BuildAgentsPageDiffModelArgs) {
+  const { diffData, gitPanelContextMode, openInTarget, resolvedGitPanelBranch, targetBranchState } =
+    buildToolsSnapshot;
+  const configuredTargetBranch = canonicalTargetBranch(targetBranchState.effectiveTargetBranch);
+  const targetBranchOptions = toBranchSelectorOptions(branches, {
+    valueFormat: "full_ref",
+    includeOptions: configuredTargetBranch
+      ? [
+          {
+            value: targetBranchState.selectionValue,
+            label: configuredTargetBranch,
+            secondaryLabel: "configured",
+            searchKeywords: configuredTargetBranch.split("/").filter(Boolean),
+          },
+        ]
+      : [],
+  });
+
+  return {
+    ...diffData,
+    contextMode: gitPanelContextMode,
+    branch: resolvedGitPanelBranch,
+    openInTargetPath: openInTarget.path,
+    openInDisabledReason: openInTarget.disabledReason,
+    ...(openInTarget.path
+      ? {
+          openDirectoryInTool: (toolId: SystemOpenInToolId) =>
+            openDirectoryInTool(openInTarget.path as string, toolId),
+        }
+      : {}),
+    ...(targetBranchState.validationError
+      ? {
+          targetBranch: targetBranchState.displayTargetBranch,
+        }
+      : {}),
+    pullRequest: viewSelectedTask?.pullRequest ?? null,
+    ...(viewSelectedTask && setTaskTargetBranch
+      ? {
+          targetBranchOptions,
+          targetBranchSelectionValue: targetBranchState.selectionValue,
+          onUpdateTargetBranch: async (selection: string) => {
+            await setTaskTargetBranch(viewSelectedTask.id, targetBranchFromSelection(selection));
+          },
+        }
+      : {}),
+    ...(viewSelectedTask && detectingPullRequestTaskId === viewSelectedTask.id
+      ? { isDetectingPullRequest: true }
+      : {}),
+    ...(viewSelectedTask &&
+    !viewSelectedTask.pullRequest &&
+    canDetectTaskPullRequest(viewSelectedTask)
+      ? {
+          onDetectPullRequest: () => onDetectPullRequest(viewSelectedTask.id),
+        }
+      : {}),
+    ...gitActions,
+    ...(targetBranchState.validationError
+      ? {
+          isGitActionsLocked: true,
+          gitActionsLockReason: targetBranchState.validationError,
+          showLockReasonBanner: true,
+        }
+      : {}),
+  };
+}
+
 export function useAgentsPageRightPanelModel({
   activeWorkspace,
   branches = [],
@@ -71,8 +166,7 @@ export function useAgentsPageRightPanelModel({
     repoSettings,
     worktreeRecoverySignal,
   });
-  const { diffData, devServerModel, gitPanelContextMode, resolvedGitPanelBranch } =
-    buildToolsSnapshot;
+  const { diffData, devServerModel, resolvedGitPanelBranch } = buildToolsSnapshot;
 
   const isActiveBuilderWorking =
     sessionRole === "build" && (sessionStatus === "running" || sessionStatus === "starting");
@@ -96,82 +190,21 @@ export function useAgentsPageRightPanelModel({
     ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
   });
   const diffModel = useMemo(() => {
-    const taskTargetBranchState = buildToolsSnapshot.targetBranchState;
-    const configuredTargetBranch = canonicalTargetBranch(
-      taskTargetBranchState.effectiveTargetBranch,
-    );
-    const targetBranchOptions = toBranchSelectorOptions(branches, {
-      valueFormat: "full_ref",
-      includeOptions: configuredTargetBranch
-        ? [
-            {
-              value: taskTargetBranchState.selectionValue,
-              label: configuredTargetBranch,
-              secondaryLabel: "configured",
-              searchKeywords: configuredTargetBranch.split("/").filter(Boolean),
-            },
-          ]
-        : [],
+    return buildAgentsPageDiffModel({
+      branches,
+      buildToolsSnapshot,
+      gitActions,
+      viewSelectedTask,
+      detectingPullRequestTaskId,
+      onDetectPullRequest,
+      ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
     });
-
-    const openInTarget = buildToolsSnapshot.openInTarget;
-
-    return {
-      ...diffData,
-      contextMode: gitPanelContextMode,
-      branch: resolvedGitPanelBranch,
-      openInTargetPath: openInTarget.path,
-      openInDisabledReason: openInTarget.disabledReason,
-      ...(openInTarget.path
-        ? {
-            openDirectoryInTool: (toolId: SystemOpenInToolId) =>
-              hostClient.systemOpenDirectoryInTool(openInTarget.path as string, toolId),
-          }
-        : {}),
-      ...(taskTargetBranchState.validationError
-        ? {
-            targetBranch: taskTargetBranchState.displayTargetBranch,
-          }
-        : {}),
-      pullRequest: viewSelectedTask?.pullRequest ?? null,
-      ...(viewSelectedTask && setTaskTargetBranch
-        ? {
-            targetBranchOptions,
-            targetBranchSelectionValue: taskTargetBranchState.selectionValue,
-            onUpdateTargetBranch: async (selection: string) => {
-              await setTaskTargetBranch(viewSelectedTask.id, targetBranchFromSelection(selection));
-            },
-          }
-        : {}),
-      ...(viewSelectedTask && detectingPullRequestTaskId === viewSelectedTask.id
-        ? { isDetectingPullRequest: true }
-        : {}),
-      ...(viewSelectedTask &&
-      !viewSelectedTask.pullRequest &&
-      canDetectTaskPullRequest(viewSelectedTask)
-        ? {
-            onDetectPullRequest: () => onDetectPullRequest(viewSelectedTask.id),
-          }
-        : {}),
-      ...gitActions,
-      ...(taskTargetBranchState.validationError
-        ? {
-            isGitActionsLocked: true,
-            gitActionsLockReason: taskTargetBranchState.validationError,
-            showLockReasonBanner: true,
-          }
-        : {}),
-    };
   }, [
-    buildToolsSnapshot.openInTarget,
-    buildToolsSnapshot.targetBranchState,
+    buildToolsSnapshot,
     branches,
-    diffData,
     gitActions,
-    gitPanelContextMode,
     onDetectPullRequest,
     detectingPullRequestTaskId,
-    resolvedGitPanelBranch,
     setTaskTargetBranch,
     viewSelectedTask,
   ]);

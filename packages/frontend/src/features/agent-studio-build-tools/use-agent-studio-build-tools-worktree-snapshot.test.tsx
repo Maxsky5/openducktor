@@ -8,7 +8,10 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { useAgentStudioBuildToolsWorktreeSnapshot } from "./use-agent-studio-build-tools-worktree-snapshot";
+import {
+  createAgentStudioBuildToolsWorktreeSnapshotHookForTest,
+  type useAgentStudioBuildToolsWorktreeSnapshot,
+} from "./use-agent-studio-build-tools-worktree-snapshot";
 
 enableReactActEnvironment();
 if (typeof document === "undefined") {
@@ -57,6 +60,22 @@ const taskWorktreeGetMock = mock(
   }),
 );
 
+type SnapshotDependencies = Parameters<
+  typeof createAgentStudioBuildToolsWorktreeSnapshotHookForTest
+>[0];
+
+const useSnapshotHookForTest = createAgentStudioBuildToolsWorktreeSnapshotHookForTest({
+  taskWorktreeHost: {
+    taskWorktreeGet: taskWorktreeGetMock,
+  },
+  useDiffData: useAgentStudioDiffDataMock as unknown as NonNullable<
+    SnapshotDependencies["useDiffData"]
+  >,
+  useDevServerPanel: useAgentStudioDevServerPanelMock as unknown as NonNullable<
+    SnapshotDependencies["useDevServerPanel"]
+  >,
+});
+
 type UseSnapshotHook = typeof useAgentStudioBuildToolsWorktreeSnapshot;
 
 const createEmptyScopeState = (): DiffDataState["scopeStatesByScope"]["target"] => ({
@@ -93,18 +112,11 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isViewSessionHistoryHydrating: false,
   repoSettings: null,
   worktreeRecoverySignal: 0,
-  taskWorktreeHost: {
-    taskWorktreeGet: taskWorktreeGetMock,
-  },
-  useDiffDataHook: useAgentStudioDiffDataMock as NonNullable<HookArgs["useDiffDataHook"]>,
-  useDevServerPanelHook: useAgentStudioDevServerPanelMock as unknown as NonNullable<
-    HookArgs["useDevServerPanelHook"]
-  >,
   ...overrides,
 });
 
 const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, initialProps);
+  createSharedHookHarness(useSnapshotHookForTest, initialProps);
 
 beforeEach(async () => {
   await clearAppQueryClient();

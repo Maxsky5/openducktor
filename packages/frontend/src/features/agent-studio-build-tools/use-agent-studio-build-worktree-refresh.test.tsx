@@ -1,18 +1,18 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
-  sessionMessageAt,
-  sessionMessagesToArray,
-} from "@/test-utils/session-message-test-helpers";
-import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+} from "@/pages/agents/agent-studio-test-utils";
+import {
+  sessionMessageAt,
+  sessionMessagesToArray,
+} from "@/test-utils/session-message-test-helpers";
 
 enableReactActEnvironment();
 
 type UseAgentStudioBuildWorktreeRefreshHook =
-  typeof import("@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh")["useAgentStudioBuildWorktreeRefresh"];
+  typeof import("./use-agent-studio-build-worktree-refresh")["useAgentStudioBuildWorktreeRefresh"];
 
 let useAgentStudioBuildWorktreeRefresh: UseAgentStudioBuildWorktreeRefreshHook;
 
@@ -54,7 +54,7 @@ const createBaseArgs = (): HookArgs => ({
 
 beforeAll(async () => {
   ({ useAgentStudioBuildWorktreeRefresh } = await import(
-    "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh"
+    "./use-agent-studio-build-worktree-refresh"
   ));
 });
 
