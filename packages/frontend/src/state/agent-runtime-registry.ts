@@ -113,6 +113,7 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     this.replyPermission = this.replyPermission.bind(this);
     this.replyRuntimeSessionPermission = this.replyRuntimeSessionPermission.bind(this);
     this.replyQuestion = this.replyQuestion.bind(this);
+    this.replyRuntimeSessionQuestion = this.replyRuntimeSessionQuestion.bind(this);
     this.subscribeEvents = this.subscribeEvents.bind(this);
     this.stopSession = this.stopSession.bind(this);
     this.loadSessionDiff = this.loadSessionDiff.bind(this);
@@ -277,6 +278,14 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     return this.getAdapter(this.requireSessionRuntimeKind(input.externalSessionId)).replyQuestion(
       input,
     );
+  }
+
+  replyRuntimeSessionQuestion(
+    input: Parameters<AgentEnginePort["replyRuntimeSessionQuestion"]>[0],
+  ) {
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "runtime session question reply"),
+    ).replyRuntimeSessionQuestion(input);
   }
 
   subscribeEvents(

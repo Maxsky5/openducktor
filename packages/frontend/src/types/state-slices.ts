@@ -210,6 +210,7 @@ export type AgentStateContextValue = {
     runtimeId?: string;
     workingDirectory: string;
     pendingPermissions?: AgentSessionState["pendingPermissions"];
+    pendingQuestions?: AgentSessionState["pendingQuestions"];
   }) => Promise<void>;
   readSessionSlashCommands: (
     repoPath: string,
@@ -278,6 +279,14 @@ export type AgentStateContextValue = {
     requestId: string;
     reply: "once" | "always" | "reject";
     message?: string;
+  }) => Promise<void>;
+  replyRuntimeSessionQuestion: (input: {
+    repoPath: string;
+    runtimeKind: RuntimeKind;
+    workingDirectory: string;
+    targetExternalSessionId: string;
+    requestId: string;
+    answers: string[][];
   }) => Promise<void>;
   answerAgentQuestion: (
     externalSessionId: string,

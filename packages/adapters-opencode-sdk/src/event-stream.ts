@@ -194,7 +194,7 @@ export const isRelevantSubscriberEvent = (
     }
 
     if (
-      event.type === "permission.asked" &&
+      (event.type === "permission.asked" || event.type === "question.asked") &&
       options?.isKnownChildExternalSessionId?.(eventExternalSessionId)
     ) {
       return true;

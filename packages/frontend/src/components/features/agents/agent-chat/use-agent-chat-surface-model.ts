@@ -20,8 +20,12 @@ import { useAgentChatLayout } from "./use-agent-chat-layout";
 import { useAgentChatThreadContext } from "./use-agent-chat-thread-context";
 
 const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS = Object.freeze({}) as Record<string, number>;
+const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_PERMISSIONS = Object.freeze({}) as NonNullable<
   AgentSessionState["subagentPendingPermissionsByExternalSessionId"]
+>;
+const EMPTY_SUBAGENT_PENDING_QUESTIONS = Object.freeze({}) as NonNullable<
+  AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
 >;
 
 const parseDraftStateKey = (draftStateKey: string) => {
@@ -168,6 +172,8 @@ type UseAgentChatSurfaceModelArgs = {
   sessionAgentColors?: Record<string, string>;
   subagentPendingPermissionsByExternalSessionId?: AgentSessionState["subagentPendingPermissionsByExternalSessionId"];
   subagentPendingPermissionCountByExternalSessionId?: Record<string, number>;
+  subagentPendingQuestionsByExternalSessionId?: AgentSessionState["subagentPendingQuestionsByExternalSessionId"];
+  subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
 };
 
 export function useAgentChatSurfaceModel({
@@ -189,6 +195,8 @@ export function useAgentChatSurfaceModel({
   sessionAgentColors,
   subagentPendingPermissionsByExternalSessionId,
   subagentPendingPermissionCountByExternalSessionId,
+  subagentPendingQuestionsByExternalSessionId,
+  subagentPendingQuestionCountByExternalSessionId,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
@@ -230,6 +238,7 @@ export function useAgentChatSurfaceModel({
   }, [activeExternalSessionId]);
 
   const isComposerInteractionEnabled = mode === "interactive" && runtimeReadiness.isReady;
+  const canSubmitQuestionAnswers = runtimeReadiness.isReady && pendingQuestions.canSubmit;
   const canReplyToPermissionRequests = runtimeReadiness.isReady && permissions.canReply;
 
   const threadModel = useMemo(
@@ -256,8 +265,11 @@ export function useAgentChatSurfaceModel({
       subagentPendingPermissionCountByExternalSessionId:
         subagentPendingPermissionCountByExternalSessionId ??
         EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
-      canSubmitQuestionAnswers:
-        mode === "interactive" && isComposerInteractionEnabled && pendingQuestions.canSubmit,
+      subagentPendingQuestionsByExternalSessionId:
+        subagentPendingQuestionsByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_QUESTIONS,
+      subagentPendingQuestionCountByExternalSessionId:
+        subagentPendingQuestionCountByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
+      canSubmitQuestionAnswers,
       isSubmittingQuestionByRequestId: pendingQuestions.isSubmittingByRequestId,
       onSubmitQuestionAnswers: pendingQuestions.onSubmit,
       canReplyToPermissions: canReplyToPermissionRequests,
@@ -274,6 +286,7 @@ export function useAgentChatSurfaceModel({
     [
       activeTodoPanelCollapsed,
       canReplyToPermissionRequests,
+      canSubmitQuestionAnswers,
       composer?.isSending,
       composer?.isStarting,
       emptyState,
@@ -284,7 +297,6 @@ export function useAgentChatSurfaceModel({
       isSessionWorking,
       isWaitingForRuntimeReadiness,
       messagesContainerRef,
-      mode,
       pendingQuestions,
       permissions,
       resolvedSessionAgentColors,
@@ -293,6 +305,8 @@ export function useAgentChatSurfaceModel({
       showThinkingMessages,
       subagentPendingPermissionsByExternalSessionId,
       subagentPendingPermissionCountByExternalSessionId,
+      subagentPendingQuestionsByExternalSessionId,
+      subagentPendingQuestionCountByExternalSessionId,
       threadSession,
     ],
   );

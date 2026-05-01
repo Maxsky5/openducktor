@@ -3,7 +3,7 @@ import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
+import type { AgentPermissionRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import {
@@ -16,6 +16,7 @@ type SubagentTranscriptButtonProps = {
   sessionRuntimeId?: string | null;
   sessionWorkingDirectory?: string | null | undefined;
   pendingPermissions?: AgentPermissionRequest[] | undefined;
+  pendingQuestions?: AgentQuestionRequest[] | undefined;
   meta: SubagentMeta;
   className?: string;
   onOpenTranscript?: (request: OpenAgentSessionTranscriptRequest) => void;
@@ -27,6 +28,7 @@ type TranscriptSourceInput = {
   sessionWorkingDirectory: string | null | undefined;
   isLive: boolean;
   pendingPermissions: AgentPermissionRequest[] | undefined;
+  pendingQuestions: AgentQuestionRequest[] | undefined;
 };
 
 const isLiveSubagentStatus = (status: SubagentMeta["status"]): boolean => {
@@ -51,6 +53,7 @@ const buildTranscriptSource = ({
   sessionWorkingDirectory,
   isLive,
   pendingPermissions,
+  pendingQuestions,
 }: TranscriptSourceInput): RuntimeSessionTranscriptSource | null => {
   const runtimeId = sessionRuntimeId?.trim() || null;
   const workingDirectory = sessionWorkingDirectory?.trim() || null;
@@ -65,6 +68,7 @@ const buildTranscriptSource = ({
     workingDirectory,
     ...(isLive ? { isLive: true } : {}),
     ...(pendingPermissions ? { pendingPermissions } : {}),
+    ...(pendingQuestions ? { pendingQuestions } : {}),
   };
 };
 
@@ -73,6 +77,7 @@ export function SubagentTranscriptButton({
   sessionRuntimeId,
   sessionWorkingDirectory,
   pendingPermissions,
+  pendingQuestions,
   meta,
   className,
   onOpenTranscript,
@@ -86,6 +91,7 @@ export function SubagentTranscriptButton({
     sessionWorkingDirectory,
     isLive: isLiveSubagentStatus(meta.status),
     pendingPermissions,
+    pendingQuestions,
   });
 
   if (!externalSessionId || !openTranscript || !transcriptSource) {

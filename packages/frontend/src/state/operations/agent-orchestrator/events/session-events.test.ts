@@ -1458,6 +1458,115 @@ describe("agent-orchestrator-session-events", () => {
     });
   });
 
+  test("records child question overlays and patches the parent subagent row from parent context", () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+    const subagentCorrelationKey = "part:assistant-parent:subtask-question";
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "external-parent-session": buildSession({
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          messages: [
+            {
+              id: `subagent:${subagentCorrelationKey}`,
+              role: "system",
+              content: "Subagent (build): Ask user",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "subagent",
+                partId: "subtask-question",
+                correlationKey: subagentCorrelationKey,
+                status: "running",
+                agent: "build",
+                prompt: "Ask user",
+              },
+            },
+          ],
+        }),
+      },
+    };
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[externalSessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [externalSessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "external-parent-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "question_required",
+      externalSessionId: "external-parent-session",
+      requestId: "question-child-1",
+      questions: [
+        {
+          header: "Scope",
+          question: "Pick target",
+          options: [{ label: "A", description: "Option A" }],
+        },
+      ],
+      timestamp: "2026-02-22T08:00:05.000Z",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey,
+    });
+
+    expect(sessionsRef.current["external-parent-session"]?.pendingQuestions).toHaveLength(0);
+    expect(
+      sessionsRef.current["external-parent-session"]?.subagentPendingQuestionsByExternalSessionId?.[
+        "external-child-session"
+      ],
+    ).toEqual([
+      {
+        requestId: "question-child-1",
+        questions: [
+          {
+            header: "Scope",
+            question: "Pick target",
+            options: [{ label: "A", description: "Option A" }],
+          },
+        ],
+      },
+    ]);
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
+    expect(parentSubagentMessage?.meta).toMatchObject({
+      kind: "subagent",
+      correlationKey: subagentCorrelationKey,
+      externalSessionId: "external-child-session",
+    });
+  });
+
   test("auto-rejects mutating child permissions observed from a read-only parent context", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const replyPermission = mock(async () => {});

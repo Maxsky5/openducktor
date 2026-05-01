@@ -12,6 +12,7 @@ export type RuntimeTranscriptSessionInput = {
   history: AgentSessionHistoryMessage[];
   isLive?: boolean;
   pendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
+  pendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
 };
 
 const updateHash = (hash: number, value: string): number => {
@@ -43,6 +44,7 @@ export const createRuntimeTranscriptSession = ({
   history,
   isLive = false,
   pendingPermissions = [],
+  pendingQuestions = [],
 }: RuntimeTranscriptSessionInput): AgentSessionState => {
   const startedAt = history[0]?.timestamp ?? new Date(0).toISOString();
 
@@ -74,7 +76,7 @@ export const createRuntimeTranscriptSession = ({
     draftReasoningMessageId: null,
     contextUsage: null,
     pendingPermissions,
-    pendingQuestions: [],
+    pendingQuestions,
     todos: [],
     modelCatalog: null,
     selectedModel: null,

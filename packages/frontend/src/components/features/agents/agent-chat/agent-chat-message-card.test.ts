@@ -605,7 +605,37 @@ describe("AgentChatMessageCard tool duration", () => {
       }),
     );
 
-    expect(html).toContain("Waiting for permission");
+    expect(html).toContain("Waiting for input");
+    expect(html).not.toContain("lucide-loader-circle");
+    expect(html).not.toContain("Running");
+  });
+
+  test("renders running subagent cards as waiting when child session has pending question", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: buildMessage("system", "Subagent (build): answer prompt", {
+          id: "subagent-waiting-question-1",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-waiting-question-1",
+            correlationKey: "part:assistant-task-tool-running:subtask-question",
+            status: "running",
+            agent: "build",
+            description: "answer prompt",
+            externalSessionId: "session-child-question",
+            startedAtMs: 1_000,
+          },
+        }),
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+        subagentPendingQuestionCountByExternalSessionId: {
+          "session-child-question": 1,
+        },
+      }),
+    );
+
+    expect(html).toContain("Waiting for input");
     expect(html).not.toContain("lucide-loader-circle");
     expect(html).not.toContain("Running");
   });
@@ -637,7 +667,7 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain("Completed");
-    expect(html).not.toContain("Waiting for permission");
+    expect(html).not.toContain("Waiting for input");
     expect(html).toContain("1m59s");
   });
 

@@ -34,6 +34,13 @@ type PermissionReplyTarget = {
 
 type PermissionReplyPayload = Pick<ReplyPermissionInput, "requestId" | "reply" | "message">;
 
+type QuestionReplyTarget = {
+  client: Pick<OpencodeClient, "question">;
+  workingDirectory: string;
+};
+
+type QuestionReplyPayload = Pick<ReplyQuestionInput, "requestId" | "answers">;
+
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
@@ -645,8 +652,21 @@ export const replyQuestion = async (
   session: SessionRecord,
   input: ReplyQuestionInput,
 ): Promise<void> => {
-  await session.client.question.reply({
-    directory: session.input.workingDirectory,
+  await replyQuestionToTarget(
+    {
+      client: session.client,
+      workingDirectory: session.input.workingDirectory,
+    },
+    input,
+  );
+};
+
+export const replyQuestionToTarget = async (
+  target: QuestionReplyTarget,
+  input: QuestionReplyPayload,
+): Promise<void> => {
+  await target.client.question.reply({
+    directory: target.workingDirectory,
     requestID: input.requestId,
     answers: input.answers,
   });

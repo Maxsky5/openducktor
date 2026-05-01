@@ -2615,8 +2615,52 @@ describe("event-stream", () => {
     expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
     expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
     expect(permissionEvents[0].subagentCorrelationKey).toBeUndefined();
+    expect(questionEvents[0].childExternalSessionId).toBe("external-session-1");
+    expect(questionEvents[0].parentExternalSessionId).toBeUndefined();
+    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
     expect(questionEvents[0].questions).toHaveLength(1);
     expect(questionEvents[0].questions[0]?.header).toBe("Scope");
+  });
+
+  test("subscribeOpencodeEvents forwards known child question events to parent subscribers", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "question.asked",
+          properties: {
+            sessionID: "external-child-session",
+            id: "question-child-1",
+            questions: [
+              {
+                header: "Scope",
+                question: "Pick target",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+          },
+        } as unknown as Event,
+      ],
+      undefined,
+      (childExternalSessionId) =>
+        childExternalSessionId === "external-child-session"
+          ? {
+              parentExternalSessionId: "external-session-1",
+              childExternalSessionId,
+              subagentCorrelationKey: "part:assistant-1:subtask-1",
+            }
+          : undefined,
+    );
+
+    const questionEvents = emitted.filter((event) => event.type === "question_required");
+    expect(questionEvents).toHaveLength(1);
+    expect(questionEvents[0]).toMatchObject({
+      type: "question_required",
+      externalSessionId: "external-session-1",
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    });
   });
 
   test("subscribeOpencodeEvents forwards known child permission events to parent subscribers", async () => {

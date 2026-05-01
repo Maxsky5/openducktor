@@ -1,5 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
+import type { AgentPermissionRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 
 type RuntimeSessionTranscriptSourceBase = {
   runtimeKind: RuntimeKind;
@@ -8,6 +8,7 @@ type RuntimeSessionTranscriptSourceBase = {
   externalSessionId?: string;
   isLive?: boolean;
   pendingPermissions?: AgentPermissionRequest[] | undefined;
+  pendingQuestions?: AgentQuestionRequest[] | undefined;
 };
 
 export type RuntimeSessionTranscriptSource = RuntimeSessionTranscriptSourceBase;

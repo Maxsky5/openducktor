@@ -26,6 +26,8 @@ const readSessionTodos = mock(async () => []);
 const attachRuntimeTranscriptSession = mock(async () => {});
 const replyAgentPermission = mock(async () => {});
 const replyRuntimeSessionPermission = mock(async () => {});
+const answerAgentQuestion = mock(async () => {});
+const replyRuntimeSessionQuestion = mock(async () => {});
 const useAgentSessionMock = mock(
   (_externalSessionId: string | null): AgentSessionState | null => null,
 );
@@ -65,6 +67,26 @@ function makePendingPermission() {
   };
 }
 
+function makePendingQuestion() {
+  return {
+    requestId: "question-1",
+    questions: [
+      {
+        header: "Choose path",
+        question: "Which path should the subagent use?",
+        options: [{ label: "A", description: "Path A" }],
+      },
+    ],
+  };
+}
+
+function makeTranscriptSourceWithPendingQuestion(): RuntimeSessionTranscriptSource {
+  return {
+    ...makeTranscriptSource(),
+    pendingQuestions: [makePendingQuestion()],
+  };
+}
+
 function makeTranscriptSourceWithPendingPermission(): RuntimeSessionTranscriptSource {
   return {
     ...makeTranscriptSource(),
@@ -99,7 +121,7 @@ function makeLiveTranscriptSession(): AgentSessionState {
     draftReasoningMessageId: null,
     contextUsage: null,
     pendingPermissions: [makePendingPermission()],
-    pendingQuestions: [],
+    pendingQuestions: [makePendingQuestion()],
     todos: [],
     modelCatalog: null,
     selectedModel: null,
@@ -168,6 +190,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     attachRuntimeTranscriptSession.mockImplementation(async () => {});
     replyAgentPermission.mockClear();
     replyRuntimeSessionPermission.mockClear();
+    answerAgentQuestion.mockClear();
+    replyRuntimeSessionQuestion.mockClear();
     useAgentSessionMock.mockClear();
     useAgentSessionMock.mockImplementation(
       (_externalSessionId: string | null): AgentSessionState | null => null,
@@ -195,6 +219,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         readSessionTodos,
         replyAgentPermission,
         replyRuntimeSessionPermission,
+        answerAgentQuestion,
+        replyRuntimeSessionQuestion,
       }),
       useAgentSession: useAgentSessionMock,
       useChecksState: () => ({
@@ -389,6 +415,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         source: {
           ...liveTranscriptSource,
           pendingPermissions: [pendingPermission],
+          pendingQuestions: [makePendingQuestion()],
         },
       },
       { wrapper },
@@ -404,6 +431,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
         pendingPermissions: [pendingPermission],
+        pendingQuestions: [makePendingQuestion()],
         workingDirectory: "/repo-a",
       });
       expect(readSessionHistory).not.toHaveBeenCalled();
@@ -545,6 +573,63 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       await harness.waitFor(() => {
         const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
         return session?.pendingPermissions.length === 0;
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps and replies to parent-observed subagent questions through the runtime transcript session", async () => {
+    const transcriptSourceWithPendingQuestion = makeTranscriptSourceWithPendingQuestion();
+    const pendingQuestion = makePendingQuestion();
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        externalSessionId: "session-subagent-1",
+        source: transcriptSourceWithPendingQuestion,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => {
+        const pendingQuestions = latestSurfaceModelArgs?.pendingQuestions as
+          | { canSubmit: boolean }
+          | undefined;
+        return pendingQuestions?.canSubmit === true;
+      });
+
+      const session = latestSurfaceModelArgs?.session as AgentSessionState;
+      expect(session.pendingQuestions).toEqual([pendingQuestion]);
+      const pendingQuestions = latestSurfaceModelArgs?.pendingQuestions as {
+        onSubmit: (requestId: string, answers: string[][]) => Promise<void>;
+      };
+      await harness.run(async () => {
+        await pendingQuestions.onSubmit("question-1", [["A"]]);
+      });
+
+      expect(replyRuntimeSessionQuestion).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a",
+        targetExternalSessionId: "session-subagent-1",
+        requestId: "question-1",
+        answers: [["A"]],
+      });
+      expect(answerAgentQuestion).not.toHaveBeenCalled();
+      await harness.waitFor(() => {
+        const nextSession = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
+        return nextSession?.pendingQuestions.length === 0;
       });
     } finally {
       await harness.unmount();

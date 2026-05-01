@@ -109,11 +109,20 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
   }
 
   markSessionActive(runtime);
+  const childExternalSessionId = readEventSessionId(event) ?? runtime.externalSessionId;
+  const subagentLink = runtime.resolveSubagentSessionLink?.(childExternalSessionId);
   runtime.emit(runtime.externalSessionId, {
     type: "question_required",
     externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
     requestId: parsed.requestId,
+    childExternalSessionId,
+    ...(subagentLink
+      ? {
+          parentExternalSessionId: subagentLink.parentExternalSessionId,
+          subagentCorrelationKey: subagentLink.subagentCorrelationKey,
+        }
+      : {}),
     questions: parsed.questions.map((question) => ({
       header: question.header,
       question: question.question,
