@@ -98,6 +98,7 @@ const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   pendingSubagentCorrelationKeys: [],
   pendingSubagentSessionsByExternalSessionId: new Map(),
   pendingSubagentPartEmissionsByExternalSessionId: new Map(),
+  pendingSubagentInputEventsByExternalSessionId: new Map(),
 });
 
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
@@ -2698,6 +2699,124 @@ describe("event-stream", () => {
       parentExternalSessionId: "external-session-1",
     });
     expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
+  });
+
+  test("re-emits unresolved child question events after subagent correlation binds", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "question.asked",
+          properties: {
+            sessionID: "external-child-session",
+            info: {
+              parentID: "external-session-1",
+            },
+            id: "question-child-1",
+            questions: [
+              {
+                header: "Scope",
+                question: "Pick target",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+          },
+        } as unknown as Event,
+        {
+          type: "session.updated",
+          properties: {
+            info: {
+              id: "external-child-session",
+              parentID: "external-session-1",
+              time: {
+                created: Date.parse("2026-02-22T12:00:11.000Z"),
+              },
+            },
+          },
+        } as unknown as Event,
+      ],
+      (session) => {
+        session.pendingSubagentCorrelationKeys.push("part:assistant-1:subtask-1");
+      },
+      () => undefined,
+    );
+
+    const questionEvents = emitted.filter((event) => event.type === "question_required");
+    expect(questionEvents).toHaveLength(2);
+    expect(questionEvents[0]).toMatchObject({
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+    });
+    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
+    expect(questionEvents[1]).toMatchObject({
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    });
+  });
+
+  test("re-emits unresolved child question events when message parts bind the child session", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-question-bind"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-question-bind",
+        partId: "subtask-a",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting A",
+      }),
+      {
+        type: "question.asked",
+        properties: {
+          sessionID: "external-child-session",
+          info: {
+            parentID: "external-session-1",
+          },
+          id: "question-child-1",
+          questions: [
+            {
+              header: "Scope",
+              question: "Pick target",
+              options: [{ label: "A", description: "Option A" }],
+            },
+          ],
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "subtask-a",
+            sessionID: "external-session-1",
+            messageID: "assistant-subagent-question-bind",
+            type: "tool",
+            tool: "delegate",
+            state: {
+              status: "completed",
+              input: {
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+              output: {
+                result: "Finished A",
+                externalSessionId: "external-child-session",
+              },
+            },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const questionEvents = emitted.filter((event) => event.type === "question_required");
+    expect(questionEvents).toHaveLength(2);
+    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
+    expect(questionEvents[1]).toMatchObject({
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-subagent-question-bind:subtask-a",
+    });
   });
 
   test("subscribeOpencodeEvents forwards known child permission events to parent subscribers", async () => {

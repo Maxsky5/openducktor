@@ -126,6 +126,8 @@ export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => 
     pendingSubagentSessionsByExternalSessionId: session.pendingSubagentSessionsByExternalSessionId,
     pendingSubagentPartEmissionsByExternalSessionId:
       session.pendingSubagentPartEmissionsByExternalSessionId,
+    pendingSubagentInputEventsByExternalSessionId:
+      session.pendingSubagentInputEventsByExternalSessionId,
   };
 
   if (handleMessageEvent(input.event, runtime)) {

@@ -617,11 +617,10 @@ export const handleQuestionRequired = (
 
   if (isLinkedChildQuestionObservedByParent(context, event)) {
     patchParentSubagentSessionLink(context, event);
+    recordParentSubagentPendingQuestion(context, event);
     if (isLinkedChildQuestionOwnedByAttachedListener(context, event)) {
       return;
     }
-
-    recordParentSubagentPendingQuestion(context, event);
     return;
   }
 

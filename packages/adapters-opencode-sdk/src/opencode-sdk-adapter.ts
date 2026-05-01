@@ -700,6 +700,7 @@ export class OpencodeSdkAdapter
   async replyPermission(input: ReplyPermissionInput): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     await replyPermission(session, input);
+    this.clearPendingSubagentInputEvent(input.requestId);
   }
 
   async replyRuntimeSessionPermission(input: ReplyRuntimeSessionPermissionInput): Promise<void> {
@@ -719,11 +720,13 @@ export class OpencodeSdkAdapter
         ...(input.message ? { message: input.message } : {}),
       },
     );
+    this.clearPendingSubagentInputEvent(input.requestId);
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
     await replyQuestion(session, input);
+    this.clearPendingSubagentInputEvent(input.requestId);
   }
 
   async replyRuntimeSessionQuestion(input: ReplyRuntimeSessionQuestionInput): Promise<void> {
@@ -742,6 +745,7 @@ export class OpencodeSdkAdapter
         answers: input.answers,
       },
     );
+    this.clearPendingSubagentInputEvent(input.requestId);
   }
 
   subscribeEvents(
@@ -786,6 +790,28 @@ export class OpencodeSdkAdapter
 
   private emit(externalSessionId: string, event: AgentEvent): void {
     emitSessionEvent(this.listeners, externalSessionId, event);
+  }
+
+  private clearPendingSubagentInputEvent(requestId: string): void {
+    for (const session of this.sessions.values()) {
+      for (const [
+        childExternalSessionId,
+        pending,
+      ] of session.pendingSubagentInputEventsByExternalSessionId) {
+        const nextPending = pending.filter((event) => event.requestId !== requestId);
+        if (nextPending.length === pending.length) {
+          continue;
+        }
+        if (nextPending.length === 0) {
+          session.pendingSubagentInputEventsByExternalSessionId.delete(childExternalSessionId);
+          continue;
+        }
+        session.pendingSubagentInputEventsByExternalSessionId.set(
+          childExternalSessionId,
+          nextPending,
+        );
+      }
+    }
   }
 
   private async resolveSessionToolSelection(

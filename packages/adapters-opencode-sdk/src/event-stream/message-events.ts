@@ -36,6 +36,7 @@ import type { EventStreamRuntime } from "./shared";
 import {
   applyDeltaToPart,
   emitSessionIdle,
+  flushPendingSubagentInputEventsForSession,
   isReasoningDeltaField,
   markSessionActive,
   removePendingSubagentCorrelationKey,
@@ -134,6 +135,7 @@ const normalizeLiveSubagentCorrelation = (
         existingCorrelationKey,
       );
       removePendingSubagentCorrelationKey(runtime, existingCorrelationKey);
+      flushPendingSubagentInputEventsForSession(runtime, part.externalSessionId);
     }
     return {
       ...part,
@@ -155,6 +157,7 @@ const normalizeLiveSubagentCorrelation = (
     if (part.externalSessionId) {
       runtime.subagentCorrelationKeyByExternalSessionId.set(part.externalSessionId, correlationKey);
       removePendingSubagentCorrelationKey(runtime, correlationKey);
+      flushPendingSubagentInputEventsForSession(runtime, part.externalSessionId);
     }
 
     return {
@@ -194,6 +197,7 @@ const normalizeLiveSubagentCorrelation = (
   if (part.externalSessionId) {
     runtime.subagentCorrelationKeyByExternalSessionId.set(part.externalSessionId, correlationKey);
     removePendingSubagentCorrelationKey(runtime, correlationKey);
+    flushPendingSubagentInputEventsForSession(runtime, part.externalSessionId);
   }
 
   return {

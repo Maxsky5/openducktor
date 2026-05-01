@@ -14,6 +14,11 @@ export type PendingSubagentPartEmission = {
   roleHint?: string;
 };
 
+export type PendingSubagentInputEvent = Extract<
+  AgentEvent,
+  { type: "permission_required" | "question_required" }
+>;
+
 export type PendingSubagentSessionBinding = {
   createdAtMs?: number;
   arrivalOrder: number;
@@ -44,9 +49,35 @@ export type EventStreamState = {
   pendingSubagentCorrelationKeys: string[];
   pendingSubagentSessionsByExternalSessionId: Map<string, PendingSubagentSessionBinding>;
   pendingSubagentPartEmissionsByExternalSessionId: Map<string, PendingSubagentPartEmission[]>;
+  pendingSubagentInputEventsByExternalSessionId: Map<string, PendingSubagentInputEvent[]>;
 };
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
+
+export const flushPendingSubagentInputEventsForSession = (
+  runtime: EventStreamRuntime,
+  childExternalSessionId: string,
+): void => {
+  const subagentCorrelationKey =
+    runtime.subagentCorrelationKeyByExternalSessionId.get(childExternalSessionId);
+  if (!subagentCorrelationKey) {
+    return;
+  }
+
+  const pending = runtime.pendingSubagentInputEventsByExternalSessionId.get(childExternalSessionId);
+  if (!pending || pending.length === 0) {
+    return;
+  }
+
+  runtime.pendingSubagentInputEventsByExternalSessionId.delete(childExternalSessionId);
+  for (const event of pending) {
+    runtime.emit(runtime.externalSessionId, {
+      ...event,
+      timestamp: runtime.now(),
+      subagentCorrelationKey,
+    });
+  }
+};
 
 export const removePendingSubagentCorrelationKey = (
   state: Pick<

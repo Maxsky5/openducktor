@@ -1,4 +1,5 @@
 import type { Event } from "@opencode-ai/sdk/v2/client";
+import type { AgentEvent } from "@openducktor/core";
 import { readStringProp } from "../guards";
 import { normalizeTodoList } from "../todo-normalizers";
 import {
@@ -17,6 +18,7 @@ import {
 import type { EventStreamRuntime } from "./shared";
 import {
   emitSessionIdle,
+  flushPendingSubagentInputEventsForSession,
   markSessionActive,
   markSessionIdle,
   readEventSessionId,
@@ -36,6 +38,34 @@ const readParentExternalSessionId = (info: unknown): string | undefined => {
   }
 
   return undefined;
+};
+
+type PendingInputEvent = Extract<AgentEvent, { type: "permission_required" | "question_required" }>;
+
+const shouldQueueSubagentInputEvent = (
+  runtime: EventStreamRuntime,
+  event: PendingInputEvent,
+): boolean => {
+  return Boolean(
+    event.parentExternalSessionId === runtime.externalSessionId &&
+      event.childExternalSessionId &&
+      event.childExternalSessionId !== runtime.externalSessionId &&
+      !event.subagentCorrelationKey,
+  );
+};
+
+const queueSubagentInputEvent = (runtime: EventStreamRuntime, event: PendingInputEvent): void => {
+  if (!shouldQueueSubagentInputEvent(runtime, event)) {
+    return;
+  }
+
+  const childExternalSessionId = event.childExternalSessionId;
+  if (!childExternalSessionId) {
+    return;
+  }
+  const current = runtime.pendingSubagentInputEventsByExternalSessionId.get(childExternalSessionId);
+  const next = [...(current ?? []).filter((entry) => entry.requestId !== event.requestId), event];
+  runtime.pendingSubagentInputEventsByExternalSessionId.set(childExternalSessionId, next);
 };
 
 const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
@@ -96,7 +126,7 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
   const eventParentExternalSessionId = readParentExternalSessionId(readEventInfo(properties));
   const parentExternalSessionId =
     subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
-  runtime.emit(runtime.externalSessionId, {
+  const permissionEvent: Extract<AgentEvent, { type: "permission_required" }> = {
     type: "permission_required",
     externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
@@ -111,7 +141,9 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
           subagentCorrelationKey: subagentLink.subagentCorrelationKey,
         }
       : {}),
-  });
+  };
+  runtime.emit(runtime.externalSessionId, permissionEvent);
+  queueSubagentInputEvent(runtime, permissionEvent);
   return true;
 };
 
@@ -132,7 +164,7 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
   const eventParentExternalSessionId = readParentExternalSessionId(readEventInfo(properties));
   const parentExternalSessionId =
     subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
-  runtime.emit(runtime.externalSessionId, {
+  const questionEvent: Extract<AgentEvent, { type: "question_required" }> = {
     type: "question_required",
     externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
@@ -151,7 +183,9 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
       ...(question.multiple !== undefined ? { multiple: question.multiple } : {}),
       ...(question.custom !== undefined ? { custom: question.custom } : {}),
     })),
-  });
+  };
+  runtime.emit(runtime.externalSessionId, questionEvent);
+  queueSubagentInputEvent(runtime, questionEvent);
   return true;
 };
 
@@ -245,6 +279,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
   );
   if (existingCorrelationKey && !existingCorrelationKey.startsWith("session:")) {
     flushPendingSubagentPartEmissionsForSession(runtime, normalizedChildExternalSessionId);
+    flushPendingSubagentInputEventsForSession(runtime, normalizedChildExternalSessionId);
     return true;
   }
 
@@ -283,6 +318,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
     runtime.pendingSubagentSessionsByExternalSessionId.delete(externalSessionId);
     removePendingSubagentCorrelationKey(runtime, nextCorrelationKey);
     flushPendingSubagentPartEmissionsForSession(runtime, externalSessionId);
+    flushPendingSubagentInputEventsForSession(runtime, externalSessionId);
   }
   return true;
 };
