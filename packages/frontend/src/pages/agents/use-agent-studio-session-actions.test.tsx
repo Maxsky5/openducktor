@@ -1167,12 +1167,29 @@ describe("useAgentStudioSessionActions", () => {
     }
   });
 
-  test("keeps kickoff available for internal rebase conflict launch action", async () => {
+  test("does not expose kickoff for message-only rebase conflict launch action", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "build",
       launchActionId: "build_rebase_conflict_resolution",
       selectedTask: createTask(),
+      activeSession: null,
+      sessionsForTask: [],
+    });
+
+    await harness.mount();
+
+    expect(harness.getLatest().canKickoffNewSession).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("keeps kickoff available for build launch actions with kickoff prompts", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "build",
+      launchActionId: "build_after_human_request_changes",
+      selectedTask: createTask({ status: "human_review" }),
       activeSession: null,
       sessionsForTask: [],
     });

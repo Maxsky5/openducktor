@@ -14,7 +14,6 @@ import type { SessionStartLaunchRequest } from "@/features/session-start";
 import {
   getSessionLaunchAction,
   LAUNCH_ACTION_LABELS,
-  resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
 } from "@/features/session-start";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
@@ -184,8 +183,7 @@ export function useAgentStudioSessionActions({
     hasActiveSession && isSessionWorking && !isWaitingInput && !supportsQueuedUserMessages
       ? `${activeRuntimeDescriptor?.label ?? "Current runtime"} does not support queued messages while the session is working.`
       : null;
-  const kickoffLaunchActionId =
-    role === "build" ? resolveBuildContinuationLaunchAction(selectedTask) : launchActionId;
+  const kickoffLaunchActionId = launchActionId;
 
   const {
     isStarting,

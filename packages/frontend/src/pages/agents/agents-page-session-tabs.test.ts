@@ -753,7 +753,7 @@ describe("agents-page-session-tabs", () => {
     });
   });
 
-  test("keeps builder done after completed qa-rework session even before task status catches up", () => {
+  test("does not mark builder done from stale approved qa report after build reopens", () => {
     const task = buildTask({
       status: "in_progress",
       documentSummary: {
@@ -807,9 +807,9 @@ describe("agents-page-session-tabs", () => {
         liveSession: "idle",
       },
       build: {
-        tone: "done",
+        tone: "in_progress",
         availability: "available",
-        completion: "done",
+        completion: "in_progress",
         liveSession: "stopped",
       },
       qa: {
@@ -819,6 +819,37 @@ describe("agents-page-session-tabs", () => {
         liveSession: "idle",
       },
     });
+  });
+
+  test("marks builder done for approved qa in build-complete task statuses", () => {
+    const task = buildTask({
+      status: "human_review",
+      documentSummary: {
+        spec: { has: true, updatedAt: "2026-02-22T09:00:00.000Z" },
+        plan: { has: true, updatedAt: "2026-02-22T09:30:00.000Z" },
+        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
+      },
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: true, canSkip: false, available: false, completed: true },
+      },
+    });
+
+    const states = buildWorkflowStateByRole({
+      task,
+      roleWorkflowsByTask: {
+        spec: task.agentWorkflows.spec,
+        planner: task.agentWorkflows.planner,
+        build: task.agentWorkflows.builder,
+        qa: task.agentWorkflows.qa,
+      },
+      roleSessionByRole: buildRoleSessionSummaryMap([]),
+    });
+
+    expect(states.build.completion).toBe("done");
+    expect(states.build.tone).toBe("done");
   });
 
   test("keeps the newest role session as the workflow target even when an older one is waiting", () => {
