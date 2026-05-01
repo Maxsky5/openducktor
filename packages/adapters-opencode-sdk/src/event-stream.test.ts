@@ -2663,7 +2663,7 @@ describe("event-stream", () => {
     });
   });
 
-  test("does not forward child question events to a parent when the child link is unknown", async () => {
+  test("forwards child question events with parent id before the child link is known", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
         {
@@ -2688,7 +2688,16 @@ describe("event-stream", () => {
       () => undefined,
     );
 
-    expect(emitted.filter((event) => event.type === "question_required")).toHaveLength(0);
+    const questionEvents = emitted.filter((event) => event.type === "question_required");
+    expect(questionEvents).toHaveLength(1);
+    expect(questionEvents[0]).toMatchObject({
+      type: "question_required",
+      externalSessionId: "external-session-1",
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+    });
+    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
   });
 
   test("subscribeOpencodeEvents forwards known child permission events to parent subscribers", async () => {
@@ -2725,6 +2734,38 @@ describe("event-stream", () => {
       parentExternalSessionId: "external-session-1",
       subagentCorrelationKey: "part:assistant-1:subtask-1",
     });
+  });
+
+  test("forwards child permission events with parent id before the child link is known", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "permission.asked",
+          properties: {
+            sessionID: "external-child-session",
+            info: {
+              parentID: "external-session-1",
+            },
+            id: "perm-child-1",
+            permission: "read",
+            patterns: ["src/**"],
+          },
+        } as unknown as Event,
+      ],
+      undefined,
+      () => undefined,
+    );
+
+    const permissionEvents = emitted.filter((event) => event.type === "permission_required");
+    expect(permissionEvents).toHaveLength(1);
+    expect(permissionEvents[0]).toMatchObject({
+      type: "permission_required",
+      externalSessionId: "external-session-1",
+      requestId: "perm-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+    });
+    expect(permissionEvents[0].subagentCorrelationKey).toBeUndefined();
   });
 
   test("subscribeOpencodeEvents ignores child permission links for other parents", async () => {

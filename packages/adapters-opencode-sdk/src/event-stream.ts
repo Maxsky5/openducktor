@@ -190,10 +190,7 @@ export const isRelevantSubscriberEvent = (
         : undefined;
 
     if (event.type === "question.asked" && parentExternalSessionId) {
-      return (
-        parentExternalSessionId === subscriber.externalSessionId &&
-        options?.isKnownChildExternalSessionId?.(eventExternalSessionId) === true
-      );
+      return parentExternalSessionId === subscriber.externalSessionId;
     }
 
     if (parentExternalSessionId === subscriber.externalSessionId) {

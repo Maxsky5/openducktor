@@ -23,6 +23,21 @@ import {
   removePendingSubagentCorrelationKey,
 } from "./shared";
 
+const readParentExternalSessionId = (info: unknown): string | undefined => {
+  if (!info || typeof info !== "object") {
+    return undefined;
+  }
+
+  for (const key of ["parentID", "parentId", "parent_id"] as const) {
+    const value = (info as Record<string, unknown>)[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
 const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   if (event.type !== "session.status") {
     return false;
@@ -78,6 +93,9 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
   markSessionActive(runtime);
   const childExternalSessionId = readEventSessionId(event) ?? runtime.externalSessionId;
   const subagentLink = runtime.resolveSubagentSessionLink?.(childExternalSessionId);
+  const eventParentExternalSessionId = readParentExternalSessionId(readEventInfo(properties));
+  const parentExternalSessionId =
+    subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
   runtime.emit(runtime.externalSessionId, {
     type: "permission_required",
     externalSessionId: runtime.externalSessionId,
@@ -87,9 +105,9 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
     patterns: parsed.patterns,
     ...(parsed.metadata ? { metadata: parsed.metadata } : {}),
     childExternalSessionId,
+    ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
     ...(subagentLink
       ? {
-          parentExternalSessionId: subagentLink.parentExternalSessionId,
           subagentCorrelationKey: subagentLink.subagentCorrelationKey,
         }
       : {}),
@@ -111,15 +129,18 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
   markSessionActive(runtime);
   const childExternalSessionId = readEventSessionId(event) ?? runtime.externalSessionId;
   const subagentLink = runtime.resolveSubagentSessionLink?.(childExternalSessionId);
+  const eventParentExternalSessionId = readParentExternalSessionId(readEventInfo(properties));
+  const parentExternalSessionId =
+    subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
   runtime.emit(runtime.externalSessionId, {
     type: "question_required",
     externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
     requestId: parsed.requestId,
     childExternalSessionId,
+    ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
     ...(subagentLink
       ? {
-          parentExternalSessionId: subagentLink.parentExternalSessionId,
           subagentCorrelationKey: subagentLink.subagentCorrelationKey,
         }
       : {}),
@@ -189,19 +210,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
         : {}) as Record<string, unknown>,
       ["sessionID", "sessionId", "session_id"],
     ) ?? readStringProp(info, ["id", "sessionID", "sessionId", "session_id"]);
-  const parentExternalSessionId =
-    info && typeof info === "object" && info !== null
-      ? (["parentID", "parentId", "parent_id"] as const).reduce<string | undefined>(
-          (found, key) => {
-            if (found) {
-              return found;
-            }
-            const value = (info as Record<string, unknown>)[key];
-            return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-          },
-          undefined,
-        )
-      : undefined;
+  const parentExternalSessionId = readParentExternalSessionId(info);
 
   if (
     typeof childExternalSessionId !== "string" ||
