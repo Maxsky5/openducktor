@@ -51,6 +51,21 @@ const canShowPullRequestQuickAction = (task: TaskCard): boolean => {
   return PULL_REQUEST_QUICK_ACTION_STATUSES.has(task.status);
 };
 
+const canStartRoleWorkflow = (params: {
+  task: TaskCard;
+  role: AgentRole;
+  roleEnabledByTask: Record<AgentRole, boolean>;
+}): boolean => {
+  if (!params.roleEnabledByTask[params.role]) {
+    return false;
+  }
+
+  if (params.role === "build") {
+    return !params.task.agentWorkflows.builder.completed;
+  }
+  return !params.task.agentWorkflows[params.role].completed;
+};
+
 const quickActionLabelForWorkflowAction = (action: TaskWorkflowAction, task: TaskCard): string => {
   if (action === "set_spec") {
     return task.status === "spec_ready" ? "Open Spec" : "Start Spec";
@@ -172,7 +187,10 @@ export const buildAgentStudioQuickActions = (params: {
     });
   }
 
-  if (availableWorkflowActions.has("set_spec") && params.roleEnabledByTask.spec) {
+  if (
+    availableWorkflowActions.has("set_spec") &&
+    canStartRoleWorkflow({ task, role: "spec", roleEnabledByTask: params.roleEnabledByTask })
+  ) {
     options.push(
       createLifecycleOption(
         "quick:spec_initial",
@@ -184,7 +202,10 @@ export const buildAgentStudioQuickActions = (params: {
     );
   }
 
-  if (availableWorkflowActions.has("set_plan") && params.roleEnabledByTask.planner) {
+  if (
+    availableWorkflowActions.has("set_plan") &&
+    canStartRoleWorkflow({ task, role: "planner", roleEnabledByTask: params.roleEnabledByTask })
+  ) {
     options.push(
       createLifecycleOption(
         "quick:planner_initial",
@@ -196,7 +217,10 @@ export const buildAgentStudioQuickActions = (params: {
     );
   }
 
-  if (availableWorkflowActions.has("build_start") && params.roleEnabledByTask.build) {
+  if (
+    availableWorkflowActions.has("build_start") &&
+    canStartRoleWorkflow({ task, role: "build", roleEnabledByTask: params.roleEnabledByTask })
+  ) {
     const launchActionId = resolveBuildContinuationLaunchAction(task);
     options.push(
       createLifecycleOption(
@@ -209,7 +233,10 @@ export const buildAgentStudioQuickActions = (params: {
     );
   }
 
-  if (availableWorkflowActions.has("qa_start") && params.roleEnabledByTask.qa) {
+  if (
+    availableWorkflowActions.has("qa_start") &&
+    canStartRoleWorkflow({ task, role: "qa", roleEnabledByTask: params.roleEnabledByTask })
+  ) {
     options.push(
       createLifecycleOption(
         "quick:qa_review",

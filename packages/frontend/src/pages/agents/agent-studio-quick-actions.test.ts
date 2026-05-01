@@ -129,6 +129,33 @@ describe("agent-studio-quick-actions", () => {
     ).toHaveLength(1);
   });
 
+  test("does not propose completed workflow roles even when backend actions are still present", () => {
+    const task = buildTask({
+      id: "task-1",
+      status: "in_progress",
+      availableActions: ["set_spec", "set_plan", "build_start"],
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: true, canSkip: false, available: false, completed: false },
+      },
+    });
+
+    const options = buildAgentStudioQuickActions({
+      selectedTask: task,
+      sessionsForTask: [],
+      roleEnabledByTask: buildRoleEnabledMapForTask(task),
+      createSessionDisabled: false,
+    });
+
+    expect(options.map((option) => option.launchActionId)).toEqual(["build_implementation_start"]);
+    expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
+      launchActionId: "build_implementation_start",
+      label: "Start Implementation",
+    });
+  });
+
   test("surfaces active git conflict resolution as the primary quick action", () => {
     const task = buildTask({
       id: "task-1",
