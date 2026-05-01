@@ -339,7 +339,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
       ? sessionHistoryQueryOptions(
           activeWorkspace.repoPath,
           source.runtimeKind,
-          resolvedSource.runtimeId,
           source.workingDirectory,
           externalSessionId,
           readSessionHistory,
@@ -347,7 +346,6 @@ export function useReadonlySessionTranscriptSurfaceModel({
       : sessionHistoryQueryOptions(
           activeWorkspace?.repoPath ?? "",
           DEFAULT_RUNTIME_KIND,
-          null,
           source?.workingDirectory ?? "",
           externalSessionId ?? "disabled",
           readSessionHistory,

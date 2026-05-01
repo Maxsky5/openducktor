@@ -27,7 +27,6 @@ type UseAgentStudioActiveSessionRuntimeDataArgs = {
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
     workingDirectory: string,
     externalSessionId: string,
-    runtimeId?: string | null,
   ) => Promise<AgentSessionTodoItem[]>;
 };
 
@@ -84,12 +83,11 @@ export const useAgentStudioActiveSessionRuntimeData = ({
         ? sessionTodosQueryOptions(
             runtimeQueryInput.repoPath,
             runtimeQueryInput.runtimeKind,
-            runtimeQueryInput.runtimeId,
             runtimeQueryInput.workingDirectory,
             session.externalSessionId,
             readSessionTodos,
           ).queryKey
-        : (["agent-session-runtime", "todos", "", "", "", "", ""] as const),
+        : (["agent-session-runtime", "todos", "", "", "", ""] as const),
     queryFn: async (): Promise<AgentSessionTodoItem[]> => {
       if (!runtimeQueryInput || !session) {
         throw new Error("Session todos query is disabled.");
@@ -99,7 +97,6 @@ export const useAgentStudioActiveSessionRuntimeData = ({
         runtimeQueryInput.runtimeKind,
         runtimeQueryInput.workingDirectory,
         session.externalSessionId,
-        runtimeQueryInput.runtimeId,
       );
     },
     enabled: shouldHydrateRuntimeData && session !== null,

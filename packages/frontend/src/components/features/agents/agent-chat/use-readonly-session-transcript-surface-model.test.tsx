@@ -352,7 +352,6 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         "opencode",
         "/repo-a/worktree",
         "session-subagent-1",
-        "runtime-1",
       );
       const session = latestSurfaceModelArgs?.session as AgentSessionState;
       expect(session.externalSessionId).toBe("session-subagent-1");

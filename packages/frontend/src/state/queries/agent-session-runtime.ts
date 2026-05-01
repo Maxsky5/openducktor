@@ -48,7 +48,6 @@ const agentSessionRuntimeQueryKeys = {
   todos: (
     repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeId: string | null | undefined,
     workingDirectory: string,
     externalSessionId: string,
   ) =>
@@ -57,14 +56,12 @@ const agentSessionRuntimeQueryKeys = {
       "todos",
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
-      runtimeId ?? "",
       normalizeWorkingDirectory(workingDirectory),
       externalSessionId,
     ] as const,
   history: (
     repoPath: string,
     runtimeKind: RuntimeKind,
-    runtimeId: string | null | undefined,
     workingDirectory: string,
     externalSessionId: string,
   ) =>
@@ -73,7 +70,6 @@ const agentSessionRuntimeQueryKeys = {
       "history",
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
-      runtimeId ?? "",
       normalizeWorkingDirectory(workingDirectory),
       externalSessionId,
     ] as const,
@@ -135,7 +131,6 @@ export const sessionFileSearchQueryOptions = (
 export const sessionTodosQueryOptions = (
   repoPath: string,
   runtimeKind: RuntimeKind,
-  runtimeId: string | null | undefined,
   workingDirectory: string,
   externalSessionId: string,
   readSessionTodos: (
@@ -143,26 +138,23 @@ export const sessionTodosQueryOptions = (
     runtimeKind: RuntimeKind,
     workingDirectory: string,
     externalSessionId: string,
-    runtimeId?: string | null,
   ) => Promise<AgentSessionTodoItem[]>,
 ) =>
   queryOptions({
     queryKey: agentSessionRuntimeQueryKeys.todos(
       repoPath,
       runtimeKind,
-      runtimeId,
       workingDirectory,
       externalSessionId,
     ),
     queryFn: (): Promise<AgentSessionTodoItem[]> =>
-      readSessionTodos(repoPath, runtimeKind, workingDirectory, externalSessionId, runtimeId),
+      readSessionTodos(repoPath, runtimeKind, workingDirectory, externalSessionId),
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });
 
 export const sessionHistoryQueryOptions = (
   repoPath: string,
   runtimeKind: RuntimeKind,
-  runtimeId: string | null | undefined,
   workingDirectory: string,
   externalSessionId: string,
   readSessionHistory: (
@@ -170,19 +162,17 @@ export const sessionHistoryQueryOptions = (
     runtimeKind: RuntimeKind,
     workingDirectory: string,
     externalSessionId: string,
-    runtimeId?: string | null,
   ) => Promise<AgentSessionHistoryMessage[]>,
 ) =>
   queryOptions({
     queryKey: agentSessionRuntimeQueryKeys.history(
       repoPath,
       runtimeKind,
-      runtimeId,
       workingDirectory,
       externalSessionId,
     ),
     queryFn: (): Promise<AgentSessionHistoryMessage[]> =>
-      readSessionHistory(repoPath, runtimeKind, workingDirectory, externalSessionId, runtimeId),
+      readSessionHistory(repoPath, runtimeKind, workingDirectory, externalSessionId),
     staleTime: SESSION_HISTORY_STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });

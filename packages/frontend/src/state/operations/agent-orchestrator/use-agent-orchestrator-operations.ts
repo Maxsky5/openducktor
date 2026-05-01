@@ -277,7 +277,6 @@ export function useAgentOrchestratorOperations({
       runtimeKind: RuntimeKind,
       workingDirectory: string,
       externalSessionId: string,
-      _runtimeId?: string | null,
     ) =>
       agentEngine.loadSessionTodos({
         repoPath,
@@ -294,7 +293,6 @@ export function useAgentOrchestratorOperations({
       runtimeKind: RuntimeKind,
       workingDirectory: string,
       externalSessionId: string,
-      _runtimeId?: string | null,
     ) =>
       agentEngine.loadSessionHistory({
         repoPath,
