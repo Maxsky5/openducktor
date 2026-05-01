@@ -42,6 +42,15 @@ const QUICK_ACTION_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
   "human_request_changes",
 ];
 
+const PULL_REQUEST_QUICK_ACTION_STATUSES = new Set<TaskCard["status"]>([
+  "ai_review",
+  "human_review",
+]);
+
+const canShowPullRequestQuickAction = (task: TaskCard): boolean => {
+  return PULL_REQUEST_QUICK_ACTION_STATUSES.has(task.status);
+};
+
 const quickActionLabelForWorkflowAction = (action: TaskWorkflowAction, task: TaskCard): string => {
   if (action === "set_spec") {
     return task.status === "spec_ready" ? "Open Spec" : "Start Spec";
@@ -94,6 +103,9 @@ const orderQuickActions = (
   const launchActionPriority = new Map(
     orderedWorkflowLaunchActions.map((launchActionId, index) => [launchActionId, index]),
   );
+  if (task.status === "human_review") {
+    launchActionPriority.set("build_pull_request_generation", -1);
+  }
   const fallbackPriority = launchActionPriority.size + 1;
 
   return [...options].sort((left, right) => {
@@ -222,31 +234,33 @@ export const buildAgentStudioQuickActions = (params: {
     });
   }
 
-  const builderSessionOptions = buildReusableSessionOptions({
-    sessions: params.sessionsForTask.filter((session) => session.taskId === task.id),
-    role: "build",
-  });
-  const hasBuilderSource = builderSessionOptions.length > 0;
-  const pullRequestDisabledReason =
-    disabledReason ?? (hasBuilderSource ? null : "Requires an existing Builder session.");
-  options.push({
-    id: "quick:build_pull_request_generation",
-    role: "build",
-    launchActionId: "build_pull_request_generation",
-    label: LAUNCH_ACTION_LABELS.build_pull_request_generation,
-    description: "Reuse or fork a Builder session to create or update a pull request.",
-    postStartAction: "kickoff",
-    disabled: pullRequestDisabledReason !== null,
-    ...(pullRequestDisabledReason ? { disabledReason: pullRequestDisabledReason } : {}),
-    ...(hasBuilderSource
-      ? {
-          initialStartMode: getSessionLaunchAction("build_pull_request_generation")
-            .defaultStartMode,
-          existingSessionOptions: builderSessionOptions,
-          initialSourceExternalSessionId: builderSessionOptions[0]?.value ?? null,
-        }
-      : {}),
-  });
+  if (canShowPullRequestQuickAction(task)) {
+    const builderSessionOptions = buildReusableSessionOptions({
+      sessions: params.sessionsForTask.filter((session) => session.taskId === task.id),
+      role: "build",
+    });
+    const hasBuilderSource = builderSessionOptions.length > 0;
+    const pullRequestDisabledReason =
+      disabledReason ?? (hasBuilderSource ? null : "Requires an existing Builder session.");
+    options.push({
+      id: "quick:build_pull_request_generation",
+      role: "build",
+      launchActionId: "build_pull_request_generation",
+      label: LAUNCH_ACTION_LABELS.build_pull_request_generation,
+      description: "Reuse or fork a Builder session to create or update a pull request.",
+      postStartAction: "kickoff",
+      disabled: pullRequestDisabledReason !== null,
+      ...(pullRequestDisabledReason ? { disabledReason: pullRequestDisabledReason } : {}),
+      ...(hasBuilderSource
+        ? {
+            initialStartMode: getSessionLaunchAction("build_pull_request_generation")
+              .defaultStartMode,
+            existingSessionOptions: builderSessionOptions,
+            initialSourceExternalSessionId: builderSessionOptions[0]?.value ?? null,
+          }
+        : {}),
+    });
+  }
 
   return orderQuickActions(task, options);
 };

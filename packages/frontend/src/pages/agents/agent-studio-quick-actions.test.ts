@@ -47,16 +47,14 @@ describe("agent-studio-quick-actions", () => {
       "build_implementation_start",
       "qa_review",
       "build_after_human_request_changes",
-      "build_pull_request_generation",
     ]);
     expect(
       options.find((option) => option.launchActionId === "build_after_human_request_changes")
         ?.requiresHumanFeedback,
     ).toBe(true);
     expect(
-      options.find((option) => option.launchActionId === "build_pull_request_generation")
-        ?.initialSourceExternalSessionId,
-    ).toBe("builder-1");
+      options.some((option) => option.launchActionId === "build_pull_request_generation"),
+    ).toBe(false);
     expect(selectPrimaryAgentStudioQuickAction(options)?.launchActionId).toBe("spec_initial");
     expect(selectPrimaryAgentStudioQuickAction(options)?.label).toBe("Start Spec");
   });
@@ -110,13 +108,19 @@ describe("agent-studio-quick-actions", () => {
     });
     const humanReviewOptions = buildAgentStudioQuickActions({
       selectedTask: humanReviewTask,
-      sessionsForTask: [],
+      sessionsForTask: [
+        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+      ],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
       createSessionDisabled: false,
     });
     expect(selectPrimaryAgentStudioQuickAction(humanReviewOptions)).toMatchObject({
-      launchActionId: "build_after_human_request_changes",
-      label: "Request Changes",
+      launchActionId: "build_pull_request_generation",
+      label: "Generate Pull Request",
+    });
+    expect(humanReviewOptions[0]).toMatchObject({
+      launchActionId: "build_pull_request_generation",
+      initialSourceExternalSessionId: "builder-1",
     });
     expect(
       humanReviewOptions.filter(
@@ -155,8 +159,45 @@ describe("agent-studio-quick-actions", () => {
     );
   });
 
-  test("keeps pull-request quick action visible but disabled without a builder source", () => {
-    const task = buildTask({ id: "task-1", availableActions: [] });
+  test("only proposes pull-request generation for review states", () => {
+    const nonReviewTask = buildTask({
+      id: "task-1",
+      status: "ready_for_dev",
+      availableActions: ["build_start"],
+    });
+    const nonReviewOptions = buildAgentStudioQuickActions({
+      selectedTask: nonReviewTask,
+      sessionsForTask: [
+        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+      ],
+      roleEnabledByTask: buildRoleEnabledMapForTask(nonReviewTask),
+      createSessionDisabled: false,
+    });
+
+    expect(
+      nonReviewOptions.some((option) => option.launchActionId === "build_pull_request_generation"),
+    ).toBe(false);
+
+    const aiReviewTask = buildTask({ id: "task-1", status: "ai_review", availableActions: [] });
+    const aiReviewOptions = buildAgentStudioQuickActions({
+      selectedTask: aiReviewTask,
+      sessionsForTask: [
+        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+      ],
+      roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTask),
+      createSessionDisabled: false,
+    });
+
+    expect(aiReviewOptions).toContainEqual(
+      expect.objectContaining({
+        launchActionId: "build_pull_request_generation",
+        initialSourceExternalSessionId: "builder-1",
+      }),
+    );
+  });
+
+  test("keeps review-state pull-request quick action disabled without a builder source", () => {
+    const task = buildTask({ id: "task-1", status: "human_review", availableActions: [] });
     const options = buildAgentStudioQuickActions({
       selectedTask: task,
       sessionsForTask: [],
