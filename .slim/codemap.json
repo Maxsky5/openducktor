@@ -1,7 +1,7 @@
 {
   "metadata": {
     "version": "1.0.0",
-    "last_run": "2026-05-01T13:45:00.000Z",
+    "last_run": "2026-05-01T17:05:00.000Z",
     "root": "/Users/maxsky5/.openducktor/worktrees/openducktor/openducktor-9wrv",
     "include_patterns": [
       "package.json",
@@ -827,9 +827,9 @@
     "packages/frontend/src/state/operations/agent-orchestrator/handlers/public-operations.ts": "2e4288065a280d2be725caf52718a171",
     "packages/frontend/src/state/operations/agent-orchestrator/handlers/session-actions.ts": "4463fe8009df54a3a6ca477ab56e2e02",
     "packages/frontend/src/state/operations/agent-orchestrator/handlers/start-session-constants.ts": "3691e39dc648679cd3db395b71dd86eb",
-    "packages/frontend/src/state/operations/agent-orchestrator/handlers/start-session-fork-strategy.ts": "e1bdb88effe1823b0a23fbbe5f23fba7",
+    "packages/frontend/src/state/operations/agent-orchestrator/handlers/start-session-fork-strategy.ts": "dd112eeb09fd2314e0ab75b9496cf7f8",
     "packages/frontend/src/state/operations/agent-orchestrator/handlers/start-session-fresh-strategy.ts": "93d4c249838fd8f3ffb45ea32ca52b64",
-    "packages/frontend/src/state/operations/agent-orchestrator/handlers/start-session-local-state.ts": "5a2c2d5fe5eb96a19da650468d285fe9",
+    "packages/frontend/src/state/operations/agent-orchestrator/handlers/start-session-local-state.ts": "4a52832d101b7ad7d42d9ab1c7c5b8b6",
     "packages/frontend/src/state/operations/agent-orchestrator/handlers/start-session-persistence.ts": "1c4f6f32a6bcac9a30082964ea9cc353",
     "packages/frontend/src/state/operations/agent-orchestrator/handlers/start-session-policies.ts": "d7b8265bfdee6d925fd6a77999b4bacd",
     "packages/frontend/src/state/operations/agent-orchestrator/handlers/start-session-reuse-strategy.ts": "de7d6fb051940cc570effa8cf365decb",
@@ -847,7 +847,7 @@
     "packages/frontend/src/state/operations/agent-orchestrator/lifecycle/hydration-runtime-resolution.ts": "35213bd6fb6175e1dffd1094e21ad99c",
     "packages/frontend/src/state/operations/agent-orchestrator/lifecycle/live-agent-session-cache.ts": "a264ba86d91f0492d22c1ef18b9964f9",
     "packages/frontend/src/state/operations/agent-orchestrator/lifecycle/live-agent-session-store.ts": "23606b1053aaae27f2d3254918ec82b7",
-    "packages/frontend/src/state/operations/agent-orchestrator/lifecycle/load-sessions-stages.ts": "01969d7c7dff859cae2c6a9d23ee097a",
+    "packages/frontend/src/state/operations/agent-orchestrator/lifecycle/load-sessions-stages.ts": "4f5adead6c777bb50550d992a7e4ffc4",
     "packages/frontend/src/state/operations/agent-orchestrator/lifecycle/load-sessions.ts": "937e7c319335fe23f424c4733f797a39",
     "packages/frontend/src/state/operations/agent-orchestrator/lifecycle/reattach-live-session.ts": "b3b6c107b73ad7af26e1231f51c7effe",
     "packages/frontend/src/state/operations/agent-orchestrator/lifecycle/repo-session-hydration-service.ts": "86e91b976a14768117b0125545db3891",
@@ -868,7 +868,7 @@
     "packages/frontend/src/state/operations/agent-orchestrator/support/persistence.ts": "c38fb532c5501d66ca3da1b952036711",
     "packages/frontend/src/state/operations/agent-orchestrator/support/question-messages.ts": "a4bd11d102bbd5d4b60a75c32db372c2",
     "packages/frontend/src/state/operations/agent-orchestrator/support/runtime-transcript-session.ts": "af697ce360c7551db37a7354e903d53c",
-    "packages/frontend/src/state/operations/agent-orchestrator/support/session-prompt.ts": "c17ee73450cca5cda2b9c3c4feca4584",
+    "packages/frontend/src/state/operations/agent-orchestrator/support/session-prompt.ts": "1d6b907cac20c64e1b22ce41b46aa414",
     "packages/frontend/src/state/operations/agent-orchestrator/support/session-purpose.ts": "0aa5ee9b32002323125440dc4e7a8f34",
     "packages/frontend/src/state/operations/agent-orchestrator/support/session-runtime-attachment.ts": "0b90160c6ac6e60d07d12fa5ccf4bfcb",
     "packages/frontend/src/state/operations/agent-orchestrator/support/session-runtime-metadata.ts": "673a9504671073a7a4b4cb3caf0c08ab",

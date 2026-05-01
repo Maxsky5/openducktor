@@ -1541,17 +1541,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const forkedMessages = sessionsById["external-forked-pr-session"]
         ? sessionMessagesToArray(sessionsById["external-forked-pr-session"])
         : [];
-      expect(forkedMessages.slice(0, 4)).toEqual([
-        {
-          id: "history:session-forked:external-forked-pr-session",
-          role: "system",
-          content: "Session forked (build)",
-          timestamp: "2026-02-22T08:20:00.000Z",
-        },
+      expect(forkedMessages.slice(0, 3)).toEqual([
         {
           id: "history:system-prompt:external-forked-pr-session",
           role: "system",
-          content: forkedMessages[1]?.content ?? "",
+          content: forkedMessages[0]?.content ?? "",
           timestamp: "2026-02-22T08:20:00.000Z",
         },
         {
@@ -1580,7 +1574,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       ]);
-      expect(forkedMessages[1]?.content).toContain("System prompt:");
+      expect(forkedMessages[0]?.content).toContain("System prompt:");
       expect(persistedSnapshots).toHaveLength(1);
       expect(persistedSnapshots[0]?.externalSessionId).toBe("external-forked-pr-session");
     } finally {
@@ -1705,17 +1699,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const forkedMessages = sessionsById["external-forked-from-hydrated-source"]
         ? sessionMessagesToArray(sessionsById["external-forked-from-hydrated-source"])
         : [];
-      expect(forkedMessages.slice(0, 3)).toEqual([
-        {
-          id: "history:session-forked:external-forked-from-hydrated-source",
-          role: "system",
-          content: "Session forked (build)",
-          timestamp: "2026-02-22T08:20:00.000Z",
-        },
+      expect(forkedMessages.slice(0, 2)).toEqual([
         {
           id: "history:system-prompt:external-forked-from-hydrated-source",
           role: "system",
-          content: forkedMessages[1]?.content ?? "",
+          content: forkedMessages[0]?.content ?? "",
           timestamp: "2026-02-22T08:20:00.000Z",
         },
         {
@@ -1729,7 +1717,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         },
       ]);
-      expect(forkedMessages[1]?.content).toContain("System prompt:");
+      expect(forkedMessages[0]?.content).toContain("System prompt:");
     } finally {
       adapter.forkSession = originalForkSession;
       adapter.loadSessionHistory = originalLoadSessionHistory;
@@ -2969,16 +2957,16 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(kickoffCalls).toBe(0);
       expect(refreshCalls).toBe(0);
       expect(Object.keys(sessionsState)).toContain("external-created");
-      expect(
-        sessionsState["external-created"]
-          ? sessionMessageAt(sessionsState["external-created"], 0)
-          : undefined,
-      ).toEqual({
-        id: "history:session-start:external-created",
+      const createdSession = sessionsState["external-created"];
+      expect(createdSession).toBeDefined();
+      const createdHeaderMessage = createdSession ? sessionMessageAt(createdSession, 0) : undefined;
+      expect(createdHeaderMessage).toEqual({
+        id: "history:system-prompt:external-created",
         role: "system",
-        content: "Session started (build)",
+        content: createdHeaderMessage?.content ?? "",
         timestamp: "2026-02-22T08:00:10.000Z",
       });
+      expect(createdHeaderMessage?.content).toContain("System prompt:");
     } finally {
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;

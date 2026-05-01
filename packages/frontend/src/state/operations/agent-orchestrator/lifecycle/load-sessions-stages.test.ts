@@ -2240,13 +2240,10 @@ describe("load-sessions-stages", () => {
     });
 
     expect(systemPrompt).toBe("");
-    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(1);
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(0);
     expect(
       sessionMessageAt({ externalSessionId: "external-1", messages: prelude }, 0),
-    ).toMatchObject({
-      id: "history:session-start:external-1",
-      content: "Session started (planner)",
-    });
+    ).toBeUndefined();
   });
 
   test("prompt assembler can skip synthetic prelude messages entirely", async () => {
@@ -2285,9 +2282,9 @@ describe("load-sessions-stages", () => {
     });
 
     expect(systemPrompt.length).toBeGreaterThan(0);
-    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(2);
+    expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(1);
     expect(
-      sessionMessageAt({ externalSessionId: "external-1", messages: prelude }, 1),
+      sessionMessageAt({ externalSessionId: "external-1", messages: prelude }, 0),
     ).toMatchObject({
       id: "history:system-prompt:external-1",
       content: `System prompt:\n\n${systemPrompt}`,

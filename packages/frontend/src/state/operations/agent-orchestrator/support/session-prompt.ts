@@ -29,10 +29,8 @@ type CreateSessionPromptContextInput = SessionPromptInput;
 
 type SessionHeaderInput = {
   externalSessionId: string;
-  role: AgentRole;
   systemPrompt: string;
   startedAt: string;
-  eventLabel?: "started" | "forked";
   includeSystemPrompt?: boolean;
 };
 
@@ -103,28 +101,15 @@ export const loadSessionPromptContext = async ({
 
 export const buildSessionHeaderMessages = ({
   externalSessionId,
-  role,
   systemPrompt,
   startedAt,
-  eventLabel = "started",
   includeSystemPrompt = true,
 }: SessionHeaderInput): AgentSessionState["messages"] => {
-  const eventId = eventLabel === "started" ? "start" : eventLabel;
-  const messages: AgentSessionState["messages"] = [
-    {
-      id: `history:session-${eventId}:${externalSessionId}`,
-      role: "system",
-      content: `Session ${eventLabel} (${role})`,
-      timestamp: startedAt,
-    },
-  ];
-
   if (!includeSystemPrompt) {
-    return messages;
+    return [];
   }
 
   return [
-    ...messages,
     {
       id: `history:system-prompt:${externalSessionId}`,
       role: "system",
@@ -135,11 +120,7 @@ export const buildSessionHeaderMessages = ({
 };
 
 export const isSessionHeaderMessageId = (messageId: string, externalSessionId: string): boolean => {
-  return (
-    messageId === `history:session-start:${externalSessionId}` ||
-    messageId === `history:session-forked:${externalSessionId}` ||
-    messageId === `history:system-prompt:${externalSessionId}`
-  );
+  return messageId === `history:system-prompt:${externalSessionId}`;
 };
 
 export const hasOnlySessionHeaderMessages = (

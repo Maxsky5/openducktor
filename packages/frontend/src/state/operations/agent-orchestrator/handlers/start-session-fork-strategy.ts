@@ -144,10 +144,8 @@ export const executeForkStart = async ({
           externalSessionId: summary.externalSessionId,
           messages: buildSessionHeaderMessages({
             externalSessionId: summary.externalSessionId,
-            role: ctx.role,
             systemPrompt: promptContext.systemPrompt,
             startedAt: summary.startedAt,
-            eventLabel: "forked",
           }),
         },
         0,

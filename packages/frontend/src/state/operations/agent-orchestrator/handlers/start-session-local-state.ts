@@ -46,7 +46,6 @@ export const buildInitialSession = ({
         initialMessages ??
         buildSessionHeaderMessages({
           externalSessionId: startedCtx.summary.externalSessionId,
-          role: startedCtx.role,
           systemPrompt,
           startedAt: startedCtx.summary.startedAt,
         }),

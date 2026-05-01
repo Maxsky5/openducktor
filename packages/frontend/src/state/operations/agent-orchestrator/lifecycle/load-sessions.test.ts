@@ -1516,9 +1516,8 @@ describe("agent-orchestrator-load-sessions", () => {
     const hydratedContents = hydratedSession
       ? sessionMessagesToArray(hydratedSession).map((message) => message.content)
       : [];
-    expect(hydratedContents[0]).toBe("Session started (planner)");
-    expect(hydratedContents[1]).toContain("System prompt:");
-    expect(hydratedContents.slice(2)).toEqual(["Requested history"]);
+    expect(hydratedContents[0]).toContain("System prompt:");
+    expect(hydratedContents.slice(1)).toEqual(["Requested history"]);
     expect(historyLoads).toBe(1);
     expect(resumeCalls).toBe(0);
     expect(attachCalls).toBe(1);
@@ -1697,9 +1696,8 @@ describe("agent-orchestrator-load-sessions", () => {
     const reconciledContents = sessionMessagesToArray(getSession(state, "external-1")).map(
       (message) => message.content,
     );
-    expect(reconciledContents[0]).toBe("Session started (planner)");
-    expect(reconciledContents[1]).toContain("System prompt:");
-    expect(reconciledContents.slice(2)).toEqual(["Hydrated from reconcile"]);
+    expect(reconciledContents[0]).toContain("System prompt:");
+    expect(reconciledContents.slice(1)).toEqual(["Hydrated from reconcile"]);
   });
 
   test("still hydrates on first live_if_empty reattach when a live message lands before hydration gating", async () => {
@@ -1858,9 +1856,8 @@ describe("agent-orchestrator-load-sessions", () => {
     const liveReconciledContents = sessionMessagesToArray(getSession(state, "external-1")).map(
       (message) => message.content,
     );
-    expect(liveReconciledContents[0]).toBe("Session started (planner)");
-    expect(liveReconciledContents[1]).toContain("System prompt:");
-    expect(liveReconciledContents.slice(2)).toEqual([
+    expect(liveReconciledContents[0]).toContain("System prompt:");
+    expect(liveReconciledContents.slice(1)).toEqual([
       "Hydrated from reconcile",
       "Live message before hydration",
     ]);
@@ -2817,14 +2814,7 @@ describe("agent-orchestrator-load-sessions", () => {
           runtimeId: null,
           runId: null,
           workingDirectory: "/tmp/repo",
-          messages: [
-            {
-              id: "history:session-start:external-1",
-              role: "system",
-              content: "Session started (planner)",
-              timestamp: "2026-02-22T08:00:00.000Z",
-            },
-          ],
+          messages: [],
           draftAssistantText: "",
           draftAssistantMessageId: null,
           draftReasoningText: "",
@@ -2897,14 +2887,7 @@ describe("agent-orchestrator-load-sessions", () => {
           runtimeId: "runtime-1",
           runId: null,
           workingDirectory: "/tmp/repo",
-          messages: [
-            {
-              id: "history:session-start:external-1",
-              role: "system",
-              content: "Session started (planner)",
-              timestamp: "2026-02-22T08:00:00.000Z",
-            },
-          ],
+          messages: [],
           draftAssistantText: "",
           draftAssistantMessageId: null,
           draftReasoningText: "",
@@ -3127,7 +3110,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(historyLoads).toBe(1);
     expect(sessionMessagesToArray(getSession(state, "external-1")).length).toBeGreaterThan(0);
     expect(sessionMessageAt(getSession(state, "external-1"), 0)?.id).toBe(
-      "history:session-start:external-1",
+      "history:system-prompt:external-1",
     );
   });
 
@@ -3559,7 +3542,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["external-qa-root"]?.runtimeId).toBe("runtime-root");
     expect(
       state["external-qa-root"] ? sessionMessagesToArray(state["external-qa-root"]) : undefined,
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 
   test("fails fast when the runtime list cache has no live repo runtime during hydration", async () => {
@@ -3925,11 +3908,11 @@ describe("agent-orchestrator-load-sessions", () => {
           historyLoads += 1;
           return [
             {
-              messageId: "history:session-start:external-1",
+              messageId: "history:runtime-history:external-1",
               parts: [
                 {
                   kind: "text",
-                  messageId: "history:session-start:external-1",
+                  messageId: "history:runtime-history:external-1",
                   partId: "part-1",
                   text: "Resumed history",
                   completed: true,
@@ -4693,7 +4676,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(
       state["external-1"] ? sessionMessagesToArray(state["external-1"]) : undefined,
-    ).toHaveLength(2);
+    ).toHaveLength(1);
     expect(specCalls).toBe(0);
     expect(planCalls).toBe(0);
     expect(qaCalls).toBe(0);

@@ -583,7 +583,6 @@ export const createHydrationPromptAssemblerStage = ({
     if (!task) {
       return buildSessionHeaderMessages({
         externalSessionId: record.externalSessionId,
-        role: record.role,
         systemPrompt: "",
         startedAt: record.startedAt,
         includeSystemPrompt: false,
@@ -598,7 +597,6 @@ export const createHydrationPromptAssemblerStage = ({
 
     return buildSessionHeaderMessages({
       externalSessionId: record.externalSessionId,
-      role: record.role,
       systemPrompt,
       startedAt: record.startedAt,
     });

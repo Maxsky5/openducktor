@@ -3104,7 +3104,9 @@ describe("use-agent-orchestrator-operations", () => {
         : [];
       expect(recoveredContents).toContain("Recovered history tail");
       expect(recoveredContents).toContain("Local transcript still present");
-      expect(recoveredContents).toContain("Session started (build)");
+      expect(recoveredContents.every((content) => !content.startsWith("Session started"))).toBe(
+        true,
+      );
       expect(recoveredContents.some((content) => content.includes("System prompt:"))).toBe(true);
     } finally {
       await harness.unmount();
