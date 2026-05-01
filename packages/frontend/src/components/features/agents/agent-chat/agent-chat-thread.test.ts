@@ -670,17 +670,19 @@ describe("AgentChatThread", () => {
     );
     await act(flush);
 
-    const getTurnStyle = (rowKey: string): string => {
+    const getTurnStyle = (rowKey: string): string | null => {
       const row = rendered.container.querySelector(`[data-row-key="${rowKey}"]`);
       const turn = row?.parentElement;
       if (!(turn instanceof HTMLDivElement)) {
-        throw new Error(`Expected turn element for ${rowKey}`);
+        return null;
       }
 
       return turn.getAttribute("style") ?? "";
     };
 
-    expect(getTurnStyle(`${externalSessionId}:user-12`)).not.toContain("content-visibility");
+    const runningLatestTurnStyle = getTurnStyle(`${externalSessionId}:user-12`);
+    expect(runningLatestTurnStyle).not.toBeNull();
+    expect(runningLatestTurnStyle).not.toContain("content-visibility");
 
     rendered.rerender(
       createElement(AgentChatThread, {
@@ -699,8 +701,12 @@ describe("AgentChatThread", () => {
     );
     await act(flush);
 
-    expect(getTurnStyle(`${externalSessionId}:user-3`)).toContain("content-visibility");
-    expect(getTurnStyle(`${externalSessionId}:user-12`)).not.toContain("content-visibility");
+    const completedOlderTurnStyle = getTurnStyle(`${externalSessionId}:user-3`);
+    const completedLatestTurnStyle = getTurnStyle(`${externalSessionId}:user-12`);
+    expect(completedOlderTurnStyle).not.toBeNull();
+    expect(completedOlderTurnStyle).toContain("content-visibility");
+    expect(completedLatestTurnStyle).not.toBeNull();
+    expect(completedLatestTurnStyle).not.toContain("content-visibility");
 
     rendered.unmount();
   });
