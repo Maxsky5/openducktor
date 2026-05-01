@@ -256,4 +256,55 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.unmount();
     }
   });
+
+  test("preserves target-branch validation for repository-mode UI locking without blocking diff", async () => {
+    const harness = createHookHarness(
+      createBaseArgs({
+        session: {
+          role: "spec",
+          status: "running",
+          workingDirectory: "/repo",
+          hasActiveSession: true,
+        },
+        viewSelectedTask: createTaskCardFixture({
+          id: "task-24",
+          targetBranchError: "Invalid openducktor.targetBranch metadata: missing field `branch`.",
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const snapshot = harness.getLatest();
+      expect(snapshot.gitPanelContextMode).toBe("repository");
+      expect(snapshot.targetBranchState.validationError).toBe(
+        "Invalid openducktor.targetBranch metadata: missing field `branch`.",
+      );
+      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).not.toHaveProperty(
+        "preconditionError",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps dev-server reads scoped to the hydrated selected task", async () => {
+    const harness = createHookHarness(createBaseArgs({ viewSelectedTask: null }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-24");
+
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-24");
+      expect(harness.getLatest().context.taskId).toBe("task-24");
+      expect(useAgentStudioDevServerPanelMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        repoPath: "/repo",
+        taskId: null,
+        enabled: false,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

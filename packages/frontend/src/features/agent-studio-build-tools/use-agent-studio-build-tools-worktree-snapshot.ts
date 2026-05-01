@@ -183,13 +183,13 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
   });
   const isSessionContextStable = sessionRole !== "build" || !isViewSessionHistoryHydrating;
   const hasSelectedTask = selectedTaskId != null;
-  const taskTargetBranchError =
-    gitPanelContextMode === "worktree" ? (viewSelectedTask?.targetBranchError ?? null) : null;
   const targetBranchState = resolveTaskTargetBranchState({
     taskTargetBranch: viewSelectedTask?.targetBranch,
-    taskTargetBranchError,
+    taskTargetBranchError: viewSelectedTask?.targetBranchError ?? null,
     defaultTargetBranch: repoSettings?.defaultTargetBranch,
   });
+  const diffPreconditionError =
+    gitPanelContextMode === "worktree" ? targetBranchState.validationError : null;
   const diffComparisonTarget =
     gitPanelContextMode === "repository"
       ? { branch: UPSTREAM_TARGET_BRANCH }
@@ -206,6 +206,8 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
   const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
   const repoPath = isEnabled ? buildToolsBootstrap.repoPath : null;
   const taskId = isEnabled ? selectedTaskId : null;
+  const devServerTaskId = isEnabled ? (viewSelectedTask?.id ?? null) : null;
+  const isDevServerEnabled = isEnabled && devServerTaskId != null;
   const directWorktreePath = resolveDirectBuildWorktreePath({
     repoPath,
     sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
@@ -285,17 +287,15 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
     worktreeResolutionError: worktreeError,
     retryWorktreeResolution,
     defaultTargetBranch: diffComparisonTarget,
-    ...(targetBranchState.validationError
-      ? { preconditionError: targetBranchState.validationError }
-      : {}),
+    ...(diffPreconditionError ? { preconditionError: diffPreconditionError } : {}),
     branchIdentityKey: repositoryBranchIdentityKey,
     enablePolling: buildToolsBootstrap.shouldEnableEventPolling && isEnabled,
   });
   const devServerModel = useDevServerPanelHook({
     repoPath,
-    taskId,
+    taskId: devServerTaskId,
     repoSettings,
-    enabled: isEnabled,
+    enabled: isDevServerEnabled,
   });
   const resolvedGitPanelBranch = resolveAgentStudioGitPanelBranch({
     contextMode: gitPanelContextMode,
