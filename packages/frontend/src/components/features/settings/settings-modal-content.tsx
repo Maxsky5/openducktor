@@ -63,6 +63,7 @@ export function SettingsModalContent({
     showRepoScriptValidationErrors,
     selectedRepoDevServerValidationErrors,
     promptValidationState,
+    customPromptValidationState,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
@@ -139,6 +140,7 @@ export function SettingsModalContent({
     return (
       <SettingsChatSection
         chat={snapshotDraft.chat}
+        validationErrors={customPromptValidationState.errorsById}
         disabled={isInteractionDisabled}
         onUpdateChat={updateGlobalChatSettings}
       />

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   AUTOPILOT_EVENT_IDS,
+  chatSettingsSchema,
+  customPromptSchema,
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
   kanbanSettingsSchema,
   repoConfigSchema,
@@ -100,6 +102,57 @@ describe("config-schemas", () => {
 
     expect(parsed.kanban.doneVisibleDays).toBe(1);
     expect(parsed.kanban.emptyColumnDisplay).toBe("show");
+    expect(parsed.chat.customPrompts).toEqual([]);
+  });
+
+  test("defaults custom prompts to an empty array", () => {
+    const parsed = chatSettingsSchema.parse({ showThinkingMessages: true });
+
+    expect(parsed).toEqual({ showThinkingMessages: true, customPrompts: [] });
+  });
+
+  test("trims and roundtrips valid custom prompts", () => {
+    const parsed = customPromptSchema.parse({
+      id: " prompt-1 ",
+      name: " review-file ",
+      description: " Review a file ",
+      content: " Review this:\n$ARGUMENTS ",
+    });
+
+    expect(parsed).toEqual({
+      id: "prompt-1",
+      name: "review-file",
+      description: "Review a file",
+      content: "Review this:\n$ARGUMENTS",
+    });
+  });
+
+  test("rejects invalid custom prompt fields", () => {
+    expect(() =>
+      chatSettingsSchema.parse({
+        showThinkingMessages: false,
+        customPrompts: [{ id: "prompt-1", name: "bad name", description: "", content: "Body" }],
+      }),
+    ).toThrow("Custom prompt name must contain only letters");
+
+    expect(() =>
+      chatSettingsSchema.parse({
+        showThinkingMessages: false,
+        customPrompts: [{ id: "prompt-1", name: "review", description: "", content: "  " }],
+      }),
+    ).toThrow("Custom prompt content cannot be blank.");
+  });
+
+  test("rejects duplicate custom prompt names case-insensitively", () => {
+    expect(() =>
+      chatSettingsSchema.parse({
+        showThinkingMessages: false,
+        customPrompts: [
+          { id: "prompt-1", name: "review", description: "", content: "Body" },
+          { id: "prompt-2", name: " Review ", description: "", content: "Body" },
+        ],
+      }),
+    ).toThrow("Duplicate custom prompt name: Review");
   });
 
   test("defaults missing kanban empty-column display to show", () => {

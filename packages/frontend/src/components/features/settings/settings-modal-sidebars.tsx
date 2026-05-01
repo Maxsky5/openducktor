@@ -36,7 +36,7 @@ export function SettingsSidebar({
               onClick={() => onChange(entry.id)}
               title={
                 sectionErrorCount > 0
-                  ? `${sectionErrorCount} prompt placeholder error${sectionErrorCount > 1 ? "s" : ""}`
+                  ? `${sectionErrorCount} settings error${sectionErrorCount > 1 ? "s" : ""}`
                   : undefined
               }
             >

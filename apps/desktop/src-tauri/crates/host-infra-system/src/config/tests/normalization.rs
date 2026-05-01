@@ -1,5 +1,5 @@
 use super::{lock_env, workspace_identity, EnvVarGuard, RepoConfig, TestStoreHarness};
-use crate::GitTargetBranch;
+use crate::{CustomPrompt, GitTargetBranch, GlobalConfig};
 use host_domain::DEFAULT_BRANCH_PREFIX;
 use serde_json::json;
 use std::fs;
@@ -13,8 +13,71 @@ fn load_missing_returns_default_config() {
     let config = store.load().expect("load default");
     assert_eq!(config.version, 2);
     assert!(!config.chat.show_thinking_messages);
+    assert!(config.chat.custom_prompts.is_empty());
     assert_eq!(config.kanban.done_visible_days, 1);
     assert!(config.workspaces.is_empty());
+}
+
+#[test]
+fn save_trims_and_preserves_custom_prompts() {
+    let harness = TestStoreHarness::new("custom-prompts-preserve");
+    let store = harness.store();
+    let mut config = GlobalConfig::default();
+    config.chat.custom_prompts = vec![CustomPrompt {
+        id: " prompt-1 ".to_string(),
+        name: " review ".to_string(),
+        description: " Review context ".to_string(),
+        content: " Review this:\n$ARGUMENTS ".to_string(),
+    }];
+
+    store.save(&config).expect("save custom prompts");
+    let loaded = store.load().expect("load custom prompts");
+
+    assert_eq!(loaded.chat.custom_prompts.len(), 1);
+    assert_eq!(loaded.chat.custom_prompts[0].id, "prompt-1");
+    assert_eq!(loaded.chat.custom_prompts[0].name, "review");
+    assert_eq!(loaded.chat.custom_prompts[0].description, "Review context");
+    assert_eq!(
+        loaded.chat.custom_prompts[0].content,
+        "Review this:\n$ARGUMENTS"
+    );
+}
+
+#[test]
+fn load_rejects_invalid_custom_prompts() {
+    let harness = TestStoreHarness::new("custom-prompts-invalid");
+    let store = harness.store();
+
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    let payload = json!({
+        "version": 2,
+        "chat": {
+            "customPrompts": [
+                { "id": "prompt-1", "name": "bad name", "description": "", "content": "Body" }
+            ]
+        },
+        "recentWorkspaces": []
+    });
+    fs::write(
+        store.path(),
+        serde_json::to_string_pretty(&payload).expect("serialize payload"),
+    )
+    .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
+
+    let error = store.load().expect_err("invalid custom prompt should fail");
+    let error_chain = format!("{error:#}");
+    assert!(
+        error_chain.contains("Custom prompt name must contain only letters"),
+        "error should identify invalid prompt name: {error_chain}"
+    );
 }
 
 #[test]

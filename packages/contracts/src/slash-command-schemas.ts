@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const slashCommandSourceValues = ["command", "mcp", "skill"] as const;
+export const slashCommandSourceValues = ["command", "mcp", "skill", "custom"] as const;
 export const slashCommandSourceSchema = z.enum(slashCommandSourceValues);
 export type SlashCommandSource = z.infer<typeof slashCommandSourceSchema>;
 

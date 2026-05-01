@@ -130,6 +130,7 @@ const createBaseArgs = (): HookArgs => ({
     variant: "default",
     profileId: "spec",
   },
+  customPrompts: [],
   repoSettings: null,
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},

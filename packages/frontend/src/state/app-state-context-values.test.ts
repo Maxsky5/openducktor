@@ -63,6 +63,7 @@ describe("app-state-context-values", () => {
         },
         chat: {
           showThinkingMessages: false,
+          customPrompts: [],
         },
         kanban: {
           doneVisibleDays: 1,

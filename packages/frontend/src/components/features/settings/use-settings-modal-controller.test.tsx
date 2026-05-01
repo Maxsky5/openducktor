@@ -36,6 +36,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    customPrompts: [],
   },
   kanban: {
     doneVisibleDays: 1,
@@ -334,6 +335,7 @@ describe("useSettingsModalController", () => {
       ...createSettingsSnapshot(),
       chat: {
         showThinkingMessages: true,
+        customPrompts: [],
       },
     });
 

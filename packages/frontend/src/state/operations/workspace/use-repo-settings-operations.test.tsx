@@ -72,6 +72,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    customPrompts: [],
   },
   kanban: {
     doneVisibleDays: 1,
@@ -682,6 +683,7 @@ describe("use-repo-settings-operations", () => {
       },
       chat: {
         showThinkingMessages: false,
+        customPrompts: [],
       },
       kanban: {
         doneVisibleDays: 1,

@@ -1,8 +1,8 @@
 use super::types::{
     default_branch_prefix, normalize_git_target_branch_value, AgentModelDefault, AutopilotActionId,
-    AutopilotRule, AutopilotSettings, GitProviderConfig, GitProviderRepository, GitTargetBranch,
-    GlobalConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig, RepoDevServerScript,
-    RuntimeConfig, AUTOPILOT_EVENT_ORDER,
+    AutopilotRule, AutopilotSettings, ChatSettings, GitProviderConfig, GitProviderRepository,
+    GitTargetBranch, GlobalConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+    RepoDevServerScript, RuntimeConfig, AUTOPILOT_EVENT_ORDER,
 };
 use anyhow::{anyhow, Result};
 use host_domain::RuntimeRegistry;
@@ -65,6 +65,40 @@ fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
             Some(trimmed.to_string())
         }
     })
+}
+
+fn is_valid_custom_prompt_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric()
+                || character == '.'
+                || character == '_'
+                || character == ':'
+                || character == '-'
+        })
+}
+
+fn normalize_chat_settings(config: &mut ChatSettings) -> Result<()> {
+    let mut seen_names = HashSet::new();
+    for prompt in &mut config.custom_prompts {
+        normalize_required_string(&mut prompt.id, "Custom prompt id")?;
+        normalize_required_string(&mut prompt.name, "Custom prompt name")?;
+        prompt.description = prompt.description.trim().to_string();
+        normalize_required_string(&mut prompt.content, "Custom prompt content")?;
+
+        if !is_valid_custom_prompt_name(&prompt.name) {
+            return Err(anyhow!(
+                "Custom prompt name must contain only letters, digits, dots, underscores, colons, or dashes."
+            ));
+        }
+
+        let normalized_name = prompt.name.to_ascii_lowercase();
+        if !seen_names.insert(normalized_name) {
+            return Err(anyhow!("Duplicate custom prompt name: {}", prompt.name));
+        }
+    }
+
+    Ok(())
 }
 
 fn normalize_hook_commands(commands: &mut Vec<String>) {
@@ -301,6 +335,7 @@ fn normalize_workspace_order(config: &mut GlobalConfig) {
 }
 
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
+    normalize_chat_settings(&mut config.chat)?;
     normalize_kanban_settings(&mut config.kanban);
     normalize_autopilot_settings(&mut config.autopilot);
     normalize_prompt_overrides(&mut config.global_prompt_overrides)?;

@@ -20,6 +20,7 @@ const createSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    customPrompts: [],
   },
   kanban: {
     doneVisibleDays: 1,
@@ -93,6 +94,7 @@ describe("useSettingsModalDirtyState", () => {
         ...createSnapshot(),
         chat: {
           showThinkingMessages: true,
+          customPrompts: [],
         },
       },
     });

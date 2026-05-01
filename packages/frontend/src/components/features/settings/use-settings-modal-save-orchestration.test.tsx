@@ -22,6 +22,7 @@ const createSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    customPrompts: [],
   },
   kanban: {
     doneVisibleDays: 1,
@@ -59,6 +60,8 @@ const createArgs = (
   dirtySections,
   hasPromptValidationErrors: false,
   promptValidationState: EMPTY_PROMPT_VALIDATION_STATE,
+  hasCustomPromptValidationErrors: false,
+  customPromptValidationErrorCount: 0,
   hasRepoScriptValidationErrors: false,
   repoScriptValidationErrorCount: 0,
   invalidRepoPathsWithDevServerErrors: [],
@@ -324,6 +327,7 @@ describe("useSettingsModalSaveOrchestration", () => {
       expect.objectContaining({
         chat: {
           showThinkingMessages: true,
+          customPrompts: [],
         },
       }),
     );

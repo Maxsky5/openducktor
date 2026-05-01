@@ -40,6 +40,15 @@ const COMMAND = {
   hints: ["compact"],
 };
 
+const CUSTOM_COMMAND = {
+  id: "custom-prompt:prompt-1",
+  trigger: "review",
+  title: "review",
+  description: "Review context",
+  source: "custom" as const,
+  hints: [],
+};
+
 const FILE_REFERENCE = {
   id: "file-src-main",
   path: "src/main.ts",
@@ -227,6 +236,7 @@ const createBaseArgs = (): HookArgs => {
       variant: "default",
       profileId: "spec",
     },
+    customPrompts: [],
     repoSettings: null,
     startAgentSession: async () => "session-new",
     sendAgentMessage: async () => {},
@@ -258,6 +268,7 @@ describe("useAgentStudioSessionActions", () => {
       },
       chat: {
         showThinkingMessages: false,
+        customPrompts: [],
       },
       kanban: {
         doneVisibleDays: 1,
@@ -370,6 +381,80 @@ describe("useAgentStudioSessionActions", () => {
 
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
       { kind: "slash_command", command: COMMAND },
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("onSend expands custom prompt slash commands to normal text with arguments", async () => {
+    const sendAgentMessage = mock(async () => {});
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("", "text-before"),
+        createSlashCommandSegment(CUSTOM_COMMAND, "slash-1"),
+        createTextSegment(" src/foo.ts ", "text-after"),
+      ],
+      attachments: [],
+    };
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({ externalSessionId: "session-existing" }),
+      customPrompts: [
+        {
+          id: "prompt-1",
+          name: "review",
+          description: "Review context",
+          content: "Review this file:\n$ARGUMENTS",
+        },
+      ],
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(draft)).resolves.toBe(true);
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "Review this file:\nsrc/foo.ts" },
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("onSend appends custom prompt arguments when no placeholder is present", async () => {
+    const sendAgentMessage = mock(async () => {});
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("", "text-before"),
+        createSlashCommandSegment(CUSTOM_COMMAND, "slash-1"),
+        createTextSegment(" src/foo.ts ", "text-after"),
+      ],
+      attachments: [],
+    };
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({ externalSessionId: "session-existing" }),
+      customPrompts: [
+        {
+          id: "prompt-1",
+          name: "review",
+          description: "Review context",
+          content: "Review this carefully.",
+        },
+      ],
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(draft)).resolves.toBe(true);
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "Review this carefully.\nsrc/foo.ts" },
     ]);
 
     await harness.unmount();

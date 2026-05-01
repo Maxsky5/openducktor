@@ -23,6 +23,8 @@ import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-consta
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import { useSettingsModalBranchesState } from "./use-settings-modal-branches-state";
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
+import type { CustomPromptValidationState } from "./use-settings-modal-custom-prompt-validation";
+import { useSettingsModalCustomPromptValidation } from "./use-settings-modal-custom-prompt-validation";
 import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-draft-actions";
 import { useSettingsModalDirtyState } from "./use-settings-modal-dirty-state";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
@@ -63,6 +65,8 @@ export type SettingsModalController = {
   globalPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
   selectedRepoPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
+  customPromptValidationState: CustomPromptValidationState;
+  hasCustomPromptValidationErrors: boolean;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCount: number;
   showRepoScriptValidationErrors: boolean;
@@ -187,6 +191,15 @@ export const useSettingsModalController = ({
     snapshotDraft,
     selectedWorkspaceId,
   });
+  const customPromptValidationState = useSettingsModalCustomPromptValidation({ snapshotDraft });
+  const hasCustomPromptValidationErrors = customPromptValidationState.totalErrorCount > 0;
+  const settingsSectionErrorCountByIdWithCustomPrompts = useMemo(
+    () => ({
+      ...settingsSectionErrorCountById,
+      chat: (settingsSectionErrorCountById.chat ?? 0) + customPromptValidationState.totalErrorCount,
+    }),
+    [customPromptValidationState.totalErrorCount, settingsSectionErrorCountById],
+  );
 
   const {
     updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
@@ -241,6 +254,8 @@ export const useSettingsModalController = ({
     dirtySections,
     hasPromptValidationErrors,
     promptValidationState,
+    hasCustomPromptValidationErrors,
+    customPromptValidationErrorCount: customPromptValidationState.totalErrorCount,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
     invalidRepoPathsWithDevServerErrors,
@@ -330,7 +345,9 @@ export const useSettingsModalController = ({
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
     selectedRepoPromptRoleTabErrorCounts,
-    settingsSectionErrorCountById,
+    settingsSectionErrorCountById: settingsSectionErrorCountByIdWithCustomPrompts,
+    customPromptValidationState,
+    hasCustomPromptValidationErrors,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
     showRepoScriptValidationErrors,

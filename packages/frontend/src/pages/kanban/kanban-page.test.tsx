@@ -54,6 +54,7 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   },
   chat: {
     showThinkingMessages: false,
+    customPrompts: [],
   },
   kanban: {
     doneVisibleDays: 1,
@@ -605,6 +606,7 @@ describe("KanbanPage session start modal flow", () => {
       },
       chat: {
         showThinkingMessages: false,
+        customPrompts: [],
       },
       kanban: {
         doneVisibleDays: 1,

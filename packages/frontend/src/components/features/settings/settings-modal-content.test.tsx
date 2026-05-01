@@ -7,7 +7,7 @@ import { SettingsModalContent } from "./settings-modal-content";
 const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot => ({
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
-  chat: { showThinkingMessages: false },
+  chat: { showThinkingMessages: false, customPrompts: [] },
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
   workspaces: {},
@@ -48,6 +48,8 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
     totalErrorCount: 0,
   },
   hasPromptValidationErrors: false,
+  customPromptValidationState: { errorsById: {}, totalErrorCount: 0 },
+  hasCustomPromptValidationErrors: false,
   hasRepoScriptValidationErrors: false,
   repoScriptValidationErrorCount: 0,
   showRepoScriptValidationErrors: false,
@@ -83,7 +85,9 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
 
 describe("settings modal content", () => {
   test("renders chat section with SettingsChatSection when section is chat", () => {
-    const snapshot = createMockSnapshot({ chat: { showThinkingMessages: true } });
+    const snapshot = createMockSnapshot({
+      chat: { showThinkingMessages: true, customPrompts: [] },
+    });
     const controller = createMockController(snapshot);
 
     const html = renderToStaticMarkup(

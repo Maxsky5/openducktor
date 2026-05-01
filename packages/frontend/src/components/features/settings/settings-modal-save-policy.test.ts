@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
+  buildCustomPromptValidationSaveError,
   buildPromptValidationSaveError,
   buildRepoScriptValidationSaveError,
   hasAnyDirtySections,
@@ -16,6 +17,7 @@ const createSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    customPrompts: [],
   },
   kanban: {
     doneVisibleDays: 1,
@@ -70,6 +72,9 @@ describe("settings-modal-save-policy", () => {
     expect(buildPromptValidationSaveError(1)).toBe("Fix 1 prompt placeholder error before saving.");
     expect(buildPromptValidationSaveError(2)).toBe(
       "Fix 2 prompt placeholder errors before saving.",
+    );
+    expect(buildCustomPromptValidationSaveError(1)).toBe(
+      "Fix 1 custom prompt field error before saving.",
     );
     expect(
       buildRepoScriptValidationSaveError({

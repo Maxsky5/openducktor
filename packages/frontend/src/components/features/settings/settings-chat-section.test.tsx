@@ -5,12 +5,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsChatSection } from "./settings-chat-section";
 
 describe("settings chat section", () => {
+  const emptyValidationErrors = {};
+
   test("renders chat settings with thinking messages hidden by default", () => {
-    const chatSettings: ChatSettings = { showThinkingMessages: false };
+    const chatSettings: ChatSettings = { showThinkingMessages: false, customPrompts: [] };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
         chat: chatSettings,
+        validationErrors: emptyValidationErrors,
         disabled: false,
         onUpdateChat: () => chatSettings,
       }),
@@ -23,11 +26,12 @@ describe("settings chat section", () => {
   });
 
   test("renders switch as unchecked when showThinkingMessages is false", () => {
-    const chatSettings: ChatSettings = { showThinkingMessages: false };
+    const chatSettings: ChatSettings = { showThinkingMessages: false, customPrompts: [] };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
         chat: chatSettings,
+        validationErrors: emptyValidationErrors,
         disabled: false,
         onUpdateChat: () => chatSettings,
       }),
@@ -37,11 +41,12 @@ describe("settings chat section", () => {
   });
 
   test("renders switch as checked when showThinkingMessages is true", () => {
-    const chatSettings: ChatSettings = { showThinkingMessages: true };
+    const chatSettings: ChatSettings = { showThinkingMessages: true, customPrompts: [] };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
         chat: chatSettings,
+        validationErrors: emptyValidationErrors,
         disabled: false,
         onUpdateChat: () => chatSettings,
       }),
@@ -51,11 +56,12 @@ describe("settings chat section", () => {
   });
 
   test("switch is disabled when disabled prop is true", () => {
-    const chatSettings: ChatSettings = { showThinkingMessages: false };
+    const chatSettings: ChatSettings = { showThinkingMessages: false, customPrompts: [] };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
         chat: chatSettings,
+        validationErrors: emptyValidationErrors,
         disabled: true,
         onUpdateChat: () => chatSettings,
       }),
@@ -65,16 +71,45 @@ describe("settings chat section", () => {
   });
 
   test("displays save notice about changes taking effect after save", () => {
-    const chatSettings: ChatSettings = { showThinkingMessages: false };
+    const chatSettings: ChatSettings = { showThinkingMessages: false, customPrompts: [] };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
         chat: chatSettings,
+        validationErrors: emptyValidationErrors,
         disabled: false,
         onUpdateChat: () => chatSettings,
       }),
     );
 
     expect(html).toContain("after you save settings");
+  });
+
+  test("renders saved custom prompts and validation errors", () => {
+    const chatSettings: ChatSettings = {
+      showThinkingMessages: false,
+      customPrompts: [
+        {
+          id: "prompt-1",
+          name: "review",
+          description: "Review files",
+          content: "Review this:\n$ARGUMENTS",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsChatSection, {
+        chat: chatSettings,
+        validationErrors: { "prompt-1": { content: "Prompt content is required." } },
+        disabled: false,
+        onUpdateChat: () => chatSettings,
+      }),
+    );
+
+    expect(html).toContain("Custom prompts");
+    expect(html).toContain("review");
+    expect(html).toContain("Review files");
+    expect(html).toContain("Prompt content is required.");
   });
 });

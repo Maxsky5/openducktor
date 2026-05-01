@@ -14,6 +14,7 @@ const DEFAULT_SOFT_GUARDRAILS = {
 
 const DEFAULT_CHAT_SETTINGS = {
   showThinkingMessages: false,
+  customPrompts: [],
 } as const;
 export const DEFAULT_KANBAN_SETTINGS = {
   doneVisibleDays: 1,
@@ -46,6 +47,49 @@ const trimmedRequiredString = (field: string) =>
     .string()
     .transform((value) => value.trim())
     .refine((value) => value.length > 0, `${field} cannot be blank.`);
+
+export const CUSTOM_PROMPT_ARGUMENTS_PLACEHOLDER = "$ARGUMENTS";
+export const CUSTOM_PROMPT_TRIGGER_PATTERN = /^[a-zA-Z0-9._:-]+$/;
+
+const customPromptNameSchema = trimmedRequiredString("Custom prompt name").refine(
+  (value) => CUSTOM_PROMPT_TRIGGER_PATTERN.test(value),
+  "Custom prompt name must contain only letters, digits, dots, underscores, colons, or dashes.",
+);
+
+export const customPromptSchema = z.object({
+  id: trimmedRequiredString("Custom prompt id"),
+  name: customPromptNameSchema,
+  description: z
+    .string()
+    .default("")
+    .transform((value) => value.trim()),
+  content: trimmedRequiredString("Custom prompt content"),
+});
+export type CustomPrompt = z.infer<typeof customPromptSchema>;
+
+export const customPromptsSchema = z
+  .array(customPromptSchema)
+  .superRefine((prompts, context) => {
+    const seenNames = new Map<string, number>();
+    for (const [index, prompt] of prompts.entries()) {
+      const normalizedName = prompt.name.toLowerCase();
+      const firstIndex = seenNames.get(normalizedName);
+      if (firstIndex !== undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate custom prompt name: ${prompt.name}`,
+          path: [index, "name"],
+        });
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate custom prompt name: ${prompt.name}`,
+          path: [firstIndex, "name"],
+        });
+      }
+      seenNames.set(normalizedName, index);
+    }
+  })
+  .default([]);
 
 const dedupeValues = <T>(values: readonly T[]) => [...new Set(values)];
 
@@ -141,6 +185,7 @@ export type RepoConfig = z.infer<typeof repoConfigSchema>;
 
 export const chatSettingsSchema = z.object({
   showThinkingMessages: z.boolean().default(DEFAULT_CHAT_SETTINGS.showThinkingMessages),
+  customPrompts: customPromptsSchema,
 });
 export type ChatSettings = z.infer<typeof chatSettingsSchema>;
 
@@ -207,7 +252,7 @@ export const globalConfigSchema = z.object({
   activeWorkspace: workspaceIdSchema.optional(),
   theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
-  chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
+  chat: chatSettingsSchema.default(() => ({ ...DEFAULT_CHAT_SETTINGS, customPrompts: [] })),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
@@ -220,7 +265,7 @@ export type GlobalConfig = z.infer<typeof globalConfigSchema>;
 export const settingsSnapshotSchema = z.object({
   theme: themeValueSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
-  chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
+  chat: chatSettingsSchema.default(() => ({ ...DEFAULT_CHAT_SETTINGS, customPrompts: [] })),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),

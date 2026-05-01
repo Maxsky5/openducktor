@@ -31,6 +31,11 @@ export const buildPromptValidationSaveError = (totalErrorCount: number): string 
   return `Fix ${totalErrorCount} prompt placeholder error${suffix} before saving.`;
 };
 
+export const buildCustomPromptValidationSaveError = (totalErrorCount: number): string => {
+  const suffix = totalErrorCount > 1 ? "s" : "";
+  return `Fix ${totalErrorCount} custom prompt field error${suffix} before saving.`;
+};
+
 export const buildRepoScriptValidationSaveError = ({
   invalidRepoPathsWithDevServerErrors,
   repoScriptValidationErrorCount,

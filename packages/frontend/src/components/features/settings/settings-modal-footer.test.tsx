@@ -12,6 +12,7 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
       isSaving: false,
       isLoadingSettings: false,
       hasPromptValidationErrors: false,
+      hasCustomPromptValidationErrors: false,
       hasRepoScriptValidationErrors: false,
       settingsError: null,
       saveError: null,
@@ -26,6 +27,7 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
         repoTotalErrorCount: 0,
         totalErrorCount: 0,
       },
+      customPromptValidationErrorCount: 0,
       repoScriptValidationErrorCount: 0,
       hasSnapshotDraft: true,
       onCancel: () => {},
@@ -59,6 +61,22 @@ describe("SettingsModalFooter", () => {
 
     try {
       expect(screen.getByText(/2 dev server field errors\./i)).toBeTruthy();
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("disables save when custom prompt fields are invalid", () => {
+    const renderer = renderFooter({
+      hasCustomPromptValidationErrors: true,
+      customPromptValidationErrorCount: 1,
+    });
+
+    try {
+      expect(screen.getByRole("button", { name: /save settings/i }).hasAttribute("disabled")).toBe(
+        true,
+      );
+      expect(screen.getByText(/1 custom prompt field error\./i)).toBeTruthy();
     } finally {
       renderer.unmount();
     }

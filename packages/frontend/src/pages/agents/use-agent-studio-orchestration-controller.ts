@@ -278,7 +278,7 @@ export function useAgentStudioOrchestrationController({
   const { repoSettings } = useAgentStudioRepoSettings({
     activeWorkspace,
   });
-  const { showThinkingMessages, chatSettingsLoadError, retryChatSettingsLoad } =
+  const { showThinkingMessages, customPrompts, chatSettingsLoadError, retryChatSettingsLoad } =
     useAgentStudioChatSettings({ activeWorkspace });
 
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
@@ -314,6 +314,7 @@ export function useAgentStudioOrchestrationController({
     activeSession: viewActiveSession,
     activeSessionSummary: viewActiveSessionSummary,
     role: viewRole,
+    customPrompts,
     repoSettings,
     updateAgentSessionModel,
     readSessionFileSearch,
@@ -353,6 +354,7 @@ export function useAgentStudioOrchestrationController({
     agentStudioReady,
     isActiveTaskHydrated,
     selectionForNewSession,
+    customPrompts,
     repoSettings,
     startAgentSession,
     sendAgentMessage,

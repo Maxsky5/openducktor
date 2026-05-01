@@ -35,7 +35,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
     defaultMergeMethod: "merge_commit",
   },
   workspaces: {},
-  chat: { showThinkingMessages: false },
+  chat: { showThinkingMessages: false, customPrompts: [] },
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
   globalPromptOverrides: {

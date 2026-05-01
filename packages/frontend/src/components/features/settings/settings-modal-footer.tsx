@@ -7,6 +7,7 @@ type SettingsModalFooterProps = {
   isSaving: boolean;
   isLoadingSettings: boolean;
   hasPromptValidationErrors: boolean;
+  hasCustomPromptValidationErrors: boolean;
   hasRepoScriptValidationErrors: boolean;
   settingsError: string | null;
   saveError: string | null;
@@ -14,6 +15,7 @@ type SettingsModalFooterProps = {
   section: SettingsSectionId;
   repositorySection: RepositorySectionId;
   promptValidationState: PromptValidationState;
+  customPromptValidationErrorCount: number;
   repoScriptValidationErrorCount: number;
   hasSnapshotDraft: boolean;
   onCancel: () => void;
@@ -24,6 +26,7 @@ export function SettingsModalFooter({
   isSaving,
   isLoadingSettings,
   hasPromptValidationErrors,
+  hasCustomPromptValidationErrors,
   hasRepoScriptValidationErrors,
   settingsError,
   saveError,
@@ -31,6 +34,7 @@ export function SettingsModalFooter({
   section,
   repositorySection,
   promptValidationState,
+  customPromptValidationErrorCount,
   repoScriptValidationErrorCount,
   hasSnapshotDraft,
   onCancel,
@@ -41,7 +45,8 @@ export function SettingsModalFooter({
     isLoadingSettings ||
     !hasSnapshotDraft ||
     Boolean(settingsError) ||
-    hasPromptValidationErrors;
+    hasPromptValidationErrors ||
+    hasCustomPromptValidationErrors;
 
   return (
     <div className="mt-0 flex shrink-0 items-center justify-start border-t border-border px-6 pb-4 pt-4">
@@ -59,7 +64,16 @@ export function SettingsModalFooter({
             {promptValidationState.totalErrorCount > 1 ? "s" : ""}.
           </span>
         ) : null}
-        {!saveError && !hasPromptValidationErrors && hasRepoScriptValidationErrors ? (
+        {!saveError && !hasPromptValidationErrors && hasCustomPromptValidationErrors ? (
+          <span className="text-destructive-muted">
+            {customPromptValidationErrorCount} custom prompt field error
+            {customPromptValidationErrorCount > 1 ? "s" : ""}.
+          </span>
+        ) : null}
+        {!saveError &&
+        !hasPromptValidationErrors &&
+        !hasCustomPromptValidationErrors &&
+        hasRepoScriptValidationErrors ? (
           <span className="text-destructive-muted">
             {repoScriptValidationErrorCount} dev server field error
             {repoScriptValidationErrorCount > 1 ? "s" : ""}.

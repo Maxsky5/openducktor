@@ -21,6 +21,7 @@ import type {
   BuildSessionBootstrap,
   ChatSettings,
   CommitsAheadBehind,
+  CustomPrompt,
   DirectoryEntry,
   DirectoryListing,
   ExternalTaskSyncEvent,
@@ -177,6 +178,10 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "buildBlockedResultSchema",
   "buildCompletedResultSchema",
   "chatSettingsSchema",
+  "CUSTOM_PROMPT_ARGUMENTS_PLACEHOLDER",
+  "CUSTOM_PROMPT_TRIGGER_PATTERN",
+  "customPromptSchema",
+  "customPromptsSchema",
   "buildResumedResultSchema",
   "CreateTaskInputSchema",
   "DEFAULT_KANBAN_SETTINGS",
@@ -435,6 +440,7 @@ type ExportedTypeContract = {
   AgentWorkflows: AgentWorkflows;
   BeadsCheck: BeadsCheck;
   ChatSettings: ChatSettings;
+  CustomPrompt: CustomPrompt;
   CommitsAheadBehind: CommitsAheadBehind;
   DirectoryEntry: DirectoryEntry;
   DirectoryListing: DirectoryListing;
@@ -570,6 +576,7 @@ describe("contracts exports contract", () => {
     });
 
     expect(parsedSnapshot.chat.showThinkingMessages).toBe(false);
+    expect(parsedSnapshot.chat.customPrompts).toEqual([]);
     expect(parsedSnapshot.kanban.doneVisibleDays).toBe(1);
     expect(parsedSnapshot.kanban.emptyColumnDisplay).toBe("show");
   });

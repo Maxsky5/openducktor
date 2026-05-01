@@ -110,6 +110,7 @@ export function SettingsModal({
           isSaving={controller.isSaving}
           isLoadingSettings={controller.isLoadingSettings}
           hasPromptValidationErrors={controller.hasPromptValidationErrors}
+          hasCustomPromptValidationErrors={controller.hasCustomPromptValidationErrors}
           hasRepoScriptValidationErrors={controller.hasRepoScriptValidationErrors}
           settingsError={controller.settingsError}
           saveError={controller.saveError}
@@ -117,6 +118,7 @@ export function SettingsModal({
           section={section}
           repositorySection={repositorySection}
           promptValidationState={controller.promptValidationState}
+          customPromptValidationErrorCount={controller.customPromptValidationState.totalErrorCount}
           repoScriptValidationErrorCount={controller.repoScriptValidationErrorCount}
           hasSnapshotDraft={Boolean(controller.snapshotDraft)}
           onCancel={() => setOpen(false)}

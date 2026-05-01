@@ -324,6 +324,14 @@ describe("settings-modal-normalization", () => {
       },
       chat: {
         showThinkingMessages: true,
+        customPrompts: [
+          {
+            id: " prompt-1 ",
+            name: " review ",
+            description: " Review context ",
+            content: " Review this. ",
+          },
+        ],
       },
       kanban: {
         doneVisibleDays: 1,
@@ -353,6 +361,14 @@ describe("settings-modal-normalization", () => {
       },
     ]);
     expect(snapshot.chat.showThinkingMessages).toBe(true);
+    expect(snapshot.chat.customPrompts).toEqual([
+      {
+        id: "prompt-1",
+        name: "review",
+        description: "Review context",
+        content: "Review this.",
+      },
+    ]);
     expect(snapshot.kanban.doneVisibleDays).toBe(1);
     expect(snapshot.globalPromptOverrides).toEqual({
       "kickoff.spec_initial": {
@@ -372,6 +388,7 @@ describe("settings-modal-normalization", () => {
       },
       chat: {
         showThinkingMessages: false,
+        customPrompts: [],
       },
       kanban: {
         doneVisibleDays: 1,
@@ -402,6 +419,7 @@ describe("settings-modal-normalization", () => {
           },
           chat: {
             showThinkingMessages: false,
+            customPrompts: [],
           },
           kanban: {
             doneVisibleDays: 1,

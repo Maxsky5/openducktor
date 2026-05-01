@@ -154,9 +154,21 @@ pub struct GlobalGitConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct CustomPrompt {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatSettings {
     #[serde(default)]
     pub show_thinking_messages: bool,
+    #[serde(default)]
+    pub custom_prompts: Vec<CustomPrompt>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -611,8 +623,8 @@ impl RuntimeConfig {
 #[cfg(test)]
 mod tests {
     use super::{
-        deserialize_global_config, GlobalConfig, KanbanEmptyColumnDisplay, KanbanSettings,
-        RepoConfig,
+        deserialize_global_config, CustomPrompt, GlobalConfig, KanbanEmptyColumnDisplay,
+        KanbanSettings, RepoConfig,
     };
 
     #[test]
@@ -648,6 +660,31 @@ mod tests {
             config.kanban.empty_column_display,
             KanbanEmptyColumnDisplay::Show
         );
+        assert!(config.chat.custom_prompts.is_empty());
+    }
+
+    #[test]
+    fn chat_settings_custom_prompts_serialize_roundtrip() {
+        let config = GlobalConfig {
+            chat: super::ChatSettings {
+                show_thinking_messages: true,
+                custom_prompts: vec![CustomPrompt {
+                    id: "prompt-1".to_string(),
+                    name: "review".to_string(),
+                    description: "Review context".to_string(),
+                    content: "Review this:\n$ARGUMENTS".to_string(),
+                }],
+            },
+            ..GlobalConfig::default()
+        };
+
+        let serialized = serde_json::to_string(&config).expect("config should serialize");
+        let deserialized =
+            deserialize_global_config(&serialized).expect("config should deserialize");
+
+        assert!(deserialized.chat.show_thinking_messages);
+        assert_eq!(deserialized.chat.custom_prompts.len(), 1);
+        assert_eq!(deserialized.chat.custom_prompts[0].name, "review");
     }
 
     #[test]
