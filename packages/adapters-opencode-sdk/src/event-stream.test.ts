@@ -220,6 +220,9 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
       subagentCorrelationKey: "part:assistant-1:subtask-1",
     },
   ]);
+  expect(
+    runtime.pendingSubagentInputEventsByExternalSessionId.get("external-child-session"),
+  ).toBeUndefined();
 });
 
 const assistantRoleEvent = (messageId: string): Event =>

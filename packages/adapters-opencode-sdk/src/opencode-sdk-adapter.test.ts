@@ -408,6 +408,7 @@ describe("opencode-sdk-adapter", () => {
     };
     session.pendingSubagentInputEventsByExternalSessionId.set("child-a", [
       { type: "permission_required", requestId: "request-1" },
+      { type: "question_required", requestId: "request-2" },
     ]);
     session.pendingSubagentInputEventsByExternalSessionId.set("child-b", [
       { type: "question_required", requestId: "request-1" },
@@ -415,7 +416,9 @@ describe("opencode-sdk-adapter", () => {
 
     (adapter as any).clearPendingSubagentInputEvent("child-a", "request-1");
 
-    expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-a")).toBeUndefined();
+    expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-a")).toEqual([
+      { type: "question_required", requestId: "request-2" },
+    ]);
     expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-b")).toEqual([
       { type: "question_required", requestId: "request-1" },
     ]);
