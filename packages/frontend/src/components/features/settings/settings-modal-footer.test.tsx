@@ -9,27 +9,19 @@ enableReactActEnvironment();
 const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[0]> = {}) => {
   return render(
     createElement(SettingsModalFooter, {
-      isSaving: false,
-      isLoadingSettings: false,
-      hasPromptValidationErrors: false,
-      hasCustomPromptValidationErrors: false,
-      hasRepoScriptValidationErrors: false,
-      settingsError: null,
-      saveError: null,
-      catalogError: null,
-      section: "repositories",
-      repositorySection: "configuration",
-      promptValidationState: {
-        globalErrors: {},
-        globalErrorCount: 0,
-        repoErrorsByWorkspaceId: {},
-        repoErrorCountByWorkspaceId: {},
-        repoTotalErrorCount: 0,
-        totalErrorCount: 0,
+      saveState: {
+        isSaving: false,
+        isLoadingSettings: false,
+        hasSnapshotDraft: true,
+        settingsError: null,
       },
-      customPromptValidationErrorCount: 0,
-      repoScriptValidationErrorCount: 0,
-      hasSnapshotDraft: true,
+      validationSummary: {
+        promptPlaceholderErrorCount: 0,
+        customPromptFieldErrorCount: 0,
+        repoScriptFieldErrorCount: 0,
+      },
+      errors: { saveError: null, catalogError: null },
+      location: { section: "repositories", repositorySection: "configuration" },
       onCancel: () => {},
       onSave: () => {},
       ...overrides,
@@ -40,8 +32,11 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
 describe("SettingsModalFooter", () => {
   test("keeps save enabled when only dev server fields are invalid", () => {
     const renderer = renderFooter({
-      hasRepoScriptValidationErrors: true,
-      repoScriptValidationErrorCount: 2,
+      validationSummary: {
+        promptPlaceholderErrorCount: 0,
+        customPromptFieldErrorCount: 0,
+        repoScriptFieldErrorCount: 2,
+      },
     });
 
     try {
@@ -55,8 +50,11 @@ describe("SettingsModalFooter", () => {
 
   test("shows the dev server validation count in the footer", () => {
     const renderer = renderFooter({
-      hasRepoScriptValidationErrors: true,
-      repoScriptValidationErrorCount: 2,
+      validationSummary: {
+        promptPlaceholderErrorCount: 0,
+        customPromptFieldErrorCount: 0,
+        repoScriptFieldErrorCount: 2,
+      },
     });
 
     try {
@@ -68,8 +66,11 @@ describe("SettingsModalFooter", () => {
 
   test("disables save when custom prompt fields are invalid", () => {
     const renderer = renderFooter({
-      hasCustomPromptValidationErrors: true,
-      customPromptValidationErrorCount: 1,
+      validationSummary: {
+        promptPlaceholderErrorCount: 0,
+        customPromptFieldErrorCount: 1,
+        repoScriptFieldErrorCount: 0,
+      },
     });
 
     try {

@@ -100,10 +100,17 @@ export const resolveCustomPromptDraftToUserMessageParts = (
     );
   }
 
+  const text = expandCustomPromptContent(prompt.content, trailingTextParts.join("").trim());
+  if (text.trim().length === 0) {
+    throw new Error(
+      "Custom prompt produced an empty message. Add command text or edit the prompt content.",
+    );
+  }
+
   return [
     {
       kind: "text",
-      text: expandCustomPromptContent(prompt.content, trailingTextParts.join("").trim()),
+      text,
     },
   ];
 };

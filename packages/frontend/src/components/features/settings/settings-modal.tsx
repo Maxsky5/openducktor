@@ -25,28 +25,52 @@ type SettingsModalProps = {
   triggerSize?: "default" | "sm" | "lg" | "icon";
 };
 
+type SettingsModalNavigationState = {
+  section: SettingsSectionId;
+  repositorySection: RepositorySectionId;
+  globalPromptRoleTab: PromptRoleTabId;
+  repoPromptRoleTab: PromptRoleTabId;
+};
+
 const INITIAL_SECTION: SettingsSectionId = "repositories";
 const INITIAL_REPOSITORY_SECTION: RepositorySectionId = "configuration";
 const INITIAL_PROMPT_ROLE_TAB: PromptRoleTabId = "shared";
+const INITIAL_NAVIGATION_STATE: SettingsModalNavigationState = {
+  section: INITIAL_SECTION,
+  repositorySection: INITIAL_REPOSITORY_SECTION,
+  globalPromptRoleTab: INITIAL_PROMPT_ROLE_TAB,
+  repoPromptRoleTab: INITIAL_PROMPT_ROLE_TAB,
+};
 
 export function SettingsModal({
   triggerClassName,
   triggerSize = "sm",
 }: SettingsModalProps): ReactElement {
   const [open, setOpen] = useState(false);
-  const [section, setSection] = useState<SettingsSectionId>(INITIAL_SECTION);
-  const [repositorySection, setRepositorySection] = useState<RepositorySectionId>(
-    INITIAL_REPOSITORY_SECTION,
-  );
-  const [globalPromptRoleTab, setGlobalPromptRoleTab] =
-    useState<PromptRoleTabId>(INITIAL_PROMPT_ROLE_TAB);
-  const [repoPromptRoleTab, setRepoPromptRoleTab] =
-    useState<PromptRoleTabId>(INITIAL_PROMPT_ROLE_TAB);
+  const [navigation, setNavigation] =
+    useState<SettingsModalNavigationState>(INITIAL_NAVIGATION_STATE);
   const controller = useSettingsModalController({
     open,
-    shouldLoadCatalog: open && section === "repositories" && repositorySection === "agents",
+    shouldLoadCatalog:
+      open && navigation.section === "repositories" && navigation.repositorySection === "agents",
   });
   const isInteractionDisabled = controller.isLoadingSettings || controller.isSaving;
+
+  const handleSectionChange = (section: SettingsSectionId): void => {
+    setNavigation((current) => ({ ...current, section }));
+  };
+
+  const handleRepositorySectionChange = (repositorySection: RepositorySectionId): void => {
+    setNavigation((current) => ({ ...current, repositorySection }));
+  };
+
+  const handleGlobalPromptRoleTabChange = (globalPromptRoleTab: PromptRoleTabId): void => {
+    setNavigation((current) => ({ ...current, globalPromptRoleTab }));
+  };
+
+  const handleRepoPromptRoleTabChange = (repoPromptRoleTab: PromptRoleTabId): void => {
+    setNavigation((current) => ({ ...current, repoPromptRoleTab }));
+  };
 
   const handleSave = (): void => {
     controller.markRepoScriptSaveAttempt();
@@ -85,42 +109,47 @@ export function SettingsModal({
         <div className="min-h-0 flex-1 overflow-hidden">
           <div className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)]">
             <SettingsSidebar
-              section={section}
+              section={navigation.section}
               disabled={isInteractionDisabled}
               errorCountById={controller.settingsSectionErrorCountById}
-              onChange={setSection}
+              onChange={handleSectionChange}
             />
             <div className="min-h-0 overflow-y-auto">
               <SettingsModalContent
-                section={section}
-                repositorySection={repositorySection}
-                globalPromptRoleTab={globalPromptRoleTab}
-                repoPromptRoleTab={repoPromptRoleTab}
+                section={navigation.section}
+                repositorySection={navigation.repositorySection}
+                globalPromptRoleTab={navigation.globalPromptRoleTab}
+                repoPromptRoleTab={navigation.repoPromptRoleTab}
                 isInteractionDisabled={isInteractionDisabled}
                 controller={controller}
-                onRepositorySectionChange={setRepositorySection}
-                onGlobalPromptRoleTabChange={setGlobalPromptRoleTab}
-                onRepoPromptRoleTabChange={setRepoPromptRoleTab}
+                onRepositorySectionChange={handleRepositorySectionChange}
+                onGlobalPromptRoleTabChange={handleGlobalPromptRoleTabChange}
+                onRepoPromptRoleTabChange={handleRepoPromptRoleTabChange}
               />
             </div>
           </div>
         </div>
 
         <SettingsModalFooter
-          isSaving={controller.isSaving}
-          isLoadingSettings={controller.isLoadingSettings}
-          hasPromptValidationErrors={controller.hasPromptValidationErrors}
-          hasCustomPromptValidationErrors={controller.hasCustomPromptValidationErrors}
-          hasRepoScriptValidationErrors={controller.hasRepoScriptValidationErrors}
-          settingsError={controller.settingsError}
-          saveError={controller.saveError}
-          catalogError={controller.runtimeDefinitionsError}
-          section={section}
-          repositorySection={repositorySection}
-          promptValidationState={controller.promptValidationState}
-          customPromptValidationErrorCount={controller.customPromptValidationState.totalErrorCount}
-          repoScriptValidationErrorCount={controller.repoScriptValidationErrorCount}
-          hasSnapshotDraft={Boolean(controller.snapshotDraft)}
+          saveState={{
+            isSaving: controller.isSaving,
+            isLoadingSettings: controller.isLoadingSettings,
+            hasSnapshotDraft: Boolean(controller.snapshotDraft),
+            settingsError: controller.settingsError,
+          }}
+          validationSummary={{
+            promptPlaceholderErrorCount: controller.promptValidationState.totalErrorCount,
+            customPromptFieldErrorCount: controller.customPromptValidationState.totalErrorCount,
+            repoScriptFieldErrorCount: controller.repoScriptValidationErrorCount,
+          }}
+          errors={{
+            saveError: controller.saveError,
+            catalogError: controller.runtimeDefinitionsError,
+          }}
+          location={{
+            section: navigation.section,
+            repositorySection: navigation.repositorySection,
+          }}
           onCancel={() => setOpen(false)}
           onSave={handleSave}
         />

@@ -71,4 +71,22 @@ describe("agent chat custom prompts", () => {
       ),
     ).toThrow("Remove file references before sending a custom prompt slash command.");
   });
+
+  test("rejects placeholder-only prompts when arguments are empty", () => {
+    const placeholderOnlyPrompt = { ...PROMPT, content: "$ARGUMENTS" };
+
+    expect(() =>
+      resolveCustomPromptDraftToUserMessageParts(
+        {
+          segments: [
+            createTextSegment("", "before"),
+            createSlashCommandSegment(toCustomPromptSlashCommand(placeholderOnlyPrompt), "slash"),
+            createTextSegment("   ", "after"),
+          ],
+          attachments: [],
+        },
+        [placeholderOnlyPrompt],
+      ),
+    ).toThrow("Custom prompt produced an empty message");
+  });
 });
