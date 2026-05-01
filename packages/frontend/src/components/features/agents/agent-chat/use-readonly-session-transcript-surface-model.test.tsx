@@ -358,6 +358,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         "opencode",
         "/repo-a/worktree",
         "session-subagent-1",
+        "runtime-1",
       );
       const session = latestSurfaceModelArgs?.session as AgentSessionState;
       expect(session.externalSessionId).toBe("session-subagent-1");
@@ -564,6 +565,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       expect(replyRuntimeSessionPermission).toHaveBeenCalledWith({
         repoPath: "/repo-a",
         runtimeKind: "opencode",
+        runtimeId: "runtime-1",
         workingDirectory: "/repo-a",
         targetExternalSessionId: "session-subagent-1",
         requestId: "permission-1",
@@ -621,6 +623,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       expect(replyRuntimeSessionQuestion).toHaveBeenCalledWith({
         repoPath: "/repo-a",
         runtimeKind: "opencode",
+        runtimeId: "runtime-1",
         workingDirectory: "/repo-a",
         targetExternalSessionId: "session-subagent-1",
         requestId: "question-1",
@@ -699,9 +702,17 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
       expect(readSessionHistory).not.toHaveBeenCalled();
       expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
+      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: false });
+      await (
+        latestSurfaceModelArgs?.permissions as {
+          onReply: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
+        }
+      ).onReply("permission-1", "once");
       expect(harness.getLatest().model.thread.emptyState).toEqual({
         title: "Failed to load conversation: No opencode runtime is attached for runtime-1.",
       });
+      expect(replyRuntimeSessionPermission).not.toHaveBeenCalled();
+      expect(replyAgentPermission).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -737,6 +748,48 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       expect(harness.getLatest().model.thread.emptyState).toEqual({
         title: "Failed to load conversation: runtime registry unavailable",
       });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("surfaces an ambiguous runtime attachment as unresolved and blocks permission replies", async () => {
+    const transcriptSourceWithRuntimeIdOnly = makeTranscriptSourceWithRuntimeIdOnly();
+    runtimeList = [makeRuntime(), makeRuntime()];
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        externalSessionId: "session-subagent-1",
+        source: transcriptSourceWithRuntimeIdOnly,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.model.thread.emptyState !== null);
+
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: false });
+      await (
+        latestSurfaceModelArgs?.permissions as {
+          onReply: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
+        }
+      ).onReply("permission-1", "once");
+      expect(harness.getLatest().model.thread.emptyState).toEqual({
+        title: "Failed to load conversation: Multiple opencode runtime is attached for runtime-1.",
+      });
+      expect(replyRuntimeSessionPermission).not.toHaveBeenCalled();
+      expect(replyAgentPermission).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

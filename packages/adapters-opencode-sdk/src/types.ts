@@ -88,9 +88,13 @@ export type ClientFactory = (input: {
   workingDirectory?: string;
 }) => OpencodeClient;
 
+export type RepoRuntimeResolverInput = RepoRuntimeRef & {
+  runtimeId?: string | null;
+};
+
 export type RepoRuntimeResolverPort = {
-  ensureRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
-  requireRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
+  ensureRepoRuntime(ref: RepoRuntimeResolverInput): Promise<RuntimeInstanceSummary>;
+  requireRepoRuntime(ref: RepoRuntimeResolverInput): Promise<RuntimeInstanceSummary>;
 };
 
 export type OpencodeStreamEventLog = {

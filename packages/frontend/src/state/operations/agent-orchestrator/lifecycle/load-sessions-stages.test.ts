@@ -1387,6 +1387,7 @@ describe("load-sessions-stages", () => {
       {
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
+        runtimeId: "runtime-stdio",
         workingDirectory: "/tmp/repo/worktree",
         externalSessionId: "external-1",
         limit: 600,
@@ -1789,7 +1790,7 @@ describe("load-sessions-stages", () => {
     });
   });
 
-  test("keeps parent hydration successful and preserves child overlay when child snapshot lookup fails", async () => {
+  test("fails parent hydration when child snapshot lookup fails", async () => {
     const stalePermission = { requestId: "stale-perm", permission: "read", patterns: ["src/**"] };
     const stateHarness = createStateHarness({
       "external-1": createSession({
@@ -1799,14 +1800,9 @@ describe("load-sessions-stages", () => {
         },
       }),
     });
-    const originalWarn = console.warn;
-    const warnings: unknown[][] = [];
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args);
-    };
 
-    try {
-      await hydrateSessionRecordsStage({
+    await expect(
+      hydrateSessionRecordsStage({
         repoPath: "/tmp/repo",
         adapter: {
           hasSession: () => false,
@@ -1881,18 +1877,17 @@ describe("load-sessions-stages", () => {
           buildHydrationSystemPrompt: async () => "",
         },
         getRepoPromptOverrides: async () => ({}),
-      });
-    } finally {
-      console.warn = originalWarn;
-    }
+      }),
+    ).rejects.toThrow(
+      "Failed to hydrate pending input for subagent session 'external-child-session': child snapshot unavailable",
+    );
 
-    expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("hydrated");
+    expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("failed");
     expect(
       stateHarness.getState()["external-1"]?.subagentPendingPermissionsByExternalSessionId,
     ).toEqual({
       "external-child-session": [stalePermission],
     });
-    expect(warnings[0]?.[0]).toContain("child snapshot unavailable");
   });
 
   test("runtime planner ignores stale hydrated runtime state and reuses preloaded live snapshots", async () => {

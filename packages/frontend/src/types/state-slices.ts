@@ -196,12 +196,14 @@ export type AgentStateContextValue = {
     runtimeKind: RuntimeKind,
     workingDirectory: string,
     externalSessionId: string,
+    runtimeId?: string | null,
   ) => Promise<AgentSessionTodoItem[]>;
   readSessionHistory: (
     repoPath: string,
     runtimeKind: RuntimeKind,
     workingDirectory: string,
     externalSessionId: string,
+    runtimeId?: string | null,
   ) => Promise<AgentSessionHistoryMessage[]>;
   attachRuntimeTranscriptSession: (input: {
     repoPath: string;
@@ -274,6 +276,7 @@ export type AgentStateContextValue = {
   replyRuntimeSessionPermission: (input: {
     repoPath: string;
     runtimeKind: RuntimeKind;
+    runtimeId?: string | null;
     workingDirectory: string;
     targetExternalSessionId: string;
     requestId: string;
@@ -283,6 +286,7 @@ export type AgentStateContextValue = {
   replyRuntimeSessionQuestion: (input: {
     repoPath: string;
     runtimeKind: RuntimeKind;
+    runtimeId?: string | null;
     workingDirectory: string;
     targetExternalSessionId: string;
     requestId: string;

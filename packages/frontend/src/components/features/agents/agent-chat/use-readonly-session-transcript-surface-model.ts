@@ -341,6 +341,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       ? sessionHistoryQueryOptions(
           activeWorkspace.repoPath,
           source.runtimeKind,
+          resolvedSource.runtimeId,
           source.workingDirectory,
           externalSessionId,
           readSessionHistory,
@@ -348,6 +349,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       : sessionHistoryQueryOptions(
           activeWorkspace?.repoPath ?? "",
           DEFAULT_RUNTIME_KIND,
+          null,
           source?.workingDirectory ?? "",
           externalSessionId ?? "disabled",
           readSessionHistory,
@@ -444,10 +446,14 @@ export function useReadonlySessionTranscriptSurfaceModel({
       requestId: string,
       reply: "once" | "always" | "reject",
     ): Promise<void> => {
-      if (source && activeWorkspace && externalSessionId) {
+      if (source) {
+        if (!activeWorkspace || !externalSessionId || !resolvedSource.runtimeId) {
+          throw new Error("Runtime transcript permission target is unavailable.");
+        }
         await replyRuntimeSessionPermission({
           repoPath: activeWorkspace.repoPath,
           runtimeKind: source.runtimeKind,
+          runtimeId: resolvedSource.runtimeId,
           workingDirectory: source.workingDirectory,
           targetExternalSessionId,
           requestId,
@@ -477,6 +483,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       liveSession,
       replyAgentPermission,
       replyRuntimeSessionPermission,
+      resolvedSource.runtimeId,
       source,
     ],
   );
@@ -491,12 +498,16 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const replyTranscriptQuestion = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
       const targetExternalSessionId = externalSessionId;
-      if (source && activeWorkspace && targetExternalSessionId) {
+      if (source) {
+        if (!activeWorkspace || !targetExternalSessionId || !resolvedSource.runtimeId) {
+          throw new Error("Runtime transcript question target is unavailable.");
+        }
         setIsSubmittingQuestionByRequestId((current) => ({ ...current, [requestId]: true }));
         try {
           await replyRuntimeSessionQuestion({
             repoPath: activeWorkspace.repoPath,
             runtimeKind: source.runtimeKind,
+            runtimeId: resolvedSource.runtimeId,
             workingDirectory: source.workingDirectory,
             targetExternalSessionId,
             requestId,
@@ -533,6 +544,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       externalSessionId,
       liveSession,
       replyRuntimeSessionQuestion,
+      resolvedSource.runtimeId,
       source,
     ],
   );
@@ -560,7 +572,12 @@ export function useReadonlySessionTranscriptSurfaceModel({
       onSubmit: replyTranscriptQuestion,
     },
     permissions: {
-      canReply: activePermissionSessionId !== null && pendingPermissionRequests.length > 0,
+      canReply:
+        runtimeReadiness.isReady &&
+        !resolvedSource.isPending &&
+        !resolvedSource.error &&
+        activePermissionSessionId !== null &&
+        pendingPermissionRequests.length > 0,
       isSubmittingByRequestId: isSubmittingPermissionByRequestId,
       errorByRequestId: permissionReplyErrorByRequestId,
       onReply: onReplyPermission,

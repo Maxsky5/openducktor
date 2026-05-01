@@ -64,6 +64,7 @@ type UseAgentStudioSelectionControllerArgs = {
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
     workingDirectory: string,
     externalSessionId: string,
+    runtimeId?: string | null,
   ) => Promise<AgentSessionTodoItem[]>;
   clearComposerInput: () => void;
   onContextSwitchIntent?: () => void;

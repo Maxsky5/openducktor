@@ -9,6 +9,7 @@ export type OpencodeRuntimeClientInput = {
 export type OpencodeRuntimeResolutionInput = {
   repoPath: string;
   runtimeKind: RuntimeKind;
+  runtimeId?: string | null;
   workingDirectory?: string | null;
 };
 
@@ -19,13 +20,19 @@ const normalizeRepoPathForComparison = (repoPath: string): string => {
 
 export const requireOpencodeRuntimeEndpoint = (
   runtime: RuntimeInstanceSummary,
-  input: Pick<OpencodeRuntimeResolutionInput, "repoPath" | "runtimeKind">,
+  input: Pick<OpencodeRuntimeResolutionInput, "repoPath" | "runtimeKind" | "runtimeId">,
   action: string,
 ): string => {
   const ref = requireRepoRuntimeRef(input, action);
   if (runtime.kind !== ref.runtimeKind) {
     throw new Error(
       `Resolved runtime kind '${runtime.kind}' cannot be used to ${action}; '${ref.runtimeKind}' was requested for repo '${ref.repoPath}'.`,
+    );
+  }
+  const requestedRuntimeId = input.runtimeId?.trim();
+  if (requestedRuntimeId && runtime.runtimeId !== requestedRuntimeId) {
+    throw new Error(
+      `Resolved runtime '${runtime.runtimeId}' cannot be used to ${action}; runtime '${requestedRuntimeId}' was requested for repo '${ref.repoPath}'.`,
     );
   }
   if (
@@ -56,6 +63,7 @@ export const toOpencodeRuntimeClientInput = (input: {
   runtime: RuntimeInstanceSummary;
   repoPath: string;
   runtimeKind: RuntimeKind;
+  runtimeId?: string | null;
   workingDirectory: string | null | undefined;
   action: string;
 }): OpencodeRuntimeClientInput => ({

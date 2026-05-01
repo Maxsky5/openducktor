@@ -33,18 +33,38 @@ export { DEFAULT_RUNTIME_KIND };
 export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
   const opencodeAdapter = new OpencodeSdkAdapter({
     repoRuntimeResolver: {
-      ensureRepoRuntime: ({ repoPath, runtimeKind }) => host.runtimeEnsure(repoPath, runtimeKind),
-      requireRepoRuntime: async ({ repoPath, runtimeKind }) => {
+      ensureRepoRuntime: async ({ repoPath, runtimeKind, runtimeId }) => {
+        if (!runtimeId) {
+          return host.runtimeEnsure(repoPath, runtimeKind);
+        }
         const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
         const runtimes = await host.runtimeList(repoPath, runtimeKind);
         const runtime = runtimes.find(
           (entry) =>
             entry.kind === runtimeKind &&
+            entry.runtimeId === runtimeId &&
             normalizeWorkingDirectory(entry.repoPath) === normalizedRepoPath,
         );
         if (!runtime) {
           throw new Error(
-            `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'.`,
+            `No live repo runtime found for repo '${repoPath}', runtime '${runtimeKind}', and runtime id '${runtimeId}'.`,
+          );
+        }
+        return runtime;
+      },
+      requireRepoRuntime: async ({ repoPath, runtimeKind, runtimeId }) => {
+        const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+        const runtimes = await host.runtimeList(repoPath, runtimeKind);
+        const runtime = runtimes.find(
+          (entry) =>
+            entry.kind === runtimeKind &&
+            (!runtimeId || entry.runtimeId === runtimeId) &&
+            normalizeWorkingDirectory(entry.repoPath) === normalizedRepoPath,
+        );
+        if (!runtime) {
+          const runtimeIdMessage = runtimeId ? ` and runtime id '${runtimeId}'` : "";
+          throw new Error(
+            `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'${runtimeIdMessage}.`,
           );
         }
         return runtime;

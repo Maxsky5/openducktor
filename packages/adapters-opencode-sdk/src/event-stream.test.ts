@@ -2663,6 +2663,34 @@ describe("event-stream", () => {
     });
   });
 
+  test("does not forward child question events to a parent when the child link is unknown", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "question.asked",
+          properties: {
+            sessionID: "external-child-session",
+            info: {
+              parentID: "external-session-1",
+            },
+            id: "question-child-1",
+            questions: [
+              {
+                header: "Scope",
+                question: "Pick target",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+          },
+        } as unknown as Event,
+      ],
+      undefined,
+      () => undefined,
+    );
+
+    expect(emitted.filter((event) => event.type === "question_required")).toHaveLength(0);
+  });
+
   test("subscribeOpencodeEvents forwards known child permission events to parent subscribers", async () => {
     const { emitted } = await runEventStreamWithSession(
       [

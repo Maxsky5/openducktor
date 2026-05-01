@@ -27,6 +27,7 @@ type RepoRuntimeOperationInput = {
 };
 
 type RepoRuntimeSessionOperationInput = RepoRuntimeOperationInput & {
+  runtimeId?: string | null;
   workingDirectory: string;
 };
 

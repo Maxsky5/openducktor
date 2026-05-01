@@ -189,6 +189,13 @@ export const isRelevantSubscriberEvent = (
           )
         : undefined;
 
+    if (event.type === "question.asked" && parentExternalSessionId) {
+      return (
+        parentExternalSessionId === subscriber.externalSessionId &&
+        options?.isKnownChildExternalSessionId?.(eventExternalSessionId) === true
+      );
+    }
+
     if (parentExternalSessionId === subscriber.externalSessionId) {
       return true;
     }

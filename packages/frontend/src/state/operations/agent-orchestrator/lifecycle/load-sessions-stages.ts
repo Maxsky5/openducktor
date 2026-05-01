@@ -262,7 +262,7 @@ const loadHydratedSubagentPendingInputOverlay = async ({
             snapshot.pendingQuestions;
         }
       } catch (error) {
-        console.warn(
+        throw new Error(
           `Failed to hydrate pending input for subagent session '${childExternalSessionId}': ${errorMessage(error)}`,
         );
       }
@@ -889,6 +889,7 @@ export const hydrateSessionRecordsStage = async ({
     const history = await adapter.loadSessionHistory({
       repoPath,
       runtimeKind,
+      runtimeId,
       workingDirectory,
       externalSessionId: record.externalSessionId,
       limit: INITIAL_SESSION_HISTORY_LIMIT,
