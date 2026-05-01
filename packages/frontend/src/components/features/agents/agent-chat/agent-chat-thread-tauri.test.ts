@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { createElement, createRef } from "react";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import { AgentChatThread } from "./agent-chat-thread";
@@ -35,7 +35,7 @@ const buildBaseModel = () => ({
 
 const buildLongSession = (externalSessionId: string, count = 80) => {
   const messages = Array.from({ length: count }, (_, index) =>
-    buildMessage("user", `Message ${index + 1}`, {
+    buildMessage(index % 2 === 0 ? "user" : "assistant", `Message ${index + 1}`, {
       id: `message-${index + 1}`,
     }),
   );
@@ -56,7 +56,7 @@ afterEach(() => {
 });
 
 describe("AgentChatThread Tauri runtime", () => {
-  test("keeps turn containment enabled in the Tauri runtime when no attachments are present", () => {
+  test("keeps turn containment enabled in the Tauri runtime when no attachments are present", async () => {
     const runtimeWindow = globalThis.window as Window & { __TAURI_INTERNALS__?: object };
     runtimeWindow.__TAURI_INTERNALS__ = {};
 
@@ -69,7 +69,9 @@ describe("AgentChatThread Tauri runtime", () => {
       }),
     );
 
-    expect(rendered.container.querySelector('[style*="content-visibility"]')).not.toBeNull();
-    expect(rendered.container.querySelector('[style*="contain-intrinsic-size"]')).not.toBeNull();
+    await waitFor(() => {
+      expect(rendered.container.querySelector('[style*="content-visibility"]')).not.toBeNull();
+      expect(rendered.container.querySelector('[style*="contain-intrinsic-size"]')).not.toBeNull();
+    });
   });
 });
