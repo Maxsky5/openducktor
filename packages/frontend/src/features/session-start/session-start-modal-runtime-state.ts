@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import {
+  DEFAULT_RUNTIME_KIND,
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
@@ -65,7 +66,7 @@ export function useSessionStartModalRuntimeState({
   const catalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(
       workspaceRepoPath ?? "",
-      selectedRuntimeKind ?? "",
+      selectedRuntimeKind ?? DEFAULT_RUNTIME_KIND,
       loadCatalog,
     ),
     enabled:

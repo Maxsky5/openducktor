@@ -1,16 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   normalizeRepoAgentDefaultForSave,
-  normalizeRepoDefaultRuntimeKindForSave,
   repoAgentDefaultRuntimeKindError,
-  repoDefaultRuntimeKindError,
 } from "./repo-agent-defaults";
 
 describe("repo-agent-defaults", () => {
-  test("normalizes configured agent defaults for save", () => {
+  test("keeps configured agent default runtime kinds unchanged", () => {
     expect(
       normalizeRepoAgentDefaultForSave("spec", {
-        runtimeKind: " opencode ",
+        runtimeKind: "opencode",
         providerId: " openai ",
         modelId: " gpt-5 ",
         variant: " mini ",
@@ -46,26 +44,9 @@ describe("repo-agent-defaults", () => {
   test("rejects missing runtime kind when provider and model are configured", () => {
     expect(() =>
       normalizeRepoAgentDefaultForSave("build", {
-        runtimeKind: " ",
         providerId: "anthropic",
         modelId: "claude-4",
       }),
     ).toThrow(repoAgentDefaultRuntimeKindError("build"));
-  });
-
-  test("normalizes repo default runtime kinds for save", () => {
-    expect(normalizeRepoDefaultRuntimeKindForSave(" opencode ")).toBe("opencode");
-  });
-
-  test("rejects missing or blank repo default runtime kinds", () => {
-    expect(() => normalizeRepoDefaultRuntimeKindForSave(undefined)).toThrow(
-      repoDefaultRuntimeKindError(),
-    );
-    expect(() => normalizeRepoDefaultRuntimeKindForSave(null)).toThrow(
-      repoDefaultRuntimeKindError(),
-    );
-    expect(() => normalizeRepoDefaultRuntimeKindForSave("   ")).toThrow(
-      repoDefaultRuntimeKindError(),
-    );
   });
 });

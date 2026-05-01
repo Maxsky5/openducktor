@@ -61,7 +61,7 @@ const buildRuntimeHealthErrorCheck = (
   },
 });
 
-const normalizeRuntimeKinds = (runtimeKinds: RuntimeKind[]): RuntimeKind[] =>
+const sortRuntimeKindsForQueryKey = (runtimeKinds: RuntimeKind[]): RuntimeKind[] =>
   [...runtimeKinds].sort();
 
 const hasTransientRepoRuntimeHealth = (
@@ -130,7 +130,7 @@ export const checksQueryKeys = {
       ...checksQueryKeys.all,
       "runtime-health",
       repoPath,
-      ...normalizeRuntimeKinds(runtimeKinds),
+      ...sortRuntimeKindsForQueryKey(runtimeKinds),
     ] as const,
 };
 

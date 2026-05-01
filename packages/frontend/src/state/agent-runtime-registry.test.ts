@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeKind } from "@openducktor/contracts";
 import { createAgentRuntimeRegistry, DEFAULT_RUNTIME_KIND } from "./agent-runtime-registry";
 import { host } from "./operations/shared/host";
 
@@ -35,7 +35,7 @@ describe("agent-runtime-registry", () => {
   test("rejects unsupported runtime adapters", () => {
     const registry = createAgentRuntimeRegistry();
 
-    expect(() => registry.getAdapter("test-runtime")).toThrow(
+    expect(() => registry.getAdapter("test-runtime" as RuntimeKind)).toThrow(
       "Unsupported agent runtime 'test-runtime'.",
     );
   });

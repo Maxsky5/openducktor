@@ -282,7 +282,7 @@ describe("runtime schemas", () => {
       hooks: { preStart: [], postComplete: [] },
       agentDefaults: {
         spec: {
-          runtimeKind: "claude-code",
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "high",
@@ -292,7 +292,7 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.agentDefaults.spec?.providerId).toBe("openai");
-    expect(parsed.agentDefaults.spec?.runtimeKind).toBe("claude-code");
+    expect(parsed.agentDefaults.spec?.runtimeKind).toBe("opencode");
     expect(parsed.agentDefaults.spec?.modelId).toBe("gpt-5");
     expect(parsed.agentDefaults.spec?.variant).toBe("high");
     expect(parsed.agentDefaults.spec?.profileId).toBe("build");
@@ -1175,11 +1175,11 @@ describe("runtime schemas", () => {
     );
   });
 
-  test("runtime descriptor accepts Codex-style item history and structured approval semantics", () => {
-    const codexDescriptor = runtimeDescriptorSchema.parse({
-      kind: "codex-app-server",
-      label: "Codex App Server",
-      description: "Codex app-server runtime fixture with item-level event history.",
+  test("runtime descriptor accepts item history and structured approval semantics", () => {
+    const itemHistoryDescriptor = runtimeDescriptorSchema.parse({
+      kind: "opencode",
+      label: "OpenCode item history fixture",
+      description: "Runtime fixture with item-level event history.",
       readOnlyRoleBlockedTools: ["shell", "apply_patch"],
       workflowToolAliasesByCanonical: OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
       capabilities: withRuntimeCapabilities({
@@ -1255,10 +1255,14 @@ describe("runtime schemas", () => {
       }),
     });
 
-    expect(codexDescriptor.capabilities.history.fidelity).toBe("item");
-    expect(codexDescriptor.capabilities.approvals.pendingVisibility).toContain("history");
-    expect(codexDescriptor.capabilities.promptInput.supportedParts).toContain("skill_mention");
-    expect(codexDescriptor.capabilities.promptInput.supportedParts).toContain("runtime_specific");
+    expect(itemHistoryDescriptor.capabilities.history.fidelity).toBe("item");
+    expect(itemHistoryDescriptor.capabilities.approvals.pendingVisibility).toContain("history");
+    expect(itemHistoryDescriptor.capabilities.promptInput.supportedParts).toContain(
+      "skill_mention",
+    );
+    expect(itemHistoryDescriptor.capabilities.promptInput.supportedParts).toContain(
+      "runtime_specific",
+    );
   });
 
   test("runtime descriptor rejects live pending snapshots when snapshot support is disabled", () => {
@@ -1458,14 +1462,14 @@ describe("runtime schemas", () => {
       role: "planner",
       scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
-      runtimeKind: "claude-code",
+      runtimeKind: "opencode",
       workingDirectory: "/repo",
     });
 
     expect(parsed.role).toBe("planner");
     expect(parsed.scenario).toBe("planner_initial");
     expect(parsed.externalSessionId).toBe("obp-session-2");
-    expect(parsed.runtimeKind).toBe("claude-code");
+    expect(parsed.runtimeKind).toBe("opencode");
     expect(parsed.selectedModel).toBeNull();
   });
 
@@ -1476,7 +1480,7 @@ describe("runtime schemas", () => {
       role: "planner",
       scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
-      runtimeKind: "claude-code",
+      runtimeKind: "opencode",
       workingDirectory: "/repo",
       selectedModel: null,
     });
@@ -1486,7 +1490,7 @@ describe("runtime schemas", () => {
       role: "planner",
       scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
-      runtimeKind: "claude-code",
+      runtimeKind: "opencode",
       workingDirectory: "/repo",
       selectedModel: null,
     });
@@ -1498,7 +1502,7 @@ describe("runtime schemas", () => {
       role: "planner",
       scenario: "planner_initial",
       startedAt: "2026-02-18T17:11:00.000Z",
-      runtimeKind: "claude-code",
+      runtimeKind: "opencode",
       workingDirectory: "/repo",
       selectedModel: null,
     });

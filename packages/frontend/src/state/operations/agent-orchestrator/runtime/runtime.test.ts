@@ -188,34 +188,6 @@ describe("agent-orchestrator-runtime", () => {
     expect(runtimeHost.taskWorktreeGet).not.toHaveBeenCalled();
   });
 
-  test("fails before runtime ensure when repo default runtime is blank", async () => {
-    repoConfigLoader = async () =>
-      createRepoConfig({
-        defaultRuntimeKind: " " as never,
-        agentDefaults: {},
-      });
-    runtimeHost.buildStart = mock(async () => buildBootstrapFixture);
-    runtimeHost.runtimeEnsure = mock(async () => sharedRuntimeFixture);
-    runtimeHost.taskWorktreeGet = mock(async () => taskWorktreeFixture);
-
-    const ensureRuntime = createEnsureRuntime({
-      hostClient: runtimeHost,
-      repoConfigLoader,
-      refreshTaskData: async () => {},
-    });
-
-    await expect(
-      ensureRuntime("/tmp/repo", "task-1", "spec", {
-        workspaceId: "workspace-1",
-      }),
-    ).rejects.toThrow(
-      "Runtime kind is not configured for spec sessions. Select a spec agent runtime or repository default runtime before starting a session.",
-    );
-    expect(runtimeHost.buildStart).not.toHaveBeenCalled();
-    expect(runtimeHost.runtimeEnsure).not.toHaveBeenCalled();
-    expect(runtimeHost.taskWorktreeGet).not.toHaveBeenCalled();
-  });
-
   test("uses shared repo runtime for build role when a target working directory is provided", async () => {
     let buildStartCalls = 0;
     let repoRuntimeEnsureCalls = 0;

@@ -138,14 +138,13 @@ export const loadRepoDefaultRuntimeKind = async (
 };
 
 export const requireConfiguredRuntimeKind = (
-  runtimeKind: RuntimeKind | string | null | undefined,
+  runtimeKind: RuntimeKind | null | undefined,
   contextMessage: string,
 ): RuntimeKind => {
-  const normalized = runtimeKind?.trim() ?? "";
-  if (!normalized) {
+  if (!runtimeKind) {
     throw new Error(contextMessage);
   }
-  return normalized;
+  return runtimeKind;
 };
 
 export const createEnsureRuntime = ({
@@ -165,7 +164,7 @@ export const createEnsureRuntime = ({
   ): Promise<RuntimeInfo> => {
     const targetWorkingDirectory = options?.targetWorkingDirectory?.trim() ?? "";
     const workspaceId = options?.workspaceId?.trim() ?? "";
-    const explicitRuntimeKind = options?.runtimeKind?.trim() ?? "";
+    const explicitRuntimeKind = options?.runtimeKind;
     let runtimeKind: RuntimeKind;
     if (explicitRuntimeKind) {
       runtimeKind = requireConfiguredRuntimeKind(

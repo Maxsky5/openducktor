@@ -2,12 +2,12 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
 import { normalizeWorkingDirectory } from "../support/core";
 
-export const getLiveAgentSessionCacheKey = (repoPath: string, runtimeKind: string): string =>
+export const getLiveAgentSessionCacheKey = (repoPath: string, runtimeKind: RuntimeKind): string =>
   `${normalizeWorkingDirectory(repoPath)}::${runtimeKind}`;
 
 export const liveAgentSessionLookupKey = (
   repoPath: string,
-  runtimeKind: string,
+  runtimeKind: RuntimeKind,
   workingDirectory: string,
 ): string =>
   `${getLiveAgentSessionCacheKey(repoPath, runtimeKind)}::${normalizeWorkingDirectory(workingDirectory)}`;

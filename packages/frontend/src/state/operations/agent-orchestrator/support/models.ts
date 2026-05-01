@@ -5,7 +5,6 @@ import {
   normalizeCatalogVariant,
   normalizeKnownCatalogProfileId,
   pickCatalogDefaultModel,
-  runtimeKindForCatalog,
 } from "@/lib/model-catalog-selection";
 
 export const pickDefaultSessionSelectionForCatalog = (
@@ -16,7 +15,7 @@ export const pickDefaultSessionSelectionForCatalog = (
     return null;
   }
   const variant = normalizeCatalogVariant(model, undefined);
-  const runtimeKind = runtimeKindForCatalog(catalog);
+  const runtimeKind = catalog.runtime?.kind;
   if (!runtimeKind) {
     return null;
   }
@@ -44,7 +43,7 @@ export const coerceSessionSelectionToCatalog = (
 
   const variant = normalizeCatalogVariant(model, selection.variant);
   const profileId = normalizeKnownCatalogProfileId(catalog, selection.profileId);
-  const runtimeKind = selection.runtimeKind ?? runtimeKindForCatalog(catalog);
+  const runtimeKind = selection.runtimeKind ?? catalog.runtime?.kind;
   if (!runtimeKind) {
     return null;
   }

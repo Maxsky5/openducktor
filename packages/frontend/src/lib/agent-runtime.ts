@@ -57,15 +57,8 @@ export type RuntimeKindSelectionResolution =
   | {
       status: "no-definitions";
       runtimeKind: null;
-      requestedRuntimeKind: RuntimeKind | null;
+      requestedRuntimeKind?: RuntimeKind | null;
     };
-
-const normalizeRequestedRuntimeKind = (
-  runtimeKind: RuntimeKind | null | undefined,
-): RuntimeKind | null => {
-  const trimmed = runtimeKind?.trim();
-  return trimmed ? trimmed : null;
-};
 
 export const resolveRuntimeKindSelectionState = ({
   runtimeDefinitions,
@@ -74,32 +67,31 @@ export const resolveRuntimeKindSelectionState = ({
   runtimeDefinitions: RuntimeDescriptor[];
   requestedRuntimeKind?: RuntimeKind | null;
 }): RuntimeKindSelectionResolution => {
-  const normalizedRequestedRuntimeKind = normalizeRequestedRuntimeKind(requestedRuntimeKind);
   if (runtimeDefinitions.length === 0) {
     return {
       status: "no-definitions",
       runtimeKind: null,
-      requestedRuntimeKind: normalizedRequestedRuntimeKind,
+      ...(requestedRuntimeKind === undefined ? {} : { requestedRuntimeKind }),
     };
   }
 
-  if (!normalizedRequestedRuntimeKind) {
+  if (!requestedRuntimeKind) {
     return { status: "missing-request", runtimeKind: null };
   }
 
-  const matching = findRuntimeDefinition(runtimeDefinitions, normalizedRequestedRuntimeKind);
+  const matching = findRuntimeDefinition(runtimeDefinitions, requestedRuntimeKind);
   if (!matching) {
     return {
       status: "unknown-request",
       runtimeKind: null,
-      requestedRuntimeKind: normalizedRequestedRuntimeKind,
+      requestedRuntimeKind,
     };
   }
 
   return {
     status: "resolved",
     runtimeKind: matching.kind,
-    requestedRuntimeKind: normalizedRequestedRuntimeKind,
+    requestedRuntimeKind,
   };
 };
 

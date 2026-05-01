@@ -2,6 +2,7 @@ import type {
   AgentSessionRecord,
   AutopilotActionId,
   AutopilotEventId,
+  RuntimeKind,
   TaskCard,
 } from "@openducktor/contracts";
 import { AUTOPILOT_EVENT_IDS } from "@openducktor/contracts";
@@ -54,7 +55,10 @@ type ExecuteAutopilotActionArgs = {
   task: TaskCard;
   actionId: AutopilotActionId;
   queryClient: QueryClient;
-  loadRepoRuntimeCatalog: (repoPath: string, runtimeKind: string) => Promise<AgentModelCatalog>;
+  loadRepoRuntimeCatalog: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ) => Promise<AgentModelCatalog>;
   resolveTaskWorktree: (
     repoPath: string,
     taskId: string,
@@ -166,7 +170,10 @@ const resolveAutopilotSelection = async ({
   role: AgentRole;
   preferredSelection?: AgentModelSelection | null;
   queryClient: QueryClient;
-  loadRepoRuntimeCatalog: (repoPath: string, runtimeKind: string) => Promise<AgentModelCatalog>;
+  loadRepoRuntimeCatalog: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ) => Promise<AgentModelCatalog>;
 }): Promise<AgentModelSelection> => {
   if (preferredSelection) {
     return preferredSelection;

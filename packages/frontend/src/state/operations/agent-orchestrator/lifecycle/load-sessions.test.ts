@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { AgentSessionRecord, RuntimeInstanceSummary } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  RuntimeInstanceSummary,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
@@ -2771,7 +2775,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const ensuredRuntimeKinds: string[] = [];
     hostModule.host.agentSessionsList = async () => [
       persistedSessionRecord({
-        runtimeKind: "claude-code",
+        runtimeKind: "opencode",
         externalSessionId: "external-1",
         taskId: "task-1",
         role: "planner",
@@ -2781,7 +2785,7 @@ describe("agent-orchestrator-load-sessions", () => {
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
         selectedModel: {
-          runtimeKind: "claude-code",
+          runtimeKind: "opencode",
           providerId: "anthropic",
           modelId: "claude-3-7-sonnet",
         },
@@ -2844,8 +2848,8 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(observedRuntimeEndpoint).toBe("/tmp/repo:claude-code:/tmp/repo");
-    expect(state["external-1"]?.runtimeKind).toBe("claude-code");
+    expect(observedRuntimeEndpoint).toBe("/tmp/repo:opencode:/tmp/repo");
+    expect(state["external-1"]?.runtimeKind).toBe("opencode");
     expect(state["external-1"]?.runtimeId).toBe("runtime-1");
   });
 
@@ -4829,7 +4833,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory,
       }),
     ];
-    const preloadedRuntimeLists = new Map([
+    const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>([
       [
         "opencode",
         [
@@ -4949,7 +4953,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory,
       }),
     ];
-    const preloadedRuntimeLists = new Map([
+    const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>([
       [
         "opencode",
         [

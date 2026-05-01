@@ -15,6 +15,7 @@ import {
   toPrimaryAgentOptions,
 } from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { findFirstChangedSessionMessageIndex } from "@/state/operations/agent-orchestrator/support/messages";
@@ -306,7 +307,7 @@ export function useAgentStudioModelSelection({
   const composerCatalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(
       workspaceRepoPath ?? "",
-      composerRuntimeKind ?? "",
+      composerRuntimeKind ?? DEFAULT_RUNTIME_KIND,
       loadCatalogForRepo,
     ),
     enabled:
@@ -333,7 +334,7 @@ export function useAgentStudioModelSelection({
           readSessionSlashCommands,
         )
       : {
-          queryKey: ["agent-session-runtime", "slash-commands", "", ""] as const,
+          queryKey: ["agent-session-runtime", "slash-commands", "", DEFAULT_RUNTIME_KIND] as const,
           queryFn: async (): Promise<AgentSlashCommandCatalog> => {
             throw new Error("Session slash commands query is disabled.");
           },
@@ -349,7 +350,7 @@ export function useAgentStudioModelSelection({
   const repoSlashCommandsQuery = useQuery({
     ...repoRuntimeSlashCommandsQueryOptions(
       workspaceRepoPath ?? "",
-      composerRuntimeKind ?? "",
+      composerRuntimeKind ?? DEFAULT_RUNTIME_KIND,
       loadSlashCommandsForRepo,
     ),
     enabled:

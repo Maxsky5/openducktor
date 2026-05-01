@@ -54,7 +54,7 @@ const CATALOG: AgentModelCatalog = {
 
 const ALTERNATE_RUNTIME_DESCRIPTOR = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
-  kind: "alternate-runtime",
+  kind: "opencode",
   label: "Alternate Runtime",
 } as const;
 
@@ -681,7 +681,7 @@ describe("useSessionStartModalState", () => {
             label: "Builder session 2",
             description: "Latest builder session",
             selectedModel: {
-              runtimeKind: "alternate-runtime",
+              runtimeKind: "opencode",
               providerId: "anthropic",
               modelId: "claude-sonnet",
               variant: "default",
@@ -721,9 +721,9 @@ describe("useSessionStartModalState", () => {
       harness.getLatest().handleSelectSourceSession("session-newer");
     });
 
-    expect(harness.getLatest().selectedRuntimeKind).toBe("alternate-runtime");
+    expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
     expect(harness.getLatest().selection).toEqual({
-      runtimeKind: "alternate-runtime",
+      runtimeKind: "opencode",
       providerId: "anthropic",
       modelId: "claude-sonnet",
       variant: "default",
@@ -754,7 +754,7 @@ describe("useSessionStartModalState", () => {
             label: "Builder session 2",
             description: "Latest builder session",
             selectedModel: {
-              runtimeKind: "alternate-runtime",
+              runtimeKind: "opencode",
               providerId: "anthropic",
               modelId: "claude-sonnet",
               variant: "default",
@@ -826,9 +826,9 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
     expect(harness.getLatest().selectedSourceSessionId).toBe("session-pr-2");
-    expect(harness.getLatest().selectedRuntimeKind).toBe("alternate-runtime");
+    expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
     expect(harness.getLatest().selection).toEqual({
-      runtimeKind: "alternate-runtime",
+      runtimeKind: "opencode",
       providerId: "anthropic",
       modelId: "claude-sonnet",
       variant: "default",

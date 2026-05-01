@@ -184,7 +184,7 @@ describe("useSettingsModalDraftActions", () => {
 
     initialSnapshot.workspaces["repo-a"] = {
       ...selectedRepo,
-      defaultRuntimeKind: "codex",
+      defaultRuntimeKind: "opencode",
     };
 
     const harness = createHookHarness({
@@ -198,7 +198,7 @@ describe("useSettingsModalDraftActions", () => {
     });
 
     expect(harness.getLatest().snapshotDraft?.workspaces["repo-a"]?.agentDefaults.planner).toEqual({
-      runtimeKind: "codex",
+      runtimeKind: "opencode",
       providerId: "",
       modelId: "",
       variant: "",

@@ -198,7 +198,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const sessionsRef = {
       current: {
         "session-1": buildSession({
-          runtimeKind: "claude-code",
+          runtimeKind: "opencode",
           selectedModel: null,
           status: "idle",
         }),
@@ -228,8 +228,8 @@ describe("agent-orchestrator-ensure-ready", () => {
       ensureRuntime: async () => {
         ensureRuntimeCalls += 1;
         return {
-          kind: "claude-code",
-          runtimeKind: "claude-code",
+          kind: "opencode",
+          runtimeKind: "opencode",
           runtimeId: "runtime-claude",
           workingDirectory: "/tmp/repo/worktree",
         };
@@ -241,7 +241,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       await ensureReady("session-1");
 
       expect(ensureRuntimeCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("claude-code");
+      expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("opencode");
     } finally {
       adapter.hasSession = originalHasSession;
     }
@@ -257,7 +257,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const sessionsRef = {
       current: {
         "session-1": buildSession({
-          runtimeKind: "claude-code",
+          runtimeKind: "opencode",
           selectedModel: {
             runtimeKind: "opencode",
             providerId: "openai",
@@ -300,7 +300,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       await ensureReady("session-1");
 
       expect(ensureRuntimeCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("claude-code");
+      expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("opencode");
     } finally {
       adapter.hasSession = originalHasSession;
     }
@@ -909,7 +909,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     adapter.resumeSession = async (input) => {
       resumedInput = input;
       return {
-        runtimeKind: "claude-code",
+        runtimeKind: "opencode",
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -921,7 +921,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const sessionsRef = {
       current: {
         "session-1": buildSession({
-          runtimeKind: "claude-code",
+          runtimeKind: "opencode",
           selectedModel: null,
           status: "idle",
         }),
@@ -951,8 +951,8 @@ describe("agent-orchestrator-ensure-ready", () => {
       ensureRuntime: async (_repoPath, _taskId, _role, options) => {
         ensuredRuntimeKind = options?.runtimeKind;
         return {
-          kind: "claude-code",
-          runtimeKind: "claude-code",
+          kind: "opencode",
+          runtimeKind: "opencode",
           runtimeId: "runtime-claude",
           workingDirectory: "/tmp/repo/worktree",
         };
@@ -963,14 +963,14 @@ describe("agent-orchestrator-ensure-ready", () => {
     try {
       await ensureReady("session-1");
 
-      expect(String(ensuredRuntimeKind)).toBe("claude-code");
+      expect(String(ensuredRuntimeKind)).toBe("opencode");
       expect(resumedInput).toMatchObject({
         repoPath: "/tmp/repo",
-        runtimeKind: "claude-code",
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
       });
       expect(resumedInput).not.toHaveProperty("runtimeConnection");
-      expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("claude-code");
+      expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("opencode");
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;

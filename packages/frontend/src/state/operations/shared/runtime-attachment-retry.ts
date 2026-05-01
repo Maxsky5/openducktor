@@ -5,38 +5,27 @@ import { normalizeWorkingDirectory } from "@/lib/working-directory";
 export type RuntimeAttachmentSource = {
   kind: RuntimeKind;
   repoPath: string;
-  workingDirectory: string;
-  runtimeId: string | null;
 };
 
 export type RuntimeAttachmentCandidate = {
   runtimeKind: RuntimeKind;
   repoPath: string;
-  workingDirectory: string;
-  runtimeId: string | null;
 };
 
 type RuntimeAttachmentSession = {
   runtimeKind?: RuntimeKind | null;
-  workingDirectory?: string | null;
 };
 
 const compareRuntimeAttachmentCandidates = (
   left: RuntimeAttachmentCandidate,
   right: RuntimeAttachmentCandidate,
 ): number => {
-  if (left.runtimeKind !== right.runtimeKind) {
-    return left.runtimeKind.localeCompare(right.runtimeKind);
+  const runtimeKindComparison = String(left.runtimeKind).localeCompare(String(right.runtimeKind));
+  if (runtimeKindComparison !== 0) {
+    return runtimeKindComparison;
   }
 
-  if (left.repoPath !== right.repoPath) {
-    return left.repoPath.localeCompare(right.repoPath);
-  }
-  if (left.workingDirectory !== right.workingDirectory) {
-    return left.workingDirectory.localeCompare(right.workingDirectory);
-  }
-
-  return (left.runtimeId ?? "").localeCompare(right.runtimeId ?? "");
+  return left.repoPath.localeCompare(right.repoPath);
 };
 
 export const cloneRuntimeAttachmentCandidates = (
@@ -56,9 +45,7 @@ export const haveSameRuntimeAttachmentCandidates = (
     return (
       other !== undefined &&
       candidate.runtimeKind === other.runtimeKind &&
-      candidate.repoPath === other.repoPath &&
-      candidate.workingDirectory === other.workingDirectory &&
-      candidate.runtimeId === other.runtimeId
+      candidate.repoPath === other.repoPath
     );
   });
 };
@@ -77,12 +64,6 @@ export const selectRuntimeAttachmentCandidates = ({
   }
 
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-  const normalizedSessionWorkingDirectory = normalizeWorkingDirectory(
-    session.workingDirectory ?? "",
-  );
-  if (!normalizedSessionWorkingDirectory) {
-    return [];
-  }
   const candidatesByKey = new Map<string, RuntimeAttachmentCandidate>();
 
   for (const runtimeSource of runtimeSources) {
@@ -94,13 +75,8 @@ export const selectRuntimeAttachmentCandidates = ({
     const candidate: RuntimeAttachmentCandidate = {
       runtimeKind: runtimeSource.kind,
       repoPath: sourceRepoPath,
-      workingDirectory: normalizedSessionWorkingDirectory,
-      runtimeId: runtimeSource.runtimeId,
     };
-    candidatesByKey.set(
-      `${candidate.runtimeKind}::${candidate.repoPath}::${candidate.workingDirectory}::${candidate.runtimeId ?? ""}`,
-      candidate,
-    );
+    candidatesByKey.set(`${candidate.runtimeKind}::${candidate.repoPath}`, candidate);
   }
 
   return Array.from(candidatesByKey.values()).sort(compareRuntimeAttachmentCandidates);

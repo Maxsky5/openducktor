@@ -73,18 +73,18 @@ describe("createHydrationRuntimeResolver", () => {
   });
 
   test("returns an error when no live runtime exists for the persisted runtime kind", async () => {
-    const record = createRecord("custom-runtime", "planner", "/tmp/repo/worktree");
+    const record = createRecord("opencode", "planner", "/tmp/repo/worktree");
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
-      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["custom-runtime", []]]),
+      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
     });
 
     const result = await resolveHydrationRuntime(record);
 
     expect(result).toEqual({
       ok: false,
-      runtimeKind: "custom-runtime",
-      reason: "No live repo runtime found for repo /tmp/repo and runtime custom-runtime.",
+      runtimeKind: "opencode",
+      reason: "No live repo runtime found for repo /tmp/repo and runtime opencode.",
     });
   });
 

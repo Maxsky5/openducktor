@@ -10,8 +10,8 @@ export const knownRuntimeKindValues = ["opencode"] as const;
 export const knownRuntimeKindSchema = z.enum(knownRuntimeKindValues);
 export type KnownRuntimeKind = z.infer<typeof knownRuntimeKindSchema>;
 
-export const runtimeKindSchema = z.string().trim().min(1);
-export type RuntimeKind = z.infer<typeof runtimeKindSchema>;
+export const runtimeKindSchema = knownRuntimeKindSchema;
+export type RuntimeKind = KnownRuntimeKind;
 
 export const runtimeProvisioningModeSchema = z.enum(["host_managed", "external"]);
 export type RuntimeProvisioningMode = z.infer<typeof runtimeProvisioningModeSchema>;

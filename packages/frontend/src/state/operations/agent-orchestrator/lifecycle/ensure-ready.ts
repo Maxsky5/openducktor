@@ -9,10 +9,7 @@ import { runOrchestratorTask } from "../support/async-side-effects";
 import { shouldReattachListenerForAttachedSession, throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import { isWorkflowAgentSession } from "../support/session-purpose";
-import {
-  assertSessionRuntimeKindMatchesEnsuredRuntime,
-  requireSessionRuntimeKindForPersistence,
-} from "../support/session-runtime-metadata";
+import { requireSessionRuntimeKindForPersistence } from "../support/session-runtime-metadata";
 
 type EnsureSessionReadyDependencies = {
   activeWorkspace: ActiveWorkspace | null;
@@ -253,15 +250,10 @@ export const createEnsureSessionReady = ({
       runtimeKind: requestedRuntimeKind,
     });
     assertNotStale();
-    const resolvedRuntimeKind = assertSessionRuntimeKindMatchesEnsuredRuntime({
-      externalSessionId: session.externalSessionId,
-      requestedRuntimeKind,
-      ensuredRuntimeKind: runtime.runtimeKind,
-    });
     await adapter.resumeSession({
       externalSessionId: session.externalSessionId,
       repoPath,
-      runtimeKind: resolvedRuntimeKind,
+      runtimeKind: requestedRuntimeKind,
       workingDirectory: runtime.workingDirectory,
       taskId: session.taskId,
       role: session.role,
@@ -289,7 +281,7 @@ export const createEnsureSessionReady = ({
 
     const liveSnapshot = await loadLiveSnapshot({
       repoPath,
-      runtimeKind: resolvedRuntimeKind,
+      runtimeKind: requestedRuntimeKind,
       workingDirectory: runtime.workingDirectory,
       externalSessionId: session.externalSessionId,
     });
@@ -301,7 +293,7 @@ export const createEnsureSessionReady = ({
     updateSession(externalSessionId, (current) => ({
       ...current,
       status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : "idle",
-      runtimeKind: resolvedRuntimeKind,
+      runtimeKind: requestedRuntimeKind,
       runtimeId: runtime.runtimeId,
       workingDirectory: runtime.workingDirectory,
       ...(liveSessionTitle ? { title: liveSessionTitle } : {}),

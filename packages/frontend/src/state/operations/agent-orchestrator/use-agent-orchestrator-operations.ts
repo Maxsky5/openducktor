@@ -54,7 +54,7 @@ const hasAttachedRuntime = (
     return false;
   }
 
-  return typeof session.runtimeId === "string" && session.runtimeId.length > 0;
+  return !!session.runtimeId;
 };
 
 const withRuntimeRecoveryState = (

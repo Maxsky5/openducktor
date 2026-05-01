@@ -1,6 +1,7 @@
 import type { RuntimeInstanceSummary } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import {
   useChecksOperationsContext,
   useRuntimeDefinitionsContext,
@@ -314,7 +315,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
         )
       : sessionHistoryQueryOptions(
           activeWorkspace?.repoPath ?? "",
-          "opencode",
+          DEFAULT_RUNTIME_KIND,
           source?.workingDirectory ?? "",
           externalSessionId ?? "disabled",
           readSessionHistory,

@@ -1,3 +1,4 @@
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { RuntimeInfo } from "../runtime/runtime";
 import type { StartSessionDependencies } from "./start-session";
 
@@ -5,7 +6,7 @@ const ensureRuntimeWithKind = async (
   ...args: Parameters<StartSessionDependencies["runtime"]["ensureRuntime"]>
 ): Promise<RuntimeInfo> => {
   const [, , , options] = args;
-  const runtimeKind = options?.runtimeKind ?? "opencode";
+  const runtimeKind = options?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
   const workingDirectory = options?.targetWorkingDirectory ?? "/tmp/repo";
 
   return {
@@ -22,9 +23,9 @@ const withRuntimeKind = async (
 ): Promise<RuntimeInfo> => {
   const [, , , options] = args;
   const runtime = await ensureRuntime(...args);
-  const runtimeKind = runtime.runtimeKind ?? options?.runtimeKind ?? runtime.kind;
+  const runtimeKind = runtime.runtimeKind ?? options?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
 
-  return runtimeKind ? { ...runtime, runtimeKind } : runtime;
+  return { ...runtime, runtimeKind };
 };
 
 export type FlatStartSessionDependencies = Omit<

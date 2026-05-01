@@ -244,8 +244,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
         (query.data ?? []).map((runtime) => ({
           kind: runtime.kind,
           repoPath: runtime.repoPath,
-          workingDirectory: runtime.workingDirectory,
-          runtimeId: runtime.runtimeId,
         })),
       ),
     [runtimeListQueries],

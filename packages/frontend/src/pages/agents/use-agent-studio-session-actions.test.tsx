@@ -72,7 +72,7 @@ const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
 
 const QUEUED_RUNTIME_DESCRIPTOR = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
-  kind: "queued-runtime",
+  kind: "opencode",
   label: "Queued Runtime",
   capabilities: {
     ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
@@ -591,7 +591,7 @@ describe("useAgentStudioSessionActions", () => {
         },
       }),
       selectedModelSelection: {
-        runtimeKind: "queued-runtime",
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "default",

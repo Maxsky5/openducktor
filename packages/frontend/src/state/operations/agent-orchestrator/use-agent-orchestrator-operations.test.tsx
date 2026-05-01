@@ -136,7 +136,7 @@ const buildBootstrapFixture = {
     endpoint: "http://127.0.0.1:4444",
   },
   workingDirectory: "/tmp/repo/worktree",
-};
+} as const;
 
 const createWorktreeRuntimeFixture = (
   overrides: Partial<RuntimeInstanceSummary> = {},
@@ -513,7 +513,7 @@ describe("use-agent-orchestrator-operations", () => {
           scenario: input.scenario,
           startedAt: "2026-02-22T08:00:00.000Z",
           status: "running",
-          runtimeKind: input.runtimeKind,
+          runtimeKind: "opencode",
         };
       };
       OpencodeSdkAdapter.prototype.subscribeEvents = () => {
@@ -734,7 +734,7 @@ describe("use-agent-orchestrator-operations", () => {
           role: "build",
           scenario: "build_after_human_request_changes",
           status: "idle",
-        };
+        } as const;
       };
       OpencodeSdkAdapter.prototype.subscribeEvents = (_externalSessionId, _listener) => () => {};
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
@@ -1100,7 +1100,7 @@ describe("use-agent-orchestrator-operations", () => {
           role: "build",
           scenario: "build_implementation_start",
           status: "idle",
-        };
+        } as const;
       };
 
       const harness = createHookHarness({
@@ -1228,7 +1228,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.sendUserMessage = async () => {};
       OpencodeSdkAdapter.prototype.stopSession = async () => {};
       OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-        runtimeKind: input.runtimeKind,
+        runtimeKind: "opencode",
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
@@ -2067,7 +2067,7 @@ describe("use-agent-orchestrator-operations", () => {
         },
       ];
       OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-        runtimeKind: input.runtimeKind,
+        runtimeKind: "opencode",
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
@@ -2165,7 +2165,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
         resumeCalls += 1;
         return {
-          runtimeKind: input.runtimeKind,
+          runtimeKind: "opencode",
           externalSessionId: input.externalSessionId,
           startedAt: "2026-02-22T08:00:00.000Z",
           role: input.role,
@@ -2236,7 +2236,7 @@ describe("use-agent-orchestrator-operations", () => {
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
       return {
-        runtimeKind: input.runtimeKind,
+        runtimeKind: "opencode",
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
@@ -2247,7 +2247,7 @@ describe("use-agent-orchestrator-operations", () => {
     OpencodeSdkAdapter.prototype.attachSession = async (input) => {
       attachCalls += 1;
       return {
-        runtimeKind: input.runtimeKind,
+        runtimeKind: "opencode",
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
@@ -2383,7 +2383,7 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-      runtimeKind: input.runtimeKind,
+      runtimeKind: "opencode",
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
@@ -2391,7 +2391,7 @@ describe("use-agent-orchestrator-operations", () => {
       status: "running",
     });
     OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
-      runtimeKind: input.runtimeKind,
+      runtimeKind: "opencode",
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
@@ -2477,7 +2477,7 @@ describe("use-agent-orchestrator-operations", () => {
       }
 
       return {
-        runtimeKind: input.runtimeKind,
+        runtimeKind: "opencode",
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T09:00:00.000Z",
         role: input.role,
@@ -2711,7 +2711,7 @@ describe("use-agent-orchestrator-operations", () => {
     OpencodeSdkAdapter.prototype.attachSession = async (input) => {
       attachSessionCalls.push(input);
       return {
-        runtimeKind: input.runtimeKind,
+        runtimeKind: "opencode",
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T09:00:00.000Z",
         role: input.role,
@@ -2837,13 +2837,13 @@ describe("use-agent-orchestrator-operations", () => {
     let loadSessionHistoryCalls = 0;
     let runtimeAttached = false;
 
-    OpencodeSdkAdapter.prototype.attachSession = async (input) => {
+    OpencodeSdkAdapter.prototype.attachSession = async (_input) => {
       runtimeAttached = true;
       const summary = await attachSessionDeferred.promise;
       runtimeAttached = true;
       return {
         ...summary,
-        runtimeKind: input.runtimeKind,
+        runtimeKind: "opencode",
       };
     };
     OpencodeSdkAdapter.prototype.hasSession = (externalSessionId) =>
@@ -2946,7 +2946,7 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-      runtimeKind: input.runtimeKind,
+      runtimeKind: "opencode",
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
@@ -2954,7 +2954,7 @@ describe("use-agent-orchestrator-operations", () => {
       status: "running",
     });
     OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
-      runtimeKind: input.runtimeKind,
+      runtimeKind: "opencode",
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
@@ -3064,7 +3064,7 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-      runtimeKind: input.runtimeKind,
+      runtimeKind: "opencode",
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
@@ -3072,7 +3072,7 @@ describe("use-agent-orchestrator-operations", () => {
       status: "running",
     });
     OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
-      runtimeKind: input.runtimeKind,
+      runtimeKind: "opencode",
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
@@ -3158,7 +3158,7 @@ describe("use-agent-orchestrator-operations", () => {
       },
     ];
     OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-      runtimeKind: input.runtimeKind,
+      runtimeKind: "opencode",
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
@@ -3166,7 +3166,7 @@ describe("use-agent-orchestrator-operations", () => {
       status: "running",
     });
     OpencodeSdkAdapter.prototype.attachSession = async (input) => ({
-      runtimeKind: input.runtimeKind,
+      runtimeKind: "opencode",
       externalSessionId: input.externalSessionId,
       startedAt: "2026-02-22T08:00:00.000Z",
       role: input.role,
@@ -3335,7 +3335,7 @@ describe("use-agent-orchestrator-operations", () => {
         ];
       };
       OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-        runtimeKind: input.runtimeKind,
+        runtimeKind: "opencode",
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
@@ -3439,7 +3439,7 @@ describe("use-agent-orchestrator-operations", () => {
         return runtimeSessionsDeferred.promise;
       };
       OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-        runtimeKind: input.runtimeKind,
+        runtimeKind: "opencode",
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,
@@ -3664,7 +3664,7 @@ describe("use-agent-orchestrator-operations", () => {
           throw new Error("task-1 resume failed");
         }
         return {
-          runtimeKind: input.runtimeKind,
+          runtimeKind: "opencode",
           externalSessionId: input.externalSessionId,
           startedAt: "2026-02-22T08:00:00.000Z",
           role: input.role,
@@ -3770,7 +3770,7 @@ describe("use-agent-orchestrator-operations", () => {
         },
       ];
       OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
-        runtimeKind: input.runtimeKind,
+        runtimeKind: "opencode",
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,

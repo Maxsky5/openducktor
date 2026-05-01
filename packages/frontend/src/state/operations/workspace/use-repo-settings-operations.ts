@@ -7,10 +7,7 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { normalizeRepoScripts } from "@/components/features/settings/settings-model";
-import {
-  normalizeRepoAgentDefaultForSave,
-  normalizeRepoDefaultRuntimeKindForSave,
-} from "@/lib/repo-agent-defaults";
+import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -87,7 +84,6 @@ export function useRepoSettingsOperations({
       const plannerDefault = toConfigDefault("planner", input.agentDefaults.planner);
       const buildDefault = toConfigDefault("build", input.agentDefaults.build);
       const qaDefault = toConfigDefault("qa", input.agentDefaults.qa);
-      const defaultRuntimeKind = normalizeRepoDefaultRuntimeKindForSave(input.defaultRuntimeKind);
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
       const normalizedTargetBranch = normalizeTargetBranch(input.defaultTargetBranch);
@@ -106,7 +102,7 @@ export function useRepoSettingsOperations({
       };
 
       const workspace = await host.workspaceSaveRepoSettings(workspaceId, {
-        defaultRuntimeKind,
+        defaultRuntimeKind: input.defaultRuntimeKind,
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
         defaultTargetBranch: normalizedTargetBranch,

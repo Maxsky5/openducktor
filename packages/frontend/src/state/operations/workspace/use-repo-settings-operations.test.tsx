@@ -305,11 +305,11 @@ describe("use-repo-settings-operations", () => {
           ...inputFixture.agentDefaults,
           spec: {
             ...specDefault,
-            runtimeKind: "claude-code",
+            runtimeKind: "opencode",
           },
         },
       };
-      await harness.getLatest().saveRepoSettings(input);
+      await harness.getLatest().saveRepoSettings(input as RepoSettingsInput);
 
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {
         defaultRuntimeKind: "opencode" as const,
@@ -324,7 +324,7 @@ describe("use-repo-settings-operations", () => {
         worktreeCopyPaths: [".env", ".env.local"],
         agentDefaults: {
           spec: {
-            runtimeKind: "claude-code",
+            runtimeKind: "opencode",
             providerId: "openai",
             modelId: "gpt-5",
             variant: "mini",
@@ -402,7 +402,7 @@ describe("use-repo-settings-operations", () => {
         postCompleteHooks: ["\t", " echo post "],
         devServers: [
           { id: "frontend", name: "Frontend", command: " bun run dev " },
-          { id: "backend", name: "Backend", command: "   " },
+          { id: "backend", name: "Backend", command: " " },
         ],
       });
 
@@ -497,7 +497,7 @@ describe("use-repo-settings-operations", () => {
       await harness.mount();
       await harness.getLatest().saveRepoSettings({
         ...inputFixture,
-        devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
+        devServers: [{ id: "frontend", name: "Frontend", command: " " }],
       });
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith(
         "repo-a",
@@ -535,51 +535,15 @@ describe("use-repo-settings-operations", () => {
           agentDefaults: {
             ...inputFixture.agentDefaults,
             spec: {
-              ...(inputFixture.agentDefaults.spec ?? {
-                providerId: "openai",
-                modelId: "gpt-5",
-                variant: "",
-                profileId: "",
-              }),
-              runtimeKind: "   ",
-            },
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "",
+              profileId: "",
+            } as unknown as NonNullable<RepoSettingsInput["agentDefaults"]["spec"]>,
           },
         }),
       ).rejects.toThrow(
         "Specification agent default runtime kind is required when provider and model are configured.",
-      );
-      expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(0);
-    } finally {
-      await harness.unmount();
-      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
-    }
-  });
-
-  test("saveRepoSettings rejects blank repo default runtime kinds", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
-
-    const original = {
-      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
-    };
-    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
-
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      await expect(
-        harness.getLatest().saveRepoSettings({
-          ...inputFixture,
-          defaultRuntimeKind: "   " as RepoSettingsInput["defaultRuntimeKind"],
-        }),
-      ).rejects.toThrow(
-        "Default runtime kind is required. Select a repository default runtime before saving.",
       );
       expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(0);
     } finally {

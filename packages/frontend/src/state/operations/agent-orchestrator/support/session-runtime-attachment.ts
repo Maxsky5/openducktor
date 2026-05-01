@@ -18,7 +18,7 @@ export const hasAttachedSessionRuntime = (
     return false;
   }
 
-  return typeof session.runtimeId === "string" && session.runtimeId.length > 0;
+  return !!session.runtimeId;
 };
 
 export const isWaitingForAttachedWorktreeRuntime = (

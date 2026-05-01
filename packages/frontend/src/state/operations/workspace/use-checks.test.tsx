@@ -3,7 +3,6 @@ import {
   type BeadsCheck,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeCheck,
-  type RuntimeDescriptor,
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
@@ -46,17 +45,6 @@ const makeRepoHealth = (
   overrides: RepoRuntimeHealthFixtureOverrides = {},
 ): RepoRuntimeHealthCheck =>
   createRepoRuntimeHealthFixture({ mcp: { toolIds: ["odt_read_task"] } }, overrides);
-
-const MOCK_RUNTIME_DESCRIPTOR: RuntimeDescriptor = {
-  kind: "mock-runtime",
-  label: "Mock Runtime",
-  description: "Mock runtime descriptor for per-kind health tests.",
-  readOnlyRoleBlockedTools: [],
-  workflowToolAliasesByCanonical: {},
-  capabilities: {
-    ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-  },
-};
 
 const toastMessage = mock(
   (_message: string, _options?: { description?: string; id?: string; duration?: number }) => {},
@@ -991,54 +979,6 @@ describe("use-checks", () => {
           status: "error",
           runtime: expect.objectContaining({
             detail: "runtime health refresh failed",
-            failureKind: "error",
-          }),
-        }),
-      );
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("keeps healthy runtime kinds when one runtime health probe fails", async () => {
-    repoHealthHandler = async (_repoPath, runtimeKind) => {
-      if (runtimeKind === "mock-runtime") {
-        throw new Error("mock runtime probe failed");
-      }
-      return makeRepoHealth({ mcp: { toolIds: [runtimeKind] } });
-    };
-
-    const harness = createHookHarness({
-      activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, MOCK_RUNTIME_DESCRIPTOR],
-    });
-
-    try {
-      await harness.mount();
-
-      await harness.run(async (value) => {
-        return expect(
-          value.refreshRepoRuntimeHealthForRepo("/repo-a", true),
-        ).resolves.toBeDefined();
-      });
-
-      await harness.waitFor((value) => {
-        const opencodeHealth = value.activeRepoRuntimeHealthByRuntime.opencode;
-        const mockRuntimeHealth = value.activeRepoRuntimeHealthByRuntime["mock-runtime"];
-        return opencodeHealth != null && mockRuntimeHealth != null;
-      });
-
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toEqual(
-        expect.objectContaining({
-          status: "ready",
-          mcp: expect.objectContaining({ toolIds: ["opencode"] }),
-        }),
-      );
-      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime["mock-runtime"]).toEqual(
-        expect.objectContaining({
-          status: "error",
-          runtime: expect.objectContaining({
-            detail: "mock runtime probe failed",
             failureKind: "error",
           }),
         }),

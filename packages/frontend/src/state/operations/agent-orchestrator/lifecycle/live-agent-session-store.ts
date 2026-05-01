@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { LiveAgentSessionSnapshot } from "@openducktor/core";
 import { liveAgentSessionLookupKey } from "./live-agent-session-cache";
 
@@ -32,7 +33,7 @@ export class LiveAgentSessionStore {
 
   readSnapshot(input: {
     repoPath: string;
-    runtimeKind: string;
+    runtimeKind: RuntimeKind;
     workingDirectory: string;
     externalSessionId: string;
     maxAgeMs?: number;

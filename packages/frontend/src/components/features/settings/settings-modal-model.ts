@@ -14,7 +14,7 @@ import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-sli
 
 type RepoDefaultRole = keyof RepoSettingsInput["agentDefaults"];
 type RepoAgentDefaultLike = {
-  runtimeKind?: string | null;
+  runtimeKind?: RuntimeKind | null;
   providerId: string;
   modelId: string;
   variant?: string | undefined;
@@ -40,7 +40,7 @@ export const ROLE_DEFAULTS: ReadonlyArray<{
 export const ensureDraftAgentDefault = (
   value:
     | {
-        runtimeKind?: string | null;
+        runtimeKind?: RuntimeKind | null;
         providerId: string;
         modelId: string;
         variant?: string | undefined;
@@ -48,13 +48,15 @@ export const ensureDraftAgentDefault = (
       }
     | null
     | undefined,
-): RepoAgentDefaultInput => ({
-  runtimeKind: value?.runtimeKind ?? "",
-  providerId: value?.providerId ?? "",
-  modelId: value?.modelId ?? "",
-  variant: value?.variant ?? "",
-  profileId: value?.profileId ?? "",
-});
+): RepoAgentDefaultInput => {
+  return {
+    ...(value?.runtimeKind ? { runtimeKind: value.runtimeKind } : {}),
+    providerId: value?.providerId ?? "",
+    modelId: value?.modelId ?? "",
+    variant: value?.variant ?? "",
+    profileId: value?.profileId ?? "",
+  };
+};
 
 export const updateRoleDefault = (
   agentDefaults: RepoAgentDefaultsInput,

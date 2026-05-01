@@ -1,7 +1,9 @@
+import type { RuntimeKind } from "@openducktor/contracts";
+
 export type RepoAgentDefaultRole = "spec" | "planner" | "build" | "qa";
 
 type RepoAgentDefaultDraft = {
-  runtimeKind?: string | null;
+  runtimeKind?: RuntimeKind | null;
   providerId: string;
   modelId: string;
   variant?: string | null | undefined;
@@ -24,27 +26,12 @@ export const repoAgentDefaultRuntimeKindError = (role: RepoAgentDefaultRole): st
   return `${REPO_AGENT_DEFAULT_LABELS[role]} agent default runtime kind is required when provider and model are configured.`;
 };
 
-export const repoDefaultRuntimeKindError = (): string => {
-  return "Default runtime kind is required. Select a repository default runtime before saving.";
-};
-
-export const normalizeRepoDefaultRuntimeKindForSave = (
-  runtimeKind: string | null | undefined,
-): string => {
-  const normalizedRuntimeKind = trimNonEmpty(runtimeKind);
-  if (normalizedRuntimeKind) {
-    return normalizedRuntimeKind;
-  }
-
-  throw new Error(repoDefaultRuntimeKindError());
-};
-
 export const normalizeRepoAgentDefaultForSave = (
   role: RepoAgentDefaultRole,
   entry: RepoAgentDefaultDraft | null | undefined,
 ):
   | {
-      runtimeKind: string;
+      runtimeKind: RuntimeKind;
       providerId: string;
       modelId: string;
       variant?: string;
@@ -61,8 +48,7 @@ export const normalizeRepoAgentDefaultForSave = (
     return undefined;
   }
 
-  const runtimeKind = trimNonEmpty(entry.runtimeKind);
-  if (!runtimeKind) {
+  if (!entry.runtimeKind) {
     throw new Error(repoAgentDefaultRuntimeKindError(role));
   }
 
@@ -70,7 +56,7 @@ export const normalizeRepoAgentDefaultForSave = (
   const profileId = trimNonEmpty(entry.profileId);
 
   return {
-    runtimeKind,
+    runtimeKind: entry.runtimeKind,
     providerId,
     modelId,
     ...(variant ? { variant } : {}),

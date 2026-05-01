@@ -39,10 +39,6 @@ export const pickCatalogDefaultModel = (catalog: AgentModelCatalog): CatalogMode
   return catalog.models[0] ?? null;
 };
 
-export const runtimeKindForCatalog = (catalog: AgentModelCatalog): string | null => {
-  return catalog.runtime?.kind ?? null;
-};
-
 export const normalizeCatalogVariant = (
   model: Pick<CatalogModel, "variants">,
   variant: string | undefined,
