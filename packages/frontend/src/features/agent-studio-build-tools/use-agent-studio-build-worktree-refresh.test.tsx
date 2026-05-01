@@ -1,13 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
-  sessionMessageAt,
-  sessionMessagesToArray,
-} from "@/test-utils/session-message-test-helpers";
-import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+} from "@/pages/agents/agent-studio-test-utils";
+import {
+  sessionMessageAt,
+  sessionMessagesToArray,
+} from "@/test-utils/session-message-test-helpers";
 
 enableReactActEnvironment();
 

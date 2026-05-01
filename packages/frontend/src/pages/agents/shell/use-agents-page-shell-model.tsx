@@ -14,6 +14,7 @@ import {
   type TaskDetailsSheetControllerHandle,
 } from "@/components/features/task-details/task-details-sheet-controller";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
+import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
@@ -30,7 +31,6 @@ import {
 } from "@/state/app-state-provider";
 import { runtimeListQueryOptions } from "@/state/queries/runtime";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
-import { useAgentStudioBuildWorktreeRefresh } from "../use-agent-studio-build-worktree-refresh";
 import {
   type AgentStudioOrchestrationSelectionContext,
   useAgentStudioOrchestrationController,
