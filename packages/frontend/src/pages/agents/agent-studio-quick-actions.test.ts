@@ -122,6 +122,14 @@ describe("agent-studio-quick-actions", () => {
       launchActionId: "build_pull_request_generation",
       initialSourceExternalSessionId: "builder-1",
     });
+    expect(humanReviewOptions.map((option) => option.launchActionId)).toEqual([
+      "build_pull_request_generation",
+      "build_after_human_request_changes",
+      "qa_review",
+      "build_implementation_start",
+      "spec_initial",
+      "planner_initial",
+    ]);
     expect(
       humanReviewOptions.filter(
         (option) => option.launchActionId === "build_after_human_request_changes",
@@ -129,7 +137,7 @@ describe("agent-studio-quick-actions", () => {
     ).toHaveLength(1);
   });
 
-  test("does not propose completed workflow roles even when backend actions are still present", () => {
+  test("keeps completed workflow roles in the dropdown while prioritizing current work", () => {
     const task = buildTask({
       id: "task-1",
       status: "in_progress",
@@ -149,7 +157,11 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
 
-    expect(options.map((option) => option.launchActionId)).toEqual(["build_implementation_start"]);
+    expect(options.map((option) => option.launchActionId)).toEqual([
+      "build_implementation_start",
+      "spec_initial",
+      "planner_initial",
+    ]);
     expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
       launchActionId: "build_implementation_start",
       label: "Start Implementation",
@@ -305,7 +317,17 @@ describe("agent-studio-quick-actions", () => {
   });
 
   test("keeps review-state pull-request quick action disabled without a builder source", () => {
-    const task = buildTask({ id: "task-1", status: "human_review", availableActions: [] });
+    const task = buildTask({
+      id: "task-1",
+      status: "human_review",
+      availableActions: [],
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: true },
+        qa: { required: true, canSkip: false, available: true, completed: true },
+      },
+    });
     const options = buildAgentStudioQuickActions({
       selectedTask: task,
       sessionsForTask: [],
@@ -313,12 +335,19 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
 
-    expect(options).toHaveLength(1);
     expect(options[0]).toMatchObject({
       launchActionId: "build_pull_request_generation",
       disabled: true,
       disabledReason: "Requires an existing Builder session.",
     });
+    expect(options.map((option) => option.launchActionId)).toEqual([
+      "build_pull_request_generation",
+      "build_after_human_request_changes",
+      "qa_review",
+      "build_implementation_start",
+      "spec_initial",
+      "planner_initial",
+    ]);
     expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
       launchActionId: "build_pull_request_generation",
       label: "Generate Pull Request",

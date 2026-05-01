@@ -1,14 +1,15 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentSessionStartMode } from "@openducktor/core";
 import {
+  AGENT_STUDIO_SESSION_START_ACTIONS,
   resolveTaskCardActions,
   type TaskWorkflowAction,
 } from "@/components/features/kanban/kanban-task-workflow";
+import { taskActionLabel } from "@/components/features/kanban/task-action-ui";
 import {
   buildReusableSessionOptions,
   getSessionLaunchAction,
   LAUNCH_ACTION_LABELS,
-  resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
   type SessionStartExistingSessionOption,
   type SessionStartPostAction,
@@ -35,14 +36,6 @@ const createQuickActionDisabledReason = (createSessionDisabled: boolean): string
   return createSessionDisabled ? "Wait for the current session to finish." : null;
 };
 
-const QUICK_ACTION_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
-  "set_spec",
-  "set_plan",
-  "build_start",
-  "qa_start",
-  "human_request_changes",
-];
-
 const PULL_REQUEST_QUICK_ACTION_STATUSES = new Set<TaskCard["status"]>([
   "ai_review",
   "human_review",
@@ -50,81 +43,6 @@ const PULL_REQUEST_QUICK_ACTION_STATUSES = new Set<TaskCard["status"]>([
 
 const canShowPullRequestQuickAction = (task: TaskCard): boolean => {
   return PULL_REQUEST_QUICK_ACTION_STATUSES.has(task.status);
-};
-
-const canStartRoleWorkflow = (params: {
-  task: TaskCard;
-  role: AgentRole;
-  roleEnabledByTask: Record<AgentRole, boolean>;
-}): boolean => {
-  if (params.role === "build") {
-    return params.roleEnabledByTask.build && !params.task.agentWorkflows.builder.completed;
-  }
-
-  if (params.role === "qa") {
-    const qaWorkflow = params.task.agentWorkflows.qa;
-    return (
-      !qaWorkflow.completed && (params.roleEnabledByTask.qa || params.task.status === "ai_review")
-    );
-  }
-
-  const workflow = params.task.agentWorkflows[params.role];
-  return params.roleEnabledByTask[params.role] && !workflow.completed;
-};
-
-const canOfferBuildQuickAction = (params: {
-  task: TaskCard;
-  availableWorkflowActions: Set<TaskWorkflowAction>;
-  roleEnabledByTask: Record<AgentRole, boolean>;
-}): boolean => {
-  if (
-    !canStartRoleWorkflow({
-      task: params.task,
-      role: "build",
-      roleEnabledByTask: params.roleEnabledByTask,
-    })
-  ) {
-    return false;
-  }
-
-  return params.availableWorkflowActions.has("build_start") || params.task.status === "in_progress";
-};
-
-const canOfferQaQuickAction = (params: {
-  task: TaskCard;
-  availableWorkflowActions: Set<TaskWorkflowAction>;
-  roleEnabledByTask: Record<AgentRole, boolean>;
-}): boolean => {
-  if (
-    !canStartRoleWorkflow({
-      task: params.task,
-      role: "qa",
-      roleEnabledByTask: params.roleEnabledByTask,
-    })
-  ) {
-    return false;
-  }
-
-  return params.availableWorkflowActions.has("qa_start") || params.task.status === "ai_review";
-};
-
-const quickActionLabelForWorkflowAction = (action: TaskWorkflowAction, task: TaskCard): string => {
-  if (action === "set_spec") {
-    return task.status === "spec_ready" ? "Open Spec" : "Start Spec";
-  }
-  if (action === "set_plan") {
-    return "Start Planner";
-  }
-  if (action === "build_start") {
-    if (isQaRejectedTask(task)) {
-      return "Address QA Feedbacks";
-    }
-    return task.status === "human_review" ? "Apply Human Changes" : "Start Implementation";
-  }
-  if (action === "qa_start") {
-    return "Request QA Review";
-  }
-  return "Request Changes";
 };
 
 const quickActionIdForWorkflowAction = (
@@ -138,7 +56,7 @@ const quickActionIdForWorkflowAction = (
     return "planner_initial";
   }
   if (action === "build_start") {
-    return resolveBuildContinuationLaunchAction(task);
+    return isQaRejectedTask(task) ? "build_after_qa_rejected" : "build_implementation_start";
   }
   if (action === "qa_start") {
     return "qa_review";
@@ -149,14 +67,41 @@ const quickActionIdForWorkflowAction = (
   throw new Error(`Unsupported Agent Studio quick action workflow action: ${action}`);
 };
 
+const quickActionRoleForWorkflowAction = (action: TaskWorkflowAction): AgentRole => {
+  if (action === "set_spec") {
+    return "spec";
+  }
+  if (action === "set_plan") {
+    return "planner";
+  }
+  if (action === "qa_start") {
+    return "qa";
+  }
+  return "build";
+};
+
+const quickActionDescriptionForWorkflowAction = (action: TaskWorkflowAction): string => {
+  if (action === "set_spec") {
+    return "Open the start-session flow for the Spec workflow.";
+  }
+  if (action === "set_plan") {
+    return "Open the start-session flow for the Planner workflow.";
+  }
+  if (action === "qa_start") {
+    return "Open the start-session flow for QA review.";
+  }
+  if (action === "human_request_changes") {
+    return "Collect human feedback, then open the Builder rework flow.";
+  }
+  return "Open the start-session flow for Builder implementation work.";
+};
+
 const orderQuickActions = (
   task: TaskCard,
   options: AgentStudioQuickActionOption[],
+  workflowActionOrder: readonly TaskWorkflowAction[],
 ): AgentStudioQuickActionOption[] => {
-  const orderedWorkflowActions = resolveTaskCardActions(task, {
-    include: QUICK_ACTION_WORKFLOW_ACTIONS,
-  }).allActions;
-  const orderedWorkflowLaunchActions = orderedWorkflowActions.map((action) =>
+  const orderedWorkflowLaunchActions = workflowActionOrder.map((action) =>
     quickActionIdForWorkflowAction(action, task),
   );
 
@@ -165,14 +110,6 @@ const orderQuickActions = (
   );
   if (task.status === "human_review") {
     launchActionPriority.set("build_pull_request_generation", -1);
-  }
-  if (task.status === "ai_review" && !task.agentWorkflows.qa.completed) {
-    launchActionPriority.set("qa_review", -1);
-  }
-  if (isQaRejectedTask(task)) {
-    launchActionPriority.set("build_after_qa_rejected", -1);
-  } else if (task.status === "in_progress" && !task.agentWorkflows.builder.completed) {
-    launchActionPriority.set("build_implementation_start", -1);
   }
   const fallbackPriority = launchActionPriority.size + 1;
 
@@ -205,118 +142,52 @@ export const buildAgentStudioQuickActions = (params: {
     return [];
   }
 
-  const availableWorkflowActions = new Set(
-    resolveTaskCardActions(task, { include: QUICK_ACTION_WORKFLOW_ACTIONS }).allActions,
-  );
+  const workflowActionOrder = resolveTaskCardActions(task, {
+    include: AGENT_STUDIO_SESSION_START_ACTIONS,
+    surface: "agent_studio_quick_actions",
+  }).allActions;
   const disabledReason = createQuickActionDisabledReason(params.createSessionDisabled);
-  const createLifecycleOption = (
+  const createLifecycleOption = (action: TaskWorkflowAction): AgentStudioQuickActionOption => {
+    const launchActionId = quickActionIdForWorkflowAction(action, task);
+    return {
+      id: `quick:${launchActionId}`,
+      role: quickActionRoleForWorkflowAction(action),
+      launchActionId,
+      label: taskActionLabel(action, task, { surface: "agent_studio" }),
+      description: quickActionDescriptionForWorkflowAction(action),
+      postStartAction: "kickoff",
+      disabled: disabledReason !== null,
+      ...(disabledReason ? { disabledReason } : {}),
+      ...(action === "human_request_changes" ? { requiresHumanFeedback: true } : {}),
+    };
+  };
+  const createSpecialOption = (
     id: string,
     role: AgentRole,
     launchActionId: SessionLaunchActionId,
     description: string,
-    label = LAUNCH_ACTION_LABELS[launchActionId],
   ): AgentStudioQuickActionOption => ({
     id,
     role,
     launchActionId,
-    label,
+    label: LAUNCH_ACTION_LABELS[launchActionId],
     description,
     postStartAction: "kickoff",
     disabled: disabledReason !== null,
     ...(disabledReason ? { disabledReason } : {}),
   });
 
-  const options: AgentStudioQuickActionOption[] = [];
+  const options: AgentStudioQuickActionOption[] = workflowActionOrder.map(createLifecycleOption);
 
   if (params.hasActiveGitConflict && params.roleEnabledByTask.build) {
     options.push({
-      ...createLifecycleOption(
+      ...createSpecialOption(
         "quick:build_rebase_conflict_resolution",
         "build",
         "build_rebase_conflict_resolution",
         "Ask Builder to resolve the active git conflict.",
       ),
       postStartAction: "send_message",
-    });
-  }
-
-  if (
-    availableWorkflowActions.has("set_spec") &&
-    canStartRoleWorkflow({ task, role: "spec", roleEnabledByTask: params.roleEnabledByTask })
-  ) {
-    options.push(
-      createLifecycleOption(
-        "quick:spec_initial",
-        "spec",
-        "spec_initial",
-        "Open the start-session flow for the Spec workflow.",
-        quickActionLabelForWorkflowAction("set_spec", task),
-      ),
-    );
-  }
-
-  if (
-    availableWorkflowActions.has("set_plan") &&
-    canStartRoleWorkflow({ task, role: "planner", roleEnabledByTask: params.roleEnabledByTask })
-  ) {
-    options.push(
-      createLifecycleOption(
-        "quick:planner_initial",
-        "planner",
-        "planner_initial",
-        "Open the start-session flow for the Planner workflow.",
-        quickActionLabelForWorkflowAction("set_plan", task),
-      ),
-    );
-  }
-
-  if (
-    canOfferBuildQuickAction({
-      task,
-      availableWorkflowActions,
-      roleEnabledByTask: params.roleEnabledByTask,
-    })
-  ) {
-    const launchActionId = resolveBuildContinuationLaunchAction(task);
-    options.push(
-      createLifecycleOption(
-        `quick:${launchActionId}`,
-        "build",
-        launchActionId,
-        "Open the start-session flow for Builder implementation work.",
-        quickActionLabelForWorkflowAction("build_start", task),
-      ),
-    );
-  }
-
-  if (
-    canOfferQaQuickAction({
-      task,
-      availableWorkflowActions,
-      roleEnabledByTask: params.roleEnabledByTask,
-    })
-  ) {
-    options.push(
-      createLifecycleOption(
-        "quick:qa_review",
-        "qa",
-        "qa_review",
-        "Open the start-session flow for QA review.",
-        quickActionLabelForWorkflowAction("qa_start", task),
-      ),
-    );
-  }
-
-  if (availableWorkflowActions.has("human_request_changes") && params.roleEnabledByTask.build) {
-    options.push({
-      ...createLifecycleOption(
-        "quick:build_after_human_request_changes",
-        "build",
-        "build_after_human_request_changes",
-        "Collect human feedback, then open the Builder rework flow.",
-        quickActionLabelForWorkflowAction("human_request_changes", task),
-      ),
-      requiresHumanFeedback: true,
     });
   }
 
@@ -348,7 +219,7 @@ export const buildAgentStudioQuickActions = (params: {
     });
   }
 
-  return orderQuickActions(task, options);
+  return orderQuickActions(task, options, workflowActionOrder);
 };
 
 export const selectPrimaryAgentStudioQuickAction = (

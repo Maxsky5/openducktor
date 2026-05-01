@@ -19,6 +19,7 @@ type ResolveTaskCardActionsOptions = {
   hasActiveSession?: boolean;
   activeSessionRole?: AgentRole;
   historicalSessionRoles?: readonly AgentRole[];
+  surface?: "kanban" | "agent_studio_quick_actions";
 };
 
 const SESSION_CREATING_ACTIONS: readonly TaskWorkflowAction[] = [
@@ -26,6 +27,14 @@ const SESSION_CREATING_ACTIONS: readonly TaskWorkflowAction[] = [
   "set_plan",
   "build_start",
   "qa_start",
+];
+
+export const AGENT_STUDIO_SESSION_START_ACTIONS: readonly TaskWorkflowAction[] = [
+  "set_spec",
+  "set_plan",
+  "build_start",
+  "qa_start",
+  "human_request_changes",
 ];
 
 const SESSION_VIEW_ACTION_BY_ROLE: Record<AgentRole, SessionRoleViewAction> = {
@@ -42,10 +51,77 @@ const SESSION_VIEW_ACTIONS = new Set<SessionRoleViewAction>(
 const toRoleSessionViewAction = (role: AgentRole): SessionRoleViewAction =>
   SESSION_VIEW_ACTION_BY_ROLE[role];
 
+const allowsIncludedAction = (
+  action: TaskWorkflowAction,
+  includeSet: Set<TaskWorkflowAction> | null,
+): boolean => (includeSet ? includeSet.has(action) : true);
+
+const includeRoleSessionStartAction = (params: {
+  action: TaskWorkflowAction;
+  workflow: { available: boolean; completed: boolean };
+  includeSet: Set<TaskWorkflowAction> | null;
+  force?: boolean;
+}): TaskWorkflowAction[] => {
+  if (!allowsIncludedAction(params.action, params.includeSet)) {
+    return [];
+  }
+  if (params.force || params.workflow.available || params.workflow.completed) {
+    return [params.action];
+  }
+  return [];
+};
+
+const resolveAgentStudioQuickActionCandidates = (
+  task: TaskCard,
+  options: ResolveTaskCardActionsOptions,
+): TaskWorkflowAction[] => {
+  const includeSet = options.include ? new Set(options.include) : null;
+  const forceBuildStart =
+    task.status === "ready_for_dev" ||
+    task.status === "in_progress" ||
+    task.status === "blocked" ||
+    task.status === "human_review";
+  const forceQaStart = task.status === "ai_review" || task.status === "human_review";
+  const forceRequestChanges = task.status === "human_review";
+
+  return dedupeActions([
+    ...includeRoleSessionStartAction({
+      action: "set_spec",
+      workflow: task.agentWorkflows.spec,
+      includeSet,
+    }),
+    ...includeRoleSessionStartAction({
+      action: "set_plan",
+      workflow: task.agentWorkflows.planner,
+      includeSet,
+    }),
+    ...includeRoleSessionStartAction({
+      action: "build_start",
+      workflow: task.agentWorkflows.builder,
+      includeSet,
+      force: forceBuildStart,
+    }),
+    ...includeRoleSessionStartAction({
+      action: "qa_start",
+      workflow: task.agentWorkflows.qa,
+      includeSet,
+      force: forceQaStart,
+    }),
+    ...(allowsIncludedAction("human_request_changes", includeSet) &&
+    (forceRequestChanges || task.availableActions.includes("human_request_changes"))
+      ? ["human_request_changes" as const]
+      : []),
+  ]);
+};
+
 const filterEnabledActions = (
   task: TaskCard,
   options: ResolveTaskCardActionsOptions,
 ): TaskWorkflowAction[] => {
+  if (options.surface === "agent_studio_quick_actions") {
+    return resolveAgentStudioQuickActionCandidates(task, options);
+  }
+
   const includeSet = options.include ? new Set(options.include) : null;
   let enabled: TaskWorkflowAction[] = dedupeActions(
     task.availableActions
