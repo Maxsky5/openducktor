@@ -586,8 +586,8 @@ export function useAgentOrchestratorOperations({
               workingDirectory: input.workingDirectory,
               historyHydrationState: "hydrated",
               runtimeRecoveryState: "idle",
-              pendingPermissions: hydratedSession.pendingPermissions,
-              pendingQuestions: hydratedSession.pendingQuestions,
+              pendingPermissions: current.pendingPermissions,
+              pendingQuestions: current.pendingQuestions,
               messages,
             };
           },

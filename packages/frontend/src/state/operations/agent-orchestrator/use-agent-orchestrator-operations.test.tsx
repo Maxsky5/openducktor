@@ -2630,6 +2630,23 @@ describe("use-agent-orchestrator-operations", () => {
       });
 
       expect(operationOrder).toEqual(["attach:start", "subscribe"]);
+      const listener = listeners[0];
+      if (!listener) {
+        throw new Error("Expected transcript listener to be attached");
+      }
+      listener({
+        type: "question_required",
+        externalSessionId: "external-subagent",
+        timestamp: "2026-02-22T09:00:01.500Z",
+        requestId: "question-during-attach",
+        questions: [
+          {
+            header: "Scope",
+            question: "Which path should I inspect?",
+            options: [{ label: "A", description: "Path A" }],
+          },
+        ],
+      });
       attachSessionDeferred.resolve({
         runtimeKind: "opencode",
         externalSessionId: "external-subagent",
@@ -2666,6 +2683,18 @@ describe("use-agent-orchestrator-operations", () => {
       expect(transcriptSession?.role).toBeNull();
       expect(transcriptSession?.scenario).toBeNull();
       expect(transcriptSession?.status).toBe("running");
+      expect(transcriptSession?.pendingQuestions).toEqual([
+        {
+          requestId: "question-during-attach",
+          questions: [
+            {
+              header: "Scope",
+              question: "Which path should I inspect?",
+              options: [{ label: "A", description: "Path A" }],
+            },
+          ],
+        },
+      ]);
       expect(
         transcriptSession
           ? sessionMessagesToArray(transcriptSession).some(
@@ -2674,10 +2703,6 @@ describe("use-agent-orchestrator-operations", () => {
           : false,
       ).toBe(true);
 
-      const listener = listeners[0];
-      if (!listener) {
-        throw new Error("Expected transcript listener to be attached");
-      }
       listener({
         type: "permission_required",
         externalSessionId: "external-subagent",
