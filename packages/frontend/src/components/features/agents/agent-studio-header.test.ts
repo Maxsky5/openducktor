@@ -375,6 +375,7 @@ describe("AgentStudioHeader", () => {
     });
     expect(screen.getByText("Prepare Builder session")).toBeTruthy();
     expect(screen.getByText("Open a Builder composer without sending a kickoff.")).toBeTruthy();
+    expect(document.querySelector(".lucide-message-circle-plus")).toBeTruthy();
 
     await act(async () => {
       fireEvent.click(screen.getByText("Open a Builder composer without sending a kickoff."));
@@ -510,6 +511,21 @@ describe("AgentStudioHeader", () => {
 
     expect(onResolveGitConflictQuickAction).toHaveBeenCalled();
     expect(onQuickAction).not.toHaveBeenCalled();
+  });
+
+  test("uses the accent variant for the quick action split button", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: buildModel(),
+      }),
+    );
+
+    expect(html).toMatch(
+      /<button[^>]*class="[^"]*bg-sidebar-accent[^"]*"[^>]*aria-label="Run quick action: Start Implementation"/,
+    );
+    expect(html).toMatch(
+      /<button[^>]*class="[^"]*bg-sidebar-accent[^"]*"[^>]*aria-label="Open quick actions menu"/,
+    );
   });
 
   test("hides the task details button when no task is selected", () => {

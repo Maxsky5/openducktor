@@ -10,7 +10,7 @@ import {
   CircleDotDashed,
   History,
   LoaderCircle,
-  Sparkles,
+  MessageCirclePlus,
   Zap,
 } from "lucide-react";
 import { type ReactElement, useMemo, useRef, useState } from "react";
@@ -267,7 +267,7 @@ function QuickActionCommandItem({
   const { option } = entry;
   const isDisabled = option.disabled || disabledReason !== null;
   const description = disabledReason ?? option.disabledReason ?? option.description;
-  const Icon = entry.kind === "message_first" ? Sparkles : Zap;
+  const Icon = entry.kind === "message_first" ? MessageCirclePlus : Zap;
 
   return (
     <CommandItem
@@ -369,7 +369,7 @@ function QuickActionsMenu({
     <div className="flex items-center gap-0">
       <Button
         type="button"
-        variant="secondary"
+        variant="accent"
         size="sm"
         className="h-9 max-w-48 gap-2 rounded-r-none border-r-0 px-3"
         disabled={!canRunPrimaryAction}
@@ -383,14 +383,14 @@ function QuickActionsMenu({
           }
         }}
       >
-        <Zap className="size-4" />
+        <Zap className="size-4 text-amber-400 dark:text-amber-500" />
         <span className="truncate">{primaryAction?.label ?? "Actions"}</span>
       </Button>
       <Popover open={isOpen} onOpenChange={onOpenChange}>
         <PopoverTrigger asChild>
           <Button
             type="button"
-            variant="secondary"
+            variant="accent"
             size="sm"
             className="h-9 rounded-l-none px-2"
             disabled={!canOpenActionsMenu}
