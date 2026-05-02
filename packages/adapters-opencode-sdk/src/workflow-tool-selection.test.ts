@@ -129,6 +129,12 @@ describe("workflow-tool-selection", () => {
     expect(selection.odt_read_task_documents).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
     expect(selection.odt_set_plan).toBe(false);
+    expect(selection.openducktor_odt_set_spec).toBe(true);
+    expect(selection["functions.openducktor_odt_set_spec"]).toBe(true);
+    expect(selection.openducktor_odt_set_plan).toBe(false);
+    expect(selection["functions.openducktor_odt_set_plan"]).toBe(false);
+    expect(selection.openducktor_odt_build_completed).toBe(false);
+    expect(selection["functions.openducktor_odt_build_completed"]).toBe(false);
     expect(selection.odt_create_task).toBe(false);
     expect(selection.odt_search_tasks).toBe(false);
     expect(selection.odt_get_workspaces).toBe(false);
@@ -197,6 +203,22 @@ describe("workflow-tool-selection", () => {
     expect(selection.odt_read_task_documents).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
     expect(selection.odt_set_plan).toBe(false);
+  });
+
+  test("keeps trusted workflow aliases role-scoped when runtime discovery misses ODT ids", async () => {
+    const selection = await resolveWorkflowToolSelection({
+      client: makeClient({
+        toolIds: ["bash", "read", "glob"],
+      }),
+      role: "build",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      workingDirectory: "/repo",
+    });
+
+    expect(selection.openducktor_odt_build_completed).toBe(true);
+    expect(selection["functions.openducktor_odt_build_completed"]).toBe(true);
+    expect(selection.openducktor_odt_qa_approved).toBe(false);
+    expect(selection["functions.openducktor_odt_qa_approved"]).toBe(false);
   });
 
   test("ignores malformed or untrusted runtime aliases", async () => {

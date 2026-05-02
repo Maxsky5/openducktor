@@ -104,6 +104,9 @@ export const buildRoleScopedOdtToolSelection = (
   if (includeCanonicalDefaults) {
     for (const workflowTool of ODT_WORKFLOW_TOOL_NAMES) {
       selection[workflowTool] = allowed.has(workflowTool);
+      for (const alias of options?.workflowToolAliasesByCanonical?.[workflowTool] ?? []) {
+        selection[alias] = allowed.has(workflowTool);
+      }
     }
   }
 
