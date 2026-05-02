@@ -114,6 +114,7 @@ export const resolveAgentStudioSessionSelection = ({
   roleFromQuery,
   selectedTask,
   fallbackRole,
+  keepExplicitRoleSessionless = false,
 }: {
   sessionsForTask: AgentSessionSummary[];
   sessionParam: string | null;
@@ -121,6 +122,7 @@ export const resolveAgentStudioSessionSelection = ({
   roleFromQuery: AgentRole;
   selectedTask: TaskCard | null;
   fallbackRole: AgentRole;
+  keepExplicitRoleSessionless?: boolean;
 }): { activeSession: AgentSessionSummary | null; role: AgentRole } => {
   const runningSession =
     [...sessionsForTask]
@@ -154,6 +156,9 @@ export const resolveAgentStudioSessionSelection = ({
   }
 
   if (hasExplicitRoleParam) {
+    if (keepExplicitRoleSessionless) {
+      return toSelection(roleFromQuery, null);
+    }
     return toSelection(roleFromQuery, latestSessionByRole(roleFromQuery));
   }
 

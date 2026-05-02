@@ -297,11 +297,16 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       return;
     }
 
-    if (
-      selectionIntent.taskId === taskIdParam &&
-      selectionIntent.externalSessionId === sessionParam &&
-      selectionIntent.role === roleFromQuery
-    ) {
+    const selectionIntentResolved =
+      selectionIntent.externalSessionId === null
+        ? selectionIntent.taskId === taskIdParam &&
+          sessionParam !== null &&
+          selectionIntent.role === roleFromQuery
+        : selectionIntent.taskId === taskIdParam &&
+          selectionIntent.externalSessionId === sessionParam &&
+          selectionIntent.role === roleFromQuery;
+
+    if (selectionIntentResolved) {
       setSelectionIntent(null);
     }
   }, [isRepoNavigationBoundaryPending, roleFromQuery, selectionIntent, sessionParam, taskIdParam]);

@@ -214,10 +214,13 @@ export function useAgentStudioSelectionController({
     : roleFromQuery;
   const effectiveSelectionIntent = isRepoNavigationBoundaryPending ? null : selectionIntent;
   const selectedTaskIdParam = effectiveSelectionIntent?.taskId ?? effectiveTaskIdParam;
-  const selectedSessionParam = effectiveSelectionIntent?.externalSessionId ?? effectiveSessionParam;
+  const selectedSessionParam = effectiveSelectionIntent
+    ? effectiveSelectionIntent.externalSessionId
+    : effectiveSessionParam;
   const selectedHasExplicitRoleParam =
     effectiveSelectionIntent !== null ? true : effectiveHasExplicitRoleParam;
   const selectedRoleFromQuery = effectiveSelectionIntent?.role ?? effectiveRoleFromQuery;
+  const keepSelectedExplicitRoleSessionless = effectiveSelectionIntent?.externalSessionId === null;
 
   const tasksById = useMemo(() => {
     return new Map(tasks.map((task) => [task.id, task]));
@@ -266,8 +269,10 @@ export function useAgentStudioSelectionController({
       roleFromQuery: selectedRoleFromQuery,
       selectedTask,
       fallbackRole: selectedRoleFromQuery,
+      keepExplicitRoleSessionless: keepSelectedExplicitRoleSessionless,
     }).activeSession;
   }, [
+    keepSelectedExplicitRoleSessionless,
     selectedHasExplicitRoleParam,
     selectedRoleFromQuery,
     selectedSessionParam,
@@ -361,7 +366,10 @@ export function useAgentStudioSelectionController({
       : null;
   const viewHasExplicitRoleSelection = viewSelectionIntent !== null ? true : hasViewRoleSelection;
   const viewRoleFromSelection = viewSelectionIntent?.role ?? effectiveRoleFromQuery;
-  const viewSessionParamFromSelection = viewSelectionIntent?.externalSessionId ?? viewSessionParam;
+  const viewSessionParamFromSelection = viewSelectionIntent
+    ? viewSelectionIntent.externalSessionId
+    : viewSessionParam;
+  const keepViewExplicitRoleSessionless = viewSelectionIntent?.externalSessionId === null;
 
   const viewSelection = useMemo(() => {
     return resolveAgentStudioSessionSelection({
@@ -371,10 +379,12 @@ export function useAgentStudioSelectionController({
       roleFromQuery: viewRoleFromSelection,
       selectedTask: viewSelectedTask,
       fallbackRole: isViewTaskDetachedFromQuery ? "spec" : viewRoleFromSelection,
+      keepExplicitRoleSessionless: keepViewExplicitRoleSessionless,
     });
   }, [
     viewHasExplicitRoleSelection,
     isViewTaskDetachedFromQuery,
+    keepViewExplicitRoleSessionless,
     viewRoleFromSelection,
     viewSelectedTask,
     viewSessionParamFromSelection,

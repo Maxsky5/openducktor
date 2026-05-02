@@ -250,6 +250,27 @@ describe("agents-page-selection", () => {
     expect(resolved?.externalSessionId).toBe("planner-1");
   });
 
+  test("keeps explicit role selection sessionless when requested", () => {
+    const buildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "build-1",
+      taskId: "task-1",
+      role: "build",
+    });
+
+    const resolved = resolveAgentStudioSessionSelection({
+      sessionsForTask: [buildSession],
+      sessionParam: null,
+      hasExplicitRoleParam: true,
+      roleFromQuery: "build",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
+      fallbackRole: "build",
+      keepExplicitRoleSessionless: true,
+    });
+
+    expect(resolved).toEqual({ activeSession: null, role: "build" });
+  });
+
   test("prioritizes active running session over status defaults", () => {
     const olderBuildSession = createAgentSessionFixture({
       runtimeKind: "opencode",
