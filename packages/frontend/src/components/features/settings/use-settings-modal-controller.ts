@@ -196,7 +196,7 @@ export const useSettingsModalController = ({
   const settingsSectionErrorCountByIdWithCustomPrompts = useMemo(
     () => ({
       ...settingsSectionErrorCountById,
-      chat: (settingsSectionErrorCountById.chat ?? 0) + customPromptValidationState.totalErrorCount,
+      "custom-prompts": customPromptValidationState.totalErrorCount,
     }),
     [customPromptValidationState.totalErrorCount, settingsSectionErrorCountById],
   );

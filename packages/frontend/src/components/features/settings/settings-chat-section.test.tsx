@@ -5,15 +5,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsChatSection } from "./settings-chat-section";
 
 describe("settings chat section", () => {
-  const emptyValidationErrors = {};
-
   test("renders chat settings with thinking messages hidden by default", () => {
     const chatSettings: ChatSettings = { showThinkingMessages: false, customPrompts: [] };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
         chat: chatSettings,
-        validationErrors: emptyValidationErrors,
         disabled: false,
         onUpdateChat: () => chatSettings,
       }),
@@ -31,7 +28,6 @@ describe("settings chat section", () => {
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
         chat: chatSettings,
-        validationErrors: emptyValidationErrors,
         disabled: false,
         onUpdateChat: () => chatSettings,
       }),
@@ -46,7 +42,6 @@ describe("settings chat section", () => {
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
         chat: chatSettings,
-        validationErrors: emptyValidationErrors,
         disabled: false,
         onUpdateChat: () => chatSettings,
       }),
@@ -61,7 +56,6 @@ describe("settings chat section", () => {
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
         chat: chatSettings,
-        validationErrors: emptyValidationErrors,
         disabled: true,
         onUpdateChat: () => chatSettings,
       }),
@@ -76,7 +70,6 @@ describe("settings chat section", () => {
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
         chat: chatSettings,
-        validationErrors: emptyValidationErrors,
         disabled: false,
         onUpdateChat: () => chatSettings,
       }),
@@ -85,7 +78,7 @@ describe("settings chat section", () => {
     expect(html).toContain("after you save settings");
   });
 
-  test("renders saved custom prompts and validation errors", () => {
+  test("does not render custom prompts in chat settings", () => {
     const chatSettings: ChatSettings = {
       showThinkingMessages: false,
       customPrompts: [
@@ -101,15 +94,12 @@ describe("settings chat section", () => {
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
         chat: chatSettings,
-        validationErrors: { "prompt-1": { content: "Prompt content is required." } },
         disabled: false,
         onUpdateChat: () => chatSettings,
       }),
     );
 
-    expect(html).toContain("Custom prompts");
-    expect(html).toContain("review");
-    expect(html).toContain("Review files");
-    expect(html).toContain("Prompt content is required.");
+    expect(html).not.toContain("Custom prompts");
+    expect(html).not.toContain("review");
   });
 });

@@ -10,6 +10,7 @@ describe("settings modal sidebars", () => {
       git: 0,
       repositories: 0,
       prompts: 0,
+      "custom-prompts": 0,
       chat: 0,
       kanban: 0,
       autopilot: 0,
@@ -28,6 +29,7 @@ describe("settings modal sidebars", () => {
     expect(html).toContain("Git");
     expect(html).toContain("Repositories");
     expect(html).toContain("Prompts");
+    expect(html).toContain("Custom Prompts");
     expect(html).toContain("Chat");
     expect(html).toContain("Kanban");
     expect(html).toContain("Autopilot");
@@ -39,6 +41,7 @@ describe("settings modal sidebars", () => {
       git: 0,
       repositories: 0,
       prompts: 0,
+      "custom-prompts": 0,
       chat: 0,
       kanban: 0,
       autopilot: 0,
@@ -63,6 +66,7 @@ describe("settings modal sidebars", () => {
       git: 0,
       repositories: 0,
       prompts: 0,
+      "custom-prompts": 0,
       chat: 0,
       kanban: 0,
       autopilot: 0,
@@ -81,13 +85,14 @@ describe("settings modal sidebars", () => {
     expect(html).toContain("Kanban");
   });
 
-  test("displays error count for chat section when errors exist", () => {
+  test("displays error count for custom prompts section when errors exist", () => {
     const errorCountById = {
       general: 0,
       git: 0,
       repositories: 0,
       prompts: 0,
-      chat: 2,
+      "custom-prompts": 2,
+      chat: 0,
       kanban: 0,
       autopilot: 0,
     };
@@ -101,7 +106,7 @@ describe("settings modal sidebars", () => {
       }),
     );
 
-    expect(html).toContain("Chat");
+    expect(html).toContain("Custom Prompts");
     expect(html).toContain("Kanban");
     expect(html).toContain("2");
   });

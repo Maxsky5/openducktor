@@ -30,6 +30,7 @@ type SettingsModalNavigationState = {
   repositorySection: RepositorySectionId;
   globalPromptRoleTab: PromptRoleTabId;
   repoPromptRoleTab: PromptRoleTabId;
+  selectedCustomPromptId: string | null;
 };
 
 const INITIAL_SECTION: SettingsSectionId = "repositories";
@@ -40,6 +41,7 @@ const INITIAL_NAVIGATION_STATE: SettingsModalNavigationState = {
   repositorySection: INITIAL_REPOSITORY_SECTION,
   globalPromptRoleTab: INITIAL_PROMPT_ROLE_TAB,
   repoPromptRoleTab: INITIAL_PROMPT_ROLE_TAB,
+  selectedCustomPromptId: null,
 };
 
 export function SettingsModal({
@@ -70,6 +72,10 @@ export function SettingsModal({
 
   const handleRepoPromptRoleTabChange = (repoPromptRoleTab: PromptRoleTabId): void => {
     setNavigation((current) => ({ ...current, repoPromptRoleTab }));
+  };
+
+  const handleSelectedCustomPromptIdChange = (selectedCustomPromptId: string | null): void => {
+    setNavigation((current) => ({ ...current, selectedCustomPromptId }));
   };
 
   const handleSave = (): void => {
@@ -120,11 +126,13 @@ export function SettingsModal({
                 repositorySection={navigation.repositorySection}
                 globalPromptRoleTab={navigation.globalPromptRoleTab}
                 repoPromptRoleTab={navigation.repoPromptRoleTab}
+                selectedCustomPromptId={navigation.selectedCustomPromptId}
                 isInteractionDisabled={isInteractionDisabled}
                 controller={controller}
                 onRepositorySectionChange={handleRepositorySectionChange}
                 onGlobalPromptRoleTabChange={handleGlobalPromptRoleTabChange}
                 onRepoPromptRoleTabChange={handleRepoPromptRoleTabChange}
+                onSelectedCustomPromptIdChange={handleSelectedCustomPromptIdChange}
               />
             </div>
           </div>

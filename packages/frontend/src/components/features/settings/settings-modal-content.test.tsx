@@ -63,6 +63,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
     git: 0,
     repositories: 0,
     prompts: 0,
+    "custom-prompts": 0,
     chat: 0,
     kanban: 0,
     autopilot: 0,
@@ -106,6 +107,44 @@ describe("settings modal content", () => {
 
     expect(html).toContain("Chat Settings");
     expect(html).toContain("Show Thinking Messages");
+    expect(html).not.toContain("Custom prompts");
+  });
+
+  test("renders custom prompts as a root section", () => {
+    const snapshot = createMockSnapshot({
+      chat: {
+        showThinkingMessages: false,
+        customPrompts: [
+          {
+            id: "prompt-1",
+            name: "review",
+            description: "Review files",
+            content: "Review this:\n$ARGUMENTS",
+          },
+        ],
+      },
+    });
+    const controller = createMockController(snapshot);
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsModalContent, {
+        section: "custom-prompts",
+        repositorySection: "configuration",
+        globalPromptRoleTab: "shared",
+        repoPromptRoleTab: "shared",
+        selectedCustomPromptId: "prompt-1",
+        isInteractionDisabled: false,
+        controller,
+        onRepositorySectionChange: () => {},
+        onGlobalPromptRoleTabChange: () => {},
+        onRepoPromptRoleTabChange: () => {},
+        onSelectedCustomPromptIdChange: () => {},
+      }),
+    );
+
+    expect(html).toContain("Custom prompts");
+    expect(html).toContain("review");
+    expect(html).toContain("Review files");
   });
 
   test("renders kanban section when section is kanban", () => {

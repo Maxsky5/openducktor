@@ -1,19 +1,15 @@
 import type { ChatSettings } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Switch } from "@/components/ui/switch";
-import { SettingsCustomPromptsSection } from "./settings-custom-prompts-section";
-import type { CustomPromptValidationMap } from "./settings-model";
 
 type SettingsChatSectionProps = {
   chat: ChatSettings;
-  validationErrors: CustomPromptValidationMap;
   disabled: boolean;
   onUpdateChat: (updater: (current: ChatSettings) => ChatSettings) => void;
 };
 
 export function SettingsChatSection({
   chat,
-  validationErrors,
   disabled,
   onUpdateChat,
 }: SettingsChatSectionProps): ReactElement {
@@ -45,18 +41,6 @@ export function SettingsChatSection({
           />
         </div>
       </div>
-
-      <SettingsCustomPromptsSection
-        customPrompts={chat.customPrompts}
-        validationErrors={validationErrors}
-        disabled={disabled}
-        onUpdateCustomPrompts={(updater) =>
-          onUpdateChat((current) => ({
-            ...current,
-            customPrompts: updater(current.customPrompts),
-          }))
-        }
-      />
 
       <div className="rounded-md border border-border bg-muted/60 p-3 text-xs text-muted-foreground">
         Changes to chat settings will take effect after you save your settings.

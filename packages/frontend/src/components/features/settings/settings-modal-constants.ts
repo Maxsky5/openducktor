@@ -6,6 +6,7 @@ import {
   FolderGit2,
   type LucideIcon,
   MessageSquare,
+  MessageSquarePlus,
   MessageSquareText,
   SlidersHorizontal,
   Workflow,
@@ -16,6 +17,7 @@ export type SettingsSectionId =
   | "git"
   | "repositories"
   | "prompts"
+  | "custom-prompts"
   | "chat"
   | "kanban"
   | "autopilot";
@@ -33,6 +35,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   { id: "git", label: "Git", icon: FolderGit2 },
   { id: "repositories", label: "Repositories", icon: FolderGit2 },
   { id: "prompts", label: "Prompts", icon: MessageSquareText },
+  { id: "custom-prompts", label: "Custom Prompts", icon: MessageSquarePlus },
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "kanban", label: "Kanban", icon: Columns3 },
   { id: "autopilot", label: "Autopilot", icon: Workflow },
