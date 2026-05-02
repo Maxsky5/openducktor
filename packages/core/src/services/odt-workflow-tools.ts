@@ -104,6 +104,9 @@ export const buildRoleScopedOdtToolSelection = (
   if (includeCanonicalDefaults) {
     for (const workflowTool of ODT_WORKFLOW_TOOL_NAMES) {
       selection[workflowTool] = allowed.has(workflowTool);
+      // Runtime descriptor aliases are trusted policy inputs, not discovery fallbacks.
+      // Include them even when runtime tool discovery omits ODT tools so role policy
+      // remains stable for every known way the runtime can expose a workflow tool.
       for (const alias of options?.workflowToolAliasesByCanonical?.[workflowTool] ?? []) {
         selection[alias] = allowed.has(workflowTool);
       }
