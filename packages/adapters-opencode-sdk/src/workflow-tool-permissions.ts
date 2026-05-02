@@ -10,8 +10,33 @@ export type OpencodePermissionRule = {
   action: PermissionAction;
 };
 
-const ODT_MCP_PERMISSION_WILDCARDS = ["openducktor_*", "functions.openducktor_*"] as const;
-const CANONICAL_ODT_TOOL_DENY_PERMISSIONS = ODT_MCP_TOOL_NAMES;
+const OPENCODE_EXPOSED_ODT_TOOL_ID_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
+const ODT_MCP_PERMISSION_WILDCARDS = OPENCODE_EXPOSED_ODT_TOOL_ID_PREFIXES.map(
+  (prefix) => `${prefix}*`,
+);
+
+const addOpenCodeExposedOdtToolPermissions = (permissions: Set<string>, toolName: string): void => {
+  permissions.add(toolName);
+  for (const prefix of OPENCODE_EXPOSED_ODT_TOOL_ID_PREFIXES) {
+    permissions.add(`${prefix}${toolName}`);
+  }
+};
+
+const buildOdtToolDenyPermissions = (runtimeDescriptor: RuntimeDescriptor): Set<string> => {
+  const permissions = new Set<string>();
+
+  for (const toolName of ODT_MCP_TOOL_NAMES) {
+    addOpenCodeExposedOdtToolPermissions(permissions, toolName);
+  }
+
+  for (const toolName of ODT_WORKFLOW_TOOL_NAMES) {
+    for (const alias of runtimeDescriptor.workflowToolAliasesByCanonical[toolName] ?? []) {
+      permissions.add(alias);
+    }
+  }
+
+  return permissions;
+};
 
 export const buildRoleScopedPermissionRules = (input: {
   role: AgentRole;
@@ -38,7 +63,7 @@ export const buildRoleScopedPermissionRules = (input: {
       action: "deny",
     });
   }
-  for (const permission of CANONICAL_ODT_TOOL_DENY_PERMISSIONS) {
+  for (const permission of buildOdtToolDenyPermissions(runtimeDescriptor)) {
     rules.push({
       permission,
       pattern: "*",
