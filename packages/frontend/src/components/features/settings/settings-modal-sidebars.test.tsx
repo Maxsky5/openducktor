@@ -28,8 +28,8 @@ describe("settings modal sidebars", () => {
     expect(html).toContain("General");
     expect(html).toContain("Git");
     expect(html).toContain("Repositories");
-    expect(html).toContain("Prompts");
-    expect(html).toContain("Custom Prompts");
+    expect(html).toContain("System Prompts");
+    expect(html).toContain("Reusable Prompts");
     expect(html).toContain("Chat");
     expect(html).toContain("Kanban");
     expect(html).toContain("Autopilot");
@@ -85,7 +85,7 @@ describe("settings modal sidebars", () => {
     expect(html).toContain("Kanban");
   });
 
-  test("displays error count for custom prompts section when errors exist", () => {
+  test("displays error count for reusable prompts section when errors exist", () => {
     const errorCountById = {
       general: 0,
       git: 0,
@@ -106,7 +106,7 @@ describe("settings modal sidebars", () => {
       }),
     );
 
-    expect(html).toContain("Custom Prompts");
+    expect(html).toContain("Reusable Prompts");
     expect(html).toContain("Kanban");
     expect(html).toContain("2");
   });

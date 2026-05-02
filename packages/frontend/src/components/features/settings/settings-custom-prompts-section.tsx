@@ -86,9 +86,9 @@ export function SettingsCustomPromptsSection({
       <aside className="flex h-full min-h-0 flex-col gap-3 border-r border-border bg-muted/50 p-3">
         <div className="shrink-0 space-y-1">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Custom prompts
+            Reusable prompts
           </p>
-          <p className="text-xs text-muted-foreground">Reusable slash commands for Agent Studio.</p>
+          <p className="text-xs text-muted-foreground">Reusable slash commands for chats.</p>
         </div>
 
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
@@ -105,7 +105,7 @@ export function SettingsCustomPromptsSection({
                 onClick={() => onSelectedCustomPromptIdChange(prompt.id)}
                 title={
                   errorCount > 0
-                    ? `${errorCount} custom prompt field error${errorCount > 1 ? "s" : ""}`
+                    ? `${errorCount} reusable prompt field error${errorCount > 1 ? "s" : ""}`
                     : undefined
                 }
               >
@@ -164,11 +164,11 @@ function CustomPromptsEmptyState({
       <div className="max-w-md space-y-4">
         <div className="space-y-2">
           <h3 className="text-base font-semibold text-foreground">
-            Create your first custom prompt
+            Create your first reusable prompt
           </h3>
           <p className="text-sm text-muted-foreground">
-            Save reusable markdown prompts and invoke them from Agent Studio with a slash command
-            like <span className="font-medium text-foreground">/review</span>.
+            Save reusable markdown prompts and invoke them in chat with a slash command like
+            <span className="font-medium text-foreground"> /review</span>.
           </p>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -176,7 +176,7 @@ function CustomPromptsEmptyState({
           slash command.
         </p>
         <Button type="button" disabled={disabled} onClick={onAddCustomPrompt}>
-          Add custom prompt
+          Add reusable prompt
         </Button>
       </div>
     </div>
@@ -209,14 +209,14 @@ function CustomPromptEditorCard({
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-foreground">{getPromptTabLabel(prompt)}</h3>
           <p className="text-xs text-muted-foreground">
-            This prompt appears in Agent Studio as
+            This prompt appears in chat as
             <span className="font-medium text-foreground"> {promptTriggerPreview}</span>.
           </p>
         </div>
         <Button
           type="button"
           size="sm"
-          variant="ghost"
+          variant="destructive"
           disabled={disabled}
           onClick={() => onRemoveCustomPrompt(prompt.id)}
         >

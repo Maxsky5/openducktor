@@ -77,7 +77,7 @@ describe("SettingsModalFooter", () => {
       expect(screen.getByRole("button", { name: /save settings/i }).hasAttribute("disabled")).toBe(
         true,
       );
-      expect(screen.getByText(/1 custom prompt field error\./i)).toBeTruthy();
+      expect(screen.getByText(/1 reusable prompt field error\./i)).toBeTruthy();
     } finally {
       renderer.unmount();
     }

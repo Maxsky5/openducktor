@@ -107,10 +107,10 @@ describe("settings modal content", () => {
 
     expect(html).toContain("Chat Settings");
     expect(html).toContain("Show Thinking Messages");
-    expect(html).not.toContain("Custom prompts");
+    expect(html).not.toContain("Reusable prompts");
   });
 
-  test("renders custom prompts as a root section", () => {
+  test("renders reusable prompts as a root section", () => {
     const snapshot = createMockSnapshot({
       chat: {
         showThinkingMessages: false,
@@ -142,7 +142,7 @@ describe("settings modal content", () => {
       }),
     );
 
-    expect(html).toContain("Custom prompts");
+    expect(html).toContain("Reusable prompts");
     expect(html).toContain("review");
     expect(html).toContain("Review files");
   });

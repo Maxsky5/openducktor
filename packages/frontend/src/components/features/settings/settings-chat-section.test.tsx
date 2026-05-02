@@ -99,7 +99,7 @@ describe("settings chat section", () => {
       }),
     );
 
-    expect(html).not.toContain("Custom prompts");
+    expect(html).not.toContain("Reusable prompts");
     expect(html).not.toContain("review");
   });
 });

@@ -75,7 +75,7 @@ export function SettingsModalFooter({
         ) : null}
         {!errors.saveError && !hasPromptValidationErrors && hasCustomPromptValidationErrors ? (
           <span className="text-destructive-muted">
-            {validationSummary.customPromptFieldErrorCount} custom prompt field error
+            {validationSummary.customPromptFieldErrorCount} reusable prompt field error
             {validationSummary.customPromptFieldErrorCount > 1 ? "s" : ""}.
           </span>
         ) : null}

@@ -33,7 +33,7 @@ export const buildPromptValidationSaveError = (totalErrorCount: number): string 
 
 export const buildCustomPromptValidationSaveError = (totalErrorCount: number): string => {
   const suffix = totalErrorCount > 1 ? "s" : "";
-  return `Fix ${totalErrorCount} custom prompt field error${suffix} before saving.`;
+  return `Fix ${totalErrorCount} reusable prompt field error${suffix} before saving.`;
 };
 
 export const buildRepoScriptValidationSaveError = ({

@@ -99,7 +99,7 @@ describe("SettingsCustomPromptsSection", () => {
     );
 
     try {
-      expect(screen.getByTitle("1 custom prompt field error")).toBeTruthy();
+      expect(screen.getByTitle("1 reusable prompt field error")).toBeTruthy();
       expect(screen.getByText("Prompt content is required.")).toBeTruthy();
 
       fireEvent.click(screen.getByRole("button", { name: /add prompt/i }));

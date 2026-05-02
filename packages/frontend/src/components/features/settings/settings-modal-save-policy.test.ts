@@ -74,7 +74,7 @@ describe("settings-modal-save-policy", () => {
       "Fix 2 prompt placeholder errors before saving.",
     );
     expect(buildCustomPromptValidationSaveError(1)).toBe(
-      "Fix 1 custom prompt field error before saving.",
+      "Fix 1 reusable prompt field error before saving.",
     );
     expect(
       buildRepoScriptValidationSaveError({
