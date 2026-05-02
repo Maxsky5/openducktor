@@ -91,6 +91,25 @@ describe("odt workflow tools", () => {
     expect(selection.openducktor_odt_build_completed).toBeUndefined();
   });
 
+  test("builds role-scoped selection with trusted aliases when metadata is provided", () => {
+    const selection = buildRoleScopedOdtToolSelection("planner", {
+      workflowToolAliasesByCanonical,
+    });
+
+    expect(selection.odt_read_task).toBe(true);
+    expect(selection.openducktor_odt_read_task).toBe(true);
+    expect(selection["functions.openducktor_odt_read_task"]).toBe(true);
+    expect(selection.odt_set_plan).toBe(true);
+    expect(selection.openducktor_odt_set_plan).toBe(true);
+    expect(selection["functions.openducktor_odt_set_plan"]).toBe(true);
+    expect(selection.odt_set_spec).toBe(false);
+    expect(selection.openducktor_odt_set_spec).toBe(false);
+    expect(selection["functions.openducktor_odt_set_spec"]).toBe(false);
+    expect(selection.odt_build_completed).toBe(false);
+    expect(selection.openducktor_odt_build_completed).toBe(false);
+    expect(selection["functions.openducktor_odt_build_completed"]).toBe(false);
+  });
+
   test("applies only trusted runtime aliases to role-scoped selection", () => {
     const selection = buildRoleScopedOdtToolSelection("qa", {
       includeCanonicalDefaults: false,

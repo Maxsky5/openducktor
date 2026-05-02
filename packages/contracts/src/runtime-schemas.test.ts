@@ -25,6 +25,8 @@ import {
   gitWorktreeStatusSnapshotSchema,
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
+  isOpencodeExposedOdtToolAlias,
+  OPENCODE_ODT_TOOL_ID_PREFIXES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
   repoConfigSchema,
@@ -35,6 +37,8 @@ import {
   slashCommandCatalogSchema,
   taskCardSchema,
   taskWorktreeSummarySchema,
+  toOpencodeExposedOdtToolIds,
+  toOpencodeOdtToolAliases,
 } from "./index";
 
 const baseRepoConfigInput = {
@@ -779,6 +783,23 @@ describe("runtime schemas", () => {
       "openducktor_odt_set_spec",
       "functions.openducktor_odt_set_spec",
     ]);
+  });
+
+  test("OpenCode ODT tool alias helpers expose the runtime descriptor aliases", () => {
+    expect(OPENCODE_ODT_TOOL_ID_PREFIXES).toEqual(["openducktor_", "functions.openducktor_"]);
+    expect(toOpencodeOdtToolAliases("odt_set_plan")).toEqual([
+      "openducktor_odt_set_plan",
+      "functions.openducktor_odt_set_plan",
+    ]);
+    expect(toOpencodeExposedOdtToolIds("odt_set_plan")).toEqual([
+      "odt_set_plan",
+      "openducktor_odt_set_plan",
+      "functions.openducktor_odt_set_plan",
+    ]);
+    expect(isOpencodeExposedOdtToolAlias("openducktor_odt_set_plan")).toBe(true);
+    expect(isOpencodeExposedOdtToolAlias("functions.openducktor_odt_set_plan")).toBe(true);
+    expect(isOpencodeExposedOdtToolAlias("customprefix_odt_set_plan")).toBe(false);
+    expect(isOpencodeExposedOdtToolAlias("odt_set_plan")).toBe(false);
   });
 
   test("runtime instance summary rejects live/transient fields outside the summary contract", () => {
