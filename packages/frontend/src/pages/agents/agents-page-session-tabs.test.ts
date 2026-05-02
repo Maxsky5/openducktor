@@ -1024,6 +1024,10 @@ describe("agents-page-session-tabs", () => {
       "planner:planner_initial:message_first",
       "build:build_after_qa_rejected:message_first",
     ]);
+    expect(options.map((option) => option.label)).toEqual([
+      "Prepare Planner session",
+      "Prepare Builder session",
+    ]);
     expect(
       options.every((option) => option.description.includes("without sending a kickoff")),
     ).toBe(true);

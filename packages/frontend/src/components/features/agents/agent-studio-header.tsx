@@ -10,7 +10,6 @@ import {
   CircleDotDashed,
   History,
   LoaderCircle,
-  Plus,
   Sparkles,
   Zap,
 } from "lucide-react";
@@ -169,6 +168,15 @@ const workflowBorderStyleClassName = (state: AgentWorkflowStepState): string =>
   // Dashed styling is only for steps that are currently merely optional and available.
   state.tone === "optional" ? "border-dashed" : "";
 
+const QUICK_ACTION_ROLE_ORDER: AgentRole[] = ["spec", "planner", "build", "qa"];
+
+const QUICK_ACTION_ROLE_LABELS: Record<AgentRole, string> = {
+  spec: "Spec",
+  planner: "Planner",
+  build: "Builder",
+  qa: "QA",
+};
+
 const getWorkflowStepAttentionVariant = (
   entry: AgentWorkflowStep,
 ): WorkflowStepAttentionVariant => {
@@ -219,100 +227,16 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   return "Blocked by workflow state";
 };
 
-type PrepareSessionMenuProps = {
-  isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  options: AgentSessionCreateOption[];
-  disabledReason: string | null;
-  triggerTitle: string;
-  onPrepareMessageFirstSession: (option: AgentSessionCreateOption) => void;
-};
-
-function PrepareSessionMenu({
-  isOpen,
-  onOpenChange,
-  options,
-  disabledReason,
-  triggerTitle,
-  onPrepareMessageFirstSession,
-}: PrepareSessionMenuProps): ReactElement {
-  const optionsByRole = useMemo(
-    () =>
-      options.reduce(
-        (acc, option) => {
-          if (!acc[option.role]) {
-            acc[option.role] = [];
-          }
-          acc[option.role].push(option);
-          return acc;
-        },
-        {} as Record<AgentRole, AgentSessionCreateOption[]>,
-      ),
-    [options],
-  );
-
-  return (
-    <Popover open={isOpen} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="default"
-          size="icon"
-          className="h-9 w-9 rounded-md"
-          disabled={disabledReason !== null}
-          title={triggerTitle}
-          aria-label={triggerTitle}
-        >
-          <Plus className="size-4" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
-        <Command>
-          <CommandList>
-            <CommandEmpty>No session roles available.</CommandEmpty>
-            {(Object.entries(optionsByRole) as [AgentRole, AgentSessionCreateOption[]][]).map(
-              ([role, roleOptions]) => (
-                <CommandGroup key={role} heading={role.toUpperCase()}>
-                  {roleOptions.map((option) => (
-                    <CommandItem
-                      key={option.id}
-                      disabled={option.disabled}
-                      onSelect={() => {
-                        if (option.disabled) {
-                          return;
-                        }
-                        onPrepareMessageFirstSession(option);
-                        onOpenChange(false);
-                      }}
-                    >
-                      <Sparkles className="size-3.5 text-muted-foreground" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground">
-                          {option.label}
-                        </p>
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {option.disabledReason ?? option.description}
-                        </p>
-                      </div>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ),
-            )}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 type QuickActionsMenuProps = {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   agentStudioReady: boolean;
+  isCreatingSession: boolean;
   options: AgentStudioQuickActionOption[];
   primaryAction: AgentStudioQuickActionOption | null;
+  sessionCreateOptions: AgentSessionCreateOption[];
   onQuickAction: (option: AgentStudioQuickActionOption) => void;
+  onPrepareMessageFirstSession: (option: AgentSessionCreateOption) => void;
   onResolveGitConflictQuickAction: (() => void) | null;
 };
 
@@ -321,24 +245,41 @@ const isGitConflictResolutionQuickAction = (option: AgentStudioQuickActionOption
 };
 
 type QuickActionCommandItemProps = {
-  option: AgentStudioQuickActionOption;
-  onSelect: (option: AgentStudioQuickActionOption) => void;
+  entry: QuickActionMenuEntry;
+  disabledReason: string | null;
+  onSelect: (entry: QuickActionMenuEntry) => void;
 };
 
-function QuickActionCommandItem({ option, onSelect }: QuickActionCommandItemProps): ReactElement {
+type QuickActionMenuEntry =
+  | { kind: "quick_action"; option: AgentStudioQuickActionOption }
+  | { kind: "message_first"; option: AgentSessionCreateOption };
+
+const quickActionEntryId = (entry: QuickActionMenuEntry): string =>
+  `${entry.kind}:${entry.option.id}`;
+
+const quickActionEntryRole = (entry: QuickActionMenuEntry): AgentRole => entry.option.role;
+
+function QuickActionCommandItem({
+  entry,
+  disabledReason,
+  onSelect,
+}: QuickActionCommandItemProps): ReactElement {
+  const { option } = entry;
+  const isDisabled = option.disabled || disabledReason !== null;
+  const description = disabledReason ?? option.disabledReason ?? option.description;
+  const Icon = entry.kind === "message_first" ? Sparkles : Zap;
+
   return (
     <CommandItem
-      disabled={option.disabled}
+      disabled={isDisabled}
       onSelect={() => {
-        onSelect(option);
+        onSelect(entry);
       }}
     >
-      <Zap className="size-3.5 text-muted-foreground" />
+      <Icon className="size-3.5 text-muted-foreground" />
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-foreground">{option.label}</p>
-        <p className="truncate text-[11px] text-muted-foreground">
-          {option.disabledReason ?? option.description}
-        </p>
+        <p className="truncate text-[11px] text-muted-foreground">{description}</p>
       </div>
     </CommandItem>
   );
@@ -348,19 +289,55 @@ function QuickActionsMenu({
   isOpen,
   onOpenChange,
   agentStudioReady,
+  isCreatingSession,
   options,
   primaryAction,
+  sessionCreateOptions,
   onQuickAction,
+  onPrepareMessageFirstSession,
   onResolveGitConflictQuickAction,
 }: QuickActionsMenuProps): ReactElement {
   const triggerTitle = primaryAction ? `Quick actions · ${primaryAction.label}` : "Quick actions";
-  const canRunPrimaryAction = agentStudioReady && primaryAction !== null && !primaryAction.disabled;
-  const canOpenActionsMenu = agentStudioReady && options.length > 0;
-  const remainingActions = useMemo(
-    () => options.filter((option) => option.id !== primaryAction?.id),
-    [primaryAction?.id, options],
+  const sessionStartBlockedReason = isCreatingSession
+    ? "Session start is already in progress."
+    : null;
+  const canRunPrimaryAction =
+    agentStudioReady &&
+    primaryAction !== null &&
+    !primaryAction.disabled &&
+    sessionStartBlockedReason === null;
+  const menuEntries = useMemo<QuickActionMenuEntry[]>(
+    () => [
+      ...options.map((option) => ({ kind: "quick_action" as const, option })),
+      ...sessionCreateOptions.map((option) => ({ kind: "message_first" as const, option })),
+    ],
+    [options, sessionCreateOptions],
   );
+  const canOpenActionsMenu = agentStudioReady && menuEntries.length > 0;
+  const groupedMenuEntries = useMemo(() => {
+    const entriesByRole: Record<AgentRole, QuickActionMenuEntry[]> = {
+      spec: [],
+      planner: [],
+      build: [],
+      qa: [],
+    };
+    const groups: { role: AgentRole; entries: QuickActionMenuEntry[] }[] = [];
+
+    for (const entry of menuEntries) {
+      entriesByRole[quickActionEntryRole(entry)].push(entry);
+    }
+    for (const role of QUICK_ACTION_ROLE_ORDER) {
+      const entries = entriesByRole[role];
+      if (entries.length > 0) {
+        groups.push({ role, entries });
+      }
+    }
+    return groups;
+  }, [menuEntries]);
   const selectAction = (option: AgentStudioQuickActionOption): void => {
+    if (sessionStartBlockedReason !== null) {
+      return;
+    }
     if (option.disabled) {
       return;
     }
@@ -375,12 +352,24 @@ function QuickActionsMenu({
     onQuickAction(option);
     onOpenChange(false);
   };
+  const selectMenuEntry = (entry: QuickActionMenuEntry): void => {
+    if (entry.kind === "quick_action") {
+      selectAction(entry.option);
+      return;
+    }
+
+    if (sessionStartBlockedReason !== null || entry.option.disabled) {
+      return;
+    }
+    onPrepareMessageFirstSession(entry.option);
+    onOpenChange(false);
+  };
 
   return (
     <div className="flex items-center gap-0">
       <Button
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         className="h-9 max-w-48 gap-2 rounded-r-none border-r-0 px-3"
         disabled={!canRunPrimaryAction}
@@ -401,7 +390,7 @@ function QuickActionsMenu({
         <PopoverTrigger asChild>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="h-9 rounded-l-none px-2"
             disabled={!canOpenActionsMenu}
@@ -415,16 +404,18 @@ function QuickActionsMenu({
           <Command>
             <CommandList>
               <CommandEmpty>No quick actions available.</CommandEmpty>
-              {primaryAction ? (
-                <CommandGroup heading="Primary">
-                  <QuickActionCommandItem option={primaryAction} onSelect={selectAction} />
+              {groupedMenuEntries.map((group) => (
+                <CommandGroup key={group.role} heading={QUICK_ACTION_ROLE_LABELS[group.role]}>
+                  {group.entries.map((entry) => (
+                    <QuickActionCommandItem
+                      key={quickActionEntryId(entry)}
+                      entry={entry}
+                      disabledReason={sessionStartBlockedReason}
+                      onSelect={selectMenuEntry}
+                    />
+                  ))}
                 </CommandGroup>
-              ) : null}
-              <CommandGroup heading={primaryAction ? "More actions" : "Actions"}>
-                {remainingActions.map((option) => (
-                  <QuickActionCommandItem key={option.id} option={option} onSelect={selectAction} />
-                ))}
-              </CommandGroup>
+              ))}
             </CommandList>
           </Command>
         </PopoverContent>
@@ -447,12 +438,10 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
     primaryQuickAction,
     onQuickAction,
     onResolveGitConflictQuickAction,
-    createSessionDisabled,
     isCreatingSession,
     agentStudioReady,
   } = model;
 
-  const [isCreateSessionMenuOpen, setIsCreateSessionMenuOpen] = useState(false);
   const [isQuickActionsMenuOpen, setIsQuickActionsMenuOpen] = useState(false);
   const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
   const sessionHistoryTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -476,19 +465,6 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
     () => sessionSelectorOptions.find((option) => option.value === sessionSelector.value) ?? null,
     [sessionSelector.value, sessionSelectorOptions],
   );
-  const prepareSessionDisabledReason = !agentStudioReady
-    ? "Agent Studio is not ready."
-    : !hasTaskId
-      ? "Select a task to prepare a session."
-      : sessionCreateOptions.length === 0
-        ? "No session roles are available for this task."
-        : createSessionDisabled
-          ? "Wait for the current session to finish."
-          : isCreatingSession
-            ? "Session start is already in progress."
-            : null;
-  const prepareSessionTriggerTitle = prepareSessionDisabledReason ?? "Prepare new session";
-
   return (
     <CardHeader className="border-b border-border bg-card pb-4">
       <div className="flex items-start justify-between gap-2">
@@ -615,21 +591,16 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
               </Command>
             </PopoverContent>
           </Popover>
-          <PrepareSessionMenu
-            isOpen={isCreateSessionMenuOpen}
-            onOpenChange={setIsCreateSessionMenuOpen}
-            options={sessionCreateOptions}
-            disabledReason={prepareSessionDisabledReason}
-            triggerTitle={prepareSessionTriggerTitle}
-            onPrepareMessageFirstSession={onPrepareMessageFirstSession}
-          />
           <QuickActionsMenu
             isOpen={isQuickActionsMenuOpen}
             onOpenChange={setIsQuickActionsMenuOpen}
             agentStudioReady={agentStudioReady}
+            isCreatingSession={isCreatingSession}
             options={quickActions}
             primaryAction={primaryQuickAction}
+            sessionCreateOptions={sessionCreateOptions}
             onQuickAction={onQuickAction}
+            onPrepareMessageFirstSession={onPrepareMessageFirstSession}
             onResolveGitConflictQuickAction={onResolveGitConflictQuickAction}
           />
         </div>

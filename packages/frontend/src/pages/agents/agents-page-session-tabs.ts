@@ -445,7 +445,7 @@ export const buildSessionCreateOptions = (params: {
       id: `${role}:${launchActionId}:message_first`,
       role,
       launchActionId,
-      label: params.roleLabelByRole[role],
+      label: `Prepare ${params.roleLabelByRole[role]} session`,
       description,
       disabled,
       ...(disabled ? { disabledReason: "Wait for the current session to finish." } : {}),
@@ -457,7 +457,7 @@ export const buildSessionCreateOptions = (params: {
     addMessageFirstOption(
       "spec",
       launchActionId,
-      "Prepare a Spec composer without sending a kickoff.",
+      "Open a Spec composer without sending a kickoff.",
       params.createSessionDisabled,
     );
   }
@@ -468,7 +468,7 @@ export const buildSessionCreateOptions = (params: {
     addMessageFirstOption(
       "planner",
       launchActionId,
-      "Prepare a Planner composer without sending a kickoff.",
+      "Open a Planner composer without sending a kickoff.",
       params.createSessionDisabled,
     );
   }
@@ -482,7 +482,7 @@ export const buildSessionCreateOptions = (params: {
     addMessageFirstOption(
       "build",
       launchActionId,
-      "Prepare a Builder composer without sending a kickoff.",
+      "Open a Builder composer without sending a kickoff.",
       params.createSessionDisabled,
     );
   }
@@ -492,7 +492,7 @@ export const buildSessionCreateOptions = (params: {
     addMessageFirstOption(
       "qa",
       launchActionId,
-      "Prepare a QA composer without sending a kickoff.",
+      "Open a QA composer without sending a kickoff.",
       params.createSessionDisabled,
     );
   }

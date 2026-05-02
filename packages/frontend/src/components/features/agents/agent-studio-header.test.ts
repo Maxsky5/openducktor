@@ -121,8 +121,8 @@ const buildModel = () => ({
       id: "build:build_implementation_start:message_first",
       role: "build" as const,
       launchActionId: "build_implementation_start" as const,
-      label: "Builder",
-      description: "Prepare a Builder composer without sending a kickoff.",
+      label: "Prepare Builder session",
+      description: "Open a Builder composer without sending a kickoff.",
       disabled: false,
     },
   ],
@@ -183,7 +183,6 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain('aria-label="Open task details"');
     expect(html).toMatch(/aria-label="Session history[^"]*"/);
     expect(html).toContain(">Open<");
-    expect(html).toContain("Prepare new session");
     expect(html).toContain("Quick actions");
     expect(html).not.toMatch(/flex-wrap/);
     expect(html).toContain("mt-1 flex items-center gap-1.5");
@@ -360,7 +359,7 @@ describe("AgentStudioHeader", () => {
     ).toBe("none");
   });
 
-  test("opens prepare-session menu and selects message-first role", () => {
+  test("opens quick-actions menu and selects message-first role", async () => {
     const onPrepareMessageFirstSession = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
@@ -371,10 +370,15 @@ describe("AgentStudioHeader", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Prepare new session/i }));
-    expect(screen.getByText("Prepare a Builder composer without sending a kickoff.")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Open quick actions menu/i }));
+    });
+    expect(screen.getByText("Prepare Builder session")).toBeTruthy();
+    expect(screen.getByText("Open a Builder composer without sending a kickoff.")).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Prepare a Builder composer without sending a kickoff."));
+    await act(async () => {
+      fireEvent.click(screen.getByText("Open a Builder composer without sending a kickoff."));
+    });
 
     expect(onPrepareMessageFirstSession).toHaveBeenCalledWith(
       expect.objectContaining({ role: "build", launchActionId: "build_implementation_start" }),
@@ -403,12 +407,38 @@ describe("AgentStudioHeader", () => {
     );
   });
 
-  test("opens quick-actions menu from the arrow with primary action and disabled reasons", async () => {
+  test("opens quick-actions menu grouped by role with disabled reasons", async () => {
     const onQuickAction = mock(() => {});
     render(
       createElement(AgentStudioHeader, {
         model: {
           ...buildModel(),
+          sessionCreateOptions: [
+            {
+              id: "spec:spec_initial:message_first",
+              role: "spec" as const,
+              launchActionId: "spec_initial" as const,
+              label: "Prepare Spec session",
+              description: "Open a Spec composer without sending a kickoff.",
+              disabled: false,
+            },
+            {
+              id: "planner:planner_initial:message_first",
+              role: "planner" as const,
+              launchActionId: "planner_initial" as const,
+              label: "Prepare Planner session",
+              description: "Open a Planner composer without sending a kickoff.",
+              disabled: false,
+            },
+            {
+              id: "qa:qa_review:message_first",
+              role: "qa" as const,
+              launchActionId: "qa_review" as const,
+              label: "Prepare QA session",
+              description: "Open a QA composer without sending a kickoff.",
+              disabled: false,
+            },
+          ],
           onQuickAction,
         },
       }),
@@ -418,9 +448,15 @@ describe("AgentStudioHeader", () => {
       fireEvent.click(screen.getByRole("button", { name: /Open quick actions menu/i }));
     });
 
-    expect(screen.getByText("Primary")).toBeTruthy();
+    const groupHeadings = Array.from(document.querySelectorAll("[cmdk-group-heading]")).map(
+      (element) => element.textContent,
+    );
+    expect(groupHeadings).toEqual(["Spec", "Planner", "Builder", "QA"]);
+    expect(screen.queryByText("Primary")).toBeNull();
+    expect(screen.queryByText("More actions")).toBeNull();
     expect(screen.getByText("Generate Pull Request")).toBeTruthy();
     expect(screen.getByText("Requires an existing Builder session.")).toBeTruthy();
+    expect(screen.getByText("Prepare Spec session")).toBeTruthy();
 
     await act(async () => {
       fireEvent.click(
@@ -488,8 +524,7 @@ describe("AgentStudioHeader", () => {
     );
 
     expect(html).not.toContain('aria-label="Open task details"');
-    expect(html).toContain('aria-label="Select a task to prepare a session."');
-    expect(html).toContain('title="Select a task to prepare a session."');
+    expect(html).not.toContain("Prepare new session");
   });
 
   test("disables controls when studio is blocked", () => {
@@ -504,9 +539,6 @@ describe("AgentStudioHeader", () => {
 
     expect(html).toMatch(
       /<button[^>]*(aria-label="Session history[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Session history[^"]*")/,
-    );
-    expect(html).toMatch(
-      /<button[^>]*(aria-label="Agent Studio is not ready\."[^>]*disabled=""|disabled=""[^>]*aria-label="Agent Studio is not ready\.")/,
     );
     expect(html).toMatch(
       /<button[^>]*(aria-label="Run quick action:[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Run quick action:[^"]*")/,
@@ -535,7 +567,7 @@ describe("AgentStudioHeader", () => {
     );
   });
 
-  test("disables prepare session while a session is starting without showing a loader", () => {
+  test("disables quick action launch while a session is starting without showing a loader", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
         model: {
@@ -545,12 +577,11 @@ describe("AgentStudioHeader", () => {
       }),
     );
 
-    expect(html).toContain('aria-label="Session start is already in progress."');
-    expect(html).toContain('disabled="" title="Session start is already in progress."');
-    expect(html).toContain('class="lucide lucide-plus size-4"');
-    expect(html).not.toContain(
-      'title="Prepare new session"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-circle size-4 animate-spin"',
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Run quick action: Start Implementation"[^>]*disabled=""|disabled=""[^>]*aria-label="Run quick action: Start Implementation")/,
     );
+    expect(html).toContain('class="lucide lucide-zap size-4"');
+    expect(html).not.toContain("Prepare new session");
   });
 
   test("keeps unavailable workflow step clickable without existing session", () => {

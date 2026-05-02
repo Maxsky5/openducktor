@@ -312,8 +312,8 @@ describe("useAgentStudioSessionActions", () => {
         id: "build:build_implementation_start:message_first",
         role: "build",
         launchActionId: "build_implementation_start",
-        label: "Builder",
-        description: "Prepare a Builder composer without sending a kickoff.",
+        label: "Prepare Builder session",
+        description: "Open a Builder composer without sending a kickoff.",
         disabled: false,
       });
     });
