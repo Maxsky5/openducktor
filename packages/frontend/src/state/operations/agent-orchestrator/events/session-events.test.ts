@@ -517,7 +517,7 @@ describe("agent-orchestrator-session-events", () => {
 
       expect(toastInfoMock).toHaveBeenCalledWith("Reconnecting OpenDucktor MCP", {
         description:
-          "OpenDucktor MCP is failed for /tmp/repo/.openducktor/worktrees/task-1. MCP error -32000: Connection closed OpenDucktor is trying to reconnect.",
+          "OpenDucktor MCP is failed for /tmp/repo/.openducktor/worktrees/task-1. MCP error -32000: Connection closed. OpenDucktor is trying to reconnect.",
       });
       expect(getSessionMessages(sessionsRef)).toEqual([]);
     });

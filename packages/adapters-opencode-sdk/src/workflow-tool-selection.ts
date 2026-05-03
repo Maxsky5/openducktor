@@ -35,6 +35,13 @@ type OdtMcpStatus = {
   errorDetails: string | undefined;
 };
 
+type OdtMcpReconnectStartHandler = (event: {
+  serverName: string;
+  workingDirectory: string;
+  status: string;
+  errorDetails: string | undefined;
+}) => void;
+
 const readOdtMcpStatus = async (input: {
   mcp: McpApi;
   workingDirectory: string;
@@ -94,12 +101,7 @@ const formatOdtMcpUnavailableError = (input: {
 export const ensureTrustedOdtMcpServerConnected = async (input: {
   client: OpencodeClient;
   workingDirectory: string;
-  onReconnectStart?: (event: {
-    serverName: string;
-    workingDirectory: string;
-    status: string;
-    errorDetails: string | undefined;
-  }) => void;
+  onReconnectStart?: OdtMcpReconnectStartHandler | undefined;
 }): Promise<void> => {
   const mcp = (input.client as { mcp?: McpApi }).mcp;
   if (!mcp) {
@@ -167,18 +169,13 @@ export const resolveWorkflowToolSelection = async (input: {
   runtimeDescriptor: RuntimeDescriptor;
   workingDirectory: string;
   skipMcpConnectionCheck?: boolean;
-  onReconnectStart?: (event: {
-    serverName: string;
-    workingDirectory: string;
-    status: string;
-    errorDetails: string | undefined;
-  }) => void;
+  onReconnectStart?: OdtMcpReconnectStartHandler | undefined;
 }): Promise<Record<string, boolean>> => {
   if (input.skipMcpConnectionCheck !== true) {
     await ensureTrustedOdtMcpServerConnected({
       client: input.client,
       workingDirectory: input.workingDirectory,
-      ...(input.onReconnectStart ? { onReconnectStart: input.onReconnectStart } : {}),
+      onReconnectStart: input.onReconnectStart,
     });
   }
 

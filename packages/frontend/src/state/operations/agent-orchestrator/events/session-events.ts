@@ -35,7 +35,7 @@ const hasSessionStateChanges = (current: object, next: object): boolean => {
 const handleMcpReconnectStarted = (
   event: Extract<SessionEvent, { type: "mcp_reconnect_started" }>,
 ): void => {
-  const details = event.errorDetails ? ` ${event.errorDetails}` : "";
+  const details = event.errorDetails ? ` ${event.errorDetails}.` : "";
   toast.info("Reconnecting OpenDucktor MCP", {
     description: `OpenDucktor MCP is ${event.status} for ${event.workingDirectory}.${details} OpenDucktor is trying to reconnect.`,
   });
