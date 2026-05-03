@@ -20,11 +20,11 @@ const buildBaseModel = () => ({
   sessionAgentColors: {},
   canSubmitQuestionAnswers: true,
   isSubmittingQuestionByRequestId: {},
-  canReplyToPermissions: true,
-  isSubmittingPermissionByRequestId: {},
-  permissionReplyErrorByRequestId: {},
+  canReplyToApprovals: true,
+  isSubmittingApprovalByRequestId: {},
+  approvalReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},
-  onReplyPermission: async () => {},
+  onReplyApproval: async () => {},
   sessionRuntimeDataError: null,
   todoPanelCollapsed: false,
   onToggleTodoPanel: () => {},
@@ -45,7 +45,7 @@ const buildLongSession = (externalSessionId: string, count = 80) => {
     messages,
     status: "idle",
     pendingQuestions: [],
-    pendingPermissions: [],
+    pendingApprovals: [],
   });
 };
 

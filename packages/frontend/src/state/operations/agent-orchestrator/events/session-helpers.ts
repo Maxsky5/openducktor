@@ -120,7 +120,7 @@ const shouldClearTurnFromCurrentState = (current: AgentSessionState): boolean =>
   return (
     (current.draftAssistantText.trim().length > 0 ||
       current.draftReasoningText.trim().length > 0) &&
-    current.pendingPermissions.length === 0 &&
+    current.pendingApprovals.length === 0 &&
     current.pendingQuestions.length === 0
   );
 };

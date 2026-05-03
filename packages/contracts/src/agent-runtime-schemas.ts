@@ -391,7 +391,7 @@ export const runtimeCapabilitiesSchema = z
     if (!capabilities.approvals.readOnlyAutoRejectSafe) {
       addIssue(
         ["approvals", "readOnlyAutoRejectSafe"],
-        "Read-only roles must auto-reject mutating permission requests.",
+        "Read-only roles must auto-reject mutating approval requests.",
       );
     } else {
       if (!capabilities.approvals.canClassifyMutatingRequests) {

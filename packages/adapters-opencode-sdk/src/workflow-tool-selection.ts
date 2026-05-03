@@ -5,11 +5,14 @@ import {
   type RuntimeDescriptor,
   toOpencodeExposedOdtToolIds,
 } from "@openducktor/contracts";
-import { type AgentRole, buildRoleScopedOdtToolSelection } from "@openducktor/core";
+import {
+  type AgentRole,
+  buildRoleScopedOdtToolSelection,
+  isReadOnlyAgentRole,
+} from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { asUnknownRecord, readStringProp } from "./guards";
 import { toToolIdList } from "./payload-mappers";
-import { isReadOnlyRole } from "./read-only-roles";
 
 const OPENDUCKTOR_MCP_SERVER_NAME = "openducktor";
 const CONNECTED_MCP_STATUS = "connected";
@@ -93,7 +96,7 @@ export const resolveWorkflowToolSelection = async (input: {
     selection[toolId] = false;
   }
 
-  if (isReadOnlyRole(input.role)) {
+  if (isReadOnlyAgentRole(input.role)) {
     for (const toolId of input.runtimeDescriptor.readOnlyRoleBlockedTools) {
       selection[toolId] = false;
     }

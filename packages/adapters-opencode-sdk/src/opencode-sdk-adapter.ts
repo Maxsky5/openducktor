@@ -22,7 +22,7 @@ import type {
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
   LoadAgentSessionTodosInput,
-  ReplyPermissionInput,
+  ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
@@ -56,7 +56,7 @@ import {
   loadAndSeedSessionHistory,
   loadSessionHistory,
   loadSessionTodos,
-  replyPermission,
+  replyApproval,
   replyQuestion,
 } from "./message-ops";
 import {
@@ -178,9 +178,9 @@ const mergeLiveAgentSessionPendingInput = (
 
   for (const entry of entries) {
     for (const [sessionId, pendingInput] of Object.entries(entry)) {
-      const current = merged[sessionId] ?? { permissions: [], questions: [] };
+      const current = merged[sessionId] ?? { approvals: [], questions: [] };
       merged[sessionId] = {
-        permissions: [...current.permissions, ...pendingInput.permissions],
+        approvals: [...current.approvals, ...pendingInput.approvals],
         questions: [...current.questions, ...pendingInput.questions],
       };
     }
@@ -427,7 +427,7 @@ export class OpencodeSdkAdapter
   ): Promise<LiveAgentSessionSummary[]> {
     const snapshots = await this.listLiveAgentSessionSnapshots(input);
     return snapshots.map(
-      ({ pendingPermissions: _pendingPermissions, pendingQuestions: _pendingQuestions, ...rest }) =>
+      ({ pendingApprovals: _pendingApprovals, pendingQuestions: _pendingQuestions, ...rest }) =>
         rest,
     );
   }
@@ -494,7 +494,7 @@ export class OpencodeSdkAdapter
         workingDirectory: normalizedDirectory,
         startedAt: toIsoFromEpoch(session.time?.created, this.now),
         status: toLiveAgentSessionStatus(directoryStatuses?.[session.id]),
-        pendingPermissions: pendingInputBySession[session.id]?.permissions ?? [],
+        pendingApprovals: pendingInputBySession[session.id]?.approvals ?? [],
         pendingQuestions: pendingInputBySession[session.id]?.questions ?? [],
       };
     });
@@ -691,9 +691,9 @@ export class OpencodeSdkAdapter
     delete session.workflowToolSelectionCachedAt;
   }
 
-  async replyPermission(input: ReplyPermissionInput): Promise<void> {
+  async replyApproval(input: ReplyApprovalInput): Promise<void> {
     const session = requireSession(this.sessions, input.externalSessionId);
-    await replyPermission(session, input);
+    await replyApproval(session, input);
     this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
   }
 

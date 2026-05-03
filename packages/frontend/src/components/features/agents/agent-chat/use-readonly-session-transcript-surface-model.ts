@@ -1,4 +1,4 @@
-import type { RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome, RuntimeInstanceSummary } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
@@ -11,16 +11,16 @@ import { createRuntimeTranscriptSession } from "@/state/operations/agent-orchest
 import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-runtime";
 import { runtimeListQueryOptions } from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import type { AgentPermissionRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { useAgentChatSessionRuntimeData } from "./use-agent-chat-session-runtime-data";
 import { useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
-import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
+import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
 const DEFAULT_SHOW_THINKING_MESSAGES = false;
-const EMPTY_PENDING_PERMISSIONS = Object.freeze([]) as unknown as AgentPermissionRequest[];
+const EMPTY_PENDING_APPROVALS = Object.freeze([]) as unknown as AgentApprovalRequest[];
 const EMPTY_PENDING_QUESTIONS = Object.freeze([]) as unknown as AgentQuestionRequest[];
 
 type UseReadonlySessionTranscriptSurfaceModelArgs = {
@@ -67,17 +67,17 @@ export function useReadonlySessionTranscriptSurfaceModel({
     readSessionModelCatalog,
     readSessionTodos,
     attachRuntimeTranscriptSession,
-    replyAgentPermission,
+    replyAgentApproval,
     answerAgentQuestion,
   } = useAgentOperations();
   const liveSession = useAgentSession(requestedExternalSessionId ?? null);
   const isMountedRef = useRef(true);
   const attachLiveTranscriptKeyRef = useRef<string | null>(null);
-  const visiblePendingPermissionsRef = useRef<AgentPermissionRequest[]>([]);
+  const visiblePendingApprovalsRef = useRef<AgentApprovalRequest[]>([]);
   const visiblePendingQuestionsRef = useRef<AgentQuestionRequest[]>([]);
   const [isAttachingLiveTranscript, setIsAttachingLiveTranscript] = useState(false);
   const [liveTranscriptAttachError, setLiveTranscriptAttachError] = useState<string | null>(null);
-  const [repliedRuntimePermissionRequestIds, setRepliedRuntimePermissionRequestIds] = useState<
+  const [repliedRuntimeApprovalRequestIds, setRepliedRuntimeApprovalRequestIds] = useState<
     Set<string>
   >(() => new Set());
   const [repliedRuntimeQuestionRequestIds, setRepliedRuntimeQuestionRequestIds] = useState<
@@ -180,38 +180,34 @@ export function useReadonlySessionTranscriptSurfaceModel({
   useEffect(() => {
     const hasTranscriptIdentity = Boolean(externalSessionId || source?.runtimeId);
     if (!hasTranscriptIdentity) {
-      setRepliedRuntimePermissionRequestIds(new Set());
+      setRepliedRuntimeApprovalRequestIds(new Set());
       setRepliedRuntimeQuestionRequestIds(new Set());
       setIsSubmittingQuestionByRequestId({});
       return;
     }
-    setRepliedRuntimePermissionRequestIds(new Set());
+    setRepliedRuntimeApprovalRequestIds(new Set());
     setRepliedRuntimeQuestionRequestIds(new Set());
     setIsSubmittingQuestionByRequestId({});
     setLiveTranscriptAttachError(null);
   }, [externalSessionId, source?.runtimeId]);
 
-  const visiblePendingPermissions = useMemo(() => {
-    const byRequestId = new Map<string, AgentPermissionRequest>();
-    for (const request of source?.pendingPermissions ?? []) {
+  const visiblePendingApprovals = useMemo(() => {
+    const byRequestId = new Map<string, AgentApprovalRequest>();
+    for (const request of source?.pendingApprovals ?? []) {
       byRequestId.set(request.requestId, request);
     }
-    for (const request of liveSession?.pendingPermissions ?? []) {
+    for (const request of liveSession?.pendingApprovals ?? []) {
       byRequestId.set(request.requestId, request);
     }
-    for (const requestId of repliedRuntimePermissionRequestIds) {
+    for (const requestId of repliedRuntimeApprovalRequestIds) {
       byRequestId.delete(requestId);
     }
     return Array.from(byRequestId.values());
-  }, [
-    liveSession?.pendingPermissions,
-    repliedRuntimePermissionRequestIds,
-    source?.pendingPermissions,
-  ]);
+  }, [liveSession?.pendingApprovals, repliedRuntimeApprovalRequestIds, source?.pendingApprovals]);
 
   useEffect(() => {
-    visiblePendingPermissionsRef.current = visiblePendingPermissions;
-  }, [visiblePendingPermissions]);
+    visiblePendingApprovalsRef.current = visiblePendingApprovals;
+  }, [visiblePendingApprovals]);
 
   const visiblePendingQuestions = useMemo(() => {
     const byRequestId = new Map<string, AgentQuestionRequest>();
@@ -290,7 +286,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       runtimeKind: source.runtimeKind,
       ...(resolvedSource.runtimeId ? { runtimeId: resolvedSource.runtimeId } : {}),
       workingDirectory: source.workingDirectory,
-      pendingPermissions: visiblePendingPermissionsRef.current,
+      pendingApprovals: visiblePendingApprovalsRef.current,
       pendingQuestions: visiblePendingQuestionsRef.current,
     })
       .catch((error: unknown) => {
@@ -357,7 +353,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     if (liveSession) {
       return {
         ...liveSession,
-        pendingPermissions: visiblePendingPermissions,
+        pendingApprovals: visiblePendingApprovals,
         pendingQuestions: visiblePendingQuestions,
       };
     }
@@ -376,7 +372,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       workingDirectory: source.workingDirectory,
       history: historyQuery.data,
       isLive: false,
-      pendingPermissions: visiblePendingPermissions,
+      pendingApprovals: visiblePendingApprovals,
       pendingQuestions: visiblePendingQuestions,
     });
   }, [
@@ -386,7 +382,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     liveSession,
     resolvedSource,
     source,
-    visiblePendingPermissions,
+    visiblePendingApprovals,
     visiblePendingQuestions,
   ]);
 
@@ -430,24 +426,23 @@ export function useReadonlySessionTranscriptSurfaceModel({
       title: "Select a repository and session to view the conversation.",
     };
   }, [activeWorkspace, isResolvingTranscript, loadError, externalSessionId]);
-  const permissionSession = runtimeData.session;
-  const activePermissionSessionId = permissionSession?.externalSessionId ?? null;
-  const pendingPermissionRequests =
-    permissionSession?.pendingPermissions ?? EMPTY_PENDING_PERMISSIONS;
+  const approvalSession = runtimeData.session;
+  const activeApprovalSessionId = approvalSession?.externalSessionId ?? null;
+  const pendingApprovalRequests = approvalSession?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
   const questionSession = runtimeData.session;
   const activeQuestionSessionId = questionSession?.externalSessionId ?? null;
   const pendingQuestionRequests = questionSession?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
-  const replyTranscriptPermission = useCallback(
+  const replyTranscriptApproval = useCallback(
     async (
       targetExternalSessionId: string,
       requestId: string,
-      reply: "once" | "always" | "reject",
+      outcome: RuntimeApprovalReplyOutcome,
     ): Promise<void> => {
       if (!targetExternalSessionId) {
-        throw new Error("Runtime transcript permission target is unavailable.");
+        throw new Error("Runtime transcript approval target is unavailable.");
       }
-      await replyAgentPermission(targetExternalSessionId, requestId, reply);
-      setRepliedRuntimePermissionRequestIds((current) => {
+      await replyAgentApproval(targetExternalSessionId, requestId, outcome);
+      setRepliedRuntimeApprovalRequestIds((current) => {
         if (current.has(requestId)) {
           return current;
         }
@@ -456,14 +451,14 @@ export function useReadonlySessionTranscriptSurfaceModel({
         return next;
       });
     },
-    [replyAgentPermission],
+    [replyAgentApproval],
   );
-  const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
-    useAgentSessionPermissionActions({
-      activeExternalSessionId: activePermissionSessionId,
-      pendingPermissions: pendingPermissionRequests,
+  const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
+    useAgentSessionApprovalActions({
+      activeExternalSessionId: activeApprovalSessionId,
+      pendingApprovals: pendingApprovalRequests,
       agentStudioReady: runtimeReadiness.isReady,
-      replyAgentPermission: replyTranscriptPermission,
+      replyAgentApproval: replyTranscriptApproval,
     });
 
   const replyTranscriptQuestion = useCallback(
@@ -503,6 +498,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     isSessionWorking,
     isSessionHistoryLoading: isTranscriptLoading,
     isWaitingForRuntimeReadiness: false,
+    runtimeDefinitions,
     sessionRuntimeDataError: runtimeData.runtimeDataError ?? loadError,
     runtimeReadiness,
     emptyState,
@@ -516,16 +512,16 @@ export function useReadonlySessionTranscriptSurfaceModel({
       isSubmittingByRequestId: isSubmittingQuestionByRequestId,
       onSubmit: replyTranscriptQuestion,
     },
-    permissions: {
+    approvals: {
       canReply:
         runtimeReadiness.isReady &&
         !resolvedSource.isPending &&
         !resolvedSource.error &&
-        activePermissionSessionId !== null &&
-        pendingPermissionRequests.length > 0,
-      isSubmittingByRequestId: isSubmittingPermissionByRequestId,
-      errorByRequestId: permissionReplyErrorByRequestId,
-      onReply: onReplyPermission,
+        activeApprovalSessionId !== null &&
+        pendingApprovalRequests.length > 0,
+      isSubmittingByRequestId: isSubmittingApprovalByRequestId,
+      errorByRequestId: approvalReplyErrorByRequestId,
+      onReply: onReplyApproval,
     },
   });
 

@@ -423,7 +423,7 @@ const subagentStatusClassName = (status: SubagentMeta["status"]): string => {
   return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300";
 };
 
-const SUBAGENT_WAITING_PERMISSION_CLASS_NAME =
+const SUBAGENT_WAITING_APPROVAL_CLASS_NAME =
   "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300";
 
 const readSubagentSummary = (meta: SubagentMeta): string | null => {
@@ -436,8 +436,8 @@ type SubagentMessageProps = {
   sessionRuntimeId?: string | null;
   sessionWorkingDirectory?: string | null | undefined;
   timeLabel: string;
-  subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
-  subagentPendingPermissionCount?: number;
+  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
+  subagentPendingApprovalCount?: number;
   subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
 };
@@ -448,8 +448,8 @@ const SubagentMessage = ({
   sessionRuntimeId,
   sessionWorkingDirectory,
   timeLabel,
-  subagentPendingPermissions,
-  subagentPendingPermissionCount = 0,
+  subagentPendingApprovals,
+  subagentPendingApprovalCount = 0,
   subagentPendingQuestions,
   subagentPendingQuestionCount = 0,
 }: SubagentMessageProps): ReactElement => {
@@ -458,7 +458,7 @@ const SubagentMessage = ({
   const isWaitingForInput = Boolean(
     meta.externalSessionId &&
       (meta.status === "pending" || meta.status === "running") &&
-      subagentPendingPermissionCount + subagentPendingQuestionCount > 0,
+      subagentPendingApprovalCount + subagentPendingQuestionCount > 0,
   );
   const durationMs =
     meta.status !== "pending" &&
@@ -483,7 +483,7 @@ const SubagentMessage = ({
               className={cn(
                 "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
                 isWaitingForInput
-                  ? SUBAGENT_WAITING_PERMISSION_CLASS_NAME
+                  ? SUBAGENT_WAITING_APPROVAL_CLASS_NAME
                   : subagentStatusClassName(meta.status),
               )}
             >
@@ -514,7 +514,7 @@ const SubagentMessage = ({
               sessionRuntimeKind={sessionRuntimeKind ?? null}
               sessionRuntimeId={sessionRuntimeId ?? null}
               sessionWorkingDirectory={sessionWorkingDirectory}
-              pendingPermissions={subagentPendingPermissions}
+              pendingApprovals={subagentPendingApprovals}
               pendingQuestions={subagentPendingQuestions}
               meta={meta}
             />
@@ -550,8 +550,8 @@ type MessageBodyProps = {
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
-  subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
-  subagentPendingPermissionCount?: number;
+  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
+  subagentPendingApprovalCount?: number;
   subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
 };
@@ -566,8 +566,8 @@ export const MessageBody = ({
   systemPromptBody,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
-  subagentPendingPermissions,
-  subagentPendingPermissionCount = 0,
+  subagentPendingApprovals,
+  subagentPendingApprovalCount = 0,
   subagentPendingQuestions,
   subagentPendingQuestionCount = 0,
 }: MessageBodyProps): ReactElement => {
@@ -609,8 +609,8 @@ export const MessageBody = ({
         sessionRuntimeId={sessionRuntimeId ?? null}
         sessionWorkingDirectory={sessionWorkingDirectory}
         timeLabel={timeLabel}
-        subagentPendingPermissions={subagentPendingPermissions}
-        subagentPendingPermissionCount={subagentPendingPermissionCount}
+        subagentPendingApprovals={subagentPendingApprovals}
+        subagentPendingApprovalCount={subagentPendingApprovalCount}
         subagentPendingQuestions={subagentPendingQuestions}
         subagentPendingQuestionCount={subagentPendingQuestionCount}
       />

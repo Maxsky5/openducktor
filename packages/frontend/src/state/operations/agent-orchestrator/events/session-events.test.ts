@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
   lastSessionMessageForTest,
   sessionMessageAt,
@@ -26,7 +27,7 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   draftReasoningText: "",
   draftReasoningMessageId: null,
   contextUsage: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: null,
@@ -332,7 +333,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -370,6 +371,7 @@ describe("agent-orchestrator-session-events", () => {
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
         refreshTaskData: async () => {},
+        resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       });
 
       const handleEvent = handlers[0];
@@ -493,7 +495,7 @@ describe("agent-orchestrator-session-events", () => {
           );
           return () => {};
         },
-        replyPermission: async () => {},
+        replyApproval: async () => {},
       };
 
       const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -593,7 +595,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -630,6 +632,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -687,7 +690,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -724,6 +727,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -776,7 +780,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -816,6 +820,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -869,7 +874,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -909,6 +914,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -954,7 +960,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -994,6 +1000,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1078,7 +1085,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -1116,6 +1123,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1177,8 +1185,8 @@ describe("agent-orchestrator-session-events", () => {
 
   test("auto-rejects mutating permissions for read-only roles", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-    const replyPermission = mock(
-      (_request: Parameters<SessionEventAdapter["replyPermission"]>[0]) => Promise.resolve(),
+    const replyApproval = mock((_request: Parameters<SessionEventAdapter["replyApproval"]>[0]) =>
+      Promise.resolve(),
     );
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_externalSessionId, handler) => {
@@ -1187,7 +1195,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission,
+      replyApproval,
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -1222,6 +1230,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1230,22 +1239,31 @@ describe("agent-orchestrator-session-events", () => {
     }
 
     handleEvent({
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "session-1",
       requestId: "perm-1",
-      permission: "write",
-      patterns: ["edit file"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"write"}`,
+      summary: `Approval request for ${"write"}.`,
+      affectedPaths: ["edit file"],
+      action: { name: "write" },
+      mutation: "mutating" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
       metadata: { tool: "edit" },
       timestamp: "2026-02-22T08:00:05.000Z",
     });
 
     await Promise.resolve();
 
-    expect(replyPermission).toHaveBeenCalledTimes(1);
-    expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
+    expect(replyApproval).toHaveBeenCalledTimes(1);
+    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
     expect(
       getSessionMessages(sessionsRef).some((message) =>
-        message.content.includes("Auto-rejected mutating permission"),
+        message.content.includes("Auto-rejected mutating approval"),
       ),
     ).toBe(true);
   });
@@ -1257,7 +1275,7 @@ describe("agent-orchestrator-session-events", () => {
         handlers.push(handler);
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
     const subagentCorrelationKey = "part:assistant-parent:subtask-1";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -1314,6 +1332,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1322,22 +1341,40 @@ describe("agent-orchestrator-session-events", () => {
     }
 
     handleEvent({
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "external-child-session",
       requestId: "perm-child-1",
-      permission: "read",
-      patterns: ["src/**"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: ["src/**"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
       timestamp: "2026-02-22T08:00:05.000Z",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey,
     });
 
-    expect(sessionsRef.current["external-child-session"]?.pendingPermissions).toEqual([
+    expect(sessionsRef.current["external-child-session"]?.pendingApprovals).toEqual([
       {
         requestId: "perm-child-1",
-        permission: "read",
-        patterns: ["src/**"],
+        requestType: "permission_grant" as const,
+        title: `Approve permission: ${"read"}`,
+        summary: `Approval request for ${"read"}.`,
+        affectedPaths: ["src/**"],
+        action: { name: "read" },
+        mutation: "read_only" as const,
+        supportedReplyOutcomes: [
+          "approve_once" as const,
+          "approve_session" as const,
+          "reject" as const,
+        ],
       },
     ]);
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
@@ -1348,13 +1385,23 @@ describe("agent-orchestrator-session-events", () => {
       status: "running",
     });
     expect(
-      sessionsRef.current["external-parent-session"]
-        ?.subagentPendingPermissionsByExternalSessionId?.["external-child-session"],
+      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
+        "external-child-session"
+      ],
     ).toEqual([
       {
         requestId: "perm-child-1",
-        permission: "read",
-        patterns: ["src/**"],
+        requestType: "permission_grant" as const,
+        title: `Approve permission: ${"read"}`,
+        summary: `Approval request for ${"read"}.`,
+        affectedPaths: ["src/**"],
+        action: { name: "read" },
+        mutation: "read_only" as const,
+        supportedReplyOutcomes: [
+          "approve_once" as const,
+          "approve_session" as const,
+          "reject" as const,
+        ],
       },
     ]);
   });
@@ -1366,7 +1413,7 @@ describe("agent-orchestrator-session-events", () => {
         handlers.push(handler);
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
     const subagentCorrelationKey = "part:assistant-parent:subtask-parent-context";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -1419,6 +1466,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1427,26 +1475,45 @@ describe("agent-orchestrator-session-events", () => {
     }
 
     handleEvent({
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "external-parent-session",
       requestId: "perm-child-1",
-      permission: "read",
-      patterns: ["src/**"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: ["src/**"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
       timestamp: "2026-02-22T08:00:05.000Z",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey,
     });
 
-    expect(sessionsRef.current["external-parent-session"]?.pendingPermissions).toHaveLength(0);
+    expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]
-        ?.subagentPendingPermissionsByExternalSessionId?.["external-child-session"],
+      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
+        "external-child-session"
+      ],
     ).toEqual([
       {
         requestId: "perm-child-1",
-        permission: "read",
-        patterns: ["src/**"],
+        requestType: "permission_grant" as const,
+        title: `Approve permission: ${"read"}`,
+        summary: `Approval request for ${"read"}.`,
+        affectedPaths: ["src/**"],
+        action: { name: "read" },
+        mutation: "read_only" as const,
+        supportedReplyOutcomes: [
+          "approve_once" as const,
+          "approve_session" as const,
+          "reject" as const,
+        ],
       },
     ]);
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
@@ -1464,7 +1531,7 @@ describe("agent-orchestrator-session-events", () => {
         handlers.push(handler);
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
     const subagentCorrelationKey = "part:assistant-parent:subtask-attached-permission";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -1492,7 +1559,7 @@ describe("agent-orchestrator-session-events", () => {
         "external-child-session": buildSession({
           externalSessionId: "external-child-session",
           purpose: "transcript",
-          pendingPermissions: [],
+          pendingApprovals: [],
         }),
       },
     };
@@ -1524,6 +1591,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1532,27 +1600,46 @@ describe("agent-orchestrator-session-events", () => {
     }
 
     handleEvent({
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "external-parent-session",
       requestId: "perm-child-attached",
-      permission: "read",
-      patterns: ["src/**"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: ["src/**"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
       timestamp: "2026-02-22T08:00:05.000Z",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey,
     });
 
-    expect(sessionsRef.current["external-parent-session"]?.pendingPermissions).toHaveLength(0);
-    expect(sessionsRef.current["external-child-session"]?.pendingPermissions).toHaveLength(0);
+    expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
+    expect(sessionsRef.current["external-child-session"]?.pendingApprovals).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]
-        ?.subagentPendingPermissionsByExternalSessionId?.["external-child-session"],
+      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
+        "external-child-session"
+      ],
     ).toEqual([
       {
         requestId: "perm-child-attached",
-        permission: "read",
-        patterns: ["src/**"],
+        requestType: "permission_grant" as const,
+        title: `Approve permission: ${"read"}`,
+        summary: `Approval request for ${"read"}.`,
+        affectedPaths: ["src/**"],
+        action: { name: "read" },
+        mutation: "read_only" as const,
+        supportedReplyOutcomes: [
+          "approve_once" as const,
+          "approve_session" as const,
+          "reject" as const,
+        ],
       },
     ]);
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
@@ -1570,7 +1657,7 @@ describe("agent-orchestrator-session-events", () => {
         handlers.push(handler);
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
     const subagentCorrelationKey = "part:assistant-parent:subtask-question";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -1623,6 +1710,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1679,7 +1767,7 @@ describe("agent-orchestrator-session-events", () => {
         handlers.push(handler);
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
     const subagentCorrelationKey = "part:assistant-parent:subtask-attached-question";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -1739,6 +1827,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1796,7 +1885,7 @@ describe("agent-orchestrator-session-events", () => {
         handlers.push(handler);
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -1833,6 +1922,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1877,13 +1967,13 @@ describe("agent-orchestrator-session-events", () => {
 
   test("auto-rejects mutating child permissions observed from a read-only parent context", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
-    const replyPermission = mock(async () => {});
+    const replyApproval = mock(async () => {});
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
-      replyPermission,
+      replyApproval,
     };
     const subagentCorrelationKey = "part:assistant-parent:subtask-parent-write";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -1936,6 +2026,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1944,11 +2035,20 @@ describe("agent-orchestrator-session-events", () => {
     }
 
     handleEvent({
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "external-parent-session",
       requestId: "perm-child-write",
-      permission: "write",
-      patterns: ["src/**"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"write"}`,
+      summary: `Approval request for ${"write"}.`,
+      affectedPaths: ["src/**"],
+      action: { name: "write" },
+      mutation: "mutating" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
       timestamp: "2026-02-22T08:00:05.000Z",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
@@ -1956,15 +2056,15 @@ describe("agent-orchestrator-session-events", () => {
     });
     await Promise.resolve();
 
-    expect(replyPermission).toHaveBeenCalledWith({
+    expect(replyApproval).toHaveBeenCalledWith({
       externalSessionId: "external-parent-session",
       requestId: "perm-child-write",
-      reply: "reject",
+      outcome: "reject",
       message: expect.any(String),
     });
-    expect(sessionsRef.current["external-parent-session"]?.pendingPermissions).toHaveLength(0);
+    expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingPermissionsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
     ).toBeUndefined();
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
@@ -1976,13 +2076,13 @@ describe("agent-orchestrator-session-events", () => {
 
   test("auto-rejects mutating child permissions from parent context when local child state has no listener", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
-    const replyPermission = mock(async () => {});
+    const replyApproval = mock(async () => {});
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
-      replyPermission,
+      replyApproval,
     };
     const subagentCorrelationKey = "part:assistant-parent:subtask-detached-child-write";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -2041,6 +2141,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleParentEvent = handlers[0];
@@ -2049,11 +2150,20 @@ describe("agent-orchestrator-session-events", () => {
     }
 
     handleParentEvent({
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "external-parent-session",
       requestId: "perm-child-write",
-      permission: "write",
-      patterns: ["src/**"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"write"}`,
+      summary: `Approval request for ${"write"}.`,
+      affectedPaths: ["src/**"],
+      action: { name: "write" },
+      mutation: "mutating" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
       timestamp: "2026-02-22T08:00:05.000Z",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
@@ -2061,26 +2171,26 @@ describe("agent-orchestrator-session-events", () => {
     });
     await Promise.resolve();
 
-    expect(replyPermission).toHaveBeenCalledWith({
+    expect(replyApproval).toHaveBeenCalledWith({
       externalSessionId: "external-parent-session",
       requestId: "perm-child-write",
-      reply: "reject",
+      outcome: "reject",
       message: expect.any(String),
     });
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingPermissionsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
     ).toBeUndefined();
   });
 
   test("lets attached child sessions own linked auto-reject replies", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
-    const replyPermission = mock(async () => {});
+    const replyApproval = mock(async () => {});
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
-      replyPermission,
+      replyApproval,
     };
     const subagentCorrelationKey = "part:assistant-parent:subtask-child-write";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -2140,6 +2250,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
     attachAgentSessionListener({
       adapter,
@@ -2156,6 +2267,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const [handleParentEvent, handleChildEvent] = handlers;
@@ -2163,11 +2275,20 @@ describe("agent-orchestrator-session-events", () => {
       throw new Error("Expected both session event handlers to be registered");
     }
     const event: SessionEvent = {
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "external-parent-session",
       requestId: "perm-child-write",
-      permission: "write",
-      patterns: ["src/**"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"write"}`,
+      summary: `Approval request for ${"write"}.`,
+      affectedPaths: ["src/**"],
+      action: { name: "write" },
+      mutation: "mutating" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
       timestamp: "2026-02-22T08:00:05.000Z",
       parentExternalSessionId: "external-parent-session",
       childExternalSessionId: "external-child-session",
@@ -2175,27 +2296,27 @@ describe("agent-orchestrator-session-events", () => {
     };
 
     handleParentEvent(event);
-    expect(replyPermission).toHaveBeenCalledTimes(0);
+    expect(replyApproval).toHaveBeenCalledTimes(0);
 
     handleChildEvent({ ...event, externalSessionId: "external-child-session" });
     await Promise.resolve();
 
-    expect(replyPermission).toHaveBeenCalledTimes(1);
-    expect(replyPermission).toHaveBeenCalledWith({
+    expect(replyApproval).toHaveBeenCalledTimes(1);
+    expect(replyApproval).toHaveBeenCalledWith({
       externalSessionId: "external-child-session",
       requestId: "perm-child-write",
-      reply: "reject",
+      outcome: "reject",
       message: expect.any(String),
     });
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingPermissionsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
     ).toBeUndefined();
 
     handleParentEvent(event);
 
-    expect(replyPermission).toHaveBeenCalledTimes(1);
+    expect(replyApproval).toHaveBeenCalledTimes(1);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingPermissionsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
     ).toBeUndefined();
   });
 
@@ -2206,7 +2327,7 @@ describe("agent-orchestrator-session-events", () => {
         handlers.push(handler);
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
     const subagentCorrelationKey = "part:assistant-parent:subtask-missing-child";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -2259,6 +2380,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -2267,11 +2389,20 @@ describe("agent-orchestrator-session-events", () => {
     }
 
     handleEvent({
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "external-parent-session",
       requestId: "perm-child-1",
-      permission: "read",
-      patterns: ["src/**"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: ["src/**"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
       timestamp: "2026-02-22T08:00:05.000Z",
       parentExternalSessionId: "external-parent-session",
       subagentCorrelationKey,
@@ -2287,9 +2418,8 @@ describe("agent-orchestrator-session-events", () => {
 
   test("keeps permission pending when auto-reject reply fails", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-    const replyPermission = mock(
-      (_request: Parameters<SessionEventAdapter["replyPermission"]>[0]) =>
-        Promise.reject(new Error("network down")),
+    const replyApproval = mock((_request: Parameters<SessionEventAdapter["replyApproval"]>[0]) =>
+      Promise.reject(new Error("network down")),
     );
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_externalSessionId, handler) => {
@@ -2298,7 +2428,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission,
+      replyApproval,
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -2353,6 +2483,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -2361,11 +2492,20 @@ describe("agent-orchestrator-session-events", () => {
     }
 
     handleEvent({
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "session-1",
       requestId: "perm-fail",
-      permission: "write",
-      patterns: ["edit file"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"write"}`,
+      summary: `Approval request for ${"write"}.`,
+      affectedPaths: ["edit file"],
+      action: { name: "write" },
+      mutation: "mutating" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
       metadata: { tool: "edit" },
       timestamp: "2026-02-22T08:00:05.000Z",
       parentExternalSessionId: "external-parent-session",
@@ -2376,12 +2516,12 @@ describe("agent-orchestrator-session-events", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(replyPermission).toHaveBeenCalledTimes(1);
-    expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(1);
-    expect(sessionsRef.current["session-1"]?.pendingPermissions[0]?.requestId).toBe("perm-fail");
+    expect(replyApproval).toHaveBeenCalledTimes(1);
+    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);
+    expect(sessionsRef.current["session-1"]?.pendingApprovals[0]?.requestId).toBe("perm-fail");
     expect(
       getSessionMessages(sessionsRef).some((message) =>
-        message.content.includes("Automatic permission rejection failed"),
+        message.content.includes("Automatic approval rejection failed"),
       ),
     ).toBe(true);
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
@@ -2394,8 +2534,8 @@ describe("agent-orchestrator-session-events", () => {
 
   test("keeps permission pending when auto-reject prompt rendering fails", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-    const replyPermission = mock(
-      (_request: Parameters<SessionEventAdapter["replyPermission"]>[0]) => Promise.resolve(),
+    const replyApproval = mock((_request: Parameters<SessionEventAdapter["replyApproval"]>[0]) =>
+      Promise.resolve(),
     );
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_externalSessionId, handler) => {
@@ -2404,7 +2544,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission,
+      replyApproval,
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -2447,6 +2587,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -2455,25 +2596,34 @@ describe("agent-orchestrator-session-events", () => {
     }
 
     handleEvent({
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "session-1",
       requestId: "perm-template-fail",
-      permission: "write",
-      patterns: ["edit file"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"write"}`,
+      summary: `Approval request for ${"write"}.`,
+      affectedPaths: ["edit file"],
+      action: { name: "write" },
+      mutation: "mutating" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
       metadata: { tool: "edit" },
       timestamp: "2026-02-22T08:00:05.000Z",
     });
 
     await Promise.resolve();
 
-    expect(replyPermission).toHaveBeenCalledTimes(0);
-    expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(1);
-    expect(sessionsRef.current["session-1"]?.pendingPermissions[0]?.requestId).toBe(
+    expect(replyApproval).toHaveBeenCalledTimes(0);
+    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);
+    expect(sessionsRef.current["session-1"]?.pendingApprovals[0]?.requestId).toBe(
       "perm-template-fail",
     );
     expect(
       getSessionMessages(sessionsRef).some((message) =>
-        message.content.includes("Automatic permission rejection failed"),
+        message.content.includes("Automatic approval rejection failed"),
       ),
     ).toBe(true);
   });
@@ -2487,18 +2637,27 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": buildSession({
           role: "build",
-          pendingPermissions: [
+          pendingApprovals: [
             {
               requestId: "perm-1",
-              permission: "read",
-              patterns: ["*.md"],
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*.md"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
             },
           ],
           pendingQuestions: [
@@ -2545,6 +2704,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -2560,7 +2720,7 @@ describe("agent-orchestrator-session-events", () => {
     });
 
     expect(sessionsRef.current["session-1"]?.status).toBe("error");
-    expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
+    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
     expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     const lastMessage = getLastSessionMessage(sessionsRef);
     expect(lastMessage?.content).toBe("Aborted");
@@ -2581,7 +2741,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -2618,6 +2778,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -2653,7 +2814,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -2676,11 +2837,20 @@ describe("agent-orchestrator-session-events", () => {
               },
             },
           ],
-          pendingPermissions: [
+          pendingApprovals: [
             {
               requestId: "perm-1",
-              permission: "read",
-              patterns: ["*.md"],
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*.md"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
             },
           ],
         }),
@@ -2713,6 +2883,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -2760,7 +2931,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -2795,6 +2966,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -2843,7 +3015,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -2866,11 +3038,20 @@ describe("agent-orchestrator-session-events", () => {
               },
             },
           ],
-          pendingPermissions: [
+          pendingApprovals: [
             {
               requestId: "perm-1",
-              permission: "read",
-              patterns: ["*.md"],
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*.md"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
             },
           ],
           pendingQuestions: [
@@ -2917,6 +3098,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -2949,7 +3131,7 @@ describe("agent-orchestrator-session-events", () => {
     expect(toolMessage.meta.status).toBe("error");
     expect(toolMessage.meta.error).toBe("Session stopped at your request.");
     expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
-    expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
+    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
     expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
   });
@@ -2963,7 +3145,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -3001,6 +3183,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -3040,7 +3223,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const turnStartedAtBySessionRef = { current: {} as Record<string, number> };
@@ -3078,6 +3261,7 @@ describe("agent-orchestrator-session-events", () => {
         turnStartedAtBySessionRef.current["session-1"] = 0;
       },
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -3138,7 +3322,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -3416,7 +3600,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -3461,6 +3645,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -3543,6 +3728,7 @@ describe("agent-orchestrator-session-events", () => {
       refresh: {
         repoPath: "/tmp/repo",
         refreshTaskData: async () => {},
+        resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       },
     };
 
@@ -3574,7 +3760,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -3612,6 +3798,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       contextUsageMessageIdBySessionRef: { current: {} },
       turnModelBySessionRef: { current: {} },
     });
@@ -3650,7 +3837,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -3686,6 +3873,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       contextUsageMessageIdBySessionRef: { current: {} },
       turnModelBySessionRef: { current: {} },
     });
@@ -3752,7 +3940,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -3788,6 +3976,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       contextUsageMessageIdBySessionRef: { current: {} },
       turnModelBySessionRef: { current: {} },
     });
@@ -3880,7 +4069,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -3916,6 +4105,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       contextUsageMessageIdBySessionRef: { current: {} },
       turnModelBySessionRef: { current: {} },
     });
@@ -3984,7 +4174,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -4020,6 +4210,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       contextUsageMessageIdBySessionRef: { current: {} },
       turnModelBySessionRef: { current: {} },
     });
@@ -4090,7 +4281,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -4126,6 +4317,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       contextUsageMessageIdBySessionRef: { current: {} },
       turnModelBySessionRef: { current: {} },
     });
@@ -4203,7 +4395,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -4255,6 +4447,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -4285,7 +4478,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -4357,6 +4550,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -4398,7 +4592,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -4437,6 +4631,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -4471,7 +4666,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -4553,6 +4748,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -4594,7 +4790,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -4654,6 +4850,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -4722,7 +4919,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -4782,6 +4979,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -4837,7 +5035,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -4906,6 +5104,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -4958,7 +5157,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -4993,6 +5192,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -5035,7 +5235,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -5072,6 +5272,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => 120,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -5113,7 +5314,7 @@ describe("agent-orchestrator-session-events", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -5166,6 +5367,7 @@ describe("agent-orchestrator-session-events", () => {
       resolveTurnDurationMs: () => 120,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];

@@ -4,8 +4,12 @@ import {
   type RuntimeDescriptor,
   toOpencodeExposedOdtToolIds,
 } from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY, type AgentRole, ODT_WORKFLOW_TOOL_NAMES } from "@openducktor/core";
-import { isReadOnlyRole } from "./read-only-roles";
+import {
+  AGENT_ROLE_TOOL_POLICY,
+  type AgentRole,
+  isReadOnlyAgentRole,
+  ODT_WORKFLOW_TOOL_NAMES,
+} from "@openducktor/core";
 
 type PermissionAction = "allow" | "deny" | "ask";
 
@@ -43,7 +47,7 @@ export const buildRoleScopedPermissionRules = (input: {
   const allowedTools = new Set(AGENT_ROLE_TOOL_POLICY[role]);
   const rules: OpencodePermissionRule[] = [];
 
-  if (isReadOnlyRole(role)) {
+  if (isReadOnlyAgentRole(role)) {
     for (const toolId of new Set(runtimeDescriptor.readOnlyRoleBlockedTools)) {
       rules.push({
         permission: toolId,

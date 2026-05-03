@@ -7,6 +7,7 @@ import {
   subscribeOpencodeEvents,
 } from "./event-stream";
 import {
+  type EventStreamRuntime,
   flushPendingSubagentInputEventsForSession,
   type SubagentSessionLink,
 } from "./event-stream/shared";
@@ -135,14 +136,17 @@ const runEventStream = async (events: Event[]): Promise<AgentEvent[]> => {
 
 test("flushPendingSubagentInputEventsForSession preserves original timestamps", () => {
   const emitted: AgentEvent[] = [];
-  const runtime = {
+  const runtime: EventStreamRuntime = {
     externalSessionId: "external-session-1",
-    input: makeSessionInput() as any,
+    input: makeSessionInput(),
     now: () => "2026-02-22T12:30:00.000Z",
     emit: (_externalSessionId: string, event: AgentEvent) => {
       emitted.push(event);
     },
     getSession: () => undefined,
+    partsById: new Map(),
+    messageRoleById: new Map(),
+    pendingDeltasByPartId: new Map(),
     subagentCorrelationKeyByPartId: new Map<string, string>(),
     subagentCorrelationKeyByExternalSessionId: new Map<string, string>([
       ["external-child-session", "part:assistant-1:subtask-1"],
@@ -156,12 +160,17 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
         "external-child-session",
         [
           {
-            type: "permission_required",
+            type: "approval_required",
             externalSessionId: "external-session-1",
             timestamp: "2026-02-22T12:00:00.000Z",
             requestId: "perm-child-1",
-            permission: "write",
-            patterns: ["src/**"],
+            requestType: "permission_grant",
+            title: "Approve permission: write",
+            summary: "Approval request for write.",
+            affectedPaths: ["src/**"],
+            action: { name: "write" },
+            mutation: "mutating",
+            supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
             childExternalSessionId: "external-child-session",
           },
           {
@@ -183,16 +192,21 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
     ]),
   };
 
-  flushPendingSubagentInputEventsForSession(runtime as any, "external-child-session");
+  flushPendingSubagentInputEventsForSession(runtime, "external-child-session");
 
   expect(emitted).toEqual([
     {
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "external-session-1",
       timestamp: "2026-02-22T12:00:00.000Z",
       requestId: "perm-child-1",
-      permission: "write",
-      patterns: ["src/**"],
+      requestType: "permission_grant",
+      title: "Approve permission: write",
+      summary: "Approval request for write.",
+      affectedPaths: ["src/**"],
+      action: { name: "write" },
+      mutation: "mutating",
+      supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey: "part:assistant-1:subtask-1",
     },
@@ -2687,17 +2701,31 @@ describe("event-stream", () => {
       } as unknown as Event,
     ]);
 
-    const permissionEvents = emitted.filter((event) => event.type === "permission_required");
+    const permissionEvents = emitted.filter((event) => event.type === "approval_required");
     const questionEvents = emitted.filter((event) => event.type === "question_required");
     expect(permissionEvents).toHaveLength(1);
     expect(questionEvents).toHaveLength(1);
-    if (permissionEvents[0]?.type !== "permission_required") {
-      throw new Error("Expected permission_required event");
+    if (permissionEvents[0]?.type !== "approval_required") {
+      throw new Error("Expected approval_required event");
     }
     if (questionEvents[0]?.type !== "question_required") {
       throw new Error("Expected question_required event");
     }
-    expect(permissionEvents[0].metadata).toEqual({ reason: "Need file write" });
+    expect(permissionEvents[0]).toMatchObject({
+      requestType: "permission_grant",
+      title: "Approve permission: write",
+      affectedPaths: ["src/**"],
+      action: { name: "write" },
+      mutation: "mutating",
+      supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+      metadata: {
+        opencode: {
+          permission: "write",
+          patterns: ["src/**"],
+          metadata: { reason: "Need file write" },
+        },
+      },
+    });
     expect(permissionEvents[0].childExternalSessionId).toBe("external-session-1");
     expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
     expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
@@ -2929,10 +2957,10 @@ describe("event-stream", () => {
           : undefined,
     );
 
-    const permissionEvents = emitted.filter((event) => event.type === "permission_required");
+    const permissionEvents = emitted.filter((event) => event.type === "approval_required");
     expect(permissionEvents).toHaveLength(1);
     expect(permissionEvents[0]).toMatchObject({
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "external-session-1",
       requestId: "perm-child-1",
       childExternalSessionId: "external-child-session",
@@ -2961,10 +2989,10 @@ describe("event-stream", () => {
       () => undefined,
     );
 
-    const permissionEvents = emitted.filter((event) => event.type === "permission_required");
+    const permissionEvents = emitted.filter((event) => event.type === "approval_required");
     expect(permissionEvents).toHaveLength(1);
     expect(permissionEvents[0]).toMatchObject({
-      type: "permission_required",
+      type: "approval_required",
       externalSessionId: "external-session-1",
       requestId: "perm-child-1",
       childExternalSessionId: "external-child-session",
@@ -2997,7 +3025,7 @@ describe("event-stream", () => {
           : undefined,
     );
 
-    expect(emitted.filter((event) => event.type === "permission_required")).toHaveLength(0);
+    expect(emitted.filter((event) => event.type === "approval_required")).toHaveLength(0);
   });
 
   test("forwards subagent session linkage on child permission events", () => {
@@ -3034,8 +3062,8 @@ describe("event-stream", () => {
 
     expect(emitted).toHaveLength(1);
     const [permissionEvent] = emitted;
-    if (permissionEvent?.type !== "permission_required") {
-      throw new Error("Expected permission_required event");
+    if (permissionEvent?.type !== "approval_required") {
+      throw new Error("Expected approval_required event");
     }
     expect(permissionEvent).toMatchObject({
       externalSessionId: "external-child-session",

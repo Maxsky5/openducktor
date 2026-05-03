@@ -55,7 +55,7 @@ const createSession = (
   draftAssistantMessageId: null,
   draftReasoningText: "",
   draftReasoningMessageId: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos,
   modelCatalog: null,

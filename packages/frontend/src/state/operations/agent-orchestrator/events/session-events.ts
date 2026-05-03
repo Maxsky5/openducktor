@@ -51,7 +51,7 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
     case "session_status":
       handleSessionStatus(context.lifecycle, event);
       return;
-    case "permission_required":
+    case "approval_required":
       handlePermissionRequired(context.lifecycle, event);
       return;
     case "question_required":

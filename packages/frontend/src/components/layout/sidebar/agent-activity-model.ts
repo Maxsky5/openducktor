@@ -56,7 +56,7 @@ export const summarizeAgentActivity = ({
       startedAt: session.startedAt,
     };
 
-    const isWaiting = session.hasPendingPermissions || session.hasPendingQuestions;
+    const isWaiting = session.hasPendingApprovals || session.hasPendingQuestions;
 
     if (isWaiting) {
       waitingForInputSessions.push(sessionItem);

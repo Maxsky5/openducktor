@@ -22,7 +22,7 @@ import {
   type AgentChatWindowTurn,
   resolveAgentChatWindowRowsState,
 } from "./agent-chat-thread-windowing";
-import { AgentSessionPermissionCard } from "./agent-session-permission-card";
+import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import {
   AgentSessionTodoPanel,
@@ -46,8 +46,8 @@ type AgentChatThreadMotionRowProps = {
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
-  subagentPendingPermissions: AgentSessionState["pendingPermissions"];
-  subagentPendingPermissionCount: number;
+  subagentPendingApprovals: AgentSessionState["pendingApprovals"];
+  subagentPendingApprovalCount: number;
   subagentPendingQuestions: AgentSessionState["pendingQuestions"];
   subagentPendingQuestionCount: number;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
@@ -65,8 +65,8 @@ type AgentChatTranscriptProps = {
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
-  subagentPendingPermissionsByExternalSessionId: AgentChatThreadModel["subagentPendingPermissionsByExternalSessionId"];
-  subagentPendingPermissionCountByExternalSessionId: AgentChatThreadModel["subagentPendingPermissionCountByExternalSessionId"];
+  subagentPendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"];
+  subagentPendingApprovalCountByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"];
   subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
   subagentPendingQuestionCountByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionCountByExternalSessionId"];
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
@@ -117,16 +117,17 @@ type AgentChatRenderedTurn = {
 type AgentChatBottomStackProps = {
   externalSessionId: string;
   pendingQuestions: AgentSessionState["pendingQuestions"];
-  pendingPermissions: AgentSessionState["pendingPermissions"];
+  pendingApprovals: AgentSessionState["pendingApprovals"];
   todos: AgentSessionState["todos"];
   sessionRuntimeDataError: string | null;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
   onSubmitQuestionAnswers: AgentChatThreadModel["onSubmitQuestionAnswers"];
-  canReplyToPermissions: boolean;
-  isSubmittingPermissionByRequestId: AgentChatThreadModel["isSubmittingPermissionByRequestId"];
-  permissionReplyErrorByRequestId: AgentChatThreadModel["permissionReplyErrorByRequestId"];
-  onReplyPermission: AgentChatThreadModel["onReplyPermission"];
+  canReplyToApprovals: boolean;
+  runtimeSupportedApprovalReplyOutcomes: AgentChatThreadModel["runtimeSupportedApprovalReplyOutcomes"];
+  isSubmittingApprovalByRequestId: AgentChatThreadModel["isSubmittingApprovalByRequestId"];
+  approvalReplyErrorByRequestId: AgentChatThreadModel["approvalReplyErrorByRequestId"];
+  onReplyApproval: AgentChatThreadModel["onReplyApproval"];
   todoPanelCollapsed: boolean;
   isSessionWorking: boolean;
   sessionAccentColor: string | undefined;
@@ -134,7 +135,7 @@ type AgentChatBottomStackProps = {
 };
 
 const EMPTY_ROWS: AgentChatWindowRow[] = [];
-const EMPTY_PENDING_PERMISSIONS: AgentSessionState["pendingPermissions"] = [];
+const EMPTY_PENDING_APPROVALS: AgentSessionState["pendingApprovals"] = [];
 const EMPTY_PENDING_QUESTIONS: AgentSessionState["pendingQuestions"] = [];
 const TURN_CONTENT_VISIBILITY_STYLE = {
   contentVisibility: "auto",
@@ -154,9 +155,9 @@ const areChatRowsEquivalent = (left: AgentChatWindowRow, right: AgentChatWindowR
   return left.kind === "message" && right.kind === "message" && left.message === right.message;
 };
 
-const readSubagentPendingPermissionCount = (
+const readSubagentPendingApprovalCount = (
   row: AgentChatWindowRow,
-  countsByExternalSessionId: AgentChatThreadModel["subagentPendingPermissionCountByExternalSessionId"],
+  countsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"],
 ): number => {
   if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
     return 0;
@@ -166,18 +167,18 @@ const readSubagentPendingPermissionCount = (
   return externalSessionId ? (countsByExternalSessionId?.[externalSessionId] ?? 0) : 0;
 };
 
-const readSubagentPendingPermissions = (
+const readSubagentPendingApprovals = (
   row: AgentChatWindowRow,
-  pendingPermissionsByExternalSessionId: AgentChatThreadModel["subagentPendingPermissionsByExternalSessionId"],
-): AgentSessionState["pendingPermissions"] => {
+  pendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"],
+): AgentSessionState["pendingApprovals"] => {
   if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
-    return EMPTY_PENDING_PERMISSIONS;
+    return EMPTY_PENDING_APPROVALS;
   }
 
   const externalSessionId = row.message.meta.externalSessionId;
   return externalSessionId
-    ? (pendingPermissionsByExternalSessionId?.[externalSessionId] ?? EMPTY_PENDING_PERMISSIONS)
-    : EMPTY_PENDING_PERMISSIONS;
+    ? (pendingApprovalsByExternalSessionId?.[externalSessionId] ?? EMPTY_PENDING_APPROVALS)
+    : EMPTY_PENDING_APPROVALS;
 };
 
 const readSubagentPendingQuestionCount = (
@@ -215,8 +216,8 @@ const AgentChatThreadMotionRow = memo(
     sessionWorkingDirectory,
     sessionRuntimeKind,
     sessionRuntimeId,
-    subagentPendingPermissions,
-    subagentPendingPermissionCount,
+    subagentPendingApprovals,
+    subagentPendingApprovalCount,
     subagentPendingQuestions,
     subagentPendingQuestionCount,
     resolveRowRef,
@@ -231,8 +232,8 @@ const AgentChatThreadMotionRow = memo(
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
           sessionRuntimeId={sessionRuntimeId}
-          subagentPendingPermissions={subagentPendingPermissions}
-          subagentPendingPermissionCount={subagentPendingPermissionCount}
+          subagentPendingApprovals={subagentPendingApprovals}
+          subagentPendingApprovalCount={subagentPendingApprovalCount}
           subagentPendingQuestions={subagentPendingQuestions}
           subagentPendingQuestionCount={subagentPendingQuestionCount}
         />
@@ -245,8 +246,8 @@ const AgentChatThreadMotionRow = memo(
       previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
       previousProps.sessionRuntimeId === nextProps.sessionRuntimeId &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
-      previousProps.subagentPendingPermissions === nextProps.subagentPendingPermissions &&
-      previousProps.subagentPendingPermissionCount === nextProps.subagentPendingPermissionCount &&
+      previousProps.subagentPendingApprovals === nextProps.subagentPendingApprovals &&
+      previousProps.subagentPendingApprovalCount === nextProps.subagentPendingApprovalCount &&
       previousProps.subagentPendingQuestions === nextProps.subagentPendingQuestions &&
       previousProps.subagentPendingQuestionCount === nextProps.subagentPendingQuestionCount &&
       previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
@@ -265,8 +266,8 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
-  subagentPendingPermissionsByExternalSessionId,
-  subagentPendingPermissionCountByExternalSessionId,
+  subagentPendingApprovalsByExternalSessionId,
+  subagentPendingApprovalCountByExternalSessionId,
   subagentPendingQuestionsByExternalSessionId,
   subagentPendingQuestionCountByExternalSessionId,
   resolveRowRef,
@@ -279,8 +280,8 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
-  subagentPendingPermissionsByExternalSessionId: AgentChatThreadModel["subagentPendingPermissionsByExternalSessionId"];
-  subagentPendingPermissionCountByExternalSessionId: AgentChatThreadModel["subagentPendingPermissionCountByExternalSessionId"];
+  subagentPendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"];
+  subagentPendingApprovalCountByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"];
   subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
   subagentPendingQuestionCountByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionCountByExternalSessionId"];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
@@ -300,13 +301,13 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
           sessionRuntimeId={sessionRuntimeId}
-          subagentPendingPermissions={readSubagentPendingPermissions(
+          subagentPendingApprovals={readSubagentPendingApprovals(
             row,
-            subagentPendingPermissionsByExternalSessionId,
+            subagentPendingApprovalsByExternalSessionId,
           )}
-          subagentPendingPermissionCount={readSubagentPendingPermissionCount(
+          subagentPendingApprovalCount={readSubagentPendingApprovalCount(
             row,
-            subagentPendingPermissionCountByExternalSessionId,
+            subagentPendingApprovalCountByExternalSessionId,
           )}
           subagentPendingQuestions={readSubagentPendingQuestions(
             row,
@@ -335,8 +336,8 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
-  subagentPendingPermissionsByExternalSessionId,
-  subagentPendingPermissionCountByExternalSessionId,
+  subagentPendingApprovalsByExternalSessionId,
+  subagentPendingApprovalCountByExternalSessionId,
   subagentPendingQuestionsByExternalSessionId,
   subagentPendingQuestionCountByExternalSessionId,
   messagesContainerRef,
@@ -429,11 +430,11 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 sessionRuntimeKind={sessionRuntimeKind}
                 sessionRuntimeId={sessionRuntimeId}
-                subagentPendingPermissionsByExternalSessionId={
-                  subagentPendingPermissionsByExternalSessionId
+                subagentPendingApprovalsByExternalSessionId={
+                  subagentPendingApprovalsByExternalSessionId
                 }
-                subagentPendingPermissionCountByExternalSessionId={
-                  subagentPendingPermissionCountByExternalSessionId
+                subagentPendingApprovalCountByExternalSessionId={
+                  subagentPendingApprovalCountByExternalSessionId
                 }
                 subagentPendingQuestionsByExternalSessionId={
                   subagentPendingQuestionsByExternalSessionId
@@ -454,16 +455,17 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
 const AgentChatBottomStack = memo(function AgentChatBottomStack({
   externalSessionId,
   pendingQuestions,
-  pendingPermissions,
+  pendingApprovals,
   todos,
   sessionRuntimeDataError,
   canSubmitQuestionAnswers,
   isSubmittingQuestionByRequestId,
   onSubmitQuestionAnswers,
-  canReplyToPermissions,
-  isSubmittingPermissionByRequestId,
-  permissionReplyErrorByRequestId,
-  onReplyPermission,
+  canReplyToApprovals,
+  runtimeSupportedApprovalReplyOutcomes,
+  isSubmittingApprovalByRequestId,
+  approvalReplyErrorByRequestId,
+  onReplyApproval,
   todoPanelCollapsed,
   isSessionWorking,
   sessionAccentColor,
@@ -489,14 +491,15 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
         />
       ))}
 
-      {pendingPermissions.map((request) => (
+      {pendingApprovals.map((request) => (
         <div key={`${externalSessionId}:${request.requestId}`} className="relative z-30">
-          <AgentSessionPermissionCard
+          <AgentSessionApprovalCard
             request={request}
-            disabled={!canReplyToPermissions}
-            isSubmitting={Boolean(isSubmittingPermissionByRequestId[request.requestId])}
-            errorMessage={permissionReplyErrorByRequestId[request.requestId]}
-            onReply={onReplyPermission}
+            runtimeSupportedReplyOutcomes={runtimeSupportedApprovalReplyOutcomes ?? null}
+            disabled={!canReplyToApprovals}
+            isSubmitting={Boolean(isSubmittingApprovalByRequestId[request.requestId])}
+            errorMessage={approvalReplyErrorByRequestId[request.requestId]}
+            onReply={onReplyApproval}
           />
         </div>
       ))}
@@ -534,17 +537,18 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isStarting,
     isSending,
     sessionAgentColors,
-    subagentPendingPermissionsByExternalSessionId,
-    subagentPendingPermissionCountByExternalSessionId,
+    subagentPendingApprovalsByExternalSessionId,
+    subagentPendingApprovalCountByExternalSessionId,
     subagentPendingQuestionsByExternalSessionId,
     subagentPendingQuestionCountByExternalSessionId,
     canSubmitQuestionAnswers,
     isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers,
-    canReplyToPermissions,
-    isSubmittingPermissionByRequestId,
-    permissionReplyErrorByRequestId,
-    onReplyPermission,
+    canReplyToApprovals,
+    runtimeSupportedApprovalReplyOutcomes,
+    isSubmittingApprovalByRequestId,
+    approvalReplyErrorByRequestId,
+    onReplyApproval,
     sessionRuntimeDataError,
     isSessionWorking,
     todoPanelCollapsed,
@@ -662,7 +666,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const hasBottomStack = Boolean(
     session &&
       (session.pendingQuestions.length > 0 ||
-        session.pendingPermissions.length > 0 ||
+        session.pendingApprovals.length > 0 ||
         hasVisibleTodo ||
         sessionRuntimeDataError),
   );
@@ -757,11 +761,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         isSending={isSending}
         isInteractionEnabled={isInteractionEnabled}
         sessionAgentColors={sessionAgentColors}
-        subagentPendingPermissionsByExternalSessionId={
-          subagentPendingPermissionsByExternalSessionId
-        }
-        subagentPendingPermissionCountByExternalSessionId={
-          subagentPendingPermissionCountByExternalSessionId
+        subagentPendingApprovalsByExternalSessionId={subagentPendingApprovalsByExternalSessionId}
+        subagentPendingApprovalCountByExternalSessionId={
+          subagentPendingApprovalCountByExternalSessionId
         }
         subagentPendingQuestionsByExternalSessionId={subagentPendingQuestionsByExternalSessionId}
         subagentPendingQuestionCountByExternalSessionId={
@@ -789,15 +791,16 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           <AgentChatBottomStack
             externalSessionId={session.externalSessionId}
             pendingQuestions={session.pendingQuestions}
-            pendingPermissions={session.pendingPermissions}
+            pendingApprovals={session.pendingApprovals}
             todos={session.todos}
             canSubmitQuestionAnswers={canSubmitQuestionAnswers}
             isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
             onSubmitQuestionAnswers={onSubmitQuestionAnswers}
-            canReplyToPermissions={canReplyToPermissions}
-            isSubmittingPermissionByRequestId={isSubmittingPermissionByRequestId}
-            permissionReplyErrorByRequestId={permissionReplyErrorByRequestId}
-            onReplyPermission={onReplyPermission}
+            canReplyToApprovals={canReplyToApprovals}
+            runtimeSupportedApprovalReplyOutcomes={runtimeSupportedApprovalReplyOutcomes}
+            isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
+            approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
+            onReplyApproval={onReplyApproval}
             sessionRuntimeDataError={sessionRuntimeDataError}
             todoPanelCollapsed={todoPanelCollapsed}
             isSessionWorking={isSessionWorking}

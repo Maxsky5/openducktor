@@ -18,7 +18,7 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
     sendAgentMessage: async () => {},
     stopAgentSession: async () => {},
     updateAgentSessionModel: () => {},
-    replyAgentPermission: async () => {},
+    replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
     ...overrides,
   };

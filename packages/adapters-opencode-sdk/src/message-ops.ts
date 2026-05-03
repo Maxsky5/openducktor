@@ -1,14 +1,18 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type {
-  AgentPendingPermissionRequest,
+  AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentStreamPart,
   AgentUserMessageDisplayPart,
-  ReplyPermissionInput,
+  ReplyApprovalInput,
   ReplyQuestionInput,
 } from "@openducktor/core";
+import {
+  normalizeOpenCodeApprovalRequest,
+  toOpenCodePermissionReply,
+} from "./approval-translation";
 import { unwrapData } from "./data-utils";
 import {
   ensureVisibleUserTextDisplayParts,
@@ -42,14 +46,6 @@ const readString = (record: Record<string, unknown>, keys: string[]): string | u
     }
   }
   return undefined;
-};
-
-const readStringArray = (record: Record<string, unknown>, key: string): string[] => {
-  const value = record[key];
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((entry): entry is string => typeof entry === "string");
 };
 
 const normalizeQuestionOptions = (
@@ -114,28 +110,6 @@ const normalizePendingQuestion = (value: unknown): AgentPendingQuestionRequest |
   return {
     requestId,
     questions,
-  };
-};
-
-const normalizePendingPermission = (value: unknown): AgentPendingPermissionRequest | null => {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  const requestId = readString(record, ["id", "requestID", "requestId"]);
-  const permission = readString(record, ["permission"]);
-  const patterns = readStringArray(record, "patterns");
-  if (!requestId || !permission) {
-    return null;
-  }
-
-  const metadata = asRecord(record.metadata);
-  return {
-    requestId,
-    permission,
-    patterns,
-    ...(metadata ? { metadata } : {}),
   };
 };
 
@@ -558,7 +532,7 @@ export const listLiveAgentSessionPendingInput = async (
   Record<
     string,
     {
-      permissions: AgentPendingPermissionRequest[];
+      approvals: AgentPendingApprovalRequest[];
       questions: AgentPendingQuestionRequest[];
     }
   >
@@ -581,19 +555,19 @@ export const listLiveAgentSessionPendingInput = async (
   const bySession: Record<
     string,
     {
-      permissions: AgentPendingPermissionRequest[];
+      approvals: AgentPendingApprovalRequest[];
       questions: AgentPendingQuestionRequest[];
     }
   > = {};
 
   for (const entry of permissions) {
     const sessionId = readPendingSessionId(entry);
-    const normalized = normalizePendingPermission(entry);
+    const normalized = normalizeOpenCodeApprovalRequest(entry);
     if (!sessionId || !normalized) {
       continue;
     }
-    bySession[sessionId] ??= { permissions: [], questions: [] };
-    bySession[sessionId].permissions.push(normalized);
+    bySession[sessionId] ??= { approvals: [], questions: [] };
+    bySession[sessionId].approvals.push(normalized);
   }
 
   for (const entry of questions) {
@@ -602,21 +576,21 @@ export const listLiveAgentSessionPendingInput = async (
     if (!sessionId || !normalized) {
       continue;
     }
-    bySession[sessionId] ??= { permissions: [], questions: [] };
+    bySession[sessionId] ??= { approvals: [], questions: [] };
     bySession[sessionId].questions.push(normalized);
   }
 
   return bySession;
 };
 
-export const replyPermission = async (
+export const replyApproval = async (
   session: SessionRecord,
-  input: ReplyPermissionInput,
+  input: ReplyApprovalInput,
 ): Promise<void> => {
   await session.client.permission.reply({
     directory: session.input.workingDirectory,
     requestID: input.requestId,
-    reply: input.reply,
+    reply: toOpenCodePermissionReply(input.outcome),
     ...(input.message ? { message: input.message } : {}),
   });
 };

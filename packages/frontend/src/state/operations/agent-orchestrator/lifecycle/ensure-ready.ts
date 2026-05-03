@@ -56,9 +56,9 @@ const toLiveSessionState = (
 };
 
 const hasPendingInput = (
-  session: Pick<AgentSessionState, "pendingPermissions" | "pendingQuestions">,
+  session: Pick<AgentSessionState, "pendingApprovals" | "pendingQuestions">,
 ) => {
-  return session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0;
+  return session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0;
 };
 
 export const createEnsureSessionReady = ({
@@ -175,7 +175,7 @@ export const createEnsureSessionReady = ({
         });
         assertNotStale();
         if (liveSnapshot) {
-          const pendingPermissions = liveSnapshot.pendingPermissions;
+          const pendingApprovals = liveSnapshot.pendingApprovals;
           const pendingQuestions = liveSnapshot.pendingQuestions;
           const liveSessionTitle = normalizeLiveSessionTitle(liveSnapshot.title);
           updateSession(
@@ -186,13 +186,13 @@ export const createEnsureSessionReady = ({
               runtimeId: attachedRuntimeId,
               workingDirectory: attachedWorkingDirectory,
               ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
-              pendingPermissions,
+              pendingApprovals,
               pendingQuestions,
               runtimeKind: attachedRuntimeKind,
             }),
             { persist: false },
           );
-          if (!allowPendingInput && hasPendingInput({ pendingPermissions, pendingQuestions })) {
+          if (!allowPendingInput && hasPendingInput({ pendingApprovals, pendingQuestions })) {
             throw new Error(PENDING_INPUT_NOT_READY_ERROR);
           }
           return;
@@ -204,7 +204,7 @@ export const createEnsureSessionReady = ({
               ...current,
               runtimeId: attachedRuntimeId,
               workingDirectory: attachedWorkingDirectory,
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
               runtimeKind: attachedRuntimeKind,
             }),
@@ -284,7 +284,7 @@ export const createEnsureSessionReady = ({
       externalSessionId: session.externalSessionId,
     });
     assertNotStale();
-    const pendingPermissions = liveSnapshot?.pendingPermissions ?? [];
+    const pendingApprovals = liveSnapshot?.pendingApprovals ?? [];
     const pendingQuestions = liveSnapshot?.pendingQuestions ?? [];
     const liveSessionTitle = normalizeLiveSessionTitle(liveSnapshot?.title);
 
@@ -296,11 +296,11 @@ export const createEnsureSessionReady = ({
       workingDirectory: runtime.workingDirectory,
       ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
       promptOverrides: promptContext.promptOverrides,
-      pendingPermissions,
+      pendingApprovals,
       pendingQuestions,
     }));
 
-    if (!allowPendingInput && hasPendingInput({ pendingPermissions, pendingQuestions })) {
+    if (!allowPendingInput && hasPendingInput({ pendingApprovals, pendingQuestions })) {
       throw new Error(PENDING_INPUT_NOT_READY_ERROR);
     }
 

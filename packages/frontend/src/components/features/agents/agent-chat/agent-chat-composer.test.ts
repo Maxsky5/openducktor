@@ -212,18 +212,18 @@ describe("AgentChatComposer", () => {
     expect(html).not.toContain("border-left-color:#d97706");
   });
 
-  test("uses a permission-specific waiting placeholder when input is blocked by permissions", () => {
+  test("uses an approval-specific waiting placeholder when input is blocked by approvals", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
           isWaitingInput: true,
-          waitingInputPlaceholder: "Respond to the pending permission request above to continue",
+          waitingInputPlaceholder: "Respond to the pending approval request above to continue",
         },
       }),
     );
 
-    expect(html).toContain("Respond to the pending permission request above to continue");
+    expect(html).toContain("Respond to the pending approval request above to continue");
     expect(html).toContain('aria-label="Send message" disabled');
   });
 

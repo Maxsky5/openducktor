@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   createRepoStaleGuard,
-  READ_ONLY_ROLES,
   runningStates,
   shouldReattachListenerForAttachedSession,
   throwIfRepoStale,
@@ -16,9 +15,7 @@ const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
 });
 
 describe("agent-orchestrator/support/core", () => {
-  test("exposes expected role and runtime constants", () => {
-    expect(READ_ONLY_ROLES.has("spec")).toBe(true);
-    expect(READ_ONLY_ROLES.has("build")).toBe(false);
+  test("exposes expected runtime constants", () => {
     expect(runningStates.has("running")).toBe(true);
     expect(runningStates.has("closed")).toBe(false);
     expect(toBaseUrl(4444)).toBe("http://127.0.0.1:4444");

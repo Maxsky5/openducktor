@@ -20,7 +20,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   draftReasoningText: "",
   draftReasoningMessageId: null,
   contextUsage: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: null,

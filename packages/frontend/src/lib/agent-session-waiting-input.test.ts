@@ -7,7 +7,7 @@ import {
 describe("agent-session-waiting-input", () => {
   test("returns false and no placeholder when nothing is pending", () => {
     const session = {
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [],
     };
 
@@ -17,7 +17,7 @@ describe("agent-session-waiting-input", () => {
 
   test("returns a question-specific placeholder when questions are pending", () => {
     const session = {
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [{ requestId: "question-1", questions: [] }],
     };
 
@@ -29,25 +29,55 @@ describe("agent-session-waiting-input", () => {
 
   test("returns a permission-specific placeholder when permissions are pending", () => {
     const session = {
-      pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: ["**/*"] }],
+      pendingApprovals: [
+        {
+          requestId: "permission-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["**/*"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
       pendingQuestions: [],
     };
 
     expect(isAgentSessionWaitingInput(session)).toBe(true);
     expect(getAgentSessionWaitingInputPlaceholder(session)).toBe(
-      "Respond to the pending permission request above to continue",
+      "Respond to the pending approval request above to continue",
     );
   });
 
   test("returns a combined placeholder when questions and permissions are pending", () => {
     const session = {
-      pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: ["**/*"] }],
+      pendingApprovals: [
+        {
+          requestId: "permission-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["**/*"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
       pendingQuestions: [{ requestId: "question-1", questions: [] }],
     };
 
     expect(isAgentSessionWaitingInput(session)).toBe(true);
     expect(getAgentSessionWaitingInputPlaceholder(session)).toBe(
-      "Resolve the pending questions and permission requests above to continue",
+      "Resolve the pending questions and approval requests above to continue",
     );
   });
 });

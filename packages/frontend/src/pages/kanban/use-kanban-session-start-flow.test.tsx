@@ -820,7 +820,7 @@ describe("useKanbanSessionStartFlow", () => {
         runtimeKind: "opencode",
         role: "build",
         status: "running",
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [],
         startedAt: "2026-03-20T12:00:00.000Z",
       }),
@@ -830,7 +830,7 @@ describe("useKanbanSessionStartFlow", () => {
         runtimeKind: "opencode",
         role: "build",
         status: "idle",
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [
           {
             requestId: "question-1",

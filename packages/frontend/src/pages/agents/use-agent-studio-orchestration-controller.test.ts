@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import { buildAgentStudioPageModelsArgs } from "./use-agent-studio-orchestration-controller";
 
@@ -46,6 +47,7 @@ const baseArgs: BuildArgs = {
     viewSessionsForTask: [session],
     viewActiveSession: session,
   },
+  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
   tabs: {
     activeTaskTabId: "task-1",
     taskTabs: [],
@@ -110,10 +112,10 @@ const baseArgs: BuildArgs = {
     activeSessionAgentColors: {},
     activeSessionContextUsage: null,
   },
-  permissions: {
-    isSubmittingPermissionByRequestId: {},
-    permissionReplyErrorByRequestId: {},
-    onReplyPermission: async () => {},
+  approvals: {
+    isSubmittingApprovalByRequestId: {},
+    approvalReplyErrorByRequestId: {},
+    onReplyApproval: async () => {},
   },
   chatSettings: {
     showThinkingMessages: true,
@@ -129,6 +131,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
 
     expect(mapped.core.role).toBe("planner");
     expect(mapped.core.contextSwitchVersion).toBe(4);
+    expect(mapped.core.runtimeDefinitions).toEqual([OPENCODE_RUNTIME_DESCRIPTOR]);
     expect(mapped.core.isSessionHistoryHydrated).toBe(true);
     expect(mapped.core.isSessionHistoryHydrationFailed).toBe(false);
     expect(mapped.core.isWaitingForRuntimeReadiness).toBe(false);

@@ -244,7 +244,7 @@ describe("useAgentStudioModelSelection", () => {
         modelId: "claude-sonnet",
         profileId: "build-agent",
       },
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [],
     };
 
@@ -274,7 +274,7 @@ describe("useAgentStudioModelSelection", () => {
         modelId: "claude-sonnet",
         profileId: "build-agent",
       },
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [],
     };
 
@@ -416,7 +416,7 @@ describe("useAgentStudioModelSelection", () => {
             modelId: "claude-sonnet",
             profileId: "build-agent",
           },
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         },
       }),

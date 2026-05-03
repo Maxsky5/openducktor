@@ -21,7 +21,7 @@ export type ResolveTurnDuration = (
 
 export type RecordTurnTimestamp = (externalSessionId: string, timestamp: string | number) => void;
 
-export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyPermission">;
+export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyApproval">;
 
 export type SessionEvent = Parameters<Parameters<SessionEventAdapter["subscribeEvents"]>[1]>[0];
 export type SessionPartEvent = Extract<SessionEvent, { type: "assistant_part" }>;
@@ -78,7 +78,10 @@ export type SessionTurnContext = Pick<
   | "clearTurnDuration"
 >;
 
-export type SessionPermissionContext = Pick<AttachAgentSessionListenerParams, "adapter">;
+export type SessionApprovalContext = Pick<
+  AttachAgentSessionListenerParams,
+  "adapter" | "resolveRuntimeDefinition"
+>;
 
 export type SessionRefreshContext = Pick<
   AttachAgentSessionListenerParams,
@@ -89,7 +92,7 @@ export type SessionLifecycleEventContext = {
   store: SessionStoreContext;
   drafts: SessionDraftContext;
   turn: SessionTurnContext;
-  permissions: SessionPermissionContext;
+  approvals: SessionApprovalContext;
 };
 
 export type SessionPartEventContext = {
@@ -147,8 +150,11 @@ export const createSessionEventHandlerContext = (
       resolveTurnDurationMs: context.resolveTurnDurationMs,
       clearTurnDuration: context.clearTurnDuration,
     },
-    permissions: {
+    approvals: {
       adapter: context.adapter,
+      ...(context.resolveRuntimeDefinition
+        ? { resolveRuntimeDefinition: context.resolveRuntimeDefinition }
+        : {}),
     },
   },
   parts: {

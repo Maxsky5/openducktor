@@ -8,6 +8,7 @@ import type {
   GlobalGitConfig,
   PullRequest,
   RepoDevServerScript,
+  RuntimeApprovalReplyOutcome,
   RuntimeCheck,
   RuntimeInstanceSummary,
   RuntimeKind,
@@ -208,7 +209,7 @@ export type AgentStateContextValue = {
     runtimeKind: RuntimeKind;
     runtimeId?: string;
     workingDirectory: string;
-    pendingPermissions?: AgentSessionState["pendingPermissions"];
+    pendingApprovals?: AgentSessionState["pendingApprovals"];
     pendingQuestions?: AgentSessionState["pendingQuestions"];
   }) => Promise<void>;
   readSessionSlashCommands: (
@@ -255,10 +256,10 @@ export type AgentStateContextValue = {
     externalSessionId: string,
     selection: AgentModelSelection | null,
   ) => void;
-  replyAgentPermission: (
+  replyAgentApproval: (
     externalSessionId: string,
     requestId: string,
-    reply: "once" | "always" | "reject",
+    outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ) => Promise<void>;
   answerAgentQuestion: (

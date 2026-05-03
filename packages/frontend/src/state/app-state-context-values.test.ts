@@ -156,7 +156,7 @@ describe("app-state-context-values", () => {
       sendAgentMessage: async () => {},
       stopAgentSession: async () => {},
       updateAgentSessionModel: () => {},
-      replyAgentPermission: async () => {},
+      replyAgentApproval: async () => {},
       answerAgentQuestion: async () => {},
     };
 

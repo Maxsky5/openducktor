@@ -175,7 +175,7 @@ let agentOperations = {
   sendAgentMessage: mock(async () => undefined),
   stopAgentSession: mock(async () => undefined),
   updateAgentSessionModel: mock(() => undefined),
-  replyAgentPermission: mock(async () => undefined),
+  replyAgentApproval: mock(async () => undefined),
   answerAgentQuestion: mock(async () => undefined),
 };
 let querySyncState: QuerySyncState = {
@@ -337,7 +337,7 @@ const registerModuleMocks = (): void => {
         status: entry.status,
         startedAt: entry.startedAt,
         workingDirectory: entry.workingDirectory,
-        pendingPermissions: entry.pendingPermissions,
+        pendingApprovals: entry.pendingApprovals,
         pendingQuestions: entry.pendingQuestions,
         selectedModel: entry.selectedModel,
         runtimeKind: entry.runtimeKind,
@@ -504,7 +504,7 @@ beforeEach(async () => {
     sendAgentMessage: mock(async () => undefined),
     stopAgentSession: mock(async () => undefined),
     updateAgentSessionModel: mock(() => undefined),
-    replyAgentPermission: mock(async () => undefined),
+    replyAgentApproval: mock(async () => undefined),
     answerAgentQuestion: mock(async () => undefined),
   };
   querySyncState = {

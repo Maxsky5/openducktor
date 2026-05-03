@@ -7,6 +7,7 @@ import type {
 import type {
   AgentModelCatalog,
   AgentModelSelection,
+  AgentPendingApprovalRequest,
   AgentRole,
   AgentSessionTodoItem,
   AgentSubagentExecutionMode,
@@ -112,12 +113,7 @@ export type SessionMessagesState = {
 
 export type AgentSessionMessages = AgentChatMessage[] | SessionMessagesState;
 
-export type AgentPermissionRequest = {
-  requestId: string;
-  permission: string;
-  patterns: string[];
-  metadata?: Record<string, unknown>;
-};
+export type AgentApprovalRequest = AgentPendingApprovalRequest;
 
 export type AgentQuestionRequest = {
   requestId: string;
@@ -176,12 +172,10 @@ export type AgentSessionState = {
   draftReasoningText: string;
   draftReasoningMessageId: string | null;
   contextUsage?: AgentSessionContextUsage | null;
-  pendingPermissions: AgentPermissionRequest[];
+  pendingApprovals: AgentApprovalRequest[];
   pendingQuestions: AgentQuestionRequest[];
   /** Live-only parent-session overlay keyed by child runtime session id. */
-  subagentPendingPermissionsByExternalSessionId?:
-    | Record<string, AgentPermissionRequest[]>
-    | undefined;
+  subagentPendingApprovalsByExternalSessionId?: Record<string, AgentApprovalRequest[]> | undefined;
   /** Live-only parent-session overlay keyed by child runtime session id. */
   subagentPendingQuestionsByExternalSessionId?: Record<string, AgentQuestionRequest[]> | undefined;
   todos: AgentSessionTodoItem[];

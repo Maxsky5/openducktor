@@ -248,7 +248,22 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
         workingDirectory: "/tmp/repo",
-        pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: ["**/*"] }],
+        pendingApprovals: [
+          {
+            requestId: "permission-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["**/*"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
         pendingQuestions: [
           {
             requestId: "question-1",
@@ -273,7 +288,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(Object.keys(state)).toContain("external-1");
     expect(state["external-1"]?.status).toBe("stopped");
-    expect(state["external-1"]?.pendingPermissions).toEqual([]);
+    expect(state["external-1"]?.pendingApprovals).toEqual([]);
     expect(state["external-1"]?.pendingQuestions).toEqual([]);
   });
 
@@ -303,7 +318,7 @@ describe("agent-orchestrator-load-sessions", () => {
       draftReasoningText: "",
       draftReasoningMessageId: null,
       contextUsage: null,
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [],
       todos: [],
       modelCatalog: null,
@@ -368,7 +383,22 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:02.000Z",
         workingDirectory: "/tmp/repo",
-        pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: ["**/*"] }],
+        pendingApprovals: [
+          {
+            requestId: "permission-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["**/*"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
         pendingQuestions: [
           {
             requestId: "question-1",
@@ -394,7 +424,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["external-1"] ? sessionMessagesToArray(state["external-1"]) : undefined).toEqual(
       sessionMessagesToArray(existingSession),
     );
-    expect(state["external-1"]?.pendingPermissions).toEqual([]);
+    expect(state["external-1"]?.pendingApprovals).toEqual([]);
     expect(state["external-1"]?.pendingQuestions).toEqual([]);
   });
 
@@ -416,7 +446,22 @@ describe("agent-orchestrator-load-sessions", () => {
       draftReasoningText: "",
       draftReasoningMessageId: null,
       contextUsage: null,
-      pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: [".env"] }],
+      pendingApprovals: [
+        {
+          requestId: "permission-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: [".env"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
       pendingQuestions: [],
       todos: [],
       modelCatalog: null,
@@ -449,7 +494,22 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:01.000Z",
         workingDirectory: "/tmp/repo/worktree",
-        pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: [".env"] }],
+        pendingApprovals: [
+          {
+            requestId: "permission-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: [".env"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
       }),
     ];
 
@@ -485,7 +545,7 @@ describe("agent-orchestrator-load-sessions", () => {
             role: "build",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "idle" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
             workingDirectory: "/tmp/repo/worktree",
           },
@@ -521,7 +581,7 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.agentSessionsList = originalList;
     }
 
-    expect(state["external-1"]?.pendingPermissions).toEqual([]);
+    expect(state["external-1"]?.pendingApprovals).toEqual([]);
   });
 
   test("does not recover pending input from transcript history when no live snapshot exists", async () => {
@@ -544,7 +604,7 @@ describe("agent-orchestrator-load-sessions", () => {
           draftReasoningText: "",
           draftReasoningMessageId: null,
           contextUsage: null,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           todos: [],
           modelCatalog: null,
@@ -575,7 +635,22 @@ describe("agent-orchestrator-load-sessions", () => {
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:01.000Z",
         workingDirectory: "/tmp/repo/worktree",
-        pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: [".env"] }],
+        pendingApprovals: [
+          {
+            requestId: "permission-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: [".env"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
       }),
     ];
 
@@ -619,8 +694,17 @@ describe("agent-orchestrator-load-sessions", () => {
                 status: "running",
                 metadata: {
                   requestId: "perm-from-history",
-                  permission: "read",
-                  patterns: ["**/.env"],
+                  requestType: "permission_grant" as const,
+                  title: `Approve permission: ${"read"}`,
+                  summary: `Approval request for ${"read"}.`,
+                  affectedPaths: ["**/.env"],
+                  action: { name: "read" },
+                  mutation: "read_only" as const,
+                  supportedReplyOutcomes: [
+                    "approve_once" as const,
+                    "approve_session" as const,
+                    "reject" as const,
+                  ],
                 },
               },
             ],
@@ -657,7 +741,7 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.agentSessionsList = originalList;
     }
 
-    expect(state["external-1"]?.pendingPermissions).toEqual([]);
+    expect(state["external-1"]?.pendingApprovals).toEqual([]);
     expect(state["external-1"]?.pendingQuestions).toEqual([]);
   });
 
@@ -709,7 +793,7 @@ describe("agent-orchestrator-load-sessions", () => {
       draftReasoningText: "",
       draftReasoningMessageId: null,
       contextUsage: null,
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [],
       todos: [],
       modelCatalog: null,
@@ -787,7 +871,7 @@ describe("agent-orchestrator-load-sessions", () => {
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
           workingDirectory: "/tmp/repo/worktree",
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         }),
       ],
@@ -822,7 +906,7 @@ describe("agent-orchestrator-load-sessions", () => {
               workingDirectory: "/tmp/repo/worktree",
               startedAt: "2026-02-22T08:00:00.000Z",
               status: { type: "busy" },
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
             },
           ],
@@ -863,7 +947,7 @@ describe("agent-orchestrator-load-sessions", () => {
           draftReasoningText: "",
           draftReasoningMessageId: null,
           contextUsage: null,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           todos: [],
           modelCatalog: null,
@@ -994,7 +1078,7 @@ describe("agent-orchestrator-load-sessions", () => {
           draftReasoningText: "",
           draftReasoningMessageId: null,
           contextUsage: null,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           todos: [],
           modelCatalog: null,
@@ -1108,7 +1192,7 @@ describe("agent-orchestrator-load-sessions", () => {
           draftReasoningText: "",
           draftReasoningMessageId: null,
           contextUsage: null,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           todos: [],
           modelCatalog: null,
@@ -1145,7 +1229,7 @@ describe("agent-orchestrator-load-sessions", () => {
               workingDirectory: "/tmp/repo/worktree",
               startedAt: "2026-02-22T08:00:00.000Z",
               status: { type: "busy" },
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
             },
           ];
@@ -1252,7 +1336,7 @@ describe("agent-orchestrator-load-sessions", () => {
             workingDirectory: "/tmp/repo/worktree",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ],
@@ -1396,8 +1480,21 @@ describe("agent-orchestrator-load-sessions", () => {
               workingDirectory: "/tmp/repo/worktree",
               startedAt: "2026-02-22T08:00:00.000Z",
               status: { type: "busy" },
-              pendingPermissions: [
-                { requestId: "permission-live", permission: "read", patterns: ["README.md"] },
+              pendingApprovals: [
+                {
+                  requestId: "permission-live",
+                  requestType: "permission_grant" as const,
+                  title: `Approve permission: ${"read"}`,
+                  summary: `Approval request for ${"read"}.`,
+                  affectedPaths: ["README.md"],
+                  action: { name: "read" },
+                  mutation: "read_only" as const,
+                  supportedReplyOutcomes: [
+                    "approve_once" as const,
+                    "approve_session" as const,
+                    "reject" as const,
+                  ],
+                },
               ],
               pendingQuestions: [
                 {
@@ -1487,7 +1584,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["external-1"]).toMatchObject({
       status: "stopped",
       messages: [],
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [],
     });
     expect(historyLoads).toBe(0);
@@ -1508,8 +1605,21 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(hydratedSession).toMatchObject({
       status: "running",
       historyHydrationState: "hydrated",
-      pendingPermissions: [
-        { requestId: "permission-live", permission: "read", patterns: ["README.md"] },
+      pendingApprovals: [
+        {
+          requestId: "permission-live",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["README.md"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
       ],
     });
     expect(hydratedSession?.pendingQuestions).toHaveLength(1);
@@ -1545,8 +1655,21 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["external-1"]).toMatchObject({
       status: "running",
       historyHydrationState: "hydrated",
-      pendingPermissions: [
-        { requestId: "permission-live", permission: "read", patterns: ["README.md"] },
+      pendingApprovals: [
+        {
+          requestId: "permission-live",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["README.md"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
       ],
     });
     expect(state["external-1"]?.pendingQuestions).toHaveLength(1);
@@ -1632,7 +1755,7 @@ describe("agent-orchestrator-load-sessions", () => {
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ],
@@ -1779,7 +1902,7 @@ describe("agent-orchestrator-load-sessions", () => {
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ],
@@ -1910,7 +2033,7 @@ describe("agent-orchestrator-load-sessions", () => {
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ],
@@ -2007,7 +2130,7 @@ describe("agent-orchestrator-load-sessions", () => {
           draftAssistantMessageId: null,
           draftReasoningText: "",
           draftReasoningMessageId: null,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           todos: [],
           modelCatalog: null,
@@ -2039,7 +2162,7 @@ describe("agent-orchestrator-load-sessions", () => {
               workingDirectory: "/tmp/repo/worktree",
               startedAt: "2026-02-22T08:00:00.000Z",
               status: { type: "busy" },
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
             },
           ],
@@ -2124,7 +2247,7 @@ describe("agent-orchestrator-load-sessions", () => {
           draftReasoningText: "",
           draftReasoningMessageId: null,
           contextUsage: null,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           todos: [],
           modelCatalog: null,
@@ -2153,7 +2276,7 @@ describe("agent-orchestrator-load-sessions", () => {
             workingDirectory: "/tmp/repo/worktree",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ],
@@ -2193,7 +2316,7 @@ describe("agent-orchestrator-load-sessions", () => {
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
           workingDirectory: "/tmp/repo/worktree",
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         }),
       ],
@@ -2256,7 +2379,7 @@ describe("agent-orchestrator-load-sessions", () => {
             workingDirectory: "/tmp/repo/worktree",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ],
@@ -2342,7 +2465,7 @@ describe("agent-orchestrator-load-sessions", () => {
           draftReasoningText: "",
           draftReasoningMessageId: null,
           contextUsage: null,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           todos: [],
           modelCatalog: null,
@@ -2396,7 +2519,7 @@ describe("agent-orchestrator-load-sessions", () => {
               workingDirectory: "/tmp/repo/resolved-worktree",
               startedAt: "2026-02-22T08:00:00.000Z",
               status: { type: "busy" },
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
             },
           ];
@@ -2455,7 +2578,7 @@ describe("agent-orchestrator-load-sessions", () => {
           draftReasoningText: "",
           draftReasoningMessageId: null,
           contextUsage: null,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           todos: [],
           modelCatalog: null,
@@ -2489,7 +2612,7 @@ describe("agent-orchestrator-load-sessions", () => {
             workingDirectory: "/tmp/repo/worktree",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ],
@@ -2526,7 +2649,7 @@ describe("agent-orchestrator-load-sessions", () => {
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
           workingDirectory: "/tmp/repo/worktree",
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         }),
       ],
@@ -2819,7 +2942,7 @@ describe("agent-orchestrator-load-sessions", () => {
           draftAssistantMessageId: null,
           draftReasoningText: "",
           draftReasoningMessageId: null,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           todos: [],
           modelCatalog: null,
@@ -2892,7 +3015,7 @@ describe("agent-orchestrator-load-sessions", () => {
           draftAssistantMessageId: null,
           draftReasoningText: "",
           draftReasoningMessageId: null,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           todos: [],
           modelCatalog: {
@@ -2985,7 +3108,7 @@ describe("agent-orchestrator-load-sessions", () => {
       draftAssistantMessageId: null,
       draftReasoningText: "",
       draftReasoningMessageId: null,
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [],
       todos: [],
       modelCatalog: null,
@@ -3134,7 +3257,7 @@ describe("agent-orchestrator-load-sessions", () => {
           draftAssistantMessageId: null,
           draftReasoningText: "",
           draftReasoningMessageId: null,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           todos: [],
           modelCatalog: null,
@@ -3161,11 +3284,20 @@ describe("agent-orchestrator-load-sessions", () => {
           workingDirectory: "/tmp/repo/worktree",
           startedAt: "2026-02-22T08:00:00.000Z",
           status: { type: "busy" },
-          pendingPermissions: [
+          pendingApprovals: [
             {
               requestId: "perm-1",
-              permission: "read",
-              patterns: ["**/.env"],
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["**/.env"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
             },
           ],
           pendingQuestions: [
@@ -3225,7 +3357,7 @@ describe("agent-orchestrator-load-sessions", () => {
       startedAt: "2026-02-22T08:00:00.000Z",
       updatedAt: "2026-02-22T08:00:00.000Z",
       workingDirectory: "/tmp/repo/worktree",
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [],
     });
     const hostRuntimeList: RuntimeInstanceSummary[] = [
@@ -3253,8 +3385,21 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     expect(setSessionsByIdCalls.length).toBeGreaterThan(0);
-    expect(sessionsRef.current["external-session-1"]?.pendingPermissions).toEqual([
-      { requestId: "perm-1", permission: "read", patterns: ["**/.env"] },
+    expect(sessionsRef.current["external-session-1"]?.pendingApprovals).toEqual([
+      {
+        requestId: "perm-1",
+        requestType: "permission_grant" as const,
+        title: `Approve permission: ${"read"}`,
+        summary: `Approval request for ${"read"}.`,
+        affectedPaths: ["**/.env"],
+        action: { name: "read" },
+        mutation: "read_only" as const,
+        supportedReplyOutcomes: [
+          "approve_once" as const,
+          "approve_session" as const,
+          "reject" as const,
+        ],
+      },
     ]);
     expect(sessionsRef.current["external-session-1"]?.pendingQuestions).toEqual([
       {
@@ -3900,7 +4045,7 @@ describe("agent-orchestrator-load-sessions", () => {
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ],
@@ -4049,7 +4194,7 @@ describe("agent-orchestrator-load-sessions", () => {
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ],
@@ -4270,7 +4415,7 @@ describe("agent-orchestrator-load-sessions", () => {
             workingDirectory: "/tmp/repo",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ],
@@ -4395,7 +4540,7 @@ describe("agent-orchestrator-load-sessions", () => {
             workingDirectory: "/tmp/repo/worktree",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ],
@@ -4467,7 +4612,7 @@ describe("agent-orchestrator-load-sessions", () => {
     ]);
     expect(attachedListeners).toBe(1);
     expect(state["external-1"]?.status).toBe("running");
-    expect(state["external-1"]?.pendingPermissions).toEqual([]);
+    expect(state["external-1"]?.pendingApprovals).toEqual([]);
     expect(state["external-1"]?.pendingQuestions).toEqual([]);
   });
 
@@ -4947,7 +5092,7 @@ describe("agent-orchestrator-load-sessions", () => {
       draftReasoningText: "",
       draftReasoningMessageId: null,
       contextUsage: null,
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [],
       todos: [],
       modelCatalog: null,

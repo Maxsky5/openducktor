@@ -19,7 +19,7 @@ const sessionFixture: AgentSessionState = {
   draftAssistantMessageId: "assistant-msg-1",
   draftReasoningText: "",
   draftReasoningMessageId: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: {

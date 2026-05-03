@@ -105,7 +105,7 @@ export const fromPersistedSessionRecord = (
       draftReasoningText: "",
       draftReasoningMessageId: null,
       contextUsage: null,
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [],
       todos: [],
       modelCatalog: null,

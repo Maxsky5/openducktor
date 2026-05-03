@@ -11,7 +11,7 @@ export type AgentSessionSummary = Pick<
   | "status"
   | "startedAt"
   | "workingDirectory"
-  | "pendingPermissions"
+  | "pendingApprovals"
   | "pendingQuestions"
 > & {
   selectedModel: AgentSessionState["selectedModel"];
@@ -36,7 +36,7 @@ export type AgentActivitySessionSummary = Pick<
   "externalSessionId" | "taskId" | "role" | "status" | "startedAt"
 > & {
   repoPath: string;
-  hasPendingPermissions: boolean;
+  hasPendingApprovals: boolean;
   hasPendingQuestions: boolean;
 };
 
@@ -65,7 +65,7 @@ export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionS
   workingDirectory: session.workingDirectory,
   selectedModel: session.selectedModel,
   runtimeKind: session.runtimeKind,
-  pendingPermissions: session.pendingPermissions,
+  pendingApprovals: session.pendingApprovals,
   pendingQuestions: session.pendingQuestions,
 });
 
@@ -83,7 +83,7 @@ export const toAgentActivitySessionSummary = (
     role: session.role,
     status: session.status,
     startedAt: session.startedAt,
-    hasPendingPermissions: session.pendingPermissions.length > 0,
+    hasPendingApprovals: session.pendingApprovals.length > 0,
     hasPendingQuestions: session.pendingQuestions.length > 0,
   };
 };
@@ -101,7 +101,7 @@ const areSummariesEquivalent = (
     left.workingDirectory === right.workingDirectory &&
     left.selectedModel === right.selectedModel &&
     left.runtimeKind === right.runtimeKind &&
-    left.pendingPermissions === right.pendingPermissions &&
+    left.pendingApprovals === right.pendingApprovals &&
     left.pendingQuestions === right.pendingQuestions
   );
 };
@@ -117,7 +117,7 @@ const areActivitySummariesEquivalent = (
     left.role === right.role &&
     left.status === right.status &&
     left.startedAt === right.startedAt &&
-    left.hasPendingPermissions === right.hasPendingPermissions &&
+    left.hasPendingApprovals === right.hasPendingApprovals &&
     left.hasPendingQuestions === right.hasPendingQuestions
   );
 };

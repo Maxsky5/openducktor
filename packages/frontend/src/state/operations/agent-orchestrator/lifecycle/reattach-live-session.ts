@@ -53,7 +53,7 @@ export const createReattachLiveSession = ({
   toLiveSessionState,
 }: CreateReattachLiveSessionArgs) => {
   const isAttachableLiveSnapshot = (snapshot: LiveAgentSessionSnapshot): boolean => {
-    if (snapshot.pendingPermissions.length > 0 || snapshot.pendingQuestions.length > 0) {
+    if (snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0) {
       return true;
     }
 
@@ -135,7 +135,7 @@ export const createReattachLiveSession = ({
         runtimeRecoveryState: "idle",
         status: nextStatus,
         ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
-        pendingPermissions: liveSession.pendingPermissions,
+        pendingApprovals: liveSession.pendingApprovals,
         pendingQuestions: liveSession.pendingQuestions,
         promptOverrides,
         selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),

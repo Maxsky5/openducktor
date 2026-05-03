@@ -37,7 +37,7 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   draftAssistantMessageId: null,
   draftReasoningText: "",
   draftReasoningMessageId: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: null,
@@ -905,7 +905,22 @@ describe("agents-page-session-tabs", () => {
         buildSession({
           role: "spec",
           status: "running",
-          pendingPermissions: [{ requestId: "p-1", permission: "bash", patterns: [] }],
+          pendingApprovals: [
+            {
+              requestId: "p-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"bash"}`,
+              summary: `Approval request for ${"bash"}.`,
+              affectedPaths: [],
+              action: { name: "bash" },
+              mutation: "mutating" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
         }),
         buildSession({
           role: "planner",
@@ -1070,7 +1085,22 @@ describe("agents-page-session-tabs", () => {
       buildSession({
         taskId: "task-2",
         status: "idle",
-        pendingPermissions: [{ requestId: "p", permission: "bash", patterns: [] }],
+        pendingApprovals: [
+          {
+            requestId: "p",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"bash"}`,
+            summary: `Approval request for ${"bash"}.`,
+            affectedPaths: [],
+            action: { name: "bash" },
+            mutation: "mutating" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
       }),
     ]);
 

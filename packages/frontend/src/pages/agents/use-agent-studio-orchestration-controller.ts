@@ -1,10 +1,15 @@
-import type { GitBranch, GitTargetBranch, WorkspaceRecord } from "@openducktor/contracts";
+import type {
+  GitBranch,
+  GitTargetBranch,
+  RuntimeDescriptor,
+  WorkspaceRecord,
+} from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
 } from "@/components/features/agents";
-import { useAgentSessionPermissionActions } from "@/components/features/agents/agent-chat/use-agent-session-permission-actions";
+import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -53,12 +58,13 @@ type AgentStudioOrchestrationActionsContext = {
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  replyAgentPermission: AgentStateContextValue["replyAgentPermission"];
+  replyAgentApproval: AgentStateContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
 };
 type UseAgentStudioOrchestrationControllerArgs = {
   activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
+  runtimeDefinitions: RuntimeDescriptor[];
   selection: AgentStudioOrchestrationSelectionContext;
   readiness: AgentStudioOrchestrationReadinessContext;
   hasActiveGitConflict: boolean;
@@ -154,12 +160,13 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
 type BuildAgentStudioPageModelsArgsInput = {
   view: AgentStudioPageModelsViewContext;
   sessions: AgentStudioPageModelsSessionsContext;
+  runtimeDefinitions: RuntimeDescriptor[];
   tabs: AgentStudioPageModelsTabsContext;
   documents: AgentStudioPageModelsDocumentsContext;
   readiness: AgentStudioOrchestrationReadinessContext;
   sessionActions: AgentStudioPageModelsSessionActionsContext;
   modelSelection: AgentStudioPageModelsModelSelectionContext;
-  permissions: ReturnType<typeof useAgentSessionPermissionActions>;
+  approvals: ReturnType<typeof useAgentSessionApprovalActions>;
   chatSettings: {
     showThinkingMessages: boolean;
   };
@@ -169,12 +176,13 @@ type BuildAgentStudioPageModelsArgsInput = {
 export const buildAgentStudioPageModelsArgs = ({
   view,
   sessions,
+  runtimeDefinitions,
   tabs,
   documents,
   readiness,
   sessionActions,
   modelSelection,
-  permissions,
+  approvals,
   chatSettings,
   composer,
 }: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => {
@@ -199,6 +207,7 @@ export const buildAgentStudioPageModelsArgs = ({
       allSessionSummaries: sessions.allSessionSummaries,
       contextSessionsLength: sessions.viewSessionsForTask.length,
       activeSession: sessions.viewActiveSession,
+      runtimeDefinitions,
       sessionRuntimeDataError: sessions.viewSessionRuntimeDataError ?? null,
       hasActiveGitConflict: view.hasActiveGitConflict,
       isTaskHydrating: Boolean(
@@ -227,7 +236,7 @@ export const buildAgentStudioPageModelsArgs = ({
       onSelectModel: handleSelectModel,
       onSelectVariant: handleSelectVariant,
     },
-    permissions,
+    approvals,
     composer,
   };
 };
@@ -235,6 +244,7 @@ export const buildAgentStudioPageModelsArgs = ({
 export function useAgentStudioOrchestrationController({
   activeWorkspace,
   branches,
+  runtimeDefinitions,
   selection,
   readiness,
   hasActiveGitConflict,
@@ -275,7 +285,7 @@ export function useAgentStudioOrchestrationController({
     hydrateRequestedTaskSessionHistory,
     humanRequestChangesTask,
     setTaskTargetBranch,
-    replyAgentPermission,
+    replyAgentApproval,
     answerAgentQuestion,
     scheduleSelectionIntent,
   } = actions;
@@ -375,12 +385,12 @@ export function useAgentStudioOrchestrationController({
     onContextSwitchIntent,
   });
 
-  const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
-    useAgentSessionPermissionActions({
+  const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
+    useAgentSessionApprovalActions({
       activeExternalSessionId: viewActiveSession?.externalSessionId ?? null,
-      pendingPermissions: viewActiveSession?.pendingPermissions ?? [],
+      pendingApprovals: viewActiveSession?.pendingApprovals ?? [],
       agentStudioReady,
-      replyAgentPermission,
+      replyAgentApproval,
     });
 
   const pageModelsArgs = buildAgentStudioPageModelsArgs({
@@ -403,6 +413,7 @@ export function useAgentStudioOrchestrationController({
       viewActiveSession,
       viewSessionRuntimeDataError,
     },
+    runtimeDefinitions,
     tabs: {
       activeTaskTabId,
       taskTabs,
@@ -461,10 +472,10 @@ export function useAgentStudioOrchestrationController({
       handleSelectModel,
       handleSelectVariant,
     },
-    permissions: {
-      isSubmittingPermissionByRequestId,
-      permissionReplyErrorByRequestId,
-      onReplyPermission,
+    approvals: {
+      isSubmittingApprovalByRequestId,
+      approvalReplyErrorByRequestId,
+      onReplyApproval,
     },
     chatSettings: {
       showThinkingMessages,

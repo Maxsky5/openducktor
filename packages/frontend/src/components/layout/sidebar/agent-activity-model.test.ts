@@ -9,7 +9,7 @@ const buildSession = (
     role?: AgentActivitySessionSummary["role"];
     startedAt?: string;
     status?: AgentActivitySessionSummary["status"];
-    hasPendingPermissions?: boolean;
+    hasPendingApprovals?: boolean;
     hasPendingQuestions?: boolean;
   } = {},
 ): AgentActivitySessionSummary => ({
@@ -19,7 +19,7 @@ const buildSession = (
   role: overrides.role ?? ("spec" as const),
   status: overrides.status ?? "idle",
   startedAt: overrides.startedAt ?? "2026-02-26T09:00:00.000Z",
-  hasPendingPermissions: overrides.hasPendingPermissions ?? false,
+  hasPendingApprovals: overrides.hasPendingApprovals ?? false,
   hasPendingQuestions: overrides.hasPendingQuestions ?? false,
 });
 
@@ -64,7 +64,7 @@ describe("summarizeAgentActivity", () => {
         buildSession({
           externalSessionId: "session-1",
           status: "running",
-          hasPendingPermissions: true,
+          hasPendingApprovals: true,
         }),
         buildSession({
           externalSessionId: "session-2",
@@ -89,7 +89,7 @@ describe("summarizeAgentActivity", () => {
         buildSession({
           externalSessionId: "session-1",
           status: "running",
-          hasPendingPermissions: true,
+          hasPendingApprovals: true,
         }),
       ],
     });

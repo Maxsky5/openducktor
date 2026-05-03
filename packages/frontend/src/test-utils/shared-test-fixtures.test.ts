@@ -24,10 +24,19 @@ describe("shared test fixtures", () => {
     const first = createAgentSessionFixture();
     const second = createAgentSessionFixture();
 
-    first.pendingPermissions.push({
+    first.pendingApprovals.push({
       requestId: "permission-1",
-      permission: "read",
-      patterns: [".env"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: [".env"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
     });
     first.messages = [
       {
@@ -38,7 +47,7 @@ describe("shared test fixtures", () => {
       },
     ];
 
-    expect(second.pendingPermissions).toEqual([]);
+    expect(second.pendingApprovals).toEqual([]);
     expect(getSessionMessageCount(second)).toBe(0);
   });
 

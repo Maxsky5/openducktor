@@ -7,7 +7,7 @@ import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestr
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
 
-const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS = Object.freeze({}) as Record<string, number>;
+const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
 
 type AgentChatMessageCardProps = {
@@ -18,9 +18,9 @@ type AgentChatMessageCardProps = {
   sessionWorkingDirectory?: string | null | undefined;
   sessionRuntimeKind?: RuntimeKind | null | undefined;
   sessionRuntimeId?: string | null | undefined;
-  subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
-  subagentPendingPermissionCount?: number;
-  subagentPendingPermissionCountByExternalSessionId?: Record<string, number>;
+  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
+  subagentPendingApprovalCount?: number;
+  subagentPendingApprovalCountByExternalSessionId?: Record<string, number>;
   subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
   subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
@@ -34,9 +34,9 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
-  subagentPendingPermissions,
-  subagentPendingPermissionCount,
-  subagentPendingPermissionCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
+  subagentPendingApprovals,
+  subagentPendingApprovalCount,
+  subagentPendingApprovalCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
   subagentPendingQuestions,
   subagentPendingQuestionCount,
   subagentPendingQuestionCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
@@ -52,10 +52,10 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     sessionAgentColors,
     workflowToolAliasesByCanonical,
   });
-  const resolvedSubagentPendingPermissionCount =
-    subagentPendingPermissionCount ??
+  const resolvedSubagentPendingApprovalCount =
+    subagentPendingApprovalCount ??
     (message.meta?.kind === "subagent" && message.meta.externalSessionId
-      ? (subagentPendingPermissionCountByExternalSessionId[message.meta.externalSessionId] ?? 0)
+      ? (subagentPendingApprovalCountByExternalSessionId[message.meta.externalSessionId] ?? 0)
       : 0);
   const resolvedSubagentPendingQuestionCount =
     subagentPendingQuestionCount ??
@@ -82,8 +82,8 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
         workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
-        subagentPendingPermissions={subagentPendingPermissions}
-        subagentPendingPermissionCount={resolvedSubagentPendingPermissionCount}
+        subagentPendingApprovals={subagentPendingApprovals}
+        subagentPendingApprovalCount={resolvedSubagentPendingApprovalCount}
         subagentPendingQuestions={subagentPendingQuestions}
         subagentPendingQuestionCount={resolvedSubagentPendingQuestionCount}
       />

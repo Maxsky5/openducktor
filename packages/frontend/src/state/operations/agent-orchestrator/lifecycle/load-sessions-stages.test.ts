@@ -36,7 +36,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   draftReasoningText: "",
   draftReasoningMessageId: null,
   contextUsage: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: null,
@@ -1095,7 +1095,22 @@ describe("load-sessions-stages", () => {
 
   test("merges persisted records while preserving in-memory pending input", async () => {
     const existingSession = createSession({
-      pendingPermissions: [{ requestId: "perm-current", permission: "read", patterns: [".env"] }],
+      pendingApprovals: [
+        {
+          requestId: "perm-current",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: [".env"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
       pendingQuestions: [
         {
           requestId: "question-current",
@@ -1121,7 +1136,7 @@ describe("load-sessions-stages", () => {
 
     const nextSession = stateHarness.getState()["external-1"];
     expect(nextSession?.startedAt).toBe("2026-03-01T10:00:00.000Z");
-    expect(nextSession?.pendingPermissions).toEqual(existingSession.pendingPermissions);
+    expect(nextSession?.pendingApprovals).toEqual(existingSession.pendingApprovals);
     expect(nextSession?.pendingQuestions).toEqual(existingSession.pendingQuestions);
   });
 
@@ -1533,7 +1548,7 @@ describe("load-sessions-stages", () => {
           role: "build",
           startedAt: "2026-03-01T09:00:00.000Z",
           status: { type: "busy" },
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           workingDirectory: "/tmp/repo/worktree",
         }),
@@ -1554,8 +1569,17 @@ describe("load-sessions-stages", () => {
     });
     const permissionRequest = {
       requestId: "perm-child-1",
-      permission: "read",
-      patterns: ["src/**"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: ["src/**"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
     };
     const loadedSnapshotSessionIds: string[] = [];
 
@@ -1620,7 +1644,7 @@ describe("load-sessions-stages", () => {
               title: "Parent",
               startedAt: "2026-03-01T09:00:00.000Z",
               status: { type: "busy" },
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
               workingDirectory: "/tmp/repo/worktree",
             };
@@ -1631,7 +1655,7 @@ describe("load-sessions-stages", () => {
               title: "Child",
               startedAt: "2026-03-01T09:00:01.000Z",
               status: { type: "busy" },
-              pendingPermissions: [permissionRequest],
+              pendingApprovals: [permissionRequest],
               pendingQuestions: [],
               workingDirectory: "/tmp/repo/worktree",
             };
@@ -1648,7 +1672,7 @@ describe("load-sessions-stages", () => {
 
     expect(loadedSnapshotSessionIds).toContain("external-child-session");
     expect(
-      stateHarness.getState()["external-1"]?.subagentPendingPermissionsByExternalSessionId?.[
+      stateHarness.getState()["external-1"]?.subagentPendingApprovalsByExternalSessionId?.[
         "external-child-session"
       ],
     ).toEqual([permissionRequest]);
@@ -1658,12 +1682,38 @@ describe("load-sessions-stages", () => {
     const stateHarness = createStateHarness({
       "external-1": createSession({
         historyHydrationState: "hydrating",
-        subagentPendingPermissionsByExternalSessionId: {
+        subagentPendingApprovalsByExternalSessionId: {
           "external-child-session": [
-            { requestId: "stale-perm", permission: "read", patterns: ["src/**"] },
+            {
+              requestId: "stale-perm",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["src/**"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
           ],
           "unscanned-child-session": [
-            { requestId: "live-perm", permission: "read", patterns: ["docs/**"] },
+            {
+              requestId: "live-perm",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["docs/**"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
           ],
         },
       }),
@@ -1729,7 +1779,7 @@ describe("load-sessions-stages", () => {
               title: "Parent",
               startedAt: "2026-03-01T09:00:00.000Z",
               status: { type: "busy" },
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
               workingDirectory: "/tmp/repo/worktree",
             };
@@ -1740,7 +1790,7 @@ describe("load-sessions-stages", () => {
               title: "Child",
               startedAt: "2026-03-01T09:00:01.000Z",
               status: { type: "busy" },
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
               workingDirectory: "/tmp/repo/worktree",
             };
@@ -1756,23 +1806,62 @@ describe("load-sessions-stages", () => {
     });
 
     expect(
-      stateHarness.getState()["external-1"]?.subagentPendingPermissionsByExternalSessionId,
+      stateHarness.getState()["external-1"]?.subagentPendingApprovalsByExternalSessionId,
     ).toEqual({
       "external-child-session": [
-        { requestId: "stale-perm", permission: "read", patterns: ["src/**"] },
+        {
+          requestId: "stale-perm",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["src/**"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
       ],
       "unscanned-child-session": [
-        { requestId: "live-perm", permission: "read", patterns: ["docs/**"] },
+        {
+          requestId: "live-perm",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["docs/**"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
       ],
     });
   });
 
   test("skips failed child pending input overlays without failing parent hydration", async () => {
-    const stalePermission = { requestId: "stale-perm", permission: "read", patterns: ["src/**"] };
+    const stalePermission = {
+      requestId: "stale-perm",
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: ["src/**"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
+    };
     const stateHarness = createStateHarness({
       "external-1": createSession({
         historyHydrationState: "hydrating",
-        subagentPendingPermissionsByExternalSessionId: {
+        subagentPendingApprovalsByExternalSessionId: {
           "external-child-session": [stalePermission],
         },
       }),
@@ -1843,7 +1932,7 @@ describe("load-sessions-stages", () => {
               title: "Parent",
               startedAt: "2026-03-01T09:00:00.000Z",
               status: { type: "busy" },
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
               workingDirectory: "/tmp/repo/worktree",
             };
@@ -1862,7 +1951,7 @@ describe("load-sessions-stages", () => {
 
     expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("hydrated");
     expect(
-      stateHarness.getState()["external-1"]?.subagentPendingPermissionsByExternalSessionId,
+      stateHarness.getState()["external-1"]?.subagentPendingApprovalsByExternalSessionId,
     ).toEqual({
       "external-child-session": [stalePermission],
     });
@@ -1879,7 +1968,7 @@ describe("load-sessions-stages", () => {
       role: "build",
       startedAt: "2026-03-01T09:00:00.000Z",
       status: { type: "busy" as const },
-      pendingPermissions: [],
+      pendingApprovals: [],
       pendingQuestions: [],
       workingDirectory,
     };
@@ -2112,7 +2201,22 @@ describe("load-sessions-stages", () => {
       title: "Builder Session",
       startedAt: "2026-03-01T09:00:00.000Z",
       status: { type: "busy" as const },
-      pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["src/**"] }],
+      pendingApprovals: [
+        {
+          requestId: "perm-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["src/**"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
       pendingQuestions: [],
       workingDirectory,
     };
@@ -2184,7 +2288,7 @@ describe("load-sessions-stages", () => {
                 title: "Builder Session",
                 startedAt: "2026-03-01T09:00:00.000Z",
                 status: { type: "busy" as const },
-                pendingPermissions: [],
+                pendingApprovals: [],
                 pendingQuestions: [],
                 workingDirectory,
               },

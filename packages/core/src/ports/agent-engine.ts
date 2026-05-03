@@ -1,10 +1,15 @@
-import type { FileDiff, FileStatus, RuntimeDescriptor } from "@openducktor/contracts";
+import type {
+  FileDiff,
+  FileStatus,
+  RuntimeApprovalReplyOutcome,
+  RuntimeDescriptor,
+} from "@openducktor/contracts";
 import type {
   AgentEvent,
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
-  AgentPendingPermissionRequest,
+  AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
   AgentRole,
   AgentSessionContext,
@@ -82,7 +87,7 @@ export type ListLiveAgentSessionPendingInput = RepoRuntimeSessionOperationInput;
 export type LiveAgentSessionPendingInputByExternalSessionId = Record<
   ExternalSessionId,
   {
-    permissions: AgentPendingPermissionRequest[];
+    approvals: AgentPendingApprovalRequest[];
     questions: AgentPendingQuestionRequest[];
   }
 >;
@@ -150,14 +155,14 @@ export type LiveAgentSessionSummary = {
 };
 
 export type LiveAgentSessionSnapshot = LiveAgentSessionSummary & {
-  pendingPermissions: AgentPendingPermissionRequest[];
+  pendingApprovals: AgentPendingApprovalRequest[];
   pendingQuestions: AgentPendingQuestionRequest[];
 };
 
-export type ReplyPermissionInput = {
+export type ReplyApprovalInput = {
   externalSessionId: ExternalSessionId;
   requestId: RuntimePendingInputRequestId;
-  reply: "once" | "always" | "reject";
+  outcome: RuntimeApprovalReplyOutcome;
   message?: string;
 };
 
@@ -205,7 +210,7 @@ export interface AgentSessionPort {
   ): Promise<LiveAgentSessionPendingInputByExternalSessionId>;
   updateSessionModel(input: UpdateAgentSessionModelInput): void;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
-  replyPermission(input: ReplyPermissionInput): Promise<void>;
+  replyApproval(input: ReplyApprovalInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
   subscribeEvents(
     externalSessionId: ExternalSessionId,

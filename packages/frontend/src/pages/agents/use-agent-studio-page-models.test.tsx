@@ -1,6 +1,9 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-import { act } from "react";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { act, createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
+import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-chat-thread";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
@@ -26,7 +29,7 @@ type HookArgsOverrides = {
   readiness?: Partial<HookArgs["readiness"]>;
   sessionActions?: Partial<HookArgs["sessionActions"]>;
   modelSelection?: Partial<HookArgs["modelSelection"]>;
-  permissions?: Partial<HookArgs["permissions"]>;
+  approvals?: Partial<HookArgs["approvals"]>;
   chatSettings?: Partial<HookArgs["chatSettings"]>;
   composer?: Partial<HookArgs["composer"]>;
 };
@@ -96,6 +99,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isWaitingForRuntimeReadiness: false,
     isSessionHistoryHydrationFailed: false,
     contextSwitchVersion: 0,
+    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     ...overrides.core,
     allSessionSummaries,
     sessionsForTask,
@@ -172,11 +176,11 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
       ...overrides.modelSelection,
     },
-    permissions: {
-      isSubmittingPermissionByRequestId: {},
-      permissionReplyErrorByRequestId: {},
-      onReplyPermission: async () => {},
-      ...overrides.permissions,
+    approvals: {
+      isSubmittingApprovalByRequestId: {},
+      approvalReplyErrorByRequestId: {},
+      onReplyApproval: async () => {},
+      ...overrides.approvals,
     },
     chatSettings: {
       showThinkingMessages: false,
@@ -500,16 +504,31 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("keeps the header model stable across permission-only session changes", async () => {
-    const permissionSession = createSession("session-1", "external-1", {
+  test("keeps the header model stable across approval-only session changes", async () => {
+    const approvalSession = createSession("session-1", "external-1", {
       status: "running",
-      pendingPermissions: [{ requestId: "p-1", permission: "shell", patterns: ["rm -rf /tmp"] }],
+      pendingApprovals: [
+        {
+          requestId: "p-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"shell"}`,
+          summary: `Approval request for ${"shell"}.`,
+          affectedPaths: ["rm -rf /tmp"],
+          action: { name: "shell" },
+          mutation: "mutating" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
     });
     const harness = createHookHarness(
       createHookArgs({
         core: {
-          activeSession: permissionSession,
-          sessionsForTask: [permissionSession],
+          activeSession: approvalSession,
+          sessionsForTask: [approvalSession],
         },
       }),
     );
@@ -517,22 +536,66 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
     const initialHeaderModel = harness.getLatest().agentStudioHeaderModel;
 
-    const permissionSessionWithoutRequests = createSession("session-1", "external-1", {
+    const approvalSessionWithoutRequests = createSession("session-1", "external-1", {
       status: "running",
-      pendingPermissions: [],
+      pendingApprovals: [],
     });
 
     await harness.update(
       createHookArgs({
         core: {
-          activeSession: permissionSessionWithoutRequests,
-          sessionsForTask: [permissionSessionWithoutRequests],
+          activeSession: approvalSessionWithoutRequests,
+          sessionsForTask: [approvalSessionWithoutRequests],
         },
       }),
     );
 
     expect(harness.getLatest().agentStudioHeaderModel.sessionStatus).toBe("running");
     expect(harness.getLatest().agentStudioHeaderModel).not.toBe(initialHeaderModel);
+    await harness.unmount();
+  });
+
+  test("hides approval outcomes unsupported by the active runtime descriptor", async () => {
+    const approvalSession = createSession("session-approval", "external-approval", {
+      runtimeKind: "opencode",
+      status: "running",
+      pendingApprovals: [
+        {
+          requestId: "approval-turn",
+          requestType: "runtime_tool" as const,
+          title: "Approve runtime tool",
+          summary: "Runtime asks for a turn-scoped tool approval.",
+          tool: { name: "shell" },
+          mutation: "mutating" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_turn" as const,
+            "reject" as const,
+          ],
+        },
+      ],
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          activeSession: approvalSession,
+          sessionsForTask: [approvalSession],
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        },
+      }),
+    );
+
+    await harness.mount();
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: harness.getLatest().agentChatModel.thread,
+      }),
+    );
+
+    expect(html).toContain("Approve once");
+    expect(html).toContain("Reject");
+    expect(html).not.toContain("Approve for turn");
+    expect(html).not.toContain("Approve for session");
     await harness.unmount();
   });
 
@@ -720,27 +783,27 @@ describe("useAgentStudioPageModels", () => {
     const initialThreadModel = initialState.agentChatModel.thread;
     const initialComposerModel = initialState.agentChatModel.composer;
 
-    const permissionUpdateProps = {
+    const approvalUpdateProps = {
       ...baseProps,
-      permissions: {
-        ...baseProps.permissions,
-        isSubmittingPermissionByRequestId: {
+      approvals: {
+        ...baseProps.approvals,
+        isSubmittingApprovalByRequestId: {
           "perm-1": true,
         },
       },
     };
-    await harness.update(permissionUpdateProps);
+    await harness.update(approvalUpdateProps);
 
-    const permissionState = harness.getLatest();
-    const permissionThreadModel = permissionState.agentChatModel.thread;
-    expect(permissionThreadModel).not.toBe(initialThreadModel);
-    expect(permissionState.agentChatModel.composer).toBe(initialComposerModel);
-    expect(permissionThreadModel.isSubmittingPermissionByRequestId["perm-1"]).toBe(true);
+    const approvalState = harness.getLatest();
+    const approvalThreadModel = approvalState.agentChatModel.thread;
+    expect(approvalThreadModel).not.toBe(initialThreadModel);
+    expect(approvalState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(approvalThreadModel.isSubmittingApprovalByRequestId["perm-1"]).toBe(true);
 
     await harness.update({
-      ...permissionUpdateProps,
+      ...approvalUpdateProps,
       sessionActions: {
-        ...permissionUpdateProps.sessionActions,
+        ...approvalUpdateProps.sessionActions,
         isSubmittingQuestionByRequestId: {
           "q-1": true,
         },
@@ -748,24 +811,50 @@ describe("useAgentStudioPageModels", () => {
     });
 
     const questionState = harness.getLatest();
-    expect(questionState.agentChatModel.thread).not.toBe(permissionThreadModel);
+    expect(questionState.agentChatModel.thread).not.toBe(approvalThreadModel);
     expect(questionState.agentChatModel.composer).toBe(initialComposerModel);
     expect(questionState.agentChatModel.thread.isSubmittingQuestionByRequestId["q-1"]).toBe(true);
 
     await harness.unmount();
   });
 
-  test("derives subagent pending permission counts from all live session summaries", async () => {
+  test("derives subagent pending approval counts from all live session summaries", async () => {
     const parentSession = createSession("session-parent", "external-parent");
-    const childWithPermission = createSession("session-child-1", "external-child-1", {
+    const childWithApproval = createSession("session-child-1", "external-child-1", {
       taskId: "other-task",
-      pendingPermissions: [
-        { requestId: "perm-1", permission: "shell", patterns: ["bun test"] },
-        { requestId: "perm-2", permission: "shell", patterns: ["git status"] },
+      pendingApprovals: [
+        {
+          requestId: "perm-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"shell"}`,
+          summary: `Approval request for ${"shell"}.`,
+          affectedPaths: ["bun test"],
+          action: { name: "shell" },
+          mutation: "mutating" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+        {
+          requestId: "perm-2",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"shell"}`,
+          summary: `Approval request for ${"shell"}.`,
+          affectedPaths: ["git status"],
+          action: { name: "shell" },
+          mutation: "mutating" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
       ],
     });
-    const childWithoutPermission = createSession("session-child-2", "external-child-2", {
-      pendingPermissions: [],
+    const childWithoutApproval = createSession("session-child-2", "external-child-2", {
+      pendingApprovals: [],
     });
     const harness = createHookHarness(
       createHookArgs({
@@ -774,8 +863,8 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
             toAgentSessionSummary(parentSession),
-            toAgentSessionSummary(childWithPermission),
-            toAgentSessionSummary(childWithoutPermission),
+            toAgentSessionSummary(childWithApproval),
+            toAgentSessionSummary(childWithoutApproval),
           ],
         },
       }),
@@ -784,7 +873,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     expect(
-      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountByExternalSessionId,
+      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountByExternalSessionId,
     ).toEqual({
       "external-child-1": 2,
     });
@@ -792,11 +881,26 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("keys subagent pending permission counts by external session id", async () => {
+  test("keys subagent pending approval counts by external session id", async () => {
     const parentSession = createSession("session-parent", "external-parent");
-    const childWithPermission = createSession("session-child-internal", "session-child-runtime", {
+    const childWithApproval = createSession("session-child-internal", "session-child-runtime", {
       taskId: "other-task",
-      pendingPermissions: [{ requestId: "perm-1", permission: "shell", patterns: ["bun test"] }],
+      pendingApprovals: [
+        {
+          requestId: "perm-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"shell"}`,
+          summary: `Approval request for ${"shell"}.`,
+          affectedPaths: ["bun test"],
+          action: { name: "shell" },
+          mutation: "mutating" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
     });
     const harness = createHookHarness(
       createHookArgs({
@@ -805,7 +909,7 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
             toAgentSessionSummary(parentSession),
-            toAgentSessionSummary(childWithPermission),
+            toAgentSessionSummary(childWithApproval),
           ],
         },
       }),
@@ -814,18 +918,31 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const counts =
-      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountByExternalSessionId ??
+      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountByExternalSessionId ??
       {};
     expect(counts["session-child-runtime"]).toBe(1);
 
     await harness.unmount();
   });
 
-  test("derives subagent pending permission counts from parent live event overlay", async () => {
+  test("derives subagent pending approval counts from parent live event overlay", async () => {
     const parentSession = createSession("session-parent", "external-parent", {
-      subagentPendingPermissionsByExternalSessionId: {
+      subagentPendingApprovalsByExternalSessionId: {
         "external-child-session": [
-          { requestId: "perm-1", permission: "external_directory", patterns: ["/tmp/*"] },
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"external_directory"}`,
+            summary: `Approval request for ${"external_directory"}.`,
+            affectedPaths: ["/tmp/*"],
+            action: { name: "external_directory" },
+            mutation: "mutating" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
         ],
       },
     });
@@ -847,18 +964,33 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const counts =
-      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountByExternalSessionId ??
+      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountByExternalSessionId ??
       {};
     expect(counts["external-child-session"]).toBe(1);
 
     await harness.unmount();
   });
 
-  test("keeps subagent pending permission count map stable when counts do not change", async () => {
+  test("keeps subagent pending approval count map stable when counts do not change", async () => {
     const parentSession = createSession("session-parent", "external-parent");
-    const childWithPermission = createSession("session-child-1", "external-child-1", {
+    const childWithApproval = createSession("session-child-1", "external-child-1", {
       taskId: "other-task",
-      pendingPermissions: [{ requestId: "perm-1", permission: "shell", patterns: ["bun test"] }],
+      pendingApprovals: [
+        {
+          requestId: "perm-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"shell"}`,
+          summary: `Approval request for ${"shell"}.`,
+          affectedPaths: ["bun test"],
+          action: { name: "shell" },
+          mutation: "mutating" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
     });
     const initialProps = createHookArgs({
       core: {
@@ -866,7 +998,7 @@ describe("useAgentStudioPageModels", () => {
         sessionsForTask: [toAgentSessionSummary(parentSession)],
         allSessionSummaries: [
           toAgentSessionSummary(parentSession),
-          toAgentSessionSummary(childWithPermission),
+          toAgentSessionSummary(childWithApproval),
         ],
       },
     });
@@ -875,7 +1007,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const initialCounts =
-      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountByExternalSessionId;
+      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountByExternalSessionId;
 
     await harness.update(
       createHookArgs({
@@ -884,11 +1016,11 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
             toAgentSessionSummary(parentSession),
-            toAgentSessionSummary(childWithPermission),
+            toAgentSessionSummary(childWithApproval),
             toAgentSessionSummary(
               createSession("session-child-2", "external-child-2", {
                 taskId: "other-task",
-                pendingPermissions: [],
+                pendingApprovals: [],
               }),
             ),
           ],
@@ -897,7 +1029,7 @@ describe("useAgentStudioPageModels", () => {
     );
 
     expect(
-      harness.getLatest().agentChatModel.thread.subagentPendingPermissionCountByExternalSessionId,
+      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountByExternalSessionId,
     ).toBe(initialCounts);
 
     await harness.unmount();

@@ -139,7 +139,7 @@ let currentSessionsFixture = [
     status: "running",
     startedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
-    pendingPermissions: 0,
+    pendingApprovals: 0,
     pendingQuestions: 0,
   },
   {
@@ -150,7 +150,7 @@ let currentSessionsFixture = [
     status: "running",
     startedAt: "2026-01-01T12:00:00.000Z",
     updatedAt: "2026-01-01T12:00:00.000Z",
-    pendingPermissions: 0,
+    pendingApprovals: 0,
     pendingQuestions: 0,
   },
   {
@@ -161,7 +161,7 @@ let currentSessionsFixture = [
     status: "idle",
     startedAt: "2026-01-02T00:00:00.000Z",
     updatedAt: "2026-01-02T00:00:00.000Z",
-    pendingPermissions: 0,
+    pendingApprovals: 0,
     pendingQuestions: 0,
   },
 ];
@@ -542,7 +542,7 @@ describe("KanbanPage session start modal flow", () => {
         status: "running",
         startedAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
-        pendingPermissions: 0,
+        pendingApprovals: 0,
         pendingQuestions: 0,
       },
       {
@@ -553,7 +553,7 @@ describe("KanbanPage session start modal flow", () => {
         status: "running",
         startedAt: "2026-01-01T12:00:00.000Z",
         updatedAt: "2026-01-01T12:00:00.000Z",
-        pendingPermissions: 0,
+        pendingApprovals: 0,
         pendingQuestions: 0,
       },
       {
@@ -564,7 +564,7 @@ describe("KanbanPage session start modal flow", () => {
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
         updatedAt: "2026-01-02T00:00:00.000Z",
-        pendingPermissions: 0,
+        pendingApprovals: 0,
         pendingQuestions: 0,
       },
     ];
@@ -1202,7 +1202,7 @@ describe("KanbanPage session start modal flow", () => {
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
         updatedAt: "2026-01-02T00:00:00.000Z",
-        pendingPermissions: 0,
+        pendingApprovals: 0,
         pendingQuestions: 0,
       },
       {
@@ -1213,7 +1213,7 @@ describe("KanbanPage session start modal flow", () => {
         status: "stopped",
         startedAt: "2026-01-03T00:00:00.000Z",
         updatedAt: "2026-01-03T00:00:00.000Z",
-        pendingPermissions: 0,
+        pendingApprovals: 0,
         pendingQuestions: 0,
       },
     ];
@@ -1270,7 +1270,7 @@ describe("KanbanPage session start modal flow", () => {
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
         updatedAt: "2026-01-02T00:00:00.000Z",
-        pendingPermissions: 0,
+        pendingApprovals: 0,
         pendingQuestions: 0,
       },
     ];

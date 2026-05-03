@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { runtimeKindSchema } from "./agent-runtime-schemas";
+import {
+  runtimeApprovalReplyOutcomeSchema,
+  runtimeApprovalRequestTypeSchema,
+  runtimeKindSchema,
+} from "./agent-runtime-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
 
 export const agentSessionStatusSchema = z.enum(["starting", "running", "idle", "error", "stopped"]);
@@ -36,13 +40,40 @@ export const agentSessionModelSelectionSchema = z.object({
 });
 export type AgentSessionModelSelection = z.infer<typeof agentSessionModelSelectionSchema>;
 
-export const agentSessionPermissionRequestSchema = z.object({
+export const agentSessionApprovalMutationSchema = z.enum(["mutating", "read_only", "unknown"]);
+export type AgentSessionApprovalMutation = z.infer<typeof agentSessionApprovalMutationSchema>;
+
+export const agentSessionApprovalRequestSchema = z.object({
   requestId: z.string(),
-  permission: z.string(),
-  patterns: z.array(z.string()).default([]),
+  requestType: runtimeApprovalRequestTypeSchema,
+  title: z.string(),
+  summary: z.string().optional(),
+  details: z.string().optional(),
+  affectedPaths: z.array(z.string()).optional(),
+  command: z
+    .object({
+      command: z.string(),
+      workingDirectory: z.string().optional(),
+    })
+    .optional(),
+  action: z
+    .object({
+      name: z.string(),
+      description: z.string().optional(),
+    })
+    .optional(),
+  tool: z
+    .object({
+      name: z.string(),
+      title: z.string().optional(),
+      input: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+  mutation: agentSessionApprovalMutationSchema.optional(),
+  supportedReplyOutcomes: z.array(runtimeApprovalReplyOutcomeSchema).optional(),
   metadata: z.record(z.string(), agentSessionMetadataValueSchema).optional(),
 });
-export type AgentSessionPermissionRequest = z.infer<typeof agentSessionPermissionRequestSchema>;
+export type AgentSessionApprovalRequest = z.infer<typeof agentSessionApprovalRequestSchema>;
 
 export const agentSessionQuestionOptionSchema = z.object({
   label: z.string(),

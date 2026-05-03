@@ -1,4 +1,3 @@
-import type { AgentRole } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
@@ -14,7 +13,6 @@ export const runningStates = new Set([
 ]);
 
 export const now = (): string => new Date().toISOString();
-export const READ_ONLY_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
 
 export const sanitizeStreamingText = (value: string): string => {
   return value.replace(/\n{3,}/g, "\n\n").trimStart();

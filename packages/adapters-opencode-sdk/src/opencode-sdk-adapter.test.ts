@@ -5,8 +5,39 @@ import type { AgentEvent, RuntimeKind } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import type { OpencodeSdkAdapterOptions } from "./types";
 
+type TestAdapterInternals = {
+  sessions: Map<
+    string,
+    {
+      pendingSubagentInputEventsByExternalSessionId: Map<
+        string,
+        Array<{ requestId: string; type: "approval_required" | "question_required" }>
+      >;
+    }
+  >;
+  clearPendingSubagentInputEvent: (externalSessionId: string, requestId: string) => void;
+};
+
 const defaultRepoPath = "/repo";
 const defaultWorkingDirectory = "/repo";
+
+const expectedReadApproval = {
+  requestId: "perm-1",
+  requestType: "permission_grant",
+  title: "Approve permission: read",
+  summary: "OpenCode requested approval for read.",
+  affectedPaths: ["**/.env"],
+  action: { name: "read" },
+  mutation: "read_only",
+  supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+  metadata: {
+    opencode: {
+      permission: "read",
+      patterns: ["**/.env"],
+      metadata: { source: "history" },
+    },
+  },
+};
 
 const makeRuntimeSummary = (
   routeType: "local_http" | "stdio",
@@ -397,21 +428,21 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const session = (adapter as any).sessions.get("external-session-1") as {
-      pendingSubagentInputEventsByExternalSessionId: Map<
-        string,
-        Array<{ requestId: string; type: "permission_required" | "question_required" }>
-      >;
-    };
+    const adapterInternals = adapter as unknown as TestAdapterInternals;
+    const session = adapterInternals.sessions.get("external-session-1");
+    expect(session).toBeDefined();
+    if (!session) {
+      throw new Error("Expected test session to be registered.");
+    }
     session.pendingSubagentInputEventsByExternalSessionId.set("child-a", [
-      { type: "permission_required", requestId: "request-1" },
+      { type: "approval_required", requestId: "request-1" },
       { type: "question_required", requestId: "request-2" },
     ]);
     session.pendingSubagentInputEventsByExternalSessionId.set("child-b", [
       { type: "question_required", requestId: "request-1" },
     ]);
 
-    (adapter as any).clearPendingSubagentInputEvent("child-a", "request-1");
+    adapterInternals.clearPendingSubagentInputEvent("child-a", "request-1");
 
     expect(session.pendingSubagentInputEventsByExternalSessionId.get("child-a")).toEqual([
       { type: "question_required", requestId: "request-2" },
@@ -658,14 +689,7 @@ describe("opencode-sdk-adapter", () => {
           message: "retrying",
           nextEpochMs: 1234,
         },
-        pendingPermissions: [
-          {
-            requestId: "perm-1",
-            permission: "read",
-            patterns: ["**/.env"],
-            metadata: { source: "history" },
-          },
-        ],
+        pendingApprovals: [expectedReadApproval],
         pendingQuestions: [],
       },
       {
@@ -676,7 +700,7 @@ describe("opencode-sdk-adapter", () => {
         status: {
           type: "busy",
         },
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [
           {
             requestId: "question-1",
@@ -851,14 +875,7 @@ describe("opencode-sdk-adapter", () => {
     expect(mock.questionListCalls).toEqual([{ directory: "/repo" }]);
     expect(pending).toEqual({
       "external-session-1": {
-        permissions: [
-          {
-            requestId: "perm-1",
-            permission: "read",
-            patterns: ["**/.env"],
-            metadata: { source: "history" },
-          },
-        ],
+        approvals: [expectedReadApproval],
         questions: [],
       },
     });

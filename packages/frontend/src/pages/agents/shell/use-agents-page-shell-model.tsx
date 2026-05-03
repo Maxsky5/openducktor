@@ -175,7 +175,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     sendAgentMessage,
     stopAgentSession,
     updateAgentSessionModel,
-    replyAgentPermission,
+    replyAgentApproval,
     answerAgentQuestion,
   } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
@@ -427,6 +427,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const orchestration = useAgentStudioOrchestrationController({
     activeWorkspace,
     branches,
+    runtimeDefinitions,
     selection: {
       ...selection,
       contextSwitchVersion,
@@ -449,7 +450,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       hydrateRequestedTaskSessionHistory,
       humanRequestChangesTask,
       setTaskTargetBranch,
-      replyAgentPermission,
+      replyAgentApproval,
       answerAgentQuestion,
       scheduleSelectionIntent,
     },

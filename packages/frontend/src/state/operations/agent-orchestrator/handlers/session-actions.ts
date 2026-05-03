@@ -2,6 +2,7 @@ import type {
   AgentSessionRecord,
   AgentSessionStopTarget,
   RepoPromptOverrides,
+  RuntimeApprovalReplyOutcome,
   RuntimeKind,
   TaskCard,
   TaskWorktreeSummary,
@@ -27,9 +28,9 @@ import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import { isWorkflowAgentSession } from "../support/session-purpose";
 import {
-  clearSubagentPendingPermissionFromSessions,
+  clearSubagentPendingApprovalFromSessions,
   clearSubagentPendingQuestionFromSessions,
-} from "../support/subagent-permission-overlay";
+} from "../support/subagent-approval-overlay";
 import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {
@@ -384,7 +385,7 @@ export const createAgentSessionActions = ({
         draftReasoningText: "",
         draftReasoningMessageId: null,
         stopRequestedAt: null,
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [],
       };
       stoppedSessionSnapshot = nextSession;
@@ -433,10 +434,10 @@ export const createAgentSessionActions = ({
     );
   };
 
-  const replyAgentPermission = async (
+  const replyAgentApproval = async (
     externalSessionId: string,
     requestId: string,
-    reply: "once" | "always" | "reject",
+    outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ): Promise<void> => {
     if (!adapter.hasSession(externalSessionId)) {
@@ -448,10 +449,10 @@ export const createAgentSessionActions = ({
       sessionsRef,
       externalSessionId,
     );
-    await adapter.replyPermission({
+    await adapter.replyApproval({
       externalSessionId,
       requestId,
-      reply,
+      outcome,
       ...(message ? { message } : {}),
     });
 
@@ -459,13 +460,11 @@ export const createAgentSessionActions = ({
       externalSessionId,
       (current) => ({
         ...current,
-        pendingPermissions: current.pendingPermissions.filter(
-          (entry) => entry.requestId !== requestId,
-        ),
+        pendingApprovals: current.pendingApprovals.filter((entry) => entry.requestId !== requestId),
       }),
       { persist: true },
     );
-    clearSubagentPendingPermissionFromSessions({
+    clearSubagentPendingApprovalFromSessions({
       sessionsRef,
       updateSession,
       targetExternalSessionId: externalSessionId,
@@ -519,7 +518,7 @@ export const createAgentSessionActions = ({
     startAgentSession,
     stopAgentSession,
     updateAgentSessionModel,
-    replyAgentPermission,
+    replyAgentApproval,
     answerAgentQuestion,
   };
 };
