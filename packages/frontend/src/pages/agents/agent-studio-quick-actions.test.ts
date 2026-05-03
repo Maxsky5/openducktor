@@ -12,6 +12,15 @@ import { buildRoleEnabledMapForTask } from "./agents-page-session-tabs";
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState =>
   createAgentSessionFixture(overrides);
 
+const buildPullRequest = () => ({
+  providerId: "github",
+  number: 42,
+  url: "https://github.com/example/repo/pull/42",
+  state: "open" as const,
+  createdAt: "2026-02-20T10:00:00.000Z",
+  updatedAt: "2026-02-20T10:05:00.000Z",
+});
+
 describe("agent-studio-quick-actions", () => {
   test("builds quick actions from backend actions, role workflows, and builder sessions", () => {
     const task = buildTask({
@@ -196,8 +205,8 @@ describe("agent-studio-quick-actions", () => {
     });
   });
 
-  test("uses status-specific primary quick actions for QA review and QA rejection", () => {
-    const aiReviewTask = buildTask({
+  test("uses status-specific primary quick actions for AI review and QA rejection", () => {
+    const aiReviewTaskWithoutPullRequest = buildTask({
       id: "task-1",
       status: "ai_review",
       availableActions: [],
@@ -208,17 +217,41 @@ describe("agent-studio-quick-actions", () => {
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
-    const aiReviewOptions = buildAgentStudioQuickActions({
-      selectedTask: aiReviewTask,
+    const aiReviewWithoutPullRequestOptions = buildAgentStudioQuickActions({
+      selectedTask: aiReviewTaskWithoutPullRequest,
       sessionsForTask: [
         buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
       ],
-      roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTask),
+      roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTaskWithoutPullRequest),
       createSessionDisabled: false,
     });
-    expect(selectPrimaryAgentStudioQuickAction(aiReviewOptions)).toMatchObject({
-      launchActionId: "qa_review",
-      label: "Request QA Review",
+    expect(selectPrimaryAgentStudioQuickAction(aiReviewWithoutPullRequestOptions)).toMatchObject({
+      launchActionId: "build_pull_request_generation",
+      label: "Generate Pull Request",
+    });
+
+    const aiReviewTaskWithPullRequest = buildTask({
+      ...aiReviewTaskWithoutPullRequest,
+      pullRequest: buildPullRequest(),
+    });
+    const aiReviewWithPullRequestOptions = buildAgentStudioQuickActions({
+      selectedTask: aiReviewTaskWithPullRequest,
+      sessionsForTask: [
+        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+      ],
+      roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTaskWithPullRequest),
+      createSessionDisabled: false,
+    });
+    expect(selectPrimaryAgentStudioQuickAction(aiReviewWithPullRequestOptions)).toMatchObject({
+      launchActionId: "build_after_human_request_changes",
+      label: "Request Changes",
+    });
+    expect(
+      aiReviewWithPullRequestOptions.find(
+        (option) => option.launchActionId === "build_after_human_request_changes",
+      ),
+    ).toMatchObject({
+      requiresHumanFeedback: true,
     });
 
     const qaRejectedTask = buildTask({

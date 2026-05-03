@@ -498,6 +498,96 @@ describe("AgentStudioHeader", () => {
     );
   });
 
+  test("renders the wider quick-actions popover with the taller result list", async () => {
+    const { unmount } = render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          quickActions: [
+            {
+              id: "quick:build_implementation_start",
+              role: "build" as const,
+              launchActionId: "build_implementation_start" as const,
+              label: "Start Implementation",
+              description: "Open the start-session flow for Builder implementation work.",
+              postStartAction: "kickoff" as const,
+              disabled: false,
+            },
+          ],
+          sessionCreateOptions: [],
+          primaryQuickAction: {
+            id: "quick:build_implementation_start",
+            role: "build" as const,
+            launchActionId: "build_implementation_start" as const,
+            label: "Start Implementation",
+            description: "Open the start-session flow for Builder implementation work.",
+            postStartAction: "kickoff" as const,
+            disabled: false,
+          },
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Open quick actions menu/i }));
+    });
+
+    const popoverContent = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+    const commandList = document.querySelector<HTMLElement>('[data-slot="command-list"]');
+
+    expect(screen.getByLabelText("Filter quick actions")).toBeTruthy();
+    expect(popoverContent?.getAttribute("class")).toContain("w-96");
+    expect(commandList?.getAttribute("class")).toContain("max-h-[32rem]");
+
+    unmount();
+  });
+
+  test("filters quick actions by action label instead of description text", async () => {
+    const { unmount } = render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          quickActions: [
+            {
+              id: "quick:build_implementation_start",
+              role: "build" as const,
+              launchActionId: "build_implementation_start" as const,
+              label: "Start Implementation",
+              description: "Open the start-session flow for Builder implementation work.",
+              postStartAction: "kickoff" as const,
+              disabled: false,
+            },
+          ],
+          sessionCreateOptions: [],
+          primaryQuickAction: {
+            id: "quick:build_implementation_start",
+            role: "build" as const,
+            launchActionId: "build_implementation_start" as const,
+            label: "Start Implementation",
+            description: "Open the start-session flow for Builder implementation work.",
+            postStartAction: "kickoff" as const,
+            disabled: false,
+          },
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Open quick actions menu/i }));
+    });
+
+    await act(async () => {
+      fireEvent.input(screen.getByPlaceholderText("Filter actions…"), {
+        target: { value: "flow" },
+      });
+    });
+
+    expect(screen.queryByRole("option", { name: /Start Implementation/i })).toBeNull();
+    expect(screen.getByText("No quick actions available.")).toBeTruthy();
+
+    unmount();
+  });
+
   test("closes quick-actions menu when actions become unavailable", async () => {
     const { rerender } = render(
       createElement(AgentStudioHeader, {
@@ -628,6 +718,7 @@ describe("AgentStudioHeader", () => {
     expect(html).toMatch(
       /<button[^>]*(class="[^"]*bg-sidebar-accent[^"]*"[^>]*aria-label="Open quick actions menu"|variant="accent"[^>]*aria-label="Open quick actions menu")/,
     );
+    expect(html).toContain("border-l border-sidebar-border/70");
   });
 
   test("hides the task details button when no task is selected", () => {

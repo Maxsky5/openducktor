@@ -45,6 +45,10 @@ const canShowPullRequestQuickAction = (task: TaskCard): boolean => {
   return PULL_REQUEST_QUICK_ACTION_STATUSES.has(task.status);
 };
 
+const hasLinkedPullRequest = (task: TaskCard): boolean => {
+  return task.pullRequest !== undefined;
+};
+
 const quickActionIdForWorkflowAction = (
   action: TaskWorkflowAction,
   task: TaskCard,
@@ -108,6 +112,12 @@ const orderQuickActions = (
   const launchActionPriority = new Map(
     orderedWorkflowLaunchActions.map((launchActionId, index) => [launchActionId, index]),
   );
+  if (task.status === "ai_review") {
+    const primaryReviewLaunchAction = hasLinkedPullRequest(task)
+      ? "build_after_human_request_changes"
+      : "build_pull_request_generation";
+    launchActionPriority.set(primaryReviewLaunchAction, -1);
+  }
   if (task.status === "human_review") {
     launchActionPriority.set("build_pull_request_generation", -1);
   }

@@ -6,6 +6,7 @@ import {
   Command,
   CommandEmpty,
   CommandGroup,
+  CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
@@ -132,6 +133,7 @@ function QuickActionCommandItem({
   return (
     <CommandItem
       disabled={isDisabled}
+      value={option.label}
       onSelect={() => {
         onSelect(entry);
       }}
@@ -213,7 +215,7 @@ export function QuickActionsMenu({
         type="button"
         variant="accent"
         size="sm"
-        className="h-9 max-w-48 gap-2 rounded-r-none border-r-0 px-3"
+        className="h-9 max-w-48 gap-2 rounded-r-none px-3"
         disabled={!canRunPrimaryAction}
         title={triggerTitle}
         aria-label={
@@ -234,7 +236,7 @@ export function QuickActionsMenu({
             type="button"
             variant="accent"
             size="sm"
-            className="h-9 rounded-l-none px-2"
+            className="h-9 rounded-l-none border-l border-sidebar-border/70 px-2"
             disabled={!canOpenActionsMenu}
             title="Open quick actions menu"
             aria-label="Open quick actions menu"
@@ -242,9 +244,14 @@ export function QuickActionsMenu({
             <ChevronDown className="size-3.5 opacity-80" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-80 p-0">
+        <PopoverContent align="end" className="w-96 p-0">
           <Command>
-            <CommandList>
+            <CommandInput
+              aria-label="Filter quick actions"
+              placeholder="Filter actions…"
+              className="h-9"
+            />
+            <CommandList className="max-h-[32rem]">
               <CommandEmpty>No quick actions available.</CommandEmpty>
               {groupedMenuEntries.map((group) => (
                 <CommandGroup key={group.role} heading={QUICK_ACTION_ROLE_LABELS[group.role]}>

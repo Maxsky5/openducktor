@@ -82,7 +82,9 @@ const resolveAgentStudioQuickActionCandidates = (
     task.status === "blocked" ||
     task.status === "human_review";
   const forceQaStart = task.status === "ai_review" || task.status === "human_review";
-  const forceRequestChanges = task.status === "human_review";
+  const forceRequestChanges =
+    task.status === "human_review" ||
+    (task.status === "ai_review" && task.pullRequest !== undefined);
 
   return dedupeActions([
     ...includeRoleSessionStartAction({
