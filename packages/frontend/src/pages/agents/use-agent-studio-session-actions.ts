@@ -35,6 +35,7 @@ import type {
   AgentStateContextValue,
   RepoSettingsInput,
 } from "@/types/state-slices";
+import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
   applyAgentStudioSelectionQuery,
@@ -114,7 +115,7 @@ export function useAgentStudioSessionActions({
   sendAgentMessage,
   bootstrapTaskSessions: _bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
-  humanRequestChangesTask: _humanRequestChangesTask,
+  humanRequestChangesTask,
   setTaskTargetBranch,
   answerAgentQuestion,
   updateQuery,
@@ -139,6 +140,8 @@ export function useAgentStudioSessionActions({
   handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
+  handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
+  handleQuickAction: (option: AgentStudioQuickActionOption) => void;
 } {
   const [sendingActivityCountByContext, setSendingActivityCountByContext] = useState<
     Record<string, number>
@@ -201,6 +204,7 @@ export function useAgentStudioSessionActions({
     startSession,
     startLaunchKickoff,
     handleCreateSession,
+    handleQuickAction,
   } = useAgentStudioSessionStartFlow({
     activeWorkspace,
     branches,
@@ -217,6 +221,7 @@ export function useAgentStudioSessionActions({
     repoSettings,
     startAgentSession,
     sendAgentMessage,
+    humanRequestChangesTask,
     ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
     updateQuery,
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
@@ -514,6 +519,55 @@ export function useAgentStudioSessionActions({
     ],
   );
 
+  const handlePrepareMessageFirstSession = useCallback(
+    (option: SessionCreateOption): void => {
+      if (option.disabled || !taskId || !agentStudioReady || !isActiveTaskHydrated) {
+        return;
+      }
+      if (activeSession && isSessionWorking) {
+        return;
+      }
+      if (!canStartSessionForRole(selectedTask, option.role)) {
+        return;
+      }
+
+      if (
+        shouldTriggerContextSwitchIntent({
+          currentExternalSessionId: activeExternalSessionId,
+          currentRole: activeSessionRole,
+          nextSessionId: null,
+          nextRole: option.role,
+        })
+      ) {
+        onContextSwitchIntent?.();
+      }
+
+      applyAgentStudioSelectionQuery(updateQuery, {
+        taskId,
+        externalSessionId: undefined,
+        role: option.role,
+      });
+      scheduleSelectionIntent?.({
+        taskId,
+        externalSessionId: null,
+        role: option.role,
+      });
+    },
+    [
+      activeExternalSessionId,
+      activeSession,
+      activeSessionRole,
+      agentStudioReady,
+      isActiveTaskHydrated,
+      isSessionWorking,
+      onContextSwitchIntent,
+      scheduleSelectionIntent,
+      selectedTask,
+      taskId,
+      updateQuery,
+    ],
+  );
+
   const selectedRoleAvailable = selectedTask ? canStartSessionForRole(selectedTask, role) : false;
   const selectedLaunchAction = getSessionLaunchAction(kickoffLaunchActionId);
   const canKickoffNewSession =
@@ -545,5 +599,7 @@ export function useAgentStudioSessionActions({
     handleWorkflowStepSelect,
     handleSessionSelectionChange,
     handleCreateSession,
+    handlePrepareMessageFirstSession,
+    handleQuickAction,
   };
 }

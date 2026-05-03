@@ -47,7 +47,8 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isStarting: false,
   onWorkflowStepSelect: mock(() => {}),
   onSessionSelectionChange: mock(() => {}),
-  onCreateSession: mock(() => {}),
+  onPrepareMessageFirstSession: mock(() => {}),
+  onQuickAction: mock(() => {}),
   workflow: {
     workflowStateByRole: {
       spec: {
@@ -99,7 +100,8 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
       },
     ],
     sessionCreateOptions: [],
-    createSessionDisabled: false,
+    quickActions: [],
+    primaryQuickAction: null,
   },
   ...overrides,
 });
@@ -109,7 +111,39 @@ const createHookHarness = (initialProps: HookArgs) =>
 
 describe("useAgentStudioHeaderModel", () => {
   test("builds workflow header state from the workflow adapter context", async () => {
-    const harness = createHookHarness(createHookArgs());
+    const onPrepareMessageFirstSession = mock(() => {});
+    const onQuickAction = mock(() => {});
+    const onResolveGitConflictQuickAction = mock(() => {});
+    const sessionCreateOption = {
+      id: "build:build_implementation_start:message_first",
+      role: "build" as const,
+      launchActionId: "build_implementation_start" as const,
+      label: "Prepare Builder session",
+      description: "Open a Builder composer without sending a kickoff.",
+      disabled: false,
+    };
+    const quickAction = {
+      id: "quick:build_implementation_start",
+      role: "build" as const,
+      launchActionId: "build_implementation_start" as const,
+      label: "Start Implementation",
+      description: "Open the start-session flow for Builder implementation work.",
+      postStartAction: "kickoff" as const,
+      disabled: false,
+    };
+    const harness = createHookHarness(
+      createHookArgs({
+        onPrepareMessageFirstSession,
+        onQuickAction,
+        onResolveGitConflictQuickAction,
+        workflow: {
+          ...createHookArgs().workflow,
+          sessionCreateOptions: [sessionCreateOption],
+          quickActions: [quickAction],
+          primaryQuickAction: quickAction,
+        },
+      }),
+    );
 
     await act(async () => {
       await harness.mount();
@@ -121,6 +155,18 @@ describe("useAgentStudioHeaderModel", () => {
     expect(model.workflowSteps[0]?.externalSessionId).toBe("session-1");
     expect(model.sessionSelector.disabled).toBe(false);
     expect(model.sessionSelector.shouldAutofocusComposerForValue("session-1")).toBe(true);
+    expect(model.sessionCreateOptions).toEqual([sessionCreateOption]);
+    expect(model.quickActions).toEqual([quickAction]);
+    expect(model.primaryQuickAction).toEqual(quickAction);
+    expect(model.onResolveGitConflictQuickAction).toBe(onResolveGitConflictQuickAction);
+
+    model.onPrepareMessageFirstSession(sessionCreateOption);
+    model.onQuickAction(quickAction);
+    model.onResolveGitConflictQuickAction?.();
+
+    expect(onPrepareMessageFirstSession).toHaveBeenCalledWith(sessionCreateOption);
+    expect(onQuickAction).toHaveBeenCalledWith(quickAction);
+    expect(onResolveGitConflictQuickAction).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await harness.unmount();

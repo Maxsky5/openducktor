@@ -8,6 +8,7 @@ import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agen
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
@@ -35,6 +36,7 @@ type AgentStudioCoreContext = {
   contextSessionsLength: number;
   activeSession: AgentSessionState | null;
   sessionRuntimeDataError: string | null;
+  hasActiveGitConflict: boolean;
   isTaskHydrating: boolean;
   isSessionHistoryHydrated: boolean;
   isSessionHistoryHydrating: boolean;
@@ -150,6 +152,8 @@ type AgentStudioSessionActionsContext = {
   handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
+  handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
+  handleQuickAction: (option: AgentStudioQuickActionOption) => void;
   openTaskDetails: () => void;
   isStarting: boolean;
   isSending: boolean;
@@ -294,9 +298,11 @@ export function useAgentStudioPageModels({
         activeSession: workflowActiveSession,
         role: core.role,
         isSessionWorking: sessionActions.isSessionWorking,
+        hasActiveGitConflict: core.hasActiveGitConflict,
         roleLabelByRole,
       }),
     [
+      core.hasActiveGitConflict,
       core.role,
       core.selectedTask,
       roleLabelByRole,
@@ -312,10 +318,11 @@ export function useAgentStudioPageModels({
     sessionSelectorAutofocusByValue,
     sessionSelectorValue,
     sessionCreateOptions,
+    quickActions,
+    primaryQuickAction,
     selectedInteractionRole,
     selectedRoleAvailable,
     selectedRoleReadOnlyReason,
-    createSessionDisabled,
   } = workflowModelContext;
 
   const activeDocumentRole = core.activeSession?.role ?? core.role;
@@ -340,7 +347,9 @@ export function useAgentStudioPageModels({
     isStarting: sessionActions.isStarting,
     onWorkflowStepSelect: sessionActions.handleWorkflowStepSelect,
     onSessionSelectionChange: sessionActions.handleSessionSelectionChange,
-    onCreateSession: sessionActions.handleCreateSession,
+    onPrepareMessageFirstSession: sessionActions.handlePrepareMessageFirstSession,
+    onQuickAction: sessionActions.handleQuickAction,
+    onResolveGitConflictQuickAction: null,
     workflow: {
       workflowStateByRole,
       selectedInteractionRole,
@@ -349,7 +358,8 @@ export function useAgentStudioPageModels({
       sessionSelectorValue,
       sessionSelectorGroups,
       sessionCreateOptions,
-      createSessionDisabled,
+      quickActions,
+      primaryQuickAction,
     },
   });
 

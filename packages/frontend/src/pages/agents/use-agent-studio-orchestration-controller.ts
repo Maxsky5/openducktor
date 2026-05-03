@@ -61,6 +61,7 @@ type UseAgentStudioOrchestrationControllerArgs = {
   branches: GitBranch[];
   selection: AgentStudioOrchestrationSelectionContext;
   readiness: AgentStudioOrchestrationReadinessContext;
+  hasActiveGitConflict: boolean;
   draftStateKey: string;
   actions: AgentStudioOrchestrationActionsContext;
 };
@@ -94,7 +95,9 @@ type AgentStudioPageModelsViewContext = Pick<
   | "isViewSessionHistoryHydrationFailed"
   | "isViewSessionHistoryHydrating"
   | "isViewSessionWaitingForRuntimeReadiness"
->;
+> & {
+  hasActiveGitConflict: boolean;
+};
 
 type AgentStudioPageModelsSessionsContext = Pick<
   AgentStudioOrchestrationSelectionContext,
@@ -197,6 +200,7 @@ export const buildAgentStudioPageModelsArgs = ({
       contextSessionsLength: sessions.viewSessionsForTask.length,
       activeSession: sessions.viewActiveSession,
       sessionRuntimeDataError: sessions.viewSessionRuntimeDataError ?? null,
+      hasActiveGitConflict: view.hasActiveGitConflict,
       isTaskHydrating: Boolean(
         view.viewTaskId && !view.isActiveTaskHydrated && !view.isActiveTaskHydrationFailed,
       ),
@@ -233,6 +237,7 @@ export function useAgentStudioOrchestrationController({
   branches,
   selection,
   readiness,
+  hasActiveGitConflict,
   draftStateKey,
   actions,
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
@@ -340,6 +345,8 @@ export function useAgentStudioOrchestrationController({
     handleWorkflowStepSelect,
     handleSessionSelectionChange,
     handleCreateSession,
+    handlePrepareMessageFirstSession,
+    handleQuickAction,
   } = useAgentStudioSessionActions({
     activeWorkspace,
     branches,
@@ -388,6 +395,7 @@ export function useAgentStudioOrchestrationController({
       isViewSessionHistoryHydrationFailed: selection.isViewSessionHistoryHydrationFailed,
       isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
       isViewSessionWaitingForRuntimeReadiness: selection.isViewSessionWaitingForRuntimeReadiness,
+      hasActiveGitConflict,
     },
     sessions: {
       allSessionSummaries: selection.allSessionSummaries,
@@ -428,6 +436,8 @@ export function useAgentStudioOrchestrationController({
       handleWorkflowStepSelect,
       handleSessionSelectionChange,
       handleCreateSession,
+      handlePrepareMessageFirstSession,
+      handleQuickAction,
       stopAgentSession,
     },
     modelSelection: {

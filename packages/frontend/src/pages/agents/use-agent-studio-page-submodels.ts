@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { useMemo } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import { buildAgentStudioHeaderModel } from "./agents-page-view-model";
@@ -19,7 +20,9 @@ type UseAgentStudioHeaderModelArgs = {
   isStarting: boolean;
   onWorkflowStepSelect: AgentStudioWorkflowStepSelect;
   onSessionSelectionChange: (nextValue: string) => void;
-  onCreateSession: (option: SessionCreateOption) => void;
+  onPrepareMessageFirstSession: (option: SessionCreateOption) => void;
+  onQuickAction: (option: AgentStudioQuickActionOption) => void;
+  onResolveGitConflictQuickAction?: (() => void) | null;
   workflow: WorkflowHeaderContext;
 };
 
@@ -33,7 +36,9 @@ export const useAgentStudioHeaderModel = ({
   isStarting,
   onWorkflowStepSelect,
   onSessionSelectionChange,
-  onCreateSession,
+  onPrepareMessageFirstSession,
+  onQuickAction,
+  onResolveGitConflictQuickAction,
   workflow,
 }: UseAgentStudioHeaderModelArgs): ReturnType<typeof buildAgentStudioHeaderModel> => {
   const activeSessionStatus = activeSession?.status ?? null;
@@ -56,8 +61,11 @@ export const useAgentStudioHeaderModel = ({
         agentStudioReady,
         sessionsForTaskLength,
         sessionCreateOptions: workflow.sessionCreateOptions,
-        onCreateSession,
-        createSessionDisabled: workflow.createSessionDisabled,
+        onPrepareMessageFirstSession,
+        quickActions: workflow.quickActions,
+        primaryQuickAction: workflow.primaryQuickAction,
+        onQuickAction,
+        onResolveGitConflictQuickAction: onResolveGitConflictQuickAction ?? null,
         isStarting,
         contextSessionsLength,
       }),
@@ -67,12 +75,15 @@ export const useAgentStudioHeaderModel = ({
       contextSessionsLength,
       isStarting,
       onOpenTaskDetails,
-      onCreateSession,
+      onPrepareMessageFirstSession,
+      onQuickAction,
+      onResolveGitConflictQuickAction,
       onSessionSelectionChange,
       onWorkflowStepSelect,
       selectedTask,
       sessionsForTaskLength,
-      workflow.createSessionDisabled,
+      workflow.primaryQuickAction,
+      workflow.quickActions,
       workflow.selectedInteractionRole,
       workflow.sessionSelectorAutofocusByValue,
       workflow.sessionCreateOptions,

@@ -5,7 +5,13 @@ import type { TaskDocumentState } from "@/components/features/task-details/use-t
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  type AgentStudioQuickActionOption,
+  buildAgentStudioQuickActions,
+  selectPrimaryAgentStudioQuickAction,
+} from "./agent-studio-quick-actions";
 import {
   type AgentSessionWorkflowSummary,
   buildLatestSessionByRoleMap,
@@ -30,10 +36,11 @@ export type AgentStudioSessionContextUsage = {
 
 type BuildWorkflowModelContextArgs = {
   selectedTask: TaskCard | null;
-  sessionsForTask: AgentSessionWorkflowSummary[];
+  sessionsForTask: AgentSessionSummary[];
   activeSession: Pick<AgentSessionState, "externalSessionId" | "role"> | null;
   role: AgentRole;
   isSessionWorking: boolean;
+  hasActiveGitConflict: boolean;
   roleLabelByRole: Record<AgentRole, string>;
 };
 
@@ -49,6 +56,8 @@ export type WorkflowModelContext = {
   sessionSelectorAutofocusByValue: Record<string, boolean>;
   sessionSelectorValue: string;
   sessionCreateOptions: ReturnType<typeof buildSessionCreateOptions>;
+  quickActions: AgentStudioQuickActionOption[];
+  primaryQuickAction: AgentStudioQuickActionOption | null;
   selectedInteractionRole: AgentRole;
   selectedRoleAvailable: boolean;
   selectedRoleReadOnlyReason: string | null;
@@ -61,6 +70,7 @@ export const buildWorkflowModelContext = ({
   activeSession,
   role,
   isSessionWorking,
+  hasActiveGitConflict,
   roleLabelByRole,
 }: BuildWorkflowModelContextArgs): WorkflowModelContext => {
   const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
@@ -101,6 +111,13 @@ export const buildWorkflowModelContext = ({
     createSessionDisabled,
     roleLabelByRole,
   });
+  const quickActions = buildAgentStudioQuickActions({
+    selectedTask,
+    sessionsForTask,
+    roleEnabledByTask,
+    createSessionDisabled,
+    hasActiveGitConflict,
+  });
 
   return {
     latestSessionByRole,
@@ -115,6 +132,8 @@ export const buildWorkflowModelContext = ({
     sessionSelectorAutofocusByValue,
     sessionSelectorValue,
     sessionCreateOptions,
+    quickActions,
+    primaryQuickAction: selectPrimaryAgentStudioQuickAction(quickActions),
     selectedInteractionRole,
     selectedRoleAvailable,
     selectedRoleReadOnlyReason,

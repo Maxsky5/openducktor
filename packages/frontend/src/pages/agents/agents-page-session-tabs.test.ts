@@ -1002,7 +1002,7 @@ describe("agents-page-session-tabs", () => {
     expect(latestByRole.build?.externalSessionId).toBe("build-newer");
   });
 
-  test("builds session create options without continue actions", () => {
+  test("builds message-first session options as one available role target", () => {
     const options = buildSessionCreateOptions({
       roleEnabledByTask: {
         spec: false,
@@ -1018,10 +1018,19 @@ describe("agents-page-session-tabs", () => {
 
     expect(options.map((option) => option.launchActionId)).toEqual([
       "planner_initial",
-      "build_implementation_start",
       "build_after_qa_rejected",
     ]);
-    expect(options.some((option) => option.label.includes("Continue"))).toBe(false);
+    expect(options.map((option) => option.id)).toEqual([
+      "planner:planner_initial:message_first",
+      "build:build_after_qa_rejected:message_first",
+    ]);
+    expect(options.map((option) => option.label)).toEqual([
+      "Prepare Planner session",
+      "Prepare Builder session",
+    ]);
+    expect(
+      options.every((option) => option.description.includes("without sending a kickoff")),
+    ).toBe(true);
 
     const plannerCompletedOptions = buildSessionCreateOptions({
       roleEnabledByTask: {
@@ -1037,10 +1046,11 @@ describe("agents-page-session-tabs", () => {
     });
 
     expect(plannerCompletedOptions.map((option) => option.launchActionId)).toEqual([
-      "build_implementation_start",
       "build_after_human_request_changes",
     ]);
-    expect(plannerCompletedOptions.some((option) => option.label.includes("Continue"))).toBe(false);
+    expect(plannerCompletedOptions.map((option) => option.id)).toEqual([
+      "build:build_after_human_request_changes:message_first",
+    ]);
   });
 
   test("filters available tasks by opened tab ids", () => {

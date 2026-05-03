@@ -10,7 +10,8 @@ export type WorkflowHeaderContext = Pick<
   | "sessionSelectorValue"
   | "sessionSelectorGroups"
   | "sessionCreateOptions"
-  | "createSessionDisabled"
+  | "quickActions"
+  | "primaryQuickAction"
 >;
 
 export type AgentStudioWorkflowStepSelect = (

@@ -24,6 +24,7 @@ import type {
   AgentStateContextValue,
   RepoSettingsInput,
 } from "@/types/state-slices";
+import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import { useAgentStudioFreshSessionCreation } from "../use-agent-studio-fresh-session-creation";
 import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human-review-feedback-flow";
@@ -51,6 +52,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   repoSettings: RepoSettingsInput | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
+  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
@@ -74,6 +76,7 @@ export function useAgentStudioSessionStartFlow({
   repoSettings,
   startAgentSession,
   sendAgentMessage,
+  humanRequestChangesTask,
   setTaskTargetBranch,
   updateQuery,
   onContextSwitchIntent,
@@ -85,6 +88,7 @@ export function useAgentStudioSessionStartFlow({
   startSession: () => Promise<string | undefined>;
   startLaunchKickoff: () => Promise<void>;
   handleCreateSession: (option: SessionCreateOption) => void;
+  handleQuickAction: (option: AgentStudioQuickActionOption) => void;
 } {
   const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
@@ -189,6 +193,7 @@ export function useAgentStudioSessionStartFlow({
           ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
           startAgentSession,
           sendAgentMessage,
+          humanRequestChangesTask,
           onPostStartActionError: (action, error) => {
             const message =
               action === "kickoff"
@@ -216,6 +221,7 @@ export function useAgentStudioSessionStartFlow({
       sendAgentMessage,
       setTaskTargetBranch,
       startAgentSession,
+      humanRequestChangesTask,
       taskId,
       updateQuery,
     ],
@@ -304,6 +310,33 @@ export function useAgentStudioSessionStartFlow({
     ],
   );
 
+  const handleQuickAction = useCallback(
+    (option: AgentStudioQuickActionOption): void => {
+      if (option.disabled || !taskId || !agentStudioReady || !isActiveTaskHydrated) {
+        return;
+      }
+      if (option.requiresHumanFeedback) {
+        openHumanReviewFeedback();
+        return;
+      }
+
+      void startSessionRequest({
+        taskId,
+        role: option.role,
+        launchActionId: option.launchActionId,
+        postStartAction: option.postStartAction,
+        ...(option.initialStartMode ? { initialStartMode: option.initialStartMode } : {}),
+        ...(option.existingSessionOptions
+          ? { existingSessionOptions: option.existingSessionOptions }
+          : {}),
+        ...(option.initialSourceExternalSessionId !== undefined
+          ? { initialSourceExternalSessionId: option.initialSourceExternalSessionId }
+          : {}),
+      });
+    },
+    [agentStudioReady, isActiveTaskHydrated, openHumanReviewFeedback, startSessionRequest, taskId],
+  );
+
   return {
     isStarting,
     sessionStartModal,
@@ -312,5 +345,6 @@ export function useAgentStudioSessionStartFlow({
     startSession,
     startLaunchKickoff,
     handleCreateSession: handleCreateSessionWithHumanFeedback,
+    handleQuickAction,
   };
 }

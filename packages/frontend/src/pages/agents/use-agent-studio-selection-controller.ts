@@ -218,6 +218,8 @@ export function useAgentStudioSelectionController({
   const selectedHasExplicitRoleParam =
     effectiveSelectionIntent !== null ? true : effectiveHasExplicitRoleParam;
   const selectedRoleFromQuery = effectiveSelectionIntent?.role ?? effectiveRoleFromQuery;
+  const keepSelectedExplicitRoleSessionless =
+    effectiveSelectionIntent?.externalSessionId === null && effectiveSessionParam === null;
 
   const tasksById = useMemo(() => {
     return new Map(tasks.map((task) => [task.id, task]));
@@ -266,8 +268,10 @@ export function useAgentStudioSelectionController({
       roleFromQuery: selectedRoleFromQuery,
       selectedTask,
       fallbackRole: selectedRoleFromQuery,
+      keepExplicitRoleSessionless: keepSelectedExplicitRoleSessionless,
     }).activeSession;
   }, [
+    keepSelectedExplicitRoleSessionless,
     selectedHasExplicitRoleParam,
     selectedRoleFromQuery,
     selectedSessionParam,
@@ -362,6 +366,8 @@ export function useAgentStudioSelectionController({
   const viewHasExplicitRoleSelection = viewSelectionIntent !== null ? true : hasViewRoleSelection;
   const viewRoleFromSelection = viewSelectionIntent?.role ?? effectiveRoleFromQuery;
   const viewSessionParamFromSelection = viewSelectionIntent?.externalSessionId ?? viewSessionParam;
+  const keepViewExplicitRoleSessionless =
+    viewSelectionIntent?.externalSessionId === null && viewSessionParam === null;
 
   const viewSelection = useMemo(() => {
     return resolveAgentStudioSessionSelection({
@@ -371,10 +377,12 @@ export function useAgentStudioSelectionController({
       roleFromQuery: viewRoleFromSelection,
       selectedTask: viewSelectedTask,
       fallbackRole: isViewTaskDetachedFromQuery ? "spec" : viewRoleFromSelection,
+      keepExplicitRoleSessionless: keepViewExplicitRoleSessionless,
     });
   }, [
     viewHasExplicitRoleSelection,
     isViewTaskDetachedFromQuery,
+    keepViewExplicitRoleSessionless,
     viewRoleFromSelection,
     viewSelectedTask,
     viewSessionParamFromSelection,

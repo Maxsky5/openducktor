@@ -45,9 +45,14 @@ import {
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
 import { useAgentStudioReadiness } from "../use-agents-page-readiness";
 import {
+  type AgentStudioGitConflictQuickActionContext,
   type UseAgentsPageRightPanelModelArgs,
   useAgentsPageRightPanelModel,
 } from "../use-agents-page-right-panel-model";
+import {
+  type AgentStudioSelectionIntent,
+  isSelectionIntentResolved,
+} from "./agent-studio-selection-intent";
 import {
   useForwardedWorktreeRefresh,
   type WorktreeRefreshRef,
@@ -178,11 +183,9 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
-  const [selectionIntent, setSelectionIntent] = useState<{
-    taskId: string;
-    externalSessionId: string | null;
-    role: AgentRole;
-  } | null>(null);
+  const [selectionIntent, setSelectionIntent] = useState<AgentStudioSelectionIntent | null>(null);
+  const [gitConflictQuickActionContext, setGitConflictQuickActionContext] =
+    useState<AgentStudioGitConflictQuickActionContext | null>(null);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
   const {
@@ -214,6 +217,12 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const scheduleSelectionIntent = useCallback(
     (intent: { taskId: string; externalSessionId: string | null; role: AgentRole }): void => {
       setSelectionIntent(intent);
+    },
+    [],
+  );
+  const handleGitConflictQuickActionContextChange = useCallback(
+    (context: AgentStudioGitConflictQuickActionContext | null): void => {
+      setGitConflictQuickActionContext(context);
     },
     [],
   );
@@ -288,11 +297,14 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       return;
     }
 
-    if (
-      selectionIntent.taskId === taskIdParam &&
-      selectionIntent.externalSessionId === sessionParam &&
-      selectionIntent.role === roleFromQuery
-    ) {
+    const selectionIntentResolved = isSelectionIntentResolved({
+      selectionIntent,
+      taskIdParam,
+      sessionParam,
+      roleFromQuery,
+    });
+
+    if (selectionIntentResolved) {
       setSelectionIntent(null);
     }
   }, [isRepoNavigationBoundaryPending, roleFromQuery, selectionIntent, sessionParam, taskIdParam]);
@@ -421,6 +433,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       isLoadingTasks: isForegroundLoadingTasks,
     },
     readiness,
+    hasActiveGitConflict: gitConflictQuickActionContext !== null,
     draftStateKey,
     actions: {
       updateQuery: scheduleQueryUpdate,
@@ -515,10 +528,23 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
         detectingPullRequestTaskId={detectingPullRequestTaskId}
         onDetectPullRequest={handleDetectPullRequest}
         onResolveGitConflict={handleResolveRebaseConflict}
+        onGitConflictQuickActionContextChange={handleGitConflictQuickActionContextChange}
         refreshWorktreeRef={rightPanelRefreshWorktreeRef}
       />
     </>
   ) : null;
+
+  const agentStudioHeaderModel = useMemo(
+    () => ({
+      ...orchestration.agentStudioHeaderModel,
+      onResolveGitConflictQuickAction: gitConflictQuickActionContext
+        ? () => {
+            void gitConflictQuickActionContext.resolveWithBuilder();
+          }
+        : null,
+    }),
+    [gitConflictQuickActionContext, orchestration.agentStudioHeaderModel],
+  );
 
   const sessionStartModal = orchestration.sessionStartModal ? (
     <SessionStartModal model={orchestration.sessionStartModal} />
@@ -564,7 +590,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     taskTabsModel: orchestration.agentStudioTaskTabsModel,
     rightPanelToggleModel: orchestration.rightPanel.rightPanelToggleModel,
     hasSelectedTask: Boolean(selection.viewTaskId),
-    chatHeaderModel: orchestration.agentStudioHeaderModel,
+    chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
     isRightPanelVisible,
     rightPanelContent,

@@ -2,13 +2,7 @@ import type { AgentWorkflowState, TaskCard } from "@openducktor/contracts";
 import { type AgentRole, isRecord } from "@openducktor/core";
 import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import {
-  firstLaunchAction,
-  getSessionLaunchAction,
-  LAUNCH_ACTION_LABELS,
-  LAUNCH_ACTIONS_BY_ROLE,
-  type SessionLaunchActionId,
-} from "@/features/session-start";
+import { firstLaunchAction, type SessionLaunchActionId } from "@/features/session-start";
 import {
   type AgentSessionOptionSummary,
   buildRoleSessionSequenceById,
@@ -42,6 +36,7 @@ export type SessionCreateOption = {
   label: string;
   description: string;
   disabled: boolean;
+  disabledReason?: string;
 };
 
 export type AgentSessionWorkflowSummary = AgentSessionOptionSummary &
@@ -440,80 +435,63 @@ export const buildSessionCreateOptions = (params: {
 }): SessionCreateOption[] => {
   const options: SessionCreateOption[] = [];
 
-  const addFreshOption = (
+  const resolveBuildLaunchAction = (): SessionLaunchActionId => {
+    if (params.hasHumanFeedback) {
+      return "build_after_human_request_changes";
+    }
+    if (params.hasQaRejection) {
+      return "build_after_qa_rejected";
+    }
+    return "build_implementation_start";
+  };
+
+  const addMessageFirstOption = (
     role: AgentRole,
     launchActionId: SessionLaunchActionId,
     description: string,
-    disabled: boolean,
   ) => {
     options.push({
-      id: `${role}:${launchActionId}:fresh`,
+      id: `${role}:${launchActionId}:message_first`,
       role,
       launchActionId,
-      label: `${params.roleLabelByRole[role]} · ${LAUNCH_ACTION_LABELS[launchActionId]}`,
+      label: `Prepare ${params.roleLabelByRole[role]} session`,
       description,
-      disabled,
+      disabled: params.createSessionDisabled,
+      ...(params.createSessionDisabled
+        ? { disabledReason: "Wait for the current session to finish." }
+        : {}),
     });
   };
 
   if (params.roleEnabledByTask.spec) {
     const launchActionId = firstLaunchAction("spec");
-    if (getSessionLaunchAction(launchActionId).allowedStartModes.includes("fresh")) {
-      addFreshOption(
-        "spec",
-        launchActionId,
-        "Create a new spec session from scratch",
-        params.createSessionDisabled,
-      );
-    }
+    addMessageFirstOption(
+      "spec",
+      launchActionId,
+      "Open a Spec composer without sending a kickoff.",
+    );
   }
 
-  const canStartPlannerFresh = params.roleEnabledByTask.planner;
-  if (canStartPlannerFresh) {
+  if (params.roleEnabledByTask.planner) {
     const launchActionId = firstLaunchAction("planner");
-    if (getSessionLaunchAction(launchActionId).allowedStartModes.includes("fresh")) {
-      addFreshOption(
-        "planner",
-        launchActionId,
-        "Create a new planner session from scratch",
-        params.createSessionDisabled,
-      );
-    }
+    addMessageFirstOption(
+      "planner",
+      launchActionId,
+      "Open a Planner composer without sending a kickoff.",
+    );
   }
 
   if (params.roleEnabledByTask.build) {
-    for (const launchActionId of LAUNCH_ACTIONS_BY_ROLE.build) {
-      if (!getSessionLaunchAction(launchActionId).allowedStartModes.includes("fresh")) {
-        continue;
-      }
-      if (launchActionId === "build_after_qa_rejected" && !params.hasQaRejection) {
-        continue;
-      }
-      if (launchActionId === "build_after_human_request_changes" && !params.hasHumanFeedback) {
-        continue;
-      }
-      if (launchActionId === "build_rebase_conflict_resolution") {
-        continue;
-      }
-      addFreshOption(
-        "build",
-        launchActionId,
-        `Create a new ${params.roleLabelByRole.build.toLowerCase()} session with ${LAUNCH_ACTION_LABELS[launchActionId].toLowerCase()}`,
-        params.createSessionDisabled,
-      );
-    }
+    addMessageFirstOption(
+      "build",
+      resolveBuildLaunchAction(),
+      "Open a Builder composer without sending a kickoff.",
+    );
   }
 
   if (params.roleEnabledByTask.qa) {
     const launchActionId = firstLaunchAction("qa");
-    if (getSessionLaunchAction(launchActionId).allowedStartModes.includes("fresh")) {
-      addFreshOption(
-        "qa",
-        launchActionId,
-        "Create a new qa session from scratch",
-        params.createSessionDisabled,
-      );
-    }
+    addMessageFirstOption("qa", launchActionId, "Open a QA composer without sending a kickoff.");
   }
 
   return options;

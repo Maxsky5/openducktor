@@ -45,12 +45,17 @@ const createSession = (
     ...overrides,
   });
 
+const isFullSessionState = (entry: HookArgs["sessions"][number]): entry is AgentSessionState =>
+  "messages" in entry;
+
 const syncSessionLookup = (sessions: HookArgs["sessions"]): void => {
-  sessionByIdRef.current = Object.fromEntries(
-    sessions
-      .filter((session): session is AgentSessionState => "messages" in session)
-      .map((session) => [session.externalSessionId, session]),
-  );
+  const nextLookup: Record<string, AgentSessionState> = {};
+  for (const session of sessions) {
+    if (isFullSessionState(session)) {
+      nextLookup[session.externalSessionId] = session;
+    }
+  }
+  sessionByIdRef.current = nextLookup;
 };
 
 const createHookHarness = (initialProps: HookArgs) => {
@@ -264,6 +269,74 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.viewLaunchActionId).toBe("planner_initial");
       expect(latest.viewActiveSession?.externalSessionId).toBe("session-planner");
       expect(latest.activeSession?.externalSessionId).toBe("session-planner");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps prepare-session role selection sessionless despite existing role sessions", async () => {
+    const buildSession = createSession("task-1", "session-build", {
+      role: "build",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "idle",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        sessions: [buildSession],
+        taskIdParam: "task-1",
+        sessionParam: null,
+        hasExplicitRoleParam: false,
+        roleFromQuery: "spec",
+        selectionIntent: {
+          taskId: "task-1",
+          externalSessionId: null,
+          role: "build",
+        },
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.activeSession).toBeNull();
+      expect(latest.viewActiveSession).toBeNull();
+      expect(latest.viewRole).toBe("build");
+      expect(latest.viewLaunchActionId).toBe("build_implementation_start");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses concrete URL session once a sessionless selection intent has a session param", async () => {
+    const buildSession = createSession("task-1", "session-build", {
+      role: "build",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "idle",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        sessions: [buildSession],
+        taskIdParam: "task-1",
+        sessionParam: "session-build",
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+        selectionIntent: {
+          taskId: "task-1",
+          externalSessionId: null,
+          role: "build",
+        },
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.selectedSessionById?.externalSessionId).toBe("session-build");
+      expect(latest.activeSession?.externalSessionId).toBe("session-build");
+      expect(latest.viewActiveSession?.externalSessionId).toBe("session-build");
+      expect(latest.viewRole).toBe("build");
     } finally {
       await harness.unmount();
     }

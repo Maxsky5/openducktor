@@ -52,42 +52,45 @@ const createHookHarness = (initialProps: HookArgs) => {
       createElement(
         QueryProvider,
         { useIsolatedClient: true },
-        createElement(RuntimeDefinitionsContext.Provider, {
-          value: {
-            runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-            isLoadingRuntimeDefinitions: false,
-            runtimeDefinitionsError: null,
-            refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-            loadRepoRuntimeCatalog: async () => ({
-              runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-              models: [
-                {
-                  id: "openai/gpt-5",
-                  providerId: "openai",
-                  providerName: "OpenAI",
-                  modelId: "gpt-5",
-                  modelName: "GPT-5",
-                  variants: ["default"],
-                  contextWindow: 200_000,
-                  outputLimit: 8_192,
+        createElement(
+          RuntimeDefinitionsContext.Provider,
+          {
+            value: {
+              runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+              isLoadingRuntimeDefinitions: false,
+              runtimeDefinitionsError: null,
+              refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+              loadRepoRuntimeCatalog: async () => ({
+                runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+                models: [
+                  {
+                    id: "openai/gpt-5",
+                    providerId: "openai",
+                    providerName: "OpenAI",
+                    modelId: "gpt-5",
+                    modelName: "GPT-5",
+                    variants: ["default"],
+                    contextWindow: 200_000,
+                    outputLimit: 8_192,
+                  },
+                ],
+                defaultModelsByProvider: {
+                  openai: "gpt-5",
                 },
-              ],
-              defaultModelsByProvider: {
-                openai: "gpt-5",
-              },
-              profiles: [
-                {
-                  name: "spec",
-                  mode: "primary" as const,
-                  hidden: false,
-                },
-              ],
-            }),
-            loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-            loadRepoRuntimeFileSearch: async () => [],
+                profiles: [
+                  {
+                    name: "spec",
+                    mode: "primary" as const,
+                    hidden: false,
+                  },
+                ],
+              }),
+              loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+              loadRepoRuntimeFileSearch: async () => [],
+            },
           },
           children,
-        }),
+        ),
       ),
     );
 
@@ -115,6 +118,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   repoSettings: null,
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},
+  humanRequestChangesTask: async () => {},
   updateQuery: () => {},
   ...overrides,
 });

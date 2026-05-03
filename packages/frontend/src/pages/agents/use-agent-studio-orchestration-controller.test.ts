@@ -39,6 +39,7 @@ const baseArgs: BuildArgs = {
     isViewSessionHistoryHydrationFailed: false,
     isViewSessionHistoryHydrating: false,
     isViewSessionWaitingForRuntimeReadiness: false,
+    hasActiveGitConflict: false,
   },
   sessions: {
     allSessionSummaries: [session],
@@ -71,6 +72,8 @@ const baseArgs: BuildArgs = {
     handleWorkflowStepSelect: () => {},
     handleSessionSelectionChange: () => {},
     handleCreateSession: () => {},
+    handlePrepareMessageFirstSession: () => {},
+    handleQuickAction: () => {},
     openTaskDetails: () => {},
     isStarting: false,
     isSending: false,

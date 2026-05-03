@@ -7,6 +7,7 @@ import {
   AgentStudioHeader,
   deriveSessionHistorySelectionFocusBehavior,
 } from "./agent-studio-header";
+import { QuickActionsMenu } from "./agent-studio-header-quick-actions";
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
@@ -118,16 +119,47 @@ const buildModel = () => ({
   },
   sessionCreateOptions: [
     {
-      id: "build:build_implementation_start",
+      id: "build:build_implementation_start:message_first",
       role: "build" as const,
       launchActionId: "build_implementation_start" as const,
-      label: "Builder · Implementation Start",
-      description: "Create build session",
+      label: "Prepare Builder session",
+      description: "Open a Builder composer without sending a kickoff.",
       disabled: false,
     },
   ],
-  onCreateSession: () => {},
-  createSessionDisabled: false,
+  onPrepareMessageFirstSession: () => {},
+  quickActions: [
+    {
+      id: "quick:build_implementation_start",
+      role: "build" as const,
+      launchActionId: "build_implementation_start" as const,
+      label: "Start Implementation",
+      description: "Open the start-session flow for Builder implementation work.",
+      postStartAction: "kickoff" as const,
+      disabled: false,
+    },
+    {
+      id: "quick:build_pull_request_generation",
+      role: "build" as const,
+      launchActionId: "build_pull_request_generation" as const,
+      label: "Generate Pull Request",
+      description: "Reuse or fork a Builder session to create or update a pull request.",
+      postStartAction: "kickoff" as const,
+      disabled: true,
+      disabledReason: "Requires an existing Builder session.",
+    },
+  ],
+  primaryQuickAction: {
+    id: "quick:build_implementation_start",
+    role: "build" as const,
+    launchActionId: "build_implementation_start" as const,
+    label: "Start Implementation",
+    description: "Open the start-session flow for Builder implementation work.",
+    postStartAction: "kickoff" as const,
+    disabled: false,
+  },
+  onQuickAction: () => {},
+  onResolveGitConflictQuickAction: null,
   isCreatingSession: false,
   stats: {
     sessions: 3,
@@ -151,7 +183,7 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain('aria-label="Open task details"');
     expect(html).toMatch(/aria-label="Session history[^"]*"/);
     expect(html).toContain(">Open<");
-    expect(html).toContain("Create session");
+    expect(html).toContain("Quick actions");
     expect(html).not.toMatch(/flex-wrap/);
     expect(html).toContain("mt-1 flex items-center gap-1.5");
     const taskIdIndex = html.indexOf("fairnest-97f");
@@ -251,6 +283,34 @@ describe("AgentStudioHeader", () => {
     unmount();
   });
 
+  test("closes session history menu without changing selection when the current session is chosen again", async () => {
+    const onValueChange = mock(() => {});
+    const model = buildModel();
+
+    render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...model,
+          sessionSelector: {
+            ...model.sessionSelector,
+            onValueChange,
+          },
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Session history/i }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Spec Revision · Spec"));
+    });
+
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.queryByPlaceholderText(/Search sessions/i)).toBeNull();
+  });
+
   test("does not restore focus to the history trigger after selecting a session", async () => {
     const onValueChange = mock(() => {});
     render(
@@ -327,6 +387,341 @@ describe("AgentStudioHeader", () => {
     ).toBe("none");
   });
 
+  test("opens quick-actions menu and selects message-first role", async () => {
+    const onPrepareMessageFirstSession = mock(() => {});
+    render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          onPrepareMessageFirstSession,
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Open quick actions menu/i }));
+    });
+    expect(screen.getByText("Prepare Builder session")).toBeTruthy();
+    expect(screen.getByText("Open a Builder composer without sending a kickoff.")).toBeTruthy();
+    expect(document.querySelector(".lucide-message-circle-plus")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Open a Builder composer without sending a kickoff."));
+    });
+
+    expect(onPrepareMessageFirstSession).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "build", launchActionId: "build_implementation_start" }),
+    );
+  });
+
+  test("runs the primary quick action from the main split button", async () => {
+    const onQuickAction = mock(() => {});
+    render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          onQuickAction,
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /Run quick action: Start Implementation/i }),
+      );
+    });
+
+    expect(onQuickAction).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "build", launchActionId: "build_implementation_start" }),
+    );
+  });
+
+  test("opens quick-actions menu grouped by role with disabled reasons", async () => {
+    const onQuickAction = mock(() => {});
+    render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          sessionCreateOptions: [
+            {
+              id: "spec:spec_initial:message_first",
+              role: "spec" as const,
+              launchActionId: "spec_initial" as const,
+              label: "Prepare Spec session",
+              description: "Open a Spec composer without sending a kickoff.",
+              disabled: false,
+            },
+            {
+              id: "planner:planner_initial:message_first",
+              role: "planner" as const,
+              launchActionId: "planner_initial" as const,
+              label: "Prepare Planner session",
+              description: "Open a Planner composer without sending a kickoff.",
+              disabled: false,
+            },
+            {
+              id: "qa:qa_review:message_first",
+              role: "qa" as const,
+              launchActionId: "qa_review" as const,
+              label: "Prepare QA session",
+              description: "Open a QA composer without sending a kickoff.",
+              disabled: false,
+            },
+          ],
+          onQuickAction,
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Open quick actions menu/i }));
+    });
+
+    const groupHeadings = Array.from(document.querySelectorAll("[cmdk-group-heading]")).map(
+      (element) => element.textContent,
+    );
+    expect(groupHeadings).toEqual(["Spec", "Planner", "Builder", "QA"]);
+    expect(screen.queryByText("Primary")).toBeNull();
+    expect(screen.queryByText("More actions")).toBeNull();
+    expect(screen.getByText("Generate Pull Request")).toBeTruthy();
+    expect(screen.getByText("Requires an existing Builder session.")).toBeTruthy();
+    expect(screen.getByText("Prepare Spec session")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByText("Open the start-session flow for Builder implementation work."),
+      );
+    });
+
+    expect(onQuickAction).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "build", launchActionId: "build_implementation_start" }),
+    );
+  });
+
+  test("renders the wider quick-actions popover with the taller result list", async () => {
+    const { unmount } = render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          quickActions: [
+            {
+              id: "quick:build_implementation_start",
+              role: "build" as const,
+              launchActionId: "build_implementation_start" as const,
+              label: "Start Implementation",
+              description: "Open the start-session flow for Builder implementation work.",
+              postStartAction: "kickoff" as const,
+              disabled: false,
+            },
+          ],
+          sessionCreateOptions: [],
+          primaryQuickAction: {
+            id: "quick:build_implementation_start",
+            role: "build" as const,
+            launchActionId: "build_implementation_start" as const,
+            label: "Start Implementation",
+            description: "Open the start-session flow for Builder implementation work.",
+            postStartAction: "kickoff" as const,
+            disabled: false,
+          },
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Open quick actions menu/i }));
+    });
+
+    const popoverContent = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+    const commandList = document.querySelector<HTMLElement>('[data-slot="command-list"]');
+
+    expect(screen.getByLabelText("Filter quick actions")).toBeTruthy();
+    expect(popoverContent?.getAttribute("class")).toContain("w-96");
+    expect(commandList?.getAttribute("class")).toContain("max-h-[32rem]");
+
+    unmount();
+  });
+
+  test("filters quick actions by action label instead of description text", async () => {
+    const { unmount } = render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          quickActions: [
+            {
+              id: "quick:build_implementation_start",
+              role: "build" as const,
+              launchActionId: "build_implementation_start" as const,
+              label: "Start Implementation",
+              description: "Open the start-session flow for Builder implementation work.",
+              postStartAction: "kickoff" as const,
+              disabled: false,
+            },
+          ],
+          sessionCreateOptions: [],
+          primaryQuickAction: {
+            id: "quick:build_implementation_start",
+            role: "build" as const,
+            launchActionId: "build_implementation_start" as const,
+            label: "Start Implementation",
+            description: "Open the start-session flow for Builder implementation work.",
+            postStartAction: "kickoff" as const,
+            disabled: false,
+          },
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Open quick actions menu/i }));
+    });
+
+    await act(async () => {
+      fireEvent.input(screen.getByPlaceholderText("Filter actions…"), {
+        target: { value: "flow" },
+      });
+    });
+
+    expect(screen.queryByRole("option", { name: /Start Implementation/i })).toBeNull();
+    expect(screen.getByText("No quick actions available.")).toBeTruthy();
+
+    unmount();
+  });
+
+  test("closes quick-actions menu when actions become unavailable", async () => {
+    const { rerender } = render(
+      createElement(AgentStudioHeader, {
+        model: buildModel(),
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Open quick actions menu/i }));
+    });
+    expect(screen.getByText("Prepare Builder session")).toBeTruthy();
+
+    await act(async () => {
+      rerender(
+        createElement(AgentStudioHeader, {
+          model: {
+            ...buildModel(),
+            agentStudioReady: false,
+          },
+        }),
+      );
+    });
+
+    expect(screen.queryByText("Prepare Builder session")).toBeNull();
+
+    await act(async () => {
+      rerender(
+        createElement(AgentStudioHeader, {
+          model: buildModel(),
+        }),
+      );
+    });
+
+    expect(screen.queryByText("Prepare Builder session")).toBeNull();
+  });
+
+  test("routes git conflict quick action through the conflict handler", async () => {
+    const onQuickAction = mock(() => {});
+    const onResolveGitConflictQuickAction = mock(() => {});
+    render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          quickActions: [
+            {
+              id: "quick:build_rebase_conflict_resolution",
+              role: "build" as const,
+              launchActionId: "build_rebase_conflict_resolution" as const,
+              label: "Resolve Git Conflict",
+              description: "Ask Builder to resolve the active git conflict.",
+              postStartAction: "send_message" as const,
+              disabled: false,
+            },
+          ],
+          primaryQuickAction: {
+            id: "quick:build_rebase_conflict_resolution",
+            role: "build" as const,
+            launchActionId: "build_rebase_conflict_resolution" as const,
+            label: "Resolve Git Conflict",
+            description: "Ask Builder to resolve the active git conflict.",
+            postStartAction: "send_message" as const,
+            disabled: false,
+          },
+          onQuickAction,
+          onResolveGitConflictQuickAction,
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /Run quick action: Resolve Git Conflict/i }),
+      );
+    });
+
+    expect(onResolveGitConflictQuickAction).toHaveBeenCalled();
+    expect(onQuickAction).not.toHaveBeenCalled();
+  });
+
+  test("disables git conflict quick action when the conflict handler is missing", async () => {
+    const html = renderToStaticMarkup(
+      createElement(QuickActionsMenu, {
+        isOpen: true,
+        onOpenChange: () => {},
+        agentStudioReady: true,
+        isCreatingSession: false,
+        options: [
+          {
+            id: "quick:build_rebase_conflict_resolution",
+            role: "build" as const,
+            launchActionId: "build_rebase_conflict_resolution" as const,
+            label: "Resolve Git Conflict",
+            description: "Ask Builder to resolve the active git conflict.",
+            postStartAction: "send_message" as const,
+            disabled: false,
+          },
+        ],
+        primaryAction: {
+          id: "quick:build_rebase_conflict_resolution",
+          role: "build" as const,
+          launchActionId: "build_rebase_conflict_resolution" as const,
+          label: "Resolve Git Conflict",
+          description: "Ask Builder to resolve the active git conflict.",
+          postStartAction: "send_message" as const,
+          disabled: false,
+        },
+        sessionCreateOptions: [],
+        onQuickAction: () => {},
+        onPrepareMessageFirstSession: () => {},
+        onResolveGitConflictQuickAction: null,
+      }),
+    );
+
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Run quick action: Resolve Git Conflict"[^>]*disabled=""|disabled=""[^>]*aria-label="Run quick action: Resolve Git Conflict")/,
+    );
+  });
+
+  test("uses the accent variant for the quick action split button", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: buildModel(),
+      }),
+    );
+
+    expect(html).toMatch(
+      /<button[^>]*(class="[^"]*bg-sidebar-accent[^"]*"[^>]*aria-label="Run quick action: Start Implementation"|variant="accent"[^>]*aria-label="Run quick action: Start Implementation")/,
+    );
+    expect(html).toMatch(
+      /<button[^>]*(class="[^"]*bg-sidebar-accent[^"]*"[^>]*aria-label="Open quick actions menu"|variant="accent"[^>]*aria-label="Open quick actions menu")/,
+    );
+    expect(html).toContain("border-l border-sidebar-border/70");
+  });
+
   test("hides the task details button when no task is selected", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
@@ -339,6 +734,7 @@ describe("AgentStudioHeader", () => {
     );
 
     expect(html).not.toContain('aria-label="Open task details"');
+    expect(html).not.toContain("Prepare new session");
   });
 
   test("disables controls when studio is blocked", () => {
@@ -355,7 +751,10 @@ describe("AgentStudioHeader", () => {
       /<button[^>]*(aria-label="Session history[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Session history[^"]*")/,
     );
     expect(html).toMatch(
-      /<button[^>]*(aria-label="Create session"[^>]*disabled=""|disabled=""[^>]*aria-label="Create session")/,
+      /<button[^>]*(aria-label="Run quick action:[^"]*"[^>]*disabled=""|disabled=""[^>]*aria-label="Run quick action:[^"]*")/,
+    );
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Open quick actions menu"[^>]*disabled=""|disabled=""[^>]*aria-label="Open quick actions menu")/,
     );
   });
 
@@ -378,7 +777,7 @@ describe("AgentStudioHeader", () => {
     );
   });
 
-  test("disables create session while a session is starting without showing a loader", () => {
+  test("disables quick action launch while a session is starting without showing a loader", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
         model: {
@@ -388,12 +787,14 @@ describe("AgentStudioHeader", () => {
       }),
     );
 
-    expect(html).toContain('aria-label="Create session"');
-    expect(html).toContain('disabled="" title="Create session"');
-    expect(html).toContain('class="lucide lucide-plus size-4"');
-    expect(html).not.toContain(
-      'title="Create session"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-circle size-4 animate-spin"',
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Run quick action: Start Implementation"[^>]*disabled=""|disabled=""[^>]*aria-label="Run quick action: Start Implementation")/,
     );
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Open quick actions menu"[^>]*disabled=""|disabled=""[^>]*aria-label="Open quick actions menu")/,
+    );
+    expect(html).toContain("lucide-zap");
+    expect(html).not.toContain("Prepare new session");
   });
 
   test("keeps unavailable workflow step clickable without existing session", () => {
@@ -464,6 +865,17 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain("border-success-border");
     expect(html).toContain("bg-success-surface");
     expect(html).toContain("text-success-muted");
+  });
+
+  test("marks workflow step buttons with pressed state for the selected role", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: buildModel(),
+      }),
+    );
+
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('aria-pressed="false"');
   });
 
   test("renders waiting-input workflow step hint and warning styling", () => {

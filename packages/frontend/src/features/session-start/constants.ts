@@ -2,6 +2,7 @@ import type { SessionLaunchActionId } from "./session-start-launch-options";
 
 export const BUILD_TARGET_BRANCH_LAUNCH_ACTIONS = new Set<SessionLaunchActionId>([
   "build_implementation_start",
+  "build_pull_request_generation",
 ]);
 
 export const supportsTaskTargetBranchSelection = (

@@ -122,60 +122,63 @@ const createHookHarness = (initialProps: HookArgs) => {
       createElement(
         QueryProvider,
         { useIsolatedClient: true },
-        createElement(RuntimeDefinitionsContext.Provider, {
-          value: {
-            runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
-            isLoadingRuntimeDefinitions: false,
-            runtimeDefinitionsError: null,
-            refreshRuntimeDefinitions: async () => [
-              OPENCODE_RUNTIME_DESCRIPTOR,
-              QUEUED_RUNTIME_DESCRIPTOR,
-            ],
-            loadRepoRuntimeCatalog: async () => ({
-              runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-              models: [
-                {
-                  id: "openai/gpt-5",
-                  providerId: "openai",
-                  providerName: "OpenAI",
-                  modelId: "gpt-5",
-                  modelName: "GPT-5",
-                  variants: ["default"],
-                  contextWindow: 200_000,
-                  outputLimit: 8_192,
-                },
+        createElement(
+          RuntimeDefinitionsContext.Provider,
+          {
+            value: {
+              runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
+              isLoadingRuntimeDefinitions: false,
+              runtimeDefinitionsError: null,
+              refreshRuntimeDefinitions: async () => [
+                OPENCODE_RUNTIME_DESCRIPTOR,
+                QUEUED_RUNTIME_DESCRIPTOR,
               ],
-              defaultModelsByProvider: {
-                openai: "gpt-5",
-              },
-              profiles: [
-                {
-                  name: "spec",
-                  mode: "primary" as const,
-                  hidden: false,
+              loadRepoRuntimeCatalog: async () => ({
+                runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+                models: [
+                  {
+                    id: "openai/gpt-5",
+                    providerId: "openai",
+                    providerName: "OpenAI",
+                    modelId: "gpt-5",
+                    modelName: "GPT-5",
+                    variants: ["default"],
+                    contextWindow: 200_000,
+                    outputLimit: 8_192,
+                  },
+                ],
+                defaultModelsByProvider: {
+                  openai: "gpt-5",
                 },
-                {
-                  name: "planner",
-                  mode: "primary" as const,
-                  hidden: false,
-                },
-                {
-                  name: "build",
-                  mode: "primary" as const,
-                  hidden: false,
-                },
-                {
-                  name: "qa",
-                  mode: "primary" as const,
-                  hidden: false,
-                },
-              ],
-            }),
-            loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-            loadRepoRuntimeFileSearch: async () => [],
+                profiles: [
+                  {
+                    name: "spec",
+                    mode: "primary" as const,
+                    hidden: false,
+                  },
+                  {
+                    name: "planner",
+                    mode: "primary" as const,
+                    hidden: false,
+                  },
+                  {
+                    name: "build",
+                    mode: "primary" as const,
+                    hidden: false,
+                  },
+                  {
+                    name: "qa",
+                    mode: "primary" as const,
+                    hidden: false,
+                  },
+                ],
+              }),
+              loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+              loadRepoRuntimeFileSearch: async () => [],
+            },
           },
           children,
-        }),
+        ),
       ),
     );
 
@@ -285,6 +288,192 @@ describe("useAgentStudioSessionActions", () => {
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+  });
+
+  test("prepares a message-first session target without starting or sending", async () => {
+    const updateQuery = mock(() => {});
+    const scheduleSelectionIntent = mock(() => {});
+    const onContextSwitchIntent = mock(() => {});
+    const startAgentSession = mock(async () => "session-new");
+    const sendAgentMessage = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      updateQuery,
+      scheduleSelectionIntent,
+      onContextSwitchIntent,
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.handlePrepareMessageFirstSession({
+        id: "build:build_implementation_start:message_first",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        label: "Prepare Builder session",
+        description: "Open a Builder composer without sending a kickoff.",
+        disabled: false,
+      });
+    });
+
+    expect(updateQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ task: "task-1", session: undefined, agent: "build" }),
+    );
+    expect(scheduleSelectionIntent).toHaveBeenCalledWith({
+      taskId: "task-1",
+      externalSessionId: null,
+      role: "build",
+    });
+    expect(onContextSwitchIntent).toHaveBeenCalled();
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("quick action opens the modal-backed session start flow", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "build",
+      launchActionId: "build_implementation_start",
+      selectedTask: createTask({
+        agentWorkflows: {
+          builder: { required: true, canSkip: false, available: true, completed: false },
+        },
+      }),
+      selectionForNewSession: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "build",
+      },
+    });
+
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.handleQuickAction({
+        id: "quick:build_pull_request_generation",
+        role: "build",
+        launchActionId: "build_pull_request_generation",
+        label: "Generate Pull Request",
+        description: "Reuse or fork a Builder session to create or update a pull request.",
+        postStartAction: "kickoff",
+        disabled: false,
+        existingSessionOptions: [
+          {
+            value: "builder-1",
+            label: "Builder #1",
+            description: "Existing Builder session",
+          },
+        ],
+        initialSourceExternalSessionId: "builder-1",
+        initialStartMode: "reuse",
+      });
+    });
+
+    await harness.waitFor((state) => state.sessionStartModal !== null);
+    expect(harness.getLatest().sessionStartModal?.description).toContain("Generate Pull Request");
+    expect(harness.getLatest().sessionStartModal?.selectedStartMode).toBe("reuse");
+    expect(harness.getLatest().sessionStartModal?.selectedSourceSessionId).toBe("builder-1");
+
+    await harness.unmount();
+  });
+
+  test("request changes quick action applies feedback before starting Builder", async () => {
+    const calls: string[] = [];
+    const humanRequestChangesTask = mock(async () => {
+      calls.push("request-changes");
+    });
+    const startAgentSession = mock(async () => {
+      calls.push("start-session");
+      return "builder-rework-session";
+    });
+    const sendAgentMessage = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "build",
+      launchActionId: "build_after_human_request_changes",
+      selectedTask: createTask({
+        status: "human_review",
+        availableActions: ["human_request_changes"],
+        agentWorkflows: {
+          spec: { required: true, canSkip: false, available: false, completed: true },
+          planner: { required: true, canSkip: false, available: false, completed: true },
+          builder: { required: true, canSkip: false, available: true, completed: false },
+          qa: { required: true, canSkip: false, available: false, completed: true },
+        },
+      }),
+      selectionForNewSession: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "build",
+      },
+      humanRequestChangesTask,
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.handleQuickAction({
+        id: "quick:build_after_human_request_changes",
+        role: "build",
+        launchActionId: "build_after_human_request_changes",
+        label: "Request Changes",
+        description: "Collect human feedback, then open the Builder rework flow.",
+        postStartAction: "kickoff",
+        disabled: false,
+        requiresHumanFeedback: true,
+      });
+    });
+    await harness.waitFor((state) => state.humanReviewFeedbackModal !== null);
+    await harness.run((state) => {
+      state.humanReviewFeedbackModal?.onMessageChange("Please address the review comments.");
+    });
+    let feedbackPromise: Promise<void> | undefined;
+    await harness.run((state) => {
+      feedbackPromise = state.humanReviewFeedbackModal?.onConfirm();
+    });
+
+    await harness.waitFor((state) => state.sessionStartModal !== null);
+    await harness.run((state) => {
+      state.sessionStartModal?.onSelectModel("openai/gpt-5");
+      state.sessionStartModal?.onSelectAgent("build");
+      state.sessionStartModal?.onSelectVariant("default");
+    });
+    await harness.waitFor((state) => {
+      const selection = state.sessionStartModal?.selectedModelSelection;
+      return selection?.profileId === "build" && selection.modelId === "gpt-5";
+    });
+    await harness.run(async (state) => {
+      state.sessionStartModal?.onConfirm({
+        runInBackground: false,
+        startMode: "fresh",
+        sourceExternalSessionId: null,
+      });
+    });
+    await harness.run(async () => {
+      await feedbackPromise;
+    });
+
+    await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
+    expect(humanRequestChangesTask).toHaveBeenCalledWith(
+      "task-1",
+      "Please address the review comments.",
+    );
+    expect(calls).toEqual(["request-changes", "start-session"]);
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "task-1", role: "build", startMode: "fresh" }),
+    );
+
+    await harness.unmount();
   });
 
   test("onSend starts session and sends trimmed message", async () => {

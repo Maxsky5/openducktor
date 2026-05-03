@@ -188,6 +188,7 @@ const createBaseArgs = (): HookArgs => ({
   repoSettings: REPO_SETTINGS,
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},
+  humanRequestChangesTask: async () => {},
   updateQuery: () => {},
 });
 

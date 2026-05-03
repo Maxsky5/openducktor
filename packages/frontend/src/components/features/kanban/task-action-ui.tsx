@@ -15,7 +15,15 @@ import type { ReactElement } from "react";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { TaskWorkflowAction } from "./kanban-task-workflow";
 
-export const taskActionLabel = (action: TaskWorkflowAction, task: TaskCard): string => {
+type TaskActionLabelOptions = {
+  surface?: "kanban" | "agent_studio";
+};
+
+export const taskActionLabel = (
+  action: TaskWorkflowAction,
+  task: TaskCard,
+  options: TaskActionLabelOptions = {},
+): string => {
   if (action === "set_spec") {
     return task.status === "spec_ready" ? "Open Spec" : "Start Spec";
   }
@@ -41,7 +49,10 @@ export const taskActionLabel = (action: TaskWorkflowAction, task: TaskCard): str
     return "Reset Task";
   }
   if (action === "build_start") {
-    return isQaRejectedTask(task) ? "Address QA Feedbacks" : "Start Builder";
+    if (isQaRejectedTask(task)) {
+      return "Address QA Feedbacks";
+    }
+    return options.surface === "agent_studio" ? "Start Implementation" : "Start Builder";
   }
   if (action === "qa_start") {
     return "Request QA Review";

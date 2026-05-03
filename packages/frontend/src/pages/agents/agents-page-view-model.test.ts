@@ -115,7 +115,8 @@ describe("agents-page-view-model", () => {
   test("buildAgentStudioHeaderModel keeps selector and workflow contracts", () => {
     const onWorkflowStepSelect = mock(() => {});
     const onSessionSelectionChange = mock(() => {});
-    const onCreateSession = mock(() => {});
+    const onPrepareMessageFirstSession = mock(() => {});
+    const onQuickAction = mock(() => {});
     const activeSession = createSession({
       pendingPermissions: [{ requestId: "req-1", permission: "read", patterns: ["**/*"] }],
       pendingQuestions: [{ requestId: "q-1", questions: [] }],
@@ -178,8 +179,10 @@ describe("agents-page-view-model", () => {
       agentStudioReady: false,
       sessionsForTaskLength: 0,
       sessionCreateOptions: [],
-      onCreateSession,
-      createSessionDisabled: true,
+      onPrepareMessageFirstSession,
+      quickActions: [],
+      primaryQuickAction: null,
+      onQuickAction,
       isStarting: true,
       contextSessionsLength: 2,
     });
@@ -242,8 +245,10 @@ describe("agents-page-view-model", () => {
       agentStudioReady: true,
       sessionsForTaskLength: 0,
       sessionCreateOptions: [],
-      onCreateSession: mock(() => {}),
-      createSessionDisabled: false,
+      onPrepareMessageFirstSession: mock(() => {}),
+      quickActions: [],
+      primaryQuickAction: null,
+      onQuickAction: mock(() => {}),
       isStarting: false,
       contextSessionsLength: 0,
     });
