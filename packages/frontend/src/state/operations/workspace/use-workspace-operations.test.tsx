@@ -278,6 +278,7 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot => ({
   chat: {
     showThinkingMessages: false,
   },
+  reusablePrompts: [],
   kanban: {
     doneVisibleDays: 1,
     emptyColumnDisplay: "show",

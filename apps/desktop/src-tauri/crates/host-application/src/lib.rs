@@ -5,5 +5,5 @@ pub use app_service::{
     OdtSearchTasksResult, OdtSetPlanResult, OdtSetPullRequestResult, OdtSetSpecResult,
     OdtTaskDocumentsRead, OdtTaskResult, OdtTaskSummary, RepoConfigUpdate,
     RepoPullRequestSyncResult, RepoSettingsUpdate, RuntimeStartupWaitFailure,
-    WorkspaceSettingsSnapshotUpdate,
+    WorkspaceSettingsSnapshot,
 };

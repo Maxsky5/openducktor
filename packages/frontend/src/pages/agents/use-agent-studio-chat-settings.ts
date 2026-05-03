@@ -1,4 +1,8 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import {
+  chatSettingsSchema,
+  type ReusablePrompt,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { errorMessage } from "@/lib/errors";
@@ -6,9 +10,19 @@ import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 const DEFAULT_SHOW_THINKING_MESSAGES = false;
+const DEFAULT_REUSABLE_PROMPTS: ReusablePrompt[] = [];
 
-const readShowThinkingMessages = (snapshot: SettingsSnapshot): boolean => {
-  return snapshot.chat.showThinkingMessages;
+type AgentStudioChatSettings = {
+  showThinkingMessages: boolean;
+  reusablePrompts: ReusablePrompt[];
+};
+
+const readAgentStudioChatSettings = (snapshot: SettingsSnapshot): AgentStudioChatSettings => {
+  const chat = chatSettingsSchema.parse(snapshot.chat);
+  return {
+    showThinkingMessages: chat.showThinkingMessages,
+    reusablePrompts: snapshot.reusablePrompts,
+  };
 };
 
 const createChatSettingsLoadError = (workspaceRepoPath: string, cause: unknown): Error => {
@@ -20,6 +34,7 @@ const createChatSettingsLoadError = (workspaceRepoPath: string, cause: unknown):
 
 export function useAgentStudioChatSettings(args: { activeWorkspace: ActiveWorkspace | null }): {
   showThinkingMessages: boolean;
+  reusablePrompts: ReusablePrompt[];
   chatSettingsLoadError: Error | null;
   retryChatSettingsLoad: () => void;
 } {
@@ -27,13 +42,13 @@ export function useAgentStudioChatSettings(args: { activeWorkspace: ActiveWorksp
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
 
   const {
-    data: showThinkingMessages = DEFAULT_SHOW_THINKING_MESSAGES,
+    data: chatSettings,
     error,
     refetch,
   } = useQuery({
     ...settingsSnapshotQueryOptions(),
     enabled: activeWorkspace !== null,
-    select: readShowThinkingMessages,
+    select: readAgentStudioChatSettings,
   });
 
   const retryChatSettingsLoad = useCallback((): void => {
@@ -48,7 +63,12 @@ export function useAgentStudioChatSettings(args: { activeWorkspace: ActiveWorksp
     activeRepoPath && error ? createChatSettingsLoadError(activeRepoPath, error) : null;
 
   return {
-    showThinkingMessages: activeWorkspace ? showThinkingMessages : DEFAULT_SHOW_THINKING_MESSAGES,
+    showThinkingMessages: activeWorkspace
+      ? (chatSettings?.showThinkingMessages ?? DEFAULT_SHOW_THINKING_MESSAGES)
+      : DEFAULT_SHOW_THINKING_MESSAGES,
+    reusablePrompts: activeWorkspace
+      ? (chatSettings?.reusablePrompts ?? DEFAULT_REUSABLE_PROMPTS)
+      : DEFAULT_REUSABLE_PROMPTS,
     chatSettingsLoadError,
     retryChatSettingsLoad,
   };

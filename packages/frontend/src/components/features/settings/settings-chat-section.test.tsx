@@ -77,4 +77,19 @@ describe("settings chat section", () => {
 
     expect(html).toContain("after you save settings");
   });
+
+  test("does not render reusable prompts in chat settings", () => {
+    const chatSettings: ChatSettings = { showThinkingMessages: false };
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsChatSection, {
+        chat: chatSettings,
+        disabled: false,
+        onUpdateChat: () => chatSettings,
+      }),
+    );
+
+    expect(html).not.toContain("Reusable prompts");
+    expect(html).not.toContain("review");
+  });
 });

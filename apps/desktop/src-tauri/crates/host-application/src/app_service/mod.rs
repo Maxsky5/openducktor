@@ -90,7 +90,7 @@ pub use task_workflow::RepoPullRequestSyncResult;
 pub(crate) use workflow_rules::{
     derive_agent_workflows, derive_available_actions, validate_transition_without_related_tasks,
 };
-pub use workspace_policy::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate};
+pub use workspace_policy::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshot};
 
 #[cfg(test)]
 pub(crate) use workflow_rules::{

@@ -4,6 +4,7 @@ import type {
   GitProviderRepository,
   RepoConfig,
   RepoPromptOverrides,
+  ReusablePrompt,
   RuntimeCheck,
   RuntimeDescriptor,
   RuntimeKind,
@@ -29,6 +30,8 @@ import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions
 import { useSettingsModalPromptValidation } from "./use-settings-modal-prompt-validation";
 import { useSettingsModalRepoScriptValidation } from "./use-settings-modal-repo-script-validation";
 import { useSettingsModalRepositoryActions } from "./use-settings-modal-repository-actions";
+import type { ReusablePromptValidationState } from "./use-settings-modal-reusable-prompt-validation";
+import { useSettingsModalReusablePromptValidation } from "./use-settings-modal-reusable-prompt-validation";
 import { useSettingsModalSaveOrchestration } from "./use-settings-modal-save-orchestration";
 import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-state";
 
@@ -63,6 +66,8 @@ export type SettingsModalController = {
   globalPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
   selectedRepoPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
+  reusablePromptValidationState: ReusablePromptValidationState;
+  hasReusablePromptValidationErrors: boolean;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCount: number;
   showRepoScriptValidationErrors: boolean;
@@ -78,6 +83,7 @@ export type SettingsModalController = {
   updateGlobalChatSettings: (
     updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"],
   ) => void;
+  updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
   ) => void;
@@ -187,11 +193,21 @@ export const useSettingsModalController = ({
     snapshotDraft,
     selectedWorkspaceId,
   });
+  const reusablePromptValidationState = useSettingsModalReusablePromptValidation({ snapshotDraft });
+  const hasReusablePromptValidationErrors = reusablePromptValidationState.totalErrorCount > 0;
+  const settingsSectionErrorCountByIdWithReusablePrompts = useMemo(
+    () => ({
+      ...settingsSectionErrorCountById,
+      "reusable-prompts": reusablePromptValidationState.totalErrorCount,
+    }),
+    [reusablePromptValidationState.totalErrorCount, settingsSectionErrorCountById],
+  );
 
   const {
     updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
     updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
+    updateReusablePrompts: applyReusablePromptsUpdate,
     updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
     updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
     updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
@@ -241,6 +257,8 @@ export const useSettingsModalController = ({
     dirtySections,
     hasPromptValidationErrors,
     promptValidationState,
+    hasReusablePromptValidationErrors: hasReusablePromptValidationErrors,
+    reusablePromptValidationErrorCount: reusablePromptValidationState.totalErrorCount,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
     invalidRepoPathsWithDevServerErrors,
@@ -253,6 +271,7 @@ export const useSettingsModalController = ({
       updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
       updateGlobalGitConfig: applyGlobalGitConfigUpdate,
       updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
+      updateReusablePrompts: applyReusablePromptsUpdate,
       updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
       updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
       updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
@@ -264,6 +283,7 @@ export const useSettingsModalController = ({
       applySelectedRepoConfigUpdate,
       applyGlobalGitConfigUpdate,
       applyGlobalChatSettingsUpdate,
+      applyReusablePromptsUpdate,
       applyGlobalKanbanSettingsUpdate,
       applyGlobalAutopilotSettingsUpdate,
       applyGlobalPromptOverridesUpdate,
@@ -276,6 +296,7 @@ export const useSettingsModalController = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
     updateGlobalPromptOverrides,
@@ -330,7 +351,9 @@ export const useSettingsModalController = ({
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
     selectedRepoPromptRoleTabErrorCounts,
-    settingsSectionErrorCountById,
+    settingsSectionErrorCountById: settingsSectionErrorCountByIdWithReusablePrompts,
+    reusablePromptValidationState,
+    hasReusablePromptValidationErrors,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
     showRepoScriptValidationErrors,
@@ -342,6 +365,7 @@ export const useSettingsModalController = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
     updateGlobalPromptOverrides,

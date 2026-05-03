@@ -10,6 +10,7 @@ import {
 import {
   buildPromptValidationSaveError,
   buildRepoScriptValidationSaveError,
+  buildReusablePromptValidationSaveError,
   hasAnyDirtySections,
   hasSameNormalizedGlobalGitConfig,
   isGlobalGitOnlySave,
@@ -23,6 +24,8 @@ type UseSettingsModalSaveOrchestrationArgs = {
   dirtySections: DirtySections;
   hasPromptValidationErrors: boolean;
   promptValidationState: PromptValidationState;
+  hasReusablePromptValidationErrors: boolean;
+  reusablePromptValidationErrorCount: number;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCount: number;
   invalidRepoPathsWithDevServerErrors: string[];
@@ -47,6 +50,8 @@ export const useSettingsModalSaveOrchestration = ({
   dirtySections,
   hasPromptValidationErrors,
   promptValidationState,
+  hasReusablePromptValidationErrors,
+  reusablePromptValidationErrorCount,
   hasRepoScriptValidationErrors,
   repoScriptValidationErrorCount,
   invalidRepoPathsWithDevServerErrors,
@@ -95,6 +100,15 @@ export const useSettingsModalSaveOrchestration = ({
 
     if (hasPromptValidationErrors) {
       const reason = buildPromptValidationSaveError(promptValidationState.totalErrorCount);
+      setSaveError(reason);
+      toast.error("Cannot save settings", {
+        description: reason,
+      });
+      return false;
+    }
+
+    if (hasReusablePromptValidationErrors) {
+      const reason = buildReusablePromptValidationSaveError(reusablePromptValidationErrorCount);
       setSaveError(reason);
       toast.error("Cannot save settings", {
         description: reason,
@@ -154,7 +168,9 @@ export const useSettingsModalSaveOrchestration = ({
     }
   }, [
     dirtySections,
+    reusablePromptValidationErrorCount,
     hasPromptValidationErrors,
+    hasReusablePromptValidationErrors,
     hasRepoScriptValidationErrors,
     invalidRepoPathsWithDevServerErrors,
     loadedSnapshot,

@@ -154,9 +154,45 @@ pub struct GlobalGitConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct ReusablePrompt {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatSettings {
     #[serde(default)]
     pub show_thinking_messages: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct PersistedChatSettings {
+    #[serde(default)]
+    pub show_thinking_messages: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub custom_prompts: Vec<ReusablePrompt>,
+}
+
+impl From<PersistedChatSettings> for ChatSettings {
+    fn from(value: PersistedChatSettings) -> Self {
+        Self {
+            show_thinking_messages: value.show_thinking_messages,
+        }
+    }
+}
+
+impl From<ChatSettings> for PersistedChatSettings {
+    fn from(value: ChatSettings) -> Self {
+        Self {
+            show_thinking_messages: value.show_thinking_messages,
+            custom_prompts: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -416,7 +452,9 @@ struct PersistedGlobalConfigV2 {
     #[serde(default)]
     pub git: GlobalGitConfig,
     #[serde(default)]
-    pub chat: ChatSettings,
+    pub chat: PersistedChatSettings,
+    #[serde(default)]
+    pub reusable_prompts: Option<Vec<ReusablePrompt>>,
     #[serde(default)]
     pub kanban: KanbanSettings,
     #[serde(default)]
@@ -462,6 +500,8 @@ pub struct GlobalConfig {
     #[serde(default)]
     pub chat: ChatSettings,
     #[serde(default)]
+    pub reusable_prompts: Vec<ReusablePrompt>,
+    #[serde(default)]
     pub kanban: KanbanSettings,
     #[serde(default)]
     pub autopilot: AutopilotSettings,
@@ -484,7 +524,10 @@ impl TryFrom<PersistedGlobalConfigV2> for GlobalConfig {
             active_workspace: config.active_workspace,
             theme: config.theme,
             git: config.git,
-            chat: config.chat,
+            chat: config.chat.clone().into(),
+            reusable_prompts: config
+                .reusable_prompts
+                .unwrap_or(config.chat.custom_prompts),
             kanban: config.kanban,
             autopilot: config.autopilot,
             global_prompt_overrides: config.global_prompt_overrides,
@@ -502,7 +545,8 @@ impl From<GlobalConfig> for PersistedGlobalConfigV2 {
             active_workspace: value.active_workspace,
             theme: value.theme,
             git: value.git,
-            chat: value.chat,
+            chat: value.chat.into(),
+            reusable_prompts: Some(value.reusable_prompts),
             kanban: value.kanban,
             autopilot: value.autopilot,
             global_prompt_overrides: value.global_prompt_overrides,
@@ -521,6 +565,7 @@ impl Default for GlobalConfig {
             theme: default_theme(),
             git: GlobalGitConfig::default(),
             chat: ChatSettings::default(),
+            reusable_prompts: Vec::new(),
             kanban: KanbanSettings::default(),
             autopilot: AutopilotSettings::default(),
             global_prompt_overrides: PromptOverrides::default(),
@@ -612,7 +657,7 @@ impl RuntimeConfig {
 mod tests {
     use super::{
         deserialize_global_config, GlobalConfig, KanbanEmptyColumnDisplay, KanbanSettings,
-        RepoConfig,
+        RepoConfig, ReusablePrompt,
     };
 
     #[test]
@@ -648,6 +693,31 @@ mod tests {
             config.kanban.empty_column_display,
             KanbanEmptyColumnDisplay::Show
         );
+        assert!(config.reusable_prompts.is_empty());
+    }
+
+    #[test]
+    fn reusable_prompts_serialize_roundtrip() {
+        let config = GlobalConfig {
+            chat: super::ChatSettings {
+                show_thinking_messages: true,
+            },
+            reusable_prompts: vec![ReusablePrompt {
+                id: "prompt-1".to_string(),
+                name: "review".to_string(),
+                description: "Review context".to_string(),
+                content: "Review this:\n$ARGUMENTS".to_string(),
+            }],
+            ..GlobalConfig::default()
+        };
+
+        let serialized = serde_json::to_string(&config).expect("config should serialize");
+        let deserialized =
+            deserialize_global_config(&serialized).expect("config should deserialize");
+
+        assert!(deserialized.chat.show_thinking_messages);
+        assert_eq!(deserialized.reusable_prompts.len(), 1);
+        assert_eq!(deserialized.reusable_prompts[0].name, "review");
     }
 
     #[test]

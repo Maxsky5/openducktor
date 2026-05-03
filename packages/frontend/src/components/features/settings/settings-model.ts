@@ -1,6 +1,7 @@
 export { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 
-import type { RepoDevServerScript } from "@openducktor/contracts";
+import type { RepoDevServerScript, ReusablePrompt } from "@openducktor/contracts";
+import { REUSABLE_PROMPT_TRIGGER_PATTERN } from "@openducktor/contracts";
 
 type HookDraftInput = {
   preStart: string[];
@@ -16,6 +17,13 @@ type DevServerDraftValidationErrors = {
 
 type DevServerDraftValidationMap = Record<string, DevServerDraftValidationErrors>;
 
+export type ReusablePromptValidationErrors = {
+  name?: string;
+  content?: string;
+};
+
+export type ReusablePromptValidationMap = Record<string, ReusablePromptValidationErrors>;
+
 type RepoScriptDraftInput = {
   hooks: HookDraftInput;
   devServers: RepoDevServerDraftInput[];
@@ -25,6 +33,93 @@ type RepoScriptDraftInput = {
 // trailing newlines or strip characters while the user is still editing. Save-time
 // normalization removes blank commands and trims persisted values.
 export const parseHookLines = (value: string): string[] => value.split("\n");
+
+export const createReusablePromptDraft = (): ReusablePrompt => {
+  if (typeof crypto === "undefined" || typeof crypto.randomUUID !== "function") {
+    throw new Error(
+      "Cannot create a reusable prompt because random UUID generation is unavailable.",
+    );
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    name: "",
+    description: "",
+    content: "",
+  };
+};
+
+export const isValidReusablePromptName = (name: string): boolean =>
+  REUSABLE_PROMPT_TRIGGER_PATTERN.test(name.trim());
+
+export const buildReusablePromptValidationErrors = (
+  prompts: ReusablePrompt[],
+): ReusablePromptValidationMap => {
+  const errorsById: ReusablePromptValidationMap = {};
+  const promptIdsByNormalizedName = new Map<string, string[]>();
+
+  for (const prompt of prompts) {
+    const name = prompt.name.trim();
+    const content = prompt.content.trim();
+    const errors: ReusablePromptValidationErrors = {};
+
+    if (!name) {
+      errors.name = "Prompt name is required.";
+    } else if (!isValidReusablePromptName(name)) {
+      errors.name = "Use only letters, digits, dots, underscores, colons, or dashes.";
+    } else {
+      const normalizedName = name.toLowerCase();
+      promptIdsByNormalizedName.set(normalizedName, [
+        ...(promptIdsByNormalizedName.get(normalizedName) ?? []),
+        prompt.id,
+      ]);
+    }
+
+    if (!content) {
+      errors.content = "Prompt content is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      errorsById[prompt.id] = errors;
+    }
+  }
+
+  for (const promptIds of promptIdsByNormalizedName.values()) {
+    if (promptIds.length < 2) {
+      continue;
+    }
+    for (const promptId of promptIds) {
+      errorsById[promptId] = {
+        ...errorsById[promptId],
+        name: "Prompt names must be unique.",
+      };
+    }
+  }
+
+  return errorsById;
+};
+
+export const countReusablePromptValidationErrors = (
+  errorsById: ReusablePromptValidationMap,
+): number =>
+  Object.values(errorsById).reduce(
+    (count, errors) => count + (errors.name ? 1 : 0) + (errors.content ? 1 : 0),
+    0,
+  );
+
+export const normalizeReusablePromptsForSave = (prompts: ReusablePrompt[]): ReusablePrompt[] => {
+  const errors = buildReusablePromptValidationErrors(prompts);
+  if (countReusablePromptValidationErrors(errors) > 0) {
+    throw new Error("Reusable prompts contain invalid fields.");
+  }
+
+  return prompts.map((prompt) => ({
+    id: prompt.id.trim(),
+    name: prompt.name.trim(),
+    description: prompt.description.trim(),
+    content: prompt.content.trim(),
+  }));
+};
 
 const normalizeHookCommands = (commands: string[]): string[] =>
   commands.map((entry) => entry.trim()).filter(Boolean);

@@ -21,6 +21,7 @@ const createSnapshot = (): SettingsSnapshot => ({
   chat: {
     showThinkingMessages: false,
   },
+  reusablePrompts: [],
   kanban: {
     doneVisibleDays: 1,
     emptyColumnDisplay: "show",
@@ -96,6 +97,7 @@ describe("useSettingsModalPromptValidation", () => {
       git: 0,
       repositories: 0,
       prompts: 0,
+      "reusable-prompts": 0,
       chat: 0,
       kanban: 0,
       autopilot: 0,
@@ -124,6 +126,7 @@ describe("useSettingsModalPromptValidation", () => {
       git: 0,
       repositories: 1,
       prompts: 1,
+      "reusable-prompts": 0,
       chat: 0,
       kanban: 0,
       autopilot: 0,

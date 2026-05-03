@@ -1,5 +1,10 @@
-import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { GitBranch, GitTargetBranch, ReusablePrompt, TaskCard } from "@openducktor/contracts";
+import type {
+  AgentModelCatalog,
+  AgentModelSelection,
+  AgentRole,
+  AgentUserMessagePart,
+} from "@openducktor/core";
 import { useCallback, useEffect, useState } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
@@ -9,6 +14,7 @@ import {
   draftHasSlashCommandSegment,
   resolveDraftToUserMessageParts,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { resolveReusablePromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { SessionStartLaunchRequest } from "@/features/session-start";
 import {
@@ -70,6 +76,7 @@ type UseAgentStudioSessionActionsArgs = {
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
   selectionForNewSession: AgentModelSelection | null;
+  reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
@@ -101,6 +108,7 @@ export function useAgentStudioSessionActions({
   agentStudioReady,
   isActiveTaskHydrated,
   selectionForNewSession,
+  reusablePrompts,
   repoSettings,
   startAgentSession,
   sendAgentMessage,
@@ -232,6 +240,16 @@ export function useAgentStudioSessionActions({
         return false;
       }
 
+      let reusablePromptMessageParts: AgentUserMessagePart[] | null;
+      try {
+        reusablePromptMessageParts = resolveReusablePromptDraftToUserMessageParts(
+          draft,
+          reusablePrompts,
+        );
+      } catch {
+        return false;
+      }
+
       if ((draft.attachments ?? []).length > 0) {
         if (draftHasSlashCommandSegment(draft)) {
           return false;
@@ -279,15 +297,16 @@ export function useAgentStudioSessionActions({
         });
         await sendAgentMessage(
           targetExternalSessionId,
-          await resolveDraftToUserMessageParts(draft, async (attachment) => {
-            if (attachment.file) {
-              return stageLocalAttachmentFile(attachment.file);
-            }
-            if (attachment.path) {
-              return attachment.path;
-            }
-            throw new Error(`Attachment "${attachment.name}" is missing local file data.`);
-          }),
+          reusablePromptMessageParts ??
+            (await resolveDraftToUserMessageParts(draft, async (attachment) => {
+              if (attachment.file) {
+                return stageLocalAttachmentFile(attachment.file);
+              }
+              if (attachment.path) {
+                return attachment.path;
+              }
+              throw new Error(`Attachment "${attachment.name}" is missing local file data.`);
+            })),
         );
         return true;
       } finally {
@@ -310,6 +329,7 @@ export function useAgentStudioSessionActions({
       activeSessionSelectedModel,
       agentStudioReady,
       canQueueBusyFollowups,
+      reusablePrompts,
       isSending,
       isStarting,
       isWaitingInput,

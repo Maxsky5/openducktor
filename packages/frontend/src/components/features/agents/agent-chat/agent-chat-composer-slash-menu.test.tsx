@@ -67,4 +67,25 @@ describe("AgentChatComposerSlashMenu", () => {
       Element.prototype.scrollIntoView = original;
     }
   });
+
+  test("shows runtime errors without hiding reusable prompt commands", () => {
+    const firstCommand = COMMANDS[0];
+    if (!firstCommand) {
+      throw new Error("Expected a slash command fixture.");
+    }
+
+    render(
+      <AgentChatComposerSlashMenu
+        commands={[{ ...firstCommand, source: "custom" }]}
+        activeIndex={0}
+        slashCommandsError="Runtime commands failed"
+        isSlashCommandsLoading={false}
+        onSelectCommand={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Runtime commands failed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /first command/i })).toBeTruthy();
+    expect(screen.getByText("custom")).toBeTruthy();
+  });
 });

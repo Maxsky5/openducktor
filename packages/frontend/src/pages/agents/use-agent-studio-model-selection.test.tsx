@@ -216,6 +216,7 @@ const createBaseProps = (overrides: Partial<LegacyHookArgs> = {}): LegacyHookArg
   activeSession: null,
   activeSessionSummary: null,
   role: "spec",
+  reusablePrompts: [],
   repoSettings: createRepoSettings(null),
   updateAgentSessionModel: () => {},
   loadCatalog: async () => CATALOG,
@@ -555,6 +556,120 @@ describe("useAgentStudioModelSelection", () => {
       expect(readSessionSlashCommands).toHaveBeenCalledTimes(1);
       expect(readSessionSlashCommands).toHaveBeenCalledWith("/repo", "opencode");
       expect(harness.getLatest().slashCommandsError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("merges runtime slash commands with reusable prompt commands", async () => {
+    const loadSlashCommands = mock(async () => ({
+      commands: [{ id: "native-review", trigger: "review", title: "Runtime review", hints: [] }],
+    }));
+    const harness = createHookHarness(
+      createBaseProps({
+        reusablePrompts: [
+          {
+            id: "prompt-1",
+            name: "summarize",
+            description: "Summarize context",
+            content: "Summarize this:\n$ARGUMENTS",
+          },
+        ],
+        loadSlashCommands,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSlashCommandsLoading === false);
+
+      expect(harness.getLatest().supportsSlashCommands).toBe(true);
+      expect(harness.getLatest().slashCommands.map((command) => command.id)).toEqual([
+        "native-review",
+        "reusable-prompt:prompt-1",
+      ]);
+      expect(harness.getLatest().slashCommands.at(1)?.source).toBe("custom");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("gives reusable prompt slash commands precedence over matching runtime triggers", async () => {
+    const loadSlashCommands = mock(async () => ({
+      commands: [
+        { id: "native-review", trigger: "review", title: "Runtime review", hints: [] },
+        { id: "native-compact", trigger: "compact", title: "Runtime compact", hints: [] },
+      ],
+    }));
+    const harness = createHookHarness(
+      createBaseProps({
+        reusablePrompts: [
+          {
+            id: "prompt-1",
+            name: "Review",
+            description: "Review context",
+            content: "Review this:",
+          },
+        ],
+        loadSlashCommands,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSlashCommandsLoading === false);
+
+      expect(harness.getLatest().slashCommands.map((command) => command.id)).toEqual([
+        "native-compact",
+        "reusable-prompt:prompt-1",
+      ]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps reusable prompt commands available when runtime lacks native slash commands", async () => {
+    const runtimeWithoutSlashCommands: RuntimeDescriptor = {
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      capabilities: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+        promptInput: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,
+          supportsSlashCommands: false,
+        },
+      },
+    };
+    const loadSlashCommands = mock(async () => ({ commands: [] }));
+    const harness = createHookHarness(
+      createBaseProps({
+        reusablePrompts: [
+          {
+            id: "prompt-1",
+            name: "review",
+            description: "Review context",
+            content: "Review this.",
+          },
+        ],
+        loadSlashCommands,
+      }),
+      { runtimeDefinitions: [runtimeWithoutSlashCommands] },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadSlashCommands).not.toHaveBeenCalled();
+      expect(harness.getLatest().supportsSlashCommands).toBe(true);
+      expect(harness.getLatest().slashCommands).toEqual([
+        {
+          id: "reusable-prompt:prompt-1",
+          trigger: "review",
+          title: "review",
+          description: "Review context",
+          source: "custom",
+          hints: [],
+        },
+      ]);
     } finally {
       await harness.unmount();
     }

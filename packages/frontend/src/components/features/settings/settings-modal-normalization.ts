@@ -13,7 +13,10 @@ import {
   createDefaultAutopilotSettings,
   DEFAULT_BRANCH_PREFIX,
 } from "@openducktor/contracts";
-import { normalizeRepoScripts } from "@/components/features/settings/settings-model";
+import {
+  normalizeRepoScripts,
+  normalizeReusablePromptsForSave,
+} from "@/components/features/settings/settings-model";
 import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 
@@ -119,6 +122,7 @@ export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSn
     theme: snapshot.theme,
     git: normalizeGlobalGitConfigForSave(snapshot.git),
     chat: snapshot.chat,
+    reusablePrompts: normalizeReusablePromptsForSave(snapshot.reusablePrompts),
     kanban: snapshot.kanban,
     autopilot: normalizeAutopilotSettingsForSave(snapshot.autopilot),
     workspaces,

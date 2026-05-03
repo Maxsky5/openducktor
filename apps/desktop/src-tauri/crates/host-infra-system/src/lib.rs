@@ -28,8 +28,8 @@ pub use config::{
     GitMergeMethod, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig,
     GlobalGitConfig, HookSet, KanbanEmptyColumnDisplay, KanbanSettings,
     OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides, RepoConfig,
-    RepoDevServerScript, RepoGitConfig, RuntimeConfig, RuntimeConfigStore, SchedulerConfig,
-    SoftGuardrails,
+    RepoDevServerScript, RepoGitConfig, ReusablePrompt, RuntimeConfig, RuntimeConfigStore,
+    SchedulerConfig, SoftGuardrails,
 };
 pub use filesystem::{list_directory, FilesystemListDirectoryError};
 pub use git::GitCliPort;

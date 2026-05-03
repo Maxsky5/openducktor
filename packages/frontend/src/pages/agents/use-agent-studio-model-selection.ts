@@ -1,9 +1,10 @@
-import type { RuntimeKind } from "@openducktor/contracts";
+import type { ReusablePrompt, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
+  AgentSlashCommand,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -14,6 +15,7 @@ import {
   toModelOptions,
   toPrimaryAgentOptions,
 } from "@/components/features/agents";
+import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -53,6 +55,7 @@ type UseAgentStudioModelSelectionArgs = {
   activeSession: AgentSessionState | null;
   activeSessionSummary: AgentSessionSummary | null;
   role: AgentRole;
+  reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
   updateAgentSessionModel: (
     externalSessionId: string,
@@ -78,6 +81,21 @@ type UseAgentStudioModelSelectionArgs = {
     workingDirectory: string,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
+};
+
+const mergeSlashCommands = (
+  runtimeSlashCommands: AgentSlashCommand[],
+  reusablePromptSlashCommands: AgentSlashCommand[],
+): AgentSlashCommand[] => {
+  const reusablePromptTriggers = new Set(
+    reusablePromptSlashCommands.map((command) => command.trigger.toLowerCase()),
+  );
+  return [
+    ...runtimeSlashCommands.filter(
+      (command) => !reusablePromptTriggers.has(command.trigger.toLowerCase()),
+    ),
+    ...reusablePromptSlashCommands,
+  ];
 };
 
 type AgentStudioModelSelectionState = {
@@ -157,6 +175,7 @@ export function useAgentStudioModelSelection({
   activeSession,
   activeSessionSummary,
   role,
+  reusablePrompts,
   repoSettings,
   updateAgentSessionModel,
   loadCatalog,
@@ -254,7 +273,7 @@ export function useAgentStudioModelSelection({
   const activeSessionRuntimeQueryError = activeSessionRuntimeQueryState.runtimeQueryError;
   const slashCommandRuntimeKind =
     activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
-  const supportsSlashCommands = useMemo(() => {
+  const runtimeSupportsSlashCommands = useMemo(() => {
     if (!slashCommandRuntimeKind) {
       return false;
     }
@@ -263,6 +282,7 @@ export function useAgentStudioModelSelection({
         ?.capabilities.promptInput.supportsSlashCommands ?? false
     );
   }, [runtimeDefinitions, slashCommandRuntimeKind]);
+  const supportsSlashCommands = runtimeSupportsSlashCommands || reusablePrompts.length > 0;
   const fileSearchRuntimeKind = activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
   const supportsFileSearch = useMemo(() => {
     if (!fileSearchRuntimeKind) {
@@ -340,7 +360,7 @@ export function useAgentStudioModelSelection({
           },
         }),
     enabled:
-      supportsSlashCommands &&
+      runtimeSupportsSlashCommands &&
       hasActiveSession &&
       activeSessionStatus !== "starting" &&
       activeSessionRuntimeQueryInput !== null &&
@@ -354,7 +374,7 @@ export function useAgentStudioModelSelection({
       loadSlashCommandsForRepo,
     ),
     enabled:
-      supportsSlashCommands &&
+      runtimeSupportsSlashCommands &&
       workspaceRepoPath !== null &&
       activeExternalSessionId === null &&
       composerRuntimeKind !== null,
@@ -447,8 +467,23 @@ export function useAgentStudioModelSelection({
   const slashCommandCatalog = hasActiveSession
     ? (activeSessionSlashCommandsQuery.data ?? null)
     : (repoSlashCommandsQuery.data ?? null);
-  const slashCommands = slashCommandCatalog?.commands ?? [];
-  const slashCommandsError = supportsSlashCommands
+  const reusablePromptSlashCommands = useMemo(
+    () => reusablePrompts.map(toReusablePromptSlashCommand),
+    [reusablePrompts],
+  );
+  const runtimeSlashCommands = useMemo(
+    () => (runtimeSupportsSlashCommands ? (slashCommandCatalog?.commands ?? []) : []),
+    [runtimeSupportsSlashCommands, slashCommandCatalog?.commands],
+  );
+  const slashCommands = useMemo(
+    () => mergeSlashCommands(runtimeSlashCommands, reusablePromptSlashCommands),
+    [reusablePromptSlashCommands, runtimeSlashCommands],
+  );
+  const mergedSlashCommandCatalog = useMemo<AgentSlashCommandCatalog>(
+    () => ({ commands: slashCommands }),
+    [slashCommands],
+  );
+  const slashCommandsError = runtimeSupportsSlashCommands
     ? hasActiveSession
       ? activeSessionSlashCommandsQuery.error instanceof Error
         ? activeSessionSlashCommandsQuery.error.message
@@ -457,7 +492,7 @@ export function useAgentStudioModelSelection({
         ? repoSlashCommandsQuery.error.message
         : null
     : null;
-  const isSlashCommandsLoading = supportsSlashCommands
+  const isSlashCommandsLoading = runtimeSupportsSlashCommands
     ? hasActiveSession
       ? activeSessionSlashCommandsQuery.isLoading
       : repoSlashCommandsQuery.isLoading
@@ -887,7 +922,7 @@ export function useAgentStudioModelSelection({
     isSelectionCatalogLoading,
     supportsSlashCommands,
     supportsFileSearch,
-    slashCommandCatalog,
+    slashCommandCatalog: mergedSlashCommandCatalog,
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,

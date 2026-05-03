@@ -3,6 +3,7 @@ import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
   buildPromptValidationSaveError,
   buildRepoScriptValidationSaveError,
+  buildReusablePromptValidationSaveError,
   hasAnyDirtySections,
   hasSameNormalizedGlobalGitConfig,
   isGlobalGitOnlySave,
@@ -17,6 +18,7 @@ const createSnapshot = (): SettingsSnapshot => ({
   chat: {
     showThinkingMessages: false,
   },
+  reusablePrompts: [],
   kanban: {
     doneVisibleDays: 1,
     emptyColumnDisplay: "show",
@@ -70,6 +72,9 @@ describe("settings-modal-save-policy", () => {
     expect(buildPromptValidationSaveError(1)).toBe("Fix 1 prompt placeholder error before saving.");
     expect(buildPromptValidationSaveError(2)).toBe(
       "Fix 2 prompt placeholder errors before saving.",
+    );
+    expect(buildReusablePromptValidationSaveError(1)).toBe(
+      "Fix 1 reusable prompt field error before saving.",
     );
     expect(
       buildRepoScriptValidationSaveError({

@@ -17,7 +17,8 @@ pub use types::{
     AutopilotSettings, ChatSettings, GitMergeMethod, GitProviderConfig, GitProviderRepository,
     GitTargetBranch, GlobalConfig, GlobalGitConfig, HookSet, KanbanEmptyColumnDisplay,
     KanbanSettings, OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides, RepoConfig,
-    RepoDevServerScript, RepoGitConfig, RuntimeConfig, SchedulerConfig, SoftGuardrails,
+    RepoDevServerScript, RepoGitConfig, ReusablePrompt, RuntimeConfig, SchedulerConfig,
+    SoftGuardrails,
 };
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 use super::{lock_env, workspace_identity, EnvVarGuard, RepoConfig, TestStoreHarness};
-use crate::GitTargetBranch;
+use crate::{GitTargetBranch, GlobalConfig, ReusablePrompt};
 use host_domain::DEFAULT_BRANCH_PREFIX;
 use serde_json::json;
 use std::fs;
@@ -13,8 +13,188 @@ fn load_missing_returns_default_config() {
     let config = store.load().expect("load default");
     assert_eq!(config.version, 2);
     assert!(!config.chat.show_thinking_messages);
+    assert!(config.reusable_prompts.is_empty());
     assert_eq!(config.kanban.done_visible_days, 1);
     assert!(config.workspaces.is_empty());
+}
+
+#[test]
+fn save_trims_and_preserves_reusable_prompts() {
+    let harness = TestStoreHarness::new("reusable-prompts-preserve");
+    let store = harness.store();
+    let config = GlobalConfig {
+        reusable_prompts: vec![ReusablePrompt {
+            id: " prompt-1 ".to_string(),
+            name: " review ".to_string(),
+            description: " Review context ".to_string(),
+            content: " Review this:\n$ARGUMENTS ".to_string(),
+        }],
+        ..GlobalConfig::default()
+    };
+
+    store.save(&config).expect("save reusable prompts");
+    let loaded = store.load().expect("load reusable prompts");
+
+    assert_eq!(loaded.reusable_prompts.len(), 1);
+    assert_eq!(loaded.reusable_prompts[0].id, "prompt-1");
+    assert_eq!(loaded.reusable_prompts[0].name, "review");
+    assert_eq!(loaded.reusable_prompts[0].description, "Review context");
+    assert_eq!(
+        loaded.reusable_prompts[0].content,
+        "Review this:\n$ARGUMENTS"
+    );
+}
+
+#[test]
+fn save_rejects_duplicate_reusable_prompt_ids() {
+    let harness = TestStoreHarness::new("reusable-prompts-duplicate-id");
+    let store = harness.store();
+    let config = GlobalConfig {
+        reusable_prompts: vec![
+            ReusablePrompt {
+                id: "prompt-1".to_string(),
+                name: "review".to_string(),
+                description: String::new(),
+                content: "Review this.".to_string(),
+            },
+            ReusablePrompt {
+                id: " prompt-1 ".to_string(),
+                name: "summarize".to_string(),
+                description: String::new(),
+                content: "Summarize this.".to_string(),
+            },
+        ],
+        ..GlobalConfig::default()
+    };
+
+    let error = store
+        .save(&config)
+        .expect_err("duplicate reusable prompt ids should fail");
+    let error_chain = format!("{error:#}");
+    assert!(
+        error_chain.contains("Duplicate reusable prompt id: prompt-1"),
+        "error should identify duplicate prompt id: {error_chain}"
+    );
+}
+
+#[test]
+fn load_rejects_invalid_reusable_prompts() {
+    let harness = TestStoreHarness::new("reusable-prompts-invalid");
+    let store = harness.store();
+
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    let payload = json!({
+        "version": 2,
+        "reusablePrompts": [
+            { "id": "prompt-1", "name": "bad name", "description": "", "content": "Body" }
+        ],
+        "recentWorkspaces": []
+    });
+    fs::write(
+        store.path(),
+        serde_json::to_string_pretty(&payload).expect("serialize payload"),
+    )
+    .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
+
+    let error = store
+        .load()
+        .expect_err("invalid reusable prompt should fail");
+    let error_chain = format!("{error:#}");
+    assert!(
+        error_chain.contains("Reusable prompt name must contain only letters"),
+        "error should identify invalid prompt name: {error_chain}"
+    );
+}
+
+#[test]
+fn load_migrates_legacy_chat_custom_prompts_to_reusable_prompts() {
+    let harness = TestStoreHarness::new("legacy-custom-prompts-migrate");
+    let store = harness.store();
+
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    let payload = json!({
+        "version": 2,
+        "chat": {
+            "showThinkingMessages": true,
+            "customPrompts": [
+                {
+                    "id": " prompt-1 ",
+                    "name": " review ",
+                    "description": " Review context ",
+                    "content": " Review this:\n$ARGUMENTS "
+                }
+            ]
+        },
+        "recentWorkspaces": []
+    });
+    fs::write(
+        store.path(),
+        serde_json::to_string_pretty(&payload).expect("serialize payload"),
+    )
+    .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
+
+    let loaded = store.load().expect("load migrated reusable prompts");
+
+    assert!(loaded.chat.show_thinking_messages);
+    assert_eq!(loaded.reusable_prompts.len(), 1);
+    assert_eq!(loaded.reusable_prompts[0].id, "prompt-1");
+    assert_eq!(loaded.reusable_prompts[0].name, "review");
+    assert_eq!(loaded.reusable_prompts[0].description, "Review context");
+    assert_eq!(
+        loaded.reusable_prompts[0].content,
+        "Review this:\n$ARGUMENTS"
+    );
+}
+
+#[test]
+fn load_prefers_explicit_root_reusable_prompts_over_legacy_chat_custom_prompts() {
+    let harness = TestStoreHarness::new("root-reusable-prompts-win");
+    let store = harness.store();
+
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    let payload = json!({
+        "version": 2,
+        "chat": {
+            "customPrompts": [
+                { "id": "prompt-1", "name": "review", "description": "", "content": "Body" }
+            ]
+        },
+        "reusablePrompts": [],
+        "recentWorkspaces": []
+    });
+    fs::write(
+        store.path(),
+        serde_json::to_string_pretty(&payload).expect("serialize payload"),
+    )
+    .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
+
+    let loaded = store.load().expect("load root reusable prompts");
+
+    assert!(loaded.reusable_prompts.is_empty());
 }
 
 #[test]

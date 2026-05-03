@@ -8,6 +8,7 @@ const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): Settings
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   chat: { showThinkingMessages: false },
+  reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
   workspaces: {},
@@ -48,6 +49,8 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
     totalErrorCount: 0,
   },
   hasPromptValidationErrors: false,
+  reusablePromptValidationState: { errorsById: {}, totalErrorCount: 0 },
+  hasReusablePromptValidationErrors: false,
   hasRepoScriptValidationErrors: false,
   repoScriptValidationErrorCount: 0,
   showRepoScriptValidationErrors: false,
@@ -61,6 +64,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
     git: 0,
     repositories: 0,
     prompts: 0,
+    "reusable-prompts": 0,
     chat: 0,
     kanban: 0,
     autopilot: 0,
@@ -72,6 +76,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateSelectedRepoConfig: () => {},
   updateGlobalGitConfig: () => {},
   updateGlobalChatSettings: () => {},
+  updateReusablePrompts: () => {},
   updateGlobalKanbanSettings: () => {},
   updateGlobalAutopilotSettings: () => {},
   updateGlobalPromptOverrides: () => {},
@@ -83,7 +88,9 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
 
 describe("settings modal content", () => {
   test("renders chat section with SettingsChatSection when section is chat", () => {
-    const snapshot = createMockSnapshot({ chat: { showThinkingMessages: true } });
+    const snapshot = createMockSnapshot({
+      chat: { showThinkingMessages: true },
+    });
     const controller = createMockController(snapshot);
 
     const html = renderToStaticMarkup(
@@ -92,16 +99,53 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
     expect(html).toContain("Chat Settings");
     expect(html).toContain("Show Thinking Messages");
+    expect(html).not.toContain("Reusable prompts");
+  });
+
+  test("renders reusable prompts as a root section", () => {
+    const snapshot = createMockSnapshot({
+      reusablePrompts: [
+        {
+          id: "prompt-1",
+          name: "review",
+          description: "Review files",
+          content: "Review this:\n$ARGUMENTS",
+        },
+      ],
+    });
+    const controller = createMockController(snapshot);
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsModalContent, {
+        section: "reusable-prompts",
+        repositorySection: "configuration",
+        globalPromptRoleTab: "shared",
+        repoPromptRoleTab: "shared",
+        selectedReusablePromptId: "prompt-1",
+        isInteractionDisabled: false,
+        controller,
+        onRepositorySectionChange: () => {},
+        onGlobalPromptRoleTabChange: () => {},
+        onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
+      }),
+    );
+
+    expect(html).toContain("Reusable prompts");
+    expect(html).toContain("review");
+    expect(html).toContain("Review files");
   });
 
   test("renders kanban section when section is kanban", () => {
@@ -116,11 +160,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -141,11 +187,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -162,11 +210,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -184,11 +234,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -205,11 +257,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -229,11 +283,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -253,11 +309,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 

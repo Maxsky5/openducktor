@@ -107,6 +107,7 @@ beforeEach(() => {
     chat: {
       showThinkingMessages: false,
     },
+    reusablePrompts: [],
     kanban: {
       doneVisibleDays: 1,
       emptyColumnDisplay: "show",

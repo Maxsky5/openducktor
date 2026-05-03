@@ -15,6 +15,7 @@ const DEFAULT_SOFT_GUARDRAILS = {
 const DEFAULT_CHAT_SETTINGS = {
   showThinkingMessages: false,
 } as const;
+export const DEFAULT_REUSABLE_PROMPTS = [] as const;
 export const DEFAULT_KANBAN_SETTINGS = {
   doneVisibleDays: 1,
   emptyColumnDisplay: "show",
@@ -46,6 +47,67 @@ const trimmedRequiredString = (field: string) =>
     .string()
     .transform((value) => value.trim())
     .refine((value) => value.length > 0, `${field} cannot be blank.`);
+
+export const REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER = "$ARGUMENTS";
+export const REUSABLE_PROMPT_TRIGGER_PATTERN = /^[a-zA-Z0-9._:-]+$/;
+
+const reusablePromptNameSchema = trimmedRequiredString("Reusable prompt name").refine(
+  (value) => REUSABLE_PROMPT_TRIGGER_PATTERN.test(value),
+  "Reusable prompt name must contain only letters, digits, dots, underscores, colons, or dashes.",
+);
+
+export const reusablePromptSchema = z.object({
+  id: trimmedRequiredString("Reusable prompt id"),
+  name: reusablePromptNameSchema,
+  description: z
+    .string()
+    .default("")
+    .transform((value) => value.trim()),
+  content: trimmedRequiredString("Reusable prompt content"),
+});
+export type ReusablePrompt = z.infer<typeof reusablePromptSchema>;
+
+export const reusablePromptsSchema = z
+  .array(reusablePromptSchema)
+  .superRefine((prompts, context) => {
+    const seenIds = new Map<string, number>();
+    const seenNames = new Map<string, number>();
+    for (const [index, prompt] of prompts.entries()) {
+      const firstIdIndex = seenIds.get(prompt.id);
+      if (firstIdIndex !== undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate reusable prompt id: ${prompt.id}`,
+          path: [index, "id"],
+        });
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate reusable prompt id: ${prompt.id}`,
+          path: [firstIdIndex, "id"],
+        });
+      } else {
+        seenIds.set(prompt.id, index);
+      }
+
+      const normalizedName = prompt.name.toLowerCase();
+      const firstIndex = seenNames.get(normalizedName);
+      if (firstIndex !== undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate reusable prompt name: ${prompt.name}`,
+          path: [index, "name"],
+        });
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate reusable prompt name: ${prompt.name}`,
+          path: [firstIndex, "name"],
+        });
+      } else {
+        seenNames.set(normalizedName, index);
+      }
+    }
+  })
+  .default([]);
 
 const dedupeValues = <T>(values: readonly T[]) => [...new Set(values)];
 
@@ -208,6 +270,7 @@ export const globalConfigSchema = z.object({
   theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
+  reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
@@ -221,6 +284,7 @@ export const settingsSnapshotSchema = z.object({
   theme: themeValueSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
+  reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),

@@ -36,6 +36,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   },
   workspaces: {},
   chat: { showThinkingMessages: false },
+  reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
   globalPromptOverrides: {

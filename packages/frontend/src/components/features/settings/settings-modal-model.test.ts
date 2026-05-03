@@ -247,7 +247,7 @@ describe("settings-modal-model", () => {
     ).toBe(true);
     expect(
       canClearPromptOverride({
-        template: "custom prompt",
+        template: "reusable prompt",
         baseVersion: 1,
         enabled: false,
       }),

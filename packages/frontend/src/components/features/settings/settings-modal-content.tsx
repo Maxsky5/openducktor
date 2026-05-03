@@ -15,6 +15,7 @@ import { PromptOverridesSection } from "./settings-prompt-overrides-section";
 import { RepositoryAgentsSection } from "./settings-repository-agents-section";
 import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
 import { RepositoryGitSection } from "./settings-repository-git-section";
+import { SettingsReusablePromptsSection } from "./settings-reusable-prompts-section";
 import type { SettingsModalController } from "./use-settings-modal-controller";
 
 type SettingsModalContentProps = {
@@ -22,11 +23,13 @@ type SettingsModalContentProps = {
   repositorySection: RepositorySectionId;
   globalPromptRoleTab: PromptRoleTabId;
   repoPromptRoleTab: PromptRoleTabId;
+  selectedReusablePromptId: string | null;
   isInteractionDisabled: boolean;
   controller: SettingsModalController;
   onRepositorySectionChange: (next: RepositorySectionId) => void;
   onGlobalPromptRoleTabChange: (next: PromptRoleTabId) => void;
   onRepoPromptRoleTabChange: (next: PromptRoleTabId) => void;
+  onSelectedReusablePromptIdChange: (next: string | null) => void;
 };
 
 export function SettingsModalContent({
@@ -34,11 +37,13 @@ export function SettingsModalContent({
   repositorySection,
   globalPromptRoleTab,
   repoPromptRoleTab,
+  selectedReusablePromptId,
   isInteractionDisabled,
   controller,
   onRepositorySectionChange,
   onGlobalPromptRoleTabChange,
   onRepoPromptRoleTabChange,
+  onSelectedReusablePromptIdChange,
 }: SettingsModalContentProps): ReactElement {
   const {
     isLoadingSettings,
@@ -63,6 +68,7 @@ export function SettingsModalContent({
     showRepoScriptValidationErrors,
     selectedRepoDevServerValidationErrors,
     promptValidationState,
+    reusablePromptValidationState,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
@@ -72,6 +78,7 @@ export function SettingsModalContent({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
     updateGlobalPromptOverrides,
@@ -141,6 +148,19 @@ export function SettingsModalContent({
         chat={snapshotDraft.chat}
         disabled={isInteractionDisabled}
         onUpdateChat={updateGlobalChatSettings}
+      />
+    );
+  }
+
+  if (section === "reusable-prompts") {
+    return (
+      <SettingsReusablePromptsSection
+        reusablePrompts={snapshotDraft.reusablePrompts}
+        selectedReusablePromptId={selectedReusablePromptId ?? null}
+        validationErrors={reusablePromptValidationState.errorsById}
+        disabled={isInteractionDisabled}
+        onSelectedReusablePromptIdChange={onSelectedReusablePromptIdChange ?? (() => {})}
+        onUpdateReusablePrompts={updateReusablePrompts}
       />
     );
   }

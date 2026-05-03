@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   AUTOPILOT_EVENT_IDS,
+  chatSettingsSchema,
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
   kanbanSettingsSchema,
   repoConfigSchema,
+  reusablePromptSchema,
+  reusablePromptsSchema,
   settingsSnapshotSchema,
 } from "./config-schemas";
 
@@ -100,6 +103,92 @@ describe("config-schemas", () => {
 
     expect(parsed.kanban.doneVisibleDays).toBe(1);
     expect(parsed.kanban.emptyColumnDisplay).toBe("show");
+    expect(parsed.reusablePrompts).toEqual([]);
+  });
+
+  test("keeps chat settings scoped to chat display", () => {
+    const parsed = chatSettingsSchema.parse({ showThinkingMessages: true });
+
+    expect(parsed).toEqual({ showThinkingMessages: true });
+  });
+
+  test("defaults reusable prompts to an empty array", () => {
+    const parsed = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      chat: { showThinkingMessages: true },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(parsed.reusablePrompts).toEqual([]);
+  });
+
+  test("trims and roundtrips valid reusable prompts", () => {
+    const parsed = reusablePromptSchema.parse({
+      id: " prompt-1 ",
+      name: " review-file ",
+      description: " Review a file ",
+      content: " Review this:\n$ARGUMENTS ",
+    });
+
+    expect(parsed).toEqual({
+      id: "prompt-1",
+      name: "review-file",
+      description: "Review a file",
+      content: "Review this:\n$ARGUMENTS",
+    });
+  });
+
+  test("rejects invalid reusable prompt fields", () => {
+    expect(() =>
+      reusablePromptsSchema.parse([
+        { id: "prompt-1", name: "bad name", description: "", content: "Body" },
+      ]),
+    ).toThrow("Reusable prompt name must contain only letters");
+
+    expect(() =>
+      reusablePromptsSchema.parse([
+        { id: "prompt-1", name: "review", description: "", content: "  " },
+      ]),
+    ).toThrow("Reusable prompt content cannot be blank.");
+  });
+
+  test("rejects duplicate reusable prompt names case-insensitively", () => {
+    expect(() =>
+      reusablePromptsSchema.parse([
+        { id: "prompt-1", name: "review", description: "", content: "Body" },
+        { id: "prompt-2", name: " Review ", description: "", content: "Body" },
+      ]),
+    ).toThrow("Duplicate reusable prompt name: Review");
+  });
+
+  test("reports duplicate reusable prompt names against the first occurrence", () => {
+    const result = reusablePromptsSchema.safeParse([
+      { id: "prompt-1", name: "review", description: "", content: "Body" },
+      { id: "prompt-2", name: " Review ", description: "", content: "Body" },
+      { id: "prompt-3", name: "REVIEW", description: "", content: "Body" },
+    ]);
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error("duplicate names should fail validation");
+    }
+    expect(result.error.issues.map((issue) => issue.path.join("."))).toEqual([
+      "1.name",
+      "0.name",
+      "2.name",
+      "0.name",
+    ]);
+  });
+
+  test("rejects duplicate reusable prompt ids", () => {
+    expect(() =>
+      reusablePromptsSchema.parse([
+        { id: "prompt-1", name: "review", description: "", content: "Body" },
+        { id: " prompt-1 ", name: "summarize", description: "", content: "Body" },
+      ]),
+    ).toThrow("Duplicate reusable prompt id: prompt-1");
   });
 
   test("defaults missing kanban empty-column display to show", () => {

@@ -67,6 +67,45 @@ fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
     })
 }
 
+fn is_valid_reusable_prompt_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric()
+                || character == '.'
+                || character == '_'
+                || character == ':'
+                || character == '-'
+        })
+}
+
+fn normalize_reusable_prompts(config: &mut GlobalConfig) -> Result<()> {
+    let mut seen_ids = HashSet::new();
+    let mut seen_names = HashSet::new();
+    for prompt in &mut config.reusable_prompts {
+        normalize_required_string(&mut prompt.id, "Reusable prompt id")?;
+        normalize_required_string(&mut prompt.name, "Reusable prompt name")?;
+        prompt.description = prompt.description.trim().to_string();
+        normalize_required_string(&mut prompt.content, "Reusable prompt content")?;
+
+        if !is_valid_reusable_prompt_name(&prompt.name) {
+            return Err(anyhow!(
+                "Reusable prompt name must contain only letters, digits, dots, underscores, colons, or dashes."
+            ));
+        }
+
+        if !seen_ids.insert(prompt.id.clone()) {
+            return Err(anyhow!("Duplicate reusable prompt id: {}", prompt.id));
+        }
+
+        let normalized_name = prompt.name.to_ascii_lowercase();
+        if !seen_names.insert(normalized_name) {
+            return Err(anyhow!("Duplicate reusable prompt name: {}", prompt.name));
+        }
+    }
+
+    Ok(())
+}
+
 fn normalize_hook_commands(commands: &mut Vec<String>) {
     *commands = std::mem::take(commands)
         .into_iter()
@@ -301,6 +340,7 @@ fn normalize_workspace_order(config: &mut GlobalConfig) {
 }
 
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
+    normalize_reusable_prompts(config)?;
     normalize_kanban_settings(&mut config.kanban);
     normalize_autopilot_settings(&mut config.autopilot);
     normalize_prompt_overrides(&mut config.global_prompt_overrides)?;

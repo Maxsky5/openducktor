@@ -73,6 +73,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   chat: {
     showThinkingMessages: false,
   },
+  reusablePrompts: [],
   kanban: {
     doneVisibleDays: 1,
     emptyColumnDisplay: "show",
@@ -683,6 +684,7 @@ describe("use-repo-settings-operations", () => {
       chat: {
         showThinkingMessages: false,
       },
+      reusablePrompts: [],
       kanban: {
         doneVisibleDays: 1,
         emptyColumnDisplay: "show" as const,

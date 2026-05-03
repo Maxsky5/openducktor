@@ -29,7 +29,7 @@ describe("PromptOverrideCard", () => {
       <PromptOverrideCard
         label="Spec kickoff"
         description="Prompt used to start spec sessions."
-        override={{ template: "custom prompt", baseVersion: 2, enabled: true }}
+        override={{ template: "reusable prompt", baseVersion: 2, enabled: true }}
         disabled={false}
         canClearOverride
         onToggleEnabled={noop}
@@ -38,6 +38,6 @@ describe("PromptOverrideCard", () => {
       />,
     );
 
-    expect(markup).toContain(">custom prompt</textarea>");
+    expect(markup).toContain(">reusable prompt</textarea>");
   });
 });

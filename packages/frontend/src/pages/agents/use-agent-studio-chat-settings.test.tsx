@@ -19,6 +19,7 @@ const hostMock = {
       chat: {
         showThinkingMessages: false,
       },
+      reusablePrompts: [],
       kanban: {
         doneVisibleDays: 1,
         emptyColumnDisplay: "show",
@@ -86,10 +87,20 @@ const createSettingsSnapshot = (
     },
     workspaces: {},
     globalPromptOverrides: {},
+    reusablePrompts: [
+      {
+        id: "prompt-1",
+        name: "review",
+        description: "Review context",
+        content: "Review this.",
+      },
+    ],
   } as Omit<SettingsSnapshot, "chat"> & { chat?: SettingsSnapshot["chat"] };
 
   if (includeChat) {
-    snapshot.chat = { showThinkingMessages };
+    snapshot.chat = {
+      showThinkingMessages,
+    };
   }
 
   return snapshot as SettingsSnapshot;
@@ -114,6 +125,14 @@ describe("useAgentStudioChatSettings", () => {
 
     expect(hostMock.workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
     expect(harness.getLatest().showThinkingMessages).toBe(true);
+    expect(harness.getLatest().reusablePrompts).toEqual([
+      {
+        id: "prompt-1",
+        name: "review",
+        description: "Review context",
+        content: "Review this.",
+      },
+    ]);
 
     await harness.unmount();
   });
@@ -190,6 +209,7 @@ describe("useAgentStudioChatSettings", () => {
     await harness.update({ workspaceRepoPath: null });
 
     expect(harness.getLatest().showThinkingMessages).toBe(false);
+    expect(harness.getLatest().reusablePrompts).toEqual([]);
 
     await harness.unmount();
   });

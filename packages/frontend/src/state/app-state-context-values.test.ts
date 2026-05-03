@@ -64,6 +64,7 @@ describe("app-state-context-values", () => {
         chat: {
           showThinkingMessages: false,
         },
+        reusablePrompts: [],
         kanban: {
           doneVisibleDays: 1,
           emptyColumnDisplay: "show",

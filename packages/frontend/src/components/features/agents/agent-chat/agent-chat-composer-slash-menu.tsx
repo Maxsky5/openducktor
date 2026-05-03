@@ -35,15 +35,20 @@ export function AgentChatComposerSlashMenu({
   return (
     <div className="absolute bottom-full rounded-xl z-20 mb-2 border border-border bg-popover shadow-lg">
       {isSlashCommandsLoading ? (
-        <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
           <span>Loading slash commands...</span>
         </div>
-      ) : slashCommandsError ? (
-        <div className="px-3 py-2 text-sm text-destructive">{slashCommandsError}</div>
-      ) : commands.length === 0 ? (
+      ) : null}
+      {slashCommandsError ? (
+        <div className="border-b border-border px-3 py-2 text-sm text-destructive">
+          {slashCommandsError}
+        </div>
+      ) : null}
+      {commands.length === 0 && !isSlashCommandsLoading && !slashCommandsError ? (
         <div className="px-3 py-2 text-sm text-muted-foreground">No slash commands found.</div>
-      ) : (
+      ) : null}
+      {commands.length > 0 ? (
         <div className="hide-scrollbar flex rounded-xl max-h-64 flex-col overflow-y-auto">
           {commands.map((command, index) => {
             const isActive = index === activeIndex;
@@ -86,7 +91,7 @@ export function AgentChatComposerSlashMenu({
             );
           })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
