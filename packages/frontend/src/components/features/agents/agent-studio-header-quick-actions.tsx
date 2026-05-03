@@ -172,7 +172,8 @@ export function QuickActionsMenu({
       onResolveGitConflictQuickAction,
     ) === null;
   const menuEntries = buildQuickActionMenuEntries(options, sessionCreateOptions);
-  const canOpenActionsMenu = agentStudioReady && menuEntries.length > 0;
+  const primaryActionDisabled = primaryAction !== null && !canRunPrimaryAction;
+  const canOpenActionsMenu = agentStudioReady && menuEntries.length > 0 && !primaryActionDisabled;
   const groupedMenuEntries = buildQuickActionMenuGroups(menuEntries);
 
   useEffect(() => {

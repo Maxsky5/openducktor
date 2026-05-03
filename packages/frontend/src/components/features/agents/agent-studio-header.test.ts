@@ -789,6 +789,9 @@ describe("AgentStudioHeader", () => {
     expect(html).toMatch(
       /<button[^>]*(aria-label="Run quick action: Start Implementation"[^>]*disabled=""|disabled=""[^>]*aria-label="Run quick action: Start Implementation")/,
     );
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Open quick actions menu"[^>]*disabled=""|disabled=""[^>]*aria-label="Open quick actions menu")/,
+    );
     expect(html).toContain("lucide-zap");
     expect(html).not.toContain("Prepare new session");
   });
