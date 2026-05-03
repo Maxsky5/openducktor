@@ -192,7 +192,7 @@ export const buildQuestionRequest = (
   ...overrides,
 });
 
-export const buildPermissionRequest = (
+export const buildApprovalRequest = (
   overrides: Partial<AgentApprovalRequest> = {},
 ): AgentApprovalRequest => ({
   requestId: "permission-1",

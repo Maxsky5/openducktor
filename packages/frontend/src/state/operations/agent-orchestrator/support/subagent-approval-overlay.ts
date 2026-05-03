@@ -14,7 +14,7 @@ export type SubagentPendingQuestionsByExternalSessionId = NonNullable<
   AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
 >;
 
-export const EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID = Object.freeze(
+export const EMPTY_SUBAGENT_PENDING_APPROVALS_BY_EXTERNAL_SESSION_ID = Object.freeze(
   {},
 ) as SubagentPendingApprovalsByExternalSessionId;
 
@@ -66,7 +66,7 @@ const mergeSubagentPendingOverlayByChildExternalSessionId = <T extends { request
   return Object.keys(next).length > 0 ? next : undefined;
 };
 
-export const mergeSubagentPendingPermissionOverlay = ({
+export const mergeSubagentPendingApprovalOverlay = ({
   current,
   scannedChildExternalSessionIds,
   pendingApprovalsByChildExternalSessionId,

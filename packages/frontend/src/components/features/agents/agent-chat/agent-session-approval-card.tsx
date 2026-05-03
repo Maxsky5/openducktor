@@ -83,7 +83,7 @@ export function AgentSessionApprovalCard({
   const canReply = supportedOutcomes.length > 0;
   const missingCapabilityMessage = runtimeSupportedReplyOutcomes
     ? "This runtime does not support any declared approval outcomes for this request."
-    : "Runtime approval capabilities are unavailable for this request.";
+    : "Runtime approval capabilities are unavailable for this request. Refresh runtime checks or reattach the session, then try again.";
 
   return (
     <section className="rounded-xl border border-warning-border bg-warning-surface shadow-sm">

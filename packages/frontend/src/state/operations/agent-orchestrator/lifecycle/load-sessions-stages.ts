@@ -32,15 +32,15 @@ import {
   resolveAgentSessionPurposeForLoad,
 } from "../support/session-purpose";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
-import { isSubagentMessage } from "../support/subagent-messages";
 import {
-  EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID,
+  EMPTY_SUBAGENT_PENDING_APPROVALS_BY_EXTERNAL_SESSION_ID,
   EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
-  mergeSubagentPendingPermissionOverlay,
+  mergeSubagentPendingApprovalOverlay,
   mergeSubagentPendingQuestionOverlay,
   type SubagentPendingApprovalsByExternalSessionId,
   type SubagentPendingQuestionsByExternalSessionId,
-} from "../support/subagent-permission-overlay";
+} from "../support/subagent-approval-overlay";
+import { isSubagentMessage } from "../support/subagent-messages";
 import {
   createHydrationRuntimeResolver,
   type ResolvedHydrationRuntime,
@@ -192,8 +192,7 @@ type HydratedSubagentPendingInputOverlay = {
 
 const EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY = Object.freeze({
   scannedChildExternalSessionIds: [],
-  pendingApprovalsByChildExternalSessionId:
-    EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID,
+  pendingApprovalsByChildExternalSessionId: EMPTY_SUBAGENT_PENDING_APPROVALS_BY_EXTERNAL_SESSION_ID,
   pendingQuestionsByChildExternalSessionId: EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
 }) satisfies HydratedSubagentPendingInputOverlay;
 
@@ -211,7 +210,7 @@ const toHydratedSubagentPendingInputOverlay = (
     pendingApprovalsByChildExternalSessionId:
       Object.keys(pendingApprovalsByChildExternalSessionId).length > 0
         ? pendingApprovalsByChildExternalSessionId
-        : EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID,
+        : EMPTY_SUBAGENT_PENDING_APPROVALS_BY_EXTERNAL_SESSION_ID,
     pendingQuestionsByChildExternalSessionId:
       Object.keys(pendingQuestionsByChildExternalSessionId).length > 0
         ? pendingQuestionsByChildExternalSessionId
@@ -918,7 +917,7 @@ export const hydrateSessionRecordsStage = async ({
           promptOverrides,
           pendingApprovals: livePendingApprovals,
           pendingQuestions: livePendingQuestions,
-          subagentPendingApprovalsByExternalSessionId: mergeSubagentPendingPermissionOverlay({
+          subagentPendingApprovalsByExternalSessionId: mergeSubagentPendingApprovalOverlay({
             current: current.subagentPendingApprovalsByExternalSessionId,
             scannedChildExternalSessionIds:
               hydratedSubagentPendingInputByExternalSessionId.scannedChildExternalSessionIds,

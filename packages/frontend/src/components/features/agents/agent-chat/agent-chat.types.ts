@@ -45,13 +45,13 @@ export type AgentChatThreadModel = {
   isSending: boolean;
   sessionAgentColors: Record<string, string>;
   subagentPendingApprovalsByExternalSessionId?: AgentSessionState["subagentPendingApprovalsByExternalSessionId"];
-  subagentPendingPermissionCountByExternalSessionId?: Record<string, number>;
+  subagentPendingApprovalCountByExternalSessionId?: Record<string, number>;
   subagentPendingQuestionsByExternalSessionId?: AgentSessionState["subagentPendingQuestionsByExternalSessionId"];
   subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
-  canReplyToPermissions: boolean;
+  canReplyToApprovals: boolean;
   runtimeSupportedApprovalReplyOutcomes?: readonly RuntimeApprovalReplyOutcome[] | null;
   isSubmittingApprovalByRequestId: Record<string, boolean>;
   approvalReplyErrorByRequestId: Record<string, string>;

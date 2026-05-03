@@ -20,7 +20,7 @@ const buildBaseModel = () => ({
   sessionAgentColors: {},
   canSubmitQuestionAnswers: true,
   isSubmittingQuestionByRequestId: {},
-  canReplyToPermissions: true,
+  canReplyToApprovals: true,
   isSubmittingApprovalByRequestId: {},
   approvalReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},

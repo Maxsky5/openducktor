@@ -3,8 +3,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  buildApprovalRequest,
   buildMessage,
-  buildPermissionRequest,
   buildQuestionRequest,
   buildSession,
   buildTodoItem,
@@ -36,7 +36,7 @@ const buildBaseModel = () => ({
   sessionAgentColors: {},
   canSubmitQuestionAnswers: true,
   isSubmittingQuestionByRequestId: {},
-  canReplyToPermissions: true,
+  canReplyToApprovals: true,
   runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"] as const,
   isSubmittingApprovalByRequestId: {},
   approvalReplyErrorByRequestId: {},
@@ -293,7 +293,7 @@ describe("AgentChatThread", () => {
     expect(html).not.toContain("Loading session history...");
   });
 
-  test("renders pending question and permission cards below blank transcript when filtered to zero", () => {
+  test("renders pending question and approval cards below blank transcript when filtered to zero", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
@@ -303,7 +303,7 @@ describe("AgentChatThread", () => {
             status: "stopped",
             messages: [buildMessage("thinking", "Reasoning trace", { id: "thinking-1" })],
             pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [buildPermissionRequest()],
+            pendingApprovals: [buildApprovalRequest()],
           }),
         },
       }),
@@ -461,14 +461,14 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Input needed");
   });
 
-  test("renders permission cards for pending approval requests", () => {
+  test("renders approval cards for pending approval requests", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
           session: buildSession({
             pendingApprovals: [
-              buildPermissionRequest({
+              buildApprovalRequest({
                 requestId: "perm-1",
                 requestType: "permission_grant" as const,
                 title: `Approve permission: ${"bash"}`,
@@ -496,7 +496,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Reject");
   });
 
-  test("keeps pending question and permission cards mounted for long sessions", () => {
+  test("keeps pending question and approval cards mounted for long sessions", () => {
     const longMessages = Array.from({ length: 80 }, (_, index) =>
       buildMessage("assistant", `Message ${index + 1}`, {
         id: `message-${index + 1}`,
@@ -510,7 +510,7 @@ describe("AgentChatThread", () => {
           session: buildSession({
             messages: longMessages,
             pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [buildPermissionRequest()],
+            pendingApprovals: [buildApprovalRequest()],
           }),
         },
       }),
@@ -529,7 +529,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             pendingQuestions: [buildQuestionRequest()],
-            pendingApprovals: [buildPermissionRequest()],
+            pendingApprovals: [buildApprovalRequest()],
             todos: [
               buildTodoItem({
                 id: "todo-1",
@@ -742,14 +742,14 @@ describe("AgentChatThread", () => {
     rendered.unmount();
   });
 
-  test("adds bottom spacing before the composer when the last bottom-stack item is a permission", async () => {
+  test("adds bottom spacing before the composer when the last bottom-stack item is an approval", async () => {
     const rendered = render(
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
           session: buildSession({
             pendingQuestions: [],
-            pendingApprovals: [buildPermissionRequest()],
+            pendingApprovals: [buildApprovalRequest()],
             todos: [],
           }),
         },
@@ -763,7 +763,7 @@ describe("AgentChatThread", () => {
     rendered.unmount();
   });
 
-  test("renders runtime data errors even when the session has no questions, permissions, or todos", async () => {
+  test("renders runtime data errors even when the session has no questions, approvals, or todos", async () => {
     const rendered = render(
       createElement(AgentChatThread, {
         model: {

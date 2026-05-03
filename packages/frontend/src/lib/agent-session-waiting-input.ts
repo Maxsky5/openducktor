@@ -11,9 +11,9 @@ export const getAgentSessionWaitingInputPlaceholder = (
   session: Pick<AgentSessionState, "pendingApprovals" | "pendingQuestions">,
 ): string | null => {
   const pendingQuestionCount = session.pendingQuestions.length;
-  const pendingPermissionCount = session.pendingApprovals.length;
+  const pendingApprovalCount = session.pendingApprovals.length;
 
-  if (pendingQuestionCount > 0 && pendingPermissionCount > 0) {
+  if (pendingQuestionCount > 0 && pendingApprovalCount > 0) {
     return "Resolve the pending questions and approval requests above to continue";
   }
 
@@ -21,9 +21,9 @@ export const getAgentSessionWaitingInputPlaceholder = (
     return `Answer the pending ${pendingInputNoun(pendingQuestionCount, "question", "questions")} above to continue`;
   }
 
-  if (pendingPermissionCount > 0) {
+  if (pendingApprovalCount > 0) {
     return `Respond to the pending ${pendingInputNoun(
-      pendingPermissionCount,
+      pendingApprovalCount,
       "approval request",
       "approval requests",
     )} above to continue`;

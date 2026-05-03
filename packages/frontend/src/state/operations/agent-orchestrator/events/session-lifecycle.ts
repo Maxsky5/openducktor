@@ -14,8 +14,8 @@ import {
   findLastSessionMessageByRole,
   upsertSessionMessage,
 } from "../support/messages";
+import { clearSubagentPendingApprovalFromSessions } from "../support/subagent-approval-overlay";
 import { formatSubagentContent } from "../support/subagent-messages";
-import { clearSubagentPendingApprovalFromSessions } from "../support/subagent-permission-overlay";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
   isStopAbortSessionErrorMessage,
@@ -176,7 +176,7 @@ const isLinkedChildQuestionObservedByParent = (
   );
 };
 
-const recordParentSubagentPendingPermission = (
+const recordParentSubagentPendingApproval = (
   context: SessionLifecycleEventContext,
   event: ApprovalRequiredEvent,
 ): void => {
@@ -567,7 +567,7 @@ export const handlePermissionRequired = (
       return;
     }
 
-    recordParentSubagentPendingPermission(context, event);
+    recordParentSubagentPendingApproval(context, event);
     if (isOwnedByAttachedListener) {
       return;
     }
@@ -589,7 +589,7 @@ export const handlePermissionRequired = (
 
   if (role && shouldAutoRejectApproval(context, role, event)) {
     patchParentSubagentSessionLink(context, event);
-    recordParentSubagentPendingPermission(context, event);
+    recordParentSubagentPendingApproval(context, event);
     autoRejectMutatingApproval(context, event, role);
     return;
   }
@@ -606,7 +606,7 @@ export const handlePermissionRequired = (
     { persist: true },
   );
   patchParentSubagentSessionLink(context, event);
-  recordParentSubagentPendingPermission(context, event);
+  recordParentSubagentPendingApproval(context, event);
 };
 
 export const handleQuestionRequired = (

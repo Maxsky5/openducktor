@@ -14,7 +14,7 @@ const createSubagentMeta = (overrides: Partial<SubagentMeta> = {}): SubagentMeta
   ...overrides,
 });
 
-const pendingPermission = {
+const pendingApproval = {
   requestId: "permission-1",
   requestType: "permission_grant" as const,
   title: `Approve permission: ${"file.read"}`,
@@ -45,7 +45,7 @@ describe("SubagentTranscriptButton", () => {
         sessionRuntimeKind="opencode"
         sessionRuntimeId="runtime-1"
         sessionWorkingDirectory="/repo-a"
-        pendingApprovals={[pendingPermission]}
+        pendingApprovals={[pendingApproval]}
         pendingQuestions={[pendingQuestion]}
         meta={createSubagentMeta()}
         onOpenTranscript={onOpenTranscript}
@@ -66,7 +66,7 @@ describe("SubagentTranscriptButton", () => {
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
         workingDirectory: "/repo-a",
-        pendingApprovals: [pendingPermission],
+        pendingApprovals: [pendingApproval],
         pendingQuestions: [pendingQuestion],
       },
     });

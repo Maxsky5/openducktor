@@ -30,7 +30,7 @@ import { isWorkflowAgentSession } from "../support/session-purpose";
 import {
   clearSubagentPendingApprovalFromSessions,
   clearSubagentPendingQuestionFromSessions,
-} from "../support/subagent-permission-overlay";
+} from "../support/subagent-approval-overlay";
 import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {

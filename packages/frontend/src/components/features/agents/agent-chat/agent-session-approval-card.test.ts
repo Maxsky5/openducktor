@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   AgentSessionApprovalCard,
   resolveApprovalReplyOutcomes,
-} from "./agent-session-permission-card";
+} from "./agent-session-approval-card";
 
 const approvalRequest = {
   requestId: "approval-1",
@@ -66,5 +66,6 @@ describe("resolveApprovalReplyOutcomes", () => {
     expect(html).not.toContain("Approve once");
     expect(html).not.toContain("Reject");
     expect(html).toContain("Runtime approval capabilities are unavailable for this request.");
+    expect(html).toContain("Refresh runtime checks or reattach the session, then try again.");
   });
 });

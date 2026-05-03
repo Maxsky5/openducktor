@@ -57,7 +57,7 @@ function makeTranscriptSourceWithRuntimeIdOnly(): RuntimeSessionTranscriptSource
   };
 }
 
-function makePendingPermission() {
+function makePendingApproval() {
   return {
     requestId: "permission-1",
     requestType: "permission_grant" as const,
@@ -94,10 +94,10 @@ function makeTranscriptSourceWithPendingQuestion(): RuntimeSessionTranscriptSour
   };
 }
 
-function makeTranscriptSourceWithPendingPermission(): RuntimeSessionTranscriptSource {
+function makeTranscriptSourceWithPendingApproval(): RuntimeSessionTranscriptSource {
   return {
     ...makeTranscriptSource(),
-    pendingApprovals: [makePendingPermission()],
+    pendingApprovals: [makePendingApproval()],
   };
 }
 
@@ -126,7 +126,7 @@ function makeLiveTranscriptSession(): AgentSessionState {
     draftReasoningText: "",
     draftReasoningMessageId: null,
     contextUsage: null,
-    pendingApprovals: [makePendingPermission()],
+    pendingApprovals: [makePendingApproval()],
     pendingQuestions: [makePendingQuestion()],
     todos: [],
     modelCatalog: null,
@@ -296,7 +296,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
             canSubmitQuestionAnswers: false,
             isSubmittingQuestionByRequestId: {},
             onSubmitQuestionAnswers: async () => {},
-            canReplyToPermissions: false,
+            canReplyToApprovals: false,
             isSubmittingApprovalByRequestId: {},
             approvalReplyErrorByRequestId: {},
             onReplyApproval: async () => {},
@@ -400,7 +400,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
   test("attaches live runtime transcripts to the session event stream without polling", async () => {
     const liveTranscriptSource = makeLiveTranscriptSource();
-    const pendingPermission = makePendingPermission();
+    const pendingApproval = makePendingApproval();
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -416,7 +416,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         externalSessionId: "session-subagent-1",
         source: {
           ...liveTranscriptSource,
-          pendingApprovals: [pendingPermission],
+          pendingApprovals: [pendingApproval],
           pendingQuestions: [makePendingQuestion()],
         },
       },
@@ -432,7 +432,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         externalSessionId: "session-subagent-1",
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
-        pendingApprovals: [pendingPermission],
+        pendingApprovals: [pendingApproval],
         pendingQuestions: [makePendingQuestion()],
         workingDirectory: "/repo-a",
       });
@@ -444,7 +444,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
   test("does not keep the live transcript loading after the session is visible", async () => {
     const liveTranscriptSource = makeLiveTranscriptSource();
-    const pendingPermission = makePendingPermission();
+    const pendingApproval = makePendingApproval();
     const liveSession = makeLiveTranscriptSession();
     const resolveAttachCallbacks: Array<() => void> = [];
     attachRuntimeTranscriptSession.mockImplementation(
@@ -471,7 +471,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         externalSessionId: "session-subagent-1",
         source: {
           ...liveTranscriptSource,
-          pendingApprovals: [pendingPermission],
+          pendingApprovals: [pendingApproval],
         },
       },
       { wrapper },
@@ -484,16 +484,16 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       expect(latestSurfaceModelArgs?.session).toEqual(liveSession);
       expect(latestSurfaceModelArgs?.isTaskHydrating).toBe(false);
       expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
-      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: true });
+      expect(latestSurfaceModelArgs?.approvals).toMatchObject({ canReply: true });
     } finally {
       resolveAttachCallbacks[0]?.();
       await harness.unmount();
     }
   });
 
-  test("keeps parent-observed subagent permissions on the transcript session", async () => {
-    const transcriptSourceWithPendingPermission = makeTranscriptSourceWithPendingPermission();
-    const pendingPermission = makePendingPermission();
+  test("keeps parent-observed subagent approvals on the transcript session", async () => {
+    const transcriptSourceWithPendingApproval = makeTranscriptSourceWithPendingApproval();
+    const pendingApproval = makePendingApproval();
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -507,7 +507,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         },
         isOpen: true,
         externalSessionId: "session-subagent-1",
-        source: transcriptSourceWithPendingPermission,
+        source: transcriptSourceWithPendingApproval,
       },
       { wrapper },
     );
@@ -520,15 +520,15 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       });
 
       const session = latestSurfaceModelArgs?.session as AgentSessionState;
-      expect(session.pendingApprovals).toEqual([pendingPermission]);
-      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: true });
+      expect(session.pendingApprovals).toEqual([pendingApproval]);
+      expect(latestSurfaceModelArgs?.approvals).toMatchObject({ canReply: true });
     } finally {
       await harness.unmount();
     }
   });
 
-  test("replies to parent-observed permissions through the runtime transcript session", async () => {
-    const transcriptSourceWithPendingPermission = makeTranscriptSourceWithPendingPermission();
+  test("replies to parent-observed approvals through the runtime transcript session", async () => {
+    const transcriptSourceWithPendingApproval = makeTranscriptSourceWithPendingApproval();
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -542,7 +542,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         },
         isOpen: true,
         externalSessionId: "session-subagent-1",
-        source: transcriptSourceWithPendingPermission,
+        source: transcriptSourceWithPendingApproval,
       },
       { wrapper },
     );
@@ -550,17 +550,15 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     try {
       await harness.mount();
       await harness.waitFor(() => {
-        const permissions = latestSurfaceModelArgs?.permissions as
-          | { canReply: boolean }
-          | undefined;
-        return permissions?.canReply === true;
+        const approvals = latestSurfaceModelArgs?.approvals as { canReply: boolean } | undefined;
+        return approvals?.canReply === true;
       });
 
-      const permissions = latestSurfaceModelArgs?.permissions as {
+      const approvals = latestSurfaceModelArgs?.approvals as {
         onReply: (requestId: string, reply: RuntimeApprovalReplyOutcome) => Promise<void>;
       };
       await harness.run(async () => {
-        await permissions.onReply("permission-1", "approve_once");
+        await approvals.onReply("permission-1", "approve_once");
       });
 
       expect(replyAgentApproval).toHaveBeenCalledWith(
@@ -731,9 +729,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
       expect(readSessionHistory).not.toHaveBeenCalled();
       expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
-      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: false });
+      expect(latestSurfaceModelArgs?.approvals).toMatchObject({ canReply: false });
       await (
-        latestSurfaceModelArgs?.permissions as {
+        latestSurfaceModelArgs?.approvals as {
           onReply: (requestId: string, reply: RuntimeApprovalReplyOutcome) => Promise<void>;
         }
       ).onReply("permission-1", "approve_once");
@@ -781,7 +779,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("surfaces an ambiguous runtime attachment as unresolved and blocks permission replies", async () => {
+  test("surfaces an ambiguous runtime attachment as unresolved and blocks approval replies", async () => {
     const transcriptSourceWithRuntimeIdOnly = makeTranscriptSourceWithRuntimeIdOnly();
     runtimeList = [makeRuntime(), makeRuntime()];
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
@@ -807,9 +805,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       await harness.waitFor((state) => state.model.thread.emptyState !== null);
 
       expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(latestSurfaceModelArgs?.permissions).toMatchObject({ canReply: false });
+      expect(latestSurfaceModelArgs?.approvals).toMatchObject({ canReply: false });
       await (
-        latestSurfaceModelArgs?.permissions as {
+        latestSurfaceModelArgs?.approvals as {
           onReply: (requestId: string, reply: RuntimeApprovalReplyOutcome) => Promise<void>;
         }
       ).onReply("permission-1", "approve_once");

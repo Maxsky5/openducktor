@@ -21,9 +21,9 @@ import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-com
 import { useAgentChatLayout } from "./use-agent-chat-layout";
 import { useAgentChatThreadContext } from "./use-agent-chat-thread-context";
 
-const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS = Object.freeze({}) as Record<string, number>;
+const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
-const EMPTY_SUBAGENT_PENDING_PERMISSIONS = Object.freeze({}) as NonNullable<
+const EMPTY_SUBAGENT_PENDING_APPROVALS = Object.freeze({}) as NonNullable<
   AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
 >;
 const EMPTY_SUBAGENT_PENDING_QUESTIONS = Object.freeze({}) as NonNullable<
@@ -103,7 +103,7 @@ type AgentChatPendingQuestionActions = {
   onSubmit: (requestId: string, answers: string[][]) => Promise<void>;
 };
 
-type AgentChatPendingPermissionActions = {
+type AgentChatPendingApprovalActions = {
   canReply: boolean;
   isSubmittingByRequestId: Record<string, boolean>;
   errorByRequestId: Record<string, string>;
@@ -170,11 +170,11 @@ type UseAgentChatSurfaceModelArgs = {
   runtimeReadiness: AgentChatRuntimeReadiness;
   emptyState: AgentChatEmptyStateModel | null;
   pendingQuestions: AgentChatPendingQuestionActions;
-  permissions: AgentChatPendingPermissionActions;
+  approvals: AgentChatPendingApprovalActions;
   composer?: AgentChatComposerConfig;
   sessionAgentColors?: Record<string, string>;
   subagentPendingApprovalsByExternalSessionId?: AgentSessionState["subagentPendingApprovalsByExternalSessionId"];
-  subagentPendingPermissionCountByExternalSessionId?: Record<string, number>;
+  subagentPendingApprovalCountByExternalSessionId?: Record<string, number>;
   subagentPendingQuestionsByExternalSessionId?: AgentSessionState["subagentPendingQuestionsByExternalSessionId"];
   subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
 };
@@ -194,11 +194,11 @@ export function useAgentChatSurfaceModel({
   runtimeReadiness,
   emptyState,
   pendingQuestions,
-  permissions,
+  approvals,
   composer,
   sessionAgentColors,
   subagentPendingApprovalsByExternalSessionId,
-  subagentPendingPermissionCountByExternalSessionId,
+  subagentPendingApprovalCountByExternalSessionId,
   subagentPendingQuestionsByExternalSessionId,
   subagentPendingQuestionCountByExternalSessionId,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
@@ -243,7 +243,7 @@ export function useAgentChatSurfaceModel({
 
   const isComposerInteractionEnabled = mode === "interactive" && runtimeReadiness.isReady;
   const canSubmitQuestionAnswers = runtimeReadiness.isReady && pendingQuestions.canSubmit;
-  const canReplyToPermissionRequests = runtimeReadiness.isReady && permissions.canReply;
+  const canReplyToApprovalRequests = runtimeReadiness.isReady && approvals.canReply;
   const runtimeSupportedApprovalReplyOutcomes = useMemo(() => {
     const runtimeKind = threadSession?.runtimeKind;
     if (!runtimeKind) {
@@ -275,10 +275,9 @@ export function useAgentChatSurfaceModel({
       isSending: composer?.isSending ?? false,
       sessionAgentColors: resolvedSessionAgentColors,
       subagentPendingApprovalsByExternalSessionId:
-        subagentPendingApprovalsByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_PERMISSIONS,
-      subagentPendingPermissionCountByExternalSessionId:
-        subagentPendingPermissionCountByExternalSessionId ??
-        EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
+        subagentPendingApprovalsByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_APPROVALS,
+      subagentPendingApprovalCountByExternalSessionId:
+        subagentPendingApprovalCountByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
       subagentPendingQuestionsByExternalSessionId:
         subagentPendingQuestionsByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_QUESTIONS,
       subagentPendingQuestionCountByExternalSessionId:
@@ -286,11 +285,11 @@ export function useAgentChatSurfaceModel({
       canSubmitQuestionAnswers,
       isSubmittingQuestionByRequestId: pendingQuestions.isSubmittingByRequestId,
       onSubmitQuestionAnswers: pendingQuestions.onSubmit,
-      canReplyToPermissions: canReplyToPermissionRequests,
+      canReplyToApprovals: canReplyToApprovalRequests,
       runtimeSupportedApprovalReplyOutcomes,
-      isSubmittingApprovalByRequestId: permissions.isSubmittingByRequestId,
-      approvalReplyErrorByRequestId: permissions.errorByRequestId,
-      onReplyApproval: permissions.onReply,
+      isSubmittingApprovalByRequestId: approvals.isSubmittingByRequestId,
+      approvalReplyErrorByRequestId: approvals.errorByRequestId,
+      onReplyApproval: approvals.onReply,
       sessionRuntimeDataError,
       todoPanelCollapsed: activeTodoPanelCollapsed,
       onToggleTodoPanel: handleToggleTodoPanel,
@@ -300,7 +299,7 @@ export function useAgentChatSurfaceModel({
     }),
     [
       activeTodoPanelCollapsed,
-      canReplyToPermissionRequests,
+      canReplyToApprovalRequests,
       canSubmitQuestionAnswers,
       composer?.isSending,
       composer?.isStarting,
@@ -313,14 +312,14 @@ export function useAgentChatSurfaceModel({
       isWaitingForRuntimeReadiness,
       messagesContainerRef,
       pendingQuestions,
-      permissions,
+      approvals,
       resolvedSessionAgentColors,
       runtimeReadiness,
       runtimeSupportedApprovalReplyOutcomes,
       sessionRuntimeDataError,
       showThinkingMessages,
       subagentPendingApprovalsByExternalSessionId,
-      subagentPendingPermissionCountByExternalSessionId,
+      subagentPendingApprovalCountByExternalSessionId,
       subagentPendingQuestionsByExternalSessionId,
       subagentPendingQuestionCountByExternalSessionId,
       threadSession,

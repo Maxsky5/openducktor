@@ -634,7 +634,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("59s");
   });
 
-  test("renders running subagent cards as waiting when child session has pending permission", () => {
+  test("renders running subagent cards as waiting when child session has pending approval", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: buildMessage("system", "Subagent (build): review changes", {
@@ -653,7 +653,7 @@ describe("AgentChatMessageCard tool duration", () => {
         }),
         sessionSelectedModel: null,
         sessionAgentColors: {},
-        subagentPendingPermissionCountByExternalSessionId: {
+        subagentPendingApprovalCountByExternalSessionId: {
           "session-child-waiting": 1,
         },
       }),
@@ -694,7 +694,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("Running");
   });
 
-  test("keeps terminal subagent status when child session still has stale pending permission", () => {
+  test("keeps terminal subagent status when child session still has stale pending approval", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: buildMessage("system", "Subagent (build): review changes", {
@@ -714,7 +714,7 @@ describe("AgentChatMessageCard tool duration", () => {
         }),
         sessionSelectedModel: null,
         sessionAgentColors: {},
-        subagentPendingPermissionCountByExternalSessionId: {
+        subagentPendingApprovalCountByExternalSessionId: {
           "session-child-completed": 1,
         },
       }),

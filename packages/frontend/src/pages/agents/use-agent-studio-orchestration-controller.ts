@@ -9,7 +9,7 @@ import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
 } from "@/components/features/agents";
-import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-permission-actions";
+import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -166,7 +166,7 @@ type BuildAgentStudioPageModelsArgsInput = {
   readiness: AgentStudioOrchestrationReadinessContext;
   sessionActions: AgentStudioPageModelsSessionActionsContext;
   modelSelection: AgentStudioPageModelsModelSelectionContext;
-  permissions: ReturnType<typeof useAgentSessionApprovalActions>;
+  approvals: ReturnType<typeof useAgentSessionApprovalActions>;
   chatSettings: {
     showThinkingMessages: boolean;
   };
@@ -182,7 +182,7 @@ export const buildAgentStudioPageModelsArgs = ({
   readiness,
   sessionActions,
   modelSelection,
-  permissions,
+  approvals,
   chatSettings,
   composer,
 }: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => {
@@ -236,7 +236,7 @@ export const buildAgentStudioPageModelsArgs = ({
       onSelectModel: handleSelectModel,
       onSelectVariant: handleSelectVariant,
     },
-    permissions,
+    approvals,
     composer,
   };
 };
@@ -472,7 +472,7 @@ export function useAgentStudioOrchestrationController({
       handleSelectModel,
       handleSelectVariant,
     },
-    permissions: {
+    approvals: {
       isSubmittingApprovalByRequestId,
       approvalReplyErrorByRequestId,
       onReplyApproval,

@@ -112,7 +112,7 @@ const baseArgs: BuildArgs = {
     activeSessionAgentColors: {},
     activeSessionContextUsage: null,
   },
-  permissions: {
+  approvals: {
     isSubmittingApprovalByRequestId: {},
     approvalReplyErrorByRequestId: {},
     onReplyApproval: async () => {},

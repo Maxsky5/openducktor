@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
-  mergeSubagentPendingPermissionOverlay,
+  mergeSubagentPendingApprovalOverlay,
   mergeSubagentPendingQuestionOverlay,
-} from "./subagent-permission-overlay";
+} from "./subagent-approval-overlay";
 
-describe("subagent-permission-overlay", () => {
-  test("merges hydrated permissions without dropping live child entries", () => {
-    const livePermission = {
+describe("subagent-approval-overlay", () => {
+  test("merges hydrated approvals without dropping live child entries", () => {
+    const liveApproval = {
       requestId: "perm-live",
       requestType: "permission_grant" as const,
       title: `Approve permission: ${"write"}`,
@@ -20,7 +20,7 @@ describe("subagent-permission-overlay", () => {
         "reject" as const,
       ],
     };
-    const sharedPermission = {
+    const sharedApproval = {
       requestId: "perm-shared",
       requestType: "permission_grant" as const,
       title: `Approve permission: ${"read"}`,
@@ -34,7 +34,7 @@ describe("subagent-permission-overlay", () => {
         "reject" as const,
       ],
     };
-    const hydratedPermission = {
+    const hydratedApproval = {
       requestId: "perm-hydrated",
       requestType: "permission_grant" as const,
       title: `Approve permission: ${"read"}`,
@@ -49,26 +49,26 @@ describe("subagent-permission-overlay", () => {
       ],
     };
 
-    const merged = mergeSubagentPendingPermissionOverlay({
+    const merged = mergeSubagentPendingApprovalOverlay({
       current: {
-        "child-live": [livePermission],
-        "child-merge": [sharedPermission],
+        "child-live": [liveApproval],
+        "child-merge": [sharedApproval],
       },
       scannedChildExternalSessionIds: ["child-merge"],
       pendingApprovalsByChildExternalSessionId: {
         "child-merge": [
           {
-            ...sharedPermission,
+            ...sharedApproval,
             affectedPaths: ["stale/**"],
           },
-          hydratedPermission,
+          hydratedApproval,
         ],
       },
     });
 
     expect(merged).toEqual({
-      "child-live": [livePermission],
-      "child-merge": [sharedPermission, hydratedPermission],
+      "child-live": [liveApproval],
+      "child-merge": [sharedApproval, hydratedApproval],
     });
   });
 

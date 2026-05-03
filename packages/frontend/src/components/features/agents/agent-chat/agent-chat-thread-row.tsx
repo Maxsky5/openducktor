@@ -15,7 +15,7 @@ type AgentChatWindowRowProps = {
   sessionRuntimeKind?: AgentSessionState["runtimeKind"] | null | undefined;
   sessionRuntimeId?: AgentSessionState["runtimeId"] | null | undefined;
   subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
-  subagentPendingPermissionCount?: number;
+  subagentPendingApprovalCount?: number;
   subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
 };
@@ -29,7 +29,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   sessionRuntimeKind,
   sessionRuntimeId,
   subagentPendingApprovals,
-  subagentPendingPermissionCount = 0,
+  subagentPendingApprovalCount = 0,
   subagentPendingQuestions,
   subagentPendingQuestionCount = 0,
 }: AgentChatWindowRowProps): ReactElement {
@@ -50,7 +50,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
             sessionRuntimeKind={sessionRuntimeKind}
             sessionRuntimeId={sessionRuntimeId}
             subagentPendingApprovals={subagentPendingApprovals}
-            subagentPendingPermissionCount={subagentPendingPermissionCount}
+            subagentPendingApprovalCount={subagentPendingApprovalCount}
             subagentPendingQuestions={subagentPendingQuestions}
             subagentPendingQuestionCount={subagentPendingQuestionCount}
           />

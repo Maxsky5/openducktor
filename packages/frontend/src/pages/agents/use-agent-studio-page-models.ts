@@ -50,10 +50,10 @@ type AgentStudioCoreContext = {
   contextSwitchVersion: number;
 };
 
-const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS: Record<string, number> = Object.freeze({});
+const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS: Record<string, number> = Object.freeze({});
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS: Record<string, number> = Object.freeze({});
 
-const arePermissionCountMapsEqual = (
+const arePendingInputCountMapsEqual = (
   left: Record<string, number>,
   right: Record<string, number>,
 ): boolean => {
@@ -66,19 +66,19 @@ const arePermissionCountMapsEqual = (
   return leftKeys.every((key) => left[key] === right[key]);
 };
 
-const useStablePendingPermissionCounts = (
+const useStablePendingApprovalCounts = (
   sessions: AgentSessionSummary[],
   subagentPendingApprovalsByExternalSessionId:
     | AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
     | undefined,
 ): Record<string, number> => {
-  const previousRef = useRef<Record<string, number>>(EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS);
+  const previousRef = useRef<Record<string, number>>(EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS);
   return useMemo(() => {
     const next: Record<string, number> = {};
     for (const session of sessions) {
-      const pendingPermissionCount = session.pendingApprovals.length;
-      if (pendingPermissionCount > 0) {
-        next[session.externalSessionId] = pendingPermissionCount;
+      const pendingApprovalCount = session.pendingApprovals.length;
+      if (pendingApprovalCount > 0) {
+        next[session.externalSessionId] = pendingApprovalCount;
       }
     }
 
@@ -86,17 +86,16 @@ const useStablePendingPermissionCounts = (
       for (const [externalSessionId, pendingApprovals] of Object.entries(
         subagentPendingApprovalsByExternalSessionId,
       )) {
-        const pendingPermissionCount = pendingApprovals.length;
-        if (pendingPermissionCount > 0) {
-          next[externalSessionId] = pendingPermissionCount;
+        const pendingApprovalCount = pendingApprovals.length;
+        if (pendingApprovalCount > 0) {
+          next[externalSessionId] = pendingApprovalCount;
         }
       }
     }
 
-    const nextCounts =
-      Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS;
+    const nextCounts = Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS;
     const previous = previousRef.current;
-    if (arePermissionCountMapsEqual(previous, nextCounts)) {
+    if (arePendingInputCountMapsEqual(previous, nextCounts)) {
       return previous;
     }
 
@@ -134,7 +133,7 @@ const useStablePendingQuestionCounts = (
 
     const nextCounts = Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS;
     const previous = previousRef.current;
-    if (arePermissionCountMapsEqual(previous, nextCounts)) {
+    if (arePendingInputCountMapsEqual(previous, nextCounts)) {
       return previous;
     }
 
@@ -205,7 +204,7 @@ type AgentStudioModelSelectionContext = {
   activeSessionContextUsage: AgentStudioSessionContextUsage;
 };
 
-type AgentStudioPermissionContext = {
+type AgentStudioApprovalContext = {
   isSubmittingApprovalByRequestId: Record<string, boolean>;
   approvalReplyErrorByRequestId: Record<string, string>;
   onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
@@ -226,7 +225,7 @@ type UseAgentStudioPageModelsArgs = {
   readiness: AgentStudioReadinessContext;
   sessionActions: AgentStudioSessionActionsContext;
   modelSelection: AgentStudioModelSelectionContext;
-  permissions: AgentStudioPermissionContext;
+  approvals: AgentStudioApprovalContext;
   chatSettings: AgentStudioChatSettingsContext;
   composer: AgentStudioComposerContext;
 };
@@ -238,7 +237,7 @@ export function useAgentStudioPageModels({
   readiness,
   sessionActions,
   modelSelection,
-  permissions,
+  approvals,
   chatSettings,
   composer,
 }: UseAgentStudioPageModelsArgs): {
@@ -249,7 +248,7 @@ export function useAgentStudioPageModels({
   agentChatModel: AgentChatModel;
 } {
   const workflowSessionsForTask = core.sessionsForTask;
-  const subagentPendingPermissionCountByExternalSessionId = useStablePendingPermissionCounts(
+  const subagentPendingApprovalCountByExternalSessionId = useStablePendingApprovalCounts(
     core.allSessionSummaries,
     core.activeSession?.subagentPendingApprovalsByExternalSessionId,
   );
@@ -467,17 +466,17 @@ export function useAgentStudioPageModels({
     [sessionActions.isSubmittingQuestionByRequestId, sessionActions.onSubmitQuestionAnswers],
   );
 
-  const permissionsModel = useMemo(
+  const approvalsModel = useMemo(
     () => ({
       canReply: true,
-      isSubmittingByRequestId: permissions.isSubmittingApprovalByRequestId,
-      errorByRequestId: permissions.approvalReplyErrorByRequestId,
-      onReply: permissions.onReplyApproval,
+      isSubmittingByRequestId: approvals.isSubmittingApprovalByRequestId,
+      errorByRequestId: approvals.approvalReplyErrorByRequestId,
+      onReply: approvals.onReplyApproval,
     }),
     [
-      permissions.isSubmittingApprovalByRequestId,
-      permissions.onReplyApproval,
-      permissions.approvalReplyErrorByRequestId,
+      approvals.isSubmittingApprovalByRequestId,
+      approvals.onReplyApproval,
+      approvals.approvalReplyErrorByRequestId,
     ],
   );
 
@@ -565,12 +564,12 @@ export function useAgentStudioPageModels({
     runtimeReadiness,
     emptyState: chatEmptyState,
     pendingQuestions,
-    permissions: permissionsModel,
+    approvals: approvalsModel,
     composer: composerConfig,
     sessionAgentColors: modelSelection.activeSessionAgentColors,
     subagentPendingApprovalsByExternalSessionId:
       core.activeSession?.subagentPendingApprovalsByExternalSessionId,
-    subagentPendingPermissionCountByExternalSessionId,
+    subagentPendingApprovalCountByExternalSessionId,
     subagentPendingQuestionsByExternalSessionId:
       core.activeSession?.subagentPendingQuestionsByExternalSessionId,
     subagentPendingQuestionCountByExternalSessionId,
