@@ -240,7 +240,7 @@ describe("agent-studio-quick-actions", () => {
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: false, completed: true },
         planner: { required: true, canSkip: false, available: false, completed: true },
-        builder: { required: true, canSkip: false, available: false, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: true },
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
@@ -358,7 +358,17 @@ describe("agent-studio-quick-actions", () => {
       nonReviewOptions.some((option) => option.launchActionId === "build_pull_request_generation"),
     ).toBe(false);
 
-    const aiReviewTask = buildTask({ id: "task-1", status: "ai_review", availableActions: [] });
+    const aiReviewTask = buildTask({
+      id: "task-1",
+      status: "ai_review",
+      availableActions: [],
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: false, completed: true },
+        planner: { required: true, canSkip: false, available: false, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: true },
+        qa: { required: true, canSkip: false, available: false, completed: false },
+      },
+    });
     const aiReviewOptions = buildAgentStudioQuickActions({
       selectedTask: aiReviewTask,
       sessionsForTask: [
@@ -409,9 +419,57 @@ describe("agent-studio-quick-actions", () => {
       "planner_initial",
     ]);
     expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
-      launchActionId: "build_pull_request_generation",
-      label: "Generate Pull Request",
-      disabled: true,
+      launchActionId: "build_after_human_request_changes",
+      label: "Request Changes",
+      disabled: false,
+      requiresHumanFeedback: true,
     });
+  });
+
+  test("filters quick actions for unavailable task roles", () => {
+    const task = buildTask({
+      id: "task-1",
+      status: "human_review",
+      availableActions: [
+        "set_spec",
+        "set_plan",
+        "build_start",
+        "qa_start",
+        "human_request_changes",
+      ],
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: true },
+        qa: { required: true, canSkip: false, available: true, completed: false },
+      },
+    });
+
+    const options = buildAgentStudioQuickActions({
+      selectedTask: task,
+      sessionsForTask: [
+        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+      ],
+      roleEnabledByTask: {
+        spec: true,
+        planner: true,
+        build: false,
+        qa: true,
+      },
+      createSessionDisabled: false,
+      hasActiveGitConflict: true,
+    });
+
+    expect(options.map((option) => option.launchActionId)).toEqual([
+      "qa_review",
+      "spec_initial",
+      "planner_initial",
+    ]);
+    expect(
+      options.some(
+        (option) =>
+          option.role === "build" || option.launchActionId === "build_pull_request_generation",
+      ),
+    ).toBe(false);
   });
 });

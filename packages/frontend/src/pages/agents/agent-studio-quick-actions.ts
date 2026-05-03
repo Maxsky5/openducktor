@@ -154,11 +154,17 @@ export const buildAgentStudioQuickActions = (params: {
     surface: "agent_studio_quick_actions",
   }).allActions;
   const disabledReason = createQuickActionDisabledReason(params.createSessionDisabled);
-  const createLifecycleOption = (action: TaskWorkflowAction): AgentStudioQuickActionOption => {
+  const createLifecycleOption = (
+    action: TaskWorkflowAction,
+  ): AgentStudioQuickActionOption | null => {
     const launchActionId = quickActionIdForWorkflowAction(action, task);
+    const role = quickActionRoleForWorkflowAction(action);
+    if (!params.roleEnabledByTask[role]) {
+      return null;
+    }
     return {
       id: `quick:${launchActionId}`,
-      role: quickActionRoleForWorkflowAction(action),
+      role,
       launchActionId,
       label: taskActionLabel(action, task, { surface: "agent_studio" }),
       description: quickActionDescriptionForWorkflowAction(action),
@@ -184,7 +190,9 @@ export const buildAgentStudioQuickActions = (params: {
     ...(disabledReason ? { disabledReason } : {}),
   });
 
-  const options: AgentStudioQuickActionOption[] = workflowActionOrder.map(createLifecycleOption);
+  const options: AgentStudioQuickActionOption[] = workflowActionOrder
+    .map(createLifecycleOption)
+    .filter((option): option is AgentStudioQuickActionOption => option !== null);
 
   if (params.hasActiveGitConflict && params.roleEnabledByTask.build) {
     options.push({
@@ -198,7 +206,7 @@ export const buildAgentStudioQuickActions = (params: {
     });
   }
 
-  if (canShowPullRequestQuickAction(task)) {
+  if (canShowPullRequestQuickAction(task) && params.roleEnabledByTask.build) {
     const builderSessionOptions = buildReusableSessionOptions({
       sessions: params.sessionsForTask.filter((session) => session.taskId === task.id),
       role: "build",
@@ -232,5 +240,5 @@ export const buildAgentStudioQuickActions = (params: {
 export const selectPrimaryAgentStudioQuickAction = (
   options: AgentStudioQuickActionOption[],
 ): AgentStudioQuickActionOption | null => {
-  return options[0] ?? null;
+  return options.find((option) => !option.disabled) ?? options[0] ?? null;
 };
