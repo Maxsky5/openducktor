@@ -308,6 +308,40 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
+  test("uses concrete URL session once a sessionless selection intent has a session param", async () => {
+    const buildSession = createSession("task-1", "session-build", {
+      role: "build",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "idle",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        sessions: [buildSession],
+        taskIdParam: "task-1",
+        sessionParam: "session-build",
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+        selectionIntent: {
+          taskId: "task-1",
+          externalSessionId: null,
+          role: "build",
+        },
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.selectedSessionById?.externalSessionId).toBe("session-build");
+      expect(latest.activeSession?.externalSessionId).toBe("session-build");
+      expect(latest.viewActiveSession?.externalSessionId).toBe("session-build");
+      expect(latest.viewRole).toBe("build");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("suppresses stale query task and session selection while repo boundary reset is pending", async () => {
     const readSessionModelCatalog = mock(async () => emptyCatalog);
     const readSessionTodos = mock(async () => []);

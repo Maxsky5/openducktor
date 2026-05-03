@@ -701,8 +701,9 @@ describe("AgentStudioHeader", () => {
       }),
     );
 
-    expect(html).toContain('disabled=""');
-    expect(html).toContain('aria-label="Run quick action: Resolve Git Conflict"');
+    expect(html).toMatch(
+      /<button[^>]*(aria-label="Run quick action: Resolve Git Conflict"[^>]*disabled=""|disabled=""[^>]*aria-label="Run quick action: Resolve Git Conflict")/,
+    );
   });
 
   test("uses the accent variant for the quick action split button", () => {

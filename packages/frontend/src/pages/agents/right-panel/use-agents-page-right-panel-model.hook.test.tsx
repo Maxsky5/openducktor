@@ -10,9 +10,14 @@ enableReactActEnvironment();
 
 type UseAgentsPageRightPanelModel =
   typeof import("./use-agents-page-right-panel-model")["useAgentsPageRightPanelModel"];
+type BuildToolsSnapshotModule =
+  typeof import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");
+type GitActionsModule = typeof import("../use-agent-studio-git-actions");
 type HookArgs = Parameters<UseAgentsPageRightPanelModel>[0];
 
 let useAgentsPageRightPanelModel: UseAgentsPageRightPanelModel;
+let realBuildToolsSnapshot: BuildToolsSnapshotModule | null = null;
+let realGitActions: GitActionsModule | null = null;
 
 const buildToolsSnapshotState: { current: Record<string, unknown> } = {
   current: {},
@@ -109,6 +114,11 @@ beforeEach(async () => {
   buildToolsSnapshotState.current = createSnapshot("A");
   gitActionsState.current = createGitActions("A");
 
+  realBuildToolsSnapshot = await import(
+    "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot"
+  );
+  realGitActions = await import("../use-agent-studio-git-actions");
+
   mock.module(
     "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot",
     () => ({
@@ -123,15 +133,19 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  const buildToolsSnapshot = realBuildToolsSnapshot;
+  const gitActions = realGitActions;
+
+  if (!buildToolsSnapshot || !gitActions) {
+    return;
+  }
+
   await restoreMockedModules([
     [
       "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot",
-      () =>
-        import(
-          "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot"
-        ),
+      () => Promise.resolve(buildToolsSnapshot),
     ],
-    ["../use-agent-studio-git-actions", () => import("../use-agent-studio-git-actions")],
+    ["../use-agent-studio-git-actions", () => Promise.resolve(gitActions)],
   ]);
 });
 
