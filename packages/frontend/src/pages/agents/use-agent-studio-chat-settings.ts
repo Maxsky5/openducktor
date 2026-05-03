@@ -1,6 +1,6 @@
 import {
-  type CustomPrompt,
   chatSettingsSchema,
+  type ReusablePrompt,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
@@ -10,10 +10,20 @@ import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 const DEFAULT_SHOW_THINKING_MESSAGES = false;
-const DEFAULT_CUSTOM_PROMPTS: CustomPrompt[] = [];
+const DEFAULT_REUSABLE_PROMPTS: ReusablePrompt[] = [];
 
-const readChatSettings = (snapshot: SettingsSnapshot): SettingsSnapshot["chat"] =>
-  chatSettingsSchema.parse(snapshot.chat);
+type AgentStudioChatSettings = {
+  showThinkingMessages: boolean;
+  reusablePrompts: ReusablePrompt[];
+};
+
+const readAgentStudioChatSettings = (snapshot: SettingsSnapshot): AgentStudioChatSettings => {
+  const chat = chatSettingsSchema.parse(snapshot.chat);
+  return {
+    showThinkingMessages: chat.showThinkingMessages,
+    reusablePrompts: snapshot.reusablePrompts,
+  };
+};
 
 const createChatSettingsLoadError = (workspaceRepoPath: string, cause: unknown): Error => {
   return new Error(
@@ -24,7 +34,7 @@ const createChatSettingsLoadError = (workspaceRepoPath: string, cause: unknown):
 
 export function useAgentStudioChatSettings(args: { activeWorkspace: ActiveWorkspace | null }): {
   showThinkingMessages: boolean;
-  customPrompts: CustomPrompt[];
+  reusablePrompts: ReusablePrompt[];
   chatSettingsLoadError: Error | null;
   retryChatSettingsLoad: () => void;
 } {
@@ -38,7 +48,7 @@ export function useAgentStudioChatSettings(args: { activeWorkspace: ActiveWorksp
   } = useQuery({
     ...settingsSnapshotQueryOptions(),
     enabled: activeWorkspace !== null,
-    select: readChatSettings,
+    select: readAgentStudioChatSettings,
   });
 
   const retryChatSettingsLoad = useCallback((): void => {
@@ -56,9 +66,9 @@ export function useAgentStudioChatSettings(args: { activeWorkspace: ActiveWorksp
     showThinkingMessages: activeWorkspace
       ? (chatSettings?.showThinkingMessages ?? DEFAULT_SHOW_THINKING_MESSAGES)
       : DEFAULT_SHOW_THINKING_MESSAGES,
-    customPrompts: activeWorkspace
-      ? (chatSettings?.customPrompts ?? DEFAULT_CUSTOM_PROMPTS)
-      : DEFAULT_CUSTOM_PROMPTS,
+    reusablePrompts: activeWorkspace
+      ? (chatSettings?.reusablePrompts ?? DEFAULT_REUSABLE_PROMPTS)
+      : DEFAULT_REUSABLE_PROMPTS,
     chatSettingsLoadError,
     retryChatSettingsLoad,
   };

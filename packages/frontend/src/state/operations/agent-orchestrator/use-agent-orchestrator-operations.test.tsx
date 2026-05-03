@@ -326,8 +326,8 @@ describe("use-agent-orchestrator-operations", () => {
       },
       chat: {
         showThinkingMessages: false,
-        customPrompts: [],
       },
+      reusablePrompts: [],
       kanban: {
         doneVisibleDays: 1,
         emptyColumnDisplay: "show",

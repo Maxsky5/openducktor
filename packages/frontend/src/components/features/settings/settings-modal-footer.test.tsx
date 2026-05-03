@@ -17,7 +17,7 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
       },
       validationSummary: {
         promptPlaceholderErrorCount: 0,
-        customPromptFieldErrorCount: 0,
+        reusablePromptFieldErrorCount: 0,
         repoScriptFieldErrorCount: 0,
       },
       errors: { saveError: null, catalogError: null },
@@ -34,7 +34,7 @@ describe("SettingsModalFooter", () => {
     const renderer = renderFooter({
       validationSummary: {
         promptPlaceholderErrorCount: 0,
-        customPromptFieldErrorCount: 0,
+        reusablePromptFieldErrorCount: 0,
         repoScriptFieldErrorCount: 2,
       },
     });
@@ -52,7 +52,7 @@ describe("SettingsModalFooter", () => {
     const renderer = renderFooter({
       validationSummary: {
         promptPlaceholderErrorCount: 0,
-        customPromptFieldErrorCount: 0,
+        reusablePromptFieldErrorCount: 0,
         repoScriptFieldErrorCount: 2,
       },
     });
@@ -64,11 +64,11 @@ describe("SettingsModalFooter", () => {
     }
   });
 
-  test("disables save when custom prompt fields are invalid", () => {
+  test("disables save when reusable prompt fields are invalid", () => {
     const renderer = renderFooter({
       validationSummary: {
         promptPlaceholderErrorCount: 0,
-        customPromptFieldErrorCount: 1,
+        reusablePromptFieldErrorCount: 1,
         repoScriptFieldErrorCount: 0,
       },
     });

@@ -14,8 +14,8 @@ const DEFAULT_SOFT_GUARDRAILS = {
 
 const DEFAULT_CHAT_SETTINGS = {
   showThinkingMessages: false,
-  customPrompts: [],
 } as const;
+export const DEFAULT_REUSABLE_PROMPTS = [] as const;
 export const DEFAULT_KANBAN_SETTINGS = {
   doneVisibleDays: 1,
   emptyColumnDisplay: "show",
@@ -48,27 +48,27 @@ const trimmedRequiredString = (field: string) =>
     .transform((value) => value.trim())
     .refine((value) => value.length > 0, `${field} cannot be blank.`);
 
-export const CUSTOM_PROMPT_ARGUMENTS_PLACEHOLDER = "$ARGUMENTS";
-export const CUSTOM_PROMPT_TRIGGER_PATTERN = /^[a-zA-Z0-9._:-]+$/;
+export const REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER = "$ARGUMENTS";
+export const REUSABLE_PROMPT_TRIGGER_PATTERN = /^[a-zA-Z0-9._:-]+$/;
 
-const customPromptNameSchema = trimmedRequiredString("Custom prompt name").refine(
-  (value) => CUSTOM_PROMPT_TRIGGER_PATTERN.test(value),
-  "Custom prompt name must contain only letters, digits, dots, underscores, colons, or dashes.",
+const reusablePromptNameSchema = trimmedRequiredString("Reusable prompt name").refine(
+  (value) => REUSABLE_PROMPT_TRIGGER_PATTERN.test(value),
+  "Reusable prompt name must contain only letters, digits, dots, underscores, colons, or dashes.",
 );
 
-export const customPromptSchema = z.object({
-  id: trimmedRequiredString("Custom prompt id"),
-  name: customPromptNameSchema,
+export const reusablePromptSchema = z.object({
+  id: trimmedRequiredString("Reusable prompt id"),
+  name: reusablePromptNameSchema,
   description: z
     .string()
     .default("")
     .transform((value) => value.trim()),
-  content: trimmedRequiredString("Custom prompt content"),
+  content: trimmedRequiredString("Reusable prompt content"),
 });
-export type CustomPrompt = z.infer<typeof customPromptSchema>;
+export type ReusablePrompt = z.infer<typeof reusablePromptSchema>;
 
-export const customPromptsSchema = z
-  .array(customPromptSchema)
+export const reusablePromptsSchema = z
+  .array(reusablePromptSchema)
   .superRefine((prompts, context) => {
     const seenNames = new Map<string, number>();
     for (const [index, prompt] of prompts.entries()) {
@@ -77,12 +77,12 @@ export const customPromptsSchema = z
       if (firstIndex !== undefined) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Duplicate custom prompt name: ${prompt.name}`,
+          message: `Duplicate reusable prompt name: ${prompt.name}`,
           path: [index, "name"],
         });
         context.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Duplicate custom prompt name: ${prompt.name}`,
+          message: `Duplicate reusable prompt name: ${prompt.name}`,
           path: [firstIndex, "name"],
         });
       }
@@ -185,7 +185,6 @@ export type RepoConfig = z.infer<typeof repoConfigSchema>;
 
 export const chatSettingsSchema = z.object({
   showThinkingMessages: z.boolean().default(DEFAULT_CHAT_SETTINGS.showThinkingMessages),
-  customPrompts: customPromptsSchema,
 });
 export type ChatSettings = z.infer<typeof chatSettingsSchema>;
 
@@ -252,7 +251,8 @@ export const globalConfigSchema = z.object({
   activeWorkspace: workspaceIdSchema.optional(),
   theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
-  chat: chatSettingsSchema.default(() => ({ ...DEFAULT_CHAT_SETTINGS, customPrompts: [] })),
+  chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
+  reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
@@ -265,7 +265,8 @@ export type GlobalConfig = z.infer<typeof globalConfigSchema>;
 export const settingsSnapshotSchema = z.object({
   theme: themeValueSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
-  chat: chatSettingsSchema.default(() => ({ ...DEFAULT_CHAT_SETTINGS, customPrompts: [] })),
+  chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
+  reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),

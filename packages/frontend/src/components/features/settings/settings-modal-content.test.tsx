@@ -7,7 +7,8 @@ import { SettingsModalContent } from "./settings-modal-content";
 const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot => ({
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
-  chat: { showThinkingMessages: false, customPrompts: [] },
+  chat: { showThinkingMessages: false },
+  reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
   workspaces: {},
@@ -48,8 +49,8 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
     totalErrorCount: 0,
   },
   hasPromptValidationErrors: false,
-  customPromptValidationState: { errorsById: {}, totalErrorCount: 0 },
-  hasCustomPromptValidationErrors: false,
+  reusablePromptValidationState: { errorsById: {}, totalErrorCount: 0 },
+  hasReusablePromptValidationErrors: false,
   hasRepoScriptValidationErrors: false,
   repoScriptValidationErrorCount: 0,
   showRepoScriptValidationErrors: false,
@@ -75,6 +76,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateSelectedRepoConfig: () => {},
   updateGlobalGitConfig: () => {},
   updateGlobalChatSettings: () => {},
+  updateReusablePrompts: () => {},
   updateGlobalKanbanSettings: () => {},
   updateGlobalAutopilotSettings: () => {},
   updateGlobalPromptOverrides: () => {},
@@ -87,7 +89,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
 describe("settings modal content", () => {
   test("renders chat section with SettingsChatSection when section is chat", () => {
     const snapshot = createMockSnapshot({
-      chat: { showThinkingMessages: true, customPrompts: [] },
+      chat: { showThinkingMessages: true },
     });
     const controller = createMockController(snapshot);
 
@@ -112,17 +114,14 @@ describe("settings modal content", () => {
 
   test("renders reusable prompts as a root section", () => {
     const snapshot = createMockSnapshot({
-      chat: {
-        showThinkingMessages: false,
-        customPrompts: [
-          {
-            id: "prompt-1",
-            name: "review",
-            description: "Review files",
-            content: "Review this:\n$ARGUMENTS",
-          },
-        ],
-      },
+      reusablePrompts: [
+        {
+          id: "prompt-1",
+          name: "review",
+          description: "Review files",
+          content: "Review this:\n$ARGUMENTS",
+        },
+      ],
     });
     const controller = createMockController(snapshot);
 
@@ -132,13 +131,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
-        selectedCustomPromptId: "prompt-1",
+        selectedReusablePromptId: "prompt-1",
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
-        onSelectedCustomPromptIdChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 

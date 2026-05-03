@@ -17,6 +17,7 @@ use host_infra_system::{
     remove_worktree_path_if_present, resolve_effective_worktree_base_dir_for_workspace,
     run_command, run_command_allow_failure_with_env, version_command, AutopilotSettings,
     ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+    ReusablePrompt,
 };
 #[cfg(test)]
 use host_infra_system::{
@@ -62,6 +63,7 @@ type SettingsSnapshotTuple = (
     String,
     GlobalGitConfig,
     ChatSettings,
+    Vec<ReusablePrompt>,
     KanbanSettings,
     AutopilotSettings,
     HashMap<String, RepoConfig>,
@@ -517,6 +519,7 @@ impl AppService {
             config.theme,
             config.git,
             config.chat,
+            config.reusable_prompts,
             config.kanban,
             config.autopilot,
             config.workspaces,
@@ -540,6 +543,7 @@ impl AppService {
         config.theme = snapshot.theme;
         config.git = snapshot.git;
         config.chat = snapshot.chat;
+        config.reusable_prompts = snapshot.reusable_prompts;
         config.kanban = KanbanSettings {
             done_visible_days: snapshot.kanban.done_visible_days.max(0),
             empty_column_display: snapshot.kanban.empty_column_display,
@@ -1273,11 +1277,21 @@ mod tests {
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
 
-        let (_theme, _git, chat, kanban, _autopilot, repos, global_prompt_overrides) = service
+        let (
+            _theme,
+            _git,
+            chat,
+            reusable_prompts,
+            kanban,
+            _autopilot,
+            repos,
+            global_prompt_overrides,
+        ) = service
             .workspace_get_settings_snapshot()
             .expect("settings snapshot should load");
 
         assert_eq!(chat, ChatSettings::default());
+        assert!(reusable_prompts.is_empty());
         assert!(!chat.show_thinking_messages);
         assert_eq!(kanban.done_visible_days, 1);
         assert!(repos.is_empty());

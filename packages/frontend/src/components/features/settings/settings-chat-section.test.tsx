@@ -6,7 +6,7 @@ import { SettingsChatSection } from "./settings-chat-section";
 
 describe("settings chat section", () => {
   test("renders chat settings with thinking messages hidden by default", () => {
-    const chatSettings: ChatSettings = { showThinkingMessages: false, customPrompts: [] };
+    const chatSettings: ChatSettings = { showThinkingMessages: false };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
@@ -23,7 +23,7 @@ describe("settings chat section", () => {
   });
 
   test("renders switch as unchecked when showThinkingMessages is false", () => {
-    const chatSettings: ChatSettings = { showThinkingMessages: false, customPrompts: [] };
+    const chatSettings: ChatSettings = { showThinkingMessages: false };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
@@ -37,7 +37,7 @@ describe("settings chat section", () => {
   });
 
   test("renders switch as checked when showThinkingMessages is true", () => {
-    const chatSettings: ChatSettings = { showThinkingMessages: true, customPrompts: [] };
+    const chatSettings: ChatSettings = { showThinkingMessages: true };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
@@ -51,7 +51,7 @@ describe("settings chat section", () => {
   });
 
   test("switch is disabled when disabled prop is true", () => {
-    const chatSettings: ChatSettings = { showThinkingMessages: false, customPrompts: [] };
+    const chatSettings: ChatSettings = { showThinkingMessages: false };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
@@ -65,7 +65,7 @@ describe("settings chat section", () => {
   });
 
   test("displays save notice about changes taking effect after save", () => {
-    const chatSettings: ChatSettings = { showThinkingMessages: false, customPrompts: [] };
+    const chatSettings: ChatSettings = { showThinkingMessages: false };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {
@@ -78,18 +78,8 @@ describe("settings chat section", () => {
     expect(html).toContain("after you save settings");
   });
 
-  test("does not render custom prompts in chat settings", () => {
-    const chatSettings: ChatSettings = {
-      showThinkingMessages: false,
-      customPrompts: [
-        {
-          id: "prompt-1",
-          name: "review",
-          description: "Review files",
-          content: "Review this:\n$ARGUMENTS",
-        },
-      ],
-    };
+  test("does not render reusable prompts in chat settings", () => {
+    const chatSettings: ChatSettings = { showThinkingMessages: false };
 
     const html = renderToStaticMarkup(
       createElement(SettingsChatSection, {

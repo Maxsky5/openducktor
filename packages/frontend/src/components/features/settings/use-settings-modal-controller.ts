@@ -4,6 +4,7 @@ import type {
   GitProviderRepository,
   RepoConfig,
   RepoPromptOverrides,
+  ReusablePrompt,
   RuntimeCheck,
   RuntimeDescriptor,
   RuntimeKind,
@@ -23,8 +24,8 @@ import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-consta
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import { useSettingsModalBranchesState } from "./use-settings-modal-branches-state";
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
-import type { CustomPromptValidationState } from "./use-settings-modal-custom-prompt-validation";
-import { useSettingsModalCustomPromptValidation } from "./use-settings-modal-custom-prompt-validation";
+import type { ReusablePromptValidationState } from "./use-settings-modal-custom-prompt-validation";
+import { useSettingsModalReusablePromptValidation } from "./use-settings-modal-custom-prompt-validation";
 import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-draft-actions";
 import { useSettingsModalDirtyState } from "./use-settings-modal-dirty-state";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
@@ -65,8 +66,8 @@ export type SettingsModalController = {
   globalPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
   selectedRepoPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
-  customPromptValidationState: CustomPromptValidationState;
-  hasCustomPromptValidationErrors: boolean;
+  reusablePromptValidationState: ReusablePromptValidationState;
+  hasReusablePromptValidationErrors: boolean;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCount: number;
   showRepoScriptValidationErrors: boolean;
@@ -82,6 +83,7 @@ export type SettingsModalController = {
   updateGlobalChatSettings: (
     updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"],
   ) => void;
+  updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
   ) => void;
@@ -191,20 +193,21 @@ export const useSettingsModalController = ({
     snapshotDraft,
     selectedWorkspaceId,
   });
-  const customPromptValidationState = useSettingsModalCustomPromptValidation({ snapshotDraft });
-  const hasCustomPromptValidationErrors = customPromptValidationState.totalErrorCount > 0;
-  const settingsSectionErrorCountByIdWithCustomPrompts = useMemo(
+  const reusablePromptValidationState = useSettingsModalReusablePromptValidation({ snapshotDraft });
+  const hasReusablePromptValidationErrors = reusablePromptValidationState.totalErrorCount > 0;
+  const settingsSectionErrorCountByIdWithReusablePrompts = useMemo(
     () => ({
       ...settingsSectionErrorCountById,
-      "custom-prompts": customPromptValidationState.totalErrorCount,
+      "custom-prompts": reusablePromptValidationState.totalErrorCount,
     }),
-    [customPromptValidationState.totalErrorCount, settingsSectionErrorCountById],
+    [reusablePromptValidationState.totalErrorCount, settingsSectionErrorCountById],
   );
 
   const {
     updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
     updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
+    updateReusablePrompts: applyReusablePromptsUpdate,
     updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
     updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
     updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
@@ -254,8 +257,8 @@ export const useSettingsModalController = ({
     dirtySections,
     hasPromptValidationErrors,
     promptValidationState,
-    hasCustomPromptValidationErrors,
-    customPromptValidationErrorCount: customPromptValidationState.totalErrorCount,
+    hasReusablePromptValidationErrors: hasReusablePromptValidationErrors,
+    reusablePromptValidationErrorCount: reusablePromptValidationState.totalErrorCount,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
     invalidRepoPathsWithDevServerErrors,
@@ -268,6 +271,7 @@ export const useSettingsModalController = ({
       updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
       updateGlobalGitConfig: applyGlobalGitConfigUpdate,
       updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
+      updateReusablePrompts: applyReusablePromptsUpdate,
       updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
       updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
       updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
@@ -279,6 +283,7 @@ export const useSettingsModalController = ({
       applySelectedRepoConfigUpdate,
       applyGlobalGitConfigUpdate,
       applyGlobalChatSettingsUpdate,
+      applyReusablePromptsUpdate,
       applyGlobalKanbanSettingsUpdate,
       applyGlobalAutopilotSettingsUpdate,
       applyGlobalPromptOverridesUpdate,
@@ -291,6 +296,7 @@ export const useSettingsModalController = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
     updateGlobalPromptOverrides,
@@ -345,9 +351,9 @@ export const useSettingsModalController = ({
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
     selectedRepoPromptRoleTabErrorCounts,
-    settingsSectionErrorCountById: settingsSectionErrorCountByIdWithCustomPrompts,
-    customPromptValidationState,
-    hasCustomPromptValidationErrors,
+    settingsSectionErrorCountById: settingsSectionErrorCountByIdWithReusablePrompts,
+    reusablePromptValidationState,
+    hasReusablePromptValidationErrors,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
     showRepoScriptValidationErrors,
@@ -359,6 +365,7 @@ export const useSettingsModalController = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
     updateGlobalPromptOverrides,

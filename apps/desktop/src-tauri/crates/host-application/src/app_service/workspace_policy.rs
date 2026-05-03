@@ -4,7 +4,7 @@ use host_domain::WorkspaceRecord;
 use host_infra_system::{
     normalize_hook_set, normalize_repo_dev_servers, AgentDefaults, AutopilotSettings, ChatSettings,
     GitTargetBranch, HookSet, KanbanSettings, PromptOverrides, RepoConfig, RepoDevServerScript,
-    RepoGitConfig,
+    RepoGitConfig, ReusablePrompt,
 };
 use std::collections::HashMap;
 
@@ -40,6 +40,7 @@ pub struct WorkspaceSettingsSnapshotUpdate {
     pub theme: String,
     pub git: host_infra_system::GlobalGitConfig,
     pub chat: ChatSettings,
+    pub reusable_prompts: Vec<ReusablePrompt>,
     pub kanban: KanbanSettings,
     pub autopilot: AutopilotSettings,
     pub workspaces: HashMap<String, RepoConfig>,
@@ -223,7 +224,7 @@ mod tests {
     use host_domain::TaskStore;
     use host_infra_system::{
         AppConfigStore, AutopilotSettings, GitCliPort, HookSet, KanbanEmptyColumnDisplay,
-        PromptOverride, RepoDevServerScript,
+        PromptOverride, RepoDevServerScript, ReusablePrompt,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -446,9 +447,23 @@ mod tests {
             },
         );
 
-        let (theme, git, mut chat, kanban, autopilot, mut workspaces, mut global_prompt_overrides) =
-            fixture.service.workspace_get_settings_snapshot()?;
+        let (
+            theme,
+            git,
+            mut chat,
+            mut reusable_prompts,
+            kanban,
+            autopilot,
+            mut workspaces,
+            mut global_prompt_overrides,
+        ) = fixture.service.workspace_get_settings_snapshot()?;
         chat.show_thinking_messages = true;
+        reusable_prompts.push(ReusablePrompt {
+            id: " prompt-1 ".to_string(),
+            name: " review ".to_string(),
+            description: " Review context ".to_string(),
+            content: " Review this ".to_string(),
+        });
         global_prompt_overrides.insert(
             "system.shared.workflow_guards".to_string(),
             PromptOverride {
@@ -471,6 +486,7 @@ mod tests {
                 theme,
                 git,
                 chat,
+                reusable_prompts,
                 kanban,
                 autopilot,
                 workspaces,
@@ -488,9 +504,12 @@ mod tests {
             }
         );
 
-        let (_, _, persisted_chat, _, persisted_autopilot, _, _) =
+        let (_, _, persisted_chat, persisted_prompts, _, persisted_autopilot, _, _) =
             fixture.service.workspace_get_settings_snapshot()?;
         assert!(persisted_chat.show_thinking_messages);
+        assert_eq!(persisted_prompts.len(), 1);
+        assert_eq!(persisted_prompts[0].name, "review");
+        assert_eq!(persisted_prompts[0].content, "Review this");
         assert_eq!(persisted_autopilot, AutopilotSettings::default());
         Ok(())
     }
@@ -499,8 +518,16 @@ mod tests {
     fn workspace_save_settings_snapshot_preserves_kanban_empty_column_display() -> Result<()> {
         let fixture = setup_fixture("snapshot-kanban-empty-display", HookSet::default());
 
-        let (theme, git, chat, mut kanban, autopilot, workspaces, global_prompt_overrides) =
-            fixture.service.workspace_get_settings_snapshot()?;
+        let (
+            theme,
+            git,
+            chat,
+            reusable_prompts,
+            mut kanban,
+            autopilot,
+            workspaces,
+            global_prompt_overrides,
+        ) = fixture.service.workspace_get_settings_snapshot()?;
         kanban.empty_column_display = KanbanEmptyColumnDisplay::Collapsed;
 
         fixture
@@ -509,6 +536,7 @@ mod tests {
                 theme,
                 git,
                 chat,
+                reusable_prompts,
                 kanban,
                 autopilot,
                 workspaces,
@@ -519,6 +547,7 @@ mod tests {
             _persisted_theme,
             _persisted_git,
             _persisted_chat,
+            _persisted_reusable_prompts,
             persisted_kanban,
             _persisted_autopilot,
             _persisted_repos,
@@ -543,8 +572,16 @@ mod tests {
             second_repo.to_string_lossy().as_ref(),
         )?;
 
-        let (theme, git, chat, kanban, autopilot, mut workspaces, global_prompt_overrides) =
-            fixture.service.workspace_get_settings_snapshot()?;
+        let (
+            theme,
+            git,
+            chat,
+            reusable_prompts,
+            kanban,
+            autopilot,
+            mut workspaces,
+            global_prompt_overrides,
+        ) = fixture.service.workspace_get_settings_snapshot()?;
         let duplicate_path = fixture
             .service
             .workspace_get_repo_config(&fixture.workspace_id)?
@@ -560,6 +597,7 @@ mod tests {
                 theme,
                 git,
                 chat,
+                reusable_prompts,
                 kanban,
                 autopilot,
                 workspaces,

@@ -2,6 +2,7 @@ import type {
   GlobalGitConfig,
   RepoConfig,
   RepoPromptOverrides,
+  ReusablePrompt,
   SettingsSnapshot,
 } from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
@@ -19,6 +20,7 @@ export type SettingsModalDraftActions = {
   updateGlobalChatSettings: (
     updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"],
   ) => void;
+  updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
   ) => void;
@@ -115,6 +117,22 @@ export const useSettingsModalDraftActions = ({
     [setSnapshotDraft],
   );
 
+  const updateReusablePrompts = useCallback(
+    (updater: (current: ReusablePrompt[]) => ReusablePrompt[]): void => {
+      setSnapshotDraft((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          reusablePrompts: updater(current.reusablePrompts),
+        };
+      });
+    },
+    [setSnapshotDraft],
+  );
+
   const updateGlobalKanbanSettings = useCallback(
     (updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"]): void => {
       setSnapshotDraft((current) => {
@@ -202,6 +220,7 @@ export const useSettingsModalDraftActions = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
     updateGlobalPromptOverrides,

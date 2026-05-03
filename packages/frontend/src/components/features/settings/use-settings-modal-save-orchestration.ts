@@ -8,9 +8,9 @@ import {
   normalizeSnapshotForSave,
 } from "./settings-modal-normalization";
 import {
-  buildCustomPromptValidationSaveError,
   buildPromptValidationSaveError,
   buildRepoScriptValidationSaveError,
+  buildReusablePromptValidationSaveError,
   hasAnyDirtySections,
   hasSameNormalizedGlobalGitConfig,
   isGlobalGitOnlySave,
@@ -24,8 +24,8 @@ type UseSettingsModalSaveOrchestrationArgs = {
   dirtySections: DirtySections;
   hasPromptValidationErrors: boolean;
   promptValidationState: PromptValidationState;
-  hasCustomPromptValidationErrors: boolean;
-  customPromptValidationErrorCount: number;
+  hasReusablePromptValidationErrors: boolean;
+  reusablePromptValidationErrorCount: number;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCount: number;
   invalidRepoPathsWithDevServerErrors: string[];
@@ -50,8 +50,8 @@ export const useSettingsModalSaveOrchestration = ({
   dirtySections,
   hasPromptValidationErrors,
   promptValidationState,
-  hasCustomPromptValidationErrors,
-  customPromptValidationErrorCount,
+  hasReusablePromptValidationErrors,
+  reusablePromptValidationErrorCount,
   hasRepoScriptValidationErrors,
   repoScriptValidationErrorCount,
   invalidRepoPathsWithDevServerErrors,
@@ -107,8 +107,8 @@ export const useSettingsModalSaveOrchestration = ({
       return false;
     }
 
-    if (hasCustomPromptValidationErrors) {
-      const reason = buildCustomPromptValidationSaveError(customPromptValidationErrorCount);
+    if (hasReusablePromptValidationErrors) {
+      const reason = buildReusablePromptValidationSaveError(reusablePromptValidationErrorCount);
       setSaveError(reason);
       toast.error("Cannot save settings", {
         description: reason,
@@ -168,9 +168,9 @@ export const useSettingsModalSaveOrchestration = ({
     }
   }, [
     dirtySections,
-    customPromptValidationErrorCount,
+    reusablePromptValidationErrorCount,
     hasPromptValidationErrors,
-    hasCustomPromptValidationErrors,
+    hasReusablePromptValidationErrors,
     hasRepoScriptValidationErrors,
     invalidRepoPathsWithDevServerErrors,
     loadedSnapshot,

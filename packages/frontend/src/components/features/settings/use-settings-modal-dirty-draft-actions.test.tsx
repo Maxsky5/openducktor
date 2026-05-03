@@ -23,8 +23,8 @@ const createSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
-    customPrompts: [],
   },
+  reusablePrompts: [],
   kanban: {
     doneVisibleDays: 1,
     emptyColumnDisplay: "show",

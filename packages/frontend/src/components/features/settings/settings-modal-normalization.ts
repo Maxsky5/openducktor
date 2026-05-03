@@ -14,8 +14,8 @@ import {
   DEFAULT_BRANCH_PREFIX,
 } from "@openducktor/contracts";
 import {
-  normalizeCustomPromptsForSave,
   normalizeRepoScripts,
+  normalizeReusablePromptsForSave,
 } from "@/components/features/settings/settings-model";
 import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
@@ -121,10 +121,8 @@ export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSn
   return {
     theme: snapshot.theme,
     git: normalizeGlobalGitConfigForSave(snapshot.git),
-    chat: {
-      ...snapshot.chat,
-      customPrompts: normalizeCustomPromptsForSave(snapshot.chat.customPrompts),
-    },
+    chat: snapshot.chat,
+    reusablePrompts: normalizeReusablePromptsForSave(snapshot.reusablePrompts),
     kanban: snapshot.kanban,
     autopilot: normalizeAutopilotSettingsForSave(snapshot.autopilot),
     workspaces,

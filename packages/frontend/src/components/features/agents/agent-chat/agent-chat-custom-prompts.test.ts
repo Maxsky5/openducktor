@@ -5,8 +5,8 @@ import {
   createTextSegment,
 } from "./agent-chat-composer-draft";
 import {
-  resolveCustomPromptDraftToUserMessageParts,
-  toCustomPromptSlashCommand,
+  resolveReusablePromptDraftToUserMessageParts,
+  toReusablePromptSlashCommand,
 } from "./agent-chat-custom-prompts";
 
 const PROMPT = {
@@ -16,11 +16,11 @@ const PROMPT = {
   content: "Review this:\n$ARGUMENTS\nAgain: $ARGUMENTS",
 };
 
-const CUSTOM_COMMAND = toCustomPromptSlashCommand(PROMPT);
+const CUSTOM_COMMAND = toReusablePromptSlashCommand(PROMPT);
 
-describe("agent chat custom prompts", () => {
+describe("agent chat reusable prompts", () => {
   test("expands every arguments placeholder", () => {
-    const parts = resolveCustomPromptDraftToUserMessageParts(
+    const parts = resolveReusablePromptDraftToUserMessageParts(
       {
         segments: [
           createTextSegment("", "before"),
@@ -37,11 +37,14 @@ describe("agent chat custom prompts", () => {
 
   test("appends arguments when no placeholder is present", () => {
     const promptWithoutPlaceholder = { ...PROMPT, content: "Review this carefully." };
-    const parts = resolveCustomPromptDraftToUserMessageParts(
+    const parts = resolveReusablePromptDraftToUserMessageParts(
       {
         segments: [
           createTextSegment("", "before"),
-          createSlashCommandSegment(toCustomPromptSlashCommand(promptWithoutPlaceholder), "slash"),
+          createSlashCommandSegment(
+            toReusablePromptSlashCommand(promptWithoutPlaceholder),
+            "slash",
+          ),
           createTextSegment(" src/foo.ts ", "after"),
         ],
         attachments: [],
@@ -52,9 +55,9 @@ describe("agent chat custom prompts", () => {
     expect(parts).toEqual([{ kind: "text", text: "Review this carefully.\nsrc/foo.ts" }]);
   });
 
-  test("rejects file references in custom prompt drafts", () => {
+  test("rejects file references in reusable prompt drafts", () => {
     expect(() =>
-      resolveCustomPromptDraftToUserMessageParts(
+      resolveReusablePromptDraftToUserMessageParts(
         {
           segments: [
             createTextSegment("", "before"),
@@ -69,24 +72,24 @@ describe("agent chat custom prompts", () => {
         },
         [PROMPT],
       ),
-    ).toThrow("Remove file references before sending a custom prompt slash command.");
+    ).toThrow("Remove file references before sending a reusable prompt slash command.");
   });
 
   test("rejects placeholder-only prompts when arguments are empty", () => {
     const placeholderOnlyPrompt = { ...PROMPT, content: "$ARGUMENTS" };
 
     expect(() =>
-      resolveCustomPromptDraftToUserMessageParts(
+      resolveReusablePromptDraftToUserMessageParts(
         {
           segments: [
             createTextSegment("", "before"),
-            createSlashCommandSegment(toCustomPromptSlashCommand(placeholderOnlyPrompt), "slash"),
+            createSlashCommandSegment(toReusablePromptSlashCommand(placeholderOnlyPrompt), "slash"),
             createTextSegment("   ", "after"),
           ],
           attachments: [],
         },
         [placeholderOnlyPrompt],
       ),
-    ).toThrow("Custom prompt produced an empty message");
+    ).toThrow("Reusable prompt produced an empty message");
   });
 });

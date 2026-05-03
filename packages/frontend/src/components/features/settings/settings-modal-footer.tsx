@@ -11,7 +11,7 @@ type SettingsModalFooterSaveState = {
 
 type SettingsModalFooterValidationSummary = {
   promptPlaceholderErrorCount: number;
-  customPromptFieldErrorCount: number;
+  reusablePromptFieldErrorCount: number;
   repoScriptFieldErrorCount: number;
 };
 
@@ -43,7 +43,7 @@ export function SettingsModalFooter({
   onSave,
 }: SettingsModalFooterProps): ReactElement {
   const hasPromptValidationErrors = validationSummary.promptPlaceholderErrorCount > 0;
-  const hasCustomPromptValidationErrors = validationSummary.customPromptFieldErrorCount > 0;
+  const hasReusablePromptValidationErrors = validationSummary.reusablePromptFieldErrorCount > 0;
   const hasRepoScriptValidationErrors = validationSummary.repoScriptFieldErrorCount > 0;
   const isSaveDisabled =
     saveState.isSaving ||
@@ -51,7 +51,7 @@ export function SettingsModalFooter({
     !saveState.hasSnapshotDraft ||
     Boolean(saveState.settingsError) ||
     hasPromptValidationErrors ||
-    hasCustomPromptValidationErrors;
+    hasReusablePromptValidationErrors;
 
   return (
     <div className="mt-0 flex shrink-0 items-center justify-start border-t border-border px-6 pb-4 pt-4">
@@ -73,15 +73,15 @@ export function SettingsModalFooter({
             {validationSummary.promptPlaceholderErrorCount > 1 ? "s" : ""}.
           </span>
         ) : null}
-        {!errors.saveError && !hasPromptValidationErrors && hasCustomPromptValidationErrors ? (
+        {!errors.saveError && !hasPromptValidationErrors && hasReusablePromptValidationErrors ? (
           <span className="text-destructive-muted">
-            {validationSummary.customPromptFieldErrorCount} reusable prompt field error
-            {validationSummary.customPromptFieldErrorCount > 1 ? "s" : ""}.
+            {validationSummary.reusablePromptFieldErrorCount} reusable prompt field error
+            {validationSummary.reusablePromptFieldErrorCount > 1 ? "s" : ""}.
           </span>
         ) : null}
         {!errors.saveError &&
         !hasPromptValidationErrors &&
-        !hasCustomPromptValidationErrors &&
+        !hasReusablePromptValidationErrors &&
         hasRepoScriptValidationErrors ? (
           <span className="text-destructive-muted">
             {validationSummary.repoScriptFieldErrorCount} dev server field error

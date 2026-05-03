@@ -30,7 +30,7 @@ type SettingsModalNavigationState = {
   repositorySection: RepositorySectionId;
   globalPromptRoleTab: PromptRoleTabId;
   repoPromptRoleTab: PromptRoleTabId;
-  selectedCustomPromptId: string | null;
+  selectedReusablePromptId: string | null;
 };
 
 const INITIAL_SECTION: SettingsSectionId = "repositories";
@@ -41,7 +41,7 @@ const INITIAL_NAVIGATION_STATE: SettingsModalNavigationState = {
   repositorySection: INITIAL_REPOSITORY_SECTION,
   globalPromptRoleTab: INITIAL_PROMPT_ROLE_TAB,
   repoPromptRoleTab: INITIAL_PROMPT_ROLE_TAB,
-  selectedCustomPromptId: null,
+  selectedReusablePromptId: null,
 };
 
 export function SettingsModal({
@@ -74,8 +74,8 @@ export function SettingsModal({
     setNavigation((current) => ({ ...current, repoPromptRoleTab }));
   };
 
-  const handleSelectedCustomPromptIdChange = (selectedCustomPromptId: string | null): void => {
-    setNavigation((current) => ({ ...current, selectedCustomPromptId }));
+  const handleSelectedReusablePromptIdChange = (selectedReusablePromptId: string | null): void => {
+    setNavigation((current) => ({ ...current, selectedReusablePromptId }));
   };
 
   const handleSave = (): void => {
@@ -126,13 +126,13 @@ export function SettingsModal({
                 repositorySection={navigation.repositorySection}
                 globalPromptRoleTab={navigation.globalPromptRoleTab}
                 repoPromptRoleTab={navigation.repoPromptRoleTab}
-                selectedCustomPromptId={navigation.selectedCustomPromptId}
+                selectedReusablePromptId={navigation.selectedReusablePromptId}
                 isInteractionDisabled={isInteractionDisabled}
                 controller={controller}
                 onRepositorySectionChange={handleRepositorySectionChange}
                 onGlobalPromptRoleTabChange={handleGlobalPromptRoleTabChange}
                 onRepoPromptRoleTabChange={handleRepoPromptRoleTabChange}
-                onSelectedCustomPromptIdChange={handleSelectedCustomPromptIdChange}
+                onSelectedReusablePromptIdChange={handleSelectedReusablePromptIdChange}
               />
             </div>
           </div>
@@ -147,7 +147,7 @@ export function SettingsModal({
           }}
           validationSummary={{
             promptPlaceholderErrorCount: controller.promptValidationState.totalErrorCount,
-            customPromptFieldErrorCount: controller.customPromptValidationState.totalErrorCount,
+            reusablePromptFieldErrorCount: controller.reusablePromptValidationState.totalErrorCount,
             repoScriptFieldErrorCount: controller.repoScriptValidationErrorCount,
           }}
           errors={{

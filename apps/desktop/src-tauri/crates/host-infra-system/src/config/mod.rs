@@ -14,11 +14,11 @@ pub use persistence::resolve_openducktor_base_dir;
 pub use store::{AppConfigStore, RuntimeConfigStore};
 pub use types::{
     AgentDefaults, AgentModelDefault, AutopilotActionId, AutopilotEventId, AutopilotRule,
-    AutopilotSettings, ChatSettings, CustomPrompt, GitMergeMethod, GitProviderConfig,
-    GitProviderRepository, GitTargetBranch, GlobalConfig, GlobalGitConfig, HookSet,
-    KanbanEmptyColumnDisplay, KanbanSettings, OpencodeStartupReadinessConfig, PromptOverride,
-    PromptOverrides, RepoConfig, RepoDevServerScript, RepoGitConfig, RuntimeConfig,
-    SchedulerConfig, SoftGuardrails,
+    AutopilotSettings, ChatSettings, GitMergeMethod, GitProviderConfig, GitProviderRepository,
+    GitTargetBranch, GlobalConfig, GlobalGitConfig, HookSet, KanbanEmptyColumnDisplay,
+    KanbanSettings, OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides, RepoConfig,
+    RepoDevServerScript, RepoGitConfig, ReusablePrompt, RuntimeConfig, SchedulerConfig,
+    SoftGuardrails,
 };
 
 #[cfg(test)]

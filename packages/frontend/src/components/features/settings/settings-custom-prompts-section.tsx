@@ -1,85 +1,85 @@
-import {
-  type ChatSettings,
-  CUSTOM_PROMPT_ARGUMENTS_PLACEHOLDER,
-  type CustomPrompt,
-} from "@openducktor/contracts";
-import { CircleAlert } from "lucide-react";
-import type { ReactElement } from "react";
+import { REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER, type ReusablePrompt } from "@openducktor/contracts";
+import { CircleAlert, Trash2 } from "lucide-react";
+import { type ReactElement, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { type CustomPromptValidationMap, createCustomPromptDraft } from "./settings-model";
+import { createReusablePromptDraft, type ReusablePromptValidationMap } from "./settings-model";
 
-type CustomPromptField = "name" | "description" | "content";
+type ReusablePromptField = "name" | "description" | "content";
 
-type SettingsCustomPromptsSectionProps = {
-  customPrompts: ChatSettings["customPrompts"];
-  selectedCustomPromptId: string | null;
-  validationErrors: CustomPromptValidationMap;
+type SettingsReusablePromptsSectionProps = {
+  reusablePrompts: ReusablePrompt[];
+  selectedReusablePromptId: string | null;
+  validationErrors: ReusablePromptValidationMap;
   disabled: boolean;
-  onSelectedCustomPromptIdChange: (promptId: string | null) => void;
-  onUpdateCustomPrompts: (
-    updater: (current: ChatSettings["customPrompts"]) => ChatSettings["customPrompts"],
-  ) => void;
+  onSelectedReusablePromptIdChange: (promptId: string | null) => void;
+  onUpdateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
 };
 
-const getPromptTabLabel = (prompt: CustomPrompt): string => {
+const getPromptTabLabel = (prompt: ReusablePrompt): string => {
   const name = prompt.name.trim();
   return name.length > 0 ? name : "Untitled prompt";
 };
 
-const countPromptErrors = (errors: CustomPromptValidationMap[string] | undefined): number =>
+const countPromptErrors = (errors: ReusablePromptValidationMap[string] | undefined): number =>
   (errors?.name ? 1 : 0) + (errors?.content ? 1 : 0);
 
 const resolveSelectedPrompt = (
-  customPrompts: CustomPrompt[],
-  selectedCustomPromptId: string | null,
-): CustomPrompt | null => {
-  if (customPrompts.length === 0) {
+  reusablePrompts: ReusablePrompt[],
+  selectedReusablePromptId: string | null,
+): ReusablePrompt | null => {
+  if (reusablePrompts.length === 0) {
     return null;
   }
   return (
-    customPrompts.find((prompt) => prompt.id === selectedCustomPromptId) ?? customPrompts[0] ?? null
+    reusablePrompts.find((prompt) => prompt.id === selectedReusablePromptId) ??
+    reusablePrompts[0] ??
+    null
   );
 };
 
-export function SettingsCustomPromptsSection({
-  customPrompts,
-  selectedCustomPromptId,
+export function SettingsReusablePromptsSection({
+  reusablePrompts,
+  selectedReusablePromptId,
   validationErrors,
   disabled,
-  onSelectedCustomPromptIdChange,
-  onUpdateCustomPrompts,
-}: SettingsCustomPromptsSectionProps): ReactElement {
-  const selectedPrompt = resolveSelectedPrompt(customPrompts, selectedCustomPromptId);
+  onSelectedReusablePromptIdChange,
+  onUpdateReusablePrompts,
+}: SettingsReusablePromptsSectionProps): ReactElement {
+  const selectedPrompt = resolveSelectedPrompt(reusablePrompts, selectedReusablePromptId);
+  const promptIdToAutofocusRef = useRef<string | null>(null);
 
-  const addCustomPrompt = (): void => {
-    const prompt = createCustomPromptDraft();
-    onUpdateCustomPrompts((current) => [...current, prompt]);
-    onSelectedCustomPromptIdChange(prompt.id);
+  const addReusablePrompt = (): void => {
+    const prompt = createReusablePromptDraft();
+    promptIdToAutofocusRef.current = prompt.id;
+    onUpdateReusablePrompts((current) => [...current, prompt]);
+    onSelectedReusablePromptIdChange(prompt.id);
   };
 
-  const removeCustomPrompt = (promptId: string): void => {
-    const currentIndex = customPrompts.findIndex((prompt) => prompt.id === promptId);
-    const remainingPrompts = customPrompts.filter((prompt) => prompt.id !== promptId);
+  const removeReusablePrompt = (promptId: string): void => {
+    const currentIndex = reusablePrompts.findIndex((prompt) => prompt.id === promptId);
+    const remainingPrompts = reusablePrompts.filter((prompt) => prompt.id !== promptId);
     const nextPrompt = remainingPrompts[currentIndex] ?? remainingPrompts[currentIndex - 1] ?? null;
 
-    onUpdateCustomPrompts(() => remainingPrompts);
+    onUpdateReusablePrompts(() => remainingPrompts);
     if (selectedPrompt?.id === promptId) {
-      onSelectedCustomPromptIdChange(nextPrompt?.id ?? null);
+      onSelectedReusablePromptIdChange(nextPrompt?.id ?? null);
     }
   };
 
-  const updateCustomPromptField = (
+  const updateReusablePromptField = (
     promptId: string,
-    field: CustomPromptField,
+    field: ReusablePromptField,
     value: string,
   ): void => {
-    onUpdateCustomPrompts((current) =>
+    onUpdateReusablePrompts((current) =>
       current.map((entry) => (entry.id === promptId ? { ...entry, [field]: value } : entry)),
     );
   };
+
+  const shouldAutofocusName = selectedPrompt?.id === promptIdToAutofocusRef.current;
 
   return (
     <div className="grid h-full lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -92,7 +92,7 @@ export function SettingsCustomPromptsSection({
         </div>
 
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-          {customPrompts.map((prompt) => {
+          {reusablePrompts.map((prompt) => {
             const errorCount = countPromptErrors(validationErrors[prompt.id]);
             const isSelected = prompt.id === selectedPrompt?.id;
             return (
@@ -102,7 +102,7 @@ export function SettingsCustomPromptsSection({
                 variant={isSelected ? "accent" : "ghost"}
                 className="w-full justify-between"
                 disabled={disabled}
-                onClick={() => onSelectedCustomPromptIdChange(prompt.id)}
+                onClick={() => onSelectedReusablePromptIdChange(prompt.id)}
                 title={
                   errorCount > 0
                     ? `${errorCount} reusable prompt field error${errorCount > 1 ? "s" : ""}`
@@ -127,7 +127,7 @@ export function SettingsCustomPromptsSection({
           variant="outline"
           className="w-full shrink-0"
           disabled={disabled}
-          onClick={addCustomPrompt}
+          onClick={addReusablePrompt}
         >
           Add prompt
         </Button>
@@ -135,30 +135,34 @@ export function SettingsCustomPromptsSection({
 
       <div className="min-w-0 p-4">
         {selectedPrompt ? (
-          <CustomPromptEditorCard
+          <ReusablePromptEditorCard
             prompt={selectedPrompt}
             errors={validationErrors[selectedPrompt.id] ?? {}}
             disabled={disabled}
-            onRemoveCustomPrompt={removeCustomPrompt}
-            onUpdateCustomPromptField={updateCustomPromptField}
+            shouldAutofocusName={shouldAutofocusName}
+            onNameAutofocused={() => {
+              promptIdToAutofocusRef.current = null;
+            }}
+            onRemoveReusablePrompt={removeReusablePrompt}
+            onUpdateReusablePromptField={updateReusablePromptField}
           />
         ) : (
-          <CustomPromptsEmptyState disabled={disabled} onAddCustomPrompt={addCustomPrompt} />
+          <ReusablePromptsEmptyState disabled={disabled} onAddReusablePrompt={addReusablePrompt} />
         )}
       </div>
     </div>
   );
 }
 
-type CustomPromptsEmptyStateProps = {
+type ReusablePromptsEmptyStateProps = {
   disabled: boolean;
-  onAddCustomPrompt: () => void;
+  onAddReusablePrompt: () => void;
 };
 
-function CustomPromptsEmptyState({
+function ReusablePromptsEmptyState({
   disabled,
-  onAddCustomPrompt,
-}: CustomPromptsEmptyStateProps): ReactElement {
+  onAddReusablePrompt,
+}: ReusablePromptsEmptyStateProps): ReactElement {
   return (
     <div className="flex min-h-[360px] items-center justify-center rounded-md border border-dashed border-border bg-card p-6 text-center">
       <div className="max-w-md space-y-4">
@@ -172,10 +176,10 @@ function CustomPromptsEmptyState({
           </p>
         </div>
         <p className="text-xs text-muted-foreground">
-          Use {CUSTOM_PROMPT_ARGUMENTS_PLACEHOLDER} in the content to insert text typed after the
+          Use {REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER} in the content to insert text typed after the
           slash command.
         </p>
-        <Button type="button" disabled={disabled} onClick={onAddCustomPrompt}>
+        <Button type="button" disabled={disabled} onClick={onAddReusablePrompt}>
           Add reusable prompt
         </Button>
       </div>
@@ -183,25 +187,43 @@ function CustomPromptsEmptyState({
   );
 }
 
-type CustomPromptEditorCardProps = {
-  prompt: CustomPrompt;
-  errors: CustomPromptValidationMap[string];
+type ReusablePromptEditorCardProps = {
+  prompt: ReusablePrompt;
+  errors: ReusablePromptValidationMap[string];
   disabled: boolean;
-  onRemoveCustomPrompt: (promptId: string) => void;
-  onUpdateCustomPromptField: (promptId: string, field: CustomPromptField, value: string) => void;
+  shouldAutofocusName: boolean;
+  onNameAutofocused: () => void;
+  onRemoveReusablePrompt: (promptId: string) => void;
+  onUpdateReusablePromptField: (
+    promptId: string,
+    field: ReusablePromptField,
+    value: string,
+  ) => void;
 };
 
-function CustomPromptEditorCard({
+function ReusablePromptEditorCard({
   prompt,
   errors,
   disabled,
-  onRemoveCustomPrompt,
-  onUpdateCustomPromptField,
-}: CustomPromptEditorCardProps): ReactElement {
+  shouldAutofocusName,
+  onNameAutofocused,
+  onRemoveReusablePrompt,
+  onUpdateReusablePromptField,
+}: ReusablePromptEditorCardProps): ReactElement {
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   const nameInputId = `custom-prompt-${prompt.id}-name`;
   const descriptionInputId = `custom-prompt-${prompt.id}-description`;
   const contentInputId = `custom-prompt-${prompt.id}-content`;
   const promptTriggerPreview = prompt.name.trim() ? `/${prompt.name.trim()}` : "/name";
+
+  useEffect(() => {
+    if (!shouldAutofocusName || disabled) {
+      return;
+    }
+    nameInputRef.current?.focus();
+    nameInputRef.current?.select();
+    onNameAutofocused();
+  }, [disabled, onNameAutofocused, shouldAutofocusName]);
 
   return (
     <div className="space-y-4 rounded-md border border-border bg-card p-4">
@@ -218,8 +240,9 @@ function CustomPromptEditorCard({
           size="sm"
           variant="destructive"
           disabled={disabled}
-          onClick={() => onRemoveCustomPrompt(prompt.id)}
+          onClick={() => onRemoveReusablePrompt(prompt.id)}
         >
+          <Trash2 className="size-4" aria-hidden="true" />
           Delete
         </Button>
       </div>
@@ -229,11 +252,12 @@ function CustomPromptEditorCard({
           <Label htmlFor={nameInputId}>Name</Label>
           <Input
             id={nameInputId}
+            ref={nameInputRef}
             value={prompt.name}
             disabled={disabled}
             placeholder="review"
             aria-invalid={errors.name ? true : undefined}
-            onChange={(event) => updateCustomPromptName(event.target.value)}
+            onChange={(event) => updateReusablePromptName(event.target.value)}
           />
           {errors.name ? (
             <p className="text-xs text-destructive">{errors.name}</p>
@@ -252,7 +276,7 @@ function CustomPromptEditorCard({
             value={prompt.description}
             disabled={disabled}
             placeholder="Explain what this prompt does"
-            onChange={(event) => updateCustomPromptDescription(event.target.value)}
+            onChange={(event) => updateReusablePromptDescription(event.target.value)}
           />
           <p className="text-xs text-muted-foreground">
             Shown in the slash-command menu to help identify the prompt.
@@ -267,31 +291,31 @@ function CustomPromptEditorCard({
           value={prompt.content}
           disabled={disabled}
           rows={12}
-          placeholder={`Write markdown prompt content. Use ${CUSTOM_PROMPT_ARGUMENTS_PLACEHOLDER} to insert command text.`}
+          placeholder={`Write markdown prompt content. Use ${REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER} to insert command text.`}
           aria-invalid={errors.content ? true : undefined}
-          onChange={(event) => updateCustomPromptContent(event.target.value)}
+          onChange={(event) => updateReusablePromptContent(event.target.value)}
         />
         {errors.content ? (
           <p className="text-xs text-destructive">{errors.content}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            If the content does not include {CUSTOM_PROMPT_ARGUMENTS_PLACEHOLDER}, text typed after
-            the slash command is appended on a new line.
+            If the content does not include {REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER}, text typed
+            after the slash command is appended on a new line.
           </p>
         )}
       </div>
     </div>
   );
 
-  function updateCustomPromptName(value: string): void {
-    onUpdateCustomPromptField(prompt.id, "name", value);
+  function updateReusablePromptName(value: string): void {
+    onUpdateReusablePromptField(prompt.id, "name", value);
   }
 
-  function updateCustomPromptDescription(value: string): void {
-    onUpdateCustomPromptField(prompt.id, "description", value);
+  function updateReusablePromptDescription(value: string): void {
+    onUpdateReusablePromptField(prompt.id, "description", value);
   }
 
-  function updateCustomPromptContent(value: string): void {
-    onUpdateCustomPromptField(prompt.id, "content", value);
+  function updateReusablePromptContent(value: string): void {
+    onUpdateReusablePromptField(prompt.id, "content", value);
   }
 }

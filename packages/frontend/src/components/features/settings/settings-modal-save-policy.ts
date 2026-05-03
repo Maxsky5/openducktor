@@ -4,6 +4,7 @@ import type { DirtySections } from "./use-settings-modal-dirty-state";
 
 export const hasAnyDirtySections = (dirtySections: DirtySections): boolean =>
   dirtySections.chat ||
+  dirtySections.reusablePrompts ||
   dirtySections.globalGit ||
   dirtySections.kanban ||
   dirtySections.autopilot ||
@@ -13,6 +14,7 @@ export const hasAnyDirtySections = (dirtySections: DirtySections): boolean =>
 export const isGlobalGitOnlySave = (dirtySections: DirtySections): boolean =>
   dirtySections.globalGit &&
   !dirtySections.chat &&
+  !dirtySections.reusablePrompts &&
   !dirtySections.kanban &&
   !dirtySections.autopilot &&
   !dirtySections.globalPromptOverrides &&
@@ -31,7 +33,7 @@ export const buildPromptValidationSaveError = (totalErrorCount: number): string 
   return `Fix ${totalErrorCount} prompt placeholder error${suffix} before saving.`;
 };
 
-export const buildCustomPromptValidationSaveError = (totalErrorCount: number): string => {
+export const buildReusablePromptValidationSaveError = (totalErrorCount: number): string => {
   const suffix = totalErrorCount > 1 ? "s" : "";
   return `Fix ${totalErrorCount} reusable prompt field error${suffix} before saving.`;
 };

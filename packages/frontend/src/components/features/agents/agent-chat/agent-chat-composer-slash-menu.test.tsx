@@ -68,7 +68,7 @@ describe("AgentChatComposerSlashMenu", () => {
     }
   });
 
-  test("shows runtime errors without hiding custom prompt commands", () => {
+  test("shows runtime errors without hiding reusable prompt commands", () => {
     const firstCommand = COMMANDS[0];
     if (!firstCommand) {
       throw new Error("Expected a slash command fixture.");

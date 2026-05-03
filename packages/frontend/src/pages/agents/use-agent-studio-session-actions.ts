@@ -1,4 +1,4 @@
-import type { CustomPrompt, GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
+import type { GitBranch, GitTargetBranch, ReusablePrompt, TaskCard } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useState } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
@@ -9,7 +9,7 @@ import {
   draftHasSlashCommandSegment,
   resolveDraftToUserMessageParts,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { resolveCustomPromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-custom-prompts";
+import { resolveReusablePromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-custom-prompts";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { SessionStartLaunchRequest } from "@/features/session-start";
 import {
@@ -71,7 +71,7 @@ type UseAgentStudioSessionActionsArgs = {
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
   selectionForNewSession: AgentModelSelection | null;
-  customPrompts: CustomPrompt[];
+  reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
@@ -103,7 +103,7 @@ export function useAgentStudioSessionActions({
   agentStudioReady,
   isActiveTaskHydrated,
   selectionForNewSession,
-  customPrompts,
+  reusablePrompts,
   repoSettings,
   startAgentSession,
   sendAgentMessage,
@@ -235,9 +235,9 @@ export function useAgentStudioSessionActions({
         return false;
       }
 
-      const customPromptMessageParts = resolveCustomPromptDraftToUserMessageParts(
+      const reusablePromptMessageParts = resolveReusablePromptDraftToUserMessageParts(
         draft,
-        customPrompts,
+        reusablePrompts,
       );
 
       if ((draft.attachments ?? []).length > 0) {
@@ -287,7 +287,7 @@ export function useAgentStudioSessionActions({
         });
         await sendAgentMessage(
           targetExternalSessionId,
-          customPromptMessageParts ??
+          reusablePromptMessageParts ??
             (await resolveDraftToUserMessageParts(draft, async (attachment) => {
               if (attachment.file) {
                 return stageLocalAttachmentFile(attachment.file);
@@ -319,7 +319,7 @@ export function useAgentStudioSessionActions({
       activeSessionSelectedModel,
       agentStudioReady,
       canQueueBusyFollowups,
-      customPrompts,
+      reusablePrompts,
       isSending,
       isStarting,
       isWaitingInput,

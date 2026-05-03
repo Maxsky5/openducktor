@@ -1,4 +1,9 @@
-import type { RepoConfig, RepoPromptOverrides, SettingsSnapshot } from "@openducktor/contracts";
+import type {
+  RepoConfig,
+  RepoPromptOverrides,
+  ReusablePrompt,
+  SettingsSnapshot,
+} from "@openducktor/contracts";
 import { useCallback } from "react";
 import type { DirtySections } from "./use-settings-modal-dirty-state";
 import type { SettingsModalDraftActions } from "./use-settings-modal-draft-actions";
@@ -47,6 +52,15 @@ export const useSettingsModalDirtyDraftActions = ({
     (updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"]): void => {
       runDirtyAction("chat", () => {
         draftActions.updateGlobalChatSettings(updater);
+      });
+    },
+    [draftActions, runDirtyAction],
+  );
+
+  const updateReusablePrompts = useCallback(
+    (updater: (current: ReusablePrompt[]) => ReusablePrompt[]): void => {
+      runDirtyAction("reusablePrompts", () => {
+        draftActions.updateReusablePrompts(updater);
       });
     },
     [draftActions, runDirtyAction],
@@ -114,6 +128,7 @@ export const useSettingsModalDirtyDraftActions = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
     updateGlobalPromptOverrides,

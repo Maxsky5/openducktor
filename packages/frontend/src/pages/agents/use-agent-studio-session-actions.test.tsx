@@ -236,7 +236,7 @@ const createBaseArgs = (): HookArgs => {
       variant: "default",
       profileId: "spec",
     },
-    customPrompts: [],
+    reusablePrompts: [],
     repoSettings: null,
     startAgentSession: async () => "session-new",
     sendAgentMessage: async () => {},
@@ -268,8 +268,8 @@ describe("useAgentStudioSessionActions", () => {
       },
       chat: {
         showThinkingMessages: false,
-        customPrompts: [],
       },
+      reusablePrompts: [],
       kanban: {
         doneVisibleDays: 1,
         emptyColumnDisplay: "show",
@@ -386,7 +386,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("onSend expands custom prompt slash commands to normal text with arguments", async () => {
+  test("onSend expands reusable prompt slash commands to normal text with arguments", async () => {
     const sendAgentMessage = mock(async () => {});
     const draft: AgentChatComposerDraft = {
       segments: [
@@ -400,7 +400,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createSession({ externalSessionId: "session-existing" }),
-      customPrompts: [
+      reusablePrompts: [
         {
           id: "prompt-1",
           name: "review",
@@ -423,7 +423,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("onSend appends custom prompt arguments when no placeholder is present", async () => {
+  test("onSend appends reusable prompt arguments when no placeholder is present", async () => {
     const sendAgentMessage = mock(async () => {});
     const draft: AgentChatComposerDraft = {
       segments: [
@@ -437,7 +437,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createSession({ externalSessionId: "session-existing" }),
-      customPrompts: [
+      reusablePrompts: [
         {
           id: "prompt-1",
           name: "review",

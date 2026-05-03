@@ -1,34 +1,34 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useMemo } from "react";
 import {
-  buildCustomPromptValidationErrors,
-  type CustomPromptValidationMap,
-  countCustomPromptValidationErrors,
+  buildReusablePromptValidationErrors,
+  countReusablePromptValidationErrors,
+  type ReusablePromptValidationMap,
 } from "./settings-model";
 
-export type CustomPromptValidationState = {
-  errorsById: CustomPromptValidationMap;
+export type ReusablePromptValidationState = {
+  errorsById: ReusablePromptValidationMap;
   totalErrorCount: number;
 };
 
-const EMPTY_CUSTOM_PROMPT_VALIDATION_STATE: CustomPromptValidationState = {
+const EMPTY_REUSABLE_PROMPT_VALIDATION_STATE: ReusablePromptValidationState = {
   errorsById: {},
   totalErrorCount: 0,
 };
 
-export const useSettingsModalCustomPromptValidation = ({
+export const useSettingsModalReusablePromptValidation = ({
   snapshotDraft,
 }: {
   snapshotDraft: SettingsSnapshot | null;
-}): CustomPromptValidationState =>
+}): ReusablePromptValidationState =>
   useMemo(() => {
     if (!snapshotDraft) {
-      return EMPTY_CUSTOM_PROMPT_VALIDATION_STATE;
+      return EMPTY_REUSABLE_PROMPT_VALIDATION_STATE;
     }
 
-    const errorsById = buildCustomPromptValidationErrors(snapshotDraft.chat.customPrompts);
+    const errorsById = buildReusablePromptValidationErrors(snapshotDraft.reusablePrompts);
     return {
       errorsById,
-      totalErrorCount: countCustomPromptValidationErrors(errorsById),
+      totalErrorCount: countReusablePromptValidationErrors(errorsById),
     };
   }, [snapshotDraft]);

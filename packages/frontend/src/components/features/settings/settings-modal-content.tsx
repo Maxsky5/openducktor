@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
 import { SettingsChatSection } from "./settings-chat-section";
-import { SettingsCustomPromptsSection } from "./settings-custom-prompts-section";
+import { SettingsReusablePromptsSection } from "./settings-custom-prompts-section";
 import { GeneralSettingsSection } from "./settings-general-section";
 import { SettingsGitSection } from "./settings-git-section";
 import { SettingsKanbanSection } from "./settings-kanban-section";
@@ -23,13 +23,13 @@ type SettingsModalContentProps = {
   repositorySection: RepositorySectionId;
   globalPromptRoleTab: PromptRoleTabId;
   repoPromptRoleTab: PromptRoleTabId;
-  selectedCustomPromptId?: string | null;
+  selectedReusablePromptId?: string | null;
   isInteractionDisabled: boolean;
   controller: SettingsModalController;
   onRepositorySectionChange: (next: RepositorySectionId) => void;
   onGlobalPromptRoleTabChange: (next: PromptRoleTabId) => void;
   onRepoPromptRoleTabChange: (next: PromptRoleTabId) => void;
-  onSelectedCustomPromptIdChange?: (next: string | null) => void;
+  onSelectedReusablePromptIdChange?: (next: string | null) => void;
 };
 
 export function SettingsModalContent({
@@ -37,13 +37,13 @@ export function SettingsModalContent({
   repositorySection,
   globalPromptRoleTab,
   repoPromptRoleTab,
-  selectedCustomPromptId,
+  selectedReusablePromptId,
   isInteractionDisabled,
   controller,
   onRepositorySectionChange,
   onGlobalPromptRoleTabChange,
   onRepoPromptRoleTabChange,
-  onSelectedCustomPromptIdChange,
+  onSelectedReusablePromptIdChange,
 }: SettingsModalContentProps): ReactElement {
   const {
     isLoadingSettings,
@@ -68,7 +68,7 @@ export function SettingsModalContent({
     showRepoScriptValidationErrors,
     selectedRepoDevServerValidationErrors,
     promptValidationState,
-    customPromptValidationState,
+    reusablePromptValidationState,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
@@ -78,6 +78,7 @@ export function SettingsModalContent({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
     updateGlobalPromptOverrides,
@@ -153,18 +154,13 @@ export function SettingsModalContent({
 
   if (section === "custom-prompts") {
     return (
-      <SettingsCustomPromptsSection
-        customPrompts={snapshotDraft.chat.customPrompts}
-        selectedCustomPromptId={selectedCustomPromptId ?? null}
-        validationErrors={customPromptValidationState.errorsById}
+      <SettingsReusablePromptsSection
+        reusablePrompts={snapshotDraft.reusablePrompts}
+        selectedReusablePromptId={selectedReusablePromptId ?? null}
+        validationErrors={reusablePromptValidationState.errorsById}
         disabled={isInteractionDisabled}
-        onSelectedCustomPromptIdChange={onSelectedCustomPromptIdChange ?? (() => {})}
-        onUpdateCustomPrompts={(updater) =>
-          updateGlobalChatSettings((current) => ({
-            ...current,
-            customPrompts: updater(current.customPrompts),
-          }))
-        }
+        onSelectedReusablePromptIdChange={onSelectedReusablePromptIdChange ?? (() => {})}
+        onUpdateReusablePrompts={updateReusablePrompts}
       />
     );
   }

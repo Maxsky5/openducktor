@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 export type DirtySections = {
   chat: boolean;
+  reusablePrompts: boolean;
   globalGit: boolean;
   kanban: boolean;
   autopilot: boolean;
@@ -12,6 +13,7 @@ export type DirtySections = {
 
 export const EMPTY_DIRTY_SECTIONS: DirtySections = {
   chat: false,
+  reusablePrompts: false,
   globalGit: false,
   kanban: false,
   autopilot: false,

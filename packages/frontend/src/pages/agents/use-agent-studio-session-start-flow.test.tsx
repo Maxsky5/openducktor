@@ -316,8 +316,8 @@ describe("useAgentStudioSessionStartFlow", () => {
       },
       chat: {
         showThinkingMessages: false,
-        customPrompts: [],
       },
+      reusablePrompts: [],
       kanban: {
         doneVisibleDays: 1,
         emptyColumnDisplay: "show",

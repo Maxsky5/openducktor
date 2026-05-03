@@ -294,7 +294,16 @@ async fn handle_workspace_get_repo_config(state: &HeadlessState, args: Value) ->
 }
 
 fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResult {
-    let (theme, git, chat, kanban, autopilot, workspaces, global_prompt_overrides) = state
+    let (
+        theme,
+        git,
+        chat,
+        reusable_prompts,
+        kanban,
+        autopilot,
+        workspaces,
+        global_prompt_overrides,
+    ) = state
         .service
         .workspace_get_settings_snapshot()
         .map_err(service_error)?;
@@ -302,6 +311,7 @@ fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResul
         theme,
         git,
         chat,
+        reusable_prompts,
         kanban,
         autopilot,
         workspaces,
@@ -366,6 +376,7 @@ async fn handle_workspace_save_settings_snapshot(
         theme,
         git,
         chat,
+        reusable_prompts,
         kanban,
         autopilot,
         workspaces,
@@ -380,6 +391,7 @@ async fn handle_workspace_save_settings_snapshot(
             theme,
             git,
             chat,
+            reusable_prompts,
             kanban,
             autopilot,
             workspaces,

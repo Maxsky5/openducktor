@@ -20,8 +20,8 @@ const createSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
-    customPrompts: [],
   },
+  reusablePrompts: [],
   kanban: {
     doneVisibleDays: 1,
     emptyColumnDisplay: "show",
@@ -50,6 +50,7 @@ describe("useSettingsModalDirtyState", () => {
 
     expect(harness.getLatest().dirtySections).toEqual({
       chat: true,
+      reusablePrompts: false,
       globalGit: false,
       kanban: false,
       autopilot: false,
@@ -64,6 +65,7 @@ describe("useSettingsModalDirtyState", () => {
 
     expect(harness.getLatest().dirtySections).toEqual({
       chat: false,
+      reusablePrompts: false,
       globalGit: false,
       kanban: false,
       autopilot: false,
@@ -94,8 +96,8 @@ describe("useSettingsModalDirtyState", () => {
         ...createSnapshot(),
         chat: {
           showThinkingMessages: true,
-          customPrompts: [],
         },
+        reusablePrompts: [],
       },
     });
 

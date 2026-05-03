@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
-  buildCustomPromptValidationSaveError,
   buildPromptValidationSaveError,
   buildRepoScriptValidationSaveError,
+  buildReusablePromptValidationSaveError,
   hasAnyDirtySections,
   hasSameNormalizedGlobalGitConfig,
   isGlobalGitOnlySave,
@@ -17,8 +17,8 @@ const createSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
-    customPrompts: [],
   },
+  reusablePrompts: [],
   kanban: {
     doneVisibleDays: 1,
     emptyColumnDisplay: "show",
@@ -73,7 +73,7 @@ describe("settings-modal-save-policy", () => {
     expect(buildPromptValidationSaveError(2)).toBe(
       "Fix 2 prompt placeholder errors before saving.",
     );
-    expect(buildCustomPromptValidationSaveError(1)).toBe(
+    expect(buildReusablePromptValidationSaveError(1)).toBe(
       "Fix 1 reusable prompt field error before saving.",
     );
     expect(

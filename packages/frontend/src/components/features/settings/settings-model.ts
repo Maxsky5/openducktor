@@ -1,7 +1,7 @@
 export { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 
-import type { CustomPrompt, RepoDevServerScript } from "@openducktor/contracts";
-import { CUSTOM_PROMPT_TRIGGER_PATTERN } from "@openducktor/contracts";
+import type { RepoDevServerScript, ReusablePrompt } from "@openducktor/contracts";
+import { REUSABLE_PROMPT_TRIGGER_PATTERN } from "@openducktor/contracts";
 
 type HookDraftInput = {
   preStart: string[];
@@ -17,12 +17,12 @@ type DevServerDraftValidationErrors = {
 
 type DevServerDraftValidationMap = Record<string, DevServerDraftValidationErrors>;
 
-export type CustomPromptValidationErrors = {
+export type ReusablePromptValidationErrors = {
   name?: string;
   content?: string;
 };
 
-export type CustomPromptValidationMap = Record<string, CustomPromptValidationErrors>;
+export type ReusablePromptValidationMap = Record<string, ReusablePromptValidationErrors>;
 
 type RepoScriptDraftInput = {
   hooks: HookDraftInput;
@@ -34,9 +34,11 @@ type RepoScriptDraftInput = {
 // normalization removes blank commands and trims persisted values.
 export const parseHookLines = (value: string): string[] => value.split("\n");
 
-export const createCustomPromptDraft = (): CustomPrompt => {
+export const createReusablePromptDraft = (): ReusablePrompt => {
   if (typeof crypto === "undefined" || typeof crypto.randomUUID !== "function") {
-    throw new Error("Cannot create a custom prompt because random UUID generation is unavailable.");
+    throw new Error(
+      "Cannot create a reusable prompt because random UUID generation is unavailable.",
+    );
   }
 
   return {
@@ -47,23 +49,23 @@ export const createCustomPromptDraft = (): CustomPrompt => {
   };
 };
 
-export const isValidCustomPromptName = (name: string): boolean =>
-  CUSTOM_PROMPT_TRIGGER_PATTERN.test(name.trim());
+export const isValidReusablePromptName = (name: string): boolean =>
+  REUSABLE_PROMPT_TRIGGER_PATTERN.test(name.trim());
 
-export const buildCustomPromptValidationErrors = (
-  prompts: CustomPrompt[],
-): CustomPromptValidationMap => {
-  const errorsById: CustomPromptValidationMap = {};
+export const buildReusablePromptValidationErrors = (
+  prompts: ReusablePrompt[],
+): ReusablePromptValidationMap => {
+  const errorsById: ReusablePromptValidationMap = {};
   const promptIdsByNormalizedName = new Map<string, string[]>();
 
   for (const prompt of prompts) {
     const name = prompt.name.trim();
     const content = prompt.content.trim();
-    const errors: CustomPromptValidationErrors = {};
+    const errors: ReusablePromptValidationErrors = {};
 
     if (!name) {
       errors.name = "Prompt name is required.";
-    } else if (!isValidCustomPromptName(name)) {
+    } else if (!isValidReusablePromptName(name)) {
       errors.name = "Use only letters, digits, dots, underscores, colons, or dashes.";
     } else {
       const normalizedName = name.toLowerCase();
@@ -97,16 +99,18 @@ export const buildCustomPromptValidationErrors = (
   return errorsById;
 };
 
-export const countCustomPromptValidationErrors = (errorsById: CustomPromptValidationMap): number =>
+export const countReusablePromptValidationErrors = (
+  errorsById: ReusablePromptValidationMap,
+): number =>
   Object.values(errorsById).reduce(
     (count, errors) => count + (errors.name ? 1 : 0) + (errors.content ? 1 : 0),
     0,
   );
 
-export const normalizeCustomPromptsForSave = (prompts: CustomPrompt[]): CustomPrompt[] => {
-  const errors = buildCustomPromptValidationErrors(prompts);
-  if (countCustomPromptValidationErrors(errors) > 0) {
-    throw new Error("Custom prompts contain invalid fields.");
+export const normalizeReusablePromptsForSave = (prompts: ReusablePrompt[]): ReusablePrompt[] => {
+  const errors = buildReusablePromptValidationErrors(prompts);
+  if (countReusablePromptValidationErrors(errors) > 0) {
+    throw new Error("Reusable prompts contain invalid fields.");
   }
 
   return prompts.map((prompt) => ({

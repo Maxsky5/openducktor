@@ -36,8 +36,8 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
-    customPrompts: [],
   },
+  reusablePrompts: [],
   kanban: {
     doneVisibleDays: 1,
     emptyColumnDisplay: "show",
@@ -335,8 +335,8 @@ describe("useSettingsModalController", () => {
       ...createSettingsSnapshot(),
       chat: {
         showThinkingMessages: true,
-        customPrompts: [],
       },
+      reusablePrompts: [],
     });
 
     await harness.unmount();

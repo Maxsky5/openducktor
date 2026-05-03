@@ -25,11 +25,11 @@ pub use config::{
     derive_workspace_name_from_repo_path, normalize_hook_set, normalize_repo_dev_servers,
     propose_workspace_id, uniquify_workspace_id, AgentDefaults, AgentModelDefault, AppConfigStore,
     AutopilotActionId, AutopilotEventId, AutopilotRule, AutopilotSettings, ChatSettings,
-    CustomPrompt, GitMergeMethod, GitProviderConfig, GitProviderRepository, GitTargetBranch,
-    GlobalConfig, GlobalGitConfig, HookSet, KanbanEmptyColumnDisplay, KanbanSettings,
+    GitMergeMethod, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig,
+    GlobalGitConfig, HookSet, KanbanEmptyColumnDisplay, KanbanSettings,
     OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides, RepoConfig,
-    RepoDevServerScript, RepoGitConfig, RuntimeConfig, RuntimeConfigStore, SchedulerConfig,
-    SoftGuardrails,
+    RepoDevServerScript, RepoGitConfig, ReusablePrompt, RuntimeConfig, RuntimeConfigStore,
+    SchedulerConfig, SoftGuardrails,
 };
 pub use filesystem::{list_directory, FilesystemListDirectoryError};
 pub use git::GitCliPort;

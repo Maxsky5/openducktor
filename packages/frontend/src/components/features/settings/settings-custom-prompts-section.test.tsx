@@ -1,13 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { ChatSettings } from "@openducktor/contracts";
+import type { ReusablePrompt } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { SettingsCustomPromptsSection } from "./settings-custom-prompts-section";
+import { SettingsReusablePromptsSection } from "./settings-custom-prompts-section";
 
 enableReactActEnvironment();
 
-const CUSTOM_PROMPTS: ChatSettings["customPrompts"] = [
+const REUSABLE_PROMPTS: ReusablePrompt[] = [
   {
     id: "prompt-1",
     name: "review",
@@ -16,34 +16,63 @@ const CUSTOM_PROMPTS: ChatSettings["customPrompts"] = [
   },
 ];
 
-const SECOND_CUSTOM_PROMPT: ChatSettings["customPrompts"][number] = {
+const SECOND_REUSABLE_PROMPT: ReusablePrompt = {
   id: "prompt-2",
   name: "summarize",
   description: "Summarize files",
   content: "Summarize this:\n$ARGUMENTS",
 };
 
-describe("SettingsCustomPromptsSection", () => {
-  test("adds a custom prompt draft", () => {
-    const onUpdateCustomPrompts = mock();
-    const renderer = render(
-      createElement(SettingsCustomPromptsSection, {
-        customPrompts: [],
-        selectedCustomPromptId: null,
+describe("SettingsReusablePromptsSection", () => {
+  test("focuses the name field after adding a reusable prompt", () => {
+    function StatefulReusablePromptsSection() {
+      const [reusablePrompts, setReusablePrompts] = useState<ReusablePrompt[]>([]);
+      const [selectedReusablePromptId, setSelectedReusablePromptId] = useState<string | null>(null);
+
+      return createElement(SettingsReusablePromptsSection, {
+        reusablePrompts,
+        selectedReusablePromptId,
         validationErrors: {},
         disabled: false,
-        onSelectedCustomPromptIdChange: () => {},
-        onUpdateCustomPrompts,
+        onSelectedReusablePromptIdChange: setSelectedReusablePromptId,
+        onUpdateReusablePrompts: (updater) => {
+          setReusablePrompts((current) => updater(current));
+        },
+      });
+    }
+
+    const renderer = render(createElement(StatefulReusablePromptsSection));
+
+    try {
+      fireEvent.click(screen.getByRole("button", { name: /add reusable prompt/i }));
+
+      const nameInput = screen.getByLabelText("Name");
+      expect(document.activeElement).toBe(nameInput);
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("adds a reusable prompt draft", () => {
+    const onUpdateReusablePrompts = mock();
+    const renderer = render(
+      createElement(SettingsReusablePromptsSection, {
+        reusablePrompts: [],
+        selectedReusablePromptId: null,
+        validationErrors: {},
+        disabled: false,
+        onSelectedReusablePromptIdChange: () => {},
+        onUpdateReusablePrompts,
       }),
     );
 
     try {
       fireEvent.click(screen.getByRole("button", { name: /add prompt/i }));
 
-      expect(onUpdateCustomPrompts).toHaveBeenCalledTimes(1);
-      const updater = onUpdateCustomPrompts.mock.calls[0]?.[0];
+      expect(onUpdateReusablePrompts).toHaveBeenCalledTimes(1);
+      const updater = onUpdateReusablePrompts.mock.calls[0]?.[0];
       if (typeof updater !== "function") {
-        throw new Error("Expected custom prompt updater.");
+        throw new Error("Expected reusable prompt updater.");
       }
       expect(updater([])).toMatchObject([{ name: "", description: "", content: "" }]);
     } finally {
@@ -51,50 +80,52 @@ describe("SettingsCustomPromptsSection", () => {
     }
   });
 
-  test("updates and deletes an existing custom prompt", () => {
-    const onUpdateCustomPrompts = mock();
-    const onSelectedCustomPromptIdChange = mock();
+  test("updates and deletes an existing reusable prompt", () => {
+    const onUpdateReusablePrompts = mock();
+    const onSelectedReusablePromptIdChange = mock();
     const renderer = render(
-      createElement(SettingsCustomPromptsSection, {
-        customPrompts: CUSTOM_PROMPTS,
-        selectedCustomPromptId: "prompt-1",
+      createElement(SettingsReusablePromptsSection, {
+        reusablePrompts: REUSABLE_PROMPTS,
+        selectedReusablePromptId: "prompt-1",
         validationErrors: {},
         disabled: false,
-        onSelectedCustomPromptIdChange,
-        onUpdateCustomPrompts,
+        onSelectedReusablePromptIdChange,
+        onUpdateReusablePrompts,
       }),
     );
 
     try {
       fireEvent.change(screen.getByLabelText("Name"), { target: { value: "summarize" } });
-      fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+      const deleteButton = screen.getByRole("button", { name: /delete/i });
+      expect(deleteButton.querySelector("svg")).not.toBeNull();
+      fireEvent.click(deleteButton);
 
-      expect(onUpdateCustomPrompts).toHaveBeenCalledTimes(2);
-      const updateName = onUpdateCustomPrompts.mock.calls[0]?.[0];
-      const deletePrompt = onUpdateCustomPrompts.mock.calls[1]?.[0];
+      expect(onUpdateReusablePrompts).toHaveBeenCalledTimes(2);
+      const updateName = onUpdateReusablePrompts.mock.calls[0]?.[0];
+      const deletePrompt = onUpdateReusablePrompts.mock.calls[1]?.[0];
       if (typeof updateName !== "function" || typeof deletePrompt !== "function") {
-        throw new Error("Expected custom prompt updater callbacks.");
+        throw new Error("Expected reusable prompt updater callbacks.");
       }
 
-      expect(updateName(CUSTOM_PROMPTS)).toEqual([{ ...CUSTOM_PROMPTS[0], name: "summarize" }]);
-      expect(deletePrompt(CUSTOM_PROMPTS)).toEqual([]);
-      expect(onSelectedCustomPromptIdChange).toHaveBeenCalledWith(null);
+      expect(updateName(REUSABLE_PROMPTS)).toEqual([{ ...REUSABLE_PROMPTS[0], name: "summarize" }]);
+      expect(deletePrompt(REUSABLE_PROMPTS)).toEqual([]);
+      expect(onSelectedReusablePromptIdChange).toHaveBeenCalledWith(null);
     } finally {
       renderer.unmount();
     }
   });
 
   test("selects added prompts and shows field errors on prompt tabs", () => {
-    const onUpdateCustomPrompts = mock();
-    const onSelectedCustomPromptIdChange = mock();
+    const onUpdateReusablePrompts = mock();
+    const onSelectedReusablePromptIdChange = mock();
     const renderer = render(
-      createElement(SettingsCustomPromptsSection, {
-        customPrompts: CUSTOM_PROMPTS,
-        selectedCustomPromptId: "prompt-1",
+      createElement(SettingsReusablePromptsSection, {
+        reusablePrompts: REUSABLE_PROMPTS,
+        selectedReusablePromptId: "prompt-1",
         validationErrors: { "prompt-1": { content: "Prompt content is required." } },
         disabled: false,
-        onSelectedCustomPromptIdChange,
-        onUpdateCustomPrompts,
+        onSelectedReusablePromptIdChange,
+        onUpdateReusablePrompts,
       }),
     );
 
@@ -104,32 +135,32 @@ describe("SettingsCustomPromptsSection", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /add prompt/i }));
 
-      expect(onSelectedCustomPromptIdChange).toHaveBeenCalledTimes(1);
-      expect(onSelectedCustomPromptIdChange.mock.calls[0]?.[0]).toEqual(expect.any(String));
+      expect(onSelectedReusablePromptIdChange).toHaveBeenCalledTimes(1);
+      expect(onSelectedReusablePromptIdChange.mock.calls[0]?.[0]).toEqual(expect.any(String));
     } finally {
       renderer.unmount();
     }
   });
 
   test("selects the next prompt when deleting the selected prompt", () => {
-    const onUpdateCustomPrompts = mock();
-    const onSelectedCustomPromptIdChange = mock();
+    const onUpdateReusablePrompts = mock();
+    const onSelectedReusablePromptIdChange = mock();
     const renderer = render(
-      createElement(SettingsCustomPromptsSection, {
-        customPrompts: [...CUSTOM_PROMPTS, SECOND_CUSTOM_PROMPT],
-        selectedCustomPromptId: "prompt-1",
+      createElement(SettingsReusablePromptsSection, {
+        reusablePrompts: [...REUSABLE_PROMPTS, SECOND_REUSABLE_PROMPT],
+        selectedReusablePromptId: "prompt-1",
         validationErrors: {},
         disabled: false,
-        onSelectedCustomPromptIdChange,
-        onUpdateCustomPrompts,
+        onSelectedReusablePromptIdChange,
+        onUpdateReusablePrompts,
       }),
     );
 
     try {
       fireEvent.click(screen.getByRole("button", { name: /delete/i }));
 
-      expect(onUpdateCustomPrompts).toHaveBeenCalledTimes(1);
-      expect(onSelectedCustomPromptIdChange).toHaveBeenCalledWith("prompt-2");
+      expect(onUpdateReusablePrompts).toHaveBeenCalledTimes(1);
+      expect(onSelectedReusablePromptIdChange).toHaveBeenCalledWith("prompt-2");
     } finally {
       renderer.unmount();
     }

@@ -216,7 +216,7 @@ const createBaseProps = (overrides: Partial<LegacyHookArgs> = {}): LegacyHookArg
   activeSession: null,
   activeSessionSummary: null,
   role: "spec",
-  customPrompts: [],
+  reusablePrompts: [],
   repoSettings: createRepoSettings(null),
   updateAgentSessionModel: () => {},
   loadCatalog: async () => CATALOG,
@@ -561,13 +561,13 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
-  test("merges runtime slash commands with custom prompt commands", async () => {
+  test("merges runtime slash commands with reusable prompt commands", async () => {
     const loadSlashCommands = mock(async () => ({
       commands: [{ id: "native-review", trigger: "review", title: "Runtime review", hints: [] }],
     }));
     const harness = createHookHarness(
       createBaseProps({
-        customPrompts: [
+        reusablePrompts: [
           {
             id: "prompt-1",
             name: "summarize",
@@ -594,7 +594,7 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
-  test("keeps custom prompt commands available when runtime lacks native slash commands", async () => {
+  test("keeps reusable prompt commands available when runtime lacks native slash commands", async () => {
     const runtimeWithoutSlashCommands: RuntimeDescriptor = {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       capabilities: {
@@ -608,7 +608,7 @@ describe("useAgentStudioModelSelection", () => {
     const loadSlashCommands = mock(async () => ({ commands: [] }));
     const harness = createHookHarness(
       createBaseProps({
-        customPrompts: [
+        reusablePrompts: [
           {
             id: "prompt-1",
             name: "review",

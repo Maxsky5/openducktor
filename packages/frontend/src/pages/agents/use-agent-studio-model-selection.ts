@@ -1,4 +1,4 @@
-import type { CustomPrompt, RuntimeKind } from "@openducktor/contracts";
+import type { ReusablePrompt, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -14,7 +14,7 @@ import {
   toModelOptions,
   toPrimaryAgentOptions,
 } from "@/components/features/agents";
-import { toCustomPromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-custom-prompts";
+import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-custom-prompts";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -54,7 +54,7 @@ type UseAgentStudioModelSelectionArgs = {
   activeSession: AgentSessionState | null;
   activeSessionSummary: AgentSessionSummary | null;
   role: AgentRole;
-  customPrompts: CustomPrompt[];
+  reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
   updateAgentSessionModel: (
     externalSessionId: string,
@@ -159,7 +159,7 @@ export function useAgentStudioModelSelection({
   activeSession,
   activeSessionSummary,
   role,
-  customPrompts,
+  reusablePrompts,
   repoSettings,
   updateAgentSessionModel,
   loadCatalog,
@@ -266,7 +266,7 @@ export function useAgentStudioModelSelection({
         ?.capabilities.promptInput.supportsSlashCommands ?? false
     );
   }, [runtimeDefinitions, slashCommandRuntimeKind]);
-  const supportsSlashCommands = runtimeSupportsSlashCommands || customPrompts.length > 0;
+  const supportsSlashCommands = runtimeSupportsSlashCommands || reusablePrompts.length > 0;
   const fileSearchRuntimeKind = activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
   const supportsFileSearch = useMemo(() => {
     if (!fileSearchRuntimeKind) {
@@ -452,8 +452,8 @@ export function useAgentStudioModelSelection({
     ? (activeSessionSlashCommandsQuery.data ?? null)
     : (repoSlashCommandsQuery.data ?? null);
   const customSlashCommands = useMemo(
-    () => customPrompts.map(toCustomPromptSlashCommand),
-    [customPrompts],
+    () => reusablePrompts.map(toReusablePromptSlashCommand),
+    [reusablePrompts],
   );
   const runtimeSlashCommands = useMemo(
     () => (runtimeSupportsSlashCommands ? (slashCommandCatalog?.commands ?? []) : []),

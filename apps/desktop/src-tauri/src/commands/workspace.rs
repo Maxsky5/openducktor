@@ -356,12 +356,21 @@ pub async fn workspace_detect_github_repository(
 pub async fn workspace_get_settings_snapshot(
     state: State<'_, AppState>,
 ) -> Result<SettingsSnapshotResponsePayload, String> {
-    let (theme, git, chat, kanban, autopilot, workspaces, global_prompt_overrides) =
-        as_error(state.service.workspace_get_settings_snapshot())?;
+    let (
+        theme,
+        git,
+        chat,
+        reusable_prompts,
+        kanban,
+        autopilot,
+        workspaces,
+        global_prompt_overrides,
+    ) = as_error(state.service.workspace_get_settings_snapshot())?;
     Ok(SettingsSnapshotResponsePayload {
         theme,
         git,
         chat,
+        reusable_prompts,
         kanban,
         autopilot,
         workspaces,
@@ -393,6 +402,7 @@ pub async fn workspace_save_settings_snapshot(
         theme,
         git,
         chat,
+        reusable_prompts,
         kanban,
         autopilot,
         workspaces,
@@ -410,6 +420,7 @@ pub async fn workspace_save_settings_snapshot(
                 theme,
                 git,
                 chat,
+                reusable_prompts,
                 kanban,
                 autopilot,
                 workspaces,
@@ -995,7 +1006,16 @@ mod tests {
                 .expect_err("seeded cache should reject worktree omitted from subset");
         assert!(stale_error.contains("not within authorized repository or linked worktrees"));
 
-        let (theme, git, chat, kanban, autopilot, workspaces, global_prompt_overrides) = fixture
+        let (
+            theme,
+            git,
+            chat,
+            reusable_prompts,
+            kanban,
+            autopilot,
+            workspaces,
+            global_prompt_overrides,
+        ) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1005,6 +1025,7 @@ mod tests {
                 theme,
                 git,
                 chat,
+                reusable_prompts,
                 kanban,
                 autopilot,
                 workspaces,
@@ -1031,7 +1052,16 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-ipc-shared-prompts", HookSet::default());
 
-        let (theme, git, chat, kanban, autopilot, workspaces, global_prompt_overrides) = fixture
+        let (
+            theme,
+            git,
+            chat,
+            reusable_prompts,
+            kanban,
+            autopilot,
+            workspaces,
+            global_prompt_overrides,
+        ) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1039,6 +1069,7 @@ mod tests {
             theme,
             git,
             chat,
+            reusable_prompts,
             kanban,
             autopilot,
             workspaces,
@@ -1089,6 +1120,7 @@ mod tests {
                 "theme": snapshot.theme,
                 "git": snapshot.git,
                 "chat": snapshot.chat,
+                "reusablePrompts": snapshot.reusable_prompts,
                 "kanban": snapshot.kanban,
                 "autopilot": snapshot.autopilot,
                 "workspaces": snapshot.workspaces,
@@ -1110,6 +1142,7 @@ mod tests {
             _persisted_theme,
             _persisted_git,
             persisted_chat,
+            _persisted_reusable_prompts,
             _persisted_kanban,
             _persisted_autopilot,
             persisted_workspaces,
@@ -1157,13 +1190,22 @@ mod tests {
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() -> Result<(), String> {
         let fixture = setup_workspace_command_fixture("snapshot-default-chat", HookSet::default());
 
-        let (_theme, _git, chat, kanban, _autopilot, _workspaces, _global_prompt_overrides) =
-            fixture
-                .service
-                .workspace_get_settings_snapshot()
-                .map_err(|error| error.to_string())?;
+        let (
+            _theme,
+            _git,
+            chat,
+            reusable_prompts,
+            kanban,
+            _autopilot,
+            _workspaces,
+            _global_prompt_overrides,
+        ) = fixture
+            .service
+            .workspace_get_settings_snapshot()
+            .map_err(|error| error.to_string())?;
 
         assert_eq!(chat, ChatSettings::default());
+        assert!(reusable_prompts.is_empty());
         assert!(!chat.show_thinking_messages);
         assert_eq!(kanban.done_visible_days, 1);
         Ok(())
@@ -1174,7 +1216,16 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-chat-roundtrip", HookSet::default());
 
-        let (theme, git, _chat, kanban, autopilot, workspaces, global_prompt_overrides) = fixture
+        let (
+            theme,
+            git,
+            _chat,
+            reusable_prompts,
+            kanban,
+            autopilot,
+            workspaces,
+            global_prompt_overrides,
+        ) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1183,6 +1234,7 @@ mod tests {
             "snapshot": {
                 "theme": theme.clone(),
                 "git": git.clone(),
+                "reusablePrompts": reusable_prompts.clone(),
                 "kanban": kanban.clone(),
                 "autopilot": autopilot.clone(),
                 "workspaces": workspaces.clone(),
@@ -1203,6 +1255,14 @@ mod tests {
                 "chat": {
                     "showThinkingMessages": true
                 },
+                "reusablePrompts": [
+                    {
+                        "id": "prompt-1",
+                        "name": "review",
+                        "description": "Review context",
+                        "content": "Review this"
+                    }
+                ],
                 "kanban": kanban,
                 "autopilot": autopilot,
                 "workspaces": workspaces,
@@ -1216,6 +1276,7 @@ mod tests {
             _reloaded_theme,
             _reloaded_git,
             reloaded_chat,
+            reloaded_prompts,
             _reloaded_kanban,
             _reloaded_autopilot,
             _reloaded_workspaces,
@@ -1225,6 +1286,8 @@ mod tests {
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
         assert!(reloaded_chat.show_thinking_messages);
+        assert_eq!(reloaded_prompts.len(), 1);
+        assert_eq!(reloaded_prompts[0].name, "review");
         Ok(())
     }
 }

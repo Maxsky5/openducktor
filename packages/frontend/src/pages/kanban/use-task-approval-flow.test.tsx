@@ -104,7 +104,8 @@ const buildMockedHost = () => ({
   workspaceGetSettingsSnapshot: async () => ({
     theme: "light" as const,
     git: { defaultMergeMethod: "merge_commit" as const },
-    chat: { showThinkingMessages: false, customPrompts: [] },
+    chat: { showThinkingMessages: false },
+    reusablePrompts: [],
     repos: {},
     globalPromptOverrides: {},
   }),

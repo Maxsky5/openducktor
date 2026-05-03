@@ -67,7 +67,7 @@ fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
     })
 }
 
-fn is_valid_custom_prompt_name(value: &str) -> bool {
+fn is_valid_reusable_prompt_name(value: &str) -> bool {
     !value.is_empty()
         && value.chars().all(|character| {
             character.is_ascii_alphanumeric()
@@ -78,23 +78,25 @@ fn is_valid_custom_prompt_name(value: &str) -> bool {
         })
 }
 
-fn normalize_chat_settings(config: &mut ChatSettings) -> Result<()> {
-    let mut seen_names = HashSet::new();
-    for prompt in &mut config.custom_prompts {
-        normalize_required_string(&mut prompt.id, "Custom prompt id")?;
-        normalize_required_string(&mut prompt.name, "Custom prompt name")?;
-        prompt.description = prompt.description.trim().to_string();
-        normalize_required_string(&mut prompt.content, "Custom prompt content")?;
+fn normalize_chat_settings(_config: &mut ChatSettings) {}
 
-        if !is_valid_custom_prompt_name(&prompt.name) {
+fn normalize_reusable_prompts(config: &mut GlobalConfig) -> Result<()> {
+    let mut seen_names = HashSet::new();
+    for prompt in &mut config.reusable_prompts {
+        normalize_required_string(&mut prompt.id, "Reusable prompt id")?;
+        normalize_required_string(&mut prompt.name, "Reusable prompt name")?;
+        prompt.description = prompt.description.trim().to_string();
+        normalize_required_string(&mut prompt.content, "Reusable prompt content")?;
+
+        if !is_valid_reusable_prompt_name(&prompt.name) {
             return Err(anyhow!(
-                "Custom prompt name must contain only letters, digits, dots, underscores, colons, or dashes."
+                "Reusable prompt name must contain only letters, digits, dots, underscores, colons, or dashes."
             ));
         }
 
         let normalized_name = prompt.name.to_ascii_lowercase();
         if !seen_names.insert(normalized_name) {
-            return Err(anyhow!("Duplicate custom prompt name: {}", prompt.name));
+            return Err(anyhow!("Duplicate reusable prompt name: {}", prompt.name));
         }
     }
 
@@ -335,7 +337,8 @@ fn normalize_workspace_order(config: &mut GlobalConfig) {
 }
 
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
-    normalize_chat_settings(&mut config.chat)?;
+    normalize_chat_settings(&mut config.chat);
+    normalize_reusable_prompts(config)?;
     normalize_kanban_settings(&mut config.kanban);
     normalize_autopilot_settings(&mut config.autopilot);
     normalize_prompt_overrides(&mut config.global_prompt_overrides)?;

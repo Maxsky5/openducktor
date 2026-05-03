@@ -21,7 +21,6 @@ import type {
   BuildSessionBootstrap,
   ChatSettings,
   CommitsAheadBehind,
-  CustomPrompt,
   DirectoryEntry,
   DirectoryListing,
   ExternalTaskSyncEvent,
@@ -82,6 +81,7 @@ import type {
   RepoStoreHealthStatus,
   RepoStoreSharedServerHealth,
   RepoStoreSharedServerOwnershipState,
+  ReusablePrompt,
   RuntimeApprovalCapabilities,
   RuntimeApprovalReplyOutcome,
   RuntimeApprovalRequestType,
@@ -178,13 +178,14 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "buildBlockedResultSchema",
   "buildCompletedResultSchema",
   "chatSettingsSchema",
-  "CUSTOM_PROMPT_ARGUMENTS_PLACEHOLDER",
-  "CUSTOM_PROMPT_TRIGGER_PATTERN",
-  "customPromptSchema",
-  "customPromptsSchema",
+  "REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER",
+  "REUSABLE_PROMPT_TRIGGER_PATTERN",
+  "reusablePromptSchema",
+  "reusablePromptsSchema",
   "buildResumedResultSchema",
   "CreateTaskInputSchema",
   "DEFAULT_KANBAN_SETTINGS",
+  "DEFAULT_REUSABLE_PROMPTS",
   "KANBAN_EMPTY_COLUMN_DISPLAY_VALUES",
   "devServerEventSchema",
   "devServerGroupStateSchema",
@@ -440,7 +441,6 @@ type ExportedTypeContract = {
   AgentWorkflows: AgentWorkflows;
   BeadsCheck: BeadsCheck;
   ChatSettings: ChatSettings;
-  CustomPrompt: CustomPrompt;
   CommitsAheadBehind: CommitsAheadBehind;
   DirectoryEntry: DirectoryEntry;
   DirectoryListing: DirectoryListing;
@@ -526,6 +526,7 @@ type ExportedTypeContract = {
   RepoRuntimeMcpStatus: RepoRuntimeMcpStatus;
   RepoRuntimeStartupStage: RepoRuntimeStartupStage;
   RepoRuntimeStartupStatus: RepoRuntimeStartupStatus;
+  ReusablePrompt: ReusablePrompt;
   SoftGuardrails: SoftGuardrails;
   RuntimeKind: RuntimeKind;
   RuntimeProvisioningMode: RuntimeProvisioningMode;
@@ -576,7 +577,7 @@ describe("contracts exports contract", () => {
     });
 
     expect(parsedSnapshot.chat.showThinkingMessages).toBe(false);
-    expect(parsedSnapshot.chat.customPrompts).toEqual([]);
+    expect(parsedSnapshot.reusablePrompts).toEqual([]);
     expect(parsedSnapshot.kanban.doneVisibleDays).toBe(1);
     expect(parsedSnapshot.kanban.emptyColumnDisplay).toBe("show");
   });
