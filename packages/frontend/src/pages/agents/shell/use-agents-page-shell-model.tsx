@@ -427,6 +427,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const orchestration = useAgentStudioOrchestrationController({
     activeWorkspace,
     branches,
+    runtimeDefinitions,
     selection: {
       ...selection,
       contextSwitchVersion,

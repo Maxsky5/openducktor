@@ -499,6 +499,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     isSessionWorking,
     isSessionHistoryLoading: isTranscriptLoading,
     isWaitingForRuntimeReadiness: false,
+    runtimeDefinitions,
     sessionRuntimeDataError: runtimeData.runtimeDataError ?? loadError,
     runtimeReadiness,
     emptyState,

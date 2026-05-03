@@ -1,4 +1,9 @@
-import type { GitBranch, GitTargetBranch, WorkspaceRecord } from "@openducktor/contracts";
+import type {
+  GitBranch,
+  GitTargetBranch,
+  RuntimeDescriptor,
+  WorkspaceRecord,
+} from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type {
   AgentStudioTaskTabsModel,
@@ -59,6 +64,7 @@ type AgentStudioOrchestrationActionsContext = {
 type UseAgentStudioOrchestrationControllerArgs = {
   activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
+  runtimeDefinitions: RuntimeDescriptor[];
   selection: AgentStudioOrchestrationSelectionContext;
   readiness: AgentStudioOrchestrationReadinessContext;
   hasActiveGitConflict: boolean;
@@ -154,6 +160,7 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
 type BuildAgentStudioPageModelsArgsInput = {
   view: AgentStudioPageModelsViewContext;
   sessions: AgentStudioPageModelsSessionsContext;
+  runtimeDefinitions: RuntimeDescriptor[];
   tabs: AgentStudioPageModelsTabsContext;
   documents: AgentStudioPageModelsDocumentsContext;
   readiness: AgentStudioOrchestrationReadinessContext;
@@ -169,6 +176,7 @@ type BuildAgentStudioPageModelsArgsInput = {
 export const buildAgentStudioPageModelsArgs = ({
   view,
   sessions,
+  runtimeDefinitions,
   tabs,
   documents,
   readiness,
@@ -199,6 +207,7 @@ export const buildAgentStudioPageModelsArgs = ({
       allSessionSummaries: sessions.allSessionSummaries,
       contextSessionsLength: sessions.viewSessionsForTask.length,
       activeSession: sessions.viewActiveSession,
+      runtimeDefinitions,
       sessionRuntimeDataError: sessions.viewSessionRuntimeDataError ?? null,
       hasActiveGitConflict: view.hasActiveGitConflict,
       isTaskHydrating: Boolean(
@@ -235,6 +244,7 @@ export const buildAgentStudioPageModelsArgs = ({
 export function useAgentStudioOrchestrationController({
   activeWorkspace,
   branches,
+  runtimeDefinitions,
   selection,
   readiness,
   hasActiveGitConflict,
@@ -403,6 +413,7 @@ export function useAgentStudioOrchestrationController({
       viewActiveSession,
       viewSessionRuntimeDataError,
     },
+    runtimeDefinitions,
     tabs: {
       activeTaskTabId,
       taskTabs,

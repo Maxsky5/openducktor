@@ -1,5 +1,13 @@
-import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
-import type { AgentApprovalMutation, AgentPendingApprovalRequest } from "@openducktor/core";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeApprovalReplyOutcome,
+} from "@openducktor/contracts";
+import {
+  type AgentApprovalMutation,
+  type AgentPendingApprovalRequest,
+  isOdtWorkflowMutationToolName,
+  normalizeOdtWorkflowToolName,
+} from "@openducktor/core";
 
 type UnknownRecord = Record<string, unknown>;
 type OpenCodePermissionReply = "once" | "always" | "reject";
@@ -46,6 +54,8 @@ const SAFE_READ_TOOL_NAMES = new Set([
 ]);
 
 const SHELL_PERMISSION_HINTS = ["bash", "shell", "exec", "command"];
+const OPENCODE_ODT_WORKFLOW_TOOL_ALIASES =
+  OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical;
 
 const MUTATING_SHELL_PATTERNS = [
   /\b(rm|mv|cp|mkdir|rmdir|touch|chmod|chown|truncate)\b/,
@@ -132,24 +142,48 @@ const isReadOnlyShellCommand = (command: string): boolean => {
   return segments.length > 0 && segments.every((segment) => isReadOnlyShellSegment(segment));
 };
 
+const classifyOpenCodeToolName = (toolName: string): AgentApprovalMutation | null => {
+  const trimmedToolName = toolName.trim();
+  if (trimmedToolName.length === 0) {
+    return null;
+  }
+
+  if (isOdtWorkflowMutationToolName(trimmedToolName, OPENCODE_ODT_WORKFLOW_TOOL_ALIASES)) {
+    return "mutating";
+  }
+  if (normalizeOdtWorkflowToolName(trimmedToolName, OPENCODE_ODT_WORKFLOW_TOOL_ALIASES)) {
+    return "read_only";
+  }
+
+  const lowerToolName = trimmedToolName.toLowerCase();
+  if (MUTATING_TOOL_NAMES.has(lowerToolName) || hasMutatingHint(lowerToolName)) {
+    return "mutating";
+  }
+  if (SAFE_READ_TOOL_NAMES.has(lowerToolName)) {
+    return "read_only";
+  }
+
+  return null;
+};
+
 const classifyOpenCodeApprovalMutation = (
   permission: string,
   patterns: string[],
   metadata?: UnknownRecord,
 ): AgentApprovalMutation => {
   const permissionLower = permission.trim().toLowerCase();
+  const permissionToolMutation = classifyOpenCodeToolName(permission);
+  if (permissionToolMutation) {
+    return permissionToolMutation;
+  }
+
   if (hasMutatingHint(permissionLower)) {
     return "mutating";
   }
 
-  const metadataTool = toLower(metadata?.tool);
-  if (metadataTool.length > 0) {
-    if (MUTATING_TOOL_NAMES.has(metadataTool)) {
-      return "mutating";
-    }
-    if (SAFE_READ_TOOL_NAMES.has(metadataTool)) {
-      return "read_only";
-    }
+  const metadataTool = typeof metadata?.tool === "string" ? metadata.tool : undefined;
+  if (metadataTool) {
+    return classifyOpenCodeToolName(metadataTool) ?? "unknown";
   }
 
   const lowerPatterns = patterns.map((pattern) => pattern.toLowerCase());
@@ -163,7 +197,7 @@ const classifyOpenCodeApprovalMutation = (
   const commandLower = toLower(metadata?.command);
 
   if (commandLower.length === 0) {
-    return shellPermission ? "unknown" : "read_only";
+    return "unknown";
   }
   if (isReadOnlyShellCommand(commandLower)) {
     return "read_only";

@@ -124,6 +124,7 @@ type AgentChatBottomStackProps = {
   isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
   onSubmitQuestionAnswers: AgentChatThreadModel["onSubmitQuestionAnswers"];
   canReplyToPermissions: boolean;
+  runtimeSupportedApprovalReplyOutcomes: AgentChatThreadModel["runtimeSupportedApprovalReplyOutcomes"];
   isSubmittingApprovalByRequestId: AgentChatThreadModel["isSubmittingApprovalByRequestId"];
   approvalReplyErrorByRequestId: AgentChatThreadModel["approvalReplyErrorByRequestId"];
   onReplyApproval: AgentChatThreadModel["onReplyApproval"];
@@ -461,6 +462,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
   isSubmittingQuestionByRequestId,
   onSubmitQuestionAnswers,
   canReplyToPermissions,
+  runtimeSupportedApprovalReplyOutcomes,
   isSubmittingApprovalByRequestId,
   approvalReplyErrorByRequestId,
   onReplyApproval,
@@ -493,6 +495,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
         <div key={`${externalSessionId}:${request.requestId}`} className="relative z-30">
           <AgentSessionApprovalCard
             request={request}
+            runtimeSupportedReplyOutcomes={runtimeSupportedApprovalReplyOutcomes ?? null}
             disabled={!canReplyToPermissions}
             isSubmitting={Boolean(isSubmittingApprovalByRequestId[request.requestId])}
             errorMessage={approvalReplyErrorByRequestId[request.requestId]}
@@ -542,6 +545,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers,
     canReplyToPermissions,
+    runtimeSupportedApprovalReplyOutcomes,
     isSubmittingApprovalByRequestId,
     approvalReplyErrorByRequestId,
     onReplyApproval,
@@ -793,6 +797,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
             onSubmitQuestionAnswers={onSubmitQuestionAnswers}
             canReplyToPermissions={canReplyToPermissions}
+            runtimeSupportedApprovalReplyOutcomes={runtimeSupportedApprovalReplyOutcomes}
             isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
             approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
             onReplyApproval={onReplyApproval}

@@ -1,4 +1,8 @@
-import type { RuntimeApprovalReplyOutcome, TaskCard } from "@openducktor/contracts";
+import type {
+  RuntimeApprovalReplyOutcome,
+  RuntimeDescriptor,
+  TaskCard,
+} from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -35,6 +39,7 @@ type AgentStudioCoreContext = {
   sessionsForTask: AgentSessionSummary[];
   contextSessionsLength: number;
   activeSession: AgentSessionState | null;
+  runtimeDefinitions: RuntimeDescriptor[];
   sessionRuntimeDataError: string | null;
   hasActiveGitConflict: boolean;
   isTaskHydrating: boolean;
@@ -555,6 +560,7 @@ export function useAgentStudioPageModels({
     isSessionWorking: sessionActions.isSessionWorking,
     isSessionHistoryLoading: core.isSessionHistoryHydrating,
     isWaitingForRuntimeReadiness: core.isWaitingForRuntimeReadiness,
+    runtimeDefinitions: core.runtimeDefinitions,
     sessionRuntimeDataError: core.sessionRuntimeDataError,
     runtimeReadiness,
     emptyState: chatEmptyState,

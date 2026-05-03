@@ -25,14 +25,39 @@ const getApprovalOutcomeButtonVariant = (
 
 type AgentSessionApprovalCardProps = {
   request: AgentApprovalRequest;
+  runtimeSupportedReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
   disabled?: boolean;
   isSubmitting?: boolean;
   errorMessage?: string | undefined;
   onReply: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
 };
 
+export const resolveApprovalReplyOutcomes = ({
+  requestSupportedReplyOutcomes,
+  runtimeSupportedReplyOutcomes,
+}: {
+  requestSupportedReplyOutcomes?: readonly RuntimeApprovalReplyOutcome[] | undefined;
+  runtimeSupportedReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
+}): RuntimeApprovalReplyOutcome[] => {
+  if (!runtimeSupportedReplyOutcomes) {
+    return [];
+  }
+
+  const requestOutcomes = requestSupportedReplyOutcomes ?? runtimeSupportedReplyOutcomes;
+  const runtimeOutcomeSet = new Set(runtimeSupportedReplyOutcomes);
+  const effectiveOutcomes: RuntimeApprovalReplyOutcome[] = [];
+  for (const outcome of requestOutcomes) {
+    if (!runtimeOutcomeSet.has(outcome) || effectiveOutcomes.includes(outcome)) {
+      continue;
+    }
+    effectiveOutcomes.push(outcome);
+  }
+  return effectiveOutcomes;
+};
+
 export function AgentSessionApprovalCard({
   request,
+  runtimeSupportedReplyOutcomes,
   disabled = false,
   isSubmitting = false,
   errorMessage,
@@ -51,8 +76,14 @@ export function AgentSessionApprovalCard({
     return null;
   }
 
-  const supportedOutcomes = request.supportedReplyOutcomes ?? [];
+  const supportedOutcomes = resolveApprovalReplyOutcomes({
+    requestSupportedReplyOutcomes: request.supportedReplyOutcomes,
+    runtimeSupportedReplyOutcomes,
+  });
   const canReply = supportedOutcomes.length > 0;
+  const missingCapabilityMessage = runtimeSupportedReplyOutcomes
+    ? "This runtime does not support any declared approval outcomes for this request."
+    : "Runtime approval capabilities are unavailable for this request.";
 
   return (
     <section className="rounded-xl border border-warning-border bg-warning-surface shadow-sm">
@@ -108,7 +139,7 @@ export function AgentSessionApprovalCard({
 
         {!canReply ? (
           <p className="rounded-md border border-warning-border bg-warning-surface px-2 py-1 text-xs text-warning-muted">
-            This runtime did not declare supported approval outcomes for this request.
+            {missingCapabilityMessage}
           </p>
         ) : null}
 

@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act } from "react";
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
@@ -96,6 +97,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isWaitingForRuntimeReadiness: false,
     isSessionHistoryHydrationFailed: false,
     contextSwitchVersion: 0,
+    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     ...overrides.core,
     allSessionSummaries,
     sessionsForTask,

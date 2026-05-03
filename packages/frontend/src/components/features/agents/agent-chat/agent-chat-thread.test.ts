@@ -37,6 +37,7 @@ const buildBaseModel = () => ({
   canSubmitQuestionAnswers: true,
   isSubmittingQuestionByRequestId: {},
   canReplyToPermissions: true,
+  runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"] as const,
   isSubmittingApprovalByRequestId: {},
   approvalReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},

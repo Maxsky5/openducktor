@@ -1,4 +1,4 @@
-import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome, RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -164,6 +165,7 @@ type UseAgentChatSurfaceModelArgs = {
   isSessionWorking: boolean;
   isSessionHistoryLoading: boolean;
   isWaitingForRuntimeReadiness: boolean;
+  runtimeDefinitions?: RuntimeDescriptor[];
   sessionRuntimeDataError: string | null;
   runtimeReadiness: AgentChatRuntimeReadiness;
   emptyState: AgentChatEmptyStateModel | null;
@@ -187,6 +189,7 @@ export function useAgentChatSurfaceModel({
   isSessionWorking,
   isSessionHistoryLoading,
   isWaitingForRuntimeReadiness,
+  runtimeDefinitions = [],
   sessionRuntimeDataError,
   runtimeReadiness,
   emptyState,
@@ -241,6 +244,16 @@ export function useAgentChatSurfaceModel({
   const isComposerInteractionEnabled = mode === "interactive" && runtimeReadiness.isReady;
   const canSubmitQuestionAnswers = runtimeReadiness.isReady && pendingQuestions.canSubmit;
   const canReplyToPermissionRequests = runtimeReadiness.isReady && permissions.canReply;
+  const runtimeSupportedApprovalReplyOutcomes = useMemo(() => {
+    const runtimeKind = threadSession?.runtimeKind;
+    if (!runtimeKind) {
+      return null;
+    }
+    return (
+      findRuntimeDefinition(runtimeDefinitions, runtimeKind)?.capabilities.approvals
+        .supportedReplyOutcomes ?? null
+    );
+  }, [runtimeDefinitions, threadSession?.runtimeKind]);
 
   const threadModel = useMemo(
     () => ({
@@ -274,6 +287,7 @@ export function useAgentChatSurfaceModel({
       isSubmittingQuestionByRequestId: pendingQuestions.isSubmittingByRequestId,
       onSubmitQuestionAnswers: pendingQuestions.onSubmit,
       canReplyToPermissions: canReplyToPermissionRequests,
+      runtimeSupportedApprovalReplyOutcomes,
       isSubmittingApprovalByRequestId: permissions.isSubmittingByRequestId,
       approvalReplyErrorByRequestId: permissions.errorByRequestId,
       onReplyApproval: permissions.onReply,
@@ -302,6 +316,7 @@ export function useAgentChatSurfaceModel({
       permissions,
       resolvedSessionAgentColors,
       runtimeReadiness,
+      runtimeSupportedApprovalReplyOutcomes,
       sessionRuntimeDataError,
       showThinkingMessages,
       subagentPendingApprovalsByExternalSessionId,
