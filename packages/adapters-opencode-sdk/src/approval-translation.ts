@@ -125,6 +125,92 @@ const isReadOnlyShellSegment = (value: string): boolean => {
   return SAFE_READ_SHELL_PATTERNS.some((pattern) => pattern.test(segment));
 };
 
+const splitShellCommandSegments = (command: string): string[] | null => {
+  const segments: string[] = [];
+  let segment = "";
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let escaped = false;
+
+  const pushSegment = (): void => {
+    const trimmed = segment.trim();
+    if (trimmed.length > 0) {
+      segments.push(trimmed);
+    }
+    segment = "";
+  };
+
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index];
+
+    if (escaped) {
+      segment += character;
+      escaped = false;
+      continue;
+    }
+
+    if (character === "\\") {
+      segment += character;
+      escaped = true;
+      continue;
+    }
+
+    if (inSingleQuote) {
+      segment += character;
+      if (character === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      segment += character;
+      if (character === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+
+    if (character === "'") {
+      segment += character;
+      inSingleQuote = true;
+      continue;
+    }
+
+    if (character === '"') {
+      segment += character;
+      inDoubleQuote = true;
+      continue;
+    }
+
+    if (character === "&" && command[index + 1] === "&") {
+      pushSegment();
+      index += 1;
+      continue;
+    }
+
+    if (character === "|" && command[index + 1] === "|") {
+      pushSegment();
+      index += 1;
+      continue;
+    }
+
+    if (character === ";" || character === "\n") {
+      pushSegment();
+      continue;
+    }
+
+    segment += character;
+  }
+
+  if (escaped || inSingleQuote || inDoubleQuote) {
+    return null;
+  }
+
+  pushSegment();
+  return segments;
+};
+
 const isReadOnlyShellCommand = (command: string): boolean => {
   const normalized = command.trim().toLowerCase();
   if (normalized.length === 0) {
@@ -134,10 +220,10 @@ const isReadOnlyShellCommand = (command: string): boolean => {
     return false;
   }
 
-  const segments = normalized
-    .split(/&&|\|\||;|\n/)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
+  const segments = splitShellCommandSegments(normalized);
+  if (!segments) {
+    return false;
+  }
 
   return segments.length > 0 && segments.every((segment) => isReadOnlyShellSegment(segment));
 };
@@ -182,8 +268,9 @@ const classifyOpenCodeApprovalMutation = (
   }
 
   const metadataTool = typeof metadata?.tool === "string" ? metadata.tool : undefined;
-  if (metadataTool) {
-    return classifyOpenCodeToolName(metadataTool) ?? "unknown";
+  const metadataToolMutation = metadataTool ? classifyOpenCodeToolName(metadataTool) : null;
+  if (metadataToolMutation) {
+    return metadataToolMutation;
   }
 
   const lowerPatterns = patterns.map((pattern) => pattern.toLowerCase());
@@ -193,7 +280,12 @@ const classifyOpenCodeApprovalMutation = (
 
   const shellPermission =
     SHELL_PERMISSION_HINTS.some((hint) => permissionLower.includes(hint)) ||
-    lowerPatterns.some((pattern) => SHELL_PERMISSION_HINTS.some((hint) => pattern.includes(hint)));
+    lowerPatterns.some((pattern) =>
+      SHELL_PERMISSION_HINTS.some((hint) => pattern.includes(hint)),
+    ) ||
+    (metadataTool
+      ? SHELL_PERMISSION_HINTS.some((hint) => metadataTool.toLowerCase().includes(hint))
+      : false);
   const commandLower = toLower(metadata?.command);
 
   if (commandLower.length === 0) {

@@ -23,6 +23,9 @@ const getApprovalOutcomeButtonVariant = (
   return "outline";
 };
 
+const AFFECTED_PATH_CODE_CLASS_NAME =
+  "rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[0.85em] text-foreground";
+
 type AgentSessionApprovalCardProps = {
   request: AgentApprovalRequest;
   runtimeSupportedReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
@@ -105,9 +108,18 @@ export function AgentSessionApprovalCard({
             <p className="text-xs text-muted-foreground">{request.details}</p>
           ) : null}
           {request.affectedPaths?.length ? (
-            <p className="text-xs text-foreground">
-              Affected paths: {request.affectedPaths.join(", ")}
-            </p>
+            <div className="space-y-1">
+              <p className="text-xs text-foreground">Affected paths:</p>
+              <div className="max-h-24 overflow-auto rounded-md border border-border bg-muted p-2">
+                <ul className="space-y-1">
+                  {request.affectedPaths.map((path) => (
+                    <li key={path}>
+                      <code className={AFFECTED_PATH_CODE_CLASS_NAME}>{path}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           ) : null}
           {request.command ? (
             <p className="text-xs text-foreground">Command: {request.command.command}</p>

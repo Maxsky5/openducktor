@@ -490,7 +490,9 @@ describe("AgentChatThread", () => {
 
     expect(html).toContain("Approval required");
     expect(html).toContain("bash");
-    expect(html).toContain("**/*.sh, /tmp/*");
+    expect(html).toContain("Affected paths:");
+    expect(html).toContain("**/*.sh");
+    expect(html).toContain("/tmp/*");
     expect(html).toContain("Approve once");
     expect(html).toContain("Approve for session");
     expect(html).toContain("Reject");
