@@ -12,16 +12,25 @@ const OPENCODE_READ_ONLY_ROLE_BLOCKED_TOOLS = [
   "ast_grep_replace",
   "lsp_rename",
 ] as const;
-const OPENCODE_ODT_WORKFLOW_TOOL_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
+export const OPENCODE_ODT_TOOL_ID_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
+
+export const toOpencodeOdtToolAliases = (canonicalOdtToolName: string): string[] =>
+  OPENCODE_ODT_TOOL_ID_PREFIXES.map((prefix) => `${prefix}${canonicalOdtToolName}`);
+
+export const toOpencodeExposedOdtToolIds = (canonicalOdtToolName: string): string[] => [
+  canonicalOdtToolName,
+  ...toOpencodeOdtToolAliases(canonicalOdtToolName),
+];
+
+export const isOpencodeExposedOdtToolAlias = (toolId: string): boolean =>
+  OPENCODE_ODT_TOOL_ID_PREFIXES.some((prefix) => toolId.startsWith(prefix));
 
 const createOpencodeWorkflowToolAliasesByCanonical =
   (): RuntimeDescriptor["workflowToolAliasesByCanonical"] => {
     const aliasesByCanonical: RuntimeDescriptor["workflowToolAliasesByCanonical"] = {};
 
     for (const toolName of ODT_WORKFLOW_AGENT_TOOL_NAMES) {
-      aliasesByCanonical[toolName] = OPENCODE_ODT_WORKFLOW_TOOL_PREFIXES.map(
-        (prefix) => `${prefix}${toolName}`,
-      );
+      aliasesByCanonical[toolName] = toOpencodeOdtToolAliases(toolName);
     }
 
     return aliasesByCanonical;

@@ -1,7 +1,9 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import {
+  isOpencodeExposedOdtToolAlias,
   ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
   type RuntimeDescriptor,
+  toOpencodeExposedOdtToolIds,
 } from "@openducktor/contracts";
 import { type AgentRole, buildRoleScopedOdtToolSelection } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
@@ -11,22 +13,13 @@ import { isReadOnlyRole } from "./read-only-roles";
 
 const OPENDUCKTOR_MCP_SERVER_NAME = "openducktor";
 const CONNECTED_MCP_STATUS = "connected";
-const OPENCODE_EXPOSED_ODT_TOOL_ID_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
-
-const toOpenCodeExposedOdtToolIds = (canonicalOdtToolName: string): string[] => [
-  canonicalOdtToolName,
-  ...OPENCODE_EXPOSED_ODT_TOOL_ID_PREFIXES.map((prefix) => `${prefix}${canonicalOdtToolName}`),
-];
 
 const OPENCODE_EXPOSED_ODT_TOOL_IDS_BLOCKED_FOR_WORKFLOW_AGENTS = new Set<string>(
-  ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES.flatMap(toOpenCodeExposedOdtToolIds),
+  ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES.flatMap(toOpencodeExposedOdtToolIds),
 );
 
-const isOpenCodePrefixedOdtToolId = (toolId: string): boolean =>
-  OPENCODE_EXPOSED_ODT_TOOL_ID_PREFIXES.some((prefix) => toolId.startsWith(prefix));
-
 const isToolIdControlledByOdtWorkflowSelection = (toolId: string): boolean =>
-  isOpenCodePrefixedOdtToolId(toolId) ||
+  isOpencodeExposedOdtToolAlias(toolId) ||
   OPENCODE_EXPOSED_ODT_TOOL_IDS_BLOCKED_FOR_WORKFLOW_AGENTS.has(toolId);
 
 const assertTrustedOdtMcpServerConnected = async (input: {
