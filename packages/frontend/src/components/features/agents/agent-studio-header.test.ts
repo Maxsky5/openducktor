@@ -556,10 +556,10 @@ describe("AgentStudioHeader", () => {
     );
 
     expect(html).toMatch(
-      /<button[^>]*class="[^"]*bg-sidebar-accent[^"]*"[^>]*aria-label="Run quick action: Start Implementation"/,
+      /<button[^>]*(class="[^"]*bg-sidebar-accent[^"]*"[^>]*aria-label="Run quick action: Start Implementation"|variant="accent"[^>]*aria-label="Run quick action: Start Implementation")/,
     );
     expect(html).toMatch(
-      /<button[^>]*class="[^"]*bg-sidebar-accent[^"]*"[^>]*aria-label="Open quick actions menu"/,
+      /<button[^>]*(class="[^"]*bg-sidebar-accent[^"]*"[^>]*aria-label="Open quick actions menu"|variant="accent"[^>]*aria-label="Open quick actions menu")/,
     );
   });
 
