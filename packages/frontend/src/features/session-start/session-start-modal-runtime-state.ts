@@ -1,10 +1,11 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import {
   DEFAULT_RUNTIME_KIND,
+  filterRuntimeDefinitionsForStartMode,
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
@@ -18,11 +19,13 @@ type UseSessionStartModalRuntimeStateArgs = {
   isOpen: boolean;
   loadCatalog: (repoPath: string, runtimeKind: RuntimeKind) => Promise<AgentModelCatalog>;
   runtimeDefinitions: RuntimeDescriptor[];
+  selectedStartMode: AgentSessionStartMode;
 };
 
 type UseSessionStartModalRuntimeStateResult = {
   catalog: AgentModelCatalog | null;
   isCatalogLoading: boolean;
+  eligibleRuntimeDefinitions: RuntimeDescriptor[];
   runtimeOptions: ComboboxOption[];
   selectedRuntimeDescriptor: RuntimeDescriptor | null;
   selectedRuntimeKind: RuntimeKind | null;
@@ -35,28 +38,36 @@ export function useSessionStartModalRuntimeState({
   isOpen,
   loadCatalog,
   runtimeDefinitions,
+  selectedStartMode,
 }: UseSessionStartModalRuntimeStateArgs): UseSessionStartModalRuntimeStateResult {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [requestedRuntimeKind, setRequestedRuntimeKindState] = useState<RuntimeKind | null>(null);
 
+  const eligibleRuntimeDefinitions = useMemo(
+    () => filterRuntimeDefinitionsForStartMode(runtimeDefinitions, selectedStartMode),
+    [runtimeDefinitions, selectedStartMode],
+  );
+
   const runtimeOptions = useMemo(
-    () => toAgentRuntimeOptions(runtimeDefinitions),
-    [runtimeDefinitions],
+    () => toAgentRuntimeOptions(eligibleRuntimeDefinitions),
+    [eligibleRuntimeDefinitions],
   );
 
   const selectedRuntimeKind = useMemo(
     () =>
       resolveRuntimeKindSelection({
-        runtimeDefinitions,
+        runtimeDefinitions: eligibleRuntimeDefinitions,
         requestedRuntimeKind,
       }),
-    [requestedRuntimeKind, runtimeDefinitions],
+    [requestedRuntimeKind, eligibleRuntimeDefinitions],
   );
 
   const selectedRuntimeDescriptor = useMemo(
     () =>
-      selectedRuntimeKind ? findRuntimeDefinition(runtimeDefinitions, selectedRuntimeKind) : null,
-    [runtimeDefinitions, selectedRuntimeKind],
+      selectedRuntimeKind
+        ? findRuntimeDefinition(eligibleRuntimeDefinitions, selectedRuntimeKind)
+        : null,
+    [eligibleRuntimeDefinitions, selectedRuntimeKind],
   );
 
   const setRequestedRuntimeKind = useCallback((runtimeKind: RuntimeKind | null): void => {
@@ -97,6 +108,7 @@ export function useSessionStartModalRuntimeState({
   return {
     catalog,
     isCatalogLoading,
+    eligibleRuntimeDefinitions,
     runtimeOptions,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,

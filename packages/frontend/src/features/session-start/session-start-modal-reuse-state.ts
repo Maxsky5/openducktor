@@ -12,7 +12,10 @@ import {
   useMemo,
   useState,
 } from "react";
-import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
+import {
+  filterRuntimeDefinitionsForStartMode,
+  resolveRuntimeKindSelection,
+} from "@/lib/agent-runtime";
 import { getSessionLaunchAction, type SessionLaunchActionId } from "./session-start-launch-options";
 import type { SessionStartModalIntent } from "./session-start-modal-types";
 import { resolveLaunchStartMode } from "./session-start-mode";
@@ -60,13 +63,24 @@ const resolveInitialStartState = ({
   selectedStartMode: AgentSessionStartMode;
 } => {
   const allowedStartModes = getSessionLaunchAction(launchActionId).allowedStartModes;
-  const selectedStartMode =
-    initialStartMode && allowedStartModes.includes(initialStartMode)
-      ? initialStartMode
-      : resolveLaunchStartMode({
-          launchActionId,
-          existingSessionOptions,
-        });
+  const hasExistingSession = existingSessionOptions.length > 0;
+  let selectedStartMode: AgentSessionStartMode;
+
+  if (initialStartMode && allowedStartModes.includes(initialStartMode)) {
+    selectedStartMode = initialStartMode;
+    if (
+      (selectedStartMode === "reuse" || selectedStartMode === "fork") &&
+      !hasExistingSession &&
+      allowedStartModes.includes("fresh")
+    ) {
+      selectedStartMode = "fresh";
+    }
+  } else {
+    selectedStartMode = resolveLaunchStartMode({
+      launchActionId,
+      existingSessionOptions,
+    });
+  }
 
   return {
     selectedStartMode,
@@ -93,7 +107,7 @@ const buildReuseSelectionDraft = ({
 } => {
   const sourceSelection = resolveSourceSelection(options, sourceExternalSessionId);
   const runtimeKind = resolveRuntimeKindSelection({
-    runtimeDefinitions,
+    runtimeDefinitions: filterRuntimeDefinitionsForStartMode(runtimeDefinitions, "reuse"),
     requestedRuntimeKind: sourceSelection?.runtimeKind ?? null,
   });
 
@@ -127,7 +141,7 @@ type UseSessionStartModalReuseStateArgs = {
 type UseSessionStartModalReuseStateResult = {
   availableStartModes: AgentSessionStartMode[];
   existingSessionOptions: SessionStartExistingSessionOption[];
-  initializeStartState: (intent: SessionStartModalIntent) => void;
+  initializeStartState: (intent: SessionStartModalIntent) => AgentSessionStartMode;
   resetStartState: () => void;
   selectedSourceSessionId: string;
   selectedStartMode: AgentSessionStartMode;
@@ -161,16 +175,20 @@ export function useSessionStartModalReuseState({
     setSelectedSourceSessionId("");
   }, []);
 
-  const initializeStartState = useCallback((nextIntent: SessionStartModalIntent): void => {
-    const nextState = resolveInitialStartState({
-      launchActionId: nextIntent.launchActionId,
-      existingSessionOptions: nextIntent.existingSessionOptions ?? [],
-      initialStartMode: nextIntent.initialStartMode,
-      initialSourceExternalSessionId: nextIntent.initialSourceExternalSessionId,
-    });
-    setSelectedStartMode(nextState.selectedStartMode);
-    setSelectedSourceSessionId(nextState.selectedSourceSessionId);
-  }, []);
+  const initializeStartState = useCallback(
+    (nextIntent: SessionStartModalIntent): AgentSessionStartMode => {
+      const nextState = resolveInitialStartState({
+        launchActionId: nextIntent.launchActionId,
+        existingSessionOptions: nextIntent.existingSessionOptions ?? [],
+        initialStartMode: nextIntent.initialStartMode,
+        initialSourceExternalSessionId: nextIntent.initialSourceExternalSessionId,
+      });
+      setSelectedStartMode(nextState.selectedStartMode);
+      setSelectedSourceSessionId(nextState.selectedSourceSessionId);
+      return nextState.selectedStartMode;
+    },
+    [],
+  );
 
   const applyReuseSourceSelection = useCallback(
     (sourceExternalSessionId: string): void => {

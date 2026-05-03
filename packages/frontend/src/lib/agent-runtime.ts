@@ -109,6 +109,20 @@ export const runtimeLabelFor = ({
   return findRuntimeDefinition(runtimeDefinitions, runtimeKind)?.label ?? runtimeKind;
 };
 
+export const runtimeSupportsStartMode = (
+  runtimeDescriptor: RuntimeDescriptor,
+  startMode: AgentSessionStartMode,
+): boolean => {
+  return runtimeDescriptor.capabilities.sessionLifecycle.supportedStartModes.includes(startMode);
+};
+
+export const filterRuntimeDefinitionsForStartMode = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  startMode: AgentSessionStartMode,
+): RuntimeDescriptor[] => {
+  return runtimeDefinitions.filter((definition) => runtimeSupportsStartMode(definition, startMode));
+};
+
 const runtimeSupportsCapability = (
   runtimeDescriptor: RuntimeDescriptor,
   capability: RuntimeCapabilityKey,
@@ -265,12 +279,17 @@ export const getRuntimeDescriptorCapabilityConfigErrors = (
 
 const launchStartModeRequirements = sessionLaunchActionIds.map((id) => SESSION_LAUNCH_ACTIONS[id]);
 
-const getUnsupportedLaunchStartModes = (
+const formatStartModes = (startModes: readonly AgentSessionStartMode[]): string => {
+  return startModes.length > 0 ? startModes.join(", ") : "none";
+};
+
+const runtimeSupportsAnyLaunchStartMode = (
   runtimeDescriptor: RuntimeDescriptor,
   allowedStartModes: readonly AgentSessionStartMode[],
-): AgentSessionStartMode[] => {
-  const supportedStartModes = runtimeDescriptor.capabilities.sessionLifecycle.supportedStartModes;
-  return allowedStartModes.filter((startMode) => !supportedStartModes.includes(startMode));
+): boolean => {
+  return allowedStartModes.some((startMode) =>
+    runtimeSupportsStartMode(runtimeDescriptor, startMode),
+  );
 };
 
 export const getRuntimeDescriptorLaunchConfigErrors = (
@@ -280,16 +299,13 @@ export const getRuntimeDescriptorLaunchConfigErrors = (
     if (!runtimeSupportsRole(runtimeDescriptor, launch.role)) {
       return [];
     }
-    const missingStartModes = getUnsupportedLaunchStartModes(
-      runtimeDescriptor,
-      launch.allowedStartModes,
-    );
-    if (missingStartModes.length === 0) {
+    if (runtimeSupportsAnyLaunchStartMode(runtimeDescriptor, launch.allowedStartModes)) {
       return [];
     }
 
+    const supportedStartModes = runtimeDescriptor.capabilities.sessionLifecycle.supportedStartModes;
     return [
-      `[launch_scoped] launch ${launch.id} requires start modes: ${missingStartModes.join(", ")}`,
+      `[launch_scoped] launch ${launch.id} has no supported start mode (allowed: ${formatStartModes(launch.allowedStartModes)}; runtime supports: ${formatStartModes(supportedStartModes)})`,
     ];
   });
 };

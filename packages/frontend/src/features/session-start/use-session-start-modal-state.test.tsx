@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createHookHarness as createSharedHookHarness,
@@ -58,6 +59,65 @@ const ALTERNATE_RUNTIME_DESCRIPTOR = {
   label: "Alternate Runtime",
 } as const;
 
+const runtimeKind = (kind: string): RuntimeKind => kind as unknown as RuntimeKind;
+
+const createRuntimeDescriptor = ({
+  kind,
+  label,
+  supportedStartModes,
+}: {
+  kind: RuntimeKind;
+  label: string;
+  supportedStartModes: AgentSessionStartMode[];
+}): RuntimeDescriptor => ({
+  ...OPENCODE_RUNTIME_DESCRIPTOR,
+  kind,
+  label,
+  capabilities: {
+    ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+    sessionLifecycle: {
+      ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+      supportedStartModes,
+      supportsSessionFork: supportedStartModes.includes("fork"),
+      forkTargets: supportedStartModes.includes("fork") ? ["session"] : [],
+    },
+  },
+});
+
+const REUSE_RUNTIME_KIND = runtimeKind("reuse-runtime");
+const FORK_RUNTIME_KIND = runtimeKind("fork-runtime");
+const REUSE_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
+  kind: REUSE_RUNTIME_KIND,
+  label: "Reuse Runtime",
+  supportedStartModes: ["fresh", "reuse"],
+});
+const FORK_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
+  kind: FORK_RUNTIME_KIND,
+  label: "Fork Runtime",
+  supportedStartModes: ["fresh", "fork"],
+});
+
+const FRESH_RUNTIME_KIND = runtimeKind("fresh-runtime");
+const FRESH_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
+  kind: FRESH_RUNTIME_KIND,
+  label: "Fresh Runtime",
+  supportedStartModes: ["fresh"],
+});
+
+const REUSE_ONLY_RUNTIME_KIND = runtimeKind("reuse-only-runtime");
+const REUSE_ONLY_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
+  kind: REUSE_ONLY_RUNTIME_KIND,
+  label: "Reuse Only Runtime",
+  supportedStartModes: ["reuse"],
+});
+
+const FORK_ONLY_RUNTIME_KIND = runtimeKind("fork-only-runtime");
+const FORK_ONLY_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
+  kind: FORK_ONLY_RUNTIME_KIND,
+  label: "Fork Only Runtime",
+  supportedStartModes: ["fork"],
+});
+
 const createRepoSettings = (
   overrides: Partial<RepoSettingsInput["agentDefaults"]> = {},
 ): RepoSettingsInput => ({
@@ -108,6 +168,43 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
   initialCatalog: CATALOG,
   ...overrides,
+});
+
+const createBuildRepoSettingsForRuntime = (runtimeKind: RuntimeKind): RepoSettingsInput => ({
+  ...createRepoSettings({
+    build: {
+      runtimeKind,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "spec-agent",
+    },
+  }),
+  defaultRuntimeKind: runtimeKind,
+});
+
+const createExistingSessionWithModel = ({
+  description = "Reusable builder session",
+  label = "Builder session",
+  runtimeKind,
+  value,
+}: {
+  description?: string;
+  label?: string;
+  runtimeKind: RuntimeKind;
+  value: string;
+}) => ({
+  value,
+  label,
+  description,
+  runtimeKind,
+  selectedModel: {
+    runtimeKind,
+    providerId: "openai",
+    modelId: "gpt-5",
+    variant: "high",
+    profileId: "spec-agent",
+  },
 });
 
 describe("useSessionStartModalState", () => {
@@ -245,6 +342,72 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("fresh");
+
+    await harness.unmount();
+  });
+
+  test("demotes reuse starts without existing sessions and keeps runtime options fresh-compatible", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        runtimeDefinitions: [
+          FRESH_RUNTIME_DESCRIPTOR,
+          REUSE_ONLY_RUNTIME_DESCRIPTOR,
+          FORK_ONLY_RUNTIME_DESCRIPTOR,
+        ],
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-4",
+        role: "build",
+        launchActionId: "build_after_human_request_changes",
+        initialStartMode: "reuse",
+        postStartAction: "kickoff",
+        title: "Resume Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().selectedStartMode).toBe("fresh");
+    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
+      FRESH_RUNTIME_KIND,
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("falls back from an unavailable fork start to fresh when no sessions exist", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        runtimeDefinitions: [
+          FRESH_RUNTIME_DESCRIPTOR,
+          REUSE_ONLY_RUNTIME_DESCRIPTOR,
+          FORK_ONLY_RUNTIME_DESCRIPTOR,
+        ],
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-4B",
+        role: "build",
+        launchActionId: "build_after_human_request_changes",
+        initialStartMode: "fork",
+        postStartAction: "kickoff",
+        title: "Resume Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().selectedStartMode).toBe("fresh");
+    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
+      FRESH_RUNTIME_KIND,
+    ]);
 
     await harness.unmount();
   });
@@ -834,6 +997,148 @@ describe("useSessionStartModalState", () => {
       variant: "default",
       profileId: "build-agent",
     });
+
+    await harness.unmount();
+  });
+
+  test("filters runtime options by the selected start mode without selecting fallbacks", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        repoSettings: createBuildRepoSettingsForRuntime(REUSE_RUNTIME_KIND),
+        runtimeDefinitions: [REUSE_RUNTIME_DESCRIPTOR, FORK_RUNTIME_DESCRIPTOR],
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-PR-RUNTIME-MODE",
+        role: "build",
+        launchActionId: "build_pull_request_generation",
+        existingSessionOptions: [
+          createExistingSessionWithModel({
+            value: "session-pr-runtime",
+            runtimeKind: REUSE_RUNTIME_KIND,
+          }),
+        ],
+        postStartAction: "kickoff",
+        title: "Start PR Generation",
+      });
+    });
+
+    expect(harness.getLatest().selectedStartMode).toBe("reuse");
+    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
+      REUSE_RUNTIME_KIND,
+    ]);
+    expect(harness.getLatest().selectedRuntimeKind).toBe(REUSE_RUNTIME_KIND);
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectStartMode("fork");
+    });
+
+    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
+      FORK_RUNTIME_KIND,
+    ]);
+    await harness.waitFor((state) => state.selectedRuntimeKind === null);
+    await harness.waitFor((state) => state.selection === null);
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectRuntime(FORK_RUNTIME_KIND);
+    });
+
+    await harness.waitFor((state) => state.selectedRuntimeKind === FORK_RUNTIME_KIND);
+    await harness.waitFor((state) => state.selection?.runtimeKind === FORK_RUNTIME_KIND);
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectStartMode("reuse");
+    });
+
+    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
+      REUSE_RUNTIME_KIND,
+    ]);
+    await harness.waitFor((state) => state.selectedRuntimeKind === REUSE_RUNTIME_KIND);
+    await harness.waitFor((state) => state.selection?.runtimeKind === REUSE_RUNTIME_KIND);
+
+    await harness.unmount();
+  });
+
+  test("clears runtime and model selection when no runtime supports the selected mode", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        repoSettings: createBuildRepoSettingsForRuntime(REUSE_RUNTIME_KIND),
+        runtimeDefinitions: [REUSE_RUNTIME_DESCRIPTOR],
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-PR-NO-FORK-RUNTIME",
+        role: "build",
+        launchActionId: "build_pull_request_generation",
+        existingSessionOptions: [
+          createExistingSessionWithModel({
+            value: "session-pr-no-fork",
+            runtimeKind: REUSE_RUNTIME_KIND,
+          }),
+        ],
+        postStartAction: "kickoff",
+        title: "Start PR Generation",
+      });
+    });
+
+    expect(harness.getLatest().selectedRuntimeKind).toBe(REUSE_RUNTIME_KIND);
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectStartMode("fork");
+    });
+
+    expect(harness.getLatest().runtimeOptions).toEqual([]);
+    await harness.waitFor((state) => state.selectedRuntimeKind === null);
+    await harness.waitFor((state) => state.selection === null);
+
+    await harness.unmount();
+  });
+
+  test("does not reuse a source-session runtime that lacks reuse support", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        runtimeDefinitions: [FORK_RUNTIME_DESCRIPTOR],
+        repoSettings: {
+          ...createRepoSettings(),
+          defaultRuntimeKind: FORK_RUNTIME_KIND,
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-PR-REUSE-INCOMPATIBLE",
+        role: "build",
+        launchActionId: "build_pull_request_generation",
+        existingSessionOptions: [
+          createExistingSessionWithModel({
+            value: "session-pr-fork-runtime",
+            description: "Builder session from a fork-only runtime",
+            runtimeKind: FORK_RUNTIME_KIND,
+          }),
+        ],
+        postStartAction: "kickoff",
+        title: "Start PR Generation",
+      });
+    });
+
+    expect(harness.getLatest().selectedStartMode).toBe("reuse");
+    expect(harness.getLatest().runtimeOptions).toEqual([]);
+    await harness.waitFor((state) => state.selectedRuntimeKind === null);
+    await harness.waitFor((state) => state.selection === null);
 
     await harness.unmount();
   });

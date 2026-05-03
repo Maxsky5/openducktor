@@ -674,23 +674,38 @@ impl RuntimeCapabilities {
     }
 
     pub(super) fn launch_config_errors(&self) -> Vec<String> {
+        let supported_modes = if self.session_lifecycle.supported_start_modes.is_empty() {
+            "none".to_string()
+        } else {
+            self.session_lifecycle
+                .supported_start_modes
+                .iter()
+                .map(|mode| mode.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
         LAUNCH_START_MODE_REQUIREMENTS
             .iter()
             .filter_map(|requirement| {
-                let missing_modes = requirement
+                let has_supported_start_mode = requirement
                     .modes
                     .iter()
-                    .copied()
-                    .filter(|mode| !self.session_lifecycle.supported_start_modes.contains(mode))
-                    .map(|mode| mode.to_string())
-                    .collect::<Vec<_>>();
-                if missing_modes.is_empty() {
+                    .any(|mode| self.session_lifecycle.supported_start_modes.contains(mode));
+                if has_supported_start_mode {
                     return None;
                 }
+                let allowed_modes = requirement
+                    .modes
+                    .iter()
+                    .map(|mode| mode.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 Some(format!(
-                    "[launch_scoped] launch action {} requires start modes: {}",
+                    "[launch_scoped] launch action {} has no supported start mode (allowed: {}; runtime supports: {})",
                     requirement.id,
-                    missing_modes.join(", ")
+                    allowed_modes,
+                    supported_modes
                 ))
             })
             .collect()

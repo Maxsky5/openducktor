@@ -784,7 +784,7 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  test("reuse confirm does not overwrite the reused session model", async () => {
+  test("reuse confirm fails fast when the modal has no reusable source option", async () => {
     const renderer = await renderPage();
 
     await act(async () => {
@@ -800,20 +800,16 @@ describe("KanbanPage session start modal flow", () => {
         }) => void
       )({
         startMode: "reuse",
-        sourceExternalSessionId: "session-existing",
+        sourceExternalSessionId: "session-build-latest",
       });
       await Promise.resolve();
     });
 
-    expect(startAgentSessionMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskId: "TASK-123",
-        role: "build",
-        startMode: "reuse",
-        sourceExternalSessionId: "session-existing",
-      }),
-    );
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).toHaveBeenCalledWith("Failed to start the session.", {
+      description: "Reusable session is missing a runtime kind.",
+    });
 
     await act(async () => {
       renderer.unmount();

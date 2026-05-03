@@ -1,4 +1,4 @@
-import type { GitTargetBranch } from "@openducktor/contracts";
+import type { GitTargetBranch, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 
@@ -7,6 +7,7 @@ export type SessionStartExistingSessionOption = {
   label: string;
   description: string;
   secondaryLabel?: string;
+  runtimeKind?: RuntimeKind | null;
   selectedModel?: AgentModelSelection | null;
 };
 

@@ -533,16 +533,36 @@ fn runtime_descriptor_validation_reports_capability_invariants() {
 }
 
 #[test]
-fn runtime_descriptor_validation_reports_launch_start_mode_gaps() {
+fn runtime_descriptor_validation_treats_launch_start_modes_as_alternatives() {
     let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
-    let supported_start_modes = vec![
+    let session_lifecycle = &mut descriptor.capabilities.session_lifecycle;
+    session_lifecycle.supported_start_modes = vec![
         RuntimeSessionStartMode::Fresh,
         RuntimeSessionStartMode::Reuse,
     ];
+    session_lifecycle.supports_session_fork = false;
+    session_lifecycle.fork_targets.clear();
+
+    assert!(descriptor.validate_for_openducktor().is_empty());
+
+    let session_lifecycle = &mut descriptor.capabilities.session_lifecycle;
+    session_lifecycle.supported_start_modes = vec![
+        RuntimeSessionStartMode::Fresh,
+        RuntimeSessionStartMode::Fork,
+    ];
+    session_lifecycle.supports_session_fork = true;
+    session_lifecycle.fork_targets = vec![RuntimeForkTarget::Session];
+
+    assert!(descriptor.validate_for_openducktor().is_empty());
+}
+
+#[test]
+fn runtime_descriptor_validation_reports_launch_start_mode_gaps() {
+    let mut descriptor = runtime_definition("custom", "Custom").descriptor().clone();
     descriptor
         .capabilities
         .session_lifecycle
-        .supported_start_modes = supported_start_modes;
+        .supported_start_modes = vec![RuntimeSessionStartMode::Fresh];
     descriptor
         .capabilities
         .session_lifecycle
@@ -556,7 +576,7 @@ fn runtime_descriptor_validation_reports_launch_start_mode_gaps() {
     assert_eq!(
         descriptor.validate_for_openducktor(),
         vec![
-            "[launch_scoped] launch action build_pull_request_generation requires start modes: fork"
+            "[launch_scoped] launch action build_pull_request_generation has no supported start mode (allowed: reuse, fork; runtime supports: fresh)"
                 .to_string()
         ]
     );

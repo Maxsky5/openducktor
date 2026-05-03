@@ -7,11 +7,13 @@ import {
 import {
   filterRuntimeDefinitionsForDefaultSelection,
   filterRuntimeDefinitionsForRole,
+  filterRuntimeDefinitionsForStartMode,
   getMissingMandatoryRuntimeCapabilities,
   getRuntimeDescriptorCapabilityConfigErrors,
   resolveRuntimeKindSelection,
   resolveRuntimeKindSelectionState,
   runtimeSupportsRole,
+  runtimeSupportsStartMode,
   validateRuntimeDefinitionForOpenDucktor,
   validateRuntimeDefinitionsForOpenDucktor,
 } from "./agent-runtime";
@@ -257,8 +259,8 @@ describe("agent-runtime capability policies", () => {
     ]);
   });
 
-  test("reports launch-scoped start mode gaps separately from role scopes", () => {
-    const descriptor = withCapabilities({
+  test("treats multi-mode launch start modes as alternatives", () => {
+    const reuseOnlyPrRuntime = withCapabilities({
       sessionLifecycle: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
         supportedStartModes: ["fresh", "reuse"],
@@ -266,10 +268,68 @@ describe("agent-runtime capability policies", () => {
         forkTargets: [],
       },
     });
+    const forkOnlyPrRuntime = withCapabilities({
+      sessionLifecycle: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+        supportedStartModes: ["fresh", "fork"],
+        supportsSessionFork: true,
+        forkTargets: ["session"],
+      },
+    });
+
+    expect(getRuntimeDescriptorCapabilityConfigErrors(reuseOnlyPrRuntime)).not.toContain(
+      expect.stringContaining("build_pull_request_generation"),
+    );
+    expect(getRuntimeDescriptorCapabilityConfigErrors(forkOnlyPrRuntime)).not.toContain(
+      expect.stringContaining("build_pull_request_generation"),
+    );
+  });
+
+  test("reports launch-scoped errors only when no allowed start mode is supported", () => {
+    const descriptor = withCapabilities({
+      sessionLifecycle: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+        supportedStartModes: ["fresh"],
+        supportsSessionFork: false,
+        forkTargets: [],
+      },
+    });
 
     expect(getRuntimeDescriptorCapabilityConfigErrors(descriptor)).toContain(
-      "[launch_scoped] launch build_pull_request_generation requires start modes: fork",
+      "[launch_scoped] launch build_pull_request_generation has no supported start mode (allowed: reuse, fork; runtime supports: fresh)",
     );
+  });
+
+  test("filters runtime definitions by the selected start mode", () => {
+    const reuseRuntime = withCapabilities({
+      sessionLifecycle: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+        supportedStartModes: ["fresh", "reuse"],
+        supportsSessionFork: false,
+        forkTargets: [],
+      },
+    });
+    const forkRuntime = {
+      ...withCapabilities({
+        sessionLifecycle: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+          supportedStartModes: ["fresh", "fork"],
+          supportsSessionFork: true,
+          forkTargets: ["session"],
+        },
+      }),
+      kind: "fork-runtime" as unknown as RuntimeDescriptor["kind"],
+      label: "Fork Runtime",
+    };
+
+    expect(runtimeSupportsStartMode(reuseRuntime, "reuse")).toBe(true);
+    expect(runtimeSupportsStartMode(reuseRuntime, "fork")).toBe(false);
+    expect(filterRuntimeDefinitionsForStartMode([reuseRuntime, forkRuntime], "reuse")).toEqual([
+      reuseRuntime,
+    ]);
+    expect(filterRuntimeDefinitionsForStartMode([reuseRuntime, forkRuntime], "fork")).toEqual([
+      forkRuntime,
+    ]);
   });
 
   test("reports incompatible runtime definitions with runtime-specific context", () => {
