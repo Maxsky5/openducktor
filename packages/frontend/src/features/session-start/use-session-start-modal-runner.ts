@@ -8,7 +8,7 @@ import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@ope
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
-import { runtimeSupportsStartMode } from "@/lib/agent-runtime";
+import { findRuntimeDefinition, runtimeSupportsStartMode } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import {
   INVALID_TASK_TARGET_BRANCH_LABEL,
@@ -146,6 +146,7 @@ export function useSessionStartModalRunner({
     intent,
     isOpen,
     selection,
+    eligibleRuntimeDefinitions,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,
     runtimeOptions,
@@ -282,9 +283,13 @@ export function useSessionStartModalRunner({
             sourceExternalSessionId: decision.sourceExternalSessionId,
           });
           if (sourceRuntimeKind) {
+            const sourceRuntimeDescriptor = findRuntimeDefinition(
+              eligibleRuntimeDefinitions,
+              sourceRuntimeKind,
+            );
             assertRuntimeSupportsSelectedStartMode({
               ...requestContext,
-              runtimeDescriptor: selectedRuntimeDescriptor,
+              runtimeDescriptor: sourceRuntimeDescriptor,
               runtimeKind: sourceRuntimeKind,
               startMode: decision.startMode,
             });
@@ -312,7 +317,13 @@ export function useSessionStartModalRunner({
         setIsStarting(false);
       }
     },
-    [existingSessionOptions, resolvePendingRun, selectedRuntimeDescriptor, selectedRuntimeKind],
+    [
+      eligibleRuntimeDefinitions,
+      existingSessionOptions,
+      resolvePendingRun,
+      selectedRuntimeDescriptor,
+      selectedRuntimeKind,
+    ],
   );
 
   const sessionStartModal = useMemo<SessionStartModalModel | null>(() => {

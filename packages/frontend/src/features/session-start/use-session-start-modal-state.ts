@@ -52,6 +52,7 @@ type UseSessionStartModalStateResult = {
   intent: SessionStartModalIntent | null;
   isOpen: boolean;
   selection: AgentModelSelection | null;
+  eligibleRuntimeDefinitions: RuntimeDescriptor[];
   selectedRuntimeDescriptor: RuntimeDescriptor | null;
   selectedRuntimeKind: RuntimeKind | null;
   runtimeOptions: ComboboxOption[];
@@ -331,6 +332,7 @@ export function useSessionStartModalState({
     intent,
     isOpen: intent !== null,
     selection,
+    eligibleRuntimeDefinitions,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,
     runtimeOptions,

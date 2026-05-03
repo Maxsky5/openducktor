@@ -149,6 +149,42 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   ...overrides,
 });
 
+const createBuildRepoSettingsForRuntime = (runtimeKind: RuntimeKind): RepoSettingsInput => ({
+  ...createRepoSettings({
+    build: {
+      runtimeKind,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "spec-agent",
+    },
+  }),
+  defaultRuntimeKind: runtimeKind,
+});
+
+const createExistingSessionWithModel = ({
+  description = "Reusable builder session",
+  label = "Builder session",
+  runtimeKind,
+  value,
+}: {
+  description?: string;
+  label?: string;
+  runtimeKind: RuntimeKind;
+  value: string;
+}) => ({
+  value,
+  label,
+  description,
+  selectedModel: {
+    runtimeKind,
+    providerId: "openai",
+    modelId: "gpt-5",
+    variant: "high",
+    profileId: "spec-agent",
+  },
+});
+
 describe("useSessionStartModalState", () => {
   test("initializes selection from repo role defaults", async () => {
     const harness = createHookHarness(createBaseProps());
@@ -878,21 +914,9 @@ describe("useSessionStartModalState", () => {
   });
 
   test("filters runtime options by the selected start mode without selecting fallbacks", async () => {
-    const repoSettings = {
-      ...createRepoSettings({
-        build: {
-          runtimeKind: REUSE_RUNTIME_KIND,
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "high",
-          profileId: "spec-agent",
-        },
-      }),
-      defaultRuntimeKind: REUSE_RUNTIME_KIND,
-    };
     const harness = createHookHarness(
       createBaseProps({
-        repoSettings,
+        repoSettings: createBuildRepoSettingsForRuntime(REUSE_RUNTIME_KIND),
         runtimeDefinitions: [REUSE_RUNTIME_DESCRIPTOR, FORK_RUNTIME_DESCRIPTOR],
       }),
     );
@@ -906,18 +930,10 @@ describe("useSessionStartModalState", () => {
         role: "build",
         launchActionId: "build_pull_request_generation",
         existingSessionOptions: [
-          {
+          createExistingSessionWithModel({
             value: "session-pr-runtime",
-            label: "Builder session",
-            description: "Reusable builder session",
-            selectedModel: {
-              runtimeKind: REUSE_RUNTIME_KIND,
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "high",
-              profileId: "spec-agent",
-            },
-          },
+            runtimeKind: REUSE_RUNTIME_KIND,
+          }),
         ],
         postStartAction: "kickoff",
         title: "Start PR Generation",
@@ -961,21 +977,9 @@ describe("useSessionStartModalState", () => {
   });
 
   test("clears runtime and model selection when no runtime supports the selected mode", async () => {
-    const repoSettings = {
-      ...createRepoSettings({
-        build: {
-          runtimeKind: REUSE_RUNTIME_KIND,
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "high",
-          profileId: "spec-agent",
-        },
-      }),
-      defaultRuntimeKind: REUSE_RUNTIME_KIND,
-    };
     const harness = createHookHarness(
       createBaseProps({
-        repoSettings,
+        repoSettings: createBuildRepoSettingsForRuntime(REUSE_RUNTIME_KIND),
         runtimeDefinitions: [REUSE_RUNTIME_DESCRIPTOR],
       }),
     );
@@ -989,18 +993,10 @@ describe("useSessionStartModalState", () => {
         role: "build",
         launchActionId: "build_pull_request_generation",
         existingSessionOptions: [
-          {
+          createExistingSessionWithModel({
             value: "session-pr-no-fork",
-            label: "Builder session",
-            description: "Reusable builder session",
-            selectedModel: {
-              runtimeKind: REUSE_RUNTIME_KIND,
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "high",
-              profileId: "spec-agent",
-            },
-          },
+            runtimeKind: REUSE_RUNTIME_KIND,
+          }),
         ],
         postStartAction: "kickoff",
         title: "Start PR Generation",
@@ -1040,18 +1036,11 @@ describe("useSessionStartModalState", () => {
         role: "build",
         launchActionId: "build_pull_request_generation",
         existingSessionOptions: [
-          {
+          createExistingSessionWithModel({
             value: "session-pr-fork-runtime",
-            label: "Builder session",
             description: "Builder session from a fork-only runtime",
-            selectedModel: {
-              runtimeKind: FORK_RUNTIME_KIND,
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "high",
-              profileId: "spec-agent",
-            },
-          },
+            runtimeKind: FORK_RUNTIME_KIND,
+          }),
         ],
         postStartAction: "kickoff",
         title: "Start PR Generation",
