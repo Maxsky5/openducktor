@@ -7,7 +7,7 @@ import {
   normalizeComposerDraft,
 } from "./agent-chat-composer-draft";
 
-export const REUSABLE_PROMPT_COMMAND_ID_PREFIX = "custom-prompt:";
+export const REUSABLE_PROMPT_COMMAND_ID_PREFIX = "reusable-prompt:";
 
 export const toReusablePromptSlashCommand = (prompt: ReusablePrompt): AgentSlashCommand => ({
   id: `${REUSABLE_PROMPT_COMMAND_ID_PREFIX}${prompt.id}`,

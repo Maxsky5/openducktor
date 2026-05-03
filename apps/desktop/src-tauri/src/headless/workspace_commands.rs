@@ -13,7 +13,7 @@ use crate::{
     SettingsSnapshotResponsePayload,
 };
 use anyhow::anyhow;
-use host_application::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate};
+use host_application::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshot};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -294,28 +294,19 @@ async fn handle_workspace_get_repo_config(state: &HeadlessState, args: Value) ->
 }
 
 fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResult {
-    let (
-        theme,
-        git,
-        chat,
-        reusable_prompts,
-        kanban,
-        autopilot,
-        workspaces,
-        global_prompt_overrides,
-    ) = state
+    let snapshot = state
         .service
         .workspace_get_settings_snapshot()
         .map_err(service_error)?;
     serialize_value(SettingsSnapshotResponsePayload {
-        theme,
-        git,
-        chat,
-        reusable_prompts,
-        kanban,
-        autopilot,
-        workspaces,
-        global_prompt_overrides,
+        theme: snapshot.theme,
+        git: snapshot.git,
+        chat: snapshot.chat,
+        reusable_prompts: snapshot.reusable_prompts,
+        kanban: snapshot.kanban,
+        autopilot: snapshot.autopilot,
+        workspaces: snapshot.workspaces,
+        global_prompt_overrides: snapshot.global_prompt_overrides,
     })
 }
 
@@ -387,7 +378,7 @@ async fn handle_workspace_save_settings_snapshot(
         .map(|workspace| workspace.repo_path.clone())
         .collect::<Vec<_>>();
     let updated = run_service_blocking_tokio("workspace_save_settings_snapshot", move || {
-        service.workspace_save_settings_snapshot(WorkspaceSettingsSnapshotUpdate {
+        service.workspace_save_settings_snapshot(WorkspaceSettingsSnapshot {
             theme,
             git,
             chat,

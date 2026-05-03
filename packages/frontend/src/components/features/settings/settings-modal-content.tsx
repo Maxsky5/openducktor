@@ -1,7 +1,6 @@
 import type { ReactElement } from "react";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
 import { SettingsChatSection } from "./settings-chat-section";
-import { SettingsReusablePromptsSection } from "./settings-custom-prompts-section";
 import { GeneralSettingsSection } from "./settings-general-section";
 import { SettingsGitSection } from "./settings-git-section";
 import { SettingsKanbanSection } from "./settings-kanban-section";
@@ -16,6 +15,7 @@ import { PromptOverridesSection } from "./settings-prompt-overrides-section";
 import { RepositoryAgentsSection } from "./settings-repository-agents-section";
 import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
 import { RepositoryGitSection } from "./settings-repository-git-section";
+import { SettingsReusablePromptsSection } from "./settings-reusable-prompts-section";
 import type { SettingsModalController } from "./use-settings-modal-controller";
 
 type SettingsModalContentProps = {
@@ -152,7 +152,7 @@ export function SettingsModalContent({
     );
   }
 
-  if (section === "custom-prompts") {
+  if (section === "reusable-prompts") {
     return (
       <SettingsReusablePromptsSection
         reusablePrompts={snapshotDraft.reusablePrompts}

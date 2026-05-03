@@ -1,4 +1,4 @@
-use super::{AppService, CachedRuntimeCheck, WorkspaceSettingsSnapshotUpdate};
+use super::{AppService, CachedRuntimeCheck, WorkspaceSettingsSnapshot};
 use crate::app_service::service_core::CachedOpenInToolList;
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
@@ -15,14 +15,14 @@ use host_infra_system::{
     command_exists, copy_configured_worktree_paths, discover_open_in_tools,
     open_directory_in_tool as open_directory_in_tool_with_system, remove_worktree,
     remove_worktree_path_if_present, resolve_effective_worktree_base_dir_for_workspace,
-    run_command, run_command_allow_failure_with_env, version_command, AutopilotSettings,
-    ChatSettings, GlobalGitConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
-    ReusablePrompt,
+    run_command, run_command_allow_failure_with_env, version_command, GlobalGitConfig, HookSet,
+    KanbanSettings, RepoConfig,
 };
 #[cfg(test)]
 use host_infra_system::{
     derive_workspace_name_from_repo_path, propose_workspace_id, uniquify_workspace_id,
 };
+#[cfg(test)]
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -58,17 +58,6 @@ fn path_is_within_root(root: &Path, candidate: &Path) -> bool {
 
     normalized_candidate.starts_with(&normalized_root)
 }
-
-type SettingsSnapshotTuple = (
-    String,
-    GlobalGitConfig,
-    ChatSettings,
-    Vec<ReusablePrompt>,
-    KanbanSettings,
-    AutopilotSettings,
-    HashMap<String, RepoConfig>,
-    PromptOverrides,
-);
 
 #[cfg(test)]
 fn build_initial_workspace_identity(
@@ -513,18 +502,18 @@ impl AppService {
         self.workspace_update_repo_config(workspace_id.as_str(), config)
     }
 
-    pub fn workspace_get_settings_snapshot(&self) -> Result<SettingsSnapshotTuple> {
+    pub fn workspace_get_settings_snapshot(&self) -> Result<WorkspaceSettingsSnapshot> {
         let config = self.config_store.load()?;
-        Ok((
-            config.theme,
-            config.git,
-            config.chat,
-            config.reusable_prompts,
-            config.kanban,
-            config.autopilot,
-            config.workspaces,
-            config.global_prompt_overrides,
-        ))
+        Ok(WorkspaceSettingsSnapshot {
+            theme: config.theme,
+            git: config.git,
+            chat: config.chat,
+            reusable_prompts: config.reusable_prompts,
+            kanban: config.kanban,
+            autopilot: config.autopilot,
+            workspaces: config.workspaces,
+            global_prompt_overrides: config.global_prompt_overrides,
+        })
     }
 
     pub fn workspace_update_global_git_config(&self, git: GlobalGitConfig) -> Result<()> {
@@ -533,7 +522,7 @@ impl AppService {
 
     pub(super) fn workspace_persist_settings_snapshot(
         &self,
-        snapshot: WorkspaceSettingsSnapshotUpdate,
+        snapshot: WorkspaceSettingsSnapshot,
     ) -> Result<()> {
         let mut config = self.config_store.load()?;
         let next_workspaces = self
@@ -1277,25 +1266,16 @@ mod tests {
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
 
-        let (
-            _theme,
-            _git,
-            chat,
-            reusable_prompts,
-            kanban,
-            _autopilot,
-            repos,
-            global_prompt_overrides,
-        ) = service
+        let snapshot = service
             .workspace_get_settings_snapshot()
             .expect("settings snapshot should load");
 
-        assert_eq!(chat, ChatSettings::default());
-        assert!(reusable_prompts.is_empty());
-        assert!(!chat.show_thinking_messages);
-        assert_eq!(kanban.done_visible_days, 1);
-        assert!(repos.is_empty());
-        assert!(global_prompt_overrides.is_empty());
+        assert_eq!(snapshot.chat, ChatSettings::default());
+        assert!(snapshot.reusable_prompts.is_empty());
+        assert!(!snapshot.chat.show_thinking_messages);
+        assert_eq!(snapshot.kanban.done_visible_days, 1);
+        assert!(snapshot.workspaces.is_empty());
+        assert!(snapshot.global_prompt_overrides.is_empty());
     }
 
     #[test]

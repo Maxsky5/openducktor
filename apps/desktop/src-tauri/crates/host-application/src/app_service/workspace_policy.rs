@@ -36,7 +36,7 @@ pub struct RepoSettingsUpdate {
 }
 
 #[derive(Debug, Clone)]
-pub struct WorkspaceSettingsSnapshotUpdate {
+pub struct WorkspaceSettingsSnapshot {
     pub theme: String,
     pub git: host_infra_system::GlobalGitConfig,
     pub chat: ChatSettings,
@@ -177,7 +177,7 @@ impl AppService {
 
     pub fn workspace_save_settings_snapshot(
         &self,
-        mut update: WorkspaceSettingsSnapshotUpdate,
+        mut update: WorkspaceSettingsSnapshot,
     ) -> Result<Vec<WorkspaceRecord>> {
         for repo_config in update.workspaces.values_mut() {
             repo_config.hooks = normalize_hook_set(std::mem::take(&mut repo_config.hooks));
@@ -213,10 +213,7 @@ fn normalize_runtime_kind(value: Option<String>) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalize_hook_set, AppService, RepoConfigUpdate, RepoSettingsUpdate,
-        WorkspaceSettingsSnapshotUpdate,
-    };
+    use super::{normalize_hook_set, AppService, RepoConfigUpdate, RepoSettingsUpdate};
     use crate::app_service::test_support::{
         lock_env, set_env_var, unique_temp_path, EnvVarGuard, FakeTaskStore, TaskStoreState,
     };
@@ -447,24 +444,15 @@ mod tests {
             },
         );
 
-        let (
-            theme,
-            git,
-            mut chat,
-            mut reusable_prompts,
-            kanban,
-            autopilot,
-            mut workspaces,
-            mut global_prompt_overrides,
-        ) = fixture.service.workspace_get_settings_snapshot()?;
-        chat.show_thinking_messages = true;
-        reusable_prompts.push(ReusablePrompt {
+        let mut snapshot = fixture.service.workspace_get_settings_snapshot()?;
+        snapshot.chat.show_thinking_messages = true;
+        snapshot.reusable_prompts.push(ReusablePrompt {
             id: " prompt-1 ".to_string(),
             name: " review ".to_string(),
             description: " Review context ".to_string(),
             content: " Review this ".to_string(),
         });
-        global_prompt_overrides.insert(
+        snapshot.global_prompt_overrides.insert(
             "system.shared.workflow_guards".to_string(),
             PromptOverride {
                 template: "global workflow guards".to_string(),
@@ -472,7 +460,8 @@ mod tests {
                 enabled: true,
             },
         );
-        let repo_config = workspaces
+        let repo_config = snapshot
+            .workspaces
             .get_mut(fixture.workspace_id.as_str())
             .ok_or_else(|| anyhow!("repo config missing"))?;
         repo_config.hooks = HookSet {
@@ -480,18 +469,7 @@ mod tests {
             post_complete: vec!["echo post".to_string()],
         };
 
-        fixture
-            .service
-            .workspace_save_settings_snapshot(WorkspaceSettingsSnapshotUpdate {
-                theme,
-                git,
-                chat,
-                reusable_prompts,
-                kanban,
-                autopilot,
-                workspaces,
-                global_prompt_overrides,
-            })?;
+        fixture.service.workspace_save_settings_snapshot(snapshot)?;
 
         let persisted = fixture
             .service
@@ -504,13 +482,15 @@ mod tests {
             }
         );
 
-        let (_, _, persisted_chat, persisted_prompts, _, persisted_autopilot, _, _) =
-            fixture.service.workspace_get_settings_snapshot()?;
-        assert!(persisted_chat.show_thinking_messages);
-        assert_eq!(persisted_prompts.len(), 1);
-        assert_eq!(persisted_prompts[0].name, "review");
-        assert_eq!(persisted_prompts[0].content, "Review this");
-        assert_eq!(persisted_autopilot, AutopilotSettings::default());
+        let persisted_snapshot = fixture.service.workspace_get_settings_snapshot()?;
+        assert!(persisted_snapshot.chat.show_thinking_messages);
+        assert_eq!(persisted_snapshot.reusable_prompts.len(), 1);
+        assert_eq!(persisted_snapshot.reusable_prompts[0].name, "review");
+        assert_eq!(
+            persisted_snapshot.reusable_prompts[0].content,
+            "Review this"
+        );
+        assert_eq!(persisted_snapshot.autopilot, AutopilotSettings::default());
         Ok(())
     }
 
@@ -518,44 +498,15 @@ mod tests {
     fn workspace_save_settings_snapshot_preserves_kanban_empty_column_display() -> Result<()> {
         let fixture = setup_fixture("snapshot-kanban-empty-display", HookSet::default());
 
-        let (
-            theme,
-            git,
-            chat,
-            reusable_prompts,
-            mut kanban,
-            autopilot,
-            workspaces,
-            global_prompt_overrides,
-        ) = fixture.service.workspace_get_settings_snapshot()?;
-        kanban.empty_column_display = KanbanEmptyColumnDisplay::Collapsed;
+        let mut snapshot = fixture.service.workspace_get_settings_snapshot()?;
+        snapshot.kanban.empty_column_display = KanbanEmptyColumnDisplay::Collapsed;
 
-        fixture
-            .service
-            .workspace_save_settings_snapshot(WorkspaceSettingsSnapshotUpdate {
-                theme,
-                git,
-                chat,
-                reusable_prompts,
-                kanban,
-                autopilot,
-                workspaces,
-                global_prompt_overrides,
-            })?;
+        fixture.service.workspace_save_settings_snapshot(snapshot)?;
 
-        let (
-            _persisted_theme,
-            _persisted_git,
-            _persisted_chat,
-            _persisted_reusable_prompts,
-            persisted_kanban,
-            _persisted_autopilot,
-            _persisted_repos,
-            _persisted_global_prompt_overrides,
-        ) = fixture.service.workspace_get_settings_snapshot()?;
+        let persisted_snapshot = fixture.service.workspace_get_settings_snapshot()?;
 
         assert_eq!(
-            persisted_kanban.empty_column_display,
+            persisted_snapshot.kanban.empty_column_display,
             KanbanEmptyColumnDisplay::Collapsed
         );
         Ok(())
@@ -572,37 +523,20 @@ mod tests {
             second_repo.to_string_lossy().as_ref(),
         )?;
 
-        let (
-            theme,
-            git,
-            chat,
-            reusable_prompts,
-            kanban,
-            autopilot,
-            mut workspaces,
-            global_prompt_overrides,
-        ) = fixture.service.workspace_get_settings_snapshot()?;
+        let mut snapshot = fixture.service.workspace_get_settings_snapshot()?;
         let duplicate_path = fixture
             .service
             .workspace_get_repo_config(&fixture.workspace_id)?
             .repo_path;
-        let second_config = workspaces
+        let second_config = snapshot
+            .workspaces
             .get_mut("repo-two")
             .ok_or_else(|| anyhow!("second repo config missing"))?;
         second_config.repo_path = duplicate_path;
 
         let error = fixture
             .service
-            .workspace_save_settings_snapshot(WorkspaceSettingsSnapshotUpdate {
-                theme,
-                git,
-                chat,
-                reusable_prompts,
-                kanban,
-                autopilot,
-                workspaces,
-                global_prompt_overrides,
-            })
+            .workspace_save_settings_snapshot(snapshot)
             .expect_err("duplicate repo path should be rejected");
 
         assert!(error

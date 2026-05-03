@@ -586,7 +586,7 @@ describe("useAgentStudioModelSelection", () => {
       expect(harness.getLatest().supportsSlashCommands).toBe(true);
       expect(harness.getLatest().slashCommands.map((command) => command.id)).toEqual([
         "native-review",
-        "custom-prompt:prompt-1",
+        "reusable-prompt:prompt-1",
       ]);
       expect(harness.getLatest().slashCommands.at(1)?.source).toBe("custom");
     } finally {
@@ -628,7 +628,7 @@ describe("useAgentStudioModelSelection", () => {
       expect(harness.getLatest().supportsSlashCommands).toBe(true);
       expect(harness.getLatest().slashCommands).toEqual([
         {
-          id: "custom-prompt:prompt-1",
+          id: "reusable-prompt:prompt-1",
           trigger: "review",
           title: "review",
           description: "Review context",

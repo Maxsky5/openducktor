@@ -3,7 +3,7 @@ import type { ReusablePrompt } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement, useState } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { SettingsReusablePromptsSection } from "./settings-custom-prompts-section";
+import { SettingsReusablePromptsSection } from "./settings-reusable-prompts-section";
 
 enableReactActEnvironment();
 

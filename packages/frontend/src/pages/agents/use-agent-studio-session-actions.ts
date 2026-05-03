@@ -9,7 +9,7 @@ import {
   draftHasSlashCommandSegment,
   resolveDraftToUserMessageParts,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { resolveReusablePromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-custom-prompts";
+import { resolveReusablePromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { SessionStartLaunchRequest } from "@/features/session-start";
 import {

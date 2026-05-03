@@ -24,14 +24,14 @@ import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-consta
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import { useSettingsModalBranchesState } from "./use-settings-modal-branches-state";
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
-import type { ReusablePromptValidationState } from "./use-settings-modal-custom-prompt-validation";
-import { useSettingsModalReusablePromptValidation } from "./use-settings-modal-custom-prompt-validation";
 import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-draft-actions";
 import { useSettingsModalDirtyState } from "./use-settings-modal-dirty-state";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
 import { useSettingsModalPromptValidation } from "./use-settings-modal-prompt-validation";
 import { useSettingsModalRepoScriptValidation } from "./use-settings-modal-repo-script-validation";
 import { useSettingsModalRepositoryActions } from "./use-settings-modal-repository-actions";
+import type { ReusablePromptValidationState } from "./use-settings-modal-reusable-prompt-validation";
+import { useSettingsModalReusablePromptValidation } from "./use-settings-modal-reusable-prompt-validation";
 import { useSettingsModalSaveOrchestration } from "./use-settings-modal-save-orchestration";
 import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-state";
 
@@ -198,7 +198,7 @@ export const useSettingsModalController = ({
   const settingsSectionErrorCountByIdWithReusablePrompts = useMemo(
     () => ({
       ...settingsSectionErrorCountById,
-      "custom-prompts": reusablePromptValidationState.totalErrorCount,
+      "reusable-prompts": reusablePromptValidationState.totalErrorCount,
     }),
     [reusablePromptValidationState.totalErrorCount, settingsSectionErrorCountById],
   );

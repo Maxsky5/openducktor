@@ -3,7 +3,7 @@ use crate::{
     SettingsSnapshotPayload, SettingsSnapshotResponsePayload,
 };
 use base64::Engine;
-use host_application::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshotUpdate};
+use host_application::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshot};
 use host_infra_system::HookSet;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -356,25 +356,16 @@ pub async fn workspace_detect_github_repository(
 pub async fn workspace_get_settings_snapshot(
     state: State<'_, AppState>,
 ) -> Result<SettingsSnapshotResponsePayload, String> {
-    let (
-        theme,
-        git,
-        chat,
-        reusable_prompts,
-        kanban,
-        autopilot,
-        workspaces,
-        global_prompt_overrides,
-    ) = as_error(state.service.workspace_get_settings_snapshot())?;
+    let snapshot = as_error(state.service.workspace_get_settings_snapshot())?;
     Ok(SettingsSnapshotResponsePayload {
-        theme,
-        git,
-        chat,
-        reusable_prompts,
-        kanban,
-        autopilot,
-        workspaces,
-        global_prompt_overrides,
+        theme: snapshot.theme,
+        git: snapshot.git,
+        chat: snapshot.chat,
+        reusable_prompts: snapshot.reusable_prompts,
+        kanban: snapshot.kanban,
+        autopilot: snapshot.autopilot,
+        workspaces: snapshot.workspaces,
+        global_prompt_overrides: snapshot.global_prompt_overrides,
     })
 }
 
@@ -416,7 +407,7 @@ pub async fn workspace_save_settings_snapshot(
 
     let updated = as_error(
         run_service_blocking("workspace_save_settings_snapshot", move || {
-            service.workspace_save_settings_snapshot(WorkspaceSettingsSnapshotUpdate {
+            service.workspace_save_settings_snapshot(WorkspaceSettingsSnapshot {
                 theme,
                 git,
                 chat,
@@ -750,7 +741,7 @@ mod tests {
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
         assert_eq!(
-            config.1.default_merge_method,
+            config.git.default_merge_method,
             host_infra_system::GitMergeMethod::Squash
         );
         Ok(())
@@ -1006,30 +997,21 @@ mod tests {
                 .expect_err("seeded cache should reject worktree omitted from subset");
         assert!(stale_error.contains("not within authorized repository or linked worktrees"));
 
-        let (
-            theme,
-            git,
-            chat,
-            reusable_prompts,
-            kanban,
-            autopilot,
-            workspaces,
-            global_prompt_overrides,
-        ) = fixture
+        let snapshot = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
         run_workspace_save_settings_snapshot(
             &fixture,
             SettingsSnapshotPayload {
-                theme,
-                git,
-                chat,
-                reusable_prompts,
-                kanban,
-                autopilot,
-                workspaces,
-                global_prompt_overrides,
+                theme: snapshot.theme,
+                git: snapshot.git,
+                chat: snapshot.chat,
+                reusable_prompts: snapshot.reusable_prompts,
+                kanban: snapshot.kanban,
+                autopilot: snapshot.autopilot,
+                workspaces: snapshot.workspaces,
+                global_prompt_overrides: snapshot.global_prompt_overrides,
             },
         )?;
 
@@ -1052,28 +1034,19 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-ipc-shared-prompts", HookSet::default());
 
-        let (
-            theme,
-            git,
-            chat,
-            reusable_prompts,
-            kanban,
-            autopilot,
-            workspaces,
-            global_prompt_overrides,
-        ) = fixture
+        let snapshot = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
         let mut snapshot = SettingsSnapshotPayload {
-            theme,
-            git,
-            chat,
-            reusable_prompts,
-            kanban,
-            autopilot,
-            workspaces,
-            global_prompt_overrides,
+            theme: snapshot.theme,
+            git: snapshot.git,
+            chat: snapshot.chat,
+            reusable_prompts: snapshot.reusable_prompts,
+            kanban: snapshot.kanban,
+            autopilot: snapshot.autopilot,
+            workspaces: snapshot.workspaces,
+            global_prompt_overrides: snapshot.global_prompt_overrides,
         };
 
         snapshot.chat.show_thinking_messages = true;
@@ -1138,32 +1111,26 @@ mod tests {
             "snapshot save response should include workspace records"
         );
 
-        let (
-            _persisted_theme,
-            _persisted_git,
-            persisted_chat,
-            _persisted_reusable_prompts,
-            _persisted_kanban,
-            _persisted_autopilot,
-            persisted_workspaces,
-            persisted_global,
-        ) = fixture
+        let persisted_snapshot = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
-        let persisted_workspace = persisted_workspaces
+        let persisted_workspace = persisted_snapshot
+            .workspaces
             .get(fixture.workspace_id.as_str())
             .ok_or_else(|| "persisted workspace config missing".to_string())?;
 
-        assert!(persisted_chat.show_thinking_messages);
+        assert!(persisted_snapshot.chat.show_thinking_messages);
         assert_eq!(
-            persisted_global
+            persisted_snapshot
+                .global_prompt_overrides
                 .get("system.shared.workflow_guards")
                 .map(|entry| entry.template.as_str()),
             Some("global workflow guards")
         );
         assert_eq!(
-            persisted_global
+            persisted_snapshot
+                .global_prompt_overrides
                 .get("system.shared.tool_protocol")
                 .map(|entry| entry.template.as_str()),
             Some("global tool protocol")
@@ -1190,24 +1157,15 @@ mod tests {
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() -> Result<(), String> {
         let fixture = setup_workspace_command_fixture("snapshot-default-chat", HookSet::default());
 
-        let (
-            _theme,
-            _git,
-            chat,
-            reusable_prompts,
-            kanban,
-            _autopilot,
-            _workspaces,
-            _global_prompt_overrides,
-        ) = fixture
+        let snapshot = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
 
-        assert_eq!(chat, ChatSettings::default());
-        assert!(reusable_prompts.is_empty());
-        assert!(!chat.show_thinking_messages);
-        assert_eq!(kanban.done_visible_days, 1);
+        assert_eq!(snapshot.chat, ChatSettings::default());
+        assert!(snapshot.reusable_prompts.is_empty());
+        assert!(!snapshot.chat.show_thinking_messages);
+        assert_eq!(snapshot.kanban.done_visible_days, 1);
         Ok(())
     }
 
@@ -1216,29 +1174,20 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-chat-roundtrip", HookSet::default());
 
-        let (
-            theme,
-            git,
-            _chat,
-            reusable_prompts,
-            kanban,
-            autopilot,
-            workspaces,
-            global_prompt_overrides,
-        ) = fixture
+        let snapshot = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
 
         let payload_without_chat = json!({
             "snapshot": {
-                "theme": theme.clone(),
-                "git": git.clone(),
-                "reusablePrompts": reusable_prompts.clone(),
-                "kanban": kanban.clone(),
-                "autopilot": autopilot.clone(),
-                "workspaces": workspaces.clone(),
-                "globalPromptOverrides": global_prompt_overrides.clone(),
+                "theme": snapshot.theme.clone(),
+                "git": snapshot.git.clone(),
+                "reusablePrompts": snapshot.reusable_prompts.clone(),
+                "kanban": snapshot.kanban.clone(),
+                "autopilot": snapshot.autopilot.clone(),
+                "workspaces": snapshot.workspaces.clone(),
+                "globalPromptOverrides": snapshot.global_prompt_overrides.clone(),
             }
         });
         let error = invoke_workspace_save_settings_snapshot_ipc(&fixture, payload_without_chat)
@@ -1250,8 +1199,8 @@ mod tests {
 
         let payload_with_chat = json!({
             "snapshot": {
-                "theme": theme,
-                "git": git,
+                "theme": snapshot.theme,
+                "git": snapshot.git,
                 "chat": {
                     "showThinkingMessages": true
                 },
@@ -1263,31 +1212,22 @@ mod tests {
                         "content": "Review this"
                     }
                 ],
-                "kanban": kanban,
-                "autopilot": autopilot,
-                "workspaces": workspaces,
-                "globalPromptOverrides": global_prompt_overrides,
+                "kanban": snapshot.kanban,
+                "autopilot": snapshot.autopilot,
+                "workspaces": snapshot.workspaces,
+                "globalPromptOverrides": snapshot.global_prompt_overrides,
             }
         });
         invoke_workspace_save_settings_snapshot_ipc(&fixture, payload_with_chat)
             .expect("IPC snapshot save should persist chat settings");
 
-        let (
-            _reloaded_theme,
-            _reloaded_git,
-            reloaded_chat,
-            reloaded_prompts,
-            _reloaded_kanban,
-            _reloaded_autopilot,
-            _reloaded_workspaces,
-            _reloaded_global,
-        ) = fixture
+        let reloaded_snapshot = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
-        assert!(reloaded_chat.show_thinking_messages);
-        assert_eq!(reloaded_prompts.len(), 1);
-        assert_eq!(reloaded_prompts[0].name, "review");
+        assert!(reloaded_snapshot.chat.show_thinking_messages);
+        assert_eq!(reloaded_snapshot.reusable_prompts.len(), 1);
+        assert_eq!(reloaded_snapshot.reusable_prompts[0].name, "review");
         Ok(())
     }
 }

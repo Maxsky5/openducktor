@@ -64,7 +64,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
     git: 0,
     repositories: 0,
     prompts: 0,
-    "custom-prompts": 0,
+    "reusable-prompts": 0,
     chat: 0,
     kanban: 0,
     autopilot: 0,
@@ -127,7 +127,7 @@ describe("settings modal content", () => {
 
     const html = renderToStaticMarkup(
       createElement(SettingsModalContent, {
-        section: "custom-prompts",
+        section: "reusable-prompts",
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",

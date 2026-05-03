@@ -14,7 +14,7 @@ import {
   toModelOptions,
   toPrimaryAgentOptions,
 } from "@/components/features/agents";
-import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-custom-prompts";
+import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -451,7 +451,7 @@ export function useAgentStudioModelSelection({
   const slashCommandCatalog = hasActiveSession
     ? (activeSessionSlashCommandsQuery.data ?? null)
     : (repoSlashCommandsQuery.data ?? null);
-  const customSlashCommands = useMemo(
+  const reusablePromptSlashCommands = useMemo(
     () => reusablePrompts.map(toReusablePromptSlashCommand),
     [reusablePrompts],
   );
@@ -460,8 +460,8 @@ export function useAgentStudioModelSelection({
     [runtimeSupportsSlashCommands, slashCommandCatalog?.commands],
   );
   const slashCommands = useMemo(
-    () => [...runtimeSlashCommands, ...customSlashCommands],
-    [customSlashCommands, runtimeSlashCommands],
+    () => [...runtimeSlashCommands, ...reusablePromptSlashCommands],
+    [reusablePromptSlashCommands, runtimeSlashCommands],
   );
   const mergedSlashCommandCatalog = useMemo<AgentSlashCommandCatalog>(
     () => ({ commands: slashCommands }),

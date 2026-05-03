@@ -7,7 +7,7 @@ import {
 import {
   resolveReusablePromptDraftToUserMessageParts,
   toReusablePromptSlashCommand,
-} from "./agent-chat-custom-prompts";
+} from "./agent-chat-reusable-prompts";
 
 const PROMPT = {
   id: "prompt-1",
@@ -16,7 +16,7 @@ const PROMPT = {
   content: "Review this:\n$ARGUMENTS\nAgain: $ARGUMENTS",
 };
 
-const CUSTOM_COMMAND = toReusablePromptSlashCommand(PROMPT);
+const REUSABLE_PROMPT_COMMAND = toReusablePromptSlashCommand(PROMPT);
 
 describe("agent chat reusable prompts", () => {
   test("expands every arguments placeholder", () => {
@@ -24,7 +24,7 @@ describe("agent chat reusable prompts", () => {
       {
         segments: [
           createTextSegment("", "before"),
-          createSlashCommandSegment(CUSTOM_COMMAND, "slash"),
+          createSlashCommandSegment(REUSABLE_PROMPT_COMMAND, "slash"),
           createTextSegment(" src/foo.ts ", "after"),
         ],
         attachments: [],
@@ -61,7 +61,7 @@ describe("agent chat reusable prompts", () => {
         {
           segments: [
             createTextSegment("", "before"),
-            createSlashCommandSegment(CUSTOM_COMMAND, "slash"),
+            createSlashCommandSegment(REUSABLE_PROMPT_COMMAND, "slash"),
             createFileReferenceSegment(
               { id: "file", path: "src/foo.ts", name: "foo.ts", kind: "code" },
               "file",

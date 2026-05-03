@@ -17,7 +17,7 @@ export type SettingsSectionId =
   | "git"
   | "repositories"
   | "prompts"
-  | "custom-prompts"
+  | "reusable-prompts"
   | "chat"
   | "kanban"
   | "autopilot";
@@ -35,7 +35,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   { id: "git", label: "Git", icon: FolderGit2 },
   { id: "repositories", label: "Repositories", icon: FolderGit2 },
   { id: "prompts", label: "System Prompts", icon: MessageSquareText },
-  { id: "custom-prompts", label: "Reusable Prompts", icon: MessageSquarePlus },
+  { id: "reusable-prompts", label: "Reusable Prompts", icon: MessageSquarePlus },
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "kanban", label: "Kanban", icon: Columns3 },
   { id: "autopilot", label: "Autopilot", icon: Workflow },

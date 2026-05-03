@@ -40,8 +40,8 @@ const COMMAND = {
   hints: ["compact"],
 };
 
-const CUSTOM_COMMAND = {
-  id: "custom-prompt:prompt-1",
+const REUSABLE_PROMPT_COMMAND = {
+  id: "reusable-prompt:prompt-1",
   trigger: "review",
   title: "review",
   description: "Review context",
@@ -391,7 +391,7 @@ describe("useAgentStudioSessionActions", () => {
     const draft: AgentChatComposerDraft = {
       segments: [
         createTextSegment("", "text-before"),
-        createSlashCommandSegment(CUSTOM_COMMAND, "slash-1"),
+        createSlashCommandSegment(REUSABLE_PROMPT_COMMAND, "slash-1"),
         createTextSegment(" src/foo.ts ", "text-after"),
       ],
       attachments: [],
@@ -428,7 +428,7 @@ describe("useAgentStudioSessionActions", () => {
     const draft: AgentChatComposerDraft = {
       segments: [
         createTextSegment("", "text-before"),
-        createSlashCommandSegment(CUSTOM_COMMAND, "slash-1"),
+        createSlashCommandSegment(REUSABLE_PROMPT_COMMAND, "slash-1"),
         createTextSegment(" src/foo.ts ", "text-after"),
       ],
       attachments: [],

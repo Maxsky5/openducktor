@@ -211,9 +211,9 @@ function ReusablePromptEditorCard({
   onUpdateReusablePromptField,
 }: ReusablePromptEditorCardProps): ReactElement {
   const nameInputRef = useRef<HTMLInputElement | null>(null);
-  const nameInputId = `custom-prompt-${prompt.id}-name`;
-  const descriptionInputId = `custom-prompt-${prompt.id}-description`;
-  const contentInputId = `custom-prompt-${prompt.id}-content`;
+  const nameInputId = `reusable-prompt-${prompt.id}-name`;
+  const descriptionInputId = `reusable-prompt-${prompt.id}-description`;
+  const contentInputId = `reusable-prompt-${prompt.id}-content`;
   const promptTriggerPreview = prompt.name.trim() ? `/${prompt.name.trim()}` : "/name";
 
   useEffect(() => {

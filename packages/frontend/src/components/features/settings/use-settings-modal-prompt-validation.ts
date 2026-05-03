@@ -95,7 +95,7 @@ export const useSettingsModalPromptValidation = ({
     git: 0,
     repositories: promptValidationState.repoTotalErrorCount,
     prompts: promptValidationState.globalErrorCount,
-    "custom-prompts": 0,
+    "reusable-prompts": 0,
     chat: 0,
     kanban: 0,
     autopilot: 0,
