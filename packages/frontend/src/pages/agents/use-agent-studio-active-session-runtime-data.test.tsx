@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { AgentModelCatalog } from "@openducktor/core";
 import {
   createAgentSessionFixture,
+  createDefaultRuntimeDefinitions,
   createDeferred,
   createHookHarness,
   enableReactActEnvironment,
@@ -26,6 +27,25 @@ const CATALOG: AgentModelCatalog = {
   },
 };
 
+const createRuntimeDefinitionsWithoutTodos = () => {
+  const [runtimeDefinition] = createDefaultRuntimeDefinitions();
+  if (!runtimeDefinition) {
+    throw new Error("Expected default runtime definition.");
+  }
+  return [
+    {
+      ...runtimeDefinition,
+      capabilities: {
+        ...runtimeDefinition.capabilities,
+        optionalSurfaces: {
+          ...runtimeDefinition.capabilities.optionalSurfaces,
+          supportsTodos: false,
+        },
+      },
+    },
+  ];
+};
+
 describe("useAgentStudioActiveSessionRuntimeData", () => {
   test("does not query runtime data while the session is still starting", async () => {
     const readSessionModelCatalog = mock(async () => CATALOG);
@@ -41,6 +61,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
         isLoadingModelCatalog: true,
       }),
       agentStudioReadinessState: "ready",
+      runtimeDefinitions: createDefaultRuntimeDefinitions(),
       readSessionModelCatalog,
       readSessionTodos,
     });
@@ -71,6 +92,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
         isLoadingModelCatalog: true,
       }),
       agentStudioReadinessState: "ready",
+      runtimeDefinitions: createDefaultRuntimeDefinitions(),
       readSessionModelCatalog,
       readSessionTodos,
     });
@@ -108,6 +130,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
     const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
       session,
       agentStudioReadinessState: "checking",
+      runtimeDefinitions: createDefaultRuntimeDefinitions(),
       readSessionModelCatalog,
       readSessionTodos,
     });
@@ -122,6 +145,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       await harness.update({
         session,
         agentStudioReadinessState: "ready",
+        runtimeDefinitions: createDefaultRuntimeDefinitions(),
         readSessionModelCatalog,
         readSessionTodos,
       });
@@ -157,6 +181,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
         isLoadingModelCatalog: false,
       }),
       agentStudioReadinessState: "ready",
+      runtimeDefinitions: createDefaultRuntimeDefinitions(),
       readSessionModelCatalog,
       readSessionTodos,
     });
@@ -195,6 +220,7 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
         isLoadingModelCatalog: true,
       }),
       agentStudioReadinessState: "ready",
+      runtimeDefinitions: createDefaultRuntimeDefinitions(),
       readSessionModelCatalog,
       readSessionTodos,
     });
@@ -216,6 +242,43 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
           state.session?.isLoadingModelCatalog === false &&
           state.session?.modelCatalog?.models[0]?.id === CATALOG.models[0]?.id,
       );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not query session todos when the runtime does not support todos", async () => {
+    const readSessionModelCatalog = mock(async () => CATALOG);
+    const readSessionTodos = mock(async () => {
+      throw new Error("todos should not be queried");
+    });
+    const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
+      session: createAgentSessionFixture({
+        externalSessionId: "external-1",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/repo",
+        modelCatalog: null,
+        isLoadingModelCatalog: true,
+      }),
+      agentStudioReadinessState: "ready",
+      runtimeDefinitions: createRuntimeDefinitionsWithoutTodos(),
+      readSessionModelCatalog,
+      readSessionTodos,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.session?.modelCatalog?.models[0]?.id === CATALOG.models[0]?.id &&
+          state.session?.isLoadingModelCatalog === false,
+      );
+
+      expect(readSessionModelCatalog).toHaveBeenCalledTimes(1);
+      expect(readSessionTodos).not.toHaveBeenCalled();
+      expect(harness.getLatest()?.session?.todos).toEqual([]);
+      expect(harness.getLatest()?.runtimeDataError).toBeNull();
     } finally {
       await harness.unmount();
     }

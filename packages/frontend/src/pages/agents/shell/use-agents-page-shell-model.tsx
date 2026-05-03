@@ -281,6 +281,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     ensureSessionReadyForView,
     runtimeAttachmentSources,
     refreshRuntimeAttachmentSources: refreshRuntimeAttachmentSourceList,
+    runtimeDefinitions,
     readSessionModelCatalog,
     readSessionTodos,
     clearComposerInput,

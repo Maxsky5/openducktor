@@ -25,7 +25,7 @@ OpenDucktor uses several runtime-related payloads. Each one describes a differen
 
 ### `RuntimeDescriptor`
 
-Defined in `packages/contracts/src/agent-runtime-schemas.ts` and mirrored in `apps/desktop/src-tauri/crates/host-domain/src/runtime/mod.rs`.
+Defined in `packages/contracts/src/agent-runtime-schemas.ts` and mirrored in the Rust host domain under `apps/desktop/src-tauri/crates/host-domain/src/runtime/registry/descriptor.rs` and its capability modules. `apps/desktop/src-tauri/crates/host-domain/src/runtime/mod.rs` re-exports the host-visible runtime types.
 
 It is the stable definition of a runtime kind:
 
@@ -77,7 +77,7 @@ It is live runtime-instance metadata only:
 
 `runtimeInstanceSummaryRoleSchema` is currently `workspace` only, so this payload describes shared workspace runtime instances rather than every startup path in the system.
 
-The host returns this payload after listing or ensuring a workspace runtime. It tells the frontend which runtime instance is running, which repo scope it belongs to, where its working directory is, how to reach it through `runtimeRoute`, and which static runtime definition it comes from through `descriptor`. Build startup returns `BuildSessionBootstrap` instead, because the build path requires `runtimeKind`, `runtimeRoute`, and `workingDirectory` to bootstrap the Builder session.
+The host returns this payload after listing or ensuring a workspace runtime. It tells the frontend which runtime instance is running, which repo scope it belongs to, where its working directory is, how to reach it through `runtimeRoute`, and which static runtime definition it comes from through `descriptor`. Build startup returns `BuildSessionBootstrap` instead, because the Builder session only needs `runtimeKind`, `runtimeId`, and the build worktree `workingDirectory` at that boundary. The live route remains attached to the running runtime instance and is resolved again through the runtime registry when adapter operations need it.
 
 ### `RuntimeRoute`
 
@@ -86,35 +86,37 @@ Live host-visible route information for a running runtime.
 Supported shapes:
 
 - `{ type: "local_http", endpoint }`
-- `{ type: "stdio" }`
+- `{ type: "stdio", identity }`
 
 This is a live route, not a persisted identifier.
 
-### `RuntimeConnection`
+### `RuntimeTransport` / runtime connection
 
-Request-scoped adapter input used by the TypeScript runtime adapter boundary.
+Request-scoped runtime transport data used at the TypeScript runtime adapter boundary. The shared schema is exported as `runtimeTransportSchema` / `RuntimeTransport`; project docs and orchestration code may also refer to this concept as the runtime connection for a request.
 
-Defined in `packages/contracts/src/agent-runtime-schemas.ts` as `runtimeTransportSchema` and consumed through `packages/core/src/services/runtime-connections.ts`.
+Defined in `packages/contracts/src/agent-runtime-schemas.ts` as `runtimeTransportSchema`. `packages/core/src/services/runtime-connections.ts` contains validation helpers for runtime-kind and working-directory inputs; runtime-specific adapters convert resolved live runtime summaries and request context into their native client inputs at the adapter boundary.
 
 Supported shapes:
 
 - `{ type: "local_http", endpoint, workingDirectory }`
-- `{ type: "stdio", workingDirectory }`
+- `{ type: "stdio", identity, workingDirectory }`
 
-The adapter boundary turns this payload into runtime-specific client input. Generic orchestration code uses `RuntimeConnection` to describe where a request should run and which working directory it applies to, while runtime-specific adapters decide how to construct HTTP clients or other transport-native inputs.
+The adapter boundary turns this payload into runtime-specific client input. Generic orchestration code carries the runtime kind and working directory for a request, then runtime-specific adapters resolve the live runtime and construct HTTP clients or other transport-native inputs from the `RuntimeTransport`/connection shape they own.
 
 ### Persisted session record
 
 Defined in `packages/contracts/src/session-schemas.ts` and mirrored by `apps/desktop/src-tauri/crates/host-domain/src/document.rs`.
 
-Persisted records keep durable identity only:
+Persisted records keep durable session context only:
 
+- `externalSessionId`
+- `role`
+- `startedAt`
 - `runtimeKind`
 - `workingDirectory`
-- `externalSessionId`
-- optional `selectedModel`
+- nullable `selectedModel`
 
-Persisted records store durable session context. Live route or connection fields such as `runtimeRoute`, `runtimeEndpoint`, `baseUrl`, or `runtimeTransport` are resolved again when the session is loaded.
+Persisted records store durable session context. `selectedModel`, when present, includes its own `runtimeKind` and must round-trip with the session. Live route or connection fields such as `runtimeRoute`, `runtimeEndpoint`, `baseUrl`, or `runtimeTransport` are resolved again when the session is loaded.
 
 ### Session routing behavior
 
@@ -126,7 +128,7 @@ Session-scoped operations use the session's runtime kind when loading:
 - file status,
 - model catalog.
 
-If the runtime kind is missing, or hydration resolves to a runtime with a different kind or working directory than the stored session context, the operation returns an actionable error instead of silently switching runtimes.
+If the runtime kind is missing, or hydration cannot resolve a live repo runtime for the stored runtime kind, the operation returns an actionable error instead of silently switching runtimes. The persisted session `workingDirectory` remains the request working directory for adapter operations; it is not required to equal the repo-scoped runtime instance working directory, because build and QA sessions may run against a task worktree while reusing a repo-scoped runtime process.
 
 ## Runtime Capability Reference
 
@@ -144,18 +146,18 @@ Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 | `approvals` group | Workflow requirement when prompts exist | Declares approval request types, reply outcomes, omitted-permission behavior, pending visibility, mutating-request classification, and read-only auto-reject safety | Permission prompts and read-only role enforcement | Approval request support must include `reject` plus at least one approve outcome; read-only auto-reject requires classification plus reject support |
 | `structuredInput` group | Workflow requirement when questions exist | Declares structured question support, supported answer modes, pending visibility, and resolution semantics | Runtime-originated user-input requests | Runtimes that claim question support must expose answer modes and resolution state; runtimes without questions keep detail flags/lists empty |
 | `promptInput.supportedParts` | Baseline with optional prompt enrichments | Declares prompt part types such as `text`, `slash_command`, file/folder references, native skill/app/plugin mentions, and `runtime_specific` structured parts | Chat composer and adapter prompt-send boundary | `text` is baseline-required; slash command and file-search flags must match supported structured prompt parts; runtime-specific parts must stay typed until the adapter/runtime boundary |
-| `optionalSurfaces.supportsProfiles` / `supportsVariants` | Optional enhancement | Runtime supports named profiles or model variants | Session start flow and repo settings | Profile and variant selectors read these before showing choices |
-| `optionalSurfaces.supportsTodos` / `supportsDiff` / `supportsFileStatus` | Optional enhancement | Runtime can list session todos, diff, and file-status data | Session warmup and inspection views | UI and refresh paths call these surfaces only when the descriptor claims support |
+| `optionalSurfaces.supportsProfiles` / `supportsVariants` | Optional enhancement | Runtime supports named profiles or model variants | Session start flow and repo settings | Profile and variant selectors should read these before showing choices |
+| `optionalSurfaces.supportsTodos` / `supportsDiff` / `supportsFileStatus` | Optional enhancement | Runtime can list session todos, diff, and file-status data | Session warmup and inspection views | Runtime-adapter consumers should gate these calls on descriptor support; current Agent Studio git diff/file-status views primarily use host git worktree queries rather than these adapter surfaces |
 | `optionalSurfaces.supportsMcpStatus` | Optional enhancement | Runtime exposes MCP status info | Diagnostics and health checks | Diagnostics and MCP health checks read this before querying MCP status |
 | `optionalSurfaces.supportsSubagents` / `supportedSubagentExecutionModes` | Optional enhancement | Runtime can run subagents and declares supported execution modes | Agent orchestration surfaces | Subagent support must include at least one execution mode; disabled support must leave the mode list empty |
 
-The current codebase treats runtime integration in three layers:
+The current codebase treats runtime integration in these categories:
 
 - `Baseline runtime contract`: descriptors must support fresh starts, text prompt input, and internally consistent lifecycle/history/input claims.
 - `Workflow requirements`: ODT workflow tool execution, approval/input semantics, and read-only safety are modeled separately from optional UI surfaces.
 - `Role-scoped workflow coverage`: `workflow.supportedScopes` must include `workspace`, `task`, and `build`. OpenDucktor does not support runtimes that cover only a subset of roles.
 - `Launch-action compatibility`: `sessionLifecycle.supportedStartModes`, `sessionLifecycle.supportsSessionFork`, and `sessionLifecycle.forkTargets` must cover every registered workflow launch action.
-- `Optional enhancement`: the application can work without these. The UI and runtime-health flow gate these features explicitly instead of assuming support.
+- `Optional enhancement`: the application can work without these. New UI, adapter, and runtime-health consumers must gate optional runtime-owned surfaces explicitly instead of assuming support; existing host-owned git/worktree views may remain independent of runtime optional-surface flags.
 
 Slash commands now belong in the optional prompt-input category: the app can function without them, and the UI treats them as additive capability rather than a baseline runtime requirement.
 
@@ -207,15 +209,15 @@ A runtime is represented through:
 - a runtime-owned `readOnlyRoleBlockedTools` list for native mutating tools,
 - a runtime-owned `workflowToolAliasesByCanonical` map for native workflow tool IDs,
 - a live `RuntimeRoute` compatible with current host-visible route schemas,
-- a request-scoped `RuntimeConnection`,
-- persisted session records that keep `runtimeKind`, `externalSessionId`, and `workingDirectory`.
+- a request-scoped runtime transport/connection shape,
+- persisted session records that keep `externalSessionId`, `role`, `startedAt`, `runtimeKind`, `workingDirectory`, and nullable `selectedModel`.
 
 ### Transport behavior
 
 The current transport model assumes only these shared invariants:
 
 - live routes are described by `RuntimeRoute`,
-- request-scoped adapter inputs are described by `RuntimeConnection`,
+- request-scoped adapter inputs are described by the `RuntimeTransport` schema and the runtime connection concept,
 - working directories are absolute and non-traversing,
 - transport-specific client construction stays inside the runtime adapter or host boundary that owns that transport.
 
@@ -245,7 +247,7 @@ Workflow roles map onto the runtime system like this:
 - `qa` requires `task` scope and runs against the task/build working directory through the shared runtime orchestration path,
 - `build` requires `build` and `workspace` scope and uses the dedicated Builder startup path.
 
-Required workflow scope coverage lives in `runtimeRequiredScopesByRole` and `requiredRuntimeSupportedScopes` in `packages/contracts/src/agent-runtime-schemas.ts`. Launch-action role and start-mode compatibility live in `SESSION_LAUNCH_ACTIONS` in `packages/frontend/src/features/session-start/session-start-launch-options.ts`.
+Required workflow scope coverage lives in `runtimeRequiredScopesByRole` and `requiredRuntimeSupportedScopes` in `packages/contracts/src/agent-runtime-schemas.ts`. Launch-action role and start-mode compatibility are exported through `SESSION_LAUNCH_ACTIONS` in `packages/frontend/src/features/session-start/session-start-launch-options.ts`; the source registry currently lives in `packages/frontend/src/lib/session-launch-actions.ts`.
 
 Even though these roles route through different startup paths, every runtime integration must support all of them. OpenDucktor does not allow registering a runtime that handles only `spec`, only `planner`, or any other partial subset.
 
@@ -285,7 +287,7 @@ These contracts are mirrored across TypeScript and Rust, so the host-visible sha
 
 ### 2. Core boundary and runtime adapter
 
-The core runtime boundary is anchored by `packages/core/src/ports/agent-engine.ts` and `packages/core/src/services/runtime-connections.ts`. The runtime adapter is where `RuntimeConnection` becomes runtime-specific client input.
+The core runtime boundary is anchored by `packages/core/src/ports/agent-engine.ts` and the runtime-kind/working-directory helpers in `packages/core/src/services/runtime-connections.ts`. The runtime adapter is where resolved runtime context becomes runtime-specific client input.
 
 This layer must cover:
 
@@ -297,11 +299,11 @@ Reference implementation anchors today are `packages/adapters-opencode-sdk/src/o
 
 For Builder PR generation, the runtime integration is responsible for making provider-native git or PR tools available to the agent. OpenDucktor persists the authoritative PR metadata only after the agent calls `odt_set_pull_request(taskId, providerId, number)`, then resolves the canonical provider record itself.
 
-### 3. Desktop runtime orchestration
+### 3. Frontend and desktop runtime orchestration
 
-The main desktop anchors are `apps/desktop/src/state/agent-runtime-registry.ts`, `apps/desktop/src/lib/agent-runtime.ts`, and `apps/desktop/src/state/operations/agent-orchestrator/runtime/runtime.ts`.
+The main shared frontend anchors are `packages/frontend/src/state/agent-runtime-registry.ts`, `packages/frontend/src/lib/agent-runtime.ts`, and `packages/frontend/src/state/operations/agent-orchestrator/runtime/runtime.ts`. The desktop app under `apps/desktop/src` is a thin Tauri shell that mounts `@openducktor/frontend`.
 
-Desktop orchestration must keep these rules true:
+Frontend/runtime orchestration must keep these rules true:
 
 - session-scoped reads carry explicit `runtimeKind`,
 - build startup carries explicit runtime kind,
@@ -312,23 +314,26 @@ Catalog/query helpers, session-start UI, settings, and diagnostics consumers may
 
 ### 4. Session persistence and hydration
 
-Persistence and hydration live across the session lifecycle/persistence modules under `apps/desktop/src/state/operations/agent-orchestrator/` and the host session document/store types in `apps/desktop/src-tauri/crates/host-domain/src/document.rs` and `apps/desktop/src-tauri/crates/host-infra-beads/src/store/session_ops.rs`.
+Persistence and hydration live across the session lifecycle/persistence modules under `packages/frontend/src/state/operations/agent-orchestrator/` and the host session document/store types in `apps/desktop/src-tauri/crates/host-domain/src/document.rs` and `apps/desktop/src-tauri/crates/host-infra-beads/src/store/session_ops.rs`.
 
 This layer must ensure that:
 
-- persisted session records keep `runtimeKind`, `externalSessionId`, `workingDirectory`, and `selectedModel.runtimeKind`,
-- hydration re-resolves a live route from `runtimeKind` and `workingDirectory`,
-- mismatched runtime kind and resolved live instance are rejected,
+- persisted session records keep `externalSessionId`, `role`, `startedAt`, `runtimeKind`, `workingDirectory`, and nullable `selectedModel` with `selectedModel.runtimeKind` when present,
+- hydration re-resolves a live repo runtime from `runtimeKind` and repo path, then preserves the persisted session `workingDirectory` for adapter requests,
+- missing runtimes and mismatched runtime kind or repo identity are rejected,
 - session-scoped reads continue to resolve from the stored session runtime instead of the repo default runtime.
 
 ### 5. Rust host integration
 
-Host-visible runtime support is anchored by `apps/desktop/src-tauri/crates/host-domain/src/runtime/mod.rs`, `apps/desktop/src-tauri/src/commands/runtime.rs`, `apps/desktop/src-tauri/src/commands/build.rs`, and the runtime/build orchestrators under `apps/desktop/src-tauri/crates/host-application/src/app_service/`.
+Host-visible runtime support is anchored by the Rust host-domain runtime modules under `apps/desktop/src-tauri/crates/host-domain/src/runtime/`, `apps/desktop/src-tauri/src/commands/runtime.rs`, `apps/desktop/src-tauri/src/commands/build.rs`, and the runtime/build orchestrators under `apps/desktop/src-tauri/crates/host-application/src/app_service/`.
 
 Host integration work includes:
 
-- adding the runtime kind to Rust domain enums and descriptors,
-- making `runtime_list`, `runtime_ensure`, `runtime_startup_status`, and `build_start` understand it where applicable,
+- adding the runtime kind to descriptors and registration data. Rust `AgentRuntimeKind` is a string wrapper, not an enum, so new kinds are registered through runtime definitions rather than enum variants,
+- adding the runtime definition to the host-domain built-in runtime registry so default runtime config and startup validation know about it,
+- implementing an `AppRuntime` for the runtime and registering it in `AppRuntimeRegistry` with the correct default startup config,
+- ensuring `RuntimeConfig` defaults are derived from the same runtime definition set used by the application service registry,
+- making `runtime_definitions_list`, `runtime_list`, `runtime_ensure`, `runtime_startup_status`, and `build_start` understand it where applicable,
 - implementing host-managed or external provisioning correctly,
 - preserving full workflow scope coverage (`workspace`, `task`, and `build`).
 
@@ -354,17 +359,17 @@ Build runtime support is separate from workspace runtime acquisition.
 
 Current startup routing is split like this:
 
-- `runtime_ensure(runtime_kind, repo)` is the workspace-runtime path used by `spec` and `planner`,
-- `qa` still requires `task` scope, but current orchestration resolves it against the build continuation working directory and either reuses the running build session for that directory or ensures the selected runtime for that working directory,
-- `build_start(repo, task, runtimeKind)` is the build-specific path and returns `BuildSessionBootstrap`, not `RuntimeInstanceSummary`.
+- `runtime_ensure(runtime_kind, repo)` is the repo-scoped workspace-runtime path used by `spec` and `planner`,
+- `qa` still requires `task` scope, but current frontend orchestration resolves the task/build continuation working directory, ensures the selected repo-scoped runtime, then starts or resumes the QA session with that working directory,
+- `build_start(repo, task, runtimeKind)` is the build-specific path and returns `BuildSessionBootstrap`, not `RuntimeInstanceSummary`; internally, the current host prepares the build worktree, ensures the selected repo-scoped runtime, validates that runtime for build bootstrap, and returns the runtime id plus the build worktree working directory.
 
-Role-to-scope requirements come from `runtimeRequiredScopesByRole` in `packages/contracts/src/agent-runtime-schemas.ts`, while launch-action start-mode compatibility comes from `SESSION_LAUNCH_ACTIONS` in `packages/frontend/src/features/session-start/session-start-launch-options.ts`.
+Role-to-scope requirements come from `runtimeRequiredScopesByRole` in `packages/contracts/src/agent-runtime-schemas.ts`, while launch-action start-mode compatibility is exported through `SESSION_LAUNCH_ACTIONS` in `packages/frontend/src/features/session-start/session-start-launch-options.ts` and sourced from `packages/frontend/src/lib/session-launch-actions.ts`.
 
 For a new runtime, the build path works like this:
 
 - because integrated runtimes must include every required workflow scope, `workflow.supportedScopes` must already contain `build`, `task`, and `workspace`,
-- when full workflow scope coverage is present, the build orchestrator starts that runtime for build worktrees,
-- if the host does not know how to start that runtime yet, build startup returns an error instead of launching a different runtime.
+- when full workflow scope coverage is present, the build orchestrator ensures the selected runtime kind and uses the prepared build worktree as the Builder session working directory,
+- if the host registry does not know how to ensure that runtime kind or validate it for build bootstrap, build startup returns an error instead of launching a different runtime.
 
 ## Verification Checklist
 
@@ -375,12 +380,12 @@ Before you consider a new runtime integrated, verify all of the following.
 - TypeScript and Rust schemas agree on descriptor, route, run summary, and persisted session fields.
 - `selectedModel.runtimeKind` survives round-trip through the host store.
 
-### Desktop/runtime orchestration
+### Frontend/runtime orchestration
 
 - session hydration reloads history from the persisted runtime kind,
 - todo/model-catalog warmups use the session runtime kind,
 - event-driven todo refresh uses the session runtime kind,
-- diff and file-status requests route through the correct adapter.
+- runtime-owned diff and file-status requests, where implemented, are capability-gated and route through the correct adapter; host-owned git/worktree views use the intended working directory.
 
 ### Host/runtime orchestration
 
@@ -395,11 +400,19 @@ Before you consider a new runtime integrated, verify all of the following.
 From repo root:
 
 ```sh
+bun run --filter @openducktor/contracts typecheck
+bun run --filter @openducktor/contracts test
+bun run --filter @openducktor/core typecheck
+bun run --filter @openducktor/core test
+bun run --filter @openducktor/frontend typecheck
+bun run --filter @openducktor/frontend test
 bun run --filter @openducktor/desktop typecheck
 bun run --filter @openducktor/desktop test
 bun run lint
 bun run build
 ```
+
+Also run the focused typecheck/test commands for the new runtime adapter package. For example, OpenCode-focused checks use `bun run --filter @openducktor/adapters-opencode-sdk typecheck` and `bun run --filter @openducktor/adapters-opencode-sdk test`; a new runtime package should expose equivalent scripts.
 
 From `apps/desktop/src-tauri`:
 
@@ -445,7 +458,7 @@ Startup telemetry follows the same rule: `port` is optional in shared startup ev
 
 ### Transport model
 
-`RuntimeRoute` and request-scoped `RuntimeConnection` are transport-generic shared abstractions. Runtime-specific code may still require a particular transport such as `local_http`, but those constraints must stay inside the owning adapter or host path and fail explicitly for unsupported route or connection types.
+`RuntimeRoute` and request-scoped `RuntimeTransport`/connection data are transport-generic shared abstractions. Runtime-specific code may still require a particular transport such as `local_http`, but those constraints must stay inside the owning adapter or host path and fail explicitly for unsupported route or connection types.
 
 ### Capability interpretation
 
@@ -461,8 +474,9 @@ Start with these anchor references:
 - `packages/contracts/src/run-schemas.ts`
 - `packages/contracts/src/session-schemas.ts`
 - `packages/core/src/ports/agent-engine.ts`
-- `apps/desktop/src/state/agent-runtime-registry.ts`
-- `apps/desktop/src/state/operations/agent-orchestrator/runtime/runtime.ts`
+- `packages/frontend/src/state/agent-runtime-registry.ts`
+- `packages/frontend/src/lib/agent-runtime.ts`
+- `packages/frontend/src/state/operations/agent-orchestrator/runtime/runtime.ts`
 - `apps/desktop/src-tauri/src/commands/runtime.rs`
 - `apps/desktop/src-tauri/src/commands/build.rs`
 

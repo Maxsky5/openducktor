@@ -1,6 +1,8 @@
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import {
   type AgentSessionViewLifecyclePhase,
   deriveAgentSessionViewLifecycle,
@@ -17,6 +19,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type UseAgentChatSessionRuntimeDataArgs = {
   session: AgentSessionState | null;
+  runtimeDefinitions: RuntimeDescriptor[];
   repoReadinessState: SessionRepoReadinessState;
   readSessionModelCatalog: (
     repoPath: string,
@@ -38,6 +41,7 @@ export type AgentChatSessionRuntimeDataState = {
 
 export const useAgentChatSessionRuntimeData = ({
   session,
+  runtimeDefinitions,
   repoReadinessState,
   readSessionModelCatalog,
   readSessionTodos,
@@ -59,8 +63,14 @@ export const useAgentChatSessionRuntimeData = ({
     runtimeQueryInput !== null &&
     runtimeDataSupportError === null &&
     session?.status !== "starting";
+  const runtimeDefinition = session?.runtimeKind
+    ? findRuntimeDefinition(runtimeDefinitions, session.runtimeKind)
+    : null;
+  const supportsTodos = runtimeDefinition
+    ? runtimeSupportsCapability(runtimeDefinition, "optionalSurfaces.supportsTodos")
+    : false;
   const shouldHydrateTodos =
-    shouldHydrateRuntimeData && session !== null && session.todos.length === 0;
+    shouldHydrateRuntimeData && session !== null && session.todos.length === 0 && supportsTodos;
 
   const catalogQuery = useQuery({
     queryKey:

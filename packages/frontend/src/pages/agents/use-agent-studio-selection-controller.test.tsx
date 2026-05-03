@@ -4,6 +4,7 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
+  createDefaultRuntimeDefinitions,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -88,6 +89,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   ensureSessionReadyForView: async () => false,
   runtimeAttachmentSources: [],
   refreshRuntimeAttachmentSources: async () => {},
+  runtimeDefinitions: createDefaultRuntimeDefinitions(),
   readSessionModelCatalog: async () => emptyCatalog,
   readSessionTodos: async () => [],
   clearComposerInput: () => {},
