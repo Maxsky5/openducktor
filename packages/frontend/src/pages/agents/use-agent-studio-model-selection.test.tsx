@@ -594,6 +594,40 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
+  test("gives reusable prompt slash commands precedence over matching runtime triggers", async () => {
+    const loadSlashCommands = mock(async () => ({
+      commands: [
+        { id: "native-review", trigger: "review", title: "Runtime review", hints: [] },
+        { id: "native-compact", trigger: "compact", title: "Runtime compact", hints: [] },
+      ],
+    }));
+    const harness = createHookHarness(
+      createBaseProps({
+        reusablePrompts: [
+          {
+            id: "prompt-1",
+            name: "Review",
+            description: "Review context",
+            content: "Review this:",
+          },
+        ],
+        loadSlashCommands,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSlashCommandsLoading === false);
+
+      expect(harness.getLatest().slashCommands.map((command) => command.id)).toEqual([
+        "native-compact",
+        "reusable-prompt:prompt-1",
+      ]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps reusable prompt commands available when runtime lacks native slash commands", async () => {
     const runtimeWithoutSlashCommands: RuntimeDescriptor = {
       ...OPENCODE_RUNTIME_DESCRIPTOR,

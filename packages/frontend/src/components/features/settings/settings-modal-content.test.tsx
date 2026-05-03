@@ -99,11 +99,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -158,11 +160,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -183,11 +187,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -204,11 +210,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -226,11 +234,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -247,11 +257,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -271,11 +283,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 
@@ -295,11 +309,13 @@ describe("settings modal content", () => {
         repositorySection: "configuration",
         globalPromptRoleTab: "shared",
         repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
         isInteractionDisabled: false,
         controller,
         onRepositorySectionChange: () => {},
         onGlobalPromptRoleTabChange: () => {},
         onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
       }),
     );
 

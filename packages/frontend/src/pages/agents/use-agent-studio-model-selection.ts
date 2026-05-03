@@ -4,6 +4,7 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
+  AgentSlashCommand,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -80,6 +81,21 @@ type UseAgentStudioModelSelectionArgs = {
     workingDirectory: string,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
+};
+
+const mergeSlashCommands = (
+  runtimeSlashCommands: AgentSlashCommand[],
+  reusablePromptSlashCommands: AgentSlashCommand[],
+): AgentSlashCommand[] => {
+  const reusablePromptTriggers = new Set(
+    reusablePromptSlashCommands.map((command) => command.trigger.toLowerCase()),
+  );
+  return [
+    ...runtimeSlashCommands.filter(
+      (command) => !reusablePromptTriggers.has(command.trigger.toLowerCase()),
+    ),
+    ...reusablePromptSlashCommands,
+  ];
 };
 
 type AgentStudioModelSelectionState = {
@@ -460,7 +476,7 @@ export function useAgentStudioModelSelection({
     [runtimeSupportsSlashCommands, slashCommandCatalog?.commands],
   );
   const slashCommands = useMemo(
-    () => [...runtimeSlashCommands, ...reusablePromptSlashCommands],
+    () => mergeSlashCommands(runtimeSlashCommands, reusablePromptSlashCommands),
     [reusablePromptSlashCommands, runtimeSlashCommands],
   );
   const mergedSlashCommandCatalog = useMemo<AgentSlashCommandCatalog>(

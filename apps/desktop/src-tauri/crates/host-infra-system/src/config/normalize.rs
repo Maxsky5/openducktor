@@ -1,8 +1,8 @@
 use super::types::{
     default_branch_prefix, normalize_git_target_branch_value, AgentModelDefault, AutopilotActionId,
-    AutopilotRule, AutopilotSettings, ChatSettings, GitProviderConfig, GitProviderRepository,
-    GitTargetBranch, GlobalConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
-    RepoDevServerScript, RuntimeConfig, AUTOPILOT_EVENT_ORDER,
+    AutopilotRule, AutopilotSettings, GitProviderConfig, GitProviderRepository, GitTargetBranch,
+    GlobalConfig, HookSet, KanbanSettings, PromptOverrides, RepoConfig, RepoDevServerScript,
+    RuntimeConfig, AUTOPILOT_EVENT_ORDER,
 };
 use anyhow::{anyhow, Result};
 use host_domain::RuntimeRegistry;
@@ -78,9 +78,8 @@ fn is_valid_reusable_prompt_name(value: &str) -> bool {
         })
 }
 
-fn normalize_chat_settings(_config: &mut ChatSettings) {}
-
 fn normalize_reusable_prompts(config: &mut GlobalConfig) -> Result<()> {
+    let mut seen_ids = HashSet::new();
     let mut seen_names = HashSet::new();
     for prompt in &mut config.reusable_prompts {
         normalize_required_string(&mut prompt.id, "Reusable prompt id")?;
@@ -92,6 +91,10 @@ fn normalize_reusable_prompts(config: &mut GlobalConfig) -> Result<()> {
             return Err(anyhow!(
                 "Reusable prompt name must contain only letters, digits, dots, underscores, colons, or dashes."
             ));
+        }
+
+        if !seen_ids.insert(prompt.id.clone()) {
+            return Err(anyhow!("Duplicate reusable prompt id: {}", prompt.id));
         }
 
         let normalized_name = prompt.name.to_ascii_lowercase();
@@ -337,7 +340,6 @@ fn normalize_workspace_order(config: &mut GlobalConfig) {
 }
 
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) -> Result<()> {
-    normalize_chat_settings(&mut config.chat);
     normalize_reusable_prompts(config)?;
     normalize_kanban_settings(&mut config.kanban);
     normalize_autopilot_settings(&mut config.autopilot);

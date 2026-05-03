@@ -1,5 +1,10 @@
 import type { GitBranch, GitTargetBranch, ReusablePrompt, TaskCard } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentModelSelection,
+  AgentRole,
+  AgentUserMessagePart,
+} from "@openducktor/core";
 import { useCallback, useEffect, useState } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
@@ -235,10 +240,15 @@ export function useAgentStudioSessionActions({
         return false;
       }
 
-      const reusablePromptMessageParts = resolveReusablePromptDraftToUserMessageParts(
-        draft,
-        reusablePrompts,
-      );
+      let reusablePromptMessageParts: AgentUserMessagePart[] | null;
+      try {
+        reusablePromptMessageParts = resolveReusablePromptDraftToUserMessageParts(
+          draft,
+          reusablePrompts,
+        );
+      } catch {
+        return false;
+      }
 
       if ((draft.attachments ?? []).length > 0) {
         if (draftHasSlashCommandSegment(draft)) {

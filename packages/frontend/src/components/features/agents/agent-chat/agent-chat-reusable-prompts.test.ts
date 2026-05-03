@@ -75,6 +75,24 @@ describe("agent chat reusable prompts", () => {
     ).toThrow("Remove file references before sending a reusable prompt slash command.");
   });
 
+  test("rejects multiple slash commands with a clear message", () => {
+    expect(() =>
+      resolveReusablePromptDraftToUserMessageParts(
+        {
+          segments: [
+            createSlashCommandSegment(REUSABLE_PROMPT_COMMAND, "slash"),
+            createSlashCommandSegment(
+              { id: "compact", trigger: "compact", title: "compact", hints: [] },
+              "other-slash",
+            ),
+          ],
+          attachments: [],
+        },
+        [PROMPT],
+      ),
+    ).toThrow("Reusable prompt messages must contain exactly one slash command.");
+  });
+
   test("rejects placeholder-only prompts when arguments are empty", () => {
     const placeholderOnlyPrompt = { ...PROMPT, content: "$ARGUMENTS" };
 

@@ -23,13 +23,13 @@ type SettingsModalContentProps = {
   repositorySection: RepositorySectionId;
   globalPromptRoleTab: PromptRoleTabId;
   repoPromptRoleTab: PromptRoleTabId;
-  selectedReusablePromptId?: string | null;
+  selectedReusablePromptId: string | null;
   isInteractionDisabled: boolean;
   controller: SettingsModalController;
   onRepositorySectionChange: (next: RepositorySectionId) => void;
   onGlobalPromptRoleTabChange: (next: PromptRoleTabId) => void;
   onRepoPromptRoleTabChange: (next: PromptRoleTabId) => void;
-  onSelectedReusablePromptIdChange?: (next: string | null) => void;
+  onSelectedReusablePromptIdChange: (next: string | null) => void;
 };
 
 export function SettingsModalContent({

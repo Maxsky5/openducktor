@@ -61,7 +61,7 @@ export const resolveReusablePromptDraftToUserMessageParts = (
     return null;
   }
   if (slashSegments.length !== 1) {
-    throw new Error("Reusable prompt sends support exactly one slash command.");
+    throw new Error("Reusable prompt messages must contain exactly one slash command.");
   }
   if ((normalizedDraft.attachments ?? []).length > 0) {
     throw new Error("Remove attachments before sending a reusable prompt slash command.");
@@ -87,7 +87,7 @@ export const resolveReusablePromptDraftToUserMessageParts = (
       throw new Error("Remove file references before sending a reusable prompt slash command.");
     }
     if (segment.kind === "slash_command") {
-      throw new Error("Reusable prompt sends support exactly one slash command.");
+      throw new Error("Reusable prompt messages must contain exactly one slash command.");
     }
     trailingTextParts.push(segment.text);
   }

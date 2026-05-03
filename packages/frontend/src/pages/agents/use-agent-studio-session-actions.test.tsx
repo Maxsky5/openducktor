@@ -460,6 +460,34 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
+  test("onSend returns false when a reusable prompt command is stale", async () => {
+    const sendAgentMessage = mock(async () => {});
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("", "text-before"),
+        createSlashCommandSegment(REUSABLE_PROMPT_COMMAND, "slash-1"),
+        createTextSegment(" src/foo.ts ", "text-after"),
+      ],
+      attachments: [],
+    };
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({ externalSessionId: "session-existing" }),
+      reusablePrompts: [],
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(draft)).resolves.toBe(false);
+    });
+
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
   test("onSend allows file-reference-only drafts without relying on serialized text", async () => {
     const sendAgentMessage = mock(async () => {});
     const draft: AgentChatComposerDraft = {

@@ -70,8 +70,25 @@ export type ReusablePrompt = z.infer<typeof reusablePromptSchema>;
 export const reusablePromptsSchema = z
   .array(reusablePromptSchema)
   .superRefine((prompts, context) => {
+    const seenIds = new Map<string, number>();
     const seenNames = new Map<string, number>();
     for (const [index, prompt] of prompts.entries()) {
+      const firstIdIndex = seenIds.get(prompt.id);
+      if (firstIdIndex !== undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate reusable prompt id: ${prompt.id}`,
+          path: [index, "id"],
+        });
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate reusable prompt id: ${prompt.id}`,
+          path: [firstIdIndex, "id"],
+        });
+      } else {
+        seenIds.set(prompt.id, index);
+      }
+
       const normalizedName = prompt.name.toLowerCase();
       const firstIndex = seenNames.get(normalizedName);
       if (firstIndex !== undefined) {
@@ -85,8 +102,9 @@ export const reusablePromptsSchema = z
           message: `Duplicate reusable prompt name: ${prompt.name}`,
           path: [firstIndex, "name"],
         });
+      } else {
+        seenNames.set(normalizedName, index);
       }
-      seenNames.set(normalizedName, index);
     }
   })
   .default([]);

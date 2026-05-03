@@ -163,6 +163,34 @@ describe("config-schemas", () => {
     ).toThrow("Duplicate reusable prompt name: Review");
   });
 
+  test("reports duplicate reusable prompt names against the first occurrence", () => {
+    const result = reusablePromptsSchema.safeParse([
+      { id: "prompt-1", name: "review", description: "", content: "Body" },
+      { id: "prompt-2", name: " Review ", description: "", content: "Body" },
+      { id: "prompt-3", name: "REVIEW", description: "", content: "Body" },
+    ]);
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error("duplicate names should fail validation");
+    }
+    expect(result.error.issues.map((issue) => issue.path.join("."))).toEqual([
+      "1.name",
+      "0.name",
+      "2.name",
+      "0.name",
+    ]);
+  });
+
+  test("rejects duplicate reusable prompt ids", () => {
+    expect(() =>
+      reusablePromptsSchema.parse([
+        { id: "prompt-1", name: "review", description: "", content: "Body" },
+        { id: " prompt-1 ", name: "summarize", description: "", content: "Body" },
+      ]),
+    ).toThrow("Duplicate reusable prompt id: prompt-1");
+  });
+
   test("defaults missing kanban empty-column display to show", () => {
     const parsed = kanbanSettingsSchema.parse({ doneVisibleDays: 4 });
 

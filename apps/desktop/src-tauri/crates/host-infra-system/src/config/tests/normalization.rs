@@ -46,6 +46,38 @@ fn save_trims_and_preserves_reusable_prompts() {
 }
 
 #[test]
+fn save_rejects_duplicate_reusable_prompt_ids() {
+    let harness = TestStoreHarness::new("reusable-prompts-duplicate-id");
+    let store = harness.store();
+    let config = GlobalConfig {
+        reusable_prompts: vec![
+            ReusablePrompt {
+                id: "prompt-1".to_string(),
+                name: "review".to_string(),
+                description: String::new(),
+                content: "Review this.".to_string(),
+            },
+            ReusablePrompt {
+                id: " prompt-1 ".to_string(),
+                name: "summarize".to_string(),
+                description: String::new(),
+                content: "Summarize this.".to_string(),
+            },
+        ],
+        ..GlobalConfig::default()
+    };
+
+    let error = store
+        .save(&config)
+        .expect_err("duplicate reusable prompt ids should fail");
+    let error_chain = format!("{error:#}");
+    assert!(
+        error_chain.contains("Duplicate reusable prompt id: prompt-1"),
+        "error should identify duplicate prompt id: {error_chain}"
+    );
+}
+
+#[test]
 fn load_rejects_invalid_reusable_prompts() {
     let harness = TestStoreHarness::new("reusable-prompts-invalid");
     let store = harness.store();
