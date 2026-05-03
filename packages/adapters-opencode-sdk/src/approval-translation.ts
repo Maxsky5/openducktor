@@ -2,90 +2,14 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeApprovalReplyOutcome,
 } from "@openducktor/contracts";
-import {
-  type AgentApprovalMutation,
-  type AgentPendingApprovalRequest,
-  isOdtWorkflowMutationToolName,
-  normalizeOdtWorkflowToolName,
-} from "@openducktor/core";
+import { type AgentPendingApprovalRequest, classifyAgentApprovalMutation } from "@openducktor/core";
 
 type UnknownRecord = Record<string, unknown>;
 type OpenCodePermissionReply = "once" | "always" | "reject";
 
 const OPENCODE_APPROVAL_OUTCOMES = ["approve_once", "approve_session", "reject"] as const;
-
-const MUTATING_HINTS = [
-  "write",
-  "edit",
-  "patch",
-  "delete",
-  "rename",
-  "move",
-  "mkdir",
-  "create",
-  "chmod",
-  "chown",
-  "truncate",
-];
-
-const MUTATING_TOOL_NAMES = new Set([
-  "edit",
-  "write",
-  "create",
-  "delete",
-  "multiedit",
-  "apply_patch",
-  "str_replace",
-  "build_blocked",
-  "build_resumed",
-  "build_completed",
-]);
-
-const SAFE_READ_TOOL_NAMES = new Set([
-  "read",
-  "view",
-  "cat",
-  "list",
-  "ls",
-  "glob",
-  "grep",
-  "find",
-  "search",
-]);
-
-const SHELL_PERMISSION_HINTS = ["bash", "shell", "exec", "command"];
 const OPENCODE_ODT_WORKFLOW_TOOL_ALIASES =
   OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical;
-
-const MUTATING_SHELL_PATTERNS = [
-  /\b(rm|mv|cp|mkdir|rmdir|touch|chmod|chown|truncate)\b/,
-  /\b(git\s+(add|commit|push|pull|merge|rebase|checkout|switch|reset|clean|stash))\b/,
-  /\b(sed\s+-i|perl\s+-i)\b/,
-  />\s*[^=]/,
-  />>/,
-  /\btee\b/,
-];
-
-const SAFE_READ_SHELL_PATTERNS = [
-  /^cat\b/,
-  /^sed\s+-n\b/,
-  /^head\b/,
-  /^tail\b/,
-  /^less\b/,
-  /^more\b/,
-  /^ls\b/,
-  /^rg\b/,
-  /^grep\b/,
-  /^find\b/,
-  /^git\s+(status|show|log|diff)\b/,
-  /^pwd\b/,
-  /^wc\b/,
-  /^stat\b/,
-  /^readlink\b/,
-  /^test\b/,
-  /^echo\b/,
-  /^printf\b/,
-];
 
 const asRecord = (value: unknown): UnknownRecord | null => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -112,194 +36,9 @@ const readStringArray = (record: UnknownRecord, key: string): string[] => {
   return value.filter((entry): entry is string => typeof entry === "string");
 };
 
-const toLower = (value: unknown): string => (typeof value === "string" ? value.toLowerCase() : "");
-
-const hasMutatingHint = (value: string): boolean =>
-  MUTATING_HINTS.some((hint) => value.includes(hint));
-
-const isReadOnlyShellSegment = (value: string): boolean => {
-  const segment = value.trim();
-  if (segment.length === 0) {
-    return false;
-  }
-  return SAFE_READ_SHELL_PATTERNS.some((pattern) => pattern.test(segment));
-};
-
-const splitShellCommandSegments = (command: string): string[] | null => {
-  const segments: string[] = [];
-  let segment = "";
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let escaped = false;
-
-  const pushSegment = (): void => {
-    const trimmed = segment.trim();
-    if (trimmed.length > 0) {
-      segments.push(trimmed);
-    }
-    segment = "";
-  };
-
-  for (let index = 0; index < command.length; index += 1) {
-    const character = command[index];
-
-    if (escaped) {
-      segment += character;
-      escaped = false;
-      continue;
-    }
-
-    if (character === "\\") {
-      segment += character;
-      escaped = true;
-      continue;
-    }
-
-    if (inSingleQuote) {
-      segment += character;
-      if (character === "'") {
-        inSingleQuote = false;
-      }
-      continue;
-    }
-
-    if (inDoubleQuote) {
-      segment += character;
-      if (character === '"') {
-        inDoubleQuote = false;
-      }
-      continue;
-    }
-
-    if (character === "'") {
-      segment += character;
-      inSingleQuote = true;
-      continue;
-    }
-
-    if (character === '"') {
-      segment += character;
-      inDoubleQuote = true;
-      continue;
-    }
-
-    if (character === "&" && command[index + 1] === "&") {
-      pushSegment();
-      index += 1;
-      continue;
-    }
-
-    if (character === "|" && command[index + 1] === "|") {
-      pushSegment();
-      index += 1;
-      continue;
-    }
-
-    if (character === ";" || character === "\n") {
-      pushSegment();
-      continue;
-    }
-
-    segment += character;
-  }
-
-  if (escaped || inSingleQuote || inDoubleQuote) {
-    return null;
-  }
-
-  pushSegment();
-  return segments;
-};
-
-const isReadOnlyShellCommand = (command: string): boolean => {
-  const normalized = command.trim().toLowerCase();
-  if (normalized.length === 0) {
-    return false;
-  }
-  if (MUTATING_SHELL_PATTERNS.some((pattern) => pattern.test(normalized))) {
-    return false;
-  }
-
-  const segments = splitShellCommandSegments(normalized);
-  if (!segments) {
-    return false;
-  }
-
-  return segments.length > 0 && segments.every((segment) => isReadOnlyShellSegment(segment));
-};
-
-const classifyOpenCodeToolName = (toolName: string): AgentApprovalMutation | null => {
-  const trimmedToolName = toolName.trim();
-  if (trimmedToolName.length === 0) {
-    return null;
-  }
-
-  if (isOdtWorkflowMutationToolName(trimmedToolName, OPENCODE_ODT_WORKFLOW_TOOL_ALIASES)) {
-    return "mutating";
-  }
-  if (normalizeOdtWorkflowToolName(trimmedToolName, OPENCODE_ODT_WORKFLOW_TOOL_ALIASES)) {
-    return "read_only";
-  }
-
-  const lowerToolName = trimmedToolName.toLowerCase();
-  if (MUTATING_TOOL_NAMES.has(lowerToolName) || hasMutatingHint(lowerToolName)) {
-    return "mutating";
-  }
-  if (SAFE_READ_TOOL_NAMES.has(lowerToolName)) {
-    return "read_only";
-  }
-
-  return null;
-};
-
-const classifyOpenCodeApprovalMutation = (
-  permission: string,
-  patterns: string[],
-  metadata?: UnknownRecord,
-): AgentApprovalMutation => {
-  const permissionLower = permission.trim().toLowerCase();
-  const permissionToolMutation = classifyOpenCodeToolName(permission);
-  if (permissionToolMutation) {
-    return permissionToolMutation;
-  }
-
-  if (hasMutatingHint(permissionLower)) {
-    return "mutating";
-  }
-
-  const metadataTool = typeof metadata?.tool === "string" ? metadata.tool : undefined;
-  const metadataToolMutation = metadataTool ? classifyOpenCodeToolName(metadataTool) : null;
-  if (metadataToolMutation) {
-    return metadataToolMutation;
-  }
-
-  const lowerPatterns = patterns.map((pattern) => pattern.toLowerCase());
-  if (lowerPatterns.some((pattern) => hasMutatingHint(pattern))) {
-    return "mutating";
-  }
-
-  const shellPermission =
-    SHELL_PERMISSION_HINTS.some((hint) => permissionLower.includes(hint)) ||
-    lowerPatterns.some((pattern) =>
-      SHELL_PERMISSION_HINTS.some((hint) => pattern.includes(hint)),
-    ) ||
-    (metadataTool
-      ? SHELL_PERMISSION_HINTS.some((hint) => metadataTool.toLowerCase().includes(hint))
-      : false);
-  const commandLower = toLower(metadata?.command);
-
-  if (commandLower.length === 0) {
-    return "unknown";
-  }
-  if (isReadOnlyShellCommand(commandLower)) {
-    return "read_only";
-  }
-  if (!shellPermission) {
-    return MUTATING_SHELL_PATTERNS.some((pattern) => pattern.test(commandLower))
-      ? "mutating"
-      : "unknown";
-  }
-  return "mutating";
+const readOptionalString = (record: UnknownRecord | undefined, key: string): string | undefined => {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 };
 
 export type ParsedOpenCodePermissionRequest = {
@@ -337,14 +76,13 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
   patterns,
   metadata,
 }: ParsedOpenCodePermissionRequest): AgentPendingApprovalRequest => {
-  const toolName = typeof metadata?.tool === "string" ? metadata.tool : undefined;
-  const command = typeof metadata?.command === "string" ? metadata.command : undefined;
+  const toolName = readOptionalString(metadata, "tool");
+  const command = readOptionalString(metadata, "command");
   const title = toolName
     ? `Approve runtime tool: ${toolName}`
     : `Approve permission: ${permission}`;
   const summary = `OpenCode requested approval for ${permission}.`;
-  const workingDirectory =
-    typeof metadata?.workingDirectory === "string" ? metadata.workingDirectory : undefined;
+  const workingDirectory = readOptionalString(metadata, "workingDirectory");
 
   return {
     requestId,
@@ -355,7 +93,13 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
     ...(command ? { command: { command, ...(workingDirectory ? { workingDirectory } : {}) } } : {}),
     action: { name: permission },
     ...(toolName ? { tool: { name: toolName } } : {}),
-    mutation: classifyOpenCodeApprovalMutation(permission, patterns, metadata),
+    mutation: classifyAgentApprovalMutation({
+      actionName: permission,
+      toolName,
+      affectedPaths: patterns,
+      command,
+      workflowToolAliasesByCanonical: OPENCODE_ODT_WORKFLOW_TOOL_ALIASES,
+    }),
     supportedReplyOutcomes: [...OPENCODE_APPROVAL_OUTCOMES],
     metadata: {
       opencode: {

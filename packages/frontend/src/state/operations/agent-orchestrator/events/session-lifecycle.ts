@@ -1,5 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
-import { buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
+import { buildReadOnlyPermissionRejectionMessage, isReadOnlyAgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { AgentApprovalRequest, AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
@@ -8,7 +8,6 @@ import {
   toAssistantMessageMeta,
   toSessionContextUsage,
 } from "../support/assistant-meta";
-import { READ_ONLY_ROLES } from "../support/core";
 import {
   appendSessionMessage,
   findLastSessionMessageByRole,
@@ -265,7 +264,7 @@ const shouldAutoRejectApproval = (
   role: AgentRole | undefined,
   event: ApprovalRequiredEvent,
 ): boolean => {
-  if (role === undefined || !READ_ONLY_ROLES.has(role) || event.mutation !== "mutating") {
+  if (role === undefined || !isReadOnlyAgentRole(role) || event.mutation !== "mutating") {
     return false;
   }
 
