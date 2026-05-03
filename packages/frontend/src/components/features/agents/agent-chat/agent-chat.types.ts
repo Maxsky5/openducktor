@@ -1,3 +1,4 @@
+import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -43,7 +44,7 @@ export type AgentChatThreadModel = {
   isStarting: boolean;
   isSending: boolean;
   sessionAgentColors: Record<string, string>;
-  subagentPendingPermissionsByExternalSessionId?: AgentSessionState["subagentPendingPermissionsByExternalSessionId"];
+  subagentPendingApprovalsByExternalSessionId?: AgentSessionState["subagentPendingApprovalsByExternalSessionId"];
   subagentPendingPermissionCountByExternalSessionId?: Record<string, number>;
   subagentPendingQuestionsByExternalSessionId?: AgentSessionState["subagentPendingQuestionsByExternalSessionId"];
   subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
@@ -51,9 +52,9 @@ export type AgentChatThreadModel = {
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   canReplyToPermissions: boolean;
-  isSubmittingPermissionByRequestId: Record<string, boolean>;
-  permissionReplyErrorByRequestId: Record<string, string>;
-  onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
+  isSubmittingApprovalByRequestId: Record<string, boolean>;
+  approvalReplyErrorByRequestId: Record<string, string>;
+  onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
   sessionRuntimeDataError: string | null;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;

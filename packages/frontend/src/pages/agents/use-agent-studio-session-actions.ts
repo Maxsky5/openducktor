@@ -57,7 +57,7 @@ export type AgentSessionActionState = Pick<
   | "status"
   | "selectedModel"
   | "isLoadingModelCatalog"
-  | "pendingPermissions"
+  | "pendingApprovals"
   | "pendingQuestions"
   | "modelCatalog"
   | "runtimeKind"
@@ -156,7 +156,7 @@ export function useAgentStudioSessionActions({
   const activeSessionStatus = activeSession?.status ?? "stopped";
   const activeSessionSelectedModel = activeSession?.selectedModel ?? null;
   const activeSessionIsLoadingModelCatalog = activeSession?.isLoadingModelCatalog === true;
-  const activeSessionPendingPermissions = activeSession?.pendingPermissions ?? [];
+  const activeSessionPendingApprovals = activeSession?.pendingApprovals ?? [];
   const activeSessionPendingQuestions = activeSession?.pendingQuestions ?? [];
   const activeSessionRuntimeKind = activeSession?.runtimeKind ?? null;
   const activeSessionRuntimeDescriptor = activeSession?.modelCatalog?.runtime ?? null;
@@ -174,7 +174,7 @@ export function useAgentStudioSessionActions({
   const isWaitingInput =
     hasActiveSession &&
     isAgentSessionWaitingInput({
-      pendingPermissions: activeSessionPendingPermissions,
+      pendingApprovals: activeSessionPendingApprovals,
       pendingQuestions: activeSessionPendingQuestions,
     });
   const selectedRuntimeKind =

@@ -40,7 +40,7 @@ export type SessionCreateOption = {
 };
 
 export type AgentSessionWorkflowSummary = AgentSessionOptionSummary &
-  Pick<AgentSessionSummary, "taskId" | "pendingPermissions" | "pendingQuestions">;
+  Pick<AgentSessionSummary, "taskId" | "pendingApprovals" | "pendingQuestions">;
 
 type WorkflowSessionSummary = AgentSessionWorkflowSummary & {
   role: AgentRole;
@@ -66,7 +66,7 @@ type RoleSessionSummary = {
 type TaskAttentionState = "none" | "blocked_needs_input";
 
 const toLiveSessionState = (session: AgentSessionWorkflowSummary): AgentWorkflowStepLiveSession => {
-  if (session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0) {
+  if (session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0) {
     return "waiting_input";
   }
   if (session.status === "starting" || session.status === "running") {
@@ -507,7 +507,7 @@ const getTabStatusFromSession = (
   if (!session) {
     return "idle";
   }
-  if (session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0) {
+  if (session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0) {
     return "waiting_input";
   }
   if (session.status === "starting" || session.status === "running") {

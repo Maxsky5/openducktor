@@ -238,7 +238,7 @@ export const getRuntimeDescriptorCapabilityConfigErrors = (
   }
 
   if (!runtimeDescriptor.capabilities.approvals.readOnlyAutoRejectSafe) {
-    errors.push("[workflow] read-only roles must auto-reject mutating permission requests");
+    errors.push("[workflow] read-only roles must auto-reject mutating approval requests");
   }
 
   if (missingWorkflowScopes.length > 0) {

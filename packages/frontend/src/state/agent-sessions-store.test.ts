@@ -54,7 +54,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       externalSessionId: "session-1",
       taskId: "task-1",
       status: "running",
-      pendingPermissions: [],
+      pendingApprovals: [],
     });
 
     store.setSessionsById({ [session.externalSessionId]: session });
@@ -62,7 +62,22 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const initialSnapshot = store.getActivitySessionsSnapshot();
     const updatedSession = {
       ...session,
-      pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["**/*"] }],
+      pendingApprovals: [
+        {
+          requestId: "perm-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["**/*"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
     };
 
     store.setSessionsById({ [updatedSession.externalSessionId]: updatedSession });
@@ -71,7 +86,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
     expect(nextSnapshot).not.toBe(initialSnapshot);
     expect(nextSnapshot[0]).toMatchObject({
       externalSessionId: "session-1",
-      hasPendingPermissions: true,
+      hasPendingApprovals: true,
       hasPendingQuestions: false,
     });
   });

@@ -1,52 +1,57 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred, TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
-import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
-import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
+import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
+import { useAgentSessionApprovalActions } from "./use-agent-session-permission-actions";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-type HookArgs = Parameters<typeof useAgentSessionPermissionActions>[0];
+type HookArgs = Parameters<typeof useAgentSessionApprovalActions>[0];
 
 const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentSessionPermissionActions, initialProps);
+  createSharedHookHarness(useAgentSessionApprovalActions, initialProps);
 
-const createPermissionRequest = (requestId: string): AgentPermissionRequest => ({
+const createPermissionRequest = (requestId: string): AgentApprovalRequest => ({
   requestId,
-  permission: "shell",
-  patterns: ["*"],
+  requestType: "permission_grant",
+  title: "Approve permission: shell",
+  summary: "Approval request for shell.",
+  affectedPaths: ["*"],
+  action: { name: "shell" },
+  mutation: "mutating",
+  supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
 });
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeExternalSessionId: TEST_EXTERNAL_SESSION_IDS.default,
-  pendingPermissions: [createPermissionRequest("req-1")],
+  pendingApprovals: [createPermissionRequest("req-1")],
   agentStudioReady: true,
-  replyAgentPermission: async () => {},
+  replyAgentApproval: async () => {},
   ...overrides,
 });
 
-describe("useAgentSessionPermissionActions", () => {
+describe("useAgentSessionApprovalActions", () => {
   test("does nothing when session is missing or studio is not ready", async () => {
-    const replyAgentPermission = mock(async () => {});
-    const base = createBaseArgs({ replyAgentPermission });
+    const replyAgentApproval = mock(async () => {});
+    const base = createBaseArgs({ replyAgentApproval });
     const harness = createHookHarness({ ...base, activeExternalSessionId: null });
 
     try {
       await harness.mount();
       await harness.run(async (state) => {
-        await state.onReplyPermission("req-1", "once");
+        await state.onReplyApproval("req-1", "approve_once");
       });
 
       await harness.update({ ...base, agentStudioReady: false });
       await harness.run(async (state) => {
-        await state.onReplyPermission("req-1", "always");
+        await state.onReplyApproval("req-1", "approve_session");
       });
 
-      expect(replyAgentPermission).not.toHaveBeenCalled();
-      expect(harness.getLatest().isSubmittingPermissionByRequestId).toEqual({});
-      expect(harness.getLatest().permissionReplyErrorByRequestId).toEqual({});
+      expect(replyAgentApproval).not.toHaveBeenCalled();
+      expect(harness.getLatest().isSubmittingApprovalByRequestId).toEqual({});
+      expect(harness.getLatest().approvalReplyErrorByRequestId).toEqual({});
     } finally {
       await harness.unmount();
     }
@@ -54,21 +59,21 @@ describe("useAgentSessionPermissionActions", () => {
 
   test("tracks submitting state while sending a permission reply", async () => {
     const deferredReply = createDeferred<void>();
-    const replyAgentPermission = mock(async () => deferredReply.promise);
-    const harness = createHookHarness(createBaseArgs({ replyAgentPermission }));
+    const replyAgentApproval = mock(async () => deferredReply.promise);
+    const harness = createHookHarness(createBaseArgs({ replyAgentApproval }));
 
     try {
       await harness.mount();
 
       await harness.run((state) => {
-        void state.onReplyPermission("req-1", "once");
+        void state.onReplyApproval("req-1", "approve_once");
       });
 
-      await harness.waitFor((state) => state.isSubmittingPermissionByRequestId["req-1"] === true);
-      expect(replyAgentPermission).toHaveBeenCalledWith(
+      await harness.waitFor((state) => state.isSubmittingApprovalByRequestId["req-1"] === true);
+      expect(replyAgentApproval).toHaveBeenCalledWith(
         TEST_EXTERNAL_SESSION_IDS.default,
         "req-1",
-        "once",
+        "approve_once",
       );
 
       await harness.run(async () => {
@@ -76,8 +81,8 @@ describe("useAgentSessionPermissionActions", () => {
         await deferredReply.promise;
       });
 
-      await harness.waitFor((state) => state.isSubmittingPermissionByRequestId["req-1"] !== true);
-      expect(harness.getLatest().permissionReplyErrorByRequestId["req-1"]).toBeUndefined();
+      await harness.waitFor((state) => state.isSubmittingApprovalByRequestId["req-1"] !== true);
+      expect(harness.getLatest().approvalReplyErrorByRequestId["req-1"]).toBeUndefined();
     } finally {
       deferredReply.resolve(undefined);
       await harness.unmount();
@@ -85,45 +90,43 @@ describe("useAgentSessionPermissionActions", () => {
   });
 
   test("stores the thrown Error message when replying fails", async () => {
-    const replyAgentPermission = mock(async () => {
+    const replyAgentApproval = mock(async () => {
       throw new Error("permission denied");
     });
-    const harness = createHookHarness(createBaseArgs({ replyAgentPermission }));
+    const harness = createHookHarness(createBaseArgs({ replyAgentApproval }));
 
     try {
       await harness.mount();
       await harness.run(async (state) => {
-        await state.onReplyPermission("req-1", "reject");
+        await state.onReplyApproval("req-1", "reject");
       });
 
-      expect(replyAgentPermission).toHaveBeenCalledWith(
+      expect(replyAgentApproval).toHaveBeenCalledWith(
         TEST_EXTERNAL_SESSION_IDS.default,
         "req-1",
         "reject",
       );
-      expect(harness.getLatest().permissionReplyErrorByRequestId["req-1"]).toBe(
-        "permission denied",
-      );
-      expect(harness.getLatest().isSubmittingPermissionByRequestId["req-1"]).toBeUndefined();
+      expect(harness.getLatest().approvalReplyErrorByRequestId["req-1"]).toBe("permission denied");
+      expect(harness.getLatest().isSubmittingApprovalByRequestId["req-1"]).toBeUndefined();
     } finally {
       await harness.unmount();
     }
   });
 
   test("uses fallback error text for non-Error failures", async () => {
-    const replyAgentPermission = mock(async () => {
+    const replyAgentApproval = mock(async () => {
       throw { code: "E_PERMISSION" };
     });
-    const harness = createHookHarness(createBaseArgs({ replyAgentPermission }));
+    const harness = createHookHarness(createBaseArgs({ replyAgentApproval }));
 
     try {
       await harness.mount();
       await harness.run(async (state) => {
-        await state.onReplyPermission("req-1", "always");
+        await state.onReplyApproval("req-1", "approve_session");
       });
 
-      expect(harness.getLatest().permissionReplyErrorByRequestId["req-1"]).toBe(
-        "Failed to reply to permission request.",
+      expect(harness.getLatest().approvalReplyErrorByRequestId["req-1"]).toBe(
+        "Failed to reply to approval request.",
       );
     } finally {
       await harness.unmount();
@@ -131,50 +134,48 @@ describe("useAgentSessionPermissionActions", () => {
   });
 
   test("prunes stale request state when pending permissions change", async () => {
-    const replyAgentPermission = mock(async () => {
+    const replyAgentApproval = mock(async () => {
       throw new Error("stale request");
     });
-    const baseArgs = createBaseArgs({ replyAgentPermission });
+    const baseArgs = createBaseArgs({ replyAgentApproval });
     const harness = createHookHarness(baseArgs);
 
     try {
       await harness.mount();
       await harness.run(async (state) => {
-        await state.onReplyPermission("req-1", "reject");
+        await state.onReplyApproval("req-1", "reject");
       });
       await harness.waitFor(
-        (state) => typeof state.permissionReplyErrorByRequestId["req-1"] === "string",
+        (state) => typeof state.approvalReplyErrorByRequestId["req-1"] === "string",
       );
 
       await harness.update({
         ...baseArgs,
-        pendingPermissions: [createPermissionRequest("req-2")],
+        pendingApprovals: [createPermissionRequest("req-2")],
       });
 
-      await harness.waitFor(
-        (state) => state.permissionReplyErrorByRequestId["req-1"] === undefined,
-      );
-      expect(harness.getLatest().permissionReplyErrorByRequestId["req-2"]).toBeUndefined();
-      expect(harness.getLatest().isSubmittingPermissionByRequestId["req-1"]).toBeUndefined();
+      await harness.waitFor((state) => state.approvalReplyErrorByRequestId["req-1"] === undefined);
+      expect(harness.getLatest().approvalReplyErrorByRequestId["req-2"]).toBeUndefined();
+      expect(harness.getLatest().isSubmittingApprovalByRequestId["req-1"]).toBeUndefined();
     } finally {
       await harness.unmount();
     }
   });
 
   test("clears request state when the active session changes", async () => {
-    const replyAgentPermission = mock(async () => {
+    const replyAgentApproval = mock(async () => {
       throw new Error("session-bound failure");
     });
-    const baseArgs = createBaseArgs({ replyAgentPermission });
+    const baseArgs = createBaseArgs({ replyAgentApproval });
     const harness = createHookHarness(baseArgs);
 
     try {
       await harness.mount();
       await harness.run(async (state) => {
-        await state.onReplyPermission("req-1", "reject");
+        await state.onReplyApproval("req-1", "reject");
       });
       await harness.waitFor(
-        (state) => typeof state.permissionReplyErrorByRequestId["req-1"] === "string",
+        (state) => typeof state.approvalReplyErrorByRequestId["req-1"] === "string",
       );
 
       await harness.update({
@@ -184,8 +185,8 @@ describe("useAgentSessionPermissionActions", () => {
 
       await harness.waitFor(
         (state) =>
-          Object.keys(state.permissionReplyErrorByRequestId).length === 0 &&
-          Object.keys(state.isSubmittingPermissionByRequestId).length === 0,
+          Object.keys(state.approvalReplyErrorByRequestId).length === 0 &&
+          Object.keys(state.isSubmittingApprovalByRequestId).length === 0,
       );
     } finally {
       await harness.unmount();

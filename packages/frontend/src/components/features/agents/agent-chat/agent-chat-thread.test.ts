@@ -37,10 +37,10 @@ const buildBaseModel = () => ({
   canSubmitQuestionAnswers: true,
   isSubmittingQuestionByRequestId: {},
   canReplyToPermissions: true,
-  isSubmittingPermissionByRequestId: {},
-  permissionReplyErrorByRequestId: {},
+  isSubmittingApprovalByRequestId: {},
+  approvalReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},
-  onReplyPermission: async () => {},
+  onReplyApproval: async () => {},
   sessionRuntimeDataError: null,
   todoPanelCollapsed: false,
   onToggleTodoPanel: () => {},
@@ -155,7 +155,7 @@ const buildLongSession = (externalSessionId: string, count = 80) => {
     messages,
     status: "idle",
     pendingQuestions: [],
-    pendingPermissions: [],
+    pendingApprovals: [],
   });
 };
 
@@ -259,7 +259,7 @@ describe("AgentChatThread", () => {
             messages: [],
             draftAssistantText: "",
             pendingQuestions: [],
-            pendingPermissions: [],
+            pendingApprovals: [],
           }),
         },
       }),
@@ -283,7 +283,7 @@ describe("AgentChatThread", () => {
             ],
             draftAssistantText: "",
             pendingQuestions: [],
-            pendingPermissions: [],
+            pendingApprovals: [],
           }),
         },
       }),
@@ -302,7 +302,7 @@ describe("AgentChatThread", () => {
             status: "stopped",
             messages: [buildMessage("thinking", "Reasoning trace", { id: "thinking-1" })],
             pendingQuestions: [buildQuestionRequest()],
-            pendingPermissions: [buildPermissionRequest()],
+            pendingApprovals: [buildPermissionRequest()],
           }),
         },
       }),
@@ -310,7 +310,7 @@ describe("AgentChatThread", () => {
 
     expect(html).not.toContain("Loading session history...");
     expect(html).toContain("Input needed");
-    expect(html).toContain("Permission request");
+    expect(html).toContain("Approval required");
   });
 
   test("renders initializing state while autostart session is pending", () => {
@@ -460,17 +460,26 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Input needed");
   });
 
-  test("renders permission cards for pending permission requests", () => {
+  test("renders permission cards for pending approval requests", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
           session: buildSession({
-            pendingPermissions: [
+            pendingApprovals: [
               buildPermissionRequest({
                 requestId: "perm-1",
-                permission: "bash",
-                patterns: ["**/*.sh", "/tmp/*"],
+                requestType: "permission_grant" as const,
+                title: `Approve permission: ${"bash"}`,
+                summary: `Approval request for ${"bash"}.`,
+                affectedPaths: ["**/*.sh", "/tmp/*"],
+                action: { name: "bash" },
+                mutation: "read_only" as const,
+                supportedReplyOutcomes: [
+                  "approve_once" as const,
+                  "approve_session" as const,
+                  "reject" as const,
+                ],
               }),
             ],
           }),
@@ -478,11 +487,11 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Permission request");
+    expect(html).toContain("Approval required");
     expect(html).toContain("bash");
     expect(html).toContain("**/*.sh, /tmp/*");
-    expect(html).toContain("Allow Once");
-    expect(html).toContain("Always Allow");
+    expect(html).toContain("Approve once");
+    expect(html).toContain("Approve for session");
     expect(html).toContain("Reject");
   });
 
@@ -500,7 +509,7 @@ describe("AgentChatThread", () => {
           session: buildSession({
             messages: longMessages,
             pendingQuestions: [buildQuestionRequest()],
-            pendingPermissions: [buildPermissionRequest()],
+            pendingApprovals: [buildPermissionRequest()],
           }),
         },
       }),
@@ -508,7 +517,7 @@ describe("AgentChatThread", () => {
 
     expect(html).toContain("Message 80");
     expect(html).toContain("Input needed");
-    expect(html).toContain("Permission request");
+    expect(html).toContain("Approval required");
     expect(html).toContain("hide-scrollbar");
   });
 
@@ -519,7 +528,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             pendingQuestions: [buildQuestionRequest()],
-            pendingPermissions: [buildPermissionRequest()],
+            pendingApprovals: [buildPermissionRequest()],
             todos: [
               buildTodoItem({
                 id: "todo-1",
@@ -542,17 +551,17 @@ describe("AgentChatThread", () => {
     const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
 
     expect(scrollRegion?.textContent).not.toContain("Input needed");
-    expect(scrollRegion?.textContent).not.toContain("Permission request");
+    expect(scrollRegion?.textContent).not.toContain("Approval required");
     expect(scrollRegion?.textContent).not.toContain("Read layout and pages");
     expect(bottomStack?.textContent).toContain("Input needed");
-    expect(bottomStack?.textContent).toContain("Permission request");
+    expect(bottomStack?.textContent).toContain("Approval required");
     expect(bottomStack?.textContent).toContain("Todo");
     expect(bottomStack?.textContent).toContain("Analyze current styling");
     expect(bottomStack?.textContent).toContain("Read layout and pages");
     expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Input needed")).toBeLessThan(
-      (bottomStack as HTMLDivElement).innerHTML.indexOf("Permission request"),
+      (bottomStack as HTMLDivElement).innerHTML.indexOf("Approval required"),
     );
-    expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Permission request")).toBeLessThan(
+    expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Approval required")).toBeLessThan(
       (bottomStack as HTMLDivElement).innerHTML.indexOf("Todo"),
     );
 
@@ -655,7 +664,7 @@ describe("AgentChatThread", () => {
       externalSessionId,
       messages,
       pendingQuestions: [],
-      pendingPermissions: [],
+      pendingApprovals: [],
       status: "running",
     });
     const model = {
@@ -693,7 +702,7 @@ describe("AgentChatThread", () => {
             externalSessionId,
             messages,
             pendingQuestions: [],
-            pendingPermissions: [],
+            pendingApprovals: [],
             status: "idle",
           }),
         },
@@ -718,7 +727,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             pendingQuestions: [buildQuestionRequest()],
-            pendingPermissions: [],
+            pendingApprovals: [],
             todos: [],
           }),
         },
@@ -739,7 +748,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             pendingQuestions: [],
-            pendingPermissions: [buildPermissionRequest()],
+            pendingApprovals: [buildPermissionRequest()],
             todos: [],
           }),
         },
@@ -760,7 +769,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             pendingQuestions: [],
-            pendingPermissions: [],
+            pendingApprovals: [],
             todos: [],
             selectedModel: null,
           }),
@@ -789,7 +798,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           session: buildSession({
             pendingQuestions: [buildQuestionRequest()],
-            pendingPermissions: [],
+            pendingApprovals: [],
             todos: [
               buildTodoItem({
                 id: "todo-1",
@@ -839,7 +848,7 @@ describe("AgentChatThread", () => {
         }),
       ),
       pendingQuestions: [],
-      pendingPermissions: [],
+      pendingApprovals: [],
       status: "idle",
     });
 
@@ -1022,7 +1031,7 @@ describe("AgentChatThread", () => {
       syncBottomAfterComposerLayoutRef,
       session: buildSession({
         pendingQuestions: [],
-        pendingPermissions: [],
+        pendingApprovals: [],
         todos: [],
       }),
     };
@@ -1042,7 +1051,7 @@ describe("AgentChatThread", () => {
           session: buildSession({
             externalSessionId: model.session?.externalSessionId,
             pendingQuestions: [],
-            pendingPermissions: [],
+            pendingApprovals: [],
             todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
           }),
         },
@@ -1076,7 +1085,7 @@ describe("AgentChatThread", () => {
     } as { current: (() => void) | null };
     const session = buildSession({
       pendingQuestions: [],
-      pendingPermissions: [],
+      pendingApprovals: [],
       todos: [buildTodoItem({ content: "Keep transcript pinned", status: "in_progress" })],
     });
     const model = {

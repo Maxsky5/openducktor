@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import opencodeRuntimeDescriptorFixture from "../../../docs/contracts/opencode-runtime-descriptor.fixture.json";
 import runtimeDescriptorInvalidCasesFixture from "../../../docs/contracts/runtime-descriptor-invalid-cases.fixture.json";
 import {
-  agentSessionPermissionRequestSchema,
+  agentSessionApprovalRequestSchema,
   agentSessionRecordSchema,
   agentSessionStopTargetSchema,
   buildSessionBootstrapSchema,
@@ -1551,10 +1551,12 @@ describe("runtime schemas", () => {
     });
   });
 
-  test("agent session permission request accepts recursive metadata values", () => {
-    const parsed = agentSessionPermissionRequestSchema.parse({
+  test("agent session approval request accepts recursive metadata values", () => {
+    const parsed = agentSessionApprovalRequestSchema.parse({
       requestId: "perm-1",
-      permission: "exec",
+      requestType: "command_execution",
+      title: "Approve command",
+      command: { command: "bun test" },
       metadata: {
         command: "bun test",
         retryCount: 2,
@@ -1581,7 +1583,7 @@ describe("runtime schemas", () => {
       },
       targets: ["packages/core", { kind: "file", path: "src/index.ts" }, null],
     });
-    expect(parsed.patterns).toEqual([]);
+    expect(parsed.command).toEqual({ command: "bun test" });
   });
 
   test("repo config rejects missing runtime-bearing defaults", () => {

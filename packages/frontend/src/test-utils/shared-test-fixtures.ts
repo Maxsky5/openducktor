@@ -98,7 +98,7 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   draftReasoningText: "",
   draftReasoningMessageId: null,
   contextUsage: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: null,

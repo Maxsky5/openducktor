@@ -54,7 +54,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   draftAssistantMessageId: null,
   draftReasoningText: "",
   draftReasoningMessageId: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: null,
@@ -96,11 +96,20 @@ describe("use-kanban-board-model helpers", () => {
       createSession({
         externalSessionId: "session-idle",
         status: "idle",
-        pendingPermissions: [
+        pendingApprovals: [
           {
             requestId: "permission-2",
-            permission: "tool",
-            patterns: ["odt_build_completed"],
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"tool"}`,
+            summary: `Approval request for ${"tool"}.`,
+            affectedPaths: ["odt_build_completed"],
+            action: { name: "tool" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
           },
         ],
       }),
@@ -137,11 +146,20 @@ describe("use-kanban-board-model helpers", () => {
     const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
         taskId: "task-waiting",
-        pendingPermissions: [
+        pendingApprovals: [
           {
             requestId: "permission-1",
-            permission: "tool",
-            patterns: ["odt_read_task"],
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"tool"}`,
+            summary: `Approval request for ${"tool"}.`,
+            affectedPaths: ["odt_read_task"],
+            action: { name: "tool" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
           },
         ],
       }),
@@ -189,11 +207,20 @@ describe("use-kanban-board-model helpers", () => {
       createSession({
         taskId: "task-4-waiting",
         externalSessionId: "session-4",
-        pendingPermissions: [
+        pendingApprovals: [
           {
             requestId: "permission-1",
-            permission: "tool",
-            patterns: ["odt_read_task"],
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"tool"}`,
+            summary: `Approval request for ${"tool"}.`,
+            affectedPaths: ["odt_read_task"],
+            action: { name: "tool" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
           },
         ],
       }),

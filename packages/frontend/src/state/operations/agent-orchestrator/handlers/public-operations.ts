@@ -1,5 +1,6 @@
 import type {
   AgentSessionRecord,
+  RuntimeApprovalReplyOutcome,
   RuntimeInstanceSummary,
   RuntimeKind,
 } from "@openducktor/contracts";
@@ -32,10 +33,10 @@ type SessionActions = {
     externalSessionId: string,
     selection: AgentModelSelection | null,
   ) => void;
-  replyAgentPermission: (
+  replyAgentApproval: (
     externalSessionId: string,
     requestId: string,
-    reply: "once" | "always" | "reject",
+    outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ) => Promise<void>;
   answerAgentQuestion: (
@@ -164,6 +165,6 @@ export const createOrchestratorPublicOperations = ({
       sessionActions.stopAgentSession(externalSessionId),
     ),
   updateAgentSessionModel: sessionActions.updateAgentSessionModel,
-  replyAgentPermission: sessionActions.replyAgentPermission,
+  replyAgentApproval: sessionActions.replyAgentApproval,
   answerAgentQuestion: sessionActions.answerAgentQuestion,
 });

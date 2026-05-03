@@ -24,11 +24,11 @@ export type KanbanTaskSession = Pick<
 };
 
 const isKanbanSessionWaitingInput = (
-  session: Pick<AgentSessionSummary, "pendingPermissions" | "pendingQuestions">,
+  session: Pick<AgentSessionSummary, "pendingApprovals" | "pendingQuestions">,
 ): boolean => isAgentSessionWaitingInput(session);
 
 export const toKanbanSessionPresentationState = (
-  session: Pick<AgentSessionSummary, "pendingPermissions" | "pendingQuestions">,
+  session: Pick<AgentSessionSummary, "pendingApprovals" | "pendingQuestions">,
 ): KanbanSessionPresentationState =>
   isKanbanSessionWaitingInput(session) ? "waiting_input" : "active";
 

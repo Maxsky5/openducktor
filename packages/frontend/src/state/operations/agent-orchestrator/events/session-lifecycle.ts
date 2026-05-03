@@ -1,8 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { isMutatingPermission } from "../../permission-policy";
+import type { AgentApprovalRequest, AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import {
   finalizeDraftAssistantMessage,
@@ -16,7 +15,7 @@ import {
   upsertSessionMessage,
 } from "../support/messages";
 import { formatSubagentContent } from "../support/subagent-messages";
-import { clearSubagentPendingPermissionFromSessions } from "../support/subagent-permission-overlay";
+import { clearSubagentPendingApprovalFromSessions } from "../support/subagent-permission-overlay";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
   isStopAbortSessionErrorMessage,
@@ -50,16 +49,22 @@ const nextContextUsageWasEstablishedForMessage = (
   );
 };
 
-type PermissionRequiredEvent = Extract<SessionEvent, { type: "permission_required" }>;
+type ApprovalRequiredEvent = Extract<SessionEvent, { type: "approval_required" }>;
 type QuestionRequiredEvent = Extract<SessionEvent, { type: "question_required" }>;
 type AssistantMessageEvent = Extract<SessionEvent, { type: "assistant_message" }>;
 
-const toPendingPermission = (event: PermissionRequiredEvent) => ({
-  requestId: event.requestId,
-  permission: event.permission,
-  patterns: event.patterns,
-  ...(event.metadata ? { metadata: event.metadata } : {}),
-});
+const toPendingApproval = (event: ApprovalRequiredEvent): AgentApprovalRequest => {
+  const {
+    type: _type,
+    externalSessionId: _externalSessionId,
+    timestamp: _timestamp,
+    parentExternalSessionId: _parentExternalSessionId,
+    childExternalSessionId: _childExternalSessionId,
+    subagentCorrelationKey: _subagentCorrelationKey,
+    ...approval
+  } = event;
+  return approval;
+};
 
 const toPendingQuestion = (event: QuestionRequiredEvent) => ({
   requestId: event.requestId,
@@ -89,7 +94,7 @@ const resolveLocalSessionIdByExternalId = (
 
 const resolvePermissionPolicyRole = (
   context: Pick<SessionLifecycleEventContext, "store">,
-  event: PermissionRequiredEvent,
+  event: ApprovalRequiredEvent,
 ): AgentRole | undefined => {
   if (event.parentExternalSessionId) {
     const parentRole = context.store.sessionsRef.current[event.parentExternalSessionId]?.role;
@@ -103,7 +108,7 @@ const resolvePermissionPolicyRole = (
 
 const patchParentSubagentSessionLink = (
   context: SessionLifecycleEventContext,
-  event: PermissionRequiredEvent | QuestionRequiredEvent,
+  event: ApprovalRequiredEvent | QuestionRequiredEvent,
 ): void => {
   if (!event.parentExternalSessionId || !event.subagentCorrelationKey) {
     return;
@@ -149,7 +154,7 @@ const patchParentSubagentSessionLink = (
 
 const isLinkedChildPermissionObservedByParent = (
   context: Pick<SessionLifecycleEventContext, "store">,
-  event: PermissionRequiredEvent,
+  event: ApprovalRequiredEvent,
 ): boolean => {
   const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
   return Boolean(
@@ -173,7 +178,7 @@ const isLinkedChildQuestionObservedByParent = (
 
 const recordParentSubagentPendingPermission = (
   context: SessionLifecycleEventContext,
-  event: PermissionRequiredEvent,
+  event: ApprovalRequiredEvent,
 ): void => {
   if (!event.parentExternalSessionId) {
     return;
@@ -184,19 +189,19 @@ const recordParentSubagentPendingPermission = (
     return;
   }
 
-  const pendingPermission = toPendingPermission(event);
+  const pendingApproval = toPendingApproval(event);
   context.store.updateSession(
     event.parentExternalSessionId,
     (current) => {
-      const currentMap = current.subagentPendingPermissionsByExternalSessionId ?? {};
+      const currentMap = current.subagentPendingApprovalsByExternalSessionId ?? {};
       const currentEntries = currentMap[childExternalSessionId] ?? [];
       const nextEntries = [
         ...currentEntries.filter((entry) => entry.requestId !== event.requestId),
-        pendingPermission,
+        pendingApproval,
       ];
       return {
         ...current,
-        subagentPendingPermissionsByExternalSessionId: {
+        subagentPendingApprovalsByExternalSessionId: {
           ...currentMap,
           [childExternalSessionId]: nextEntries,
         },
@@ -255,20 +260,26 @@ const toUserMessageMeta = (event: Extract<SessionEvent, { type: "user_message" }
   };
 };
 
-const shouldAutoRejectPermission = (
+const shouldAutoRejectApproval = (
+  context: SessionLifecycleEventContext,
   role: AgentRole | undefined,
-  event: PermissionRequiredEvent,
+  event: ApprovalRequiredEvent,
 ): boolean => {
-  return (
-    role !== undefined &&
-    READ_ONLY_ROLES.has(role) &&
-    isMutatingPermission(event.permission, event.patterns, event.metadata)
-  );
+  if (role === undefined || !READ_ONLY_ROLES.has(role) || event.mutation !== "mutating") {
+    return false;
+  }
+
+  const session = context.store.sessionsRef.current[context.store.externalSessionId];
+  if (!session?.runtimeKind || !context.approvals.resolveRuntimeDefinition) {
+    return false;
+  }
+  const runtimeDefinition = context.approvals.resolveRuntimeDefinition(session.runtimeKind);
+  return runtimeDefinition?.capabilities.approvals.readOnlyAutoRejectSafe === true;
 };
 
-const isLinkedChildPermissionOwnedByAttachedListener = (
+const isLinkedChildApprovalOwnedByAttachedListener = (
   context: Pick<SessionLifecycleEventContext, "store">,
-  event: PermissionRequiredEvent,
+  event: ApprovalRequiredEvent,
 ): boolean => {
   const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
   if (!childExternalSessionId || !context.store.isSessionListenerAttached) {
@@ -282,14 +293,14 @@ const isLinkedChildPermissionOwnedByAttachedListener = (
   return localChildSessionId ? context.store.isSessionListenerAttached(localChildSessionId) : false;
 };
 
-const autoRejectMutatingPermission = (
+const autoRejectMutatingApproval = (
   context: SessionLifecycleEventContext,
-  event: PermissionRequiredEvent,
+  event: ApprovalRequiredEvent,
   role: AgentRole,
   replySessionId = context.store.externalSessionId,
   overlaySessionId = replySessionId,
 ): void => {
-  const pendingPermission = toPendingPermission(event);
+  const pendingApproval = toPendingApproval(event);
   const promptOverrides =
     context.store.sessionsRef.current[event.parentExternalSessionId ?? replySessionId]
       ?.promptOverrides;
@@ -298,14 +309,14 @@ const autoRejectMutatingPermission = (
       replySessionId,
       (current) => ({
         ...current,
-        pendingPermissions: [
-          ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
-          pendingPermission,
+        pendingApprovals: [
+          ...current.pendingApprovals.filter((entry) => entry.requestId !== event.requestId),
+          pendingApproval,
         ],
         messages: appendSessionMessage(current, {
           id: crypto.randomUUID(),
           role: "system",
-          content: `Automatic permission rejection failed: ${errorMessage(error)}. Manual response required.`,
+          content: `Automatic approval rejection failed: ${errorMessage(error)}. Manual response required.`,
           timestamp: event.timestamp,
         }),
       }),
@@ -325,11 +336,11 @@ const autoRejectMutatingPermission = (
     return;
   }
 
-  void context.permissions.adapter
-    .replyPermission({
+  void context.approvals.adapter
+    .replyApproval({
       externalSessionId: replySessionId,
       requestId: event.requestId,
-      reply: "reject",
+      outcome: "reject",
       message: rejectionMessage,
     })
     .then(() => {
@@ -337,19 +348,19 @@ const autoRejectMutatingPermission = (
         replySessionId,
         (current) => ({
           ...current,
-          pendingPermissions: current.pendingPermissions.filter(
+          pendingApprovals: current.pendingApprovals.filter(
             (entry) => entry.requestId !== event.requestId,
           ),
           messages: appendSessionMessage(current, {
             id: crypto.randomUUID(),
             role: "system",
-            content: `Auto-rejected mutating permission (${event.permission}) for ${role} session.`,
+            content: `Auto-rejected mutating approval (${event.title}) for ${role} session.`,
             timestamp: event.timestamp,
           }),
         }),
         { persist: true },
       );
-      clearSubagentPendingPermissionFromSessions({
+      clearSubagentPendingApprovalFromSessions({
         sessionsRef: context.store.sessionsRef,
         updateSession: context.store.updateSession,
         targetExternalSessionId: overlaySessionId,
@@ -544,18 +555,15 @@ export const handleSessionStatus = (
 
 export const handlePermissionRequired = (
   context: SessionLifecycleEventContext,
-  event: PermissionRequiredEvent,
+  event: ApprovalRequiredEvent,
 ): void => {
   flushDraftBuffers(context);
   const role = resolvePermissionPolicyRole(context, event);
 
   if (isLinkedChildPermissionObservedByParent(context, event)) {
     patchParentSubagentSessionLink(context, event);
-    const isOwnedByAttachedListener = isLinkedChildPermissionOwnedByAttachedListener(
-      context,
-      event,
-    );
-    if (isOwnedByAttachedListener && role && shouldAutoRejectPermission(role, event)) {
+    const isOwnedByAttachedListener = isLinkedChildApprovalOwnedByAttachedListener(context, event);
+    if (isOwnedByAttachedListener && shouldAutoRejectApproval(context, role, event)) {
       return;
     }
 
@@ -564,10 +572,10 @@ export const handlePermissionRequired = (
       return;
     }
 
-    if (role && shouldAutoRejectPermission(role, event)) {
+    if (role && shouldAutoRejectApproval(context, role, event)) {
       const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
       if (childExternalSessionId) {
-        autoRejectMutatingPermission(
+        autoRejectMutatingApproval(
           context,
           event,
           role,
@@ -579,10 +587,10 @@ export const handlePermissionRequired = (
     return;
   }
 
-  if (role && shouldAutoRejectPermission(role, event)) {
+  if (role && shouldAutoRejectApproval(context, role, event)) {
     patchParentSubagentSessionLink(context, event);
     recordParentSubagentPendingPermission(context, event);
-    autoRejectMutatingPermission(context, event, role);
+    autoRejectMutatingApproval(context, event, role);
     return;
   }
 
@@ -590,9 +598,9 @@ export const handlePermissionRequired = (
     context.store.externalSessionId,
     (current) => ({
       ...current,
-      pendingPermissions: [
-        ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
-        toPendingPermission(event),
+      pendingApprovals: [
+        ...current.pendingApprovals.filter((entry) => entry.requestId !== event.requestId),
+        toPendingApproval(event),
       ],
     }),
     { persist: true },
@@ -749,7 +757,7 @@ export const handleSessionError = (
         ...finalized,
         status: appendUserStoppedNotice ? "stopped" : "error",
         stopRequestedAt: null,
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [],
         messages: appendUserStoppedNotice
           ? settleTerminalMessages(finalized, event.timestamp, {
@@ -817,7 +825,7 @@ export const handleSessionFinished = (
               }
             : {}),
         }),
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [],
         status: "stopped",
         stopRequestedAt: null,

@@ -86,7 +86,7 @@ const SESSION_EVENT_BATCH_RULES: SessionEventBatchRules = {
     immediate: false,
     dedupeKey: () => "session_status",
   },
-  permission_required: {
+  approval_required: {
     immediate: true,
   },
   question_required: {
@@ -142,8 +142,8 @@ const withTypedSessionEvent = <T>(
       return callback(event, SESSION_EVENT_BATCH_RULES.user_message);
     case "session_status":
       return callback(event, SESSION_EVENT_BATCH_RULES.session_status);
-    case "permission_required":
-      return callback(event, SESSION_EVENT_BATCH_RULES.permission_required);
+    case "approval_required":
+      return callback(event, SESSION_EVENT_BATCH_RULES.approval_required);
     case "question_required":
       return callback(event, SESSION_EVENT_BATCH_RULES.question_required);
     case "session_todos_updated":

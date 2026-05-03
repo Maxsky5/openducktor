@@ -54,7 +54,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   draftAssistantMessageId: null,
   draftReasoningText: "",
   draftReasoningMessageId: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: null,
@@ -118,7 +118,22 @@ describe("agents-page-view-model", () => {
     const onPrepareMessageFirstSession = mock(() => {});
     const onQuickAction = mock(() => {});
     const activeSession = createSession({
-      pendingPermissions: [{ requestId: "req-1", permission: "read", patterns: ["**/*"] }],
+      pendingApprovals: [
+        {
+          requestId: "req-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["**/*"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
+      ],
       pendingQuestions: [{ requestId: "q-1", questions: [] }],
       messages: [{ id: "m-1", role: "assistant", content: "ok", timestamp: "now" }],
     });
@@ -257,7 +272,7 @@ describe("agents-page-view-model", () => {
   });
 
   test("buildAgentStudioWorkspaceSidebarModel forwards active document state", () => {
-    const onReplyPermission = mock(() => {});
+    const onReplyApproval = mock(() => {});
 
     const model = buildAgentStudioWorkspaceSidebarModel({
       activeDocument: {
@@ -275,6 +290,6 @@ describe("agents-page-view-model", () => {
       document: createDocumentState("spec"),
     });
 
-    expect(onReplyPermission).not.toHaveBeenCalled();
+    expect(onReplyApproval).not.toHaveBeenCalled();
   });
 });

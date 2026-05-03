@@ -4,7 +4,7 @@ import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
 } from "@/components/features/agents";
-import { useAgentSessionPermissionActions } from "@/components/features/agents/agent-chat/use-agent-session-permission-actions";
+import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-permission-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -53,7 +53,7 @@ type AgentStudioOrchestrationActionsContext = {
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  replyAgentPermission: AgentStateContextValue["replyAgentPermission"];
+  replyAgentApproval: AgentStateContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
 };
 type UseAgentStudioOrchestrationControllerArgs = {
@@ -159,7 +159,7 @@ type BuildAgentStudioPageModelsArgsInput = {
   readiness: AgentStudioOrchestrationReadinessContext;
   sessionActions: AgentStudioPageModelsSessionActionsContext;
   modelSelection: AgentStudioPageModelsModelSelectionContext;
-  permissions: ReturnType<typeof useAgentSessionPermissionActions>;
+  permissions: ReturnType<typeof useAgentSessionApprovalActions>;
   chatSettings: {
     showThinkingMessages: boolean;
   };
@@ -275,7 +275,7 @@ export function useAgentStudioOrchestrationController({
     hydrateRequestedTaskSessionHistory,
     humanRequestChangesTask,
     setTaskTargetBranch,
-    replyAgentPermission,
+    replyAgentApproval,
     answerAgentQuestion,
     scheduleSelectionIntent,
   } = actions;
@@ -375,12 +375,12 @@ export function useAgentStudioOrchestrationController({
     onContextSwitchIntent,
   });
 
-  const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
-    useAgentSessionPermissionActions({
+  const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
+    useAgentSessionApprovalActions({
       activeExternalSessionId: viewActiveSession?.externalSessionId ?? null,
-      pendingPermissions: viewActiveSession?.pendingPermissions ?? [],
+      pendingApprovals: viewActiveSession?.pendingApprovals ?? [],
       agentStudioReady,
-      replyAgentPermission,
+      replyAgentApproval,
     });
 
   const pageModelsArgs = buildAgentStudioPageModelsArgs({
@@ -462,9 +462,9 @@ export function useAgentStudioOrchestrationController({
       handleSelectVariant,
     },
     permissions: {
-      isSubmittingPermissionByRequestId,
-      permissionReplyErrorByRequestId,
-      onReplyPermission,
+      isSubmittingApprovalByRequestId,
+      approvalReplyErrorByRequestId,
+      onReplyApproval,
     },
     chatSettings: {
       showThinkingMessages,

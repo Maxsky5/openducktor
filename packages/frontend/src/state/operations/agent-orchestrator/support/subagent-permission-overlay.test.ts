@@ -6,16 +6,47 @@ import {
 
 describe("subagent-permission-overlay", () => {
   test("merges hydrated permissions without dropping live child entries", () => {
-    const livePermission = { requestId: "perm-live", permission: "write", patterns: ["src/**"] };
+    const livePermission = {
+      requestId: "perm-live",
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"write"}`,
+      summary: `Approval request for ${"write"}.`,
+      affectedPaths: ["src/**"],
+      action: { name: "write" },
+      mutation: "mutating" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
+    };
     const sharedPermission = {
       requestId: "perm-shared",
-      permission: "read",
-      patterns: ["docs/**"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: ["docs/**"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
     };
     const hydratedPermission = {
       requestId: "perm-hydrated",
-      permission: "read",
-      patterns: ["tests/**"],
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: ["tests/**"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
     };
 
     const merged = mergeSubagentPendingPermissionOverlay({
@@ -24,11 +55,11 @@ describe("subagent-permission-overlay", () => {
         "child-merge": [sharedPermission],
       },
       scannedChildExternalSessionIds: ["child-merge"],
-      pendingPermissionsByChildExternalSessionId: {
+      pendingApprovalsByChildExternalSessionId: {
         "child-merge": [
           {
             ...sharedPermission,
-            patterns: ["stale/**"],
+            affectedPaths: ["stale/**"],
           },
           hydratedPermission,
         ],

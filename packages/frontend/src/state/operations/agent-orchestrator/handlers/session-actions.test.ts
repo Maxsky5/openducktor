@@ -27,7 +27,7 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   draftAssistantMessageId: null,
   draftReasoningText: "",
   draftReasoningMessageId: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: null,
@@ -153,7 +153,22 @@ describe("agent-orchestrator/handlers/session-actions", () => {
           role: "planner",
           runtimeId: null,
           workingDirectory: "/tmp/repo",
-          pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
           pendingQuestions: [
             {
               requestId: "question-1",
@@ -224,7 +239,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         },
       ]);
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
-      expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
+      expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     } finally {
       adapter.hasSession = originalHasSession;
@@ -246,7 +261,22 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": buildSession({
-          pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
           pendingQuestions: [
             {
               requestId: "question-1",
@@ -327,7 +357,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(unsubscribeCalls).toBe(0);
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
       expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
-      expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(1);
+      expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
     } finally {
       adapter.hasSession = originalHasSession;
@@ -442,7 +472,22 @@ describe("agent-orchestrator/handlers/session-actions", () => {
               },
             },
           ],
-          pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
         }),
       },
     };
@@ -723,7 +768,22 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": buildSession({
-          pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
           pendingQuestions: [
             {
               requestId: "question-1",
@@ -808,7 +868,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(callOrder.indexOf("refresh-task-data")).toBeGreaterThan(persistEndIndex);
       expect(callOrder.indexOf("load-agent-sessions")).toBeGreaterThan(persistEndIndex);
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
-      expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
+      expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     } finally {
       adapter.hasSession = originalHasSession;
@@ -991,18 +1051,33 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
     const originalUpdateSessionModel = adapter.updateSessionModel;
-    const originalReplyPermission = adapter.replyPermission;
+    const originalReplyApproval = adapter.replyApproval;
     let replyCalls = 0;
     adapter.hasSession = () => true;
     adapter.updateSessionModel = () => {};
-    adapter.replyPermission = async () => {
+    adapter.replyApproval = async () => {
       replyCalls += 1;
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": buildSession({
-          pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
         }),
       },
     };
@@ -1051,13 +1126,13 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       });
       expect(sessionsRef.current["session-1"]?.selectedModel?.modelId).toBe("gpt-5");
 
-      await actions.replyAgentPermission("session-1", "perm-1", "once");
+      await actions.replyAgentApproval("session-1", "perm-1", "approve_once");
       expect(replyCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
+      expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.updateSessionModel = originalUpdateSessionModel;
-      adapter.replyPermission = originalReplyPermission;
+      adapter.replyApproval = originalReplyApproval;
     }
   });
 
@@ -1066,7 +1141,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const originalHasSession = adapter.hasSession;
     const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
     const originalResumeSession = adapter.resumeSession;
-    const originalReplyPermission = adapter.replyPermission;
+    const originalReplyApproval = adapter.replyApproval;
     let resumeCalls = 0;
     let replyCalls = 0;
     adapter.hasSession = () => false;
@@ -1077,7 +1152,22 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
         startedAt: "2026-02-22T08:00:00.000Z",
         status: { type: "idle" },
-        pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: [".env"] }],
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: [".env"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
         pendingQuestions: [],
       },
     ];
@@ -1091,7 +1181,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         runtimeKind: input.runtimeKind,
       };
     };
-    adapter.replyPermission = async () => {
+    adapter.replyApproval = async () => {
       replyCalls += 1;
     };
 
@@ -1100,7 +1190,22 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         "session-1": buildSession({
           status: "stopped",
           externalSessionId: "external-session-1",
-          pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: [".env"] }],
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: [".env"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
         }),
       },
     };
@@ -1143,15 +1248,15 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.replyAgentPermission("session-1", "perm-1", "once");
+      await actions.replyAgentApproval("session-1", "perm-1", "approve_once");
       expect(resumeCalls).toBe(1);
       expect(replyCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.pendingPermissions).toEqual([]);
+      expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([]);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
       adapter.resumeSession = originalResumeSession;
-      adapter.replyPermission = originalReplyPermission;
+      adapter.replyApproval = originalReplyApproval;
     }
   });
 
@@ -1271,7 +1376,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
         startedAt: "2026-02-22T08:00:00.000Z",
         status: { type: "idle" },
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [
           {
             requestId: "question-1",
@@ -1532,7 +1637,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         model: null,
         workingDirectory: "/tmp/repo/worktree",
         startedAt: "2026-02-22T08:00:00.000Z",
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [
           {
             requestId: "question-1",

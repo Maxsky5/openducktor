@@ -39,7 +39,7 @@ export const createLiveAgentSessionSnapshotFixture = (
     workingDirectory: "/tmp/repo/worktree",
     startedAt: "2026-02-22T08:00:00.000Z",
     status: { type: "busy" },
-    pendingPermissions: [],
+    pendingApprovals: [],
     pendingQuestions: [],
     ...overrides,
   };

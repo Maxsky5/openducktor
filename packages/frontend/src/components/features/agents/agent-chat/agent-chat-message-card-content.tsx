@@ -436,7 +436,7 @@ type SubagentMessageProps = {
   sessionRuntimeId?: string | null;
   sessionWorkingDirectory?: string | null | undefined;
   timeLabel: string;
-  subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
+  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingPermissionCount?: number;
   subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
@@ -448,7 +448,7 @@ const SubagentMessage = ({
   sessionRuntimeId,
   sessionWorkingDirectory,
   timeLabel,
-  subagentPendingPermissions,
+  subagentPendingApprovals,
   subagentPendingPermissionCount = 0,
   subagentPendingQuestions,
   subagentPendingQuestionCount = 0,
@@ -514,7 +514,7 @@ const SubagentMessage = ({
               sessionRuntimeKind={sessionRuntimeKind ?? null}
               sessionRuntimeId={sessionRuntimeId ?? null}
               sessionWorkingDirectory={sessionWorkingDirectory}
-              pendingPermissions={subagentPendingPermissions}
+              pendingApprovals={subagentPendingApprovals}
               pendingQuestions={subagentPendingQuestions}
               meta={meta}
             />
@@ -550,7 +550,7 @@ type MessageBodyProps = {
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
-  subagentPendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
+  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingPermissionCount?: number;
   subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
@@ -566,7 +566,7 @@ export const MessageBody = ({
   systemPromptBody,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
-  subagentPendingPermissions,
+  subagentPendingApprovals,
   subagentPendingPermissionCount = 0,
   subagentPendingQuestions,
   subagentPendingQuestionCount = 0,
@@ -609,7 +609,7 @@ export const MessageBody = ({
         sessionRuntimeId={sessionRuntimeId ?? null}
         sessionWorkingDirectory={sessionWorkingDirectory}
         timeLabel={timeLabel}
-        subagentPendingPermissions={subagentPendingPermissions}
+        subagentPendingApprovals={subagentPendingApprovals}
         subagentPendingPermissionCount={subagentPendingPermissionCount}
         subagentPendingQuestions={subagentPendingQuestions}
         subagentPendingQuestionCount={subagentPendingQuestionCount}

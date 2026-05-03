@@ -38,7 +38,7 @@ import {
   EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
   mergeSubagentPendingPermissionOverlay,
   mergeSubagentPendingQuestionOverlay,
-  type SubagentPendingPermissionsByExternalSessionId,
+  type SubagentPendingApprovalsByExternalSessionId,
   type SubagentPendingQuestionsByExternalSessionId,
 } from "../support/subagent-permission-overlay";
 import {
@@ -186,20 +186,20 @@ const readSubagentSessionIds = (
 
 type HydratedSubagentPendingInputOverlay = {
   scannedChildExternalSessionIds: string[];
-  pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsByExternalSessionId;
+  pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId;
   pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId;
 };
 
 const EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY = Object.freeze({
   scannedChildExternalSessionIds: [],
-  pendingPermissionsByChildExternalSessionId:
+  pendingApprovalsByChildExternalSessionId:
     EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID,
   pendingQuestionsByChildExternalSessionId: EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
 }) satisfies HydratedSubagentPendingInputOverlay;
 
 const toHydratedSubagentPendingInputOverlay = (
   scannedChildExternalSessionIds: string[],
-  pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsByExternalSessionId,
+  pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId,
   pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId,
 ): HydratedSubagentPendingInputOverlay => {
   if (scannedChildExternalSessionIds.length === 0) {
@@ -208,9 +208,9 @@ const toHydratedSubagentPendingInputOverlay = (
 
   return {
     scannedChildExternalSessionIds,
-    pendingPermissionsByChildExternalSessionId:
-      Object.keys(pendingPermissionsByChildExternalSessionId).length > 0
-        ? pendingPermissionsByChildExternalSessionId
+    pendingApprovalsByChildExternalSessionId:
+      Object.keys(pendingApprovalsByChildExternalSessionId).length > 0
+        ? pendingApprovalsByChildExternalSessionId
         : EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID,
     pendingQuestionsByChildExternalSessionId:
       Object.keys(pendingQuestionsByChildExternalSessionId).length > 0
@@ -235,8 +235,7 @@ const loadHydratedSubagentPendingInputOverlay = async ({
     return EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY;
   }
 
-  const pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsByExternalSessionId =
-    {};
+  const pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId = {};
   const pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId = {};
   const scannedChildExternalSessionIds: string[] = [];
   await Promise.all(
@@ -250,9 +249,9 @@ const loadHydratedSubagentPendingInputOverlay = async ({
           runtimeResolution,
         );
         scannedChildExternalSessionIds.push(childExternalSessionId);
-        if (snapshot && snapshot.pendingPermissions.length > 0) {
-          pendingPermissionsByChildExternalSessionId[childExternalSessionId] =
-            snapshot.pendingPermissions;
+        if (snapshot && snapshot.pendingApprovals.length > 0) {
+          pendingApprovalsByChildExternalSessionId[childExternalSessionId] =
+            snapshot.pendingApprovals;
         }
         if (snapshot && snapshot.pendingQuestions.length > 0) {
           pendingQuestionsByChildExternalSessionId[childExternalSessionId] =
@@ -268,7 +267,7 @@ const loadHydratedSubagentPendingInputOverlay = async ({
 
   return toHydratedSubagentPendingInputOverlay(
     scannedChildExternalSessionIds,
-    pendingPermissionsByChildExternalSessionId,
+    pendingApprovalsByChildExternalSessionId,
     pendingQuestionsByChildExternalSessionId,
   );
 };
@@ -301,7 +300,7 @@ const mergePersistedSessionRecord = (
     workingDirectory: shouldKeepLiveWorkingDirectory
       ? current.workingDirectory
       : persisted.workingDirectory,
-    pendingPermissions: current.pendingPermissions,
+    pendingApprovals: current.pendingApprovals,
     pendingQuestions: current.pendingQuestions,
     selectedModel: mergeModelSelection(current.selectedModel, persisted.selectedModel ?? undefined),
     historyHydrationState:
@@ -420,7 +419,7 @@ export const preparePersistedSessionMergeStage = async ({
         next[record.externalSessionId] = {
           ...fromPersistedSessionRecord(record, intent.taskId, intent.repoPath),
           purpose: nextPurpose,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           promptOverrides: EMPTY_PROMPT_OVERRIDES,
         };
@@ -740,7 +739,7 @@ export const reconcileLiveSessionsStage = async ({
         record.externalSessionId,
         (current) => ({
           ...current,
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         }),
         { persist: false },
@@ -880,7 +879,7 @@ export const hydrateSessionRecordsStage = async ({
     const liveSessionStatus = liveRuntimeSnapshot
       ? toLiveSessionState(liveRuntimeSnapshot.status)
       : null;
-    const livePendingPermissions = liveRuntimeSnapshot?.pendingPermissions ?? [];
+    const livePendingApprovals = liveRuntimeSnapshot?.pendingApprovals ?? [];
     const livePendingQuestions = liveRuntimeSnapshot?.pendingQuestions ?? [];
     const selectedModel = normalizePersistedSelection(record.selectedModel);
     const liveSessionTitle = normalizeLiveSessionTitle(liveRuntimeSnapshot?.title);
@@ -917,14 +916,14 @@ export const hydrateSessionRecordsStage = async ({
           historyHydrationState: "hydrated",
           runtimeRecoveryState: "idle",
           promptOverrides,
-          pendingPermissions: livePendingPermissions,
+          pendingApprovals: livePendingApprovals,
           pendingQuestions: livePendingQuestions,
-          subagentPendingPermissionsByExternalSessionId: mergeSubagentPendingPermissionOverlay({
-            current: current.subagentPendingPermissionsByExternalSessionId,
+          subagentPendingApprovalsByExternalSessionId: mergeSubagentPendingPermissionOverlay({
+            current: current.subagentPendingApprovalsByExternalSessionId,
             scannedChildExternalSessionIds:
               hydratedSubagentPendingInputByExternalSessionId.scannedChildExternalSessionIds,
-            pendingPermissionsByChildExternalSessionId:
-              hydratedSubagentPendingInputByExternalSessionId.pendingPermissionsByChildExternalSessionId,
+            pendingApprovalsByChildExternalSessionId:
+              hydratedSubagentPendingInputByExternalSessionId.pendingApprovalsByChildExternalSessionId,
           }),
           subagentPendingQuestionsByExternalSessionId: mergeSubagentPendingQuestionOverlay({
             current: current.subagentPendingQuestionsByExternalSessionId,

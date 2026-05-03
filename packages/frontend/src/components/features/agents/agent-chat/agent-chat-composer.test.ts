@@ -218,12 +218,12 @@ describe("AgentChatComposer", () => {
         model: {
           ...buildModel(),
           isWaitingInput: true,
-          waitingInputPlaceholder: "Respond to the pending permission request above to continue",
+          waitingInputPlaceholder: "Respond to the pending approval request above to continue",
         },
       }),
     );
 
-    expect(html).toContain("Respond to the pending permission request above to continue");
+    expect(html).toContain("Respond to the pending approval request above to continue");
     expect(html).toContain('aria-label="Send message" disabled');
   });
 

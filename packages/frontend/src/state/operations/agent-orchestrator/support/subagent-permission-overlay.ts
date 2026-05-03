@@ -6,8 +6,8 @@ type UpdateSession = (
   options?: { persist?: boolean },
 ) => void;
 
-export type SubagentPendingPermissionsByExternalSessionId = NonNullable<
-  AgentSessionState["subagentPendingPermissionsByExternalSessionId"]
+export type SubagentPendingApprovalsByExternalSessionId = NonNullable<
+  AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
 >;
 
 export type SubagentPendingQuestionsByExternalSessionId = NonNullable<
@@ -16,7 +16,7 @@ export type SubagentPendingQuestionsByExternalSessionId = NonNullable<
 
 export const EMPTY_SUBAGENT_PENDING_PERMISSIONS_BY_EXTERNAL_SESSION_ID = Object.freeze(
   {},
-) as SubagentPendingPermissionsByExternalSessionId;
+) as SubagentPendingApprovalsByExternalSessionId;
 
 export const EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID = Object.freeze(
   {},
@@ -69,15 +69,15 @@ const mergeSubagentPendingOverlayByChildExternalSessionId = <T extends { request
 export const mergeSubagentPendingPermissionOverlay = ({
   current,
   scannedChildExternalSessionIds,
-  pendingPermissionsByChildExternalSessionId,
+  pendingApprovalsByChildExternalSessionId,
 }: {
-  current: AgentSessionState["subagentPendingPermissionsByExternalSessionId"];
+  current: AgentSessionState["subagentPendingApprovalsByExternalSessionId"];
   scannedChildExternalSessionIds: string[];
-  pendingPermissionsByChildExternalSessionId: SubagentPendingPermissionsByExternalSessionId;
-}): AgentSessionState["subagentPendingPermissionsByExternalSessionId"] => {
+  pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId;
+}): AgentSessionState["subagentPendingApprovalsByExternalSessionId"] => {
   if (
     scannedChildExternalSessionIds.length === 0 &&
-    Object.keys(pendingPermissionsByChildExternalSessionId).length === 0
+    Object.keys(pendingApprovalsByChildExternalSessionId).length === 0
   ) {
     return current;
   }
@@ -85,7 +85,7 @@ export const mergeSubagentPendingPermissionOverlay = ({
   return mergeSubagentPendingOverlayByChildExternalSessionId(
     current,
     scannedChildExternalSessionIds,
-    pendingPermissionsByChildExternalSessionId,
+    pendingApprovalsByChildExternalSessionId,
   );
 };
 
@@ -124,7 +124,7 @@ const buildOverlayKeysForSession = (
   return externalSessionIds;
 };
 
-export const clearSubagentPendingPermissionFromSessions = ({
+export const clearSubagentPendingApprovalFromSessions = ({
   sessionsRef,
   updateSession,
   targetExternalSessionId,
@@ -141,7 +141,7 @@ export const clearSubagentPendingPermissionFromSessions = ({
   );
 
   for (const session of Object.values(sessionsRef.current)) {
-    const currentMap = session.subagentPendingPermissionsByExternalSessionId;
+    const currentMap = session.subagentPendingApprovalsByExternalSessionId;
     if (!currentMap) {
       continue;
     }
@@ -175,7 +175,7 @@ export const clearSubagentPendingPermissionFromSessions = ({
       session.externalSessionId,
       (current) => ({
         ...current,
-        subagentPendingPermissionsByExternalSessionId:
+        subagentPendingApprovalsByExternalSessionId:
           Object.keys(nextMap).length > 0 ? nextMap : undefined,
       }),
       { persist: false },

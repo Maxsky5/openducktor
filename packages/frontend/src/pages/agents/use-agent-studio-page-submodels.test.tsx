@@ -84,7 +84,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
         startedAt: "2026-02-22T12:00:00.000Z",
         status: "running",
         taskId: "task-1",
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [],
       },
       planner: null,

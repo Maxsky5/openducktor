@@ -112,7 +112,7 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   draftReasoningText: "",
   draftReasoningMessageId: null,
   contextUsage: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: null,
@@ -1722,7 +1722,7 @@ describe("use-task-operations", () => {
         );
         return () => {};
       },
-      replyPermission: async () => {},
+      replyApproval: async () => {},
     };
 
     const original = {

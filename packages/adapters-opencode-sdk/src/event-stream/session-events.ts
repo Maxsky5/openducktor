@@ -1,5 +1,6 @@
 import type { Event } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
+import { toAgentApprovalRequestFromOpenCodePermission } from "../approval-translation";
 import { readStringProp } from "../guards";
 import { normalizeTodoList } from "../todo-normalizers";
 import {
@@ -40,7 +41,7 @@ const readParentExternalSessionId = (info: unknown): string | undefined => {
   return undefined;
 };
 
-type PendingInputEvent = Extract<AgentEvent, { type: "permission_required" | "question_required" }>;
+type PendingInputEvent = Extract<AgentEvent, { type: "approval_required" | "question_required" }>;
 
 const shouldQueueSubagentInputEvent = (
   runtime: EventStreamRuntime,
@@ -126,14 +127,11 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
   const eventParentExternalSessionId = readParentExternalSessionId(readEventInfo(properties));
   const parentExternalSessionId =
     subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
-  const permissionEvent: Extract<AgentEvent, { type: "permission_required" }> = {
-    type: "permission_required",
+  const permissionEvent: Extract<AgentEvent, { type: "approval_required" }> = {
+    type: "approval_required",
     externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
-    requestId: parsed.requestId,
-    permission: parsed.permission,
-    patterns: parsed.patterns,
-    ...(parsed.metadata ? { metadata: parsed.metadata } : {}),
+    ...toAgentApprovalRequestFromOpenCodePermission(parsed),
     childExternalSessionId,
     ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
     ...(subagentLink

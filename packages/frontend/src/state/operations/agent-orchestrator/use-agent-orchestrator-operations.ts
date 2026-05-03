@@ -509,7 +509,7 @@ export function useAgentOrchestratorOperations({
           workingDirectory: input.workingDirectory,
           history: [],
           isLive: true,
-          pendingPermissions: input.pendingPermissions ?? [],
+          pendingApprovals: input.pendingApprovals ?? [],
           pendingQuestions: input.pendingQuestions ?? [],
         });
         commitSessions((current) => ({
@@ -559,7 +559,7 @@ export function useAgentOrchestratorOperations({
           workingDirectory: input.workingDirectory,
           history,
           isLive: true,
-          pendingPermissions: input.pendingPermissions ?? [],
+          pendingApprovals: input.pendingApprovals ?? [],
           pendingQuestions: input.pendingQuestions ?? [],
         });
 
@@ -584,7 +584,7 @@ export function useAgentOrchestratorOperations({
               workingDirectory: input.workingDirectory,
               historyHydrationState: "hydrated",
               runtimeRecoveryState: "idle",
-              pendingPermissions: current.pendingPermissions,
+              pendingApprovals: current.pendingApprovals,
               pendingQuestions: current.pendingQuestions,
               messages,
             };

@@ -1,16 +1,15 @@
+import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
+import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
 
-type PermissionReply = "once" | "always" | "reject";
-
-type UseAgentSessionPermissionActionsParams = {
+type UseAgentSessionApprovalActionsParams = {
   activeExternalSessionId: string | null;
-  pendingPermissions: AgentPermissionRequest[];
+  pendingApprovals: AgentApprovalRequest[];
   agentStudioReady: boolean;
-  replyAgentPermission: (
+  replyAgentApproval: (
     externalSessionId: string,
     requestId: string,
-    reply: PermissionReply,
+    outcome: RuntimeApprovalReplyOutcome,
   ) => Promise<void>;
 };
 
@@ -46,20 +45,20 @@ const filterStringMapByPendingRequestIds = (
   return changed ? next : source;
 };
 
-export function useAgentSessionPermissionActions({
+export function useAgentSessionApprovalActions({
   activeExternalSessionId,
-  pendingPermissions,
+  pendingApprovals,
   agentStudioReady,
-  replyAgentPermission,
-}: UseAgentSessionPermissionActionsParams): {
-  isSubmittingPermissionByRequestId: Record<string, boolean>;
-  permissionReplyErrorByRequestId: Record<string, string>;
-  onReplyPermission: (requestId: string, reply: PermissionReply) => Promise<void>;
+  replyAgentApproval,
+}: UseAgentSessionApprovalActionsParams): {
+  isSubmittingApprovalByRequestId: Record<string, boolean>;
+  approvalReplyErrorByRequestId: Record<string, string>;
+  onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
 } {
-  const [isSubmittingPermissionByRequestId, setIsSubmittingPermissionByRequestId] = useState<
+  const [isSubmittingApprovalByRequestId, setIsSubmittingApprovalByRequestId] = useState<
     Record<string, boolean>
   >({});
-  const [permissionReplyErrorByRequestId, setPermissionReplyErrorByRequestId] = useState<
+  const [approvalReplyErrorByRequestId, setApprovalReplyErrorByRequestId] = useState<
     Record<string, string>
   >({});
   const previousSessionIdRef = useRef<string | null>(activeExternalSessionId);
@@ -69,31 +68,31 @@ export function useAgentSessionPermissionActions({
       return;
     }
     previousSessionIdRef.current = activeExternalSessionId;
-    setIsSubmittingPermissionByRequestId({});
-    setPermissionReplyErrorByRequestId({});
+    setIsSubmittingApprovalByRequestId({});
+    setApprovalReplyErrorByRequestId({});
   }, [activeExternalSessionId]);
 
   useEffect(() => {
-    const pendingRequestIds = new Set(pendingPermissions.map((request) => request.requestId));
-    setIsSubmittingPermissionByRequestId((current) =>
+    const pendingRequestIds = new Set(pendingApprovals.map((request) => request.requestId));
+    setIsSubmittingApprovalByRequestId((current) =>
       filterBooleanMapByPendingRequestIds(current, pendingRequestIds),
     );
-    setPermissionReplyErrorByRequestId((current) =>
+    setApprovalReplyErrorByRequestId((current) =>
       filterStringMapByPendingRequestIds(current, pendingRequestIds),
     );
-  }, [pendingPermissions]);
+  }, [pendingApprovals]);
 
-  const onReplyPermission = useCallback(
-    async (requestId: string, reply: PermissionReply): Promise<void> => {
+  const onReplyApproval = useCallback(
+    async (requestId: string, outcome: RuntimeApprovalReplyOutcome): Promise<void> => {
       if (!activeExternalSessionId || !agentStudioReady) {
         return;
       }
 
-      setIsSubmittingPermissionByRequestId((current) => ({
+      setIsSubmittingApprovalByRequestId((current) => ({
         ...current,
         [requestId]: true,
       }));
-      setPermissionReplyErrorByRequestId((current) => {
+      setApprovalReplyErrorByRequestId((current) => {
         if (!current[requestId]) {
           return current;
         }
@@ -103,18 +102,18 @@ export function useAgentSessionPermissionActions({
       });
 
       try {
-        await replyAgentPermission(activeExternalSessionId, requestId, reply);
+        await replyAgentApproval(activeExternalSessionId, requestId, outcome);
       } catch (error) {
         const message =
           error instanceof Error && error.message.trim().length > 0
             ? error.message
-            : "Failed to reply to permission request.";
-        setPermissionReplyErrorByRequestId((current) => ({
+            : "Failed to reply to approval request.";
+        setApprovalReplyErrorByRequestId((current) => ({
           ...current,
           [requestId]: message,
         }));
       } finally {
-        setIsSubmittingPermissionByRequestId((current) => {
+        setIsSubmittingApprovalByRequestId((current) => {
           if (!current[requestId]) {
             return current;
           }
@@ -124,12 +123,12 @@ export function useAgentSessionPermissionActions({
         });
       }
     },
-    [activeExternalSessionId, agentStudioReady, replyAgentPermission],
+    [activeExternalSessionId, agentStudioReady, replyAgentApproval],
   );
 
   return {
-    isSubmittingPermissionByRequestId,
-    permissionReplyErrorByRequestId,
-    onReplyPermission,
+    isSubmittingApprovalByRequestId,
+    approvalReplyErrorByRequestId,
+    onReplyApproval,
   };
 }

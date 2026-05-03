@@ -532,7 +532,7 @@ describe("use-agent-orchestrator-operations", () => {
           workingDirectory: "/tmp/repo/worktree",
           startedAt: "2026-02-22T08:00:00.000Z",
           status: { type: "busy" },
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         },
       ];
@@ -1258,11 +1258,20 @@ describe("use-agent-orchestrator-operations", () => {
             timestamp: "2026-02-22T08:00:04.000Z",
           });
           eventHandler?.({
-            type: "permission_required",
+            type: "approval_required",
             externalSessionId: "external-1",
             requestId: "perm-1",
-            permission: "read",
-            patterns: ["*.md"],
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*.md"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
             metadata: { tool: "read" },
             timestamp: "2026-02-22T08:00:05.000Z",
           });
@@ -1286,12 +1295,12 @@ describe("use-agent-orchestrator-operations", () => {
         const pendingState = await harness.waitFor(
           (state) =>
             state.sessions.find((entry) => entry.externalSessionId === "external-1")
-              ?.pendingPermissions.length === 1,
+              ?.pendingApprovals.length === 1,
         );
         const pendingSession = pendingState.sessions.find(
           (entry) => entry.externalSessionId === "external-1",
         );
-        expect(pendingSession?.pendingPermissions).toHaveLength(1);
+        expect(pendingSession?.pendingApprovals).toHaveLength(1);
         expect(pendingSession?.pendingQuestions).toHaveLength(1);
 
         await harness.run(async () => {
@@ -1308,7 +1317,7 @@ describe("use-agent-orchestrator-operations", () => {
         expect(subscribeCalls).toBeGreaterThan(0);
         expect(unsubscribeCalls).toBe(0);
         expect(sendCalls).toBe(1);
-        expect(recoveredSession?.pendingPermissions).toHaveLength(1);
+        expect(recoveredSession?.pendingApprovals).toHaveLength(1);
         expect(recoveredSession?.pendingQuestions).toHaveLength(1);
       } finally {
         await harness.unmount();
@@ -1714,7 +1723,7 @@ describe("use-agent-orchestrator-operations", () => {
               draftReasoningText: "",
               draftReasoningMessageId: null,
               contextUsage: null,
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
               todos: [],
               modelCatalog: null,
@@ -1782,7 +1791,7 @@ describe("use-agent-orchestrator-operations", () => {
               draftReasoningText: "",
               draftReasoningMessageId: null,
               contextUsage: null,
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
               todos: [],
               modelCatalog: null,
@@ -1809,7 +1818,7 @@ describe("use-agent-orchestrator-operations", () => {
               draftReasoningText: "",
               draftReasoningMessageId: null,
               contextUsage: null,
-              pendingPermissions: [],
+              pendingApprovals: [],
               pendingQuestions: [],
               todos: [],
               modelCatalog: null,
@@ -1912,7 +1921,7 @@ describe("use-agent-orchestrator-operations", () => {
           workingDirectory: "/tmp/repo/worktree",
           startedAt: "2026-02-22T08:00:00.000Z",
           status: { type: "busy" },
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         },
       ];
@@ -2006,7 +2015,7 @@ describe("use-agent-orchestrator-operations", () => {
             workingDirectory: "/tmp/repo/worktree",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "idle" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ];
@@ -2157,7 +2166,7 @@ describe("use-agent-orchestrator-operations", () => {
           workingDirectory: "/tmp/repo/worktree",
           startedAt: "2026-02-22T08:00:00.000Z",
           status: { type: "busy" },
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         },
       ];
@@ -2224,7 +2233,7 @@ describe("use-agent-orchestrator-operations", () => {
         workingDirectory: "/tmp/repo/worktree",
         startedAt: "2026-02-22T08:00:00.000Z",
         status: { type: "busy" },
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [],
       },
     ];
@@ -2544,12 +2553,21 @@ describe("use-agent-orchestrator-operations", () => {
       ).toBe(true);
 
       listener({
-        type: "permission_required",
+        type: "approval_required",
         externalSessionId: "external-subagent",
         timestamp: "2026-02-22T09:00:02.000Z",
         requestId: "permission-1",
-        permission: "file.read",
-        patterns: ["src/app.ts"],
+        requestType: "permission_grant" as const,
+        title: `Approve permission: ${"file.read"}`,
+        summary: `Approval request for ${"file.read"}.`,
+        affectedPaths: ["src/app.ts"],
+        action: { name: "file.read" },
+        mutation: "read_only" as const,
+        supportedReplyOutcomes: [
+          "approve_once" as const,
+          "approve_session" as const,
+          "reject" as const,
+        ],
       });
       expect(agentSessionUpsert).not.toHaveBeenCalled();
     } finally {
@@ -2637,7 +2655,7 @@ describe("use-agent-orchestrator-operations", () => {
             draftReasoningText: "",
             draftReasoningMessageId: null,
             contextUsage: null,
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
             todos: [],
             modelCatalog: null,
@@ -2803,7 +2821,7 @@ describe("use-agent-orchestrator-operations", () => {
         workingDirectory: "/tmp/repo/worktree",
         startedAt: "2026-02-22T08:00:00.000Z",
         status: { type: "busy" },
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [],
       },
     ];
@@ -2919,7 +2937,7 @@ describe("use-agent-orchestrator-operations", () => {
         workingDirectory: "/tmp/repo/worktree",
         startedAt: "2026-02-22T08:00:00.000Z",
         status: { type: "busy" },
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [],
       },
     ];
@@ -3011,7 +3029,7 @@ describe("use-agent-orchestrator-operations", () => {
         workingDirectory: "/tmp/repo/worktree",
         startedAt: "2026-02-22T08:00:00.000Z",
         status: { type: "busy" },
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [],
       },
     ];
@@ -3183,7 +3201,7 @@ describe("use-agent-orchestrator-operations", () => {
             workingDirectory: "/tmp/repo/worktree",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ];
@@ -3327,7 +3345,7 @@ describe("use-agent-orchestrator-operations", () => {
             workingDirectory: "/tmp/repo/worktree",
             startedAt: "2026-02-22T08:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
           },
         ]);
@@ -3498,7 +3516,7 @@ describe("use-agent-orchestrator-operations", () => {
           workingDirectory: "/tmp/repo/worktree",
           startedAt: "2026-02-22T08:00:00.000Z",
           status: { type: "busy" },
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         },
         {
@@ -3507,7 +3525,7 @@ describe("use-agent-orchestrator-operations", () => {
           workingDirectory: "/tmp/repo/worktree",
           startedAt: "2026-02-22T08:00:00.000Z",
           status: { type: "busy" },
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         },
       ];
@@ -3616,7 +3634,7 @@ describe("use-agent-orchestrator-operations", () => {
           workingDirectory: "/tmp/repo/worktree",
           startedAt: "2026-02-22T08:00:00.000Z",
           status: { type: "busy" },
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         },
       ];

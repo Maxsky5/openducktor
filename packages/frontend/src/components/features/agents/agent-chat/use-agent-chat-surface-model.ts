@@ -1,3 +1,4 @@
+import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -22,7 +23,7 @@ import { useAgentChatThreadContext } from "./use-agent-chat-thread-context";
 const EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_PERMISSIONS = Object.freeze({}) as NonNullable<
-  AgentSessionState["subagentPendingPermissionsByExternalSessionId"]
+  AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
 >;
 const EMPTY_SUBAGENT_PENDING_QUESTIONS = Object.freeze({}) as NonNullable<
   AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
@@ -105,7 +106,7 @@ type AgentChatPendingPermissionActions = {
   canReply: boolean;
   isSubmittingByRequestId: Record<string, boolean>;
   errorByRequestId: Record<string, string>;
-  onReply: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
+  onReply: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
 };
 
 type AgentChatComposerConfig = {
@@ -115,7 +116,7 @@ type AgentChatComposerConfig = {
     | "externalSessionId"
     | "selectedModel"
     | "isLoadingModelCatalog"
-    | "pendingPermissions"
+    | "pendingApprovals"
     | "pendingQuestions"
   > | null;
   isSessionWorking: boolean;
@@ -170,7 +171,7 @@ type UseAgentChatSurfaceModelArgs = {
   permissions: AgentChatPendingPermissionActions;
   composer?: AgentChatComposerConfig;
   sessionAgentColors?: Record<string, string>;
-  subagentPendingPermissionsByExternalSessionId?: AgentSessionState["subagentPendingPermissionsByExternalSessionId"];
+  subagentPendingApprovalsByExternalSessionId?: AgentSessionState["subagentPendingApprovalsByExternalSessionId"];
   subagentPendingPermissionCountByExternalSessionId?: Record<string, number>;
   subagentPendingQuestionsByExternalSessionId?: AgentSessionState["subagentPendingQuestionsByExternalSessionId"];
   subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
@@ -193,7 +194,7 @@ export function useAgentChatSurfaceModel({
   permissions,
   composer,
   sessionAgentColors,
-  subagentPendingPermissionsByExternalSessionId,
+  subagentPendingApprovalsByExternalSessionId,
   subagentPendingPermissionCountByExternalSessionId,
   subagentPendingQuestionsByExternalSessionId,
   subagentPendingQuestionCountByExternalSessionId,
@@ -260,8 +261,8 @@ export function useAgentChatSurfaceModel({
       isStarting: composer?.isStarting ?? false,
       isSending: composer?.isSending ?? false,
       sessionAgentColors: resolvedSessionAgentColors,
-      subagentPendingPermissionsByExternalSessionId:
-        subagentPendingPermissionsByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_PERMISSIONS,
+      subagentPendingApprovalsByExternalSessionId:
+        subagentPendingApprovalsByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_PERMISSIONS,
       subagentPendingPermissionCountByExternalSessionId:
         subagentPendingPermissionCountByExternalSessionId ??
         EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS,
@@ -273,9 +274,9 @@ export function useAgentChatSurfaceModel({
       isSubmittingQuestionByRequestId: pendingQuestions.isSubmittingByRequestId,
       onSubmitQuestionAnswers: pendingQuestions.onSubmit,
       canReplyToPermissions: canReplyToPermissionRequests,
-      isSubmittingPermissionByRequestId: permissions.isSubmittingByRequestId,
-      permissionReplyErrorByRequestId: permissions.errorByRequestId,
-      onReplyPermission: permissions.onReply,
+      isSubmittingApprovalByRequestId: permissions.isSubmittingByRequestId,
+      approvalReplyErrorByRequestId: permissions.errorByRequestId,
+      onReplyApproval: permissions.onReply,
       sessionRuntimeDataError,
       todoPanelCollapsed: activeTodoPanelCollapsed,
       onToggleTodoPanel: handleToggleTodoPanel,
@@ -303,7 +304,7 @@ export function useAgentChatSurfaceModel({
       runtimeReadiness,
       sessionRuntimeDataError,
       showThinkingMessages,
-      subagentPendingPermissionsByExternalSessionId,
+      subagentPendingApprovalsByExternalSessionId,
       subagentPendingPermissionCountByExternalSessionId,
       subagentPendingQuestionsByExternalSessionId,
       subagentPendingQuestionCountByExternalSessionId,

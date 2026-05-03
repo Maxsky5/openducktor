@@ -11,7 +11,7 @@ export type RuntimeTranscriptSessionInput = {
   workingDirectory: string;
   history: AgentSessionHistoryMessage[];
   isLive?: boolean;
-  pendingPermissions?: AgentSessionState["pendingPermissions"] | undefined;
+  pendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   pendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
 };
 
@@ -43,7 +43,7 @@ export const createRuntimeTranscriptSession = ({
   workingDirectory,
   history,
   isLive = false,
-  pendingPermissions = [],
+  pendingApprovals = [],
   pendingQuestions = [],
 }: RuntimeTranscriptSessionInput): AgentSessionState => {
   const startedAt = history[0]?.timestamp ?? new Date(0).toISOString();
@@ -74,7 +74,7 @@ export const createRuntimeTranscriptSession = ({
     draftReasoningText: "",
     draftReasoningMessageId: null,
     contextUsage: null,
-    pendingPermissions,
+    pendingApprovals,
     pendingQuestions,
     todos: [],
     modelCatalog: null,

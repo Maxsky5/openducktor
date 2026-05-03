@@ -30,7 +30,7 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(hydrated.status).toBe("stopped");
     expect(hydrated.runtimeKind).toBe("opencode");
     expect(hydrated.runtimeId).toBeNull();
-    expect(hydrated.pendingPermissions).toEqual([]);
+    expect(hydrated.pendingApprovals).toEqual([]);
     expect(hydrated.pendingQuestions).toEqual([]);
     expect(hydrated.selectedModel?.modelId).toBe("gpt-5");
     expect(hydrated.isLoadingModelCatalog).toBe(false);
@@ -40,11 +40,20 @@ describe("agent-orchestrator/support/persistence", () => {
     const hydrated = fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture);
     const withPendingInput: AgentSessionState = {
       ...hydrated,
-      pendingPermissions: [
+      pendingApprovals: [
         {
           requestId: "permission-1",
-          permission: "read",
-          patterns: ["**/*"],
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["**/*"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
           metadata: { source: "tool" },
         },
       ],
@@ -64,7 +73,7 @@ describe("agent-orchestrator/support/persistence", () => {
     };
 
     const persisted = toPersistedSessionRecord(withPendingInput);
-    expect("pendingPermissions" in persisted).toBe(false);
+    expect("pendingApprovals" in persisted).toBe(false);
     expect("pendingQuestions" in persisted).toBe(false);
   });
 

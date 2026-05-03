@@ -10,8 +10,8 @@ import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-ses
 import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type {
+  AgentApprovalRequest,
   AgentChatMessage,
-  AgentPermissionRequest,
   AgentQuestionRequest,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
@@ -104,7 +104,7 @@ const baseSession: AgentSessionState = {
   draftAssistantMessageId: null,
   draftReasoningText: "",
   draftReasoningMessageId: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: baseCatalog,
@@ -193,11 +193,16 @@ export const buildQuestionRequest = (
 });
 
 export const buildPermissionRequest = (
-  overrides: Partial<AgentPermissionRequest> = {},
-): AgentPermissionRequest => ({
+  overrides: Partial<AgentApprovalRequest> = {},
+): AgentApprovalRequest => ({
   requestId: "permission-1",
-  permission: "shell",
-  patterns: ["*"],
+  requestType: "permission_grant" as const,
+  title: `Approve permission: ${"shell"}`,
+  summary: `Approval request for ${"shell"}.`,
+  affectedPaths: ["*"],
+  action: { name: "shell" },
+  mutation: "read_only" as const,
+  supportedReplyOutcomes: ["approve_once" as const, "approve_session" as const, "reject" as const],
   ...overrides,
 });
 

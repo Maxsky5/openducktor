@@ -62,10 +62,10 @@ describe("agent-runtime capability policies", () => {
       "approvals.readOnlyAutoRejectSafe",
     ]);
     expect(getRuntimeDescriptorCapabilityConfigErrors(descriptor)).toEqual([
-      "[workflow] read-only roles must auto-reject mutating permission requests",
+      "[workflow] read-only roles must auto-reject mutating approval requests",
     ]);
     expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
-      "[workflow] runtime descriptor schema violation at capabilities.approvals.readOnlyAutoRejectSafe: Read-only roles must auto-reject mutating permission requests.",
+      "[workflow] runtime descriptor schema violation at capabilities.approvals.readOnlyAutoRejectSafe: Read-only roles must auto-reject mutating approval requests.",
     ]);
   });
 

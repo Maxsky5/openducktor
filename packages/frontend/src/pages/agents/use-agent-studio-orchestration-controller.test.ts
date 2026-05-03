@@ -111,9 +111,9 @@ const baseArgs: BuildArgs = {
     activeSessionContextUsage: null,
   },
   permissions: {
-    isSubmittingPermissionByRequestId: {},
-    permissionReplyErrorByRequestId: {},
-    onReplyPermission: async () => {},
+    isSubmittingApprovalByRequestId: {},
+    approvalReplyErrorByRequestId: {},
+    onReplyApproval: async () => {},
   },
   chatSettings: {
     showThinkingMessages: true,

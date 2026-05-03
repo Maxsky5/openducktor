@@ -62,7 +62,7 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   draftAssistantMessageId: null,
   draftReasoningText: "",
   draftReasoningMessageId: null,
-  pendingPermissions: [],
+  pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
   modelCatalog: null,
@@ -388,11 +388,20 @@ describe("agent-orchestrator-ensure-ready", () => {
         workingDirectory: "/tmp/repo/worktree",
         startedAt: "2026-02-22T08:00:00.000Z",
         status: { type: "busy" },
-        pendingPermissions: [
+        pendingApprovals: [
           {
             requestId: "perm-1",
-            permission: "read",
-            patterns: ["**/.env"],
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["**/.env"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
           },
         ],
         pendingQuestions: [],
@@ -403,7 +412,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       current: {
         "session-1": buildSession({
           status: "idle",
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
         }),
       },
@@ -447,8 +456,21 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(attachCalls).toBe(1);
       expect(resumeCalls).toBe(0);
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
-      expect(sessionsRef.current["session-1"]?.pendingPermissions).toEqual([
-        { requestId: "perm-1", permission: "read", patterns: ["**/.env"] },
+      expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([
+        {
+          requestId: "perm-1",
+          requestType: "permission_grant" as const,
+          title: `Approve permission: ${"read"}`,
+          summary: `Approval request for ${"read"}.`,
+          affectedPaths: ["**/.env"],
+          action: { name: "read" },
+          mutation: "read_only" as const,
+          supportedReplyOutcomes: [
+            "approve_once" as const,
+            "approve_session" as const,
+            "reject" as const,
+          ],
+        },
       ]);
     } finally {
       adapter.hasSession = originalHasSession;
@@ -487,7 +509,22 @@ describe("agent-orchestrator-ensure-ready", () => {
         "session-1": buildSession({
           status: "error",
           runtimeId: "runtime-1",
-          pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
           pendingQuestions: [
             {
               requestId: "question-1",
@@ -556,7 +593,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(resumeCalls).toBe(1);
       expect(attachCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("idle");
-      expect(sessionsRef.current["session-1"]?.pendingPermissions).toEqual([]);
+      expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([]);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([]);
     } finally {
       adapter.hasSession = originalHasSession;
@@ -820,7 +857,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         workingDirectory: "/tmp/repo/worktree",
         startedAt: "2026-02-22T08:00:00.000Z",
         status: { type: "idle" },
-        pendingPermissions: [],
+        pendingApprovals: [],
         pendingQuestions: [],
       },
     ];

@@ -16,7 +16,7 @@ export type PendingSubagentPartEmission = {
 
 export type PendingSubagentInputEvent = Extract<
   AgentEvent,
-  { type: "permission_required" | "question_required" }
+  { type: "approval_required" | "question_required" }
 >;
 
 export type PendingSubagentSessionBinding = {

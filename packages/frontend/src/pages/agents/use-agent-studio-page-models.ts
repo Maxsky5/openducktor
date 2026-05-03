@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -63,25 +63,25 @@ const arePermissionCountMapsEqual = (
 
 const useStablePendingPermissionCounts = (
   sessions: AgentSessionSummary[],
-  subagentPendingPermissionsByExternalSessionId:
-    | AgentSessionState["subagentPendingPermissionsByExternalSessionId"]
+  subagentPendingApprovalsByExternalSessionId:
+    | AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
     | undefined,
 ): Record<string, number> => {
   const previousRef = useRef<Record<string, number>>(EMPTY_SUBAGENT_PENDING_PERMISSION_COUNTS);
   return useMemo(() => {
     const next: Record<string, number> = {};
     for (const session of sessions) {
-      const pendingPermissionCount = session.pendingPermissions.length;
+      const pendingPermissionCount = session.pendingApprovals.length;
       if (pendingPermissionCount > 0) {
         next[session.externalSessionId] = pendingPermissionCount;
       }
     }
 
-    if (subagentPendingPermissionsByExternalSessionId) {
-      for (const [externalSessionId, pendingPermissions] of Object.entries(
-        subagentPendingPermissionsByExternalSessionId,
+    if (subagentPendingApprovalsByExternalSessionId) {
+      for (const [externalSessionId, pendingApprovals] of Object.entries(
+        subagentPendingApprovalsByExternalSessionId,
       )) {
-        const pendingPermissionCount = pendingPermissions.length;
+        const pendingPermissionCount = pendingApprovals.length;
         if (pendingPermissionCount > 0) {
           next[externalSessionId] = pendingPermissionCount;
         }
@@ -97,7 +97,7 @@ const useStablePendingPermissionCounts = (
 
     previousRef.current = nextCounts;
     return nextCounts;
-  }, [sessions, subagentPendingPermissionsByExternalSessionId]);
+  }, [sessions, subagentPendingApprovalsByExternalSessionId]);
 };
 
 const useStablePendingQuestionCounts = (
@@ -201,9 +201,9 @@ type AgentStudioModelSelectionContext = {
 };
 
 type AgentStudioPermissionContext = {
-  isSubmittingPermissionByRequestId: Record<string, boolean>;
-  permissionReplyErrorByRequestId: Record<string, string>;
-  onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
+  isSubmittingApprovalByRequestId: Record<string, boolean>;
+  approvalReplyErrorByRequestId: Record<string, string>;
+  onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
 };
 
 type AgentStudioComposerContext = {
@@ -246,7 +246,7 @@ export function useAgentStudioPageModels({
   const workflowSessionsForTask = core.sessionsForTask;
   const subagentPendingPermissionCountByExternalSessionId = useStablePendingPermissionCounts(
     core.allSessionSummaries,
-    core.activeSession?.subagentPendingPermissionsByExternalSessionId,
+    core.activeSession?.subagentPendingApprovalsByExternalSessionId,
   );
   const subagentPendingQuestionCountByExternalSessionId = useStablePendingQuestionCounts(
     core.allSessionSummaries,
@@ -379,7 +379,7 @@ export function useAgentStudioPageModels({
   const activeComposerExternalSessionId = core.activeSession?.externalSessionId ?? null;
   const activeComposerSelectedModel = core.activeSession?.selectedModel ?? null;
   const activeComposerIsLoadingModelCatalog = core.activeSession?.isLoadingModelCatalog ?? false;
-  const activeComposerPendingPermissions = core.activeSession?.pendingPermissions ?? [];
+  const activeComposerPendingApprovals = core.activeSession?.pendingApprovals ?? [];
   const activeComposerPendingQuestions = core.activeSession?.pendingQuestions ?? [];
   const activeComposerSession = useMemo(
     () =>
@@ -388,13 +388,13 @@ export function useAgentStudioPageModels({
             externalSessionId: activeComposerExternalSessionId,
             selectedModel: activeComposerSelectedModel,
             isLoadingModelCatalog: activeComposerIsLoadingModelCatalog,
-            pendingPermissions: activeComposerPendingPermissions,
+            pendingApprovals: activeComposerPendingApprovals,
             pendingQuestions: activeComposerPendingQuestions,
           }
         : null,
     [
       activeComposerIsLoadingModelCatalog,
-      activeComposerPendingPermissions,
+      activeComposerPendingApprovals,
       activeComposerPendingQuestions,
       activeComposerSelectedModel,
       activeComposerExternalSessionId,
@@ -465,14 +465,14 @@ export function useAgentStudioPageModels({
   const permissionsModel = useMemo(
     () => ({
       canReply: true,
-      isSubmittingByRequestId: permissions.isSubmittingPermissionByRequestId,
-      errorByRequestId: permissions.permissionReplyErrorByRequestId,
-      onReply: permissions.onReplyPermission,
+      isSubmittingByRequestId: permissions.isSubmittingApprovalByRequestId,
+      errorByRequestId: permissions.approvalReplyErrorByRequestId,
+      onReply: permissions.onReplyApproval,
     }),
     [
-      permissions.isSubmittingPermissionByRequestId,
-      permissions.onReplyPermission,
-      permissions.permissionReplyErrorByRequestId,
+      permissions.isSubmittingApprovalByRequestId,
+      permissions.onReplyApproval,
+      permissions.approvalReplyErrorByRequestId,
     ],
   );
 
@@ -562,8 +562,8 @@ export function useAgentStudioPageModels({
     permissions: permissionsModel,
     composer: composerConfig,
     sessionAgentColors: modelSelection.activeSessionAgentColors,
-    subagentPendingPermissionsByExternalSessionId:
-      core.activeSession?.subagentPendingPermissionsByExternalSessionId,
+    subagentPendingApprovalsByExternalSessionId:
+      core.activeSession?.subagentPendingApprovalsByExternalSessionId,
     subagentPendingPermissionCountByExternalSessionId,
     subagentPendingQuestionsByExternalSessionId:
       core.activeSession?.subagentPendingQuestionsByExternalSessionId,

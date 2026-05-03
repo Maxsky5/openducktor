@@ -96,7 +96,7 @@ export const buildWorkflowModelContext = ({
       session.externalSessionId,
       session.role !== null &&
         roleWorkflowsByTask[session.role].available &&
-        session.pendingPermissions.length === 0 &&
+        session.pendingApprovals.length === 0 &&
         session.pendingQuestions.length === 0,
     ]),
   );

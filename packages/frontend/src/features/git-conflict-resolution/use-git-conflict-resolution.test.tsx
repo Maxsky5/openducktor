@@ -25,7 +25,7 @@ const buildSession = (
     draftReasoningText: "",
     draftReasoningMessageId: null,
     contextUsage: null,
-    pendingPermissions: [],
+    pendingApprovals: [],
     pendingQuestions: [],
     todos: [],
     modelCatalog: null,

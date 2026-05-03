@@ -43,7 +43,22 @@ const createSessionStateFixture = (): AgentSessionState => ({
   draftReasoningText: "",
   draftReasoningMessageId: null,
   contextUsage: null,
-  pendingPermissions: [{ requestId: "permission-1", permission: "read", patterns: [".env"] }],
+  pendingApprovals: [
+    {
+      requestId: "permission-1",
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: [".env"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
+    },
+  ],
   pendingQuestions: [],
   todos: [],
   modelCatalog: null,
@@ -84,7 +99,7 @@ describe("reattach-live-session", () => {
           role: "build",
           startedAt: "2026-03-22T12:00:00.000Z",
           status: { type: "idle" },
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           workingDirectory: "/tmp/repo/worktree",
         },
@@ -98,7 +113,7 @@ describe("reattach-live-session", () => {
     expect(reattached).toBe(false);
     expect(resumed).toBe(false);
     expect(attachedSessionId).toBeNull();
-    expect(state.pendingPermissions).toEqual(createSessionStateFixture().pendingPermissions);
+    expect(state.pendingApprovals).toEqual(createSessionStateFixture().pendingApprovals);
   });
 
   test("reattaches an idle snapshot when pending input is still live", async () => {
@@ -132,7 +147,22 @@ describe("reattach-live-session", () => {
           role: "build",
           startedAt: "2026-03-22T12:00:00.000Z",
           status: { type: "idle" },
-          pendingPermissions: [{ requestId: "permission-2", permission: "read", patterns: [] }],
+          pendingApprovals: [
+            {
+              requestId: "permission-2",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: [],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
           pendingQuestions: [],
           workingDirectory: "/tmp/repo/worktree",
         },
@@ -146,8 +176,21 @@ describe("reattach-live-session", () => {
     expect(reattached).toBe(true);
     expect(resumed).toBe(true);
     expect(attachedSessionId === "external-1").toBe(true);
-    expect(state.pendingPermissions).toEqual([
-      { requestId: "permission-2", permission: "read", patterns: [] },
+    expect(state.pendingApprovals).toEqual([
+      {
+        requestId: "permission-2",
+        requestType: "permission_grant" as const,
+        title: `Approve permission: ${"read"}`,
+        summary: `Approval request for ${"read"}.`,
+        affectedPaths: [],
+        action: { name: "read" },
+        mutation: "read_only" as const,
+        supportedReplyOutcomes: [
+          "approve_once" as const,
+          "approve_session" as const,
+          "reject" as const,
+        ],
+      },
     ]);
   });
 
@@ -183,7 +226,7 @@ describe("reattach-live-session", () => {
           role: "build",
           startedAt: "2026-03-22T12:00:00.000Z",
           status: { type: "busy" },
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           workingDirectory: "/tmp/repo/worktree",
         },
@@ -226,7 +269,7 @@ describe("reattach-live-session", () => {
     const reattached = await reattachLiveSession(sessionRecordFixture);
 
     expect(reattached).toBe(false);
-    expect(state.pendingPermissions).toEqual(createSessionStateFixture().pendingPermissions);
+    expect(state.pendingApprovals).toEqual(createSessionStateFixture().pendingApprovals);
   });
 
   test("does not attach or update when the repo becomes stale after resume", async () => {
@@ -262,7 +305,7 @@ describe("reattach-live-session", () => {
           role: "build",
           startedAt: "2026-03-22T12:00:00.000Z",
           status: { type: "busy" },
-          pendingPermissions: [],
+          pendingApprovals: [],
           pendingQuestions: [],
           workingDirectory: "/tmp/repo/worktree",
         },
@@ -308,7 +351,7 @@ describe("reattach-live-session", () => {
             role: "build",
             startedAt: "2026-03-22T12:00:00.000Z",
             status: { type: "busy" },
-            pendingPermissions: [],
+            pendingApprovals: [],
             pendingQuestions: [],
             workingDirectory: "/tmp/repo/worktree",
           },

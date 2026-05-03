@@ -7,6 +7,8 @@ import type {
   SlashCommandCatalog as ContractsSlashCommandCatalog,
   SlashCommandDescriptor as ContractsSlashCommandDescriptor,
   RepoRuntimeRef,
+  RuntimeApprovalReplyOutcome,
+  RuntimeApprovalRequestType,
   RuntimeCapabilities,
   RuntimeDescriptor,
   RuntimeKind,
@@ -165,10 +167,30 @@ export type AgentSessionTodoItem = {
 
 export type AgentUserMessageState = "queued" | "read";
 
-export type AgentPendingPermissionRequest = {
+export type AgentApprovalMutation = "mutating" | "read_only" | "unknown";
+
+export type AgentPendingApprovalRequest = {
   requestId: RuntimePendingInputRequestId;
-  permission: string;
-  patterns: string[];
+  requestType: RuntimeApprovalRequestType;
+  title: string;
+  summary?: string;
+  details?: string;
+  affectedPaths?: string[];
+  command?: {
+    command: string;
+    workingDirectory?: string;
+  };
+  action?: {
+    name: string;
+    description?: string;
+  };
+  tool?: {
+    name: string;
+    title?: string;
+    input?: Record<string, unknown>;
+  };
+  mutation?: AgentApprovalMutation;
+  supportedReplyOutcomes?: RuntimeApprovalReplyOutcome[];
   metadata?: Record<string, unknown>;
 };
 
@@ -184,7 +206,7 @@ export type AgentPendingQuestionRequest = {
 };
 
 export type AgentRuntimePendingInput = {
-  permissions: AgentPendingPermissionRequest[];
+  approvals: AgentPendingApprovalRequest[];
   questions: AgentPendingQuestionRequest[];
 };
 
@@ -408,18 +430,14 @@ export type AgentEvent =
       success: boolean;
       message: string;
     }
-  | {
-      type: "permission_required";
+  | (AgentPendingApprovalRequest & {
+      type: "approval_required";
       externalSessionId: ExternalSessionId;
       timestamp: string;
-      requestId: RuntimePendingInputRequestId;
-      permission: string;
-      patterns: string[];
-      metadata?: Record<string, unknown>;
       parentExternalSessionId?: string;
       childExternalSessionId?: string;
       subagentCorrelationKey?: string;
-    }
+    })
   | {
       type: "question_required";
       externalSessionId: ExternalSessionId;
