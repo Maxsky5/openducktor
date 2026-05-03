@@ -144,6 +144,33 @@ describe("agent-studio-quick-actions", () => {
         (option) => option.launchActionId === "build_after_human_request_changes",
       ),
     ).toHaveLength(1);
+
+    const humanReviewTaskWithPullRequest = buildTask({
+      ...humanReviewTask,
+      pullRequest: buildPullRequest(),
+    });
+    const humanReviewWithPullRequestOptions = buildAgentStudioQuickActions({
+      selectedTask: humanReviewTaskWithPullRequest,
+      sessionsForTask: [
+        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+      ],
+      roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTaskWithPullRequest),
+      createSessionDisabled: false,
+    });
+
+    expect(selectPrimaryAgentStudioQuickAction(humanReviewWithPullRequestOptions)).toMatchObject({
+      launchActionId: "build_after_human_request_changes",
+      label: "Request Changes",
+      requiresHumanFeedback: true,
+    });
+    expect(humanReviewWithPullRequestOptions.map((option) => option.launchActionId)).toEqual([
+      "build_after_human_request_changes",
+      "qa_review",
+      "build_implementation_start",
+      "spec_initial",
+      "planner_initial",
+      "build_pull_request_generation",
+    ]);
   });
 
   test("keeps completed workflow roles in the dropdown while prioritizing current work", () => {
