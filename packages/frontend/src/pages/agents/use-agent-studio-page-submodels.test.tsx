@@ -102,7 +102,6 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     sessionCreateOptions: [],
     quickActions: [],
     primaryQuickAction: null,
-    createSessionDisabled: false,
   },
   ...overrides,
 });

@@ -323,7 +323,6 @@ export function useAgentStudioPageModels({
     selectedInteractionRole,
     selectedRoleAvailable,
     selectedRoleReadOnlyReason,
-    createSessionDisabled,
   } = workflowModelContext;
 
   const activeDocumentRole = core.activeSession?.role ?? core.role;
@@ -361,7 +360,6 @@ export function useAgentStudioPageModels({
       sessionCreateOptions,
       quickActions,
       primaryQuickAction,
-      createSessionDisabled,
     },
   });
 

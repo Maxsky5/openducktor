@@ -13,7 +13,7 @@ import {
   MessageCirclePlus,
   Zap,
 } from "lucide-react";
-import { type ReactElement, useMemo, useRef, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Button } from "@/components/ui/button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,7 +86,6 @@ export type AgentStudioHeaderModel = {
   primaryQuickAction: AgentStudioQuickActionOption | null;
   onQuickAction: (option: AgentStudioQuickActionOption) => void;
   onResolveGitConflictQuickAction: (() => void) | null;
-  createSessionDisabled: boolean;
   isCreatingSession: boolean;
   agentStudioReady: boolean;
 };
@@ -254,10 +253,46 @@ type QuickActionMenuEntry =
   | { kind: "quick_action"; option: AgentStudioQuickActionOption }
   | { kind: "message_first"; option: AgentSessionCreateOption };
 
+type QuickActionMenuGroup = {
+  role: AgentRole;
+  entries: QuickActionMenuEntry[];
+};
+
 const quickActionEntryId = (entry: QuickActionMenuEntry): string =>
   `${entry.kind}:${entry.option.id}`;
 
 const quickActionEntryRole = (entry: QuickActionMenuEntry): AgentRole => entry.option.role;
+
+const buildQuickActionMenuEntries = (
+  options: AgentStudioQuickActionOption[],
+  sessionCreateOptions: AgentSessionCreateOption[],
+): QuickActionMenuEntry[] => [
+  ...options.map((option) => ({ kind: "quick_action" as const, option })),
+  ...sessionCreateOptions.map((option) => ({ kind: "message_first" as const, option })),
+];
+
+const buildQuickActionMenuGroups = (entries: QuickActionMenuEntry[]): QuickActionMenuGroup[] => {
+  const entriesByRole: Record<AgentRole, QuickActionMenuEntry[]> = {
+    spec: [],
+    planner: [],
+    build: [],
+    qa: [],
+  };
+  const groups: QuickActionMenuGroup[] = [];
+
+  for (const entry of entries) {
+    entriesByRole[quickActionEntryRole(entry)].push(entry);
+  }
+
+  for (const role of QUICK_ACTION_ROLE_ORDER) {
+    const roleEntries = entriesByRole[role];
+    if (roleEntries.length > 0) {
+      groups.push({ role, entries: roleEntries });
+    }
+  }
+
+  return groups;
+};
 
 function QuickActionCommandItem({
   entry,
@@ -301,47 +336,31 @@ function QuickActionsMenu({
   const sessionStartBlockedReason = isCreatingSession
     ? "Session start is already in progress."
     : null;
+  const isActionSelectionBlocked = !agentStudioReady || sessionStartBlockedReason !== null;
   const canRunPrimaryAction =
-    agentStudioReady &&
-    primaryAction !== null &&
-    !primaryAction.disabled &&
-    sessionStartBlockedReason === null;
-  const menuEntries = useMemo<QuickActionMenuEntry[]>(
-    () => [
-      ...options.map((option) => ({ kind: "quick_action" as const, option })),
-      ...sessionCreateOptions.map((option) => ({ kind: "message_first" as const, option })),
-    ],
-    [options, sessionCreateOptions],
-  );
+    primaryAction !== null && !primaryAction.disabled && !isActionSelectionBlocked;
+  const menuEntries = buildQuickActionMenuEntries(options, sessionCreateOptions);
   const canOpenActionsMenu = agentStudioReady && menuEntries.length > 0;
-  const groupedMenuEntries = useMemo(() => {
-    const entriesByRole: Record<AgentRole, QuickActionMenuEntry[]> = {
-      spec: [],
-      planner: [],
-      build: [],
-      qa: [],
-    };
-    const groups: { role: AgentRole; entries: QuickActionMenuEntry[] }[] = [];
+  const groupedMenuEntries = buildQuickActionMenuGroups(menuEntries);
 
-    for (const entry of menuEntries) {
-      entriesByRole[quickActionEntryRole(entry)].push(entry);
+  useEffect(() => {
+    if (isOpen && !canOpenActionsMenu) {
+      onOpenChange(false);
     }
-    for (const role of QUICK_ACTION_ROLE_ORDER) {
-      const entries = entriesByRole[role];
-      if (entries.length > 0) {
-        groups.push({ role, entries });
-      }
-    }
-    return groups;
-  }, [menuEntries]);
-  const selectAction = (option: AgentStudioQuickActionOption): void => {
-    if (sessionStartBlockedReason !== null) {
+  }, [canOpenActionsMenu, isOpen, onOpenChange]);
+
+  const selectMenuEntry = (entry: QuickActionMenuEntry): void => {
+    if (isActionSelectionBlocked || entry.option.disabled) {
       return;
     }
-    if (option.disabled) {
+
+    if (entry.kind === "message_first") {
+      onPrepareMessageFirstSession(entry.option);
+      onOpenChange(false);
       return;
     }
-    if (isGitConflictResolutionQuickAction(option)) {
+
+    if (isGitConflictResolutionQuickAction(entry.option)) {
       if (!onResolveGitConflictQuickAction) {
         throw new Error("Git conflict quick action handler is not configured.");
       }
@@ -349,19 +368,8 @@ function QuickActionsMenu({
       onOpenChange(false);
       return;
     }
-    onQuickAction(option);
-    onOpenChange(false);
-  };
-  const selectMenuEntry = (entry: QuickActionMenuEntry): void => {
-    if (entry.kind === "quick_action") {
-      selectAction(entry.option);
-      return;
-    }
 
-    if (sessionStartBlockedReason !== null || entry.option.disabled) {
-      return;
-    }
-    onPrepareMessageFirstSession(entry.option);
+    onQuickAction(entry.option);
     onOpenChange(false);
   };
 
@@ -379,7 +387,7 @@ function QuickActionsMenu({
         }
         onClick={() => {
           if (primaryAction) {
-            selectAction(primaryAction);
+            selectMenuEntry({ kind: "quick_action", option: primaryAction });
           }
         }}
       >

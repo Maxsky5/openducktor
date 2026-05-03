@@ -435,11 +435,20 @@ export const buildSessionCreateOptions = (params: {
 }): SessionCreateOption[] => {
   const options: SessionCreateOption[] = [];
 
+  const resolveBuildLaunchAction = (): SessionLaunchActionId => {
+    if (params.hasHumanFeedback) {
+      return "build_after_human_request_changes";
+    }
+    if (params.hasQaRejection) {
+      return "build_after_qa_rejected";
+    }
+    return "build_implementation_start";
+  };
+
   const addMessageFirstOption = (
     role: AgentRole,
     launchActionId: SessionLaunchActionId,
     description: string,
-    disabled: boolean,
   ) => {
     options.push({
       id: `${role}:${launchActionId}:message_first`,
@@ -447,8 +456,10 @@ export const buildSessionCreateOptions = (params: {
       launchActionId,
       label: `Prepare ${params.roleLabelByRole[role]} session`,
       description,
-      disabled,
-      ...(disabled ? { disabledReason: "Wait for the current session to finish." } : {}),
+      disabled: params.createSessionDisabled,
+      ...(params.createSessionDisabled
+        ? { disabledReason: "Wait for the current session to finish." }
+        : {}),
     });
   };
 
@@ -458,43 +469,29 @@ export const buildSessionCreateOptions = (params: {
       "spec",
       launchActionId,
       "Open a Spec composer without sending a kickoff.",
-      params.createSessionDisabled,
     );
   }
 
-  const canStartPlannerFresh = params.roleEnabledByTask.planner;
-  if (canStartPlannerFresh) {
+  if (params.roleEnabledByTask.planner) {
     const launchActionId = firstLaunchAction("planner");
     addMessageFirstOption(
       "planner",
       launchActionId,
       "Open a Planner composer without sending a kickoff.",
-      params.createSessionDisabled,
     );
   }
 
   if (params.roleEnabledByTask.build) {
-    const launchActionId = params.hasHumanFeedback
-      ? "build_after_human_request_changes"
-      : params.hasQaRejection
-        ? "build_after_qa_rejected"
-        : "build_implementation_start";
     addMessageFirstOption(
       "build",
-      launchActionId,
+      resolveBuildLaunchAction(),
       "Open a Builder composer without sending a kickoff.",
-      params.createSessionDisabled,
     );
   }
 
   if (params.roleEnabledByTask.qa) {
     const launchActionId = firstLaunchAction("qa");
-    addMessageFirstOption(
-      "qa",
-      launchActionId,
-      "Open a QA composer without sending a kickoff.",
-      params.createSessionDisabled,
-    );
+    addMessageFirstOption("qa", launchActionId, "Open a QA composer without sending a kickoff.");
   }
 
   return options;

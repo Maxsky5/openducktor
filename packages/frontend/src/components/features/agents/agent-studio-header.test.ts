@@ -159,7 +159,6 @@ const buildModel = () => ({
   },
   onQuickAction: () => {},
   onResolveGitConflictQuickAction: null,
-  createSessionDisabled: false,
   isCreatingSession: false,
   stats: {
     sessions: 3,
@@ -470,6 +469,42 @@ describe("AgentStudioHeader", () => {
     );
   });
 
+  test("closes quick-actions menu when actions become unavailable", async () => {
+    const { rerender } = render(
+      createElement(AgentStudioHeader, {
+        model: buildModel(),
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Open quick actions menu/i }));
+    });
+    expect(screen.getByText("Prepare Builder session")).toBeTruthy();
+
+    await act(async () => {
+      rerender(
+        createElement(AgentStudioHeader, {
+          model: {
+            ...buildModel(),
+            agentStudioReady: false,
+          },
+        }),
+      );
+    });
+
+    expect(screen.queryByText("Prepare Builder session")).toBeNull();
+
+    await act(async () => {
+      rerender(
+        createElement(AgentStudioHeader, {
+          model: buildModel(),
+        }),
+      );
+    });
+
+    expect(screen.queryByText("Prepare Builder session")).toBeNull();
+  });
+
   test("routes git conflict quick action through the conflict handler", async () => {
     const onQuickAction = mock(() => {});
     const onResolveGitConflictQuickAction = mock(() => {});
@@ -596,7 +631,7 @@ describe("AgentStudioHeader", () => {
     expect(html).toMatch(
       /<button[^>]*(aria-label="Run quick action: Start Implementation"[^>]*disabled=""|disabled=""[^>]*aria-label="Run quick action: Start Implementation")/,
     );
-    expect(html).toContain('class="lucide lucide-zap size-4"');
+    expect(html).toContain("lucide-zap");
     expect(html).not.toContain("Prepare new session");
   });
 

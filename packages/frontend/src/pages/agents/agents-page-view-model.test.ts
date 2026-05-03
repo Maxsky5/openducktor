@@ -183,7 +183,6 @@ describe("agents-page-view-model", () => {
       quickActions: [],
       primaryQuickAction: null,
       onQuickAction,
-      createSessionDisabled: true,
       isStarting: true,
       contextSessionsLength: 2,
     });
@@ -250,7 +249,6 @@ describe("agents-page-view-model", () => {
       quickActions: [],
       primaryQuickAction: null,
       onQuickAction: mock(() => {}),
-      createSessionDisabled: false,
       isStarting: false,
       contextSessionsLength: 0,
     });

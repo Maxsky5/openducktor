@@ -65,7 +65,6 @@ export const buildAgentStudioHeaderModel = (args: {
   primaryQuickAction: AgentStudioQuickActionOption | null;
   onQuickAction: (option: AgentStudioQuickActionOption) => void;
   onResolveGitConflictQuickAction?: (() => void) | null;
-  createSessionDisabled: boolean;
   isStarting: boolean;
   contextSessionsLength: number;
 }): AgentStudioHeaderModel => ({
@@ -99,7 +98,6 @@ export const buildAgentStudioHeaderModel = (args: {
   primaryQuickAction: args.primaryQuickAction,
   onQuickAction: args.onQuickAction,
   onResolveGitConflictQuickAction: args.onResolveGitConflictQuickAction ?? null,
-  createSessionDisabled: args.createSessionDisabled,
   isCreatingSession: args.isStarting,
   agentStudioReady: args.agentStudioReady,
 });
