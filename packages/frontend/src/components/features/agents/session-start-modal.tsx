@@ -127,6 +127,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     !selectedModelSelection ||
     !supportsVariants ||
     variantOptions.length === 0;
+  const runtimePlaceholder =
+    runtimeOptions.length > 0
+      ? "Select runtime"
+      : `No runtime supports ${sessionStartModeButtonLabel(selectedStartMode).toLowerCase()}`;
   const handleConfirm = (): void => {
     if (confirmDisabled) {
       return;
@@ -248,6 +252,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                 <AgentRuntimeCombobox
                   value={selectedRuntimeKind ?? ""}
                   runtimeOptions={runtimeOptions}
+                  placeholder={runtimePlaceholder}
                   disabled={runtimeDisabled}
                   className="sm:min-w-[20rem]"
                   onValueChange={onSelectRuntime}

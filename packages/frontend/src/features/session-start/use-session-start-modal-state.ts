@@ -13,7 +13,10 @@ import {
 } from "@/components/features/agents/catalog-select-options";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
+import {
+  filterRuntimeDefinitionsForStartMode,
+  resolveRuntimeKindSelection,
+} from "@/lib/agent-runtime";
 import {
   canonicalTargetBranch,
   effectiveTaskTargetBranch,
@@ -49,6 +52,7 @@ type UseSessionStartModalStateResult = {
   intent: SessionStartModalIntent | null;
   isOpen: boolean;
   selection: AgentModelSelection | null;
+  selectedRuntimeDescriptor: RuntimeDescriptor | null;
   selectedRuntimeKind: RuntimeKind | null;
   runtimeOptions: ComboboxOption[];
   supportsProfiles: boolean;
@@ -89,9 +93,12 @@ export function useSessionStartModalState({
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
   const [selectedTargetBranch, setSelectedTargetBranch] = useState("");
+  const [selectedStartModeForRuntime, setSelectedStartModeForRuntime] =
+    useState<AgentSessionStartMode>("fresh");
   const activeRole = intent?.role ?? null;
   const {
     catalog,
+    eligibleRuntimeDefinitions,
     isCatalogLoading,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,
@@ -103,6 +110,7 @@ export function useSessionStartModalState({
     isOpen: intent !== null,
     loadCatalog: loadCatalogForRepo,
     runtimeDefinitions,
+    selectedStartMode: selectedStartModeForRuntime,
   });
   const {
     availableStartModes,
@@ -140,6 +148,7 @@ export function useSessionStartModalState({
   const closeStartModal = useCallback(() => {
     setIntent(null);
     setSelectedTargetBranch("");
+    setSelectedStartModeForRuntime("fresh");
     resetSelection();
     resetStartState();
   }, [resetSelection, resetStartState]);
@@ -151,11 +160,16 @@ export function useSessionStartModalState({
         roleDefaultSelectionFor(repoSettings, nextIntent.role)?.runtimeKind ??
         repoSettings?.defaultRuntimeKind ??
         null;
+      const initialStartMode = initializeStartState(nextIntent);
       const initialRuntimeKind = resolveRuntimeKindSelection({
-        runtimeDefinitions,
+        runtimeDefinitions: filterRuntimeDefinitionsForStartMode(
+          runtimeDefinitions,
+          initialStartMode,
+        ),
         requestedRuntimeKind,
       });
       setRequestedRuntimeKind(requestedRuntimeKind);
+      setSelectedStartModeForRuntime(initialStartMode);
       setIntent(nextIntent);
       setSelectedTargetBranch(
         targetBranchSelectionValue(
@@ -165,7 +179,6 @@ export function useSessionStartModalState({
           ),
         ),
       );
-      initializeStartState(nextIntent);
       initializeSelection(nextIntent.role, initialRuntimeKind, nextIntent.selectedModel ?? null);
     },
     [
@@ -180,7 +193,7 @@ export function useSessionStartModalState({
   const handleSelectRuntime = useCallback(
     (runtimeKindValue: RuntimeKind): void => {
       const runtimeKind = resolveRuntimeKindSelection({
-        runtimeDefinitions,
+        runtimeDefinitions: eligibleRuntimeDefinitions,
         requestedRuntimeKind: runtimeKindValue,
       });
       setRequestedRuntimeKind(runtimeKindValue);
@@ -190,7 +203,23 @@ export function useSessionStartModalState({
         resetSelection();
       }
     },
-    [handleSelectionRuntimeChange, resetSelection, runtimeDefinitions, setRequestedRuntimeKind],
+    [
+      eligibleRuntimeDefinitions,
+      handleSelectionRuntimeChange,
+      resetSelection,
+      setRequestedRuntimeKind,
+    ],
+  );
+
+  const handleSelectedStartModeChange = useCallback(
+    (startMode: AgentSessionStartMode): void => {
+      handleSelectStartMode(startMode);
+      if ((startMode === "reuse" || startMode === "fork") && existingSessionOptions.length === 0) {
+        return;
+      }
+      setSelectedStartModeForRuntime(startMode);
+    },
+    [existingSessionOptions.length, handleSelectStartMode],
   );
 
   const selectedModelEntry = useMemo(() => {
@@ -302,6 +331,7 @@ export function useSessionStartModalState({
     intent,
     isOpen: intent !== null,
     selection,
+    selectedRuntimeDescriptor,
     selectedRuntimeKind,
     runtimeOptions,
     supportsProfiles:
@@ -322,7 +352,7 @@ export function useSessionStartModalState({
     selectedTargetBranch,
     openStartModal,
     closeStartModal,
-    handleSelectStartMode,
+    handleSelectStartMode: handleSelectedStartModeChange,
     handleSelectSourceSession,
     handleSelectTargetBranch,
     handleSelectRuntime,

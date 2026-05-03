@@ -1,8 +1,14 @@
-import type { GitBranch, GitTargetBranch } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
+import type {
+  GitBranch,
+  GitTargetBranch,
+  RuntimeDescriptor,
+  RuntimeKind,
+} from "@openducktor/contracts";
+import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import { runtimeSupportsStartMode } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import {
   INVALID_TASK_TARGET_BRANCH_LABEL,
@@ -74,6 +80,49 @@ const requireSourceSessionId = (
   );
 };
 
+const sourceSessionRuntimeKind = ({
+  existingSessionOptions,
+  sourceExternalSessionId,
+}: {
+  existingSessionOptions: Array<{ value: string; selectedModel?: AgentModelSelection | null }>;
+  sourceExternalSessionId: string;
+}): RuntimeKind | null => {
+  return (
+    existingSessionOptions.find((option) => option.value === sourceExternalSessionId)?.selectedModel
+      ?.runtimeKind ?? null
+  );
+};
+
+export const assertRuntimeSupportsSelectedStartMode = ({
+  launchActionId,
+  role,
+  runtimeDescriptor,
+  runtimeKind,
+  startMode,
+  taskId,
+}: {
+  launchActionId: string;
+  role: AgentRole;
+  runtimeDescriptor: RuntimeDescriptor | null;
+  runtimeKind: RuntimeKind | null;
+  startMode: AgentSessionStartMode;
+  taskId: string;
+}): void => {
+  if (!runtimeDescriptor) {
+    throw new Error(
+      `Starting a ${role} ${launchActionId} session for ${taskId} requires a runtime that supports ${startMode} session starts.`,
+    );
+  }
+  if (runtimeSupportsStartMode(runtimeDescriptor, startMode)) {
+    return;
+  }
+
+  const runtimeLabel = runtimeDescriptor.label || runtimeKind || runtimeDescriptor.kind;
+  throw new Error(
+    `Runtime "${runtimeLabel}" does not support ${startMode} session starts for ${launchActionId}. Select a compatible runtime or start mode.`,
+  );
+};
+
 export function useSessionStartModalRunner({
   activeWorkspace,
   branches = [],
@@ -97,6 +146,7 @@ export function useSessionStartModalRunner({
     intent,
     isOpen,
     selection,
+    selectedRuntimeDescriptor,
     selectedRuntimeKind,
     runtimeOptions,
     supportsProfiles,
@@ -192,22 +242,12 @@ export function useSessionStartModalRunner({
 
       const requestContext = pendingRun.request;
 
-      const decision: SessionStartModalDecision =
-        input.startMode === "reuse"
-          ? {
-              startMode: "reuse",
-              sourceExternalSessionId: requireSourceSessionId(
-                input.sourceExternalSessionId,
-                requestContext,
-              ),
-              ...(input.targetBranch
-                ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
-                : {}),
-            }
-          : input.startMode === "fork"
+      setIsStarting(true);
+      try {
+        const decision: SessionStartModalDecision =
+          input.startMode === "reuse"
             ? {
-                startMode: "fork",
-                selectedModel: requireSelectedModel(selectionRef.current, requestContext),
+                startMode: "reuse",
                 sourceExternalSessionId: requireSourceSessionId(
                   input.sourceExternalSessionId,
                   requestContext,
@@ -216,16 +256,48 @@ export function useSessionStartModalRunner({
                   ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
                   : {}),
               }
-            : {
-                startMode: "fresh",
-                selectedModel: requireSelectedModel(selectionRef.current, requestContext),
-                ...(input.targetBranch
-                  ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
-                  : {}),
-              };
+            : input.startMode === "fork"
+              ? {
+                  startMode: "fork",
+                  selectedModel: requireSelectedModel(selectionRef.current, requestContext),
+                  sourceExternalSessionId: requireSourceSessionId(
+                    input.sourceExternalSessionId,
+                    requestContext,
+                  ),
+                  ...(input.targetBranch
+                    ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
+                    : {}),
+                }
+              : {
+                  startMode: "fresh",
+                  selectedModel: requireSelectedModel(selectionRef.current, requestContext),
+                  ...(input.targetBranch
+                    ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
+                    : {}),
+                };
 
-      setIsStarting(true);
-      try {
+        if (decision.startMode === "reuse") {
+          const sourceRuntimeKind = sourceSessionRuntimeKind({
+            existingSessionOptions,
+            sourceExternalSessionId: decision.sourceExternalSessionId,
+          });
+          if (sourceRuntimeKind) {
+            assertRuntimeSupportsSelectedStartMode({
+              ...requestContext,
+              runtimeDescriptor: selectedRuntimeDescriptor,
+              runtimeKind: sourceRuntimeKind,
+              startMode: decision.startMode,
+            });
+          }
+        } else {
+          assertRuntimeSupportsSelectedStartMode({
+            ...requestContext,
+            runtimeDescriptor: selectedRuntimeDescriptor,
+            runtimeKind: decision.selectedModel.runtimeKind ?? selectedRuntimeKind,
+            startMode: decision.startMode,
+          });
+        }
+
         const value = await pendingRun.execute({
           decision,
           runInBackground: input.runInBackground ?? false,
@@ -240,7 +312,7 @@ export function useSessionStartModalRunner({
         setIsStarting(false);
       }
     },
-    [resolvePendingRun],
+    [existingSessionOptions, resolvePendingRun, selectedRuntimeDescriptor, selectedRuntimeKind],
   );
 
   const sessionStartModal = useMemo<SessionStartModalModel | null>(() => {

@@ -70,7 +70,11 @@ export function useSessionStartModalSelectionState({
     if (!activeRole) {
       return;
     }
-    if (selectedStartMode === "reuse" || !selectedRuntimeKind) {
+    if (selectedStartMode === "reuse") {
+      return;
+    }
+    if (!selectedRuntimeKind) {
+      setSelection((current) => (current === null ? current : null));
       return;
     }
 
