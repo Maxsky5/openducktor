@@ -26,6 +26,7 @@ import {
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
   isOpencodeExposedOdtToolAlias,
+  ODT_WORKFLOW_AGENT_TOOL_NAMES,
   OPENCODE_ODT_TOOL_ID_PREFIXES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
@@ -800,6 +801,14 @@ describe("runtime schemas", () => {
     expect(isOpencodeExposedOdtToolAlias("functions.openducktor_odt_set_plan")).toBe(true);
     expect(isOpencodeExposedOdtToolAlias("customprefix_odt_set_plan")).toBe(false);
     expect(isOpencodeExposedOdtToolAlias("odt_set_plan")).toBe(false);
+  });
+
+  test("OpenCode runtime descriptor aliases stay generated from canonical ODT tool names", () => {
+    for (const canonicalTool of ODT_WORKFLOW_AGENT_TOOL_NAMES) {
+      expect(OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical[canonicalTool]).toEqual(
+        toOpencodeOdtToolAliases(canonicalTool),
+      );
+    }
   });
 
   test("runtime instance summary rejects live/transient fields outside the summary contract", () => {
