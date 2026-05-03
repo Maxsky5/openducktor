@@ -461,6 +461,15 @@ export type AgentEvent =
       status: AgentSessionStatus;
     }
   | {
+      type: "mcp_reconnect_started";
+      externalSessionId: ExternalSessionId;
+      timestamp: string;
+      serverName: string;
+      workingDirectory: string;
+      status: string;
+      errorDetails?: string;
+    }
+  | {
       type: "session_error";
       externalSessionId: ExternalSessionId;
       timestamp: string;

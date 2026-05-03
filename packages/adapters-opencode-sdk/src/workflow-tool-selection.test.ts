@@ -10,8 +10,13 @@ const makeClient = (input: {
   throwOnList?: boolean;
   onList?: () => void;
   mcpStatusResponse?: unknown;
+  mcpStatusResponses?: unknown[];
   throwOnMcpStatus?: boolean;
+  throwOnMcpConnect?: boolean;
+  onMcpStatus?: (args: { directory: string }) => void;
+  onMcpConnect?: (args: { directory: string; name: string }) => void;
 }): OpencodeClient => {
+  let statusResponseIndex = 0;
   return {
     tool: {
       ids: async () => {
@@ -35,12 +40,31 @@ const makeClient = (input: {
       },
     },
     mcp: {
-      status: async () => {
+      status: async (args: { directory: string }) => {
+        input.onMcpStatus?.(args);
         if (input.throwOnMcpStatus) {
           throw new Error("mcp-down");
         }
+        if (input.mcpStatusResponses) {
+          const response = input.mcpStatusResponses[statusResponseIndex];
+          statusResponseIndex += 1;
+          return {
+            data: response,
+            error: undefined,
+          };
+        }
         return {
           data: input.mcpStatusResponse ?? { openducktor: { status: "connected" } },
+          error: undefined,
+        };
+      },
+      connect: async (args: { directory: string; name: string }) => {
+        input.onMcpConnect?.(args);
+        if (input.throwOnMcpConnect) {
+          throw new Error("mcp-connect-down");
+        }
+        return {
+          data: true,
           error: undefined,
         };
       },
@@ -170,8 +194,77 @@ describe("workflow-tool-selection", () => {
     }).catch((error: unknown) => error);
 
     expect(selectionError).toBeInstanceOf(Error);
-    expect((selectionError as Error).message).toContain('MCP server "openducktor" is "failed"');
+    expect((selectionError as Error).message).toContain('unavailable for "/repo"');
+    expect((selectionError as Error).message).toContain(
+      'MCP server "openducktor" stayed unavailable after reconnect',
+    );
     expect((selectionError as Error).message).toContain("connection closed");
+  });
+
+  test("reconnects a failed trusted MCP server for the same worktree before tool selection", async () => {
+    const mcpStatusDirectories: string[] = [];
+    const mcpConnectCalls: Array<{ directory: string; name: string }> = [];
+    const reconnectEvents: Array<{
+      serverName: string;
+      workingDirectory: string;
+      status: string;
+      errorDetails: string | undefined;
+    }> = [];
+
+    const selection = await resolveWorkflowToolSelection({
+      client: makeClient({
+        toolIds: ["odt_read_task", "odt_set_plan"],
+        mcpStatusResponses: [
+          { openducktor: { status: "failed", error: "MCP error -32000: Connection closed" } },
+          { openducktor: { status: "connected" } },
+        ],
+        onMcpStatus: (args) => mcpStatusDirectories.push(args.directory),
+        onMcpConnect: (args) => mcpConnectCalls.push(args),
+      }),
+      role: "build",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      workingDirectory: "/repo/.openducktor/worktrees/task-1",
+      onReconnectStart: (event) => reconnectEvents.push(event),
+    });
+
+    expect(mcpStatusDirectories).toEqual([
+      "/repo/.openducktor/worktrees/task-1",
+      "/repo/.openducktor/worktrees/task-1",
+    ]);
+    expect(mcpConnectCalls).toEqual([
+      {
+        directory: "/repo/.openducktor/worktrees/task-1",
+        name: "openducktor",
+      },
+    ]);
+    expect(reconnectEvents).toEqual([
+      {
+        serverName: "openducktor",
+        workingDirectory: "/repo/.openducktor/worktrees/task-1",
+        status: "failed",
+        errorDetails: "MCP error -32000: Connection closed",
+      },
+    ]);
+    expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_set_plan).toBe(false);
+  });
+
+  test("propagates same-directory MCP reconnect failures", async () => {
+    const selectionError = await resolveWorkflowToolSelection({
+      client: makeClient({
+        toolIds: ["odt_read_task"],
+        mcpStatusResponse: {
+          openducktor: { status: "failed", error: "MCP error -32000: Connection closed" },
+        },
+        throwOnMcpConnect: true,
+      }),
+      role: "build",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      workingDirectory: "/repo/.openducktor/worktrees/task-1",
+    }).catch((error: unknown) => error);
+
+    expect(selectionError).toBeInstanceOf(Error);
+    expect((selectionError as Error).message).toBe("mcp-connect-down");
   });
 
   test("propagates trusted MCP status lookup failures", async () => {

@@ -89,6 +89,9 @@ const SESSION_EVENT_BATCH_RULES: SessionEventBatchRules = {
   approval_required: {
     immediate: true,
   },
+  mcp_reconnect_started: {
+    immediate: true,
+  },
   question_required: {
     immediate: true,
   },
@@ -144,6 +147,8 @@ const withTypedSessionEvent = <T>(
       return callback(event, SESSION_EVENT_BATCH_RULES.session_status);
     case "approval_required":
       return callback(event, SESSION_EVENT_BATCH_RULES.approval_required);
+    case "mcp_reconnect_started":
+      return callback(event, SESSION_EVENT_BATCH_RULES.mcp_reconnect_started);
     case "question_required":
       return callback(event, SESSION_EVENT_BATCH_RULES.question_required);
     case "session_todos_updated":

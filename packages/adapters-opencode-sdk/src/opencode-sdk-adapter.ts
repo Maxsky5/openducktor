@@ -84,7 +84,10 @@ import type {
 } from "./types";
 import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
 import { buildRoleScopedPermissionRules } from "./workflow-tool-permissions";
-import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
+import {
+  ensureTrustedOdtMcpServerConnected,
+  resolveWorkflowToolSelection,
+} from "./workflow-tool-selection";
 
 const toLiveAgentSessionStatus = (status: unknown): LiveAgentSessionSummary["status"] => {
   if (status === undefined || status === null) {
@@ -770,6 +773,22 @@ export class OpencodeSdkAdapter
     session: SessionRecord,
   ): Promise<Record<string, boolean>> {
     const nowMs = Date.now();
+    await ensureTrustedOdtMcpServerConnected({
+      client: session.client,
+      workingDirectory: session.input.workingDirectory,
+      onReconnectStart: (event) => {
+        this.emit(session.summary.externalSessionId, {
+          type: "mcp_reconnect_started",
+          externalSessionId: session.summary.externalSessionId,
+          timestamp: this.now(),
+          serverName: event.serverName,
+          workingDirectory: event.workingDirectory,
+          status: event.status,
+          ...(event.errorDetails ? { errorDetails: event.errorDetails } : {}),
+        });
+      },
+    });
+
     if (
       session.workflowToolSelectionCache &&
       typeof session.workflowToolSelectionCachedAt === "number" &&
@@ -783,6 +802,7 @@ export class OpencodeSdkAdapter
       role: requireWorkflowRole(session),
       runtimeDescriptor: this.getRuntimeDefinition(),
       workingDirectory: session.input.workingDirectory,
+      skipMcpConnectionCheck: true,
     });
 
     session.workflowToolSelectionCache = selection;

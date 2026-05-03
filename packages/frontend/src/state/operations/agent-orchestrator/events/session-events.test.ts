@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { withMockedToast } from "@/test-utils/mock-toast";
 import {
   lastSessionMessageForTest,
   sessionMessageAt,
@@ -465,6 +466,61 @@ describe("agent-orchestrator-session-events", () => {
     } finally {
       Date.now = originalDateNow;
     }
+  });
+
+  test("shows a toast when OpenDucktor starts MCP reconnect recovery", async () => {
+    await withMockedToast(async ({ toastInfoMock }) => {
+      const handlers: Array<(event: SessionEvent) => void> = [];
+      const adapter: SessionEventAdapter = {
+        subscribeEvents: (_externalSessionId, handler) => {
+          handlers.push(handler);
+          return () => {};
+        },
+        replyApproval: async () => {},
+      };
+      const sessionsRef: { current: Record<string, AgentSessionState> } = {
+        current: {
+          "session-1": buildSession({ role: "build" }),
+        },
+      };
+
+      attachAgentSessionListener({
+        adapter,
+        repoPath: "/tmp/repo",
+        externalSessionId: "session-1",
+        sessionsRef,
+        draftRawBySessionRef: { current: {} },
+        draftSourceBySessionRef: { current: {} },
+        draftMessageIdBySessionRef: { current: {} },
+        draftFlushTimeoutBySessionRef: { current: {} },
+        turnStartedAtBySessionRef: { current: {} },
+        updateSession: () => {},
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => {},
+        refreshTaskData: async () => {},
+      });
+
+      const handleEvent = handlers[0];
+      if (!handleEvent) {
+        throw new Error("Expected session event handler to be registered");
+      }
+
+      handleEvent({
+        type: "mcp_reconnect_started",
+        externalSessionId: "session-1",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        serverName: "openducktor",
+        workingDirectory: "/tmp/repo/.openducktor/worktrees/task-1",
+        status: "failed",
+        errorDetails: "MCP error -32000: Connection closed",
+      });
+
+      expect(toastInfoMock).toHaveBeenCalledWith("Reconnecting OpenDucktor MCP", {
+        description:
+          "OpenDucktor MCP is failed for /tmp/repo/.openducktor/worktrees/task-1. MCP error -32000: Connection closed OpenDucktor is trying to reconnect.",
+      });
+      expect(getSessionMessages(sessionsRef)).toEqual([]);
+    });
   });
 
   test("runs completion side effects once for duplicate completed tool events", async () => {
