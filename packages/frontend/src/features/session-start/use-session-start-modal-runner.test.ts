@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { assertRuntimeSupportsSelectedStartMode } from "./use-session-start-modal-runner";
+import {
+  assertRuntimeSupportsSelectedStartMode,
+  requireSourceSessionRuntimeKind,
+} from "./use-session-start-modal-runner";
 
 const FORKLESS_RUNTIME = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
@@ -59,5 +62,28 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
     ).toThrow(
       "Starting a build build_implementation_start session for TASK-2 requires a runtime that supports fresh session starts.",
     );
+  });
+
+  test("uses the source option runtime kind before selected model runtime kind", () => {
+    expect(
+      requireSourceSessionRuntimeKind({
+        value: "session-1",
+        label: "Reusable session",
+        description: "Reusable session with runtime",
+        runtimeKind: "opencode",
+        selectedModel: null,
+      }),
+    ).toBe("opencode");
+  });
+
+  test("fails fast when a reusable session has no runtime kind", () => {
+    expect(() =>
+      requireSourceSessionRuntimeKind({
+        value: "session-2",
+        label: "Missing runtime session",
+        description: "Reusable session without runtime",
+        selectedModel: null,
+      }),
+    ).toThrow("Reusable session is missing a runtime kind.");
   });
 });

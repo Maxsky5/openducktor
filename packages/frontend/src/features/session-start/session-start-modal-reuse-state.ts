@@ -63,13 +63,24 @@ const resolveInitialStartState = ({
   selectedStartMode: AgentSessionStartMode;
 } => {
   const allowedStartModes = getSessionLaunchAction(launchActionId).allowedStartModes;
-  const selectedStartMode =
-    initialStartMode && allowedStartModes.includes(initialStartMode)
-      ? initialStartMode
-      : resolveLaunchStartMode({
-          launchActionId,
-          existingSessionOptions,
-        });
+  const hasExistingSession = existingSessionOptions.length > 0;
+  let selectedStartMode: AgentSessionStartMode;
+
+  if (initialStartMode && allowedStartModes.includes(initialStartMode)) {
+    selectedStartMode = initialStartMode;
+    if (
+      (selectedStartMode === "reuse" || selectedStartMode === "fork") &&
+      !hasExistingSession &&
+      allowedStartModes.includes("fresh")
+    ) {
+      selectedStartMode = "fresh";
+    }
+  } else {
+    selectedStartMode = resolveLaunchStartMode({
+      launchActionId,
+      existingSessionOptions,
+    });
+  }
 
   return {
     selectedStartMode,

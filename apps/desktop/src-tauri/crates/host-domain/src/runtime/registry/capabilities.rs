@@ -674,6 +674,17 @@ impl RuntimeCapabilities {
     }
 
     pub(super) fn launch_config_errors(&self) -> Vec<String> {
+        let supported_modes = if self.session_lifecycle.supported_start_modes.is_empty() {
+            "none".to_string()
+        } else {
+            self.session_lifecycle
+                .supported_start_modes
+                .iter()
+                .map(|mode| mode.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
         LAUNCH_START_MODE_REQUIREMENTS
             .iter()
             .filter_map(|requirement| {
@@ -690,16 +701,6 @@ impl RuntimeCapabilities {
                     .map(|mode| mode.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                let supported_modes = if self.session_lifecycle.supported_start_modes.is_empty() {
-                    "none".to_string()
-                } else {
-                    self.session_lifecycle
-                        .supported_start_modes
-                        .iter()
-                        .map(|mode| mode.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                };
                 Some(format!(
                     "[launch_scoped] launch action {} has no supported start mode (allowed: {}; runtime supports: {})",
                     requirement.id,

@@ -23,6 +23,7 @@ export const buildReusableSessionOptions = ({
     const runtimeKind = session.selectedModel?.runtimeKind ?? session.runtimeKind ?? null;
     return {
       value: session.externalSessionId,
+      runtimeKind: session.runtimeKind ?? null,
       label: formatAgentSessionOptionLabel({
         session,
         sessionNumber: roleSessionNumberById.get(session.externalSessionId) ?? index + 1,

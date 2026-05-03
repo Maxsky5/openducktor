@@ -17,6 +17,7 @@ import {
 } from "@/lib/target-branch";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import { supportsTaskTargetBranchSelection } from "./constants";
+import type { SessionStartExistingSessionOption } from "./session-start-types";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
 
@@ -80,17 +81,16 @@ const requireSourceSessionId = (
   );
 };
 
-const sourceSessionRuntimeKind = ({
-  existingSessionOptions,
-  sourceExternalSessionId,
-}: {
-  existingSessionOptions: Array<{ value: string; selectedModel?: AgentModelSelection | null }>;
-  sourceExternalSessionId: string;
-}): RuntimeKind | null => {
-  return (
-    existingSessionOptions.find((option) => option.value === sourceExternalSessionId)?.selectedModel
-      ?.runtimeKind ?? null
-  );
+export const requireSourceSessionRuntimeKind = (
+  sourceSession: SessionStartExistingSessionOption | null | undefined,
+): RuntimeKind => {
+  const runtimeKind =
+    sourceSession?.runtimeKind ?? sourceSession?.selectedModel?.runtimeKind ?? null;
+  if (runtimeKind) {
+    return runtimeKind;
+  }
+
+  throw new Error("Reusable session is missing a runtime kind.");
 };
 
 export const assertRuntimeSupportsSelectedStartMode = ({
@@ -278,22 +278,21 @@ export function useSessionStartModalRunner({
                 };
 
         if (decision.startMode === "reuse") {
-          const sourceRuntimeKind = sourceSessionRuntimeKind({
-            existingSessionOptions,
-            sourceExternalSessionId: decision.sourceExternalSessionId,
+          const sourceOption = existingSessionOptions.find(
+            (option) => option.value === decision.sourceExternalSessionId,
+          );
+          const sourceRuntimeKind = requireSourceSessionRuntimeKind(sourceOption);
+
+          const sourceRuntimeDescriptor = findRuntimeDefinition(
+            eligibleRuntimeDefinitions,
+            sourceRuntimeKind,
+          );
+          assertRuntimeSupportsSelectedStartMode({
+            ...requestContext,
+            runtimeDescriptor: sourceRuntimeDescriptor,
+            runtimeKind: sourceRuntimeKind,
+            startMode: decision.startMode,
           });
-          if (sourceRuntimeKind) {
-            const sourceRuntimeDescriptor = findRuntimeDefinition(
-              eligibleRuntimeDefinitions,
-              sourceRuntimeKind,
-            );
-            assertRuntimeSupportsSelectedStartMode({
-              ...requestContext,
-              runtimeDescriptor: sourceRuntimeDescriptor,
-              runtimeKind: sourceRuntimeKind,
-              startMode: decision.startMode,
-            });
-          }
         } else {
           assertRuntimeSupportsSelectedStartMode({
             ...requestContext,

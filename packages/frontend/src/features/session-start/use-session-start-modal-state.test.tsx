@@ -97,6 +97,27 @@ const FORK_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
   supportedStartModes: ["fresh", "fork"],
 });
 
+const FRESH_RUNTIME_KIND = runtimeKind("fresh-runtime");
+const FRESH_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
+  kind: FRESH_RUNTIME_KIND,
+  label: "Fresh Runtime",
+  supportedStartModes: ["fresh"],
+});
+
+const REUSE_ONLY_RUNTIME_KIND = runtimeKind("reuse-only-runtime");
+const REUSE_ONLY_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
+  kind: REUSE_ONLY_RUNTIME_KIND,
+  label: "Reuse Only Runtime",
+  supportedStartModes: ["reuse"],
+});
+
+const FORK_ONLY_RUNTIME_KIND = runtimeKind("fork-only-runtime");
+const FORK_ONLY_RUNTIME_DESCRIPTOR = createRuntimeDescriptor({
+  kind: FORK_ONLY_RUNTIME_KIND,
+  label: "Fork Only Runtime",
+  supportedStartModes: ["fork"],
+});
+
 const createRepoSettings = (
   overrides: Partial<RepoSettingsInput["agentDefaults"]> = {},
 ): RepoSettingsInput => ({
@@ -176,6 +197,7 @@ const createExistingSessionWithModel = ({
   value,
   label,
   description,
+  runtimeKind,
   selectedModel: {
     runtimeKind,
     providerId: "openai",
@@ -320,6 +342,72 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("fresh");
+
+    await harness.unmount();
+  });
+
+  test("demotes reuse starts without existing sessions and keeps runtime options fresh-compatible", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        runtimeDefinitions: [
+          FRESH_RUNTIME_DESCRIPTOR,
+          REUSE_ONLY_RUNTIME_DESCRIPTOR,
+          FORK_ONLY_RUNTIME_DESCRIPTOR,
+        ],
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-4",
+        role: "build",
+        launchActionId: "build_after_human_request_changes",
+        initialStartMode: "reuse",
+        postStartAction: "kickoff",
+        title: "Resume Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().selectedStartMode).toBe("fresh");
+    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
+      FRESH_RUNTIME_KIND,
+    ]);
+
+    await harness.unmount();
+  });
+
+  test("falls back from an unavailable fork start to fresh when no sessions exist", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        runtimeDefinitions: [
+          FRESH_RUNTIME_DESCRIPTOR,
+          REUSE_ONLY_RUNTIME_DESCRIPTOR,
+          FORK_ONLY_RUNTIME_DESCRIPTOR,
+        ],
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-4B",
+        role: "build",
+        launchActionId: "build_after_human_request_changes",
+        initialStartMode: "fork",
+        postStartAction: "kickoff",
+        title: "Resume Builder Session",
+      });
+    });
+
+    expect(harness.getLatest().selectedStartMode).toBe("fresh");
+    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
+      FRESH_RUNTIME_KIND,
+    ]);
 
     await harness.unmount();
   });
