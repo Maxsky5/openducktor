@@ -166,6 +166,7 @@ function WorkflowStepButton({
         "cursor-pointer",
       )}
       disabled={!agentStudioReady}
+      aria-pressed={isSelected}
       title={workflowStepHint(step)}
       onClick={() => {
         onSelect(step.role, step.externalSessionId);

@@ -61,6 +61,33 @@ const quickActionEntryId = (entry: QuickActionMenuEntry): string =>
 
 const quickActionEntryRole = (entry: QuickActionMenuEntry): AgentRole => entry.option.role;
 
+const getEntryDisabledReason = (
+  entry: QuickActionMenuEntry,
+  agentStudioReady: boolean,
+  sessionStartBlockedReason: string | null,
+  onResolveGitConflictQuickAction: (() => void) | null,
+): string | null => {
+  if (!agentStudioReady) {
+    return "Agent Studio is not ready.";
+  }
+
+  if (sessionStartBlockedReason) {
+    return sessionStartBlockedReason;
+  }
+
+  if (entry.option.disabled) {
+    return entry.option.disabledReason ?? "Action unavailable.";
+  }
+
+  if (entry.kind === "quick_action" && isGitConflictResolutionQuickAction(entry.option)) {
+    if (!onResolveGitConflictQuickAction) {
+      return "Git conflict resolution is unavailable.";
+    }
+  }
+
+  return null;
+};
+
 const buildQuickActionMenuEntries = (
   options: AgentStudioQuickActionOption[],
   sessionCreateOptions: AgentSessionCreateOption[],
@@ -134,9 +161,14 @@ export function QuickActionsMenu({
   const sessionStartBlockedReason = isCreatingSession
     ? "Session start is already in progress."
     : null;
-  const isActionSelectionBlocked = !agentStudioReady || sessionStartBlockedReason !== null;
   const canRunPrimaryAction =
-    primaryAction !== null && !primaryAction.disabled && !isActionSelectionBlocked;
+    primaryAction !== null &&
+    getEntryDisabledReason(
+      { kind: "quick_action", option: primaryAction },
+      agentStudioReady,
+      sessionStartBlockedReason,
+      onResolveGitConflictQuickAction,
+    ) === null;
   const menuEntries = buildQuickActionMenuEntries(options, sessionCreateOptions);
   const canOpenActionsMenu = agentStudioReady && menuEntries.length > 0;
   const groupedMenuEntries = buildQuickActionMenuGroups(menuEntries);
@@ -148,7 +180,14 @@ export function QuickActionsMenu({
   }, [canOpenActionsMenu, isOpen, onOpenChange]);
 
   const selectMenuEntry = (entry: QuickActionMenuEntry): void => {
-    if (isActionSelectionBlocked || entry.option.disabled) {
+    if (
+      getEntryDisabledReason(
+        entry,
+        agentStudioReady,
+        sessionStartBlockedReason,
+        onResolveGitConflictQuickAction,
+      )
+    ) {
       return;
     }
 
@@ -159,10 +198,7 @@ export function QuickActionsMenu({
     }
 
     if (isGitConflictResolutionQuickAction(entry.option)) {
-      if (!onResolveGitConflictQuickAction) {
-        throw new Error("Git conflict quick action handler is not configured.");
-      }
-      onResolveGitConflictQuickAction();
+      onResolveGitConflictQuickAction?.();
       onOpenChange(false);
       return;
     }
@@ -216,7 +252,12 @@ export function QuickActionsMenu({
                     <QuickActionCommandItem
                       key={quickActionEntryId(entry)}
                       entry={entry}
-                      disabledReason={sessionStartBlockedReason}
+                      disabledReason={getEntryDisabledReason(
+                        entry,
+                        agentStudioReady,
+                        sessionStartBlockedReason,
+                        onResolveGitConflictQuickAction,
+                      )}
                       onSelect={selectMenuEntry}
                     />
                   ))}

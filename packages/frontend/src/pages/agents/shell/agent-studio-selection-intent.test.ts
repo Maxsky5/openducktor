@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { isSelectionIntentResolved } from "./agent-studio-selection-intent";
 
 describe("agent-studio-selection-intent", () => {
-  test("treats a sessionless role intent as resolved once the session query param is absent", () => {
+  test("keeps a sessionless role intent unresolved until a concrete session param appears", () => {
     expect(
       isSelectionIntentResolved({
         selectionIntent: {
@@ -14,10 +14,8 @@ describe("agent-studio-selection-intent", () => {
         sessionParam: null,
         roleFromQuery: "build",
       }),
-    ).toBe(true);
-  });
+    ).toBe(false);
 
-  test("does not resolve a sessionless role intent while a session query param remains", () => {
     expect(
       isSelectionIntentResolved({
         selectionIntent: {
@@ -29,7 +27,7 @@ describe("agent-studio-selection-intent", () => {
         sessionParam: "session-1",
         roleFromQuery: "build",
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   test("resolves a session intent only when task, role, and session match", () => {

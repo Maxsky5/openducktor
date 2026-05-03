@@ -109,6 +109,11 @@ export function SessionHistoryMenu({
                     key={option.value}
                     value={`${group.label} ${option.label} ${option.description ?? ""}`}
                     onSelect={() => {
+                      if (option.value === selector.value) {
+                        setIsOpen(false);
+                        return;
+                      }
+
                       const focusBehavior = deriveSessionHistorySelectionFocusBehavior({
                         currentValue: selector.value,
                         nextValue: option.value,

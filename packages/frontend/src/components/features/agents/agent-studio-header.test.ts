@@ -7,6 +7,7 @@ import {
   AgentStudioHeader,
   deriveSessionHistorySelectionFocusBehavior,
 } from "./agent-studio-header";
+import { QuickActionsMenu } from "./agent-studio-header-quick-actions";
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
@@ -282,6 +283,34 @@ describe("AgentStudioHeader", () => {
     unmount();
   });
 
+  test("closes session history menu without changing selection when the current session is chosen again", async () => {
+    const onValueChange = mock(() => {});
+    const model = buildModel();
+
+    render(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...model,
+          sessionSelector: {
+            ...model.sessionSelector,
+            onValueChange,
+          },
+        },
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Session history/i }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Spec Revision · Spec"));
+    });
+
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.queryByPlaceholderText(/Search sessions/i)).toBeNull();
+  });
+
   test("does not restore focus to the history trigger after selecting a session", async () => {
     const onValueChange = mock(() => {});
     render(
@@ -548,6 +577,44 @@ describe("AgentStudioHeader", () => {
     expect(onQuickAction).not.toHaveBeenCalled();
   });
 
+  test("disables git conflict quick action when the conflict handler is missing", async () => {
+    const html = renderToStaticMarkup(
+      createElement(QuickActionsMenu, {
+        isOpen: true,
+        onOpenChange: () => {},
+        agentStudioReady: true,
+        isCreatingSession: false,
+        options: [
+          {
+            id: "quick:build_rebase_conflict_resolution",
+            role: "build" as const,
+            launchActionId: "build_rebase_conflict_resolution" as const,
+            label: "Resolve Git Conflict",
+            description: "Ask Builder to resolve the active git conflict.",
+            postStartAction: "send_message" as const,
+            disabled: false,
+          },
+        ],
+        primaryAction: {
+          id: "quick:build_rebase_conflict_resolution",
+          role: "build" as const,
+          launchActionId: "build_rebase_conflict_resolution" as const,
+          label: "Resolve Git Conflict",
+          description: "Ask Builder to resolve the active git conflict.",
+          postStartAction: "send_message" as const,
+          disabled: false,
+        },
+        sessionCreateOptions: [],
+        onQuickAction: () => {},
+        onPrepareMessageFirstSession: () => {},
+        onResolveGitConflictQuickAction: null,
+      }),
+    );
+
+    expect(html).toContain('disabled=""');
+    expect(html).toContain('aria-label="Run quick action: Resolve Git Conflict"');
+  });
+
   test("uses the accent variant for the quick action split button", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
@@ -703,6 +770,17 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain("border-success-border");
     expect(html).toContain("bg-success-surface");
     expect(html).toContain("text-success-muted");
+  });
+
+  test("marks workflow step buttons with pressed state for the selected role", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: buildModel(),
+      }),
+    );
+
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('aria-pressed="false"');
   });
 
   test("renders waiting-input workflow step hint and warning styling", () => {
