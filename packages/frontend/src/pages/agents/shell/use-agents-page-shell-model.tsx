@@ -50,6 +50,10 @@ import {
   useAgentsPageRightPanelModel,
 } from "../use-agents-page-right-panel-model";
 import {
+  type AgentStudioSelectionIntent,
+  isSelectionIntentResolved,
+} from "./agent-studio-selection-intent";
+import {
   useForwardedWorktreeRefresh,
   type WorktreeRefreshRef,
 } from "./use-forwarded-worktree-refresh";
@@ -179,11 +183,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
-  const [selectionIntent, setSelectionIntent] = useState<{
-    taskId: string;
-    externalSessionId: string | null;
-    role: AgentRole;
-  } | null>(null);
+  const [selectionIntent, setSelectionIntent] = useState<AgentStudioSelectionIntent | null>(null);
   const [gitConflictQuickActionContext, setGitConflictQuickActionContext] =
     useState<AgentStudioGitConflictQuickActionContext | null>(null);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
@@ -297,14 +297,12 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       return;
     }
 
-    const selectionIntentResolved =
-      selectionIntent.externalSessionId === null
-        ? selectionIntent.taskId === taskIdParam &&
-          sessionParam !== null &&
-          selectionIntent.role === roleFromQuery
-        : selectionIntent.taskId === taskIdParam &&
-          selectionIntent.externalSessionId === sessionParam &&
-          selectionIntent.role === roleFromQuery;
+    const selectionIntentResolved = isSelectionIntentResolved({
+      selectionIntent,
+      taskIdParam,
+      sessionParam,
+      roleFromQuery,
+    });
 
     if (selectionIntentResolved) {
       setSelectionIntent(null);

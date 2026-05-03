@@ -44,9 +44,10 @@ export function SessionHistoryMenu({
   );
   const selectedOption = useMemo(() => {
     for (const group of groupsWithOptions) {
-      const option = group.options.find((entry) => entry.value === selector.value);
-      if (option) {
-        return option;
+      for (const option of group.options) {
+        if (option.value === selector.value) {
+          return option;
+        }
       }
     }
     return null;
