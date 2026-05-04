@@ -5,10 +5,10 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentStudioContextUsage,
   type AgentStudioContextUsageEntry,
-  extractLatestContextUsage,
-  extractLatestContextUsageEntry,
-  toModelDescriptorByKey,
-} from "./model-selection-model";
+  extractLatestSessionContextUsage,
+  extractLatestSessionContextUsageEntry,
+  indexModelDescriptorsByProviderAndModel,
+} from "./context-usage-resolution";
 
 type ContextUsageCache = {
   externalSessionId: string;
@@ -47,7 +47,7 @@ export const useAgentStudioContextUsage = ({
     [activeExternalSessionIdForContextUsage, activeSessionMessages],
   );
   const activeSessionModelDescriptorByKey = useMemo(() => {
-    return toModelDescriptorByKey(activeSessionModelCatalog ?? null);
+    return indexModelDescriptorsByProviderAndModel(activeSessionModelCatalog ?? null);
   }, [activeSessionModelCatalog]);
 
   return useMemo<AgentStudioContextUsage>(() => {
@@ -96,7 +96,7 @@ export const useAgentStudioContextUsage = ({
 
     const liveContextUsage = activeSessionLiveContextUsage ?? null;
     if (liveContextUsage !== null) {
-      const nextUsage = extractLatestContextUsage({
+      const nextUsage = extractLatestSessionContextUsage({
         session: activeSessionMessageOwnerForContextUsage,
         liveContextUsage,
         modelDescriptorByKey: activeSessionModelDescriptorByKey,
@@ -132,7 +132,7 @@ export const useAgentStudioContextUsage = ({
           return cached.value;
         }
 
-        nextUsageEntry = extractLatestContextUsageEntry({
+        nextUsageEntry = extractLatestSessionContextUsageEntry({
           session: activeSessionMessageOwnerForContextUsage,
           modelDescriptorByKey: activeSessionModelDescriptorByKey,
           ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
@@ -150,7 +150,7 @@ export const useAgentStudioContextUsage = ({
         }
 
         if (!nextUsageEntry && firstChangedMessageIndex > 0) {
-          nextUsageEntry = extractLatestContextUsageEntry({
+          nextUsageEntry = extractLatestSessionContextUsageEntry({
             session: activeSessionMessageOwnerForContextUsage,
             modelDescriptorByKey: activeSessionModelDescriptorByKey,
             ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
@@ -159,7 +159,7 @@ export const useAgentStudioContextUsage = ({
           });
         }
       } else {
-        nextUsageEntry = extractLatestContextUsageEntry({
+        nextUsageEntry = extractLatestSessionContextUsageEntry({
           session: activeSessionMessageOwnerForContextUsage,
           modelDescriptorByKey: activeSessionModelDescriptorByKey,
           ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),

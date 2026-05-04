@@ -12,18 +12,17 @@ import {
   createAgentSessionFixture,
   createDeferred,
   enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+} from "../agent-studio-test-utils";
 import {
   resolveActiveSessionSelectionState,
-  useAgentStudioModelSelection,
-} from "./use-agent-studio-model-selection";
+  useAgentStudioComposerRuntime,
+} from "./use-agent-studio-composer-runtime";
 
 enableReactActEnvironment();
 
 let messageCounter = 0;
 
-type HookArgs = Parameters<typeof useAgentStudioModelSelection>[0];
-type LegacyHookArgs = HookArgs & { workspaceRepoPath?: string | null };
+type HookArgs = Parameters<typeof useAgentStudioComposerRuntime>[0];
 
 const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
   workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
@@ -151,7 +150,7 @@ const createActiveSession = (overrides = {}) =>
   });
 
 const createHookHarness = (
-  initialProps: LegacyHookArgs,
+  initialProps: HookArgs,
   options: { runtimeDefinitions?: RuntimeDescriptor[] } = {},
 ) => {
   const runtimeDefinitions = options.runtimeDefinitions ?? [OPENCODE_RUNTIME_DESCRIPTOR];
@@ -179,16 +178,7 @@ const createHookHarness = (
     );
 
   return createSharedHookHarness(
-    (props: LegacyHookArgs) =>
-      useAgentStudioModelSelection({
-        ...props,
-        activeWorkspace:
-          "workspaceRepoPath" in props
-            ? props.workspaceRepoPath
-              ? createActiveWorkspace(props.workspaceRepoPath)
-              : null
-            : (props.activeWorkspace ?? null),
-      }),
+    (props: HookArgs) => useAgentStudioComposerRuntime(props),
     initialProps,
     { wrapper },
   );
@@ -211,7 +201,7 @@ const createAssistantMessage = (
   };
 };
 
-const createBaseProps = (overrides: Partial<LegacyHookArgs> = {}): LegacyHookArgs => ({
+const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: createActiveWorkspace("/repo"),
   activeSession: null,
   activeSessionSummary: null,
@@ -223,7 +213,7 @@ const createBaseProps = (overrides: Partial<LegacyHookArgs> = {}): LegacyHookArg
   ...overrides,
 });
 
-describe("useAgentStudioModelSelection", () => {
+describe("useAgentStudioComposerRuntime", () => {
   test("prefers hydrated session runtime fields while preserving summary selection fallback", () => {
     const hydratedSession = createActiveSession({
       runtimeKind: "opencode",
@@ -905,7 +895,7 @@ describe("useAgentStudioModelSelection", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        workspaceRepoPath: "/repo-a",
+        activeWorkspace: createActiveWorkspace("/repo-a"),
         loadCatalog,
       }),
     );
@@ -916,7 +906,7 @@ describe("useAgentStudioModelSelection", () => {
 
       await harness.update(
         createBaseProps({
-          workspaceRepoPath: "/repo-b",
+          activeWorkspace: createActiveWorkspace("/repo-b"),
           loadCatalog,
         }),
       );
@@ -973,7 +963,7 @@ describe("useAgentStudioModelSelection", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        workspaceRepoPath: "/repo-a",
+        activeWorkspace: createActiveWorkspace("/repo-a"),
         repoSettings: createRepoSettings({
           runtimeKind: "opencode",
           providerId: "openai",
@@ -1001,7 +991,7 @@ describe("useAgentStudioModelSelection", () => {
 
       await harness.update(
         createBaseProps({
-          workspaceRepoPath: "/repo-b",
+          activeWorkspace: createActiveWorkspace("/repo-b"),
           repoSettings: createRepoSettings({
             runtimeKind: "opencode",
             providerId: "anthropic",
@@ -1037,7 +1027,7 @@ describe("useAgentStudioModelSelection", () => {
   test("does not reuse stale repo defaults while waiting for the next repo settings", async () => {
     const harness = createHookHarness(
       createBaseProps({
-        workspaceRepoPath: "/repo-a",
+        activeWorkspace: createActiveWorkspace("/repo-a"),
         repoSettings: createRepoSettings({
           runtimeKind: "opencode",
           providerId: "openai",
@@ -1061,7 +1051,7 @@ describe("useAgentStudioModelSelection", () => {
 
       await harness.update(
         createBaseProps({
-          workspaceRepoPath: "/repo-b",
+          activeWorkspace: createActiveWorkspace("/repo-b"),
           repoSettings: null,
           loadCatalog: async () => {
             throw new Error("catalog unavailable");
@@ -1078,7 +1068,7 @@ describe("useAgentStudioModelSelection", () => {
 
       await harness.update(
         createBaseProps({
-          workspaceRepoPath: "/repo-b",
+          activeWorkspace: createActiveWorkspace("/repo-b"),
           repoSettings: createRepoSettings({
             runtimeKind: "opencode",
             providerId: "anthropic",

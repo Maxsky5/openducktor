@@ -17,8 +17,9 @@ import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog"
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import { pickDefaultVisibleSelectionForCatalog } from "../agents-page-selection";
-import { type AgentStudioContextUsage, toRoleDefaultSelection } from "./model-selection-model";
+import type { AgentStudioContextUsage } from "./context-usage-resolution";
 import { resolveModelSelectionOptions } from "./model-selection-options";
+import { toRoleDefaultModelSelection } from "./model-selection-preferences";
 import {
   resolveActiveSessionSelectionState,
   resolveComposerRuntimeKind,
@@ -37,7 +38,7 @@ import { useAgentStudioSlashCommands } from "./use-slash-commands";
 
 export { resolveActiveSessionSelectionState } from "./model-selection-resolution";
 
-type UseAgentStudioModelSelectionArgs = {
+type UseAgentStudioComposerRuntimeArgs = {
   activeWorkspace: ActiveWorkspace | null;
   activeSession: AgentSessionState | null;
   activeSessionSummary: AgentSessionSummary | null;
@@ -70,7 +71,7 @@ type UseAgentStudioModelSelectionArgs = {
   ) => Promise<AgentFileSearchResult[]>;
 };
 
-type AgentStudioModelSelectionState = {
+type AgentStudioComposerRuntimeState = {
   selectionForNewSession: AgentModelSelection | null;
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
@@ -93,7 +94,7 @@ type AgentStudioModelSelectionState = {
   handleSelectVariant: (variant: string) => void;
 };
 
-export function useAgentStudioModelSelection({
+export function useAgentStudioComposerRuntime({
   activeWorkspace,
   activeSession,
   activeSessionSummary,
@@ -106,7 +107,7 @@ export function useAgentStudioModelSelection({
   loadFileSearch,
   readSessionSlashCommands,
   readSessionFileSearch,
-}: UseAgentStudioModelSelectionArgs): AgentStudioModelSelectionState {
+}: UseAgentStudioComposerRuntimeArgs): AgentStudioComposerRuntimeState {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const {
     runtimeDefinitions,
@@ -134,7 +135,7 @@ export function useAgentStudioModelSelection({
   const activeSessionMessages = activeSessionSelection.messages;
   const hasActiveSession = activeSessionSelection.hasSelection;
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
-    return toRoleDefaultSelection(
+    return toRoleDefaultModelSelection(
       repoSettings?.agentDefaults[role],
       repoSettings?.defaultRuntimeKind,
     );

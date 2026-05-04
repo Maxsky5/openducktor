@@ -2,7 +2,7 @@ import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openduc
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { emptyDraftSelections, isSameSelection } from "../agents-page-selection";
-import { resolveDraftSelection } from "./model-selection-model";
+import { resolveDraftModelSelection } from "./model-selection-preferences";
 
 const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
   spec: false,
@@ -101,7 +101,7 @@ export const useAgentStudioDraftModelSelectionState = ({
       }
       setDraftSelectionByRole((current) => {
         const existing = current[role];
-        const normalized = resolveDraftSelection({
+        const normalized = resolveDraftModelSelection({
           catalog: composerCatalog,
           existingSelection: isDraftSelectionTouched ? existing : null,
           roleDefaultSelection,

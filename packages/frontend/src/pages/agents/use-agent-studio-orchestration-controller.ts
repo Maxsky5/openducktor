@@ -14,9 +14,9 @@ import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feed
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
+import { useAgentStudioComposerRuntime } from "./composer-runtime/use-agent-studio-composer-runtime";
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
-import { useAgentStudioModelSelection } from "./use-agent-studio-model-selection";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
 import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
 import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
@@ -135,7 +135,7 @@ type AgentStudioPageModelsSessionActionsContext = Parameters<
 >[0]["sessionActions"];
 
 type AgentStudioPageModelsModelSelectionContext = Pick<
-  ReturnType<typeof useAgentStudioModelSelection>,
+  ReturnType<typeof useAgentStudioComposerRuntime>,
   | "selectedModelSelection"
   | "selectedModelDescriptor"
   | "isSelectionCatalogLoading"
@@ -324,7 +324,7 @@ export function useAgentStudioOrchestrationController({
     handleSelectAgent,
     handleSelectModel,
     handleSelectVariant,
-  } = useAgentStudioModelSelection({
+  } = useAgentStudioComposerRuntime({
     activeWorkspace,
     activeSession: viewActiveSession,
     activeSessionSummary: viewActiveSessionSummary,

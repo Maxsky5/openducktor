@@ -1,15 +1,10 @@
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog } from "@openducktor/core";
 import {
   getSessionMessageAt,
   getSessionMessageCount,
   type SessionMessageOwner,
 } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionContextUsage } from "@/types/agent-orchestrator";
-import type { RepoSettingsInput } from "@/types/state-slices";
-import {
-  coerceVisibleSelectionToCatalog,
-  pickDefaultVisibleSelectionForCatalog,
-} from "../agents-page-selection";
 
 export type AgentStudioContextUsage = {
   totalTokens: number;
@@ -28,75 +23,6 @@ type ResolvedContextUsageParts = {
 };
 
 type CatalogModelDescriptor = AgentModelCatalog["models"][number];
-
-export const toRoleDefaultSelection = (
-  roleDefault: RepoSettingsInput["agentDefaults"][AgentRole] | null | undefined,
-  repoDefaultRuntimeKind?: RepoSettingsInput["defaultRuntimeKind"] | null,
-): AgentModelSelection | null => {
-  if (!roleDefault?.providerId || !roleDefault.modelId) {
-    return null;
-  }
-  const runtimeKind = roleDefault.runtimeKind ?? repoDefaultRuntimeKind;
-  if (!runtimeKind) {
-    return null;
-  }
-  return {
-    runtimeKind,
-    providerId: roleDefault.providerId,
-    modelId: roleDefault.modelId,
-    ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
-    ...(roleDefault.profileId ? { profileId: roleDefault.profileId } : {}),
-  };
-};
-
-const resolvePreferredSelectionForCatalog = ({
-  catalog,
-  primarySelection,
-  secondarySelection,
-}: {
-  catalog: AgentModelCatalog | null;
-  primarySelection: AgentModelSelection | null;
-  secondarySelection: AgentModelSelection | null;
-}): AgentModelSelection | null => {
-  const preferredBase =
-    primarySelection ?? secondarySelection ?? pickDefaultVisibleSelectionForCatalog(catalog);
-  return (
-    coerceVisibleSelectionToCatalog(catalog, preferredBase) ??
-    pickDefaultVisibleSelectionForCatalog(catalog)
-  );
-};
-
-export const resolveDraftSelection = ({
-  catalog,
-  existingSelection,
-  roleDefaultSelection,
-}: {
-  catalog: AgentModelCatalog | null;
-  existingSelection: AgentModelSelection | null;
-  roleDefaultSelection: AgentModelSelection | null;
-}): AgentModelSelection | null => {
-  return resolvePreferredSelectionForCatalog({
-    catalog,
-    primarySelection: existingSelection,
-    secondarySelection: roleDefaultSelection,
-  });
-};
-
-export const resolveSessionSelection = ({
-  catalog,
-  selectedModel,
-  roleDefaultSelection,
-}: {
-  catalog: AgentModelCatalog | null;
-  selectedModel: AgentModelSelection | null;
-  roleDefaultSelection: AgentModelSelection | null;
-}): AgentModelSelection | null => {
-  return resolvePreferredSelectionForCatalog({
-    catalog,
-    primarySelection: selectedModel,
-    secondarySelection: roleDefaultSelection,
-  });
-};
 
 const toModelDescriptorKey = (providerId: string, modelId: string): string => {
   return `${providerId}::${modelId}`;
@@ -117,7 +43,7 @@ const resolveContextUsageDescriptor = ({
   );
 };
 
-export const toModelDescriptorByKey = (
+export const indexModelDescriptorsByProviderAndModel = (
   catalog: AgentModelCatalog | null,
 ): Map<string, CatalogModelDescriptor> => {
   const map = new Map<string, CatalogModelDescriptor>();
@@ -140,7 +66,7 @@ const pickPositiveNumber = (...values: Array<number | undefined>): number | unde
   return undefined;
 };
 
-const extractFallbackContextUsageEntry = ({
+const extractFallbackSessionContextUsageEntry = ({
   session,
   modelDescriptorByKey,
   fallbackContextWindow,
@@ -155,7 +81,7 @@ const extractFallbackContextUsageEntry = ({
     return null;
   }
 
-  return extractLatestContextUsageEntry({
+  return extractLatestSessionContextUsageEntry({
     session,
     modelDescriptorByKey,
     ...(fallbackContextWindow !== undefined ? { fallbackContextWindow } : {}),
@@ -203,7 +129,7 @@ const resolveLiveContextUsageParts = ({
   };
 };
 
-export const extractLatestContextUsage = ({
+export const extractLatestSessionContextUsage = ({
   session,
   liveContextUsage,
   modelDescriptorByKey,
@@ -222,7 +148,7 @@ export const extractLatestContextUsage = ({
       return fallbackUsageEntry;
     }
 
-    fallbackUsageEntry = extractFallbackContextUsageEntry({
+    fallbackUsageEntry = extractFallbackSessionContextUsageEntry({
       session,
       modelDescriptorByKey,
       fallbackContextWindow,
@@ -273,7 +199,7 @@ export const extractLatestContextUsage = ({
   return getFallbackUsageEntry()?.usage ?? null;
 };
 
-export const extractLatestContextUsageEntry = ({
+export const extractLatestSessionContextUsageEntry = ({
   session,
   modelDescriptorByKey,
   fallbackContextWindow,
