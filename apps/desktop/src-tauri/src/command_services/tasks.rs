@@ -154,48 +154,82 @@ pub(crate) fn delete(
     service: Arc<AppService>,
     request: TaskDeleteRequest,
 ) -> CommandServiceResult<TaskDeleteResponse> {
-    service
-        .task_delete(
-            &request.repo_path,
-            &request.task_id,
-            request.delete_subtasks.unwrap_or(false),
-        )
-        .map(|()| TaskDeleteResponse { ok: true })
-        .map_err(service_error)
+    delete_with(request, |repo_path, task_id, delete_subtasks| {
+        service.task_delete(repo_path, task_id, delete_subtasks)
+    })
+}
+
+fn delete_with<F>(
+    request: TaskDeleteRequest,
+    delete_task: F,
+) -> CommandServiceResult<TaskDeleteResponse>
+where
+    F: FnOnce(&str, &str, bool) -> anyhow::Result<()>,
+{
+    delete_task(
+        &request.repo_path,
+        &request.task_id,
+        request.delete_subtasks.unwrap_or(false),
+    )
+    .map(|()| TaskDeleteResponse { ok: true })
+    .map_err(service_error)
 }
 
 pub(crate) fn transition(
     service: Arc<AppService>,
     request: TaskTransitionRequest,
 ) -> CommandServiceResult<TaskCard> {
-    service
-        .task_transition(
-            &request.repo_path,
-            &request.task_id,
-            request.status,
-            request.reason.as_deref(),
-        )
-        .map_err(service_error)
+    transition_with(request, |repo_path, task_id, status, reason| {
+        service.task_transition(repo_path, task_id, status, reason)
+    })
+}
+
+fn transition_with<F>(
+    request: TaskTransitionRequest,
+    transition_task: F,
+) -> CommandServiceResult<TaskCard>
+where
+    F: FnOnce(&str, &str, TaskStatus, Option<&str>) -> anyhow::Result<TaskCard>,
+{
+    transition_task(
+        &request.repo_path,
+        &request.task_id,
+        request.status,
+        request.reason.as_deref(),
+    )
+    .map_err(service_error)
 }
 
 pub(crate) fn defer(
     service: Arc<AppService>,
     request: TaskDeferRequest,
 ) -> CommandServiceResult<TaskCard> {
-    service
-        .task_defer(
-            &request.repo_path,
-            &request.task_id,
-            request.reason.as_deref(),
-        )
-        .map_err(service_error)
+    defer_with(request, |repo_path, task_id, reason| {
+        service.task_defer(repo_path, task_id, reason)
+    })
+}
+
+fn defer_with<F>(request: TaskDeferRequest, defer_task: F) -> CommandServiceResult<TaskCard>
+where
+    F: FnOnce(&str, &str, Option<&str>) -> anyhow::Result<TaskCard>,
+{
+    defer_task(
+        &request.repo_path,
+        &request.task_id,
+        request.reason.as_deref(),
+    )
+    .map_err(service_error)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{list, map_task_create_payload, map_task_update_payload, TasksListRequest};
+    use super::{
+        defer_with, delete_with, list, map_task_create_payload, map_task_update_payload,
+        transition_with, TaskDeferRequest, TaskDeleteRequest, TaskTransitionRequest,
+        TasksListRequest,
+    };
     use crate::{TaskCreatePayload, TaskUpdatePayload};
-    use host_domain::IssueType;
+    use host_domain::{IssueType, TaskCard, TaskStatus};
 
     #[test]
     fn map_task_create_payload_rejects_unknown_issue_type() {
@@ -287,5 +321,94 @@ mod tests {
             error.to_string(),
             "doneVisibleDays must be greater than or equal to 0"
         );
+    }
+
+    #[test]
+    fn task_delete_defaults_missing_delete_subtasks_to_false_before_service_call(
+    ) -> Result<(), String> {
+        let request = TaskDeleteRequest {
+            repo_path: "/tmp/repo".to_string(),
+            task_id: "task-1".to_string(),
+            delete_subtasks: None,
+        };
+
+        let response = delete_with(request, |repo_path, task_id, delete_subtasks| {
+            assert_eq!(repo_path, "/tmp/repo");
+            assert_eq!(task_id, "task-1");
+            assert!(!delete_subtasks);
+            Ok(())
+        })
+        .map_err(|error| error.to_string())?;
+
+        assert!(response.ok);
+        Ok(())
+    }
+
+    #[test]
+    fn task_transition_forwards_optional_reason_unchanged() -> Result<(), String> {
+        let request = TaskTransitionRequest {
+            repo_path: "/tmp/repo".to_string(),
+            task_id: "task-1".to_string(),
+            status: TaskStatus::Blocked,
+            reason: Some("  wait for api  ".to_string()),
+        };
+
+        let task = transition_with(request, |repo_path, task_id, status, reason| {
+            assert_eq!(repo_path, "/tmp/repo");
+            assert_eq!(task_id, "task-1");
+            assert_eq!(status, TaskStatus::Blocked);
+            assert_eq!(reason, Some("  wait for api  "));
+            Ok(task_card("task-1", status))
+        })
+        .map_err(|error| error.to_string())?;
+
+        assert_eq!(task.status, TaskStatus::Blocked);
+        Ok(())
+    }
+
+    #[test]
+    fn task_defer_forwards_optional_reason_unchanged() -> Result<(), String> {
+        let request = TaskDeferRequest {
+            repo_path: "/tmp/repo".to_string(),
+            task_id: "task-1".to_string(),
+            reason: Some("  later  ".to_string()),
+        };
+
+        let task = defer_with(request, |repo_path, task_id, reason| {
+            assert_eq!(repo_path, "/tmp/repo");
+            assert_eq!(task_id, "task-1");
+            assert_eq!(reason, Some("  later  "));
+            Ok(task_card("task-1", TaskStatus::Deferred))
+        })
+        .map_err(|error| error.to_string())?;
+
+        assert_eq!(task.status, TaskStatus::Deferred);
+        Ok(())
+    }
+
+    fn task_card(id: &str, status: TaskStatus) -> TaskCard {
+        TaskCard {
+            id: id.to_string(),
+            title: "Task".to_string(),
+            description: String::new(),
+            notes: String::new(),
+            status,
+            priority: 1,
+            issue_type: IssueType::Task,
+            ai_review_enabled: false,
+            available_actions: Vec::new(),
+            labels: Vec::new(),
+            assignee: None,
+            parent_id: None,
+            subtask_ids: Vec::new(),
+            agent_sessions: Vec::new(),
+            target_branch: None,
+            target_branch_error: None,
+            pull_request: None,
+            document_summary: Default::default(),
+            agent_workflows: Default::default(),
+            updated_at: String::new(),
+            created_at: String::new(),
+        }
     }
 }
