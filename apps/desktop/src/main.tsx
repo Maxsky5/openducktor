@@ -1,12 +1,9 @@
-import { configureShellBridge, mountOpenDucktorApp } from "@openducktor/frontend";
+import { bootstrapOpenDucktorShell } from "@openducktor/frontend";
 import "@openducktor/frontend/styles.css";
 import { createDesktopShellBridge } from "./desktop-shell-bridge";
 
-const rootElement = document.getElementById("root");
-if (!rootElement) {
-  throw new Error("Root element not found");
-}
-
-configureShellBridge(createDesktopShellBridge());
-
-void mountOpenDucktorApp(rootElement);
+bootstrapOpenDucktorShell({
+  createShellBridge: createDesktopShellBridge,
+}).catch((error: unknown) => {
+  console.error("Critical desktop bootstrap failure", error);
+});

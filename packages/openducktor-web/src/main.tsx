@@ -1,19 +1,11 @@
-import { configureShellBridge, mountOpenDucktorApp } from "@openducktor/frontend";
+import { bootstrapOpenDucktorShell } from "@openducktor/frontend";
 import "@openducktor/frontend/styles.css";
 import { createBrowserShellBridge } from "./browser-shell-bridge";
 import { loadBrowserRuntimeConfig } from "./runtime-config";
 
-const bootstrap = async (): Promise<void> => {
-  await loadBrowserRuntimeConfig();
-
-  const rootElement = document.getElementById("root");
-  if (!rootElement) {
-    throw new Error("Root element not found");
-  }
-
-  configureShellBridge(createBrowserShellBridge());
-
-  await mountOpenDucktorApp(rootElement);
-};
-
-void bootstrap();
+bootstrapOpenDucktorShell({
+  prepare: loadBrowserRuntimeConfig,
+  createShellBridge: createBrowserShellBridge,
+}).catch((error: unknown) => {
+  console.error("Critical browser bootstrap failure", error);
+});

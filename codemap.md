@@ -5,8 +5,8 @@ OpenDucktor is a Bun monorepo for a macOS-first Tauri v2 desktop app and local b
 
 ## System Entry Points
 - `package.json`: root workspace manifest and Bun command surface for dev, build, test, lint, Tauri, release, and dependency guard workflows.
-- `packages/frontend/src/index.ts`: shared React app, mount helper, shell bridge contract, and style export used by both shells.
-- `apps/desktop/src/main.tsx`: thin Tauri desktop shell that configures the desktop shell bridge and mounts `@openducktor/frontend`.
+- `packages/frontend/src/index.ts`: shared React shell bootstrap, shell bridge contract, and style export used by both shells.
+- `apps/desktop/src/main.tsx`: thin Tauri desktop shell that supplies the desktop shell bridge to `@openducktor/frontend` bootstrap.
 - `packages/openducktor-web/src/cli.ts`: `@openducktor/web` launcher CLI for starting the Rust web host and Vite browser shell.
 - `apps/desktop/src-tauri/src/main.rs`: Tauri desktop startup and legacy browser-backend compatibility path.
 - `apps/desktop/src-tauri/src/bin/openducktor_web_host.rs`: dedicated local web host binary used by `@openducktor/web`.
@@ -20,8 +20,8 @@ OpenDucktor is a Bun monorepo for a macOS-first Tauri v2 desktop app and local b
 ## Architecture Summary
 - **Contracts-first boundary:** `packages/contracts` defines runtime/task/session/MCP schemas before adapters or host code translate them.
 - **Hexagonal core:** `packages/core` and Rust `host-domain` define ports and policies; adapters/infra crates implement external runtime, IPC, Beads, git, config, and process integrations.
-- **Shared frontend composition:** `packages/frontend/src` owns UI composition, TanStack Query read models, app-state operations, and host interaction hooks behind an explicit shell bridge.
-- **Thin shell composition:** `apps/desktop/src` provides the Tauri shell bridge, while `packages/openducktor-web/src` provides the browser/local-host shell bridge, runtime config injection, and launcher.
+- **Shared frontend composition:** `packages/frontend/src` owns UI composition, shell bootstrap ordering, TanStack Query read models, app-state operations, and host interaction hooks behind an explicit shell bridge.
+- **Thin shell composition:** `apps/desktop/src` provides the Tauri shell bridge, while `packages/openducktor-web/src` provides the browser/local-host shell bridge, runtime config readiness, and launcher.
 - **Runtime/session separation:** durable task/session metadata stays separate from live runtime routes and connections; request-scoped operations resolve live runtime connections at adapter boundaries.
 - **No fallback masking:** guard scripts, host startup, runtime selection, and workflow tool routing are documented to fail at the originating layer with actionable errors.
 
