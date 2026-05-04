@@ -1,6 +1,7 @@
 use super::command_registry::CommandRegistry;
 use super::events::HeadlessEventBus;
-use crate::commands::git::invalidate_worktree_resolution_cache_for_repo;
+use crate::command_services::error::{CommandServiceError, CommandServiceResult};
+use crate::command_services::git::invalidate_worktree_resolution_cache_for_repo;
 use crate::run_service_blocking_tokio;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -118,6 +119,13 @@ pub(super) fn service_error(error: anyhow::Error) -> HeadlessCommandError {
     HeadlessCommandError::internal(format!("{error:#}"))
 }
 
+pub(super) fn command_service_error(error: CommandServiceError) -> HeadlessCommandError {
+    match error {
+        CommandServiceError::InvalidRequest(message) => HeadlessCommandError::bad_request(message),
+        CommandServiceError::Internal(error) => service_error(error),
+    }
+}
+
 pub(super) fn request_error(error: impl std::fmt::Display) -> HeadlessCommandError {
     HeadlessCommandError::bad_request(error.to_string())
 }
@@ -133,6 +141,20 @@ where
     run_service_blocking_tokio(operation_name, operation)
         .await
         .map_err(service_error)
+}
+
+pub(super) async fn run_command_service_blocking<T, F>(
+    operation_name: &'static str,
+    operation: F,
+) -> Result<T, HeadlessCommandError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> CommandServiceResult<T> + Send + 'static,
+{
+    let result = run_service_blocking_tokio(operation_name, move || Ok(operation()))
+        .await
+        .map_err(service_error)?;
+    result.map_err(command_service_error)
 }
 
 pub(super) fn handle_repo_path_operation<T, F>(args: Value, operation: F) -> CommandResult
@@ -203,32 +225,6 @@ where
     serialize_value(operation(repo_path, task_id, reason).map_err(service_error)?)
 }
 
-pub(super) async fn handle_repo_task_reason_operation_blocking<T, F>(
-    state: &HeadlessState,
-    args: Value,
-    operation_name: &'static str,
-    operation: F,
-) -> CommandResult
-where
-    T: serde::Serialize + Send + 'static,
-    F: FnOnce(Arc<AppService>, String, String, Option<String>) -> anyhow::Result<T>
-        + Send
-        + 'static,
-{
-    let RepoTaskReasonArgs {
-        repo_path,
-        task_id,
-        reason,
-    } = deserialize_args(args)?;
-    let service = state.service.clone();
-    serialize_value(
-        run_headless_blocking(operation_name, move || {
-            operation(service, repo_path, task_id, reason)
-        })
-        .await?,
-    )
-}
-
 pub(super) fn invalidate_repo_worktree_cache(repo_path: &str) -> Result<(), HeadlessCommandError> {
     invalidate_worktree_resolution_cache_for_repo(repo_path)
         .map_err(|error| HeadlessCommandError::internal(error.to_string()))
@@ -263,5 +259,18 @@ mod tests {
         assert!(error
             .message
             .contains("headless-test-join worker join failure"));
+    }
+
+    #[tokio::test]
+    async fn run_command_service_blocking_maps_internal_errors_to_internal_error() {
+        let error =
+            run_command_service_blocking("shared-internal-test", || -> CommandServiceResult<()> {
+                Err(CommandServiceError::internal(anyhow!("service failure")))
+            })
+            .await
+            .expect_err("internal command service error should fail");
+
+        assert_eq!(error.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(error.message.contains("service failure"));
     }
 }

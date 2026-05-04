@@ -1,47 +1,17 @@
 use super::command_registry::CommandRegistry;
 use super::command_support::{
     deserialize_args, handle_repo_task_operation, handle_repo_task_operation_blocking,
-    handle_repo_task_reason_operation, handle_repo_task_reason_operation_blocking, request_error,
+    handle_repo_task_reason_operation, request_error, run_command_service_blocking,
     serialize_value, service_error, CommandResult, HeadlessState, RepoPathArgs, RepoTaskArgs,
 };
+use crate::command_services::tasks as task_service;
 use crate::commands::documents::map_plan_subtasks;
-use crate::commands::tasks::{map_task_create_payload, map_task_update_payload};
 use crate::{
     BuildCompletePayload, MarkdownPayload, PlanPayload, PullRequestContentPayload,
-    TaskCreatePayload, TaskDirectMergePayload, TaskUpdatePayload,
+    TaskDirectMergePayload,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TaskCreateArgs {
-    repo_path: String,
-    input: TaskCreatePayload,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TaskListArgs {
-    repo_path: String,
-    done_visible_days: Option<i32>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TaskUpdateArgs {
-    repo_path: String,
-    task_id: String,
-    patch: TaskUpdatePayload,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TaskDeleteArgs {
-    repo_path: String,
-    task_id: String,
-    delete_subtasks: Option<bool>,
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -55,15 +25,6 @@ struct TaskResetImplementationArgs {
 struct TaskResetArgs {
     repo_path: String,
     task_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TaskTransitionArgs {
-    repo_path: String,
-    task_id: String,
-    status: host_domain::TaskStatus,
-    reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -223,63 +184,45 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
 }
 
 async fn handle_tasks_list(state: &HeadlessState, args: Value) -> CommandResult {
-    let TaskListArgs {
-        repo_path,
-        done_visible_days,
-    } = deserialize_args(args)?;
+    let request: task_service::TasksListRequest = deserialize_args(args)?;
     let service = state.service.clone();
-    let tasks = crate::run_service_blocking_tokio("tasks_list", move || match done_visible_days {
-        Some(days) => service.tasks_list_for_kanban(&repo_path, days),
-        None => service.tasks_list(&repo_path),
-    })
-    .await
-    .map_err(service_error)?;
-    serialize_value(tasks)
+    serialize_value(
+        run_command_service_blocking("tasks_list", move || task_service::list(service, request))
+            .await?,
+    )
 }
 
 async fn handle_task_create(state: &HeadlessState, args: Value) -> CommandResult {
-    let TaskCreateArgs { repo_path, input } = deserialize_args(args)?;
-    let create = map_task_create_payload(input).map_err(request_error)?;
+    let request: task_service::TaskCreateRequest = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        super::command_support::run_headless_blocking("task_create", move || {
-            service.task_create(&repo_path, create)
+        run_command_service_blocking("task_create", move || {
+            task_service::create(service, request)
         })
         .await?,
     )
 }
 
 async fn handle_task_update(state: &HeadlessState, args: Value) -> CommandResult {
-    let TaskUpdateArgs {
-        repo_path,
-        task_id,
-        patch,
-    } = deserialize_args(args)?;
-    let mapped = map_task_update_payload(patch).map_err(request_error)?;
+    let request: task_service::TaskUpdateRequest = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        super::command_support::run_headless_blocking("task_update", move || {
-            service.task_update(&repo_path, &task_id, mapped)
+        run_command_service_blocking("task_update", move || {
+            task_service::update(service, request)
         })
         .await?,
     )
 }
 
 async fn handle_task_delete(state: &HeadlessState, args: Value) -> CommandResult {
-    let TaskDeleteArgs {
-        repo_path,
-        task_id,
-        delete_subtasks,
-    } = deserialize_args(args)?;
+    let request: task_service::TaskDeleteRequest = deserialize_args(args)?;
     let service = state.service.clone();
-    let delete_subtasks = delete_subtasks.unwrap_or(false);
-    let ok = super::command_support::run_headless_blocking("task_delete", move || {
-        service
-            .task_delete(&repo_path, &task_id, delete_subtasks)
-            .map(|()| true)
-    })
-    .await?;
-    Ok(json!({ "ok": ok }))
+    serialize_value(
+        run_command_service_blocking("task_delete", move || {
+            task_service::delete(service, request)
+        })
+        .await?,
+    )
 }
 
 async fn handle_task_reset_implementation(state: &HeadlessState, args: Value) -> CommandResult {
@@ -305,31 +248,23 @@ async fn handle_task_reset(state: &HeadlessState, args: Value) -> CommandResult 
 }
 
 async fn handle_task_transition(state: &HeadlessState, args: Value) -> CommandResult {
-    let TaskTransitionArgs {
-        repo_path,
-        task_id,
-        status,
-        reason,
-    } = deserialize_args(args)?;
+    let request: task_service::TaskTransitionRequest = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        super::command_support::run_headless_blocking("task_transition", move || {
-            service.task_transition(&repo_path, &task_id, status, reason.as_deref())
+        run_command_service_blocking("task_transition", move || {
+            task_service::transition(service, request)
         })
         .await?,
     )
 }
 
 async fn handle_task_defer(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_reason_operation_blocking(
-        state,
-        args,
-        "task_defer",
-        |service, repo_path, task_id, reason| {
-            service.task_defer(&repo_path, &task_id, reason.as_deref())
-        },
+    let request: task_service::TaskDeferRequest = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_command_service_blocking("task_defer", move || task_service::defer(service, request))
+            .await?,
     )
-    .await
 }
 
 async fn handle_task_resume_deferred(state: &HeadlessState, args: Value) -> CommandResult {

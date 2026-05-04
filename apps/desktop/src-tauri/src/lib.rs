@@ -22,6 +22,7 @@ use tracing_subscriber::fmt::format::Writer;
 use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields};
 use tracing_subscriber::registry::LookupSpan;
 
+mod command_services;
 mod commands;
 mod external_task_sync;
 mod headless;

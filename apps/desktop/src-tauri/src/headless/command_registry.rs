@@ -85,7 +85,8 @@ mod tests {
     use serde_json::json;
     use serde_json::Value;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -139,6 +140,48 @@ mod tests {
             },
             root,
         }
+    }
+
+    fn test_state_fixture_with_workspace(registry: CommandRegistry) -> TestStateFixture {
+        let root = unique_temp_path("registry-workspace");
+        fs::create_dir_all(&root).expect("test root should exist");
+        let repo = root.join("repo");
+        init_repo(&repo);
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        config_store
+            .add_workspace("repo", "repo", repo.to_string_lossy().as_ref())
+            .expect("workspace should be allowlisted");
+        let task_store: Arc<dyn TaskStore> = Arc::new(
+            BeadsTaskStore::with_metadata_namespace_and_config("openducktor", config_store.clone()),
+        );
+        let service = Arc::new(AppService::new(task_store, config_store));
+
+        TestStateFixture {
+            state: HeadlessState {
+                service,
+                events: HeadlessEventBus::new(1),
+                dev_server_events: HeadlessEventBus::new(1),
+                task_events: HeadlessEventBus::new(1),
+                pull_request_sync_stop_requested: Arc::new(AtomicBool::new(false)),
+                registry: Arc::new(registry),
+                shutdown_signal: Arc::new(Notify::new()),
+                shutdown_started: Arc::new(AtomicBool::new(false)),
+                control_token: None,
+                app_token: None,
+            },
+            root,
+        }
+    }
+
+    fn init_repo(path: &Path) {
+        fs::create_dir_all(path).expect("test repo should exist");
+        let status = Command::new("git")
+            .arg("init")
+            .arg("--initial-branch=main")
+            .current_dir(path)
+            .status()
+            .expect("git init should run");
+        assert!(status.success(), "git init should succeed");
     }
 
     async fn response_json(error: HeadlessCommandError) -> (StatusCode, Value) {
@@ -264,5 +307,51 @@ mod tests {
             .as_str()
             .expect("error message should be a string")
             .contains("Invalid arguments:"));
+    }
+
+    #[tokio::test]
+    async fn dispatch_command_maps_shared_task_validation_to_bad_request_envelope() {
+        let fixture = test_state_fixture(build_registry().expect("registry should build"));
+
+        let error = dispatch_command(
+            &fixture.state,
+            "tasks_list",
+            json!({ "repoPath": "/unused", "doneVisibleDays": -1 }),
+        )
+        .await
+        .expect_err("negative doneVisibleDays should fail");
+        let (status, payload) = response_json(error).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            payload,
+            json!({ "error": "doneVisibleDays must be greater than or equal to 0" })
+        );
+    }
+
+    #[tokio::test]
+    async fn dispatch_command_maps_shared_git_validation_to_bad_request_envelope() {
+        let fixture =
+            test_state_fixture_with_workspace(build_registry().expect("registry should build"));
+        let repo_path = fixture.root.join("repo");
+
+        let error = dispatch_command(
+            &fixture.state,
+            "git_get_worktree_status",
+            json!({
+                "repoPath": repo_path.to_string_lossy().to_string(),
+                "targetBranch": "origin/main",
+                "diffScope": "staged"
+            }),
+        )
+        .await
+        .expect_err("invalid diffScope should fail");
+        let (status, payload) = response_json(error).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(payload["error"]
+            .as_str()
+            .expect("error message should be a string")
+            .contains("diffScope must be either 'target' or 'uncommitted'"));
     }
 }
