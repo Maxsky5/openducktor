@@ -233,6 +233,14 @@ fn create_linked_worktree(repo_path: &Path, worktree_path: &Path, branch: &str) 
     assert!(status.success(), "git worktree add should succeed");
 }
 
+fn authorized_git_fixture(prefix: &str) -> TestGitFixture {
+    test_git_fixture(prefix, true)
+}
+
+fn unauthorized_git_fixture(prefix: &str) -> TestGitFixture {
+    test_git_fixture(prefix, false)
+}
+
 fn test_git_fixture(prefix: &str, authorize_repo: bool) -> TestGitFixture {
     let root = unique_temp_path(prefix);
     fs::create_dir_all(&root).expect("test root should exist");
@@ -286,9 +294,16 @@ async fn response_json(error: HeadlessCommandError) -> (StatusCode, Value) {
     (status, payload)
 }
 
+fn canonical_path_string(path: &Path) -> String {
+    fs::canonicalize(path)
+        .expect("path should canonicalize")
+        .to_string_lossy()
+        .to_string()
+}
+
 #[tokio::test]
 async fn headless_git_get_worktree_status_keeps_snapshot_metadata_and_upstream_error() {
-    let fixture = test_git_fixture("status", true);
+    let fixture = authorized_git_fixture("status");
     let worktree = fixture.root.join("repo-wt");
     let worktree_str = worktree.to_string_lossy().to_string();
     {
@@ -334,10 +349,7 @@ async fn headless_git_get_worktree_status_keeps_snapshot_metadata_and_upstream_e
     assert_eq!(status.snapshot.status_hash.len(), 16);
     assert_eq!(status.snapshot.diff_hash.len(), 16);
 
-    let expected_worktree = fs::canonicalize(&worktree)
-        .expect("worktree should canonicalize")
-        .to_string_lossy()
-        .to_string();
+    let expected_worktree = canonical_path_string(&worktree);
     assert_eq!(status.snapshot.effective_working_dir, expected_worktree);
 
     let state = fixture
@@ -357,7 +369,7 @@ async fn headless_git_get_worktree_status_keeps_snapshot_metadata_and_upstream_e
 
 #[tokio::test]
 async fn headless_git_fetch_remote_forwards_trimmed_target_branch_and_effective_working_dir() {
-    let fixture = test_git_fixture("fetch", true);
+    let fixture = authorized_git_fixture("fetch");
     let worktree = fixture.root.join("repo-wt-fetch");
     let worktree_str = worktree.to_string_lossy().to_string();
     create_linked_worktree(&fixture.repo_path, &worktree, "feature/headless-fetch");
@@ -377,10 +389,7 @@ async fn headless_git_fetch_remote_forwards_trimmed_target_branch_and_effective_
     assert_eq!(response["outcome"], json!("fetched"));
     assert_eq!(response["output"], json!("Fetched origin"));
 
-    let expected_worktree = fs::canonicalize(&worktree)
-        .expect("worktree should canonicalize")
-        .to_string_lossy()
-        .to_string();
+    let expected_worktree = canonical_path_string(&worktree);
     let state = fixture
         .git_state
         .lock()
@@ -398,7 +407,7 @@ async fn headless_git_fetch_remote_forwards_trimmed_target_branch_and_effective_
 
 #[tokio::test]
 async fn headless_git_reset_worktree_selection_forwards_snapshot_selection_and_working_dir() {
-    let fixture = test_git_fixture("reset", true);
+    let fixture = authorized_git_fixture("reset");
     let worktree = fixture.root.join("repo-wt-reset");
     let worktree_str = worktree.to_string_lossy().to_string();
     create_linked_worktree(&fixture.repo_path, &worktree, "feature/headless-reset");
@@ -427,10 +436,7 @@ async fn headless_git_reset_worktree_selection_forwards_snapshot_selection_and_w
 
     assert_eq!(response["affectedPaths"], json!(["src/main.rs"]));
 
-    let expected_worktree = fs::canonicalize(&worktree)
-        .expect("worktree should canonicalize")
-        .to_string_lossy()
-        .to_string();
+    let expected_worktree = canonical_path_string(&worktree);
     let state = fixture
         .git_state
         .lock()
@@ -457,7 +463,7 @@ async fn headless_git_reset_worktree_selection_forwards_snapshot_selection_and_w
 
 #[tokio::test]
 async fn headless_git_get_worktree_status_rejects_unauthorized_repo_without_calling_git_port() {
-    let fixture = test_git_fixture("unauthorized", false);
+    let fixture = unauthorized_git_fixture("unauthorized");
 
     let error = dispatch_command(
         &fixture.state,
@@ -486,7 +492,7 @@ async fn headless_git_get_worktree_status_rejects_unauthorized_repo_without_call
 
 #[tokio::test]
 async fn headless_git_get_worktree_status_rejects_unrelated_working_dir_without_calling_git_port() {
-    let fixture = test_git_fixture("working-dir-reject", true);
+    let fixture = authorized_git_fixture("working-dir-reject");
     let external = fixture.root.join("external");
     fs::create_dir_all(&external).expect("external dir should exist");
 
@@ -518,7 +524,7 @@ async fn headless_git_get_worktree_status_rejects_unrelated_working_dir_without_
 
 #[tokio::test]
 async fn headless_git_get_worktree_status_rejects_invalid_diff_scope_without_calling_git_port() {
-    let fixture = test_git_fixture("invalid-scope", true);
+    let fixture = authorized_git_fixture("invalid-scope");
 
     let error = dispatch_command(
         &fixture.state,
@@ -629,10 +635,10 @@ impl GitPort for TestGitPort {
             working_dir: request.working_dir,
             target_branch: request.target_branch,
         });
-        match state.fetch_remote_result.clone() {
-            Ok(payload) => Ok(payload),
-            Err(message) => Err(anyhow::anyhow!(message)),
-        }
+        state
+            .fetch_remote_result
+            .clone()
+            .map_err(|message| anyhow::anyhow!(message))
     }
 
     fn rebase_abort(

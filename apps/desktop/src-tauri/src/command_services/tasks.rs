@@ -112,15 +112,10 @@ pub(crate) fn list(
     service: Arc<AppService>,
     request: TasksListRequest,
 ) -> CommandServiceResult<Vec<TaskCard>> {
-    if let Some(days) = request.done_visible_days {
-        if days < 0 {
-            return Err(request_error(
-                "doneVisibleDays must be greater than or equal to 0",
-            ));
-        }
-    }
-
     match request.done_visible_days {
+        Some(days) if days < 0 => Err(request_error(
+            "doneVisibleDays must be greater than or equal to 0",
+        )),
         Some(days) => service
             .tasks_list_for_kanban(&request.repo_path, days)
             .map_err(service_error),
