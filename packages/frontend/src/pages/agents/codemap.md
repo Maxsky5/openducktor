@@ -10,4 +10,4 @@ This folder is model-heavy. Shell/query-sync/right-panel/session-start/chat-comp
 Route params and workspace state seed the shell model; session/task changes feed back into query params, session stores, runtime hydration, and right-panel refreshes.
 
 ## Integration Points
-`shell/`, `query-sync/`, `right-panel/`, `session-start/`, `chat-composer/`, `use-agent-studio-*` orchestration hooks, and `components/features/agents`.
+`shell/`, `query-sync/use-agent-studio-query-sync.ts`, `right-panel/use-agent-studio-right-panel.ts`, `session-start/use-agent-studio-session-start-flow.ts`, `chat-composer/use-agent-studio-chat-composer.ts`, `use-agent-studio-orchestration-controller.ts`, and `components/features/agents`.

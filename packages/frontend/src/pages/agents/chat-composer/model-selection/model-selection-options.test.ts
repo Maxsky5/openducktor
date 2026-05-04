@@ -3,15 +3,15 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { resolveModelSelectionOptions } from "./model-selection-options";
 
-const selectedSessionModel: AgentModelSelection = {
+const makeSelectedSessionModel = (): AgentModelSelection => ({
   runtimeKind: "opencode",
   providerId: "anthropic",
   modelId: "claude-sonnet",
   variant: "high",
   profileId: "build-agent",
-};
+});
 
-const catalogWithProfile: AgentModelCatalog = {
+const makeCatalogWithProfile = (): AgentModelCatalog => ({
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
     {
@@ -25,13 +25,13 @@ const catalogWithProfile: AgentModelCatalog = {
   ],
   defaultModelsByProvider: {},
   profiles: [{ name: "build-agent", mode: "primary", hidden: false, color: "#f59e0b" }],
-};
+});
 
 describe("model-selection-options", () => {
   test("keeps current-session options when catalog metadata is unavailable", () => {
     const options = resolveModelSelectionOptions({
-      selectionCatalog: { ...catalogWithProfile, models: [], profiles: [] },
-      selectedModelSelection: selectedSessionModel,
+      selectionCatalog: { ...makeCatalogWithProfile(), models: [], profiles: [] },
+      selectedModelSelection: makeSelectedSessionModel(),
     });
 
     expect(options.agentProfileOptions).toEqual([
@@ -54,8 +54,8 @@ describe("model-selection-options", () => {
   test("derives catalog-backed agent colors", () => {
     expect(
       resolveModelSelectionOptions({
-        selectionCatalog: catalogWithProfile,
-        selectedModelSelection: selectedSessionModel,
+        selectionCatalog: makeCatalogWithProfile(),
+        selectedModelSelection: makeSelectedSessionModel(),
       }).agentAccentColorsByProfileId,
     ).toEqual({ "build-agent": "#f59e0b" });
   });

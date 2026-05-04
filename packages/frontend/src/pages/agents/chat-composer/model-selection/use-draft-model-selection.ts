@@ -91,12 +91,6 @@ export const useAgentStudioDraftModelSelectionState = ({
         return;
       }
       if (!composerCatalog) {
-        setDraftSelectionByRole((current) =>
-          current[role] === null ? current : { ...current, [role]: null },
-        );
-        setDraftSelectionTouchedByRole((current) =>
-          current[role] ? { ...current, [role]: false } : current,
-        );
         return;
       }
       setDraftSelectionByRole((current) => {

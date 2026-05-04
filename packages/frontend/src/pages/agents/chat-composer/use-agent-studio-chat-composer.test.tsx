@@ -289,19 +289,21 @@ describe("useAgentStudioChatComposer", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.waitFor((state) => state.selectedModelSelection?.variant === "high");
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.selectedModelSelection?.variant === "high");
 
-    const state = harness.getLatest();
-    expect(state.selectedModelSelection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "spec-agent",
-    });
-
-    await harness.unmount();
+      const state = harness.getLatest();
+      expect(state.selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "spec-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("keeps repo defaults selectable when composer catalog is unavailable", async () => {
@@ -357,32 +359,36 @@ describe("useAgentStudioChatComposer", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
 
-    expect(harness.getLatest().selectedModelSelection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "spec-agent",
-    });
-
-    await harness.unmount();
+      expect(harness.getLatest().selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "spec-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("publishes agent colors from composer catalog before a session is started", async () => {
     const harness = createHookHarness(createBaseProps());
 
-    await harness.mount();
-    await harness.waitFor((state) => state.agentProfileOptions.length > 0);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.agentProfileOptions.length > 0);
 
-    const state = harness.getLatest();
-    expect(state.agentAccentColorsByProfileId).toMatchObject({
-      "spec-agent": "#f59e0b",
-    });
-
-    await harness.unmount();
+      const state = harness.getLatest();
+      expect(state.agentAccentColorsByProfileId).toMatchObject({
+        "spec-agent": "#f59e0b",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("keeps the selected session model while the full session object is still hydrating", async () => {
@@ -733,38 +739,40 @@ describe("useAgentStudioChatComposer", () => {
   test("updates draft selections through model and variant handlers", async () => {
     const harness = createHookHarness(createBaseProps());
 
-    await harness.mount();
-    await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
-    });
-    await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
+      await harness.run(() => {
+        harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
+      });
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectModel("openai/gpt-5");
-    });
-    await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
+      await harness.run(() => {
+        harness.getLatest().handleSelectModel("openai/gpt-5");
+      });
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectVariant("high");
-    });
-    await harness.waitFor((state) => state.selectedModelSelection?.variant === "high");
+      await harness.run(() => {
+        harness.getLatest().handleSelectVariant("high");
+      });
+      await harness.waitFor((state) => state.selectedModelSelection?.variant === "high");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectAgentProfile("build-agent");
-    });
+      await harness.run(() => {
+        harness.getLatest().handleSelectAgentProfile("build-agent");
+      });
 
-    const state = harness.getLatest();
-    expect(state.selectedModelSelection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "build-agent",
-    });
-
-    await harness.unmount();
+      const state = harness.getLatest();
+      expect(state.selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "build-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("routes selection updates to active sessions via callback", async () => {
@@ -778,22 +786,24 @@ describe("useAgentStudioChatComposer", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectVariant("high");
-    });
+      await harness.run(() => {
+        harness.getLatest().handleSelectVariant("high");
+      });
 
-    expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "spec-agent",
-    });
-
-    await harness.unmount();
+      expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "spec-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("preserves active session model when catalog cannot produce a replacement", async () => {

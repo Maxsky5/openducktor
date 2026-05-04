@@ -40,13 +40,16 @@ export const createChatComposerFileSearch = ({
       if (activeSessionRuntimeQueryError) {
         throw new Error(activeSessionRuntimeQueryError);
       }
-      if (activeSessionRuntimeQueryInput == null || readSessionFileSearch == null) {
+      if (activeSessionRuntimeQueryInput == null) {
         throw new Error(
           "Active session file search is unavailable until the session runtime is ready.",
         );
       }
       if (!supportsFileSearch) {
         return [];
+      }
+      if (readSessionFileSearch == null) {
+        throw new Error("Active session file search adapter is unavailable.");
       }
       return queryClient.fetchQuery(
         sessionFileSearchQueryOptions(

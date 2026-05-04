@@ -76,7 +76,7 @@ type AgentStudioChatComposerState = {
   isSelectionCatalogLoading: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
-  slashCommandCatalog: AgentSlashCommandCatalog | null;
+  slashCommandCatalog: AgentSlashCommandCatalog;
   slashCommands: AgentSlashCommandCatalog["commands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
@@ -197,15 +197,6 @@ export function useAgentStudioChatComposer({
       workspaceRepoPath !== null &&
       activeExternalSessionId === null &&
       selectedRuntimeKind !== null,
-    queryFn: async (): Promise<AgentModelCatalog> => {
-      if (!workspaceRepoPath) {
-        throw new Error("No repository selected.");
-      }
-      if (!selectedRuntimeKind) {
-        throw new Error("Select a runtime before loading model catalogs.");
-      }
-      return loadCatalogForRepo(workspaceRepoPath, selectedRuntimeKind);
-    },
   });
   const composerCatalog = composerCatalogQuery.data ?? null;
   const isLoadingComposerCatalog = composerCatalogQuery.isLoading;
