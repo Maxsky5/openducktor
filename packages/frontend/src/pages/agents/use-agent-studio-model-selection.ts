@@ -4,51 +4,41 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
-  AgentSlashCommand,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  resolveAgentAccentColor,
-  toModelGroupsByProvider,
-  toModelOptions,
-  toPrimaryAgentOptions,
-} from "@/components/features/agents";
-import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
+import { useEffect, useMemo } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { findFirstChangedSessionMessageIndex } from "@/state/operations/agent-orchestrator/support/messages";
 import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
-import {
-  sessionFileSearchQueryOptions,
-  sessionSlashCommandsQueryOptions,
-} from "@/state/queries/agent-session-runtime";
-import {
-  repoRuntimeCatalogQueryOptions,
-  repoRuntimeFileSearchQueryOptions,
-  repoRuntimeSlashCommandsQueryOptions,
-} from "@/state/queries/runtime-catalog";
+import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
+import { resolveModelSelectionOptions } from "./agent-studio-model-selection-options";
 import {
-  coerceVisibleSelectionToCatalog,
-  emptyDraftSelections,
-  isSameSelection,
-  pickDefaultVisibleSelectionForCatalog,
-} from "./agents-page-selection";
+  resolveActiveSessionSelectionState,
+  resolveComposerRuntimeKind,
+  resolveRoleDefaultSelectionForComposer,
+  resolveRuntimePromptInputSupport,
+  resolveSelectedModelSelection,
+  resolveSelectionCatalogLoading,
+  resolveSelectionForNewSession,
+} from "./agent-studio-model-selection-resolution";
+import { pickDefaultVisibleSelectionForCatalog } from "./agents-page-selection";
+import { useAgentStudioActiveSessionModelRepair } from "./use-agent-studio-active-session-model-repair";
+import { useAgentStudioContextUsage } from "./use-agent-studio-context-usage";
+import { useAgentStudioDraftModelSelectionState } from "./use-agent-studio-draft-model-selection";
+import { createAgentStudioFileSearch } from "./use-agent-studio-file-search";
+import { useAgentStudioModelSelectionHandlers } from "./use-agent-studio-model-selection-handlers";
 import {
   type AgentStudioContextUsage,
-  type AgentStudioContextUsageEntry,
-  extractLatestContextUsage,
-  extractLatestContextUsageEntry,
-  resolveDraftSelection,
-  resolveSessionSelection,
-  toModelDescriptorByKey,
   toRoleDefaultSelection,
 } from "./use-agent-studio-model-selection-model";
+import { useAgentStudioSlashCommands } from "./use-agent-studio-slash-commands";
+
+export { resolveActiveSessionSelectionState } from "./agent-studio-model-selection-resolution";
 
 type UseAgentStudioModelSelectionArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -83,21 +73,6 @@ type UseAgentStudioModelSelectionArgs = {
   ) => Promise<AgentFileSearchResult[]>;
 };
 
-const mergeSlashCommands = (
-  runtimeSlashCommands: AgentSlashCommand[],
-  reusablePromptSlashCommands: AgentSlashCommand[],
-): AgentSlashCommand[] => {
-  const reusablePromptTriggers = new Set(
-    reusablePromptSlashCommands.map((command) => command.trigger.toLowerCase()),
-  );
-  return [
-    ...runtimeSlashCommands.filter(
-      (command) => !reusablePromptTriggers.has(command.trigger.toLowerCase()),
-    ),
-    ...reusablePromptSlashCommands,
-  ];
-};
-
 type AgentStudioModelSelectionState = {
   selectionForNewSession: AgentModelSelection | null;
   selectedModelSelection: AgentModelSelection | null;
@@ -112,7 +87,7 @@ type AgentStudioModelSelectionState = {
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
-  modelGroups: ReturnType<typeof toModelGroupsByProvider>;
+  modelGroups: ReturnType<typeof resolveModelSelectionOptions>["modelGroups"];
   variantOptions: ComboboxOption[];
   activeSessionAgentColors: Record<string, string>;
   activeSessionContextUsage: AgentStudioContextUsage;
@@ -120,55 +95,6 @@ type AgentStudioModelSelectionState = {
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
 };
-
-type ActiveSessionSelectionState = {
-  externalSessionId: string | null;
-  repoPath: string;
-  status: AgentSessionState["status"] | null;
-  selectedModel: AgentModelSelection | null;
-  modelCatalog: AgentSessionState["modelCatalog"] | null;
-  runtimeKind: AgentSessionState["runtimeKind"] | null;
-  workingDirectory: string;
-  isLoadingModelCatalog: boolean;
-  liveContextUsage: AgentSessionState["contextUsage"] | null;
-  messages: AgentSessionState["messages"] | null;
-  hasSelection: boolean;
-};
-
-export const resolveActiveSessionSelectionState = (
-  activeSession: AgentSessionState | null,
-  activeSessionSummary: AgentSessionSummary | null,
-): ActiveSessionSelectionState => {
-  const externalSessionId =
-    activeSession?.externalSessionId ?? activeSessionSummary?.externalSessionId ?? null;
-  const selectedModel = activeSession?.selectedModel ?? activeSessionSummary?.selectedModel ?? null;
-
-  return {
-    externalSessionId,
-    repoPath: activeSession?.repoPath?.trim() ?? activeSessionSummary?.repoPath?.trim() ?? "",
-    status: activeSession?.status ?? activeSessionSummary?.status ?? null,
-    selectedModel,
-    modelCatalog: activeSession?.modelCatalog ?? null,
-    runtimeKind: activeSession?.runtimeKind ?? activeSessionSummary?.runtimeKind ?? null,
-    workingDirectory:
-      activeSession?.workingDirectory?.trim() ??
-      activeSessionSummary?.workingDirectory?.trim() ??
-      "",
-    isLoadingModelCatalog:
-      activeSession?.isLoadingModelCatalog === true ||
-      (activeSession == null && activeSessionSummary != null),
-    liveContextUsage: activeSession?.contextUsage ?? null,
-    messages: activeSession?.messages ?? null,
-    hasSelection: externalSessionId !== null,
-  };
-};
-
-const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
-  spec: false,
-  planner: false,
-  build: false,
-  qa: false,
-});
 
 export function useAgentStudioModelSelection({
   activeWorkspace,
@@ -195,26 +121,6 @@ export function useAgentStudioModelSelection({
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
   const loadFileSearchForRepo = loadFileSearch ?? loadRepoRuntimeFileSearch;
-  const previousWorkspaceRepoPathRef = useRef<string | null>(workspaceRepoPath);
-  const previousWorkspaceRepoPathForDefaultsRef = useRef<string | null>(workspaceRepoPath);
-  const previousRepoSettingsRef = useRef<RepoSettingsInput | null>(repoSettings);
-  const activeSessionContextUsageCacheRef = useRef<{
-    externalSessionId: string;
-    messages: AgentSessionState["messages"];
-    sourceIndex: number;
-    metadataKey: string;
-    key: string;
-    value: NonNullable<AgentStudioContextUsage>;
-  } | null>(null);
-  const [
-    isAwaitingRepoSettingsForWorkspaceRepoPath,
-    setIsAwaitingRepoSettingsForWorkspaceRepoPath,
-  ] = useState(false);
-  const [draftSelectionByRole, setDraftSelectionByRole] =
-    useState<Record<AgentRole, AgentModelSelection | null>>(emptyDraftSelections);
-  const [draftSelectionTouchedByRole, setDraftSelectionTouchedByRole] = useState<
-    Record<AgentRole, boolean>
-  >(emptyDraftSelectionTouchedByRole);
   const activeSessionSelection = useMemo(
     () => resolveActiveSessionSelectionState(activeSession, activeSessionSummary),
     [activeSession, activeSessionSummary],
@@ -236,20 +142,24 @@ export function useAgentStudioModelSelection({
       repoSettings?.defaultRuntimeKind,
     );
   }, [repoSettings?.agentDefaults, repoSettings?.defaultRuntimeKind, role]);
+  const {
+    draftSelection,
+    isAwaitingRepoSettingsForWorkspaceRepoPath,
+    applyDraftSelection,
+    repairDraftSelection,
+  } = useAgentStudioDraftModelSelectionState({ workspaceRepoPath, repoSettings, role });
   const composerRuntimeKind = useMemo<RuntimeKind | null>(() => {
-    return (
-      activeSessionSelectedModel?.runtimeKind ??
-      draftSelectionByRole[role]?.runtimeKind ??
-      roleDefaultSelection?.runtimeKind ??
-      repoSettings?.defaultRuntimeKind ??
-      null
-    );
+    return resolveComposerRuntimeKind({
+      activeSessionSelectedModel,
+      draftSelection,
+      roleDefaultSelection,
+      repoDefaultRuntimeKind: repoSettings?.defaultRuntimeKind ?? null,
+    });
   }, [
-    activeSessionSelectedModel?.runtimeKind,
-    draftSelectionByRole,
+    activeSessionSelectedModel,
+    draftSelection,
     repoSettings?.defaultRuntimeKind,
-    role,
-    roleDefaultSelection?.runtimeKind,
+    roleDefaultSelection,
   ]);
   const activeSessionRuntimeQueryState = useMemo(
     () =>
@@ -271,58 +181,15 @@ export function useAgentStudioModelSelection({
   );
   const activeSessionRuntimeQueryInput = activeSessionRuntimeQueryState.runtimeQueryInput;
   const activeSessionRuntimeQueryError = activeSessionRuntimeQueryState.runtimeQueryError;
-  const slashCommandRuntimeKind =
-    activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
-  const runtimeSupportsSlashCommands = useMemo(() => {
-    if (!slashCommandRuntimeKind) {
-      return false;
-    }
-    return (
-      runtimeDefinitions.find((definition) => definition.kind === slashCommandRuntimeKind)
-        ?.capabilities.promptInput.supportsSlashCommands ?? false
-    );
-  }, [runtimeDefinitions, slashCommandRuntimeKind]);
-  const supportsSlashCommands = runtimeSupportsSlashCommands || reusablePrompts.length > 0;
-  const fileSearchRuntimeKind = activeSessionRuntimeQueryInput?.runtimeKind ?? composerRuntimeKind;
-  const supportsFileSearch = useMemo(() => {
-    if (!fileSearchRuntimeKind) {
-      return false;
-    }
-    return (
-      runtimeDefinitions.find((definition) => definition.kind === fileSearchRuntimeKind)
-        ?.capabilities.promptInput.supportsFileSearch ?? false
-    );
-  }, [fileSearchRuntimeKind, runtimeDefinitions]);
-
-  useEffect(() => {
-    if (previousWorkspaceRepoPathRef.current === workspaceRepoPath) {
-      return;
-    }
-    previousWorkspaceRepoPathRef.current = workspaceRepoPath;
-    setDraftSelectionByRole(emptyDraftSelections());
-    setDraftSelectionTouchedByRole(emptyDraftSelectionTouchedByRole());
-  }, [workspaceRepoPath]);
-
-  useEffect(() => {
-    if (previousWorkspaceRepoPathForDefaultsRef.current !== workspaceRepoPath) {
-      previousWorkspaceRepoPathForDefaultsRef.current = workspaceRepoPath;
-      previousRepoSettingsRef.current = repoSettings;
-      setIsAwaitingRepoSettingsForWorkspaceRepoPath(
-        Boolean(workspaceRepoPath) && repoSettings == null,
-      );
-      return;
-    }
-
-    if (!isAwaitingRepoSettingsForWorkspaceRepoPath) {
-      previousRepoSettingsRef.current = repoSettings;
-      return;
-    }
-
-    if (repoSettings != null) {
-      previousRepoSettingsRef.current = repoSettings;
-      setIsAwaitingRepoSettingsForWorkspaceRepoPath(false);
-    }
-  }, [workspaceRepoPath, isAwaitingRepoSettingsForWorkspaceRepoPath, repoSettings]);
+  const { runtimeSupportsSlashCommands, supportsFileSearch } = useMemo(
+    () =>
+      resolveRuntimePromptInputSupport({
+        runtimeDefinitions,
+        activeSessionRuntimeKind: activeSessionRuntimeQueryInput?.runtimeKind ?? null,
+        composerRuntimeKind,
+      }),
+    [activeSessionRuntimeQueryInput?.runtimeKind, composerRuntimeKind, runtimeDefinitions],
+  );
 
   const composerCatalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(
@@ -346,117 +213,48 @@ export function useAgentStudioModelSelection({
   });
   const composerCatalog = composerCatalogQuery.data ?? null;
   const isLoadingComposerCatalog = composerCatalogQuery.isLoading;
-  const activeSessionSlashCommandsQuery = useQuery({
-    ...(activeSessionRuntimeQueryInput && readSessionSlashCommands
-      ? sessionSlashCommandsQueryOptions(
-          activeSessionRuntimeQueryInput.repoPath,
-          activeSessionRuntimeQueryInput.runtimeKind,
-          readSessionSlashCommands,
-        )
-      : {
-          queryKey: ["agent-session-runtime", "slash-commands", "", DEFAULT_RUNTIME_KIND] as const,
-          queryFn: async (): Promise<AgentSlashCommandCatalog> => {
-            throw new Error("Session slash commands query is disabled.");
-          },
-        }),
-    enabled:
-      runtimeSupportsSlashCommands &&
-      hasActiveSession &&
-      activeSessionStatus !== "starting" &&
-      activeSessionRuntimeQueryInput !== null &&
-      activeSessionRuntimeQueryError === null &&
-      readSessionSlashCommands !== undefined,
+  const {
+    supportsSlashCommands,
+    slashCommandCatalog,
+    slashCommands,
+    slashCommandsError,
+    isSlashCommandsLoading,
+  } = useAgentStudioSlashCommands({
+    hasActiveSession,
+    activeExternalSessionId,
+    activeSessionStatus,
+    activeSessionRuntimeQueryInput,
+    activeSessionRuntimeQueryError,
+    runtimeSupportsSlashCommands,
+    workspaceRepoPath,
+    composerRuntimeKind,
+    reusablePrompts,
+    loadSlashCommandsForRepo,
+    ...(readSessionSlashCommands ? { readSessionSlashCommands } : {}),
   });
-  const repoSlashCommandsQuery = useQuery({
-    ...repoRuntimeSlashCommandsQueryOptions(
-      workspaceRepoPath ?? "",
-      composerRuntimeKind ?? DEFAULT_RUNTIME_KIND,
-      loadSlashCommandsForRepo,
-    ),
-    enabled:
-      runtimeSupportsSlashCommands &&
-      workspaceRepoPath !== null &&
-      activeExternalSessionId === null &&
-      composerRuntimeKind !== null,
-  });
-  const hasDraftSelectionForWorkspaceRepoPath =
-    previousWorkspaceRepoPathRef.current === workspaceRepoPath;
-  const isDraftSelectionTouched = hasDraftSelectionForWorkspaceRepoPath
-    ? draftSelectionTouchedByRole[role]
-    : false;
-
   useEffect(() => {
-    if (hasActiveSession) {
-      return;
-    }
-    if (!composerCatalog) {
-      setDraftSelectionByRole((current) => {
-        if (current[role] === null) {
-          return current;
-        }
-        return {
-          ...current,
-          [role]: null,
-        };
-      });
-      setDraftSelectionTouchedByRole((current) => {
-        if (!current[role]) {
-          return current;
-        }
-        return {
-          ...current,
-          [role]: false,
-        };
-      });
-      return;
-    }
-    setDraftSelectionByRole((current) => {
-      const existing = current[role];
-      const normalized = resolveDraftSelection({
-        catalog: composerCatalog,
-        existingSelection: isDraftSelectionTouched ? existing : null,
-        roleDefaultSelection,
-      });
-      if (isSameSelection(existing, normalized)) {
-        return current;
-      }
-      return {
-        ...current,
-        [role]: normalized,
-      };
-    });
-  }, [composerCatalog, hasActiveSession, isDraftSelectionTouched, role, roleDefaultSelection]);
-
-  useEffect(() => {
-    if (!activeExternalSessionId) {
-      return;
-    }
-    const preferredSelection = resolveSessionSelection({
-      catalog: activeSessionModelCatalog,
-      selectedModel: activeSessionSelectedModel,
+    repairDraftSelection({
+      hasActiveSession,
+      composerCatalog,
       roleDefaultSelection,
     });
-    if (!preferredSelection || isSameSelection(activeSessionSelectedModel, preferredSelection)) {
-      return;
-    }
-    updateAgentSessionModel(activeExternalSessionId, preferredSelection);
-  }, [
+  }, [composerCatalog, hasActiveSession, repairDraftSelection, roleDefaultSelection]);
+
+  useAgentStudioActiveSessionModelRepair({
     activeExternalSessionId,
     activeSessionModelCatalog,
     activeSessionSelectedModel,
     roleDefaultSelection,
     updateAgentSessionModel,
-  ]);
+  });
 
-  const draftSelection = hasDraftSelectionForWorkspaceRepoPath ? draftSelectionByRole[role] : null;
   const roleDefaultSelectionForComposer = useMemo<AgentModelSelection | null>(() => {
-    if (hasActiveSession) {
-      return roleDefaultSelection;
-    }
-    if (!composerCatalog) {
-      return isAwaitingRepoSettingsForWorkspaceRepoPath ? null : roleDefaultSelection;
-    }
-    return coerceVisibleSelectionToCatalog(composerCatalog, roleDefaultSelection);
+    return resolveRoleDefaultSelectionForComposer({
+      hasActiveSession,
+      composerCatalog,
+      isAwaitingRepoSettingsForWorkspaceRepoPath,
+      roleDefaultSelection,
+    });
   }, [
     hasActiveSession,
     composerCatalog,
@@ -464,107 +262,50 @@ export function useAgentStudioModelSelection({
     roleDefaultSelection,
   ]);
   const selectionCatalog = activeSessionModelCatalog ?? composerCatalog;
-  const slashCommandCatalog = hasActiveSession
-    ? (activeSessionSlashCommandsQuery.data ?? null)
-    : (repoSlashCommandsQuery.data ?? null);
-  const reusablePromptSlashCommands = useMemo(
-    () => reusablePrompts.map(toReusablePromptSlashCommand),
-    [reusablePrompts],
-  );
-  const runtimeSlashCommands = useMemo(
-    () => (runtimeSupportsSlashCommands ? (slashCommandCatalog?.commands ?? []) : []),
-    [runtimeSupportsSlashCommands, slashCommandCatalog?.commands],
-  );
-  const slashCommands = useMemo(
-    () => mergeSlashCommands(runtimeSlashCommands, reusablePromptSlashCommands),
-    [reusablePromptSlashCommands, runtimeSlashCommands],
-  );
-  const mergedSlashCommandCatalog = useMemo<AgentSlashCommandCatalog>(
-    () => ({ commands: slashCommands }),
-    [slashCommands],
-  );
-  const slashCommandsError = runtimeSupportsSlashCommands
-    ? hasActiveSession
-      ? activeSessionSlashCommandsQuery.error instanceof Error
-        ? activeSessionSlashCommandsQuery.error.message
-        : null
-      : repoSlashCommandsQuery.error instanceof Error
-        ? repoSlashCommandsQuery.error.message
-        : null
-    : null;
-  const isSlashCommandsLoading = runtimeSupportsSlashCommands
-    ? hasActiveSession
-      ? activeSessionSlashCommandsQuery.isLoading
-      : repoSlashCommandsQuery.isLoading
-    : false;
-  const searchFiles = useCallback(
-    async (query: string): Promise<AgentFileSearchResult[]> => {
-      if (hasActiveSession) {
-        if (activeSessionRuntimeQueryError) {
-          throw new Error(activeSessionRuntimeQueryError);
-        }
-        if (!supportsFileSearch) {
-          return [];
-        }
-        if (activeSessionRuntimeQueryInput == null || readSessionFileSearch == null) {
-          throw new Error(
-            "Active session file search is unavailable until the session runtime is ready.",
-          );
-        }
-        return queryClient.fetchQuery(
-          sessionFileSearchQueryOptions(
-            activeSessionRuntimeQueryInput.repoPath,
-            activeSessionRuntimeQueryInput.runtimeKind,
-            activeSessionRuntimeQueryInput.workingDirectory,
-            query,
-            readSessionFileSearch,
-          ),
-        );
-      }
-      if (!workspaceRepoPath) {
-        throw new Error("No repository selected.");
-      }
-      if (!composerRuntimeKind) {
-        throw new Error("Select a runtime before searching files.");
-      }
-      if (!supportsFileSearch) {
-        return [];
-      }
-      return queryClient.fetchQuery(
-        repoRuntimeFileSearchQueryOptions(
-          workspaceRepoPath,
-          composerRuntimeKind,
-          query,
-          loadFileSearchForRepo,
-        ),
-      );
-    },
+  const searchFiles = useMemo(
+    () =>
+      createAgentStudioFileSearch({
+        hasActiveSession,
+        activeSessionRuntimeQueryInput,
+        activeSessionRuntimeQueryError,
+        workspaceRepoPath,
+        composerRuntimeKind,
+        supportsFileSearch,
+        queryClient,
+        loadFileSearchForRepo,
+        ...(readSessionFileSearch ? { readSessionFileSearch } : {}),
+      }),
     [
-      workspaceRepoPath,
-      hasActiveSession,
-      activeSessionRuntimeQueryInput,
       activeSessionRuntimeQueryError,
+      activeSessionRuntimeQueryInput,
       composerRuntimeKind,
+      hasActiveSession,
       loadFileSearchForRepo,
       queryClient,
       readSessionFileSearch,
       supportsFileSearch,
+      workspaceRepoPath,
     ],
   );
-  const isSelectionCatalogLoading = hasActiveSession
-    ? activeSessionIsLoadingModelCatalog && !activeSessionModelCatalog && !composerCatalog
-    : isLoadingComposerCatalog;
+  const isSelectionCatalogLoading = resolveSelectionCatalogLoading({
+    hasActiveSession,
+    activeSessionIsLoadingModelCatalog,
+    activeSessionModelCatalog,
+    composerCatalog,
+    isLoadingComposerCatalog,
+  });
   const fallbackCatalogSelection = useMemo(
     () => pickDefaultVisibleSelectionForCatalog(selectionCatalog),
     [selectionCatalog],
   );
   const selectedModelSelection = useMemo(
     () =>
-      activeSessionSelectedModel ??
-      draftSelection ??
-      roleDefaultSelectionForComposer ??
-      fallbackCatalogSelection ??
-      null,
+      resolveSelectedModelSelection({
+        activeSessionSelectedModel,
+        draftSelection,
+        roleDefaultSelectionForComposer,
+        fallbackCatalogSelection,
+      }),
     [
       activeSessionSelectedModel,
       draftSelection,
@@ -573,347 +314,47 @@ export function useAgentStudioModelSelection({
     ],
   );
 
-  const applySelection = useCallback(
-    (selection: AgentModelSelection | null): void => {
-      if (activeExternalSessionId) {
-        updateAgentSessionModel(activeExternalSessionId, selection);
-        return;
-      }
-      setDraftSelectionByRole((current) => ({
-        ...current,
-        [role]: selection,
-      }));
-      setDraftSelectionTouchedByRole((current) => ({
-        ...current,
-        [role]: true,
-      }));
-    },
-    [activeExternalSessionId, role, updateAgentSessionModel],
-  );
-
   const selectionForNewSession = useMemo(
     () =>
-      draftSelection ??
-      roleDefaultSelectionForComposer ??
-      coerceVisibleSelectionToCatalog(selectionCatalog, fallbackCatalogSelection) ??
-      fallbackCatalogSelection ??
-      null,
+      resolveSelectionForNewSession({
+        draftSelection,
+        roleDefaultSelectionForComposer,
+        selectionCatalog,
+        fallbackCatalogSelection,
+      }),
     [draftSelection, fallbackCatalogSelection, roleDefaultSelectionForComposer, selectionCatalog],
   );
 
-  const agentOptions = useMemo<ComboboxOption[]>(() => {
-    const options = toPrimaryAgentOptions(selectionCatalog);
-    if (options.length > 0) {
-      return options;
-    }
-    const fallbackAgent = selectedModelSelection?.profileId;
-    const fallbackAgentColor = resolveAgentAccentColor(fallbackAgent);
-    if (fallbackAgent && fallbackAgent.trim().length > 0) {
-      return [
-        {
-          value: fallbackAgent,
-          label: fallbackAgent,
-          description: "Current session agent",
-          ...(fallbackAgentColor ? { accentColor: fallbackAgentColor } : {}),
-        },
-      ];
-    }
-    return [];
-  }, [selectedModelSelection?.profileId, selectionCatalog]);
-
-  const modelOptions = useMemo<ComboboxOption[]>(() => {
-    const options = toModelOptions(selectionCatalog);
-    if (options.length > 0) {
-      return options;
-    }
-    const selected = selectedModelSelection;
-    if (selected?.providerId && selected.modelId) {
-      return [
-        {
-          value: `${selected.providerId}/${selected.modelId}`,
-          label: selected.modelId,
-          description: `${selected.providerId} (current session model)`,
-        },
-      ];
-    }
-    return [];
-  }, [selectedModelSelection, selectionCatalog]);
-
-  const modelGroups = useMemo(() => toModelGroupsByProvider(selectionCatalog), [selectionCatalog]);
-
-  const selectedModelEntry = useMemo(() => {
-    if (!selectionCatalog || !selectedModelSelection) {
-      return null;
-    }
-    return (
-      selectionCatalog.models.find(
-        (entry) =>
-          entry.providerId === selectedModelSelection.providerId &&
-          entry.modelId === selectedModelSelection.modelId,
-      ) ?? null
-    );
-  }, [selectedModelSelection, selectionCatalog]);
-
-  const variantOptions = useMemo(() => {
-    if (!selectedModelEntry) {
-      const selectedVariant = selectedModelSelection?.variant;
-      if (selectedVariant && selectedVariant.trim().length > 0) {
-        return [
-          {
-            value: selectedVariant,
-            label: selectedVariant,
-          },
-        ];
-      }
-      return [];
-    }
-    return selectedModelEntry.variants.map((variant) => ({
-      value: variant,
-      label: variant,
-    }));
-  }, [selectedModelEntry, selectedModelSelection?.variant]);
-
-  const activeSessionAgentColors = useMemo<Record<string, string>>(() => {
-    if (!selectionCatalog) {
-      return {};
-    }
-    const map: Record<string, string> = {};
-    for (const descriptor of selectionCatalog.profiles ?? []) {
-      const descriptorId = descriptor.id ?? descriptor.name;
-      const descriptorLabel = descriptor.label ?? descriptor.name;
-      if (!descriptorId || !descriptorLabel) {
-        continue;
-      }
-      const color = resolveAgentAccentColor(descriptorLabel, descriptor.color);
-      if (color) {
-        map[descriptorId] = color;
-      }
-    }
-    return map;
-  }, [selectionCatalog]);
-
-  const activeExternalSessionIdForContextUsage = activeSession?.externalSessionId ?? null;
-  const activeSessionMessagesForContextUsage = activeSessionMessages;
-  const activeSessionMessageOwnerForContextUsage = useMemo(
-    () =>
-      activeExternalSessionIdForContextUsage && activeSessionMessagesForContextUsage
-        ? {
-            externalSessionId: activeExternalSessionIdForContextUsage,
-            messages: activeSessionMessagesForContextUsage,
-          }
-        : null,
-    [activeExternalSessionIdForContextUsage, activeSessionMessagesForContextUsage],
+  const {
+    selectedModelEntry,
+    agentOptions,
+    modelOptions,
+    modelGroups,
+    variantOptions,
+    activeSessionAgentColors,
+  } = useMemo(
+    () => resolveModelSelectionOptions({ selectionCatalog, selectedModelSelection }),
+    [selectedModelSelection, selectionCatalog],
   );
-  const activeSessionModelDescriptorByKey = useMemo(() => {
-    return toModelDescriptorByKey(activeSessionModelCatalog ?? null);
-  }, [activeSessionModelCatalog]);
 
-  const activeSessionContextUsage = useMemo<AgentStudioContextUsage>(() => {
-    const fallbackContextWindow =
-      typeof selectedModelEntry?.contextWindow === "number"
-        ? selectedModelEntry.contextWindow
-        : null;
-    const fallbackOutputLimit =
-      typeof selectedModelEntry?.outputLimit === "number" ? selectedModelEntry.outputLimit : null;
-    const metadataKey = [
-      activeExternalSessionIdForContextUsage ?? "",
-      selectedModelSelection?.providerId ?? "",
-      selectedModelSelection?.modelId ?? "",
-      selectedModelEntry?.contextWindow ?? "",
-      selectedModelEntry?.outputLimit ?? "",
-    ].join(":");
-    const commitCachedUsage = (
-      usage: NonNullable<AgentStudioContextUsage>,
-      sourceIndex: number,
-      messages: AgentSessionState["messages"],
-    ): NonNullable<AgentStudioContextUsage> => {
-      const nextKey = [usage.totalTokens, usage.contextWindow, usage.outputLimit ?? ""].join(":");
-      const cached = activeSessionContextUsageCacheRef.current;
-      if (cached?.key === nextKey && cached.metadataKey === metadataKey) {
-        activeSessionContextUsageCacheRef.current = {
-          externalSessionId: activeExternalSessionIdForContextUsage ?? cached.externalSessionId,
-          messages,
-          sourceIndex,
-          metadataKey,
-          key: cached.key,
-          value: cached.value,
-        };
-        return cached.value;
-      }
-
-      activeSessionContextUsageCacheRef.current = {
-        externalSessionId: activeExternalSessionIdForContextUsage ?? "",
-        messages,
-        sourceIndex,
-        metadataKey,
-        key: nextKey,
-        value: usage,
-      };
-      return usage;
-    };
-
-    if (activeSessionLiveContextUsage !== null) {
-      const nextUsage = extractLatestContextUsage({
-        session: activeSessionMessageOwnerForContextUsage,
-        liveContextUsage: activeSessionLiveContextUsage,
-        modelDescriptorByKey: activeSessionModelDescriptorByKey,
-        ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
-        ...(fallbackOutputLimit !== null ? { fallbackOutputLimit } : {}),
-      });
-      if (nextUsage === null) {
-        activeSessionContextUsageCacheRef.current = null;
-        return null;
-      }
-
-      return commitCachedUsage(
-        nextUsage,
-        Number.MAX_SAFE_INTEGER,
-        activeSessionMessages ?? activeSessionMessageOwnerForContextUsage?.messages ?? [],
-      );
-    }
-
-    let nextUsageEntry: AgentStudioContextUsageEntry = null;
-    if (activeSessionMessageOwnerForContextUsage) {
-      const cached = activeSessionContextUsageCacheRef.current;
-      if (
-        cached &&
-        activeExternalSessionIdForContextUsage !== null &&
-        cached.externalSessionId === activeExternalSessionIdForContextUsage &&
-        cached.metadataKey === metadataKey
-      ) {
-        const firstChangedMessageIndex = findFirstChangedSessionMessageIndex(
-          cached.messages,
-          activeSessionMessageOwnerForContextUsage,
-        );
-        if (firstChangedMessageIndex < 0) {
-          return cached.value;
-        }
-
-        nextUsageEntry = extractLatestContextUsageEntry({
-          session: activeSessionMessageOwnerForContextUsage,
-          modelDescriptorByKey: activeSessionModelDescriptorByKey,
-          ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
-          ...(fallbackOutputLimit !== null ? { fallbackOutputLimit } : {}),
-          startIndex: firstChangedMessageIndex,
-        });
-
-        if (!nextUsageEntry && cached.sourceIndex < firstChangedMessageIndex) {
-          activeSessionContextUsageCacheRef.current = {
-            ...cached,
-            messages: activeSessionMessageOwnerForContextUsage.messages,
-            metadataKey,
-          };
-          return cached.value;
-        }
-
-        if (!nextUsageEntry && firstChangedMessageIndex > 0) {
-          nextUsageEntry = extractLatestContextUsageEntry({
-            session: activeSessionMessageOwnerForContextUsage,
-            modelDescriptorByKey: activeSessionModelDescriptorByKey,
-            ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
-            ...(fallbackOutputLimit !== null ? { fallbackOutputLimit } : {}),
-            endIndex: firstChangedMessageIndex - 1,
-          });
-        }
-      } else {
-        nextUsageEntry = extractLatestContextUsageEntry({
-          session: activeSessionMessageOwnerForContextUsage,
-          modelDescriptorByKey: activeSessionModelDescriptorByKey,
-          ...(fallbackContextWindow !== null ? { fallbackContextWindow } : {}),
-          ...(fallbackOutputLimit !== null ? { fallbackOutputLimit } : {}),
-        });
-      }
-    }
-
-    if (nextUsageEntry === null) {
-      activeSessionContextUsageCacheRef.current = null;
-      return null;
-    }
-
-    return commitCachedUsage(
-      nextUsageEntry.usage,
-      nextUsageEntry.sourceIndex,
-      activeSessionMessageOwnerForContextUsage?.messages ?? [],
-    );
-  }, [
-    activeSessionLiveContextUsage,
-    activeExternalSessionIdForContextUsage,
+  const activeSessionContextUsage = useAgentStudioContextUsage({
+    activeSession,
     activeSessionMessages,
-    activeSessionMessageOwnerForContextUsage,
-    activeSessionModelDescriptorByKey,
-    selectedModelSelection?.modelId,
-    selectedModelSelection?.providerId,
-    selectedModelEntry?.contextWindow,
-    selectedModelEntry?.outputLimit,
-  ]);
+    activeSessionLiveContextUsage,
+    activeSessionModelCatalog,
+    selectedModelSelection,
+    selectedModelEntry,
+  });
 
-  const handleSelectAgent = useCallback(
-    (profileId: string) => {
-      const baseSelection =
-        selectedModelSelection ??
-        (() => {
-          const firstModel = selectionCatalog?.models[0];
-          if (!firstModel) {
-            return null;
-          }
-          if (!composerRuntimeKind) {
-            return null;
-          }
-          return {
-            runtimeKind: composerRuntimeKind,
-            providerId: firstModel.providerId,
-            modelId: firstModel.modelId,
-            ...(firstModel.variants[0] ? { variant: firstModel.variants[0] } : {}),
-          } satisfies AgentModelSelection;
-        })();
-      if (!baseSelection) {
-        return;
-      }
-      applySelection({
-        ...baseSelection,
-        profileId,
-      });
-    },
-    [applySelection, composerRuntimeKind, selectedModelSelection, selectionCatalog],
-  );
-
-  const handleSelectModel = useCallback(
-    (nextValue: string) => {
-      if (!selectionCatalog) {
-        return;
-      }
-      if (!composerRuntimeKind) {
-        return;
-      }
-      const model = selectionCatalog.models.find((entry) => entry.id === nextValue);
-      if (!model) {
-        return;
-      }
-      applySelection({
-        runtimeKind: composerRuntimeKind,
-        providerId: model.providerId,
-        modelId: model.modelId,
-        ...(model.variants[0] ? { variant: model.variants[0] } : {}),
-        ...(selectedModelSelection?.profileId
-          ? { profileId: selectedModelSelection.profileId }
-          : {}),
-      });
-    },
-    [applySelection, composerRuntimeKind, selectedModelSelection?.profileId, selectionCatalog],
-  );
-
-  const handleSelectVariant = useCallback(
-    (variant: string) => {
-      if (!selectedModelSelection) {
-        return;
-      }
-      applySelection({
-        ...selectedModelSelection,
-        variant,
-      });
-    },
-    [applySelection, selectedModelSelection],
-  );
+  const { handleSelectAgent, handleSelectModel, handleSelectVariant } =
+    useAgentStudioModelSelectionHandlers({
+      activeExternalSessionId,
+      updateAgentSessionModel,
+      applyDraftSelection,
+      selectedModelSelection,
+      selectionCatalog,
+      composerRuntimeKind,
+    });
 
   return {
     selectionForNewSession,
@@ -922,7 +363,7 @@ export function useAgentStudioModelSelection({
     isSelectionCatalogLoading,
     supportsSlashCommands,
     supportsFileSearch,
-    slashCommandCatalog: mergedSlashCommandCatalog,
+    slashCommandCatalog,
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
