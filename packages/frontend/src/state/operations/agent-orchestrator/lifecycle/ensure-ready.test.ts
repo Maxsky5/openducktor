@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
+import type { ReadLiveAgentSessionSnapshotInput } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred, createLiveAgentSessionSnapshotFixture } from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
@@ -117,9 +118,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     let attachCalls = 0;
     let stopCalls = 0;
     let resumeCalls = 0;
-    const readSnapshotCalls: Array<
-      Parameters<OpencodeSdkAdapter["readLiveAgentSessionSnapshot"]>[0]
-    > = [];
+    const readSnapshotCalls: ReadLiveAgentSessionSnapshotInput[] = [];
 
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;

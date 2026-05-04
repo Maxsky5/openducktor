@@ -110,13 +110,11 @@ export const createEnsureSessionReady = ({
     };
 
     const readLiveTruth = async ({
-      repoPath,
       runtimeKind,
       runtimeId,
       workingDirectory,
       externalSessionId,
     }: {
-      repoPath: string;
       runtimeKind: AgentSessionState["runtimeKind"];
       runtimeId: string | null;
       workingDirectory: string;
@@ -168,7 +166,6 @@ export const createEnsureSessionReady = ({
         );
 
         const liveSessionTruth = await readLiveTruth({
-          repoPath,
           runtimeKind: attachedRuntimeKind,
           runtimeId: attachedRuntimeId,
           workingDirectory: attachedWorkingDirectory,
@@ -255,7 +252,6 @@ export const createEnsureSessionReady = ({
     }
 
     const liveSessionTruth = await readLiveTruth({
-      repoPath,
       runtimeKind: requestedRuntimeKind,
       runtimeId: runtime.runtimeId,
       workingDirectory: runtime.workingDirectory,
@@ -281,12 +277,11 @@ export const createEnsureSessionReady = ({
 
     assertNotStale();
 
-    updateSession(externalSessionId, (current) => {
-      const next = applyLiveSessionTruthToSession(current, liveSessionTruth, {
+    updateSession(externalSessionId, (current) =>
+      applyLiveSessionTruthToSession(current, liveSessionTruth, {
         promptOverrides: promptContext.promptOverrides,
-      });
-      return next;
-    });
+      }),
+    );
 
     if (!allowPendingInput && liveSessionTruthHasPendingInput(liveSessionTruth)) {
       throw new Error(PENDING_INPUT_NOT_READY_ERROR);
