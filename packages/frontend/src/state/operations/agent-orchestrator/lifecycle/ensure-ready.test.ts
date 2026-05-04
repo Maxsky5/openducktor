@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
+import type { LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred } from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
@@ -71,6 +72,19 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   ...overrides,
 });
 
+const buildLiveSnapshot = (
+  overrides: Partial<LiveAgentSessionSnapshot> = {},
+): LiveAgentSessionSnapshot => ({
+  externalSessionId: "external-1",
+  title: "BUILD task-1",
+  workingDirectory: "/tmp/repo/worktree",
+  startedAt: "2026-02-22T08:00:00.000Z",
+  status: { type: "idle" },
+  pendingApprovals: [],
+  pendingQuestions: [],
+  ...overrides,
+});
+
 const createAdapter = () => {
   const adapter = new OpencodeSdkAdapter();
   adapter.listLiveAgentSessionSnapshots = async () => [];
@@ -123,6 +137,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
     adapter.hasSession = () => true;
+    adapter.listLiveAgentSessionSnapshots = async () => [buildLiveSnapshot()];
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
@@ -192,6 +207,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => true;
+    adapter.listLiveAgentSessionSnapshots = async () => [buildLiveSnapshot()];
 
     const sessionsRef = {
       current: {
@@ -251,6 +267,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => true;
+    adapter.listLiveAgentSessionSnapshots = async () => [buildLiveSnapshot()];
 
     const sessionsRef = {
       current: {
@@ -476,6 +493,115 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
       adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+    }
+  });
+
+  test("fails fast when an attached session with legacy runtime metadata is missing from the live snapshot", async () => {
+    let attachCalls = 0;
+    let ensureRuntimeCalls = 0;
+    let resumeCalls = 0;
+
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalResumeSession = adapter.resumeSession;
+    adapter.hasSession = () => true;
+    adapter.resumeSession = async () => {
+      resumeCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        status: "idle",
+      };
+    };
+
+    const sessionsRef = {
+      current: {
+        "session-1": buildSession({
+          status: "idle",
+          runtimeId: null,
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Confirm",
+                  question: "Confirm",
+                  options: [],
+                  multiple: false,
+                  custom: false,
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef: { current: new Map() },
+      updateSession: (_externalSessionId, updater) => {
+        const current = sessionsRef.current["session-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["session-1"] = updater(current);
+      },
+      attachSessionListener: () => {
+        attachCalls += 1;
+      },
+      ensureRuntime: async () => {
+        ensureRuntimeCalls += 1;
+        return {
+          kind: "opencode",
+          runtimeKind: "opencode",
+          runtimeId: null,
+          workingDirectory: "/tmp/repo/worktree",
+        };
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await expect(ensureReady("session-1")).rejects.toThrow(
+        "Runtime did not report attached session 'session-1'.",
+      );
+
+      expect(attachCalls).toBe(1);
+      expect(ensureRuntimeCalls).toBe(0);
+      expect(resumeCalls).toBe(0);
+      expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([]);
+      expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([]);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.resumeSession = originalResumeSession;
     }
   });
 

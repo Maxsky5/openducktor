@@ -80,7 +80,13 @@ export const normalizeSessionDirectory = (directory: unknown): string | undefine
   if (typeof directory !== "string") {
     return undefined;
   }
-  const normalized = directory.trim();
+  let normalized = directory.trim();
+  if (/^[A-Za-z]:[\\/]$/.test(normalized)) {
+    return normalized;
+  }
+  while (normalized.length > 1 && /[\\/]/.test(normalized.at(-1) ?? "")) {
+    normalized = normalized.slice(0, -1);
+  }
   return normalized.length > 0 ? normalized : undefined;
 };
 

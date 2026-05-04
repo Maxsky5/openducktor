@@ -6,6 +6,7 @@ import {
   type RuntimeInstanceSummary,
   type TaskCard,
 } from "@openducktor/contracts";
+import type { LiveAgentSessionSnapshot } from "@openducktor/core";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -152,6 +153,19 @@ const createWorktreeRuntimeFixture = (
   },
   startedAt: "2026-02-22T08:00:00.000Z",
   descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+  ...overrides,
+});
+
+const buildLiveSnapshot = (
+  overrides: Partial<LiveAgentSessionSnapshot> = {},
+): LiveAgentSessionSnapshot => ({
+  externalSessionId: "external-1",
+  title: "BUILD task-1",
+  workingDirectory: "/tmp/repo/worktree",
+  startedAt: "2026-02-22T08:00:00.000Z",
+  status: { type: "idle" },
+  pendingApprovals: [],
+  pendingQuestions: [],
   ...overrides,
 });
 
@@ -368,7 +382,7 @@ describe("use-agent-orchestrator-operations", () => {
         kind: runtimeKind,
       },
     });
-    OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = async () => [];
+    OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = async () => [buildLiveSnapshot()];
   });
 
   afterEach(() => {

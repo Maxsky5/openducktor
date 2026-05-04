@@ -190,20 +190,13 @@ export const createEnsureSessionReady = ({
           }
           return;
         }
-        if (attachedRuntimeId === null || !adapter.listLiveAgentSessionSnapshots) {
+        if (attachedRuntimeId === null) {
           updateSession(
             externalSessionId,
-            (current) => ({
-              ...current,
-              runtimeId: attachedRuntimeId,
-              workingDirectory: attachedWorkingDirectory,
-              pendingApprovals: [],
-              pendingQuestions: [],
-              runtimeKind: attachedRuntimeKind,
-            }),
+            (current) => applyLiveSessionTruthToSession(current, liveSessionTruth),
             { persist: false },
           );
-          return;
+          throw new Error(`Runtime did not report attached session '${externalSessionId}'.`);
         }
       }
       if (session.runtimeId !== null) {

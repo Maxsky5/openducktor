@@ -805,6 +805,123 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
+  test("listLiveAgentSessionSnapshots rejects malformed pending approval payloads", async () => {
+    const mock = makeMockClient();
+    const malformedClient = {
+      ...mock.client,
+      permission: {
+        ...mock.client.permission,
+        list: async () => ({
+          data: [
+            {
+              id: "perm-1",
+              sessionID: "external-session-1",
+              patterns: ["**/.env"],
+            },
+          ],
+          error: undefined,
+        }),
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => malformedClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await expect(
+      adapter.listLiveAgentSessionSnapshots({
+        repoPath: defaultRepoPath,
+        runtimeKind: "opencode",
+      }),
+    ).rejects.toThrow("Malformed Opencode pending approval payload: missing permission.");
+  });
+
+  test("listLiveAgentSessionSnapshots rejects malformed pending question payloads", async () => {
+    const mock = makeMockClient();
+    const malformedClient = {
+      ...mock.client,
+      question: {
+        ...mock.client.question,
+        list: async () => ({
+          data: [
+            {
+              id: "question-1",
+              sessionID: "external-session-2",
+              questions: [],
+            },
+          ],
+          error: undefined,
+        }),
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => malformedClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await expect(
+      adapter.listLiveAgentSessionSnapshots({
+        repoPath: defaultRepoPath,
+        runtimeKind: "opencode",
+      }),
+    ).rejects.toThrow(
+      "Malformed Opencode pending question payload 'question-1': missing questions.",
+    );
+  });
+
+  test("listLiveAgentSessionSnapshots normalizes trailing separators in directory filters", async () => {
+    const mock = makeMockClient();
+    const trailingDirectoryClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async () => ({
+          data: [
+            {
+              id: "external-session-1",
+              projectID: "project-1",
+              directory: "/repo/",
+              title: "BUILD task-1",
+              time: {
+                created: Date.parse("2026-02-22T12:00:00.000Z"),
+              },
+            },
+          ],
+          error: undefined,
+        }),
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => trailingDirectoryClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    const snapshots = await adapter.listLiveAgentSessionSnapshots({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      directories: ["/repo///"],
+    });
+
+    expect(mock.statusCalls).toEqual([{ directory: "/repo" }]);
+    expect(mock.permissionListCalls).toEqual([{ directory: "/repo" }]);
+    expect(snapshots).toEqual([
+      {
+        externalSessionId: "external-session-1",
+        title: "BUILD task-1",
+        workingDirectory: "/repo",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        status: {
+          type: "retry",
+          attempt: 2,
+          message: "retrying",
+          nextEpochMs: 1234,
+        },
+        pendingApprovals: [expectedReadApproval],
+        pendingQuestions: [],
+      },
+    ]);
+  });
+
   test("listLiveAgentSessions fails fast on malformed runtime statuses", async () => {
     const mock = makeMockClient();
     const malformedClient = {

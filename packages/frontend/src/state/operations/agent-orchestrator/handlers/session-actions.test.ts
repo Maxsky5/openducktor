@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionStopTarget } from "@openducktor/contracts";
+import type { LiveAgentSessionSnapshot } from "@openducktor/core";
 import {
   findSessionMessageForTest,
   lastSessionMessageForTest,
@@ -33,6 +34,19 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   modelCatalog: null,
   selectedModel: null,
   isLoadingModelCatalog: false,
+  ...overrides,
+});
+
+const buildLiveSnapshot = (
+  overrides: Partial<LiveAgentSessionSnapshot> = {},
+): LiveAgentSessionSnapshot => ({
+  externalSessionId: "external-1",
+  title: "BUILD task-1",
+  workingDirectory: "/tmp/repo/worktree",
+  startedAt: "2026-02-22T08:00:00.000Z",
+  status: { type: "idle" },
+  pendingApprovals: [],
+  pendingQuestions: [],
   ...overrides,
 });
 
@@ -1479,7 +1493,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [];
+    adapter.listLiveAgentSessionSnapshots = async () => [buildLiveSnapshot()];
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -1555,7 +1569,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const callOrder: string[] = [];
 
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [];
+    adapter.listLiveAgentSessionSnapshots = async () => [buildLiveSnapshot()];
     adapter.sendUserMessage = async () => {
       callOrder.push("send");
     };
@@ -1942,7 +1956,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     let clearCalls = 0;
 
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [];
+    adapter.listLiveAgentSessionSnapshots = async () => [buildLiveSnapshot()];
     adapter.sendUserMessage = async () => {
       throw new Error("send failed");
     };
@@ -2023,7 +2037,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }> = [];
 
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [];
+    adapter.listLiveAgentSessionSnapshots = async () => [
+      buildLiveSnapshot({ status: { type: "busy" } }),
+    ];
     adapter.sendUserMessage = async (input) => {
       sendCalls.push({
         externalSessionId: input.externalSessionId,
@@ -2121,7 +2137,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     let clearCalls = 0;
 
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [];
+    adapter.listLiveAgentSessionSnapshots = async () => [
+      buildLiveSnapshot({ status: { type: "busy" } }),
+    ];
     adapter.sendUserMessage = async () => {
       throw new Error("queued send failed");
     };
