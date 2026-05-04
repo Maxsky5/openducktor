@@ -228,12 +228,10 @@ pub(crate) fn commits_ahead_behind(
     request: GitAheadBehindRequest,
 ) -> CommandServiceResult<host_domain::GitAheadBehind> {
     let scope = authorize_git_scope(&service, &request.repo_path, request.working_dir.as_deref())?;
+    let target_branch = require_target_branch(&request.target_branch)?;
     service
         .git_port()
-        .commits_ahead_behind(
-            Path::new(&scope.effective_working_dir),
-            &request.target_branch,
-        )
+        .commits_ahead_behind(Path::new(&scope.effective_working_dir), target_branch)
         .map_err(service_error)
 }
 

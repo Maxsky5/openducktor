@@ -208,23 +208,23 @@ async fn handle_git_reset_worktree_selection(state: &HeadlessState, args: Value)
     )
 }
 
-async fn handle_git_pull_branch(state: &HeadlessState, args: Value) -> CommandResult {
-    let request: git_requests::GitPullBranchRequest = deserialize_args(args)?;
-    let service = state.service.clone();
-    serialize_value(
-        run_command_service_blocking("git_pull_branch", move || {
-            git_service::pull_branch(service, request)
-        })
-        .await?,
-    )
-}
-
 async fn handle_git_fetch_remote(state: &HeadlessState, args: Value) -> CommandResult {
     let request: git_requests::GitFetchRemoteRequest = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
         run_command_service_blocking("git_fetch_remote", move || {
             git_service::fetch_remote(service, request)
+        })
+        .await?,
+    )
+}
+
+async fn handle_git_pull_branch(state: &HeadlessState, args: Value) -> CommandResult {
+    let request: git_requests::GitPullBranchRequest = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_command_service_blocking("git_pull_branch", move || {
+            git_service::pull_branch(service, request)
         })
         .await?,
     )

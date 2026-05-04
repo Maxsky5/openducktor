@@ -552,6 +552,26 @@ async fn headless_git_get_worktree_status_rejects_invalid_diff_scope_without_cal
         .is_empty());
 }
 
+#[tokio::test]
+async fn headless_git_commits_ahead_behind_rejects_blank_target_branch_before_git_port() {
+    let fixture = authorized_git_fixture("ahead-behind-blank-target");
+
+    let error = dispatch_command(
+        &fixture.state,
+        "git_commits_ahead_behind",
+        json!({
+            "repoPath": fixture.repo_path.to_string_lossy().to_string(),
+            "targetBranch": "   "
+        }),
+    )
+    .await
+    .expect_err("blank target branch should fail");
+    let (status, payload) = response_json(error).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(payload["error"], "targetBranch is required");
+}
+
 impl GitPort for TestGitPort {
     fn get_branches(&self, _repo_path: &Path) -> anyhow::Result<Vec<GitBranch>> {
         panic!("unexpected call: get_branches");
