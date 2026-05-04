@@ -82,16 +82,6 @@ export type LoadAgentSessionTodosInput = RepoRuntimeSessionOperationInput & {
   externalSessionId: ExternalSessionId;
 };
 
-export type ListLiveAgentSessionPendingInput = RepoRuntimeSessionOperationInput;
-
-export type LiveAgentSessionPendingInputByExternalSessionId = Record<
-  ExternalSessionId,
-  {
-    approvals: AgentPendingApprovalRequest[];
-    questions: AgentPendingQuestionRequest[];
-  }
->;
-
 export type ListAgentModelsInput = RepoRuntimeOperationInput;
 
 export type ListAgentSlashCommandsInput = RepoRuntimeOperationInput;
@@ -102,6 +92,10 @@ export type SearchAgentFilesInput = RepoRuntimeSessionOperationInput & {
 
 export type ListLiveAgentSessionsInput = RepoRuntimeOperationInput & {
   directories?: string[];
+};
+
+export type ReadLiveAgentSessionSnapshotInput = RepoRuntimeSessionOperationInput & {
+  externalSessionId: ExternalSessionId;
 };
 
 export type LoadAgentSessionDiffInput = RepoRuntimeSessionOperationInput & {
@@ -202,12 +196,12 @@ export interface AgentSessionPort {
   listLiveAgentSessionSnapshots(
     input: ListLiveAgentSessionsInput,
   ): Promise<LiveAgentSessionSnapshot[]>;
+  readLiveAgentSessionSnapshot(
+    input: ReadLiveAgentSessionSnapshotInput,
+  ): Promise<LiveAgentSessionSnapshot | null>;
   hasSession(externalSessionId: ExternalSessionId): boolean;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
-  listLiveAgentSessionPendingInput(
-    input: ListLiveAgentSessionPendingInput,
-  ): Promise<LiveAgentSessionPendingInputByExternalSessionId>;
   updateSessionModel(input: UpdateAgentSessionModelInput): void;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyApproval(input: ReplyApprovalInput): Promise<void>;

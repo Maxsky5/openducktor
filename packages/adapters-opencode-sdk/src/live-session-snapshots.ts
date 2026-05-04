@@ -1,10 +1,11 @@
 import type {
-  LiveAgentSessionPendingInputByExternalSessionId,
+  AgentPendingApprovalRequest,
+  AgentPendingQuestionRequest,
   LiveAgentSessionSnapshot,
   LiveAgentSessionSummary,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
-import { listLiveAgentSessionPendingInput } from "./message-ops";
+import { listOpencodeLiveSessionPendingInput } from "./message-ops";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import type { ClientFactory } from "./types";
 
@@ -15,6 +16,14 @@ export type ListOpencodeLiveAgentSessionSnapshotsInput = {
   directories?: string[];
   now: () => string;
 };
+
+type OpencodeLiveSessionPendingInputBySessionId = Record<
+  string,
+  {
+    approvals: AgentPendingApprovalRequest[];
+    questions: AgentPendingQuestionRequest[];
+  }
+>;
 
 export const toLiveAgentSessionStatus = (status: unknown): LiveAgentSessionSummary["status"] => {
   if (status === undefined || status === null) {
@@ -99,9 +108,9 @@ export const requireSessionDirectory = (directory: unknown, sessionId: string): 
 };
 
 const mergeLiveAgentSessionPendingInput = (
-  entries: LiveAgentSessionPendingInputByExternalSessionId[],
-): LiveAgentSessionPendingInputByExternalSessionId => {
-  const merged: LiveAgentSessionPendingInputByExternalSessionId = {};
+  entries: OpencodeLiveSessionPendingInputBySessionId[],
+): OpencodeLiveSessionPendingInputBySessionId => {
+  const merged: OpencodeLiveSessionPendingInputBySessionId = {};
 
   for (const entry of entries) {
     for (const [sessionId, pendingInput] of Object.entries(entry)) {
@@ -157,7 +166,7 @@ export const listOpencodeLiveAgentSessionSnapshots = async ({
   const statusesByDirectory = new Map(statusEntries);
   const pendingInputEntries = await Promise.all(
     sessionDirectories.map((directory) =>
-      listLiveAgentSessionPendingInput(createClient, {
+      listOpencodeLiveSessionPendingInput(createClient, {
         runtimeEndpoint,
         workingDirectory: directory,
       }),

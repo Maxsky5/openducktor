@@ -35,10 +35,10 @@ export const createLiveAgentSessionSnapshotFixture = (
 
   return {
     externalSessionId,
-    title: overrides.title ?? `Session ${externalSessionId}`,
+    title: overrides.title ?? "BUILD task-1",
     workingDirectory: "/tmp/repo/worktree",
     startedAt: "2026-02-22T08:00:00.000Z",
-    status: { type: "busy" },
+    status: { type: "idle" },
     pendingApprovals: [],
     pendingQuestions: [],
     ...overrides,

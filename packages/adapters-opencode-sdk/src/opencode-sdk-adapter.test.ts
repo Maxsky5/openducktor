@@ -1062,26 +1062,26 @@ describe("opencode-sdk-adapter", () => {
     );
   });
 
-  test("listLiveAgentSessionPendingInput groups pending permissions and questions by external session id", async () => {
+  test("readLiveAgentSessionSnapshot includes pending permissions and questions", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
-    const pending = await adapter.listLiveAgentSessionPendingInput({
+    const snapshot = await adapter.readLiveAgentSessionSnapshot({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
+      externalSessionId: "external-session-1",
     });
 
     expect(mock.permissionListCalls).toEqual([{ directory: "/repo" }]);
     expect(mock.questionListCalls).toEqual([{ directory: "/repo" }]);
-    expect(pending).toEqual({
-      "external-session-1": {
-        approvals: [expectedReadApproval],
-        questions: [],
-      },
+    expect(snapshot).toMatchObject({
+      externalSessionId: "external-session-1",
+      pendingApprovals: [expectedReadApproval],
+      pendingQuestions: [],
     });
   });
 });

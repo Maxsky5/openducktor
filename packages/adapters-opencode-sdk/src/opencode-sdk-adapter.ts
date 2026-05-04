@@ -13,15 +13,14 @@ import type {
   EventUnsubscribe,
   ForkAgentSessionInput,
   ListAgentModelsInput,
-  ListLiveAgentSessionPendingInput,
   ListLiveAgentSessionsInput,
-  LiveAgentSessionPendingInputByExternalSessionId,
   LiveAgentSessionSnapshot,
   LiveAgentSessionSummary,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
   LoadAgentSessionTodosInput,
+  ReadLiveAgentSessionSnapshotInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
@@ -53,7 +52,6 @@ import { setSessionIdle } from "./event-stream/shared";
 import { listOpencodeLiveAgentSessionSnapshots } from "./live-session-snapshots";
 import { sendUserMessage } from "./message-execution";
 import {
-  listLiveAgentSessionPendingInput,
   loadAndSeedSessionHistory,
   loadSessionHistory,
   loadSessionTodos,
@@ -359,6 +357,19 @@ export class OpencodeSdkAdapter
     });
   }
 
+  async readLiveAgentSessionSnapshot(
+    input: ReadLiveAgentSessionSnapshotInput,
+  ): Promise<LiveAgentSessionSnapshot | null> {
+    const snapshots = await this.listLiveAgentSessionSnapshots({
+      repoPath: input.repoPath,
+      runtimeKind: input.runtimeKind,
+      directories: [input.workingDirectory],
+    });
+    return (
+      snapshots.find((snapshot) => snapshot.externalSessionId === input.externalSessionId) ?? null
+    );
+  }
+
   hasSession(externalSessionId: string): boolean {
     return hasSession(this.sessions, externalSessionId);
   }
@@ -438,17 +449,6 @@ export class OpencodeSdkAdapter
       ...(await this.resolveRuntimeClientInput(input, "load session todos", { requireLive: true })),
       externalSessionId: input.externalSessionId,
     });
-  }
-
-  async listLiveAgentSessionPendingInput(
-    input: ListLiveAgentSessionPendingInput,
-  ): Promise<LiveAgentSessionPendingInputByExternalSessionId> {
-    return listLiveAgentSessionPendingInput(
-      this.createClient,
-      await this.resolveRuntimeClientInput(input, "list live agent session pending input", {
-        requireLive: true,
-      }),
-    );
   }
 
   async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {

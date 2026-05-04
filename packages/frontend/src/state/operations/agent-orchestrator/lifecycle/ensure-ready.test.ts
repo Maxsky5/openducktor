@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
-import type { LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createDeferred } from "../test-utils";
+import { createDeferred, createLiveAgentSessionSnapshotFixture } from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
 
 const withCapturedConsoleError = async (
@@ -72,19 +71,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   ...overrides,
 });
 
-const buildLiveSnapshot = (
-  overrides: Partial<LiveAgentSessionSnapshot> = {},
-): LiveAgentSessionSnapshot => ({
-  externalSessionId: "external-1",
-  title: "BUILD task-1",
-  workingDirectory: "/tmp/repo/worktree",
-  startedAt: "2026-02-22T08:00:00.000Z",
-  status: { type: "idle" },
-  pendingApprovals: [],
-  pendingQuestions: [],
-  ...overrides,
-});
-
 const createAdapter = () => {
   const adapter = new OpencodeSdkAdapter();
   adapter.listLiveAgentSessionSnapshots = async () => [];
@@ -131,13 +117,24 @@ describe("agent-orchestrator-ensure-ready", () => {
     let attachCalls = 0;
     let stopCalls = 0;
     let resumeCalls = 0;
+    const readSnapshotCalls: Array<
+      Parameters<OpencodeSdkAdapter["readLiveAgentSessionSnapshot"]>[0]
+    > = [];
 
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalReadLiveAgentSessionSnapshot = adapter.readLiveAgentSessionSnapshot;
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [buildLiveSnapshot()];
+    adapter.listLiveAgentSessionSnapshots = async () => {
+      throw new Error("ensure-ready must use the single-session snapshot read");
+    };
+    adapter.readLiveAgentSessionSnapshot = async (input) => {
+      readSnapshotCalls.push(input);
+      return createLiveAgentSessionSnapshotFixture();
+    };
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
@@ -197,10 +194,20 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(unsubscribersRef.current.has("session-1")).toBe(true);
       expect(stopCalls).toBe(0);
       expect(resumeCalls).toBe(0);
+      expect(readSnapshotCalls).toEqual([
+        {
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+          externalSessionId: "external-1",
+        },
+      ]);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.readLiveAgentSessionSnapshot = originalReadLiveAgentSessionSnapshot;
     }
   });
 
@@ -210,7 +217,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [buildLiveSnapshot()];
+    adapter.listLiveAgentSessionSnapshots = async () => [createLiveAgentSessionSnapshotFixture()];
 
     const sessionsRef = {
       current: {
@@ -270,7 +277,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [buildLiveSnapshot()];
+    adapter.listLiveAgentSessionSnapshots = async () => [createLiveAgentSessionSnapshotFixture()];
 
     const sessionsRef = {
       current: {

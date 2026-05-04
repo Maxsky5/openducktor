@@ -12,6 +12,7 @@ import { isWorkflowAgentSession } from "../support/session-purpose";
 import { requireSessionRuntimeKindForPersistence } from "../support/session-runtime-metadata";
 import {
   applyLiveSessionTruthToSession,
+  type LiveSessionTruth,
   liveSessionTruthHasPendingInput,
   readResolvedLiveSessionTruth,
 } from "./live-session-truth";
@@ -133,19 +134,18 @@ export const createEnsureSessionReady = ({
         runtimeId,
         workingDirectory,
         externalSessionId,
-        readSnapshot: async (snapshotInput) => {
-          const snapshots = await adapter.listLiveAgentSessionSnapshots({
-            repoPath: snapshotInput.repoPath,
-            runtimeKind: snapshotInput.runtimeKind,
-            directories: [snapshotInput.workingDirectory],
-          });
-          return (
-            snapshots.find(
-              (entry) => entry.externalSessionId === snapshotInput.externalSessionId,
-            ) ?? null
-          );
-        },
+        readSnapshot: (snapshotInput) => adapter.readLiveAgentSessionSnapshot(snapshotInput),
       });
+    };
+
+    const attachListenerIfLiveTruthConfirmed = (
+      truth: LiveSessionTruth,
+      shouldAttachListener: boolean,
+    ): void => {
+      if (truth.type !== "live" || !shouldAttachListener) {
+        return;
+      }
+      attachSessionListener(repoPath, truth.externalSessionId);
     };
 
     assertNotStale();
@@ -181,9 +181,7 @@ export const createEnsureSessionReady = ({
             (current) => applyLiveSessionTruthToSession(current, liveSessionTruth),
             { persist: false },
           );
-          if (shouldAttachListener) {
-            attachSessionListener(repoPath, externalSessionId);
-          }
+          attachListenerIfLiveTruthConfirmed(liveSessionTruth, shouldAttachListener);
           if (!allowPendingInput && liveSessionTruthHasPendingInput(liveSessionTruth)) {
             throw new Error(PENDING_INPUT_NOT_READY_ERROR);
           }
@@ -276,9 +274,10 @@ export const createEnsureSessionReady = ({
       throw new Error(`Runtime did not report resumed session '${externalSessionId}'.`);
     }
 
-    if (!unsubscribersRef.current.has(externalSessionId)) {
-      attachSessionListener(repoPath, externalSessionId);
-    }
+    attachListenerIfLiveTruthConfirmed(
+      liveSessionTruth,
+      !unsubscribersRef.current.has(externalSessionId),
+    );
 
     assertNotStale();
 

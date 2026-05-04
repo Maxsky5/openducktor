@@ -553,7 +553,7 @@ export const loadSessionTodos = async (
   }
 };
 
-export const listLiveAgentSessionPendingInput = async (
+export const listOpencodeLiveSessionPendingInput = async (
   createClient: ClientFactory,
   input: {
     runtimeEndpoint: string;
