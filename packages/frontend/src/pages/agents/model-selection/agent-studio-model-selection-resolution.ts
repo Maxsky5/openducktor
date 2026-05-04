@@ -2,7 +2,7 @@ import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { coerceVisibleSelectionToCatalog } from "./agents-page-selection";
+import { coerceVisibleSelectionToCatalog } from "../agents-page-selection";
 
 export type ActiveSessionSelectionState = {
   externalSessionId: string | null;

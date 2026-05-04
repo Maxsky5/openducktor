@@ -8,7 +8,7 @@ import {
   extractLatestContextUsage,
   extractLatestContextUsageEntry,
   toModelDescriptorByKey,
-} from "./use-agent-studio-model-selection-model";
+} from "../use-agent-studio-model-selection-model";
 
 type ContextUsageCache = {
   externalSessionId: string;

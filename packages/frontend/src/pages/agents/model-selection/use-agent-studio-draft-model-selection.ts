@@ -1,8 +1,8 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { emptyDraftSelections, isSameSelection } from "./agents-page-selection";
-import { resolveDraftSelection } from "./use-agent-studio-model-selection-model";
+import { emptyDraftSelections, isSameSelection } from "../agents-page-selection";
+import { resolveDraftSelection } from "../use-agent-studio-model-selection-model";
 
 const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
   spec: false,

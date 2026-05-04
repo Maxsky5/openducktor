@@ -16,7 +16,8 @@ import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agen
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
-import { resolveModelSelectionOptions } from "./agent-studio-model-selection-options";
+import { pickDefaultVisibleSelectionForCatalog } from "./agents-page-selection";
+import { resolveModelSelectionOptions } from "./model-selection/agent-studio-model-selection-options";
 import {
   resolveActiveSessionSelectionState,
   resolveComposerRuntimeKind,
@@ -25,20 +26,19 @@ import {
   resolveSelectedModelSelection,
   resolveSelectionCatalogLoading,
   resolveSelectionForNewSession,
-} from "./agent-studio-model-selection-resolution";
-import { pickDefaultVisibleSelectionForCatalog } from "./agents-page-selection";
-import { useAgentStudioActiveSessionModelRepair } from "./use-agent-studio-active-session-model-repair";
-import { useAgentStudioContextUsage } from "./use-agent-studio-context-usage";
-import { useAgentStudioDraftModelSelectionState } from "./use-agent-studio-draft-model-selection";
-import { createAgentStudioFileSearch } from "./use-agent-studio-file-search";
-import { useAgentStudioModelSelectionHandlers } from "./use-agent-studio-model-selection-handlers";
+} from "./model-selection/agent-studio-model-selection-resolution";
+import { useAgentStudioActiveSessionModelRepair } from "./model-selection/use-agent-studio-active-session-model-repair";
+import { useAgentStudioContextUsage } from "./model-selection/use-agent-studio-context-usage";
+import { useAgentStudioDraftModelSelectionState } from "./model-selection/use-agent-studio-draft-model-selection";
+import { createAgentStudioFileSearch } from "./model-selection/use-agent-studio-file-search";
+import { useAgentStudioModelSelectionHandlers } from "./model-selection/use-agent-studio-model-selection-handlers";
+import { useAgentStudioSlashCommands } from "./model-selection/use-agent-studio-slash-commands";
 import {
   type AgentStudioContextUsage,
   toRoleDefaultSelection,
 } from "./use-agent-studio-model-selection-model";
-import { useAgentStudioSlashCommands } from "./use-agent-studio-slash-commands";
 
-export { resolveActiveSessionSelectionState } from "./agent-studio-model-selection-resolution";
+export { resolveActiveSessionSelectionState } from "./model-selection/agent-studio-model-selection-resolution";
 
 type UseAgentStudioModelSelectionArgs = {
   activeWorkspace: ActiveWorkspace | null;
