@@ -388,6 +388,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
 
   const runtimeData = useAgentChatSessionRuntimeData({
     session: hydratedSession,
+    runtimeDefinitions,
     repoReadinessState: runtimeReadiness.readinessState,
     readSessionModelCatalog,
     readSessionTodos,

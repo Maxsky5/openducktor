@@ -123,21 +123,61 @@ export const filterRuntimeDefinitionsForStartMode = (
   return runtimeDefinitions.filter((definition) => runtimeSupportsStartMode(definition, startMode));
 };
 
-const runtimeSupportsCapability = (
+export const runtimeSupportsCapability = (
   runtimeDescriptor: RuntimeDescriptor,
   capability: RuntimeCapabilityKey,
 ): boolean => {
   switch (capability) {
     case "workflow.supportsOdtWorkflowTools":
       return runtimeDescriptor.capabilities.workflow.supportsOdtWorkflowTools;
+    case "workflow.supportedScopes":
+      return (
+        getMissingRequiredRuntimeSupportedScopes(
+          runtimeDescriptor.capabilities.workflow.supportedScopes,
+        ).length === 0
+      );
     case "approvals.readOnlyAutoRejectSafe":
       return runtimeDescriptor.capabilities.approvals.readOnlyAutoRejectSafe;
     case "sessionLifecycle.supportedStartModes":
       return runtimeDescriptor.capabilities.sessionLifecycle.supportedStartModes.includes("fresh");
+    case "sessionLifecycle.supportsSessionFork":
+      return runtimeDescriptor.capabilities.sessionLifecycle.supportsSessionFork;
+    case "sessionLifecycle.supportsQueuedUserMessages":
+      return runtimeDescriptor.capabilities.sessionLifecycle.supportsQueuedUserMessages;
+    case "history.fidelity":
+      return runtimeDescriptor.capabilities.history.fidelity !== "none";
+    case "history.replay":
+      return runtimeDescriptor.capabilities.history.replay !== "none";
+    case "approvals.supportedRequestTypes":
+      return runtimeDescriptor.capabilities.approvals.supportedRequestTypes.length > 0;
+    case "approvals.supportedReplyOutcomes":
+      return runtimeDescriptor.capabilities.approvals.supportedReplyOutcomes.length > 0;
+    case "structuredInput.supportsQuestions":
+      return runtimeDescriptor.capabilities.structuredInput.supportsQuestions;
     case "promptInput.supportedParts":
       return runtimeDescriptor.capabilities.promptInput.supportedParts.includes("text");
-    default:
-      return true;
+    case "promptInput.supportsSlashCommands":
+      return runtimeDescriptor.capabilities.promptInput.supportsSlashCommands;
+    case "promptInput.supportsFileSearch":
+      return runtimeDescriptor.capabilities.promptInput.supportsFileSearch;
+    case "optionalSurfaces.supportsProfiles":
+      return runtimeDescriptor.capabilities.optionalSurfaces.supportsProfiles;
+    case "optionalSurfaces.supportsVariants":
+      return runtimeDescriptor.capabilities.optionalSurfaces.supportsVariants;
+    case "optionalSurfaces.supportsTodos":
+      return runtimeDescriptor.capabilities.optionalSurfaces.supportsTodos;
+    case "optionalSurfaces.supportsDiff":
+      return runtimeDescriptor.capabilities.optionalSurfaces.supportsDiff;
+    case "optionalSurfaces.supportsFileStatus":
+      return runtimeDescriptor.capabilities.optionalSurfaces.supportsFileStatus;
+    case "optionalSurfaces.supportsMcpStatus":
+      return runtimeDescriptor.capabilities.optionalSurfaces.supportsMcpStatus;
+    case "optionalSurfaces.supportsSubagents":
+      return runtimeDescriptor.capabilities.optionalSurfaces.supportsSubagents;
+    case "optionalSurfaces.supportedSubagentExecutionModes":
+      return (
+        runtimeDescriptor.capabilities.optionalSurfaces.supportedSubagentExecutionModes.length > 0
+      );
   }
 };
 

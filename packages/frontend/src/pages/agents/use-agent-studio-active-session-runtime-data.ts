@@ -1,6 +1,8 @@
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import {
   type AgentSessionViewLifecyclePhase,
   deriveAgentSessionViewLifecycle,
@@ -17,6 +19,7 @@ import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-st
 
 type UseAgentStudioActiveSessionRuntimeDataArgs = {
   session: AgentSessionState | null;
+  runtimeDefinitions: RuntimeDescriptor[];
   agentStudioReadinessState: AgentStudioReadinessState;
   readSessionModelCatalog: (
     repoPath: string,
@@ -38,6 +41,7 @@ export type AgentStudioSessionRuntimeDataState = {
 
 export const useAgentStudioActiveSessionRuntimeData = ({
   session,
+  runtimeDefinitions,
   agentStudioReadinessState,
   readSessionModelCatalog,
   readSessionTodos,
@@ -59,6 +63,14 @@ export const useAgentStudioActiveSessionRuntimeData = ({
     runtimeQueryInput !== null &&
     runtimeDataSupportError === null &&
     session?.status !== "starting";
+  const runtimeDefinition = session?.runtimeKind
+    ? findRuntimeDefinition(runtimeDefinitions, session.runtimeKind)
+    : null;
+  const supportsTodos = runtimeDefinition
+    ? runtimeSupportsCapability(runtimeDefinition, "optionalSurfaces.supportsTodos")
+    : false;
+  const shouldHydrateTodos =
+    shouldHydrateRuntimeData && session !== null && session.todos.length === 0 && supportsTodos;
   const catalogQuery = useQuery({
     queryKey:
       shouldHydrateRuntimeData && runtimeQueryInput
@@ -79,7 +91,7 @@ export const useAgentStudioActiveSessionRuntimeData = ({
   });
   const todosQuery = useQuery({
     queryKey:
-      shouldHydrateRuntimeData && runtimeQueryInput && session
+      shouldHydrateTodos && runtimeQueryInput && session
         ? sessionTodosQueryOptions(
             runtimeQueryInput.repoPath,
             runtimeQueryInput.runtimeKind,
@@ -99,7 +111,7 @@ export const useAgentStudioActiveSessionRuntimeData = ({
         session.externalSessionId,
       );
     },
-    enabled: shouldHydrateRuntimeData && session !== null,
+    enabled: shouldHydrateTodos,
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });
 

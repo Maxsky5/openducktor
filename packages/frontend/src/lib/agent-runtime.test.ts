@@ -12,6 +12,7 @@ import {
   getRuntimeDescriptorCapabilityConfigErrors,
   resolveRuntimeKindSelection,
   resolveRuntimeKindSelectionState,
+  runtimeSupportsCapability,
   runtimeSupportsRole,
   runtimeSupportsStartMode,
   validateRuntimeDefinitionForOpenDucktor,
@@ -85,6 +86,28 @@ describe("agent-runtime capability policies", () => {
     });
 
     expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([]);
+  });
+
+  test("resolves optional runtime capability support from the descriptor", () => {
+    const runtimeWithTodos = withCapabilities({
+      optionalSurfaces: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces,
+        supportsTodos: true,
+      },
+    });
+    const runtimeWithoutTodos = withCapabilities({
+      optionalSurfaces: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces,
+        supportsTodos: false,
+      },
+    });
+
+    expect(runtimeSupportsCapability(runtimeWithTodos, "optionalSurfaces.supportsTodos")).toBe(
+      true,
+    );
+    expect(runtimeSupportsCapability(runtimeWithoutTodos, "optionalSurfaces.supportsTodos")).toBe(
+      false,
+    );
   });
 
   test("fails fast on runtime descriptor schema violations before registration", () => {

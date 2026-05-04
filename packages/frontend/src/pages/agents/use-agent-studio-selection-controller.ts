@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import { useAgentChatSessionHydration } from "@/components/features/agents/agent-chat/use-agent-chat-session-hydration";
@@ -53,6 +53,7 @@ type UseAgentStudioSelectionControllerArgs = {
   }) => Promise<boolean>;
   runtimeAttachmentSources: RuntimeAttachmentSource[];
   refreshRuntimeAttachmentSources: () => Promise<void>;
+  runtimeDefinitions: RuntimeDescriptor[];
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
@@ -197,6 +198,7 @@ export function useAgentStudioSelectionController({
   ensureSessionReadyForView,
   runtimeAttachmentSources,
   refreshRuntimeAttachmentSources,
+  runtimeDefinitions,
   readSessionModelCatalog,
   readSessionTodos,
   clearComposerInput,
@@ -281,6 +283,7 @@ export function useAgentStudioSelectionController({
   const activeSession = useAgentSession(activeSessionSummary?.externalSessionId ?? null);
   const activeSessionRuntimeData = useAgentChatSessionRuntimeData({
     session: activeSession,
+    runtimeDefinitions,
     repoReadinessState: agentStudioReadinessState,
     readSessionModelCatalog,
     readSessionTodos,
@@ -391,6 +394,7 @@ export function useAgentStudioSelectionController({
   const viewActiveSession = useAgentSession(viewSelection.activeSession?.externalSessionId ?? null);
   const viewSessionRuntimeData = useAgentChatSessionRuntimeData({
     session: viewActiveSession,
+    runtimeDefinitions,
     repoReadinessState: agentStudioReadinessState,
     readSessionModelCatalog,
     readSessionTodos,
