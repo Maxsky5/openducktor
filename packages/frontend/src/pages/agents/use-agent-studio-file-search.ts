@@ -40,13 +40,13 @@ export const createAgentStudioFileSearch = ({
       if (activeSessionRuntimeQueryError) {
         throw new Error(activeSessionRuntimeQueryError);
       }
-      if (!supportsFileSearch) {
-        return [];
-      }
       if (activeSessionRuntimeQueryInput == null || readSessionFileSearch == null) {
         throw new Error(
           "Active session file search is unavailable until the session runtime is ready.",
         );
+      }
+      if (!supportsFileSearch) {
+        return [];
       }
       return queryClient.fetchQuery(
         sessionFileSearchQueryOptions(

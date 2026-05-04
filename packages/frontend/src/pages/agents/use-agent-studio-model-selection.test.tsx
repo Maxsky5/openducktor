@@ -707,6 +707,49 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
+  test("does not mask missing active session runtime readiness when fallback runtime lacks file search", async () => {
+    const runtimeWithoutFileSearch: RuntimeDescriptor = {
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      capabilities: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+        promptInput: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,
+          supportsFileSearch: false,
+        },
+      },
+    };
+    const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession: createActiveSession({
+          runtimeKind: null,
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "default",
+            profileId: "spec-agent",
+          },
+        }),
+        readSessionFileSearch,
+      }),
+      {
+        runtimeDefinitions: [runtimeWithoutFileSearch],
+      },
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().supportsFileSearch).toBe(false);
+      await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
+        "Active session file search is unavailable until the session runtime is ready.",
+      );
+      expect(readSessionFileSearch).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("propagates adapter errors when active session file search uses stdio OpenCode session", async () => {
     const readSessionFileSearch = mock(async () => {
       throw new Error("file search unavailable");
