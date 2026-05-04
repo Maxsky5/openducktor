@@ -1,13 +1,12 @@
-use super::super::{
-    command_handlers::{parse_diff_scope, require_target_branch},
-    snapshot::GIT_WORKTREE_HASH_VERSION,
-};
 use super::fixtures::{
     init_repo, invoke_json, run_git, sample_worktree_status_data,
     sample_worktree_status_summary_data, setup_command_git_fixture,
     setup_command_git_fixture_with_mutations, setup_command_git_fixture_with_summary,
     FetchRemoteCall, ResetWorktreeSelectionCall, ResetWorktreeSelectionResult, WorktreeStatusCall,
     WorktreeStatusResult, WorktreeStatusSummaryCall, WorktreeStatusSummaryResult,
+};
+use crate::command_services::git::{
+    parse_diff_scope, require_target_branch, GIT_WORKTREE_HASH_VERSION,
 };
 use host_domain::{
     GitDiffScope, GitResetWorktreeSelection, GitUpstreamAheadBehind, GitWorktreeStatus,
@@ -728,7 +727,7 @@ fn git_get_worktree_status_summary_rejects_unrelated_working_dir() {
 #[test]
 fn require_target_branch_rejects_blank_values() {
     let error = require_target_branch("   ").expect_err("blank target branch should be rejected");
-    assert_eq!(error, "targetBranch is required");
+    assert_eq!(error.to_string(), "targetBranch is required");
 }
 
 #[test]
@@ -741,7 +740,9 @@ fn parse_diff_scope_accepts_uncommitted_and_rejects_unknown_values() {
     let error = parse_diff_scope(Some("staged"))
         .expect_err("unknown diff scope should be rejected at command boundary");
     assert!(
-        error.contains("diffScope must be either 'target' or 'uncommitted'"),
+        error
+            .to_string()
+            .contains("diffScope must be either 'target' or 'uncommitted'"),
         "unexpected scope parse error: {error}"
     );
 }

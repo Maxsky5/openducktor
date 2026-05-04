@@ -1,39 +1,18 @@
-use super::issue_type::parse_issue_type;
+use crate::command_services::error::CommandServiceResult;
+use crate::command_services::tasks as task_service;
 use crate::{as_error, run_service_blocking, AppState, TaskCreatePayload, TaskUpdatePayload};
-use host_domain::{CreateTaskInput, TaskCard, TaskStatus, UpdateTaskPatch};
+use host_domain::{TaskCard, TaskStatus};
 use tauri::State;
 
-pub(crate) fn map_task_create_payload(input: TaskCreatePayload) -> Result<CreateTaskInput, String> {
-    Ok(CreateTaskInput {
-        title: input.title,
-        issue_type: parse_issue_type(&input.issue_type, "issueType")?,
-        priority: input.priority,
-        description: input.description,
-        labels: input.labels,
-        ai_review_enabled: input.ai_review_enabled,
-        parent_id: input.parent_id,
-    })
-}
-
-pub(crate) fn map_task_update_payload(patch: TaskUpdatePayload) -> Result<UpdateTaskPatch, String> {
-    let issue_type = match patch.issue_type {
-        Some(issue_type) => Some(parse_issue_type(&issue_type, "issueType")?),
-        None => None,
-    };
-
-    Ok(UpdateTaskPatch {
-        title: patch.title,
-        description: patch.description,
-        notes: None,
-        status: None,
-        priority: patch.priority,
-        issue_type,
-        ai_review_enabled: patch.ai_review_enabled,
-        labels: patch.labels,
-        assignee: patch.assignee,
-        parent_id: patch.parent_id,
-        target_branch: patch.target_branch,
-    })
+async fn run_task_command<T, F>(operation_name: &'static str, operation: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> CommandServiceResult<T> + Send + 'static,
+{
+    let result = run_service_blocking(operation_name, move || Ok(operation()))
+        .await
+        .map_err(|error| format!("{error:#}"))?;
+    result.map_err(|error| error.to_tauri_error())
 }
 
 #[tauri::command]
@@ -42,23 +21,17 @@ pub async fn tasks_list(
     repo_path: String,
     done_visible_days: Option<i32>,
 ) -> Result<Vec<TaskCard>, String> {
-    if let Some(days) = done_visible_days {
-        if days < 0 {
-            return Err("doneVisibleDays must be greater than or equal to 0".to_string());
-        }
-    }
-
     let service = state.service.clone();
-    let result = match done_visible_days {
-        Some(days) => {
-            run_service_blocking("tasks_list", move || {
-                service.tasks_list_for_kanban(&repo_path, days)
-            })
-            .await
-        }
-        None => run_service_blocking("tasks_list", move || service.tasks_list(&repo_path)).await,
-    };
-    as_error(result)
+    run_task_command("tasks_list", move || {
+        task_service::list(
+            service,
+            task_service::TasksListRequest {
+                repo_path,
+                done_visible_days,
+            },
+        )
+    })
+    .await
 }
 
 #[tauri::command]
@@ -67,13 +40,14 @@ pub async fn task_create(
     repo_path: String,
     input: TaskCreatePayload,
 ) -> Result<TaskCard, String> {
-    let create = map_task_create_payload(input)?;
     let service = state.service.clone();
-    let result = run_service_blocking("task_create", move || {
-        service.task_create(&repo_path, create)
+    run_task_command("task_create", move || {
+        task_service::create(
+            service,
+            task_service::TaskCreateRequest { repo_path, input },
+        )
     })
-    .await;
-    as_error(result)
+    .await
 }
 
 #[tauri::command]
@@ -83,13 +57,18 @@ pub async fn task_update(
     task_id: String,
     patch: TaskUpdatePayload,
 ) -> Result<TaskCard, String> {
-    let mapped = map_task_update_payload(patch)?;
     let service = state.service.clone();
-    let result = run_service_blocking("task_update", move || {
-        service.task_update(&repo_path, &task_id, mapped)
+    run_task_command("task_update", move || {
+        task_service::update(
+            service,
+            task_service::TaskUpdateRequest {
+                repo_path,
+                task_id,
+                patch,
+            },
+        )
     })
-    .await;
-    as_error(result)
+    .await
 }
 
 #[tauri::command]
@@ -100,14 +79,18 @@ pub async fn task_delete(
     delete_subtasks: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     let service = state.service.clone();
-    let delete_subtasks = delete_subtasks.unwrap_or(false);
-    let result = run_service_blocking("task_delete", move || {
-        service
-            .task_delete(&repo_path, &task_id, delete_subtasks)
-            .map(|()| serde_json::json!({ "ok": true }))
+    let response = run_task_command("task_delete", move || {
+        task_service::delete(
+            service,
+            task_service::TaskDeleteRequest {
+                repo_path,
+                task_id,
+                delete_subtasks,
+            },
+        )
     })
-    .await;
-    as_error(result)
+    .await?;
+    Ok(serde_json::json!({ "ok": response.ok }))
 }
 
 #[tauri::command]
@@ -147,11 +130,18 @@ pub async fn task_transition(
     reason: Option<String>,
 ) -> Result<TaskCard, String> {
     let service = state.service.clone();
-    let result = run_service_blocking("task_transition", move || {
-        service.task_transition(&repo_path, &task_id, status, reason.as_deref())
+    run_task_command("task_transition", move || {
+        task_service::transition(
+            service,
+            task_service::TaskTransitionRequest {
+                repo_path,
+                task_id,
+                status,
+                reason,
+            },
+        )
     })
-    .await;
-    as_error(result)
+    .await
 }
 
 #[tauri::command]
@@ -162,11 +152,17 @@ pub async fn task_defer(
     reason: Option<String>,
 ) -> Result<TaskCard, String> {
     let service = state.service.clone();
-    let result = run_service_blocking("task_defer", move || {
-        service.task_defer(&repo_path, &task_id, reason.as_deref())
+    run_task_command("task_defer", move || {
+        task_service::defer(
+            service,
+            task_service::TaskDeferRequest {
+                repo_path,
+                task_id,
+                reason,
+            },
+        )
     })
-    .await;
-    as_error(result)
+    .await
 }
 
 #[tauri::command]
@@ -181,74 +177,4 @@ pub async fn task_resume_deferred(
     })
     .await;
     as_error(result)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{map_task_create_payload, map_task_update_payload};
-    use crate::{TaskCreatePayload, TaskUpdatePayload};
-    use host_domain::IssueType;
-
-    #[test]
-    fn map_task_create_payload_rejects_unknown_issue_type() {
-        let error = map_task_create_payload(TaskCreatePayload {
-            title: "Task".to_string(),
-            issue_type: "epik".to_string(),
-            priority: 2,
-            description: None,
-            labels: None,
-            ai_review_enabled: None,
-            parent_id: None,
-        })
-        .expect_err("unknown issue type should fail");
-
-        assert!(error.contains("Invalid issueType"));
-        assert!(error.contains("task, feature, bug, epic"));
-    }
-
-    #[test]
-    fn map_task_update_payload_rejects_unknown_issue_type() {
-        let error = map_task_update_payload(TaskUpdatePayload {
-            title: None,
-            description: None,
-            priority: None,
-            issue_type: Some("bugg".to_string()),
-            ai_review_enabled: None,
-            labels: None,
-            assignee: None,
-            parent_id: None,
-            target_branch: None,
-        })
-        .expect_err("unknown issue type should fail");
-
-        assert!(error.contains("Invalid issueType"));
-    }
-
-    #[test]
-    fn map_task_update_payload_parses_valid_issue_type() -> Result<(), String> {
-        let patch = map_task_update_payload(TaskUpdatePayload {
-            title: None,
-            description: None,
-            priority: None,
-            issue_type: Some("feature".to_string()),
-            ai_review_enabled: None,
-            labels: None,
-            assignee: None,
-            parent_id: None,
-            target_branch: Some(host_domain::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "release/2026.04".to_string(),
-            }),
-        })?;
-
-        assert_eq!(patch.issue_type, Some(IssueType::Feature));
-        assert_eq!(
-            patch.target_branch,
-            Some(host_domain::GitTargetBranch {
-                remote: Some("origin".to_string()),
-                branch: "release/2026.04".to_string(),
-            })
-        );
-        Ok(())
-    }
 }

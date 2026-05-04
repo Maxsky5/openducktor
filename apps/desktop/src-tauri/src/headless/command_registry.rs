@@ -70,6 +70,9 @@ pub(super) async fn dispatch_command(
 }
 
 #[cfg(test)]
+mod git_parity_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::headless::command_support::deserialize_args;
@@ -264,5 +267,25 @@ mod tests {
             .as_str()
             .expect("error message should be a string")
             .contains("Invalid arguments:"));
+    }
+
+    #[tokio::test]
+    async fn dispatch_command_maps_shared_task_validation_to_bad_request_envelope() {
+        let fixture = test_state_fixture(build_registry().expect("registry should build"));
+
+        let error = dispatch_command(
+            &fixture.state,
+            "tasks_list",
+            json!({ "repoPath": "/unused", "doneVisibleDays": -1 }),
+        )
+        .await
+        .expect_err("negative doneVisibleDays should fail");
+        let (status, payload) = response_json(error).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            payload,
+            json!({ "error": "doneVisibleDays must be greater than or equal to 0" })
+        );
     }
 }
