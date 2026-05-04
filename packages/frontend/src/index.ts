@@ -1,10 +1,5 @@
-export { App } from "./App";
+export type { HostBridge, ShellBridge, ShellCapabilities } from "./lib/shell-bridge";
 export {
-  configureShellBridge,
-  createUnavailableShellBridge,
-  getShellBridge,
-  type HostBridge,
-  type ShellBridge,
-  type ShellCapabilities,
-} from "./lib/shell-bridge";
-export { mountOpenDucktorApp } from "./mount";
+  bootstrapOpenDucktorShell,
+  type OpenDucktorShellBootstrapOptions,
+} from "./shell-bootstrap";

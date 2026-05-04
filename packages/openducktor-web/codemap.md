@@ -9,7 +9,7 @@ Public local browser runner for OpenDucktor. It starts the Rust web host, writes
 - `src/artifact-resolver.ts` resolves workspace binaries in development and packaged artifacts for published installs.
 
 ## Data & Control Flow
-`bunx @openducktor/web` or `browser:dev` launches the loopback host, injects browser runtime config, wires `createBrowserShellBridge`, and serves the app on localhost. `src/runtime-config.ts` loads the injected config into browser state; `src/browser-shell-bridge.ts` and `src/local-host-transport.ts` keep browser transport isolated from shared frontend code.
+`bunx @openducktor/web` or `browser:dev` launches the loopback host, injects browser runtime config, supplies runtime readiness and `createBrowserShellBridge` to the shared frontend bootstrap, and serves the app on localhost. `src/runtime-config.ts` loads the injected config into browser state; `src/browser-shell-bridge.ts` and `src/local-host-transport.ts` keep browser transport isolated from shared frontend code.
 
 ## Integration Points
 - `packages/frontend`

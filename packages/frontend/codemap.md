@@ -6,13 +6,14 @@ Shared React/Vite frontend package for OpenDucktor. It owns App composition, reu
 
 ## Design Patterns
 
-- `src/index.ts` exposes the package entrypoint, `App`, mount helper, styles subpath, and shell-bridge contract.
+- `src/index.ts` exposes the package entrypoint, shell bootstrap API, styles subpath, and shell-bridge contract types.
+- `src/shell-bootstrap.tsx` owns shared startup ordering: shell readiness, root resolution, bridge configuration, settings/theme preload, crash shell, router, and app render.
 - `src/lib/shell-bridge.ts` is the host boundary. Shared UI code reaches host operations through this bridge instead of importing Tauri or web transport APIs directly.
 - `src/components`, `src/pages`, `src/state`, `src/features`, `src/lib`, and `src/test-utils` keep the layered frontend structure, now shell-neutral.
 
 ## Data & Control Flow
 
-Shells call `configureShellBridge(...)`, then `mountOpenDucktorApp(rootElement)`. The shared app preloads settings/theme, renders routes, and uses `hostClient`/event subscriptions through the configured bridge.
+Shells call `bootstrapOpenDucktorShell(...)` with shell-specific readiness and bridge factory inputs. The shared bootstrap resolves the root, configures the bridge, preloads settings/theme, renders routes, and uses `hostClient`/event subscriptions through the configured bridge.
 
 ## Integration Points
 

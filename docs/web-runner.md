@@ -18,7 +18,7 @@ Both commands start a loopback-only Rust host and serve the shared frontend with
 
 ## Architecture
 
-- `packages/frontend` owns the shared React app. It exposes `mountOpenDucktorApp` and the `ShellBridge` contract.
+- `packages/frontend` owns the shared React app and shell bootstrap. It exposes `bootstrapOpenDucktorShell` and the `ShellBridge` contract types.
 - `apps/desktop/src` is a thin Tauri shell that implements the bridge with Tauri invoke/events.
 - `packages/openducktor-web` is a thin browser shell and launcher. It implements the bridge with HTTP invoke calls and SSE subscriptions against the local Rust host.
 - `openducktor-web-host` is a dedicated Rust binary under `apps/desktop/src-tauri/src/bin/`.
