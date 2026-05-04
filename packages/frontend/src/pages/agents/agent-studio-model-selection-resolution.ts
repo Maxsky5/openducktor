@@ -161,14 +161,14 @@ const runtimeSupportsPromptInput = (
 
 export const resolveRuntimePromptInputSupport = ({
   runtimeDefinitions,
-  activeSessionRuntimeKind,
+  readyActiveSessionRuntimeKind,
   composerRuntimeKind,
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
-  activeSessionRuntimeKind: RuntimeKind | null;
+  readyActiveSessionRuntimeKind: RuntimeKind | null;
   composerRuntimeKind: RuntimeKind | null;
 }): { runtimeSupportsSlashCommands: boolean; supportsFileSearch: boolean } => {
-  const runtimeKind = activeSessionRuntimeKind ?? composerRuntimeKind;
+  const runtimeKind = readyActiveSessionRuntimeKind ?? composerRuntimeKind;
   return {
     runtimeSupportsSlashCommands: runtimeSupportsPromptInput(
       runtimeDefinitions,

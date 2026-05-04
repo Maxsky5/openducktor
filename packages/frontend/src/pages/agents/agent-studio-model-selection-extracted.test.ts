@@ -81,7 +81,7 @@ describe("Agent Studio model selection extracted helpers", () => {
     expect(
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        activeSessionRuntimeKind: null,
+        readyActiveSessionRuntimeKind: null,
         composerRuntimeKind: "opencode",
       }),
     ).toEqual({ runtimeSupportsSlashCommands: true, supportsFileSearch: true });

@@ -185,7 +185,7 @@ export function useAgentStudioModelSelection({
     () =>
       resolveRuntimePromptInputSupport({
         runtimeDefinitions,
-        activeSessionRuntimeKind: activeSessionRuntimeQueryInput?.runtimeKind ?? null,
+        readyActiveSessionRuntimeKind: activeSessionRuntimeQueryInput?.runtimeKind ?? null,
         composerRuntimeKind,
       }),
     [activeSessionRuntimeQueryInput?.runtimeKind, composerRuntimeKind, runtimeDefinitions],
