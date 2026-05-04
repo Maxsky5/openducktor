@@ -253,22 +253,24 @@ Use these as the first-line safety net:
 
 The refactor improved the system materially, but a few design choices are still carrying too much weight.
 
-### 1. Live session classification still spans too many layers
+### 1. Live session classification boundary
 
-Today, “is this session really running, waiting for input, or stale?” is still assembled from:
-- live agent session status,
-- runtime pending-input lists,
-- persisted session metadata,
-- transcript history reconstruction.
+Live session classification now has one orchestration-facing boundary:
+`packages/frontend/src/state/operations/agent-orchestrator/lifecycle/live-session-truth.ts`.
+It classifies normalized live snapshots from `AgentEnginePort.listLiveAgentSessionSnapshots`
+and applies the same live/stale/persisted-only truth across hydration, live reattach,
+and readiness recovery.
 
-This works, but the boundary is still too distributed.
+Runtime-specific interpretation stays in the runtime adapter. For OpenCode,
+`packages/adapters-opencode-sdk/src/live-session-snapshots.ts` owns session list/status
+payload parsing, pending approval/question grouping, directory normalization, and malformed
+payload errors before frontend code sees normalized snapshots.
 
-Recommended next step:
-- add one authoritative `AgentEnginePort` read for a live session snapshot
-- return status + pending permissions + pending questions together
-- make desktop hydration consume that single live snapshot for resumed sessions
-
-That would remove another class of stale-session bugs by design.
+Keep this boundary narrow:
+- status + pending permissions + pending questions belong in the live snapshot/truth path
+- persisted runtime/session metadata decides stale vs persisted-only in frontend lifecycle code
+- event streams still own post-attachment live updates
+- TanStack Query still owns stable model catalog/todos reads
 
 ### 2. Build-tools right panel still owns too much bootstrap work
 

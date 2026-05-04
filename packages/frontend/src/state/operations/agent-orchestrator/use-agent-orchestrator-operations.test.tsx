@@ -1172,6 +1172,8 @@ describe("use-agent-orchestrator-operations", () => {
       const originalStopSession = OpencodeSdkAdapter.prototype.stopSession;
       const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
       const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
+      const originalListLiveAgentSessionSnapshots =
+        OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots;
       const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
       const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
       const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
@@ -1209,6 +1211,41 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.sendUserMessage = async () => {
         sendCalls += 1;
       };
+      OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots = async () => [
+        {
+          externalSessionId: "external-1",
+          title: "SPEC task-1",
+          workingDirectory: "/tmp/repo",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "idle" },
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*.md"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+            },
+          ],
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Confirm",
+                  question: "Confirm",
+                  options: [],
+                  multiple: false,
+                  custom: false,
+                },
+              ],
+            },
+          ],
+        },
+      ];
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
@@ -1316,7 +1353,7 @@ describe("use-agent-orchestrator-operations", () => {
         expect(resumeCalls).toBe(0);
         expect(subscribeCalls).toBeGreaterThan(0);
         expect(unsubscribeCalls).toBe(0);
-        expect(sendCalls).toBe(1);
+        expect(sendCalls).toBe(0);
         expect(recoveredSession?.pendingApprovals).toHaveLength(1);
         expect(recoveredSession?.pendingQuestions).toHaveLength(1);
       } finally {
@@ -1333,6 +1370,8 @@ describe("use-agent-orchestrator-operations", () => {
         OpencodeSdkAdapter.prototype.stopSession = originalStopSession;
         OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
         OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
+        OpencodeSdkAdapter.prototype.listLiveAgentSessionSnapshots =
+          originalListLiveAgentSessionSnapshots;
         OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
         OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
         OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
@@ -3352,7 +3391,7 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.run(async () => {
           await runtimeSessionsDeferred.promise;
         });
-        expect(listLiveAgentSessionSnapshotsCalls).toBe(2);
+        expect(listLiveAgentSessionSnapshotsCalls).toBe(1);
       } finally {
         runtimeSessionsDeferred.resolve([]);
         await harness.unmount();

@@ -455,7 +455,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       );
       expect(attachCalls).toBe(1);
       expect(resumeCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.status).toBe("running");
+      expect(sessionsRef.current["session-1"]?.status).toBe("idle");
       expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([
         {
           requestId: "perm-1",
@@ -479,7 +479,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
-  test("recovers attached error session and clears pending requests without a live snapshot", async () => {
+  test("fails fast when a resumed session is missing from the live snapshot", async () => {
     let attachCalls = 0;
     let unsubscribeCalls = 0;
     let stopCalls = 0;
@@ -586,15 +586,15 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await ensureReady("session-1");
+      await expect(ensureReady("session-1")).rejects.toThrow(
+        "Runtime did not report resumed session 'session-1'.",
+      );
 
       expect(unsubscribeCalls).toBe(1);
-      expect(stopCalls).toBe(1);
+      expect(stopCalls).toBe(2);
       expect(resumeCalls).toBe(1);
-      expect(attachCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.status).toBe("idle");
-      expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([]);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([]);
+      expect(attachCalls).toBe(0);
+      expect(sessionsRef.current["session-1"]?.status).toBe("error");
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
@@ -934,6 +934,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
     adapter.hasSession = () => false;
     adapter.resumeSession = async (input) => {
       resumedInput = input;
@@ -945,6 +946,17 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
+    adapter.listLiveAgentSessionSnapshots = async () => [
+      {
+        externalSessionId: "external-1",
+        title: "Session",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        status: { type: "idle" },
+        pendingApprovals: [],
+        pendingQuestions: [],
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    ];
 
     const sessionsRef = {
       current: {
@@ -1002,6 +1014,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
+      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
     }
   });
 

@@ -34,6 +34,9 @@ export class LiveAgentSessionCache {
           .filter((directory) => directory.length > 0),
       ),
     ).sort();
+    if (input.directories.length > 0 && normalizedDirectories.length === 0) {
+      throw new Error("Cannot scan live agent sessions without a valid working directory.");
+    }
     const key = `${getLiveAgentSessionCacheKey(input.repoPath, input.runtimeKind)}::${normalizedDirectories.join("|")}`;
     const cached = this.scansByKey.get(key);
     if (cached) {

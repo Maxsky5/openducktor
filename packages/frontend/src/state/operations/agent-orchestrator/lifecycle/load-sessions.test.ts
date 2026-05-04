@@ -1161,7 +1161,7 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     expect(liveSnapshotCalls).toBe(1);
-    expect(getSession(state, "external-stale").runtimeId).toBeNull();
+    expect(getSession(state, "external-stale").runtimeId).toBe("runtime-repo");
     expect(getSession(state, "external-stale").workingDirectory).toBe("/tmp/repo/worktree");
   });
 
@@ -1389,7 +1389,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(getSession(state, "external-1").runtimeId).toBe("runtime-root");
     expect(getSession(state, "external-1").workingDirectory).toBe("/tmp/repo/worktree");
-    expect(getSession(state, "external-2").runtimeId).toBeNull();
+    expect(getSession(state, "external-2").runtimeId).toBe("runtime-root");
     expect(getSession(state, "external-2").workingDirectory).toBe("/tmp/repo/worktree");
     expect(sessionMessagesToArray(getSession(state, "external-1"))).toEqual([]);
     expect(sessionMessagesToArray(getSession(state, "external-2"))).toEqual([]);
@@ -1603,7 +1603,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const hydratedSession = state["external-1"];
     expect(hydratedSession).toMatchObject({
-      status: "running",
+      status: "idle",
       historyHydrationState: "hydrated",
       pendingApprovals: [
         {
@@ -1648,12 +1648,12 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(resumeCalls).toBe(0);
     expect(attachCalls).toBe(1);
     expect(attachedListeners).toBe(2);
-    expect(liveSnapshotLoads).toBe(4);
+    expect(liveSnapshotLoads).toBe(2);
     expect(
       sessionMessagesToArray(getSession(state, "external-1")).map((message) => message.id),
     ).toEqual(hydratedMessageIds);
     expect(state["external-1"]).toMatchObject({
-      status: "running",
+      status: "idle",
       historyHydrationState: "hydrated",
       pendingApprovals: [
         {

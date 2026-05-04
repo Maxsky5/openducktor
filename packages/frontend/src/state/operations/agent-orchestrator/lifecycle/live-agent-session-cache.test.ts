@@ -96,19 +96,18 @@ describe("live-agent-session-cache", () => {
     expect(listLiveAgentSessionSnapshots).toHaveBeenCalledTimes(1);
   });
 
-  test("omits directories from the adapter call when every directory normalizes away", async () => {
+  test("rejects empty directory scans instead of widening to all sessions", async () => {
     const listLiveAgentSessionSnapshots = mock(async () => [createSnapshot("external-1")]);
     const cache = new LiveAgentSessionCache({ listLiveAgentSessionSnapshots });
 
-    await cache.load({
-      repoPath: "/tmp/repo",
-      runtimeKind: "opencode",
-      directories: ["", "   "],
-    });
+    await expect(
+      cache.load({
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        directories: ["", "   "],
+      }),
+    ).rejects.toThrow("Cannot scan live agent sessions without a valid working directory.");
 
-    expect(listLiveAgentSessionSnapshots).toHaveBeenCalledWith({
-      repoPath: "/tmp/repo",
-      runtimeKind: "opencode",
-    });
+    expect(listLiveAgentSessionSnapshots).not.toHaveBeenCalled();
   });
 });
