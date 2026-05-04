@@ -1293,7 +1293,7 @@ describe("OpencodeSdkAdapter", () => {
     });
   });
 
-  test("sendUserMessage caches workflow tool discovery across prompts for the same model", async () => {
+  test("sendUserMessage caches workflow tool discovery but checks MCP health for each prompt", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
@@ -1320,7 +1320,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     expect(mock.tool.idsCalls).toEqual([{ directory: "/repo" }]);
-    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }]);
+    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }, { directory: "/repo" }]);
     expect(mock.session.promptCalls).toHaveLength(0);
     expect(mock.session.promptAsyncCalls).toHaveLength(2);
   });

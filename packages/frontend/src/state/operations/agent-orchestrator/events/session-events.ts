@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
 import type {
   AttachAgentSessionListenerParams,
@@ -31,6 +32,15 @@ const hasSessionStateChanges = (current: object, next: object): boolean => {
   return false;
 };
 
+const handleMcpReconnectStarted = (
+  event: Extract<SessionEvent, { type: "mcp_reconnect_started" }>,
+): void => {
+  const details = event.errorDetails ? ` ${event.errorDetails}.` : "";
+  toast.info("Reconnecting OpenDucktor MCP", {
+    description: `OpenDucktor MCP is ${event.status} for ${event.workingDirectory}.${details} OpenDucktor is trying to reconnect.`,
+  });
+};
+
 const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionEvent): void => {
   switch (event.type) {
     case "session_started":
@@ -53,6 +63,9 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
       return;
     case "approval_required":
       handlePermissionRequired(context.lifecycle, event);
+      return;
+    case "mcp_reconnect_started":
+      handleMcpReconnectStarted(event);
       return;
     case "question_required":
       handleQuestionRequired(context.lifecycle, event);

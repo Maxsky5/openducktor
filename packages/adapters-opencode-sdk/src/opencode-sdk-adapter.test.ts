@@ -3,7 +3,7 @@ import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
 import type { AgentEvent, RuntimeKind } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
-import type { OpencodeSdkAdapterOptions } from "./types";
+import type { OpencodeSdkAdapterOptions, SessionRecord } from "./types";
 
 type TestAdapterInternals = {
   sessions: Map<
@@ -474,6 +474,93 @@ describe("opencode-sdk-adapter", () => {
       }),
     ).rejects.toThrow("client.global.event()");
     expect(adapter.hasSession("external-session-1")).toBe(false);
+  });
+
+  test("checks same-directory MCP health before returning cached workflow tool selection", async () => {
+    const mock = makeMockClient();
+    const statusCalls: Array<{ directory: string }> = [];
+    const connectCalls: Array<{ directory: string; name: string }> = [];
+    const toolIdCalls: Array<{ directory: string }> = [];
+    const statusResponses = [
+      { openducktor: { status: "connected" } },
+      { openducktor: { status: "failed", error: "MCP error -32000: Connection closed" } },
+      { openducktor: { status: "connected" } },
+    ];
+    let statusResponseIndex = 0;
+    const client = {
+      ...mock.client,
+      mcp: {
+        status: async (input: { directory: string }) => {
+          statusCalls.push(input);
+          const response = statusResponses[statusResponseIndex] ?? statusResponses.at(-1);
+          statusResponseIndex += 1;
+          return { data: response, error: undefined };
+        },
+        connect: async (input: { directory: string; name: string }) => {
+          connectCalls.push(input);
+          return { data: true, error: undefined };
+        },
+      },
+      tool: {
+        ids: async (input: { directory: string }) => {
+          toolIdCalls.push(input);
+          return { data: ["odt_read_task"], error: undefined };
+        },
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => client,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      workingDirectory: "/repo/.openducktor/worktrees/task-1",
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      systemPrompt: "system",
+    });
+
+    const adapterInternals = adapter as unknown as {
+      sessions: Map<string, SessionRecord>;
+      resolveSessionToolSelection: (session: SessionRecord) => Promise<Record<string, boolean>>;
+    };
+    const session = adapterInternals.sessions.get("external-session-1");
+    if (!session) {
+      throw new Error("Expected test session to be registered.");
+    }
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("external-session-1", (event) => {
+      events.push(event);
+    });
+
+    await adapterInternals.resolveSessionToolSelection(session);
+    await adapterInternals.resolveSessionToolSelection(session);
+
+    expect(statusCalls).toEqual([
+      { directory: "/repo/.openducktor/worktrees/task-1" },
+      { directory: "/repo/.openducktor/worktrees/task-1" },
+      { directory: "/repo/.openducktor/worktrees/task-1" },
+    ]);
+    expect(connectCalls).toEqual([
+      {
+        directory: "/repo/.openducktor/worktrees/task-1",
+        name: "openducktor",
+      },
+    ]);
+    expect(toolIdCalls).toEqual([{ directory: "/repo/.openducktor/worktrees/task-1" }]);
+    expect(events).toEqual([
+      {
+        type: "mcp_reconnect_started",
+        externalSessionId: "external-session-1",
+        timestamp: "2026-02-22T12:00:00.000Z",
+        serverName: "openducktor",
+        workingDirectory: "/repo/.openducktor/worktrees/task-1",
+        status: "failed",
+        errorDetails: "MCP error -32000: Connection closed",
+      },
+    ]);
   });
 
   test("listLiveAgentSessions maps server sessions and statuses", async () => {

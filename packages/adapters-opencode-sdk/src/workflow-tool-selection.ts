@@ -25,18 +25,34 @@ const isToolIdControlledByOdtWorkflowSelection = (toolId: string): boolean =>
   isOpencodeExposedOdtToolAlias(toolId) ||
   OPENCODE_EXPOSED_ODT_TOOL_IDS_BLOCKED_FOR_WORKFLOW_AGENTS.has(toolId);
 
-const assertTrustedOdtMcpServerConnected = async (input: {
-  client: OpencodeClient;
+type McpApi = {
+  status?: (args: { directory: string }) => Promise<unknown>;
+  connect?: (args: { directory: string; name: string }) => Promise<unknown>;
+};
+
+type OdtMcpStatus = {
+  status: string;
+  errorDetails: string | undefined;
+};
+
+type OdtMcpReconnectStartHandler = (event: {
+  serverName: string;
   workingDirectory: string;
-}): Promise<void> => {
-  const mcp = (input.client as { mcp?: { status?: unknown } }).mcp;
-  if (!mcp || typeof mcp.status !== "function") {
+  status: string;
+  errorDetails: string | undefined;
+}) => void;
+
+const readOdtMcpStatus = async (input: {
+  mcp: McpApi;
+  workingDirectory: string;
+}): Promise<OdtMcpStatus> => {
+  if (typeof input.mcp.status !== "function") {
     throw new Error(
       `ODT workflow tools unavailable: OpenCode MCP status API is unavailable for "${OPENDUCKTOR_MCP_SERVER_NAME}".`,
     );
   }
 
-  const response = await (mcp.status as (args: { directory: string }) => Promise<unknown>)({
+  const response = await input.mcp.status({
     directory: input.workingDirectory,
   });
   const statusPayload = unwrapData(
@@ -57,16 +73,93 @@ const assertTrustedOdtMcpServerConnected = async (input: {
       `ODT workflow tools unavailable: MCP server "${OPENDUCKTOR_MCP_SERVER_NAME}" status is missing.`,
     );
   }
-  const normalizedStatus = status.trim().toLowerCase();
+
+  return {
+    status,
+    errorDetails: readStringProp(serverStatus, ["error"]),
+  };
+};
+
+const formatOdtMcpUnavailableError = (input: {
+  workingDirectory: string;
+  status: string;
+  errorDetails: string | undefined;
+  recoveredStatus?: OdtMcpStatus;
+}): string => {
+  const initialStatus = input.status.trim();
+  const initialDetails = input.errorDetails ? ` (${input.errorDetails})` : "";
+  if (!input.recoveredStatus) {
+    return `ODT workflow tools unavailable for "${input.workingDirectory}": MCP server "${OPENDUCKTOR_MCP_SERVER_NAME}" is "${initialStatus}"${initialDetails}.`;
+  }
+
+  const recoveredDetails = input.recoveredStatus.errorDetails
+    ? ` (${input.recoveredStatus.errorDetails})`
+    : "";
+  return `ODT workflow tools unavailable for "${input.workingDirectory}": MCP server "${OPENDUCKTOR_MCP_SERVER_NAME}" stayed unavailable after reconnect. Initial status was "${initialStatus}"${initialDetails}; recovered status is "${input.recoveredStatus.status.trim()}"${recoveredDetails}.`;
+};
+
+export const ensureTrustedOdtMcpServerConnected = async (input: {
+  client: OpencodeClient;
+  workingDirectory: string;
+  onReconnectStart?: OdtMcpReconnectStartHandler | undefined;
+}): Promise<void> => {
+  const mcp = (input.client as { mcp?: McpApi }).mcp;
+  if (!mcp) {
+    throw new Error(
+      `ODT workflow tools unavailable: OpenCode MCP status API is unavailable for "${OPENDUCKTOR_MCP_SERVER_NAME}".`,
+    );
+  }
+
+  const initialStatus = await readOdtMcpStatus({
+    mcp,
+    workingDirectory: input.workingDirectory,
+  });
+  const normalizedStatus = initialStatus.status.trim().toLowerCase();
   if (normalizedStatus === CONNECTED_MCP_STATUS) {
     return;
   }
 
-  const errorDetails = readStringProp(serverStatus, ["error"]);
+  if (typeof mcp.connect !== "function") {
+    throw new Error(
+      formatOdtMcpUnavailableError({
+        workingDirectory: input.workingDirectory,
+        status: initialStatus.status,
+        errorDetails: initialStatus.errorDetails,
+      }),
+    );
+  }
+
+  input.onReconnectStart?.({
+    serverName: OPENDUCKTOR_MCP_SERVER_NAME,
+    workingDirectory: input.workingDirectory,
+    status: initialStatus.status,
+    errorDetails: initialStatus.errorDetails,
+  });
+
+  const connectResponse = await mcp.connect({
+    directory: input.workingDirectory,
+    name: OPENDUCKTOR_MCP_SERVER_NAME,
+  });
+  unwrapData(
+    connectResponse as { data?: unknown; error?: { message?: string } | unknown },
+    `connect mcp server ${OPENDUCKTOR_MCP_SERVER_NAME} for role policy`,
+  );
+
+  const recoveredStatus = await readOdtMcpStatus({
+    mcp,
+    workingDirectory: input.workingDirectory,
+  });
+  if (recoveredStatus.status.trim().toLowerCase() === CONNECTED_MCP_STATUS) {
+    return;
+  }
+
   throw new Error(
-    `ODT workflow tools unavailable: MCP server "${OPENDUCKTOR_MCP_SERVER_NAME}" is "${status.trim()}"${
-      errorDetails ? ` (${errorDetails})` : ""
-    }.`,
+    formatOdtMcpUnavailableError({
+      workingDirectory: input.workingDirectory,
+      status: initialStatus.status,
+      errorDetails: initialStatus.errorDetails,
+      recoveredStatus,
+    }),
   );
 };
 
@@ -75,11 +168,16 @@ export const resolveWorkflowToolSelection = async (input: {
   role: AgentRole;
   runtimeDescriptor: RuntimeDescriptor;
   workingDirectory: string;
+  skipMcpConnectionCheck?: boolean;
+  onReconnectStart?: OdtMcpReconnectStartHandler | undefined;
 }): Promise<Record<string, boolean>> => {
-  await assertTrustedOdtMcpServerConnected({
-    client: input.client,
-    workingDirectory: input.workingDirectory,
-  });
+  if (input.skipMcpConnectionCheck !== true) {
+    await ensureTrustedOdtMcpServerConnected({
+      client: input.client,
+      workingDirectory: input.workingDirectory,
+      onReconnectStart: input.onReconnectStart,
+    });
+  }
 
   const response = await input.client.tool.ids({
     directory: input.workingDirectory,
