@@ -37,7 +37,7 @@ jobs:
         run: git checkout -B "$HEAD_REF"
 
       - name: Run React Doctor on changed desktop files
-        uses: millionco/react-doctor@7da4ce4e27cb5208ed52ad9d01cae32f96ac177f # main
+        uses: millionco/react-doctor@40b3f7dcc9f9ffbfd21393026d364f76af19b7e2 # main
         with:
           project: "@openducktor/desktop"
           diff: ${{ github.base_ref }}
