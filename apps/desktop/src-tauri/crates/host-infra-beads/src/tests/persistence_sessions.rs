@@ -1,5 +1,313 @@
 use super::*;
 
+fn make_pull_request_record() -> PullRequestRecord {
+    PullRequestRecord {
+        provider_id: "github".to_string(),
+        number: 42,
+        url: "https://github.com/example/repo/pull/42".to_string(),
+        state: "open".to_string(),
+        created_at: "2026-02-20T11:00:00Z".to_string(),
+        updated_at: "2026-02-20T12:00:00Z".to_string(),
+        last_synced_at: None,
+        merged_at: None,
+        closed_at: None,
+    }
+}
+
+fn make_direct_merge_record() -> DirectMergeRecord {
+    DirectMergeRecord {
+        method: GitMergeMethod::Squash,
+        source_branch: "feature/x".to_string(),
+        target_branch: GitTargetBranch {
+            remote: Some("origin".to_string()),
+            branch: "main".to_string(),
+        },
+        merged_at: "2026-02-20T13:00:00Z".to_string(),
+    }
+}
+
+fn make_pull_request_sync_candidate_task(task_id: &str) -> TaskCard {
+    TaskCard {
+        id: task_id.to_string(),
+        title: format!("Task {task_id}"),
+        description: String::new(),
+        notes: String::new(),
+        status: TaskStatus::Open,
+        priority: 2,
+        issue_type: IssueType::Task,
+        ai_review_enabled: true,
+        available_actions: Vec::new(),
+        labels: Vec::new(),
+        assignee: None,
+        parent_id: None,
+        subtask_ids: Vec::new(),
+        agent_sessions: Vec::new(),
+        target_branch: None,
+        target_branch_error: None,
+        pull_request: Some(make_pull_request_record()),
+        document_summary: TaskDocumentSummary::default(),
+        agent_workflows: AgentWorkflows::default(),
+        updated_at: "2026-02-20T12:00:00Z".to_string(),
+        created_at: "2026-02-20T11:00:00Z".to_string(),
+    }
+}
+
+fn seed_pull_request_sync_candidate_cache(
+    store: &BeadsTaskStore,
+    repo: &RepoFixture,
+) -> Result<u64> {
+    let generation = store.pull_request_sync_candidate_cache_generation_for_repo(repo.path())?;
+    store.cache_pull_request_sync_candidates_for_repo_if_generation(
+        repo.path(),
+        "openducktor",
+        generation,
+        &[make_pull_request_sync_candidate_task("task-1")],
+    )?;
+    Ok(generation)
+}
+
+#[test]
+fn set_pull_request_writes_key_and_removes_legacy_delivery() -> Result<()> {
+    let repo = RepoFixture::new("set-pull-request-some");
+    let current = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({"openducktor": {"delivery": {"linkedPullRequest": {"number": 1}}}})),
+    );
+    let refreshed = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "pullRequest": make_pull_request_record(),
+                "directMerge": make_direct_merge_record()
+            }
+        })),
+    );
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([current]).to_string())),
+        MockStep::WithEnv(Ok("{}".to_string())),
+        MockStep::WithEnv(Ok(json!([refreshed]).to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+    let generation = seed_pull_request_sync_candidate_cache(&store, &repo)?;
+
+    store.set_pull_request(repo.path(), "task-1", Some(make_pull_request_record()))?;
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 3);
+    let metadata_root = metadata_from_call(&calls[1]);
+    assert_eq!(metadata_root["openducktor"]["pullRequest"]["number"], 42);
+    assert!(metadata_root["openducktor"].get("delivery").is_none());
+    let refreshed_generation =
+        store.pull_request_sync_candidate_cache_generation_for_repo(repo.path())?;
+    assert!(refreshed_generation > generation);
+    Ok(())
+}
+
+#[test]
+fn set_pull_request_none_removes_key_and_legacy_delivery() -> Result<()> {
+    let repo = RepoFixture::new("set-pull-request-none");
+    let current = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "pullRequest": make_pull_request_record(),
+                "delivery": {"linkedPullRequest": {"number": 1}}
+            }
+        })),
+    );
+    let refreshed = issue_value("task-1", "open", "task", None, json!([]), None);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([current]).to_string())),
+        MockStep::WithEnv(Ok("{}".to_string())),
+        MockStep::WithEnv(Ok(json!([refreshed]).to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+    let generation = seed_pull_request_sync_candidate_cache(&store, &repo)?;
+
+    store.set_pull_request(repo.path(), "task-1", None)?;
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 3);
+    let metadata_root = metadata_from_call(&calls[1]);
+    assert!(metadata_root["openducktor"].get("pullRequest").is_none());
+    assert!(metadata_root["openducktor"].get("delivery").is_none());
+    let refreshed_generation =
+        store.pull_request_sync_candidate_cache_generation_for_repo(repo.path())?;
+    assert!(refreshed_generation > generation);
+    Ok(())
+}
+
+#[test]
+fn set_delivery_metadata_writes_both_keys_and_removes_legacy_delivery() -> Result<()> {
+    let repo = RepoFixture::new("set-delivery-metadata-some");
+    let current = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({"openducktor": {"delivery": {"directMerge": {"sourceBranch": "old"}}}})),
+    );
+    let refreshed = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({"openducktor": {"pullRequest": make_pull_request_record()}})),
+    );
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([current]).to_string())),
+        MockStep::WithEnv(Ok("{}".to_string())),
+        MockStep::WithEnv(Ok(json!([refreshed]).to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+    let generation = seed_pull_request_sync_candidate_cache(&store, &repo)?;
+
+    store.set_delivery_metadata(
+        repo.path(),
+        "task-1",
+        Some(make_pull_request_record()),
+        Some(make_direct_merge_record()),
+    )?;
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 3);
+    let metadata_root = metadata_from_call(&calls[1]);
+    assert_eq!(metadata_root["openducktor"]["pullRequest"]["number"], 42);
+    assert_eq!(
+        metadata_root["openducktor"]["directMerge"]["sourceBranch"],
+        "feature/x"
+    );
+    assert!(metadata_root["openducktor"].get("delivery").is_none());
+    let refreshed_generation =
+        store.pull_request_sync_candidate_cache_generation_for_repo(repo.path())?;
+    assert!(refreshed_generation > generation);
+    Ok(())
+}
+
+#[test]
+fn set_delivery_metadata_none_removes_both_keys_and_legacy_delivery() -> Result<()> {
+    let repo = RepoFixture::new("set-delivery-metadata-none");
+    let current = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "pullRequest": make_pull_request_record(),
+                "directMerge": make_direct_merge_record(),
+                "delivery": {"directMerge": {"sourceBranch": "old"}}
+            }
+        })),
+    );
+    let refreshed = issue_value("task-1", "open", "task", None, json!([]), None);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([current]).to_string())),
+        MockStep::WithEnv(Ok("{}".to_string())),
+        MockStep::WithEnv(Ok(json!([refreshed]).to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+    let generation = seed_pull_request_sync_candidate_cache(&store, &repo)?;
+
+    store.set_delivery_metadata(repo.path(), "task-1", None, None)?;
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 3);
+    let metadata_root = metadata_from_call(&calls[1]);
+    assert!(metadata_root["openducktor"].get("pullRequest").is_none());
+    assert!(metadata_root["openducktor"].get("directMerge").is_none());
+    assert!(metadata_root["openducktor"].get("delivery").is_none());
+    let refreshed_generation =
+        store.pull_request_sync_candidate_cache_generation_for_repo(repo.path())?;
+    assert!(refreshed_generation > generation);
+    Ok(())
+}
+
+#[test]
+fn set_direct_merge_record_writes_key_and_removes_legacy_delivery_without_refresh() -> Result<()> {
+    let repo = RepoFixture::new("set-direct-merge-some");
+    let current = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({"openducktor": {"delivery": {"directMerge": {"sourceBranch": "old"}}}})),
+    );
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([current]).to_string())),
+        MockStep::WithEnv(Ok("{}".to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+    let generation = seed_pull_request_sync_candidate_cache(&store, &repo)?;
+
+    store.set_direct_merge_record(repo.path(), "task-1", Some(make_direct_merge_record()))?;
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 2);
+    let metadata_root = metadata_from_call(&calls[1]);
+    assert_eq!(
+        metadata_root["openducktor"]["directMerge"]["sourceBranch"],
+        "feature/x"
+    );
+    assert!(metadata_root["openducktor"].get("delivery").is_none());
+    let refreshed_generation =
+        store.pull_request_sync_candidate_cache_generation_for_repo(repo.path())?;
+    assert_eq!(refreshed_generation, generation);
+    Ok(())
+}
+
+#[test]
+fn set_direct_merge_record_none_removes_key_and_legacy_delivery_without_refresh() -> Result<()> {
+    let repo = RepoFixture::new("set-direct-merge-none");
+    let current = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "directMerge": make_direct_merge_record(),
+                "delivery": {"directMerge": {"sourceBranch": "old"}}
+            }
+        })),
+    );
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([current]).to_string())),
+        MockStep::WithEnv(Ok("{}".to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+    let generation = seed_pull_request_sync_candidate_cache(&store, &repo)?;
+
+    store.set_direct_merge_record(repo.path(), "task-1", None)?;
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 2);
+    let metadata_root = metadata_from_call(&calls[1]);
+    assert!(metadata_root["openducktor"].get("directMerge").is_none());
+    assert!(metadata_root["openducktor"].get("delivery").is_none());
+    let refreshed_generation =
+        store.pull_request_sync_candidate_cache_generation_for_repo(repo.path())?;
+    assert_eq!(refreshed_generation, generation);
+    Ok(())
+}
+
 #[test]
 fn list_tasks_parses_agent_sessions_for_multiple_tasks_in_single_list_call() -> Result<()> {
     let repo = RepoFixture::new("list-task-sessions");
@@ -239,6 +547,39 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].program, "bd");
     assert!(calls[0].args.contains(&"show".to_string()));
+    Ok(())
+}
+
+#[test]
+fn get_task_metadata_ignores_malformed_delivery_records() -> Result<()> {
+    let repo = RepoFixture::new("get-task-metadata-malformed-delivery-records");
+    let issue = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "pullRequest": {"providerId": "github", "number": "not-a-number"},
+                "directMerge": {"method": "not-a-merge-method"},
+                "delivery": {
+                    "linkedPullRequest": {"providerId": "github", "number": "also-invalid"},
+                    "directMerge": {"method": "also-invalid"}
+                }
+            }
+        })),
+    );
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([issue]).to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let metadata = store.get_task_metadata(repo.path(), "task-1")?;
+    assert!(metadata.pull_request.is_none());
+    assert!(metadata.direct_merge.is_none());
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
     Ok(())
 }
 
