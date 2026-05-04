@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { Theme } from "@openducktor/contracts";
 import type { ShellBridge } from "./lib/shell-bridge";
-import { createOpenDucktorShellBootstrap } from "./shell-bootstrap";
+import { runOpenDucktorShellBootstrap } from "./shell-bootstrap-workflow";
 
 if (typeof document === "undefined") {
   GlobalRegistrator.register();
@@ -14,6 +14,12 @@ const REPO_ROOT = resolve(import.meta.dir, "../../..");
 
 const readRepoFile = (relativePath: string): string =>
   readFileSync(resolve(REPO_ROOT, relativePath), "utf8");
+
+const expectNoManualShellBootstrapSteps = (source: string): void => {
+  expect(source).not.toMatch(/\bconfigureShellBridge\b/u);
+  expect(source).not.toMatch(/\bmountOpenDucktorApp\b/u);
+  expect(source).not.toMatch(/\bdocument\s*\.\s*getElementById\s*\(/u);
+};
 
 const createTestShellBridge = (): ShellBridge =>
   ({
@@ -69,14 +75,15 @@ const createBootstrapHarness = (options: BootstrapHarnessOptions = {}) => {
 
   return {
     bridge,
-    bootstrap: createOpenDucktorShellBootstrap({
-      configureBridge,
-      getRootById,
-      loadSettingsSnapshot,
-      applyTheme,
-      renderApp,
-      reportSettingsPreloadError,
-    }),
+    bootstrap: (bootstrapOptions: Parameters<typeof runOpenDucktorShellBootstrap>[0]) =>
+      runOpenDucktorShellBootstrap(bootstrapOptions, {
+        configureBridge,
+        getRootById,
+        loadSettingsSnapshot,
+        applyTheme,
+        renderApp,
+        reportSettingsPreloadError,
+      }),
     deps: {
       applyTheme,
       configureBridge,
@@ -244,22 +251,25 @@ describe("shell entrypoints", () => {
   test("desktop delegates shared startup to the frontend bootstrap", () => {
     const source = readRepoFile("apps/desktop/src/main.tsx");
 
-    expect(source).toContain("bootstrapOpenDucktorShell");
-    expect(source).toContain("createShellBridge: createDesktopShellBridge");
-    expect(source).not.toContain("configureShellBridge");
-    expect(source).not.toContain("mountOpenDucktorApp");
-    expect(source).not.toContain("document.getElementById");
+    expect(source).toMatch(
+      /import\s*\{\s*bootstrapOpenDucktorShell\s*\}\s*from\s*"@openducktor\/frontend"/u,
+    );
+    expect(source).toMatch(
+      /bootstrapOpenDucktorShell\(\{\s*createShellBridge:\s*createDesktopShellBridge,\s*\}\)/u,
+    );
+    expectNoManualShellBootstrapSteps(source);
   });
 
   test("browser delegates shared startup after supplying runtime config readiness", () => {
     const source = readRepoFile("packages/openducktor-web/src/main.tsx");
 
-    expect(source).toContain("bootstrapOpenDucktorShell");
-    expect(source).toContain("prepare: loadBrowserRuntimeConfig");
-    expect(source).toContain("createShellBridge: createBrowserShellBridge");
-    expect(source).not.toContain("configureShellBridge");
-    expect(source).not.toContain("mountOpenDucktorApp");
-    expect(source).not.toContain("document.getElementById");
+    expect(source).toMatch(
+      /import\s*\{\s*bootstrapOpenDucktorShell\s*\}\s*from\s*"@openducktor\/frontend"/u,
+    );
+    expect(source).toMatch(
+      /bootstrapOpenDucktorShell\(\{\s*prepare:\s*loadBrowserRuntimeConfig,\s*createShellBridge:\s*createBrowserShellBridge,\s*\}\)/u,
+    );
+    expectNoManualShellBootstrapSteps(source);
   });
 
   test("the production renderer keeps the crash shell and router composition", () => {
@@ -268,5 +278,14 @@ describe("shell entrypoints", () => {
     expect(source).toContain("<AppCrashShell>");
     expect(source).toContain("<BrowserRouter>");
     expect(source).toContain("<App />");
+  });
+
+  test("the frontend package root does not export bootstrap internals", () => {
+    const source = readRepoFile("packages/frontend/src/index.ts");
+
+    expect(source).toContain("bootstrapOpenDucktorShell");
+    expect(source).toContain("OpenDucktorShellBootstrapOptions");
+    expect(source).not.toMatch(/createOpenDucktorShellBootstrap|runOpenDucktorShellBootstrap/u);
+    expect(source).not.toMatch(/mountOpenDucktorApp|configureShellBridge|getShellBridge|\bApp\b/u);
   });
 });
