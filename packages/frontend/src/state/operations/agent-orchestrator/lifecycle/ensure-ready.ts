@@ -158,18 +158,14 @@ export const createEnsureSessionReady = ({
     }
 
     if (adapter.hasSession(externalSessionId)) {
-      if (
-        shouldReattachListenerForAttachedSession(
-          session.status,
-          unsubscribersRef.current.has(externalSessionId),
-        )
-      ) {
-        attachSessionListener(repoPath, externalSessionId);
-      }
       if (session.status !== "error") {
         const attachedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
         const attachedRuntimeId = session.runtimeId;
         const attachedWorkingDirectory = session.workingDirectory;
+        const shouldAttachListener = shouldReattachListenerForAttachedSession(
+          session.status,
+          unsubscribersRef.current.has(externalSessionId),
+        );
 
         const liveSessionTruth = await readLiveTruth({
           repoPath,
@@ -185,6 +181,9 @@ export const createEnsureSessionReady = ({
             (current) => applyLiveSessionTruthToSession(current, liveSessionTruth),
             { persist: false },
           );
+          if (shouldAttachListener) {
+            attachSessionListener(repoPath, externalSessionId);
+          }
           if (!allowPendingInput && liveSessionTruthHasPendingInput(liveSessionTruth)) {
             throw new Error(PENDING_INPUT_NOT_READY_ERROR);
           }

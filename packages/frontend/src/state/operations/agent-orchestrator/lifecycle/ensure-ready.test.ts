@@ -157,6 +157,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         "session-1": buildSession({ status: "idle" }),
       },
     };
+    const unsubscribersRef = { current: new Map<string, () => void>() };
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -169,7 +170,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      unsubscribersRef,
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -179,6 +180,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       attachSessionListener: () => {
         attachCalls += 1;
+        unsubscribersRef.current.set("session-1", () => {});
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -192,6 +194,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     try {
       await ensureReady("session-1");
       expect(attachCalls).toBe(1);
+      expect(unsubscribersRef.current.has("session-1")).toBe(true);
       expect(stopCalls).toBe(0);
       expect(resumeCalls).toBe(0);
     } finally {
@@ -554,6 +557,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }),
       },
     };
+    const unsubscribersRef = { current: new Map<string, () => void>() };
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -566,7 +570,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      unsubscribersRef,
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -576,6 +580,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       attachSessionListener: () => {
         attachCalls += 1;
+        unsubscribersRef.current.set("session-1", () => {});
       },
       ensureRuntime: async () => {
         ensureRuntimeCalls += 1;
@@ -594,7 +599,8 @@ describe("agent-orchestrator-ensure-ready", () => {
         "Runtime did not report attached session 'session-1'.",
       );
 
-      expect(attachCalls).toBe(1);
+      expect(attachCalls).toBe(0);
+      expect(unsubscribersRef.current.has("session-1")).toBe(false);
       expect(ensureRuntimeCalls).toBe(0);
       expect(resumeCalls).toBe(0);
       expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([]);
