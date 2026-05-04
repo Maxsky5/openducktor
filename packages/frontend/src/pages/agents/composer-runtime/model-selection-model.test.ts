@@ -9,7 +9,7 @@ import {
   resolveSessionSelection,
   toModelDescriptorByKey,
   toRoleDefaultSelection,
-} from "./use-agent-studio-model-selection-model";
+} from "./model-selection-model";
 
 const CATALOG: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -71,7 +71,7 @@ const createAssistantMessage = (
   };
 };
 
-describe("use-agent-studio-model-selection-model", () => {
+describe("model-selection-model", () => {
   test("maps repo role defaults to model selection shape", () => {
     expect(toRoleDefaultSelection(null)).toBeNull();
     expect(

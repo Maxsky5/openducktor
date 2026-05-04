@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
-import { createAgentStudioFileSearch } from "./use-agent-studio-file-search";
+import { createAgentStudioFileSearch } from "./use-file-search";
 
 const FILE_SEARCH_RESULTS: AgentFileSearchResult[] = [
   {

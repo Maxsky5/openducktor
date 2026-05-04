@@ -9,7 +9,7 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   coerceVisibleSelectionToCatalog,
   pickDefaultVisibleSelectionForCatalog,
-} from "./agents-page-selection";
+} from "../agents-page-selection";
 
 export type AgentStudioContextUsage = {
   totalTokens: number;

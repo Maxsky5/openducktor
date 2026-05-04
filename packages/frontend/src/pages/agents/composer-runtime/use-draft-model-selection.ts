@@ -2,7 +2,7 @@ import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openduc
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { emptyDraftSelections, isSameSelection } from "../agents-page-selection";
-import { resolveDraftSelection } from "../use-agent-studio-model-selection-model";
+import { resolveDraftSelection } from "./model-selection-model";
 
 const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
   spec: false,

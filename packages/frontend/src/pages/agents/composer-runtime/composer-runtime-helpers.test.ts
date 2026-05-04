@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentSlashCommand } from "@openducktor/core";
-import { resolveModelSelectionOptions } from "./agent-studio-model-selection-options";
+import { resolveModelSelectionOptions } from "./model-selection-options";
 import {
   resolveRuntimePromptInputSupport,
   resolveSelectionForNewSession,
-} from "./agent-studio-model-selection-resolution";
-import { mergeSlashCommands } from "./use-agent-studio-slash-commands";
+} from "./model-selection-resolution";
+import { mergeSlashCommands } from "./use-slash-commands";
 
 const selectedSessionModel: AgentModelSelection = {
   runtimeKind: "opencode",
