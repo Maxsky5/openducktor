@@ -5,9 +5,9 @@ import {
 } from "./live-session-classification";
 
 describe("live-session-classification", () => {
-  test("classifies pending questions before approvals and runtime status", () => {
+  test("classifies pending questions before approvals and retry status", () => {
     const classification = classifyLiveAgentSessionSnapshot({
-      status: { type: "busy" },
+      status: { type: "retry", attempt: 2, message: "try again", nextEpochMs: 1234 },
       pendingApprovals: [{ requestId: "approval-1" }],
       pendingQuestions: [{ requestId: "question-1" }],
     });
@@ -16,9 +16,9 @@ describe("live-session-classification", () => {
     expect(toLiveAgentSessionRuntimeStatus(classification)).toBe("idle");
   });
 
-  test("classifies pending approvals before runtime status", () => {
+  test("classifies pending approvals before retry status", () => {
     const classification = classifyLiveAgentSessionSnapshot({
-      status: { type: "busy" },
+      status: { type: "retry", attempt: 2, message: "try again", nextEpochMs: 1234 },
       pendingApprovals: [{ requestId: "approval-1" }],
       pendingQuestions: [],
     });

@@ -61,6 +61,13 @@ const createSnapshot = (
   ...overrides,
 });
 
+const sessionRefFixture = {
+  repoPath: "/tmp/repo",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/tmp/repo/worktree",
+  externalSessionId: "external-1",
+};
+
 describe("live-session-truth", () => {
   test("classifies missing runtime as persisted-only without reading live snapshots", async () => {
     let snapshotReads = 0;
@@ -86,10 +93,8 @@ describe("live-session-truth", () => {
 
   test("classifies missing live session as stale and clears pending input when applied", () => {
     const truth = toLiveSessionTruthFromResolvedSnapshot({
-      externalSessionId: "external-1",
-      runtimeKind: "opencode",
+      sessionRef: sessionRefFixture,
       runtimeId: "runtime-1",
-      workingDirectory: "/tmp/repo/worktree",
       snapshot: null,
     });
 
@@ -106,10 +111,8 @@ describe("live-session-truth", () => {
       requestId: "live-approval",
     } as AgentSessionState["pendingApprovals"][number];
     const truth = toLiveSessionTruthFromResolvedSnapshot({
-      externalSessionId: "external-1",
-      runtimeKind: "opencode",
+      sessionRef: sessionRefFixture,
       runtimeId: "runtime-1",
-      workingDirectory: "/tmp/repo/worktree",
       snapshot: createSnapshot({ pendingApprovals: [liveApproval] }),
     });
 
@@ -120,26 +123,42 @@ describe("live-session-truth", () => {
     expect(applied.pendingQuestions).toEqual([]);
   });
 
+  test("maps retry truth to running session status without pending input", () => {
+    const truth = toLiveSessionTruthFromResolvedSnapshot({
+      sessionRef: sessionRefFixture,
+      runtimeId: "runtime-1",
+      snapshot: createSnapshot({
+        status: { type: "retry", attempt: 2, message: "try again", nextEpochMs: 1234 },
+      }),
+    });
+
+    const applied = applyLiveSessionTruthToSession(createSessionState({ status: "idle" }), truth);
+
+    expect(truth.type).toBe("live");
+    expect(truth.classification).toBe("retrying");
+    if (truth.type !== "live") {
+      throw new Error("Expected live truth.");
+    }
+    expect(truth.agentSessionStatus).toBe("running");
+    expect(applied.status).toBe("running");
+    expect(applied.pendingApprovals).toEqual([]);
+    expect(applied.pendingQuestions).toEqual([]);
+  });
+
   test("treats pending input and non-idle runtime status as attachable", () => {
     const idleTruth = toLiveSessionTruthFromResolvedSnapshot({
-      externalSessionId: "external-1",
-      runtimeKind: "opencode",
+      sessionRef: sessionRefFixture,
       runtimeId: "runtime-1",
-      workingDirectory: "/tmp/repo/worktree",
       snapshot: createSnapshot(),
     });
     const busyTruth = toLiveSessionTruthFromResolvedSnapshot({
-      externalSessionId: "external-1",
-      runtimeKind: "opencode",
+      sessionRef: sessionRefFixture,
       runtimeId: "runtime-1",
-      workingDirectory: "/tmp/repo/worktree",
       snapshot: createSnapshot({ status: { type: "busy" } }),
     });
     const questionTruth = toLiveSessionTruthFromResolvedSnapshot({
-      externalSessionId: "external-1",
-      runtimeKind: "opencode",
+      sessionRef: sessionRefFixture,
       runtimeId: "runtime-1",
-      workingDirectory: "/tmp/repo/worktree",
       snapshot: createSnapshot({
         pendingQuestions: [
           { requestId: "question-1" } as AgentSessionState["pendingQuestions"][number],

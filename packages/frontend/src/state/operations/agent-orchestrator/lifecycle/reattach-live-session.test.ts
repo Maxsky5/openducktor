@@ -34,10 +34,13 @@ const toLiveTruth = (
   runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }> = localHttpRuntimeResolution,
 ) =>
   toLiveSessionTruthFromResolvedSnapshot({
-    externalSessionId: sessionRecordFixture.externalSessionId,
-    runtimeKind: runtimeResolution.runtimeKind,
+    sessionRef: {
+      repoPath: "/tmp/repo",
+      runtimeKind: runtimeResolution.runtimeKind,
+      externalSessionId: sessionRecordFixture.externalSessionId,
+      workingDirectory: runtimeResolution.workingDirectory,
+    },
     runtimeId: runtimeResolution.runtimeId,
-    workingDirectory: runtimeResolution.workingDirectory,
     snapshot,
   });
 

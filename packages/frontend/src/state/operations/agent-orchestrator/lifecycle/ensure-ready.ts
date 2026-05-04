@@ -108,6 +108,31 @@ export const createEnsureSessionReady = ({
         throw new Error(`${cleanupErrorMessage}: ${errorMessage(error)}`, { cause: error });
       }
     };
+    const detachSessionOrThrow = async ({
+      operation,
+      cleanupErrorMessage,
+      externalSessionId: targetExternalSessionId,
+      taskId,
+      role,
+    }: {
+      operation: string;
+      cleanupErrorMessage: string;
+      externalSessionId: string;
+      taskId: string;
+      role: AgentSessionState["role"];
+    }): Promise<void> => {
+      try {
+        await runOrchestratorTask(
+          operation,
+          async () => adapter.detachSession(targetExternalSessionId),
+          {
+            tags: { repoPath, externalSessionId: targetExternalSessionId, taskId, role },
+          },
+        );
+      } catch (error) {
+        throw new Error(`${cleanupErrorMessage}: ${errorMessage(error)}`, { cause: error });
+      }
+    };
 
     const readLiveTruth = async ({
       runtimeKind,
@@ -127,11 +152,13 @@ export const createEnsureSessionReady = ({
         throw new Error(`Session '${externalSessionId}' has no working directory.`);
       }
       return readResolvedLiveSessionTruth({
-        repoPath,
-        runtimeKind,
+        ref: {
+          repoPath,
+          runtimeKind,
+          workingDirectory,
+          externalSessionId,
+        },
         runtimeId,
-        workingDirectory,
-        externalSessionId,
         readSnapshot: (snapshotInput) => adapter.readLiveAgentSessionSnapshot(snapshotInput),
       });
     };
@@ -184,14 +211,28 @@ export const createEnsureSessionReady = ({
           }
           return;
         }
-        if (attachedRuntimeId === null) {
-          updateSession(
-            externalSessionId,
-            (current) => applyLiveSessionTruthToSession(current, liveSessionTruth),
-            { persist: false },
-          );
-          throw new Error(`Runtime did not report attached session '${externalSessionId}'.`);
+        const existingUnsubscriber = unsubscribersRef.current.get(externalSessionId);
+        updateSession(
+          externalSessionId,
+          (current) =>
+            applyLiveSessionTruthToSession(current, liveSessionTruth, {
+              missingSessionRuntimeId: null,
+            }),
+          { persist: false },
+        );
+        await detachSessionOrThrow({
+          operation: "ensure-ready-detach-missing-attached-session",
+          cleanupErrorMessage: `Failed to detach stale attached session '${externalSessionId}' before preparing it`,
+          externalSessionId,
+          taskId: session.taskId,
+          role: session.role,
+        });
+        if (existingUnsubscriber) {
+          existingUnsubscriber();
+          unsubscribersRef.current.delete(externalSessionId);
         }
+        assertNotStale();
+        throw new Error(`Runtime did not report attached session '${externalSessionId}'.`);
       }
       if (session.runtimeId !== null) {
         const existingUnsubscriber = unsubscribersRef.current.get(externalSessionId);

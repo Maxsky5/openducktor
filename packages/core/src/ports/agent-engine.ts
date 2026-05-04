@@ -20,18 +20,18 @@ import type {
   AgentUserMessagePart,
   AgentUserMessageState,
   ExternalSessionId,
+  RepoRuntimeRef,
   RuntimeHistoryAnchor,
   RuntimeKind,
   RuntimePendingInputRequestId,
 } from "../types/agent-orchestrator";
 
-type RepoRuntimeOperationInput = {
-  repoPath: string;
-  runtimeKind: RuntimeKind;
+type RepoRuntimeSessionOperationInput = RepoRuntimeRef & {
+  workingDirectory: string;
 };
 
-type RepoRuntimeSessionOperationInput = RepoRuntimeOperationInput & {
-  workingDirectory: string;
+export type LiveAgentSessionRef = RepoRuntimeSessionOperationInput & {
+  externalSessionId: ExternalSessionId;
 };
 
 export type StartAgentSessionInput = AgentSessionContext;
@@ -82,21 +82,19 @@ export type LoadAgentSessionTodosInput = RepoRuntimeSessionOperationInput & {
   externalSessionId: ExternalSessionId;
 };
 
-export type ListAgentModelsInput = RepoRuntimeOperationInput;
+export type ListAgentModelsInput = RepoRuntimeRef;
 
-export type ListAgentSlashCommandsInput = RepoRuntimeOperationInput;
+export type ListAgentSlashCommandsInput = RepoRuntimeRef;
 
 export type SearchAgentFilesInput = RepoRuntimeSessionOperationInput & {
   query: string;
 };
 
-export type ListLiveAgentSessionsInput = RepoRuntimeOperationInput & {
+export type ListLiveAgentSessionsInput = RepoRuntimeRef & {
   directories?: string[];
 };
 
-export type ReadLiveAgentSessionSnapshotInput = RepoRuntimeSessionOperationInput & {
-  externalSessionId: ExternalSessionId;
-};
+export type ReadLiveAgentSessionSnapshotInput = LiveAgentSessionRef;
 
 export type LoadAgentSessionDiffInput = RepoRuntimeSessionOperationInput & {
   externalSessionId: ExternalSessionId;

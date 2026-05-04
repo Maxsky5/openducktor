@@ -1,10 +1,9 @@
+import type { AgentSessionRecord, RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type {
-  AgentSessionRecord,
-  RepoPromptOverrides,
-  RuntimeKind,
-  TaskCard,
-} from "@openducktor/contracts";
-import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
+  AgentEnginePort,
+  LiveAgentSessionRef,
+  LiveAgentSessionSnapshot,
+} from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { errorMessage } from "@/lib/errors";
 import { appQueryClient } from "@/lib/query-client";
@@ -106,6 +105,7 @@ export type PersistedSessionMergeStageOutput = {
 };
 
 export type HydrationRuntimePlanner = {
+  repoPath: string;
   resolveHydrationRuntime: (record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>;
   readLiveSessionTruth?: (record: AgentSessionRecord) => Promise<LiveSessionTruth>;
   /** @deprecated Use readLiveSessionTruth for classification-aware consumers. */
@@ -133,10 +133,13 @@ const readPlannerLiveSessionTruth = async (
   }
   const snapshot = await runtimePlanner.loadLiveAgentSessionSnapshot(record, runtimeResolution);
   return toLiveSessionTruthFromResolvedSnapshot({
-    externalSessionId: record.externalSessionId,
-    runtimeKind: runtimeResolution.runtimeKind,
+    sessionRef: {
+      repoPath: runtimePlanner.repoPath,
+      runtimeKind: runtimeResolution.runtimeKind,
+      externalSessionId: record.externalSessionId,
+      workingDirectory: runtimeResolution.workingDirectory,
+    },
     runtimeId: runtimeResolution.runtimeId,
-    workingDirectory: runtimeResolution.workingDirectory,
     snapshot,
   });
 };
@@ -549,17 +552,13 @@ export const createRuntimeResolutionPlannerStage = async ({
       : null;
 
   const readSnapshot = async ({
+    repoPath,
     runtimeKind,
     workingDirectory,
     externalSessionId,
-  }: {
-    repoPath: string;
-    runtimeKind: RuntimeKind;
-    workingDirectory: string;
-    externalSessionId: string;
-  }): Promise<LiveAgentSessionSnapshot | null> => {
+  }: LiveAgentSessionRef): Promise<LiveAgentSessionSnapshot | null> => {
     const storedSnapshot = liveAgentSessionStore?.readSnapshot({
-      repoPath: intent.repoPath,
+      repoPath,
       runtimeKind,
       workingDirectory,
       externalSessionId,
@@ -572,7 +571,7 @@ export const createRuntimeResolutionPlannerStage = async ({
       throw new Error("Live agent session snapshots are unavailable for session hydration.");
     }
     const snapshots = await liveAgentSessionScanCache.load({
-      repoPath: intent.repoPath,
+      repoPath,
       runtimeKind,
       directories: [workingDirectory],
     });
@@ -596,6 +595,7 @@ export const createRuntimeResolutionPlannerStage = async ({
   };
 
   return {
+    repoPath: intent.repoPath,
     resolveHydrationRuntime,
     readLiveSessionTruth,
     loadLiveAgentSessionSnapshot,

@@ -106,6 +106,13 @@ export const requireSessionDirectory = (directory: unknown, sessionId: string): 
   throw new Error(`Malformed Opencode session payload for '${sessionId}': missing directory.`);
 };
 
+export const requireSessionTitle = (title: unknown, sessionId: string): string => {
+  if (typeof title === "string") {
+    return title;
+  }
+  throw new Error(`Malformed Opencode session payload for '${sessionId}': missing title.`);
+};
+
 const mergeLiveAgentSessionPendingInput = (
   entries: OpencodeLiveSessionPendingInputBySessionId[],
 ): OpencodeLiveSessionPendingInputBySessionId => {
@@ -178,7 +185,7 @@ export const listOpencodeLiveAgentSessionSnapshots = async ({
     const directoryStatuses = statusesByDirectory.get(normalizedDirectory);
     return {
       externalSessionId: session.id,
-      title: session.title,
+      title: requireSessionTitle(session.title, session.id),
       workingDirectory: normalizedDirectory,
       startedAt: toIsoFromEpoch(session.time?.created, now),
       status: toLiveAgentSessionStatus(directoryStatuses?.[session.id]),

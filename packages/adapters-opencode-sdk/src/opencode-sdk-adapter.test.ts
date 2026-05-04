@@ -904,6 +904,7 @@ describe("opencode-sdk-adapter", () => {
 
     expect(mock.statusCalls).toEqual([{ directory: "/repo" }]);
     expect(mock.permissionListCalls).toEqual([{ directory: "/repo" }]);
+    expect(mock.questionListCalls).toEqual([{ directory: "/repo" }]);
     expect(snapshots).toEqual([
       {
         externalSessionId: "external-session-1",
@@ -1062,17 +1063,86 @@ describe("opencode-sdk-adapter", () => {
     );
   });
 
+  test("listLiveAgentSessions rejects sessions with malformed titles", async () => {
+    const mock = makeMockClient();
+    const malformedClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async () => ({
+          data: [
+            {
+              id: "external-session-1",
+              projectID: "project-1",
+              directory: "/repo",
+              time: {
+                created: Date.parse("2026-02-22T12:00:00.000Z"),
+              },
+            },
+          ],
+          error: undefined,
+        }),
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => malformedClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await expect(
+      adapter.listLiveAgentSessions({
+        repoPath: defaultRepoPath,
+        runtimeKind: "opencode",
+      }),
+    ).rejects.toThrow(
+      "Malformed Opencode session payload for 'external-session-1': missing title.",
+    );
+  });
+
   test("readLiveAgentSessionSnapshot includes pending permissions and questions", async () => {
     const mock = makeMockClient();
+    const questionfulClient = {
+      ...mock.client,
+      question: {
+        ...mock.client.question,
+        list: async (input?: unknown) => {
+          mock.questionListCalls.push(input);
+          const directory =
+            typeof input === "object" && input !== null && "directory" in input
+              ? (input as { directory?: string }).directory
+              : undefined;
+          return {
+            data:
+              directory === "/repo"
+                ? [
+                    {
+                      id: "question-1",
+                      sessionID: "external-session-1",
+                      questions: [
+                        {
+                          header: "Confirm",
+                          question: "Ship it?",
+                          options: [{ label: "Yes", description: "Approve" }],
+                          custom: false,
+                        },
+                      ],
+                    },
+                  ]
+                : [],
+            error: undefined,
+          };
+        },
+      },
+    } as unknown as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
-      createClient: () => mock.client,
+      createClient: () => questionfulClient,
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
     const snapshot = await adapter.readLiveAgentSessionSnapshot({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
-      workingDirectory: defaultWorkingDirectory,
+      workingDirectory: `${defaultWorkingDirectory}/`,
       externalSessionId: "external-session-1",
     });
 
@@ -1081,7 +1151,19 @@ describe("opencode-sdk-adapter", () => {
     expect(snapshot).toMatchObject({
       externalSessionId: "external-session-1",
       pendingApprovals: [expectedReadApproval],
-      pendingQuestions: [],
+      pendingQuestions: [
+        {
+          requestId: "question-1",
+          questions: [
+            {
+              header: "Confirm",
+              question: "Ship it?",
+              options: [{ label: "Yes", description: "Approve" }],
+              custom: false,
+            },
+          ],
+        },
+      ],
     });
   });
 });

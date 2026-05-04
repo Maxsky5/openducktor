@@ -1250,6 +1250,7 @@ describe("load-sessions-stages", () => {
         recordsToHydrate: [createRecord()],
         historyHydrationSessionIds: new Set(["external-1"]),
         runtimePlanner: {
+          repoPath: "/tmp/repo",
           resolveHydrationRuntime: async () => ({
             ok: false,
             runtimeKind: "opencode",
@@ -1309,6 +1310,7 @@ describe("load-sessions-stages", () => {
         historyHydrationSessionIds: new Set(),
         failOnRuntimeResolutionError: true,
         runtimePlanner: {
+          repoPath: "/tmp/repo",
           resolveHydrationRuntime: async () => ({
             ok: false,
             runtimeKind: "opencode",
@@ -1367,6 +1369,7 @@ describe("load-sessions-stages", () => {
         recordsToHydrate: [createRecord()],
         historyHydrationSessionIds: new Set(["external-1"]),
         runtimePlanner: {
+          repoPath: "/tmp/repo",
           resolveHydrationRuntime: async () => ({
             ok: true,
             runtimeKind: "opencode",
@@ -1428,6 +1431,7 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
+        repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => {
           stale = true;
           return {
@@ -1480,6 +1484,7 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(),
       runtimePlanner: {
+        repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => {
           stale = true;
           return {
@@ -1536,6 +1541,7 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
+        repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => ({
           ok: true,
           runtimeKind: "opencode",
@@ -1629,6 +1635,7 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
+        repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => ({
           ok: true,
           runtimeKind: "opencode",
@@ -1765,6 +1772,7 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
       runtimePlanner: {
+        repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => ({
           ok: true,
           runtimeKind: "opencode",
@@ -1916,6 +1924,7 @@ describe("load-sessions-stages", () => {
         recordsToHydrate: [createRecord()],
         historyHydrationSessionIds: new Set(["external-1"]),
         runtimePlanner: {
+          repoPath: "/tmp/repo",
           resolveHydrationRuntime: async () => ({
             ok: true,
             runtimeKind: "opencode",

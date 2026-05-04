@@ -1,4 +1,4 @@
-import type { RuntimeKind } from "@openducktor/contracts";
+import type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
 import { normalizeWorkingDirectory } from "../support/core";
 
@@ -22,11 +22,11 @@ export class LiveAgentSessionCache {
     private readonly preloadedByKey?: Map<string, LiveAgentSessionSnapshot[]>,
   ) {}
 
-  async load(input: {
-    repoPath: string;
-    runtimeKind: RuntimeKind;
-    directories: string[];
-  }): Promise<LiveAgentSessionSnapshot[]> {
+  async load(
+    input: RepoRuntimeRef & {
+      directories: string[];
+    },
+  ): Promise<LiveAgentSessionSnapshot[]> {
     const normalizedDirectories = Array.from(
       new Set(
         input.directories

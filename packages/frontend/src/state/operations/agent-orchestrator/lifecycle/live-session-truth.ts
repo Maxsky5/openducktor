@@ -2,7 +2,9 @@ import type { AgentSessionRecord, RepoPromptOverrides, RuntimeKind } from "@open
 import {
   classifyLiveAgentSessionSnapshot,
   type LiveAgentSessionClassification,
+  type LiveAgentSessionRef,
   type LiveAgentSessionSnapshot,
+  type RepoRuntimeRef,
   toLiveAgentSessionRuntimeStatus,
 } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -49,12 +51,9 @@ export type LiveSessionTruth =
       pendingQuestions: [];
     };
 
-type LiveSessionSnapshotReader = (input: {
-  repoPath: string;
-  runtimeKind: RuntimeKind;
-  workingDirectory: string;
-  externalSessionId: string;
-}) => Promise<LiveAgentSessionSnapshot | null>;
+type LiveSessionSnapshotReader = (
+  input: LiveAgentSessionRef,
+) => Promise<LiveAgentSessionSnapshot | null>;
 
 const EMPTY_PENDING_INPUT = Object.freeze([]) as [];
 
@@ -64,26 +63,22 @@ export const normalizeLiveSessionTitle = (title: string | undefined): string | u
 };
 
 export const toLiveSessionTruthFromResolvedSnapshot = ({
-  externalSessionId,
-  runtimeKind,
+  sessionRef,
   runtimeId,
-  workingDirectory,
   snapshot,
 }: {
-  externalSessionId: string;
-  runtimeKind: RuntimeKind;
+  sessionRef: LiveAgentSessionRef;
   runtimeId: string | null;
-  workingDirectory: string;
   snapshot: LiveAgentSessionSnapshot | null;
 }): LiveSessionTruth => {
   if (!snapshot) {
     return {
       type: "missing_session",
       classification: "stale",
-      externalSessionId,
-      runtimeKind,
+      externalSessionId: sessionRef.externalSessionId,
+      runtimeKind: sessionRef.runtimeKind,
       runtimeId,
-      workingDirectory,
+      workingDirectory: sessionRef.workingDirectory,
       pendingApprovals: EMPTY_PENDING_INPUT,
       pendingQuestions: EMPTY_PENDING_INPUT,
     };
@@ -93,10 +88,10 @@ export const toLiveSessionTruthFromResolvedSnapshot = ({
   return {
     type: "live",
     classification,
-    externalSessionId,
-    runtimeKind,
+    externalSessionId: sessionRef.externalSessionId,
+    runtimeKind: sessionRef.runtimeKind,
     runtimeId,
-    workingDirectory,
+    workingDirectory: sessionRef.workingDirectory,
     snapshot,
     title: normalizeLiveSessionTitle(snapshot.title),
     agentSessionStatus: toLiveAgentSessionRuntimeStatus(classification),
@@ -126,31 +121,18 @@ export const toMissingRuntimeLiveSessionTruth = ({
 });
 
 export const readResolvedLiveSessionTruth = async ({
-  repoPath,
-  externalSessionId,
-  runtimeKind,
+  ref,
   runtimeId,
-  workingDirectory,
   readSnapshot,
 }: {
-  repoPath: string;
-  externalSessionId: string;
-  runtimeKind: RuntimeKind;
+  ref: LiveAgentSessionRef;
   runtimeId: string | null;
-  workingDirectory: string;
   readSnapshot: LiveSessionSnapshotReader;
 }): Promise<LiveSessionTruth> => {
-  const snapshot = await readSnapshot({
-    repoPath,
-    runtimeKind,
-    workingDirectory,
-    externalSessionId,
-  });
+  const snapshot = await readSnapshot(ref);
   return toLiveSessionTruthFromResolvedSnapshot({
-    externalSessionId,
-    runtimeKind,
+    sessionRef: ref,
     runtimeId,
-    workingDirectory,
     snapshot,
   });
 };
@@ -160,7 +142,7 @@ export const createLiveSessionTruthReader = ({
   resolveHydrationRuntime,
   readSnapshot,
 }: {
-  repoPath: string;
+  repoPath: RepoRuntimeRef["repoPath"];
   resolveHydrationRuntime: (record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>;
   readSnapshot: LiveSessionSnapshotReader;
 }): ((record: AgentSessionRecord) => Promise<LiveSessionTruth>) => {
@@ -175,11 +157,13 @@ export const createLiveSessionTruthReader = ({
     }
 
     return readResolvedLiveSessionTruth({
-      repoPath,
-      externalSessionId: record.externalSessionId,
-      runtimeKind: runtimeResolution.runtimeKind,
+      ref: {
+        repoPath,
+        runtimeKind: runtimeResolution.runtimeKind,
+        externalSessionId: record.externalSessionId,
+        workingDirectory: runtimeResolution.workingDirectory,
+      },
       runtimeId: runtimeResolution.runtimeId,
-      workingDirectory: runtimeResolution.workingDirectory,
       readSnapshot,
     });
   };

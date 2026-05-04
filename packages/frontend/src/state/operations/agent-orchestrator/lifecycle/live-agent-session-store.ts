@@ -1,5 +1,4 @@
-import type { RuntimeKind } from "@openducktor/contracts";
-import type { LiveAgentSessionSnapshot } from "@openducktor/core";
+import type { LiveAgentSessionRef, LiveAgentSessionSnapshot } from "@openducktor/core";
 import { liveAgentSessionLookupKey } from "./live-agent-session-cache";
 
 const DEFAULT_SNAPSHOT_MAX_AGE_MS = 5_000;
@@ -31,14 +30,12 @@ export class LiveAgentSessionStore {
     this.snapshotsByRepo.set(repoPath, nextSnapshots);
   }
 
-  readSnapshot(input: {
-    repoPath: string;
-    runtimeKind: RuntimeKind;
-    workingDirectory: string;
-    externalSessionId: string;
-    maxAgeMs?: number;
-    nowMs?: number;
-  }): LiveAgentSessionSnapshot | null {
+  readSnapshot(
+    input: LiveAgentSessionRef & {
+      maxAgeMs?: number;
+      nowMs?: number;
+    },
+  ): LiveAgentSessionSnapshot | null {
     const repoSnapshots = this.snapshotsByRepo.get(input.repoPath);
     if (!repoSnapshots) {
       return null;

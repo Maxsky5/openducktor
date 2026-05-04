@@ -210,6 +210,98 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
+  test("clears stale local attachment before failing on missing live attached session", async () => {
+    let attached = true;
+    let detachCalls = 0;
+    let resumeCalls = 0;
+    let unsubscribeCalls = 0;
+
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalDetachSession = adapter.detachSession;
+    const originalResumeSession = adapter.resumeSession;
+    const originalReadLiveAgentSessionSnapshot = adapter.readLiveAgentSessionSnapshot;
+    adapter.hasSession = () => attached;
+    adapter.detachSession = async (externalSessionId) => {
+      expect(externalSessionId).toBe("external-1");
+      attached = false;
+      detachCalls += 1;
+    };
+    adapter.resumeSession = async () => {
+      resumeCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        status: "idle",
+      };
+    };
+    adapter.readLiveAgentSessionSnapshot = async () => null;
+
+    const sessionsRef = {
+      current: {
+        "external-1": buildSession({ status: "idle", runtimeId: "runtime-1" }),
+      },
+    };
+    const unsubscribersRef = {
+      current: new Map<string, () => void>([
+        [
+          "external-1",
+          () => {
+            unsubscribeCalls += 1;
+          },
+        ],
+      ]),
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef,
+      updateSession: (_externalSessionId, updater) => {
+        const current = sessionsRef.current["external-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["external-1"] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await expect(ensureReady("external-1")).rejects.toThrow(
+        "Runtime did not report attached session 'external-1'.",
+      );
+      expect(detachCalls).toBe(1);
+      expect(resumeCalls).toBe(0);
+      expect(attached).toBe(false);
+      expect(unsubscribeCalls).toBe(1);
+      expect(unsubscribersRef.current.has("external-1")).toBe(false);
+      expect(sessionsRef.current["external-1"]?.runtimeId).toBeNull();
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.detachSession = originalDetachSession;
+      adapter.resumeSession = originalResumeSession;
+      adapter.readLiveAgentSessionSnapshot = originalReadLiveAgentSessionSnapshot;
+    }
+  });
+
   test("keeps attached session runtime metadata when refreshing a session", async () => {
     let ensureRuntimeCalls = 0;
 
