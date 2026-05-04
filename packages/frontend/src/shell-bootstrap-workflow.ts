@@ -6,7 +6,7 @@ const DEFAULT_ROOT_ID = "root";
 export type OpenDucktorShellBootstrapOptions = {
   createShellBridge: () => ShellBridge;
   prepare?: () => void | Promise<void>;
-  rootElement?: HTMLElement | null;
+  rootElement?: HTMLElement | null | undefined;
   rootId?: string;
 };
 
@@ -22,12 +22,19 @@ export type ShellBootstrapDependencies = {
 const rootMissingMessage = (rootId: string): string =>
   `OpenDucktor bootstrap root element "#${rootId}" was not found. Ensure the shell HTML contains the root element.`;
 
+const explicitNullRootMessage = (): string =>
+  "OpenDucktor bootstrap rootElement was explicitly set to null. Omit rootElement to use the shell root lookup, or pass an HTMLElement.";
+
 const resolveRootElement = (
   options: OpenDucktorShellBootstrapOptions,
   getRootById: ShellBootstrapDependencies["getRootById"],
 ): HTMLElement => {
   const rootId = options.rootId ?? DEFAULT_ROOT_ID;
-  const rootElement = "rootElement" in options ? options.rootElement : getRootById(rootId);
+  if (options.rootElement === null) {
+    throw new Error(explicitNullRootMessage());
+  }
+
+  const rootElement = options.rootElement ?? getRootById(rootId);
 
   if (!rootElement) {
     throw new Error(rootMissingMessage(rootId));

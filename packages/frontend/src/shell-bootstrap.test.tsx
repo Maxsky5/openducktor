@@ -188,10 +188,11 @@ describe("bootstrapOpenDucktorShell", () => {
         createShellBridge: () => bridge,
       }),
     ).rejects.toThrow(
-      'OpenDucktor bootstrap root element "#root" was not found. Ensure the shell HTML contains the root element.',
+      "OpenDucktor bootstrap rootElement was explicitly set to null. Omit rootElement to use the shell root lookup, or pass an HTMLElement.",
     );
 
     expect(deps.configureBridge).not.toHaveBeenCalled();
+    expect(deps.loadSettingsSnapshot).not.toHaveBeenCalled();
     expect(deps.renderApp).not.toHaveBeenCalled();
   });
 
@@ -245,6 +246,21 @@ describe("bootstrapOpenDucktorShell", () => {
 
     expect(deps.renderApp).toHaveBeenCalledWith(rootElement);
   });
+
+  test("treats an explicit undefined root as a lookup fallback", async () => {
+    document.body.innerHTML = '<div id="app-root"></div>';
+    const rootElement = document.getElementById("app-root");
+    const { bootstrap, bridge, deps } = createBootstrapHarness();
+
+    await bootstrap({
+      rootElement: undefined,
+      rootId: "app-root",
+      createShellBridge: () => bridge,
+    });
+
+    expect(deps.getRootById).toHaveBeenCalledWith("app-root");
+    expect(deps.renderApp).toHaveBeenCalledWith(rootElement);
+  });
 });
 
 describe("shell entrypoints", () => {
@@ -257,6 +273,7 @@ describe("shell entrypoints", () => {
     expect(source).toMatch(
       /bootstrapOpenDucktorShell\(\{\s*createShellBridge:\s*createDesktopShellBridge,\s*\}\)/u,
     );
+    expect(source).toContain('console.error("Critical desktop bootstrap failure", error);');
     expectNoManualShellBootstrapSteps(source);
   });
 
@@ -266,9 +283,10 @@ describe("shell entrypoints", () => {
     expect(source).toMatch(
       /import\s*\{\s*bootstrapOpenDucktorShell\s*\}\s*from\s*"@openducktor\/frontend"/u,
     );
-    expect(source).toMatch(
-      /bootstrapOpenDucktorShell\(\{\s*prepare:\s*loadBrowserRuntimeConfig,\s*createShellBridge:\s*createBrowserShellBridge,\s*\}\)/u,
-    );
+    expect(source).toContain("bootstrapOpenDucktorShell(");
+    expect(source).toContain("prepare: loadBrowserRuntimeConfig");
+    expect(source).toContain("createShellBridge: createBrowserShellBridge");
+    expect(source).toContain('console.error("Critical browser bootstrap failure", error);');
     expectNoManualShellBootstrapSteps(source);
   });
 
