@@ -7,6 +7,11 @@ fn parse_record<T: DeserializeOwned>(value: &Value) -> Option<T> {
     serde_json::from_value(value.clone()).ok()
 }
 
+enum PullRequestSyncRefresh {
+    Refresh,
+    Skip,
+}
+
 impl BeadsTaskStore {
     pub(super) fn parse_task_metadata_from_issue(&self, issue: &RawIssue) -> Result<TaskMetadata> {
         let metadata_root = parse_metadata_root(issue.metadata.clone());
@@ -235,7 +240,7 @@ impl BeadsTaskStore {
         &self,
         repo_path: &Path,
         task_id: &str,
-        refresh_pull_request_cache: bool,
+        pull_request_sync_refresh: PullRequestSyncRefresh,
         update_namespace: impl FnOnce(&mut Map<String, Value>) -> Result<()>,
     ) -> Result<()> {
         let (mut root, namespace_key, mut namespace_map) =
@@ -245,8 +250,11 @@ impl BeadsTaskStore {
         namespace_map.remove("delivery");
         self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
 
-        if refresh_pull_request_cache {
-            self.refresh_cached_pull_request_sync_candidate_from_store(repo_path, task_id)?;
+        match pull_request_sync_refresh {
+            PullRequestSyncRefresh::Refresh => {
+                self.refresh_cached_pull_request_sync_candidate_from_store(repo_path, task_id)?;
+            }
+            PullRequestSyncRefresh::Skip => {}
         }
 
         Ok(())
@@ -258,9 +266,12 @@ impl BeadsTaskStore {
         task_id: &str,
         pull_request: Option<PullRequestRecord>,
     ) -> Result<()> {
-        self.update_delivery_namespace(repo_path, task_id, true, |namespace_map| {
-            Self::set_namespace_value(namespace_map, "pullRequest", pull_request)
-        })
+        self.update_delivery_namespace(
+            repo_path,
+            task_id,
+            PullRequestSyncRefresh::Refresh,
+            |namespace_map| Self::set_namespace_value(namespace_map, "pullRequest", pull_request),
+        )
     }
 
     pub(super) fn set_delivery_metadata_impl(
@@ -270,10 +281,15 @@ impl BeadsTaskStore {
         pull_request: Option<PullRequestRecord>,
         direct_merge: Option<DirectMergeRecord>,
     ) -> Result<()> {
-        self.update_delivery_namespace(repo_path, task_id, true, |namespace_map| {
-            Self::set_namespace_value(namespace_map, "pullRequest", pull_request)?;
-            Self::set_namespace_value(namespace_map, "directMerge", direct_merge)
-        })
+        self.update_delivery_namespace(
+            repo_path,
+            task_id,
+            PullRequestSyncRefresh::Refresh,
+            |namespace_map| {
+                Self::set_namespace_value(namespace_map, "pullRequest", pull_request)?;
+                Self::set_namespace_value(namespace_map, "directMerge", direct_merge)
+            },
+        )
     }
 
     pub(super) fn set_direct_merge_record_impl(
@@ -282,9 +298,12 @@ impl BeadsTaskStore {
         task_id: &str,
         direct_merge: Option<DirectMergeRecord>,
     ) -> Result<()> {
-        self.update_delivery_namespace(repo_path, task_id, false, |namespace_map| {
-            Self::set_namespace_value(namespace_map, "directMerge", direct_merge)
-        })
+        self.update_delivery_namespace(
+            repo_path,
+            task_id,
+            PullRequestSyncRefresh::Skip,
+            |namespace_map| Self::set_namespace_value(namespace_map, "directMerge", direct_merge),
+        )
     }
 
     pub(super) fn get_task_metadata_impl(
