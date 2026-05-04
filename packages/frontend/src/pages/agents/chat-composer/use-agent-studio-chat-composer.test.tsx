@@ -13,16 +13,14 @@ import {
   createDeferred,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
-import {
-  resolveActiveSessionSelectionState,
-  useAgentStudioComposerRuntime,
-} from "./use-agent-studio-composer-runtime";
+import { resolveActiveSessionChatComposerContext } from "./session-context/active-session-chat-composer-context";
+import { useAgentStudioChatComposer } from "./use-agent-studio-chat-composer";
 
 enableReactActEnvironment();
 
 let messageCounter = 0;
 
-type HookArgs = Parameters<typeof useAgentStudioComposerRuntime>[0];
+type HookArgs = Parameters<typeof useAgentStudioChatComposer>[0];
 
 const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
   workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
@@ -178,7 +176,7 @@ const createHookHarness = (
     );
 
   return createSharedHookHarness(
-    (props: HookArgs) => useAgentStudioComposerRuntime(props),
+    (props: HookArgs) => useAgentStudioChatComposer(props),
     initialProps,
     { wrapper },
   );
@@ -213,7 +211,7 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   ...overrides,
 });
 
-describe("useAgentStudioComposerRuntime", () => {
+describe("useAgentStudioChatComposer", () => {
   test("prefers hydrated session runtime fields while preserving summary selection fallback", () => {
     const hydratedSession = createActiveSession({
       runtimeKind: "opencode",
@@ -238,14 +236,14 @@ describe("useAgentStudioComposerRuntime", () => {
       pendingQuestions: [],
     };
 
-    const state = resolveActiveSessionSelectionState(hydratedSession, summary);
+    const state = resolveActiveSessionChatComposerContext(hydratedSession, summary);
 
     expect(state.externalSessionId).toBe("external-1");
     expect(state.selectedModel).toEqual(hydratedSession.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.workingDirectory).toBe("/repo/session-worktree");
     expect(state.isLoadingModelCatalog).toBe(false);
-    expect(state.hasSelection).toBe(true);
+    expect(state.hasActiveSession).toBe(true);
   });
 
   test("keeps summary selection available while the hydrated session is missing", () => {
@@ -268,14 +266,14 @@ describe("useAgentStudioComposerRuntime", () => {
       pendingQuestions: [],
     };
 
-    const state = resolveActiveSessionSelectionState(null, summary);
+    const state = resolveActiveSessionChatComposerContext(null, summary);
 
     expect(state.externalSessionId).toBe("external-1");
     expect(state.selectedModel).toEqual(summary.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.workingDirectory).toBe("/repo");
     expect(state.isLoadingModelCatalog).toBe(true);
-    expect(state.hasSelection).toBe(true);
+    expect(state.hasActiveSession).toBe(true);
   });
 
   test("uses repo role defaults when available", async () => {
@@ -377,10 +375,10 @@ describe("useAgentStudioComposerRuntime", () => {
     const harness = createHookHarness(createBaseProps());
 
     await harness.mount();
-    await harness.waitFor((state) => state.agentOptions.length > 0);
+    await harness.waitFor((state) => state.agentProfileOptions.length > 0);
 
     const state = harness.getLatest();
-    expect(state.activeSessionAgentColors).toMatchObject({
+    expect(state.agentAccentColorsByProfileId).toMatchObject({
       "spec-agent": "#f59e0b",
     });
 
@@ -754,7 +752,7 @@ describe("useAgentStudioComposerRuntime", () => {
     await harness.waitFor((state) => state.selectedModelSelection?.variant === "high");
 
     await harness.run(() => {
-      harness.getLatest().handleSelectAgent("build-agent");
+      harness.getLatest().handleSelectAgentProfile("build-agent");
     });
 
     const state = harness.getLatest();

@@ -19,7 +19,7 @@ type ContextUsageCache = {
   value: NonNullable<AgentStudioContextUsage>;
 };
 
-export const useAgentStudioContextUsage = ({
+export const useActiveSessionContextUsage = ({
   activeSession,
   activeSessionMessages,
   activeSessionLiveContextUsage,

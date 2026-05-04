@@ -3,7 +3,7 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   coerceVisibleSelectionToCatalog,
   pickDefaultVisibleSelectionForCatalog,
-} from "../agents-page-selection";
+} from "../../agents-page-selection";
 
 export const toRoleDefaultModelSelection = (
   roleDefault: RepoSettingsInput["agentDefaults"][AgentRole] | null | undefined,

@@ -5,12 +5,12 @@ import type { SessionRuntimeQueryInput } from "@/state/operations/agent-orchestr
 import { sessionFileSearchQueryOptions } from "@/state/queries/agent-session-runtime";
 import { repoRuntimeFileSearchQueryOptions } from "@/state/queries/runtime-catalog";
 
-export const createAgentStudioFileSearch = ({
+export const createChatComposerFileSearch = ({
   hasActiveSession,
   activeSessionRuntimeQueryInput,
   activeSessionRuntimeQueryError,
   workspaceRepoPath,
-  composerRuntimeKind,
+  selectedRuntimeKind,
   supportsFileSearch,
   queryClient,
   loadFileSearchForRepo,
@@ -20,7 +20,7 @@ export const createAgentStudioFileSearch = ({
   activeSessionRuntimeQueryInput: SessionRuntimeQueryInput | null;
   activeSessionRuntimeQueryError: string | null;
   workspaceRepoPath: string | null;
-  composerRuntimeKind: RuntimeKind | null;
+  selectedRuntimeKind: RuntimeKind | null;
   supportsFileSearch: boolean;
   queryClient: QueryClient;
   loadFileSearchForRepo: (
@@ -62,7 +62,7 @@ export const createAgentStudioFileSearch = ({
     if (!workspaceRepoPath) {
       throw new Error("No repository selected.");
     }
-    if (!composerRuntimeKind) {
+    if (!selectedRuntimeKind) {
       throw new Error("Select a runtime before searching files.");
     }
     if (!supportsFileSearch) {
@@ -71,7 +71,7 @@ export const createAgentStudioFileSearch = ({
     return queryClient.fetchQuery(
       repoRuntimeFileSearchQueryOptions(
         workspaceRepoPath,
-        composerRuntimeKind,
+        selectedRuntimeKind,
         query,
         loadFileSearchForRepo,
       ),

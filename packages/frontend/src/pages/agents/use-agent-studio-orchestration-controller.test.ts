@@ -24,7 +24,7 @@ const onSelectTab = () => {};
 const onCreateTab = () => {};
 const onCloseTab = () => {};
 const onReorderTab = () => {};
-const handleSelectAgent = () => {};
+const handleSelectAgentProfile = () => {};
 const handleSelectModel = () => {};
 const handleSelectVariant = () => {};
 
@@ -102,14 +102,14 @@ const baseArgs: BuildArgs = {
     slashCommandsError: null,
     isSlashCommandsLoading: false,
     searchFiles: async () => [],
-    agentOptions: [],
+    agentProfileOptions: [],
     modelOptions: [],
     modelGroups: [],
     variantOptions: [],
-    handleSelectAgent,
+    handleSelectAgentProfile,
     handleSelectModel,
     handleSelectVariant,
-    activeSessionAgentColors: {},
+    agentAccentColorsByProfileId: {},
     activeSessionContextUsage: null,
   },
   approvals: {
@@ -141,7 +141,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.taskTabs.onReorderTab).toBe(onReorderTab);
     expect(mapped.documents.planDoc.markdown).toBe("# doc");
     expect(mapped.readiness.agentStudioReadinessState).toBe("ready");
-    expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgent);
+    expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
     expect(mapped.chatSettings.showThinkingMessages).toBe(true);

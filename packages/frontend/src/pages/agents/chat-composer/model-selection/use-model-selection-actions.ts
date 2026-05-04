@@ -2,13 +2,13 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
 
-export const useAgentStudioModelSelectionHandlers = ({
+export const useModelSelectionActions = ({
   activeExternalSessionId,
   updateAgentSessionModel,
   applyDraftSelection,
   selectedModelSelection,
   selectionCatalog,
-  composerRuntimeKind,
+  selectedRuntimeKind,
 }: {
   activeExternalSessionId: string | null;
   updateAgentSessionModel: (
@@ -18,9 +18,9 @@ export const useAgentStudioModelSelectionHandlers = ({
   applyDraftSelection: (selection: AgentModelSelection | null) => void;
   selectedModelSelection: AgentModelSelection | null;
   selectionCatalog: AgentModelCatalog | null;
-  composerRuntimeKind: RuntimeKind | null;
+  selectedRuntimeKind: RuntimeKind | null;
 }): {
-  handleSelectAgent: (profileId: string) => void;
+  handleSelectAgentProfile: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
 } => {
@@ -35,17 +35,17 @@ export const useAgentStudioModelSelectionHandlers = ({
     [activeExternalSessionId, applyDraftSelection, updateAgentSessionModel],
   );
 
-  const handleSelectAgent = useCallback(
+  const handleSelectAgentProfile = useCallback(
     (profileId: string) => {
       const baseSelection =
         selectedModelSelection ??
         (() => {
           const firstModel = selectionCatalog?.models[0];
-          if (!firstModel || !composerRuntimeKind) {
+          if (!firstModel || !selectedRuntimeKind) {
             return null;
           }
           return {
-            runtimeKind: composerRuntimeKind,
+            runtimeKind: selectedRuntimeKind,
             providerId: firstModel.providerId,
             modelId: firstModel.modelId,
             ...(firstModel.variants[0] ? { variant: firstModel.variants[0] } : {}),
@@ -56,12 +56,12 @@ export const useAgentStudioModelSelectionHandlers = ({
       }
       applySelection({ ...baseSelection, profileId });
     },
-    [applySelection, composerRuntimeKind, selectedModelSelection, selectionCatalog],
+    [applySelection, selectedRuntimeKind, selectedModelSelection, selectionCatalog],
   );
 
   const handleSelectModel = useCallback(
     (nextValue: string) => {
-      if (!selectionCatalog || !composerRuntimeKind) {
+      if (!selectionCatalog || !selectedRuntimeKind) {
         return;
       }
       const model = selectionCatalog.models.find((entry) => entry.id === nextValue);
@@ -69,7 +69,7 @@ export const useAgentStudioModelSelectionHandlers = ({
         return;
       }
       applySelection({
-        runtimeKind: composerRuntimeKind,
+        runtimeKind: selectedRuntimeKind,
         providerId: model.providerId,
         modelId: model.modelId,
         ...(model.variants[0] ? { variant: model.variants[0] } : {}),
@@ -78,7 +78,7 @@ export const useAgentStudioModelSelectionHandlers = ({
           : {}),
       });
     },
-    [applySelection, composerRuntimeKind, selectedModelSelection?.profileId, selectionCatalog],
+    [applySelection, selectedRuntimeKind, selectedModelSelection?.profileId, selectionCatalog],
   );
 
   const handleSelectVariant = useCallback(
@@ -91,5 +91,5 @@ export const useAgentStudioModelSelectionHandlers = ({
     [applySelection, selectedModelSelection],
   );
 
-  return { handleSelectAgent, handleSelectModel, handleSelectVariant };
+  return { handleSelectAgentProfile, handleSelectModel, handleSelectVariant };
 };

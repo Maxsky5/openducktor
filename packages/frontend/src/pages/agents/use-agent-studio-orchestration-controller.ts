@@ -14,7 +14,7 @@ import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feed
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
-import { useAgentStudioComposerRuntime } from "./composer-runtime/use-agent-studio-composer-runtime";
+import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
@@ -135,7 +135,7 @@ type AgentStudioPageModelsSessionActionsContext = Parameters<
 >[0]["sessionActions"];
 
 type AgentStudioPageModelsModelSelectionContext = Pick<
-  ReturnType<typeof useAgentStudioComposerRuntime>,
+  ReturnType<typeof useAgentStudioChatComposer>,
   | "selectedModelSelection"
   | "selectedModelDescriptor"
   | "isSelectionCatalogLoading"
@@ -146,13 +146,13 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "slashCommandsError"
   | "isSlashCommandsLoading"
   | "searchFiles"
-  | "agentOptions"
+  | "agentProfileOptions"
   | "modelOptions"
   | "modelGroups"
   | "variantOptions"
-  | "activeSessionAgentColors"
+  | "agentAccentColorsByProfileId"
   | "activeSessionContextUsage"
-  | "handleSelectAgent"
+  | "handleSelectAgentProfile"
   | "handleSelectModel"
   | "handleSelectVariant"
 >;
@@ -194,8 +194,14 @@ export const buildAgentStudioPageModelsArgs = ({
     handleReorderTab,
     ...taskTabs
   } = tabs;
-  const { handleSelectAgent, handleSelectModel, handleSelectVariant, ...restOfModelSelection } =
-    modelSelection;
+  const {
+    handleSelectAgentProfile,
+    handleSelectModel,
+    handleSelectVariant,
+    agentProfileOptions,
+    agentAccentColorsByProfileId,
+    ...restOfModelSelection
+  } = modelSelection;
 
   return {
     core: {
@@ -232,7 +238,9 @@ export const buildAgentStudioPageModelsArgs = ({
     chatSettings,
     modelSelection: {
       ...restOfModelSelection,
-      onSelectAgent: handleSelectAgent,
+      agentOptions: agentProfileOptions,
+      activeSessionAgentColors: agentAccentColorsByProfileId,
+      onSelectAgent: handleSelectAgentProfile,
       onSelectModel: handleSelectModel,
       onSelectVariant: handleSelectVariant,
     },
@@ -315,16 +323,16 @@ export function useAgentStudioOrchestrationController({
     slashCommandsError,
     isSlashCommandsLoading,
     searchFiles,
-    agentOptions,
+    agentProfileOptions,
     modelOptions,
     modelGroups,
     variantOptions,
-    activeSessionAgentColors,
+    agentAccentColorsByProfileId,
     activeSessionContextUsage,
-    handleSelectAgent,
+    handleSelectAgentProfile,
     handleSelectModel,
     handleSelectVariant,
-  } = useAgentStudioComposerRuntime({
+  } = useAgentStudioChatComposer({
     activeWorkspace,
     activeSession: viewActiveSession,
     activeSessionSummary: viewActiveSessionSummary,
@@ -462,13 +470,13 @@ export function useAgentStudioOrchestrationController({
       slashCommandsError,
       isSlashCommandsLoading,
       searchFiles,
-      agentOptions,
+      agentProfileOptions,
       modelOptions,
       modelGroups,
       variantOptions,
-      activeSessionAgentColors,
+      agentAccentColorsByProfileId,
       activeSessionContextUsage,
-      handleSelectAgent,
+      handleSelectAgentProfile,
       handleSelectModel,
       handleSelectVariant,
     },

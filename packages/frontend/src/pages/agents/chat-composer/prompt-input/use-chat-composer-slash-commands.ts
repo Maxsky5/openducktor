@@ -24,7 +24,7 @@ export const mergeSlashCommands = (
   ];
 };
 
-export const useAgentStudioSlashCommands = ({
+export const useChatComposerSlashCommands = ({
   hasActiveSession,
   activeExternalSessionId,
   activeSessionStatus,
@@ -32,7 +32,7 @@ export const useAgentStudioSlashCommands = ({
   activeSessionRuntimeQueryError,
   runtimeSupportsSlashCommands,
   workspaceRepoPath,
-  composerRuntimeKind,
+  selectedRuntimeKind,
   reusablePrompts,
   loadSlashCommandsForRepo,
   readSessionSlashCommands,
@@ -44,7 +44,7 @@ export const useAgentStudioSlashCommands = ({
   activeSessionRuntimeQueryError: string | null;
   runtimeSupportsSlashCommands: boolean;
   workspaceRepoPath: string | null;
-  composerRuntimeKind: RuntimeKind | null;
+  selectedRuntimeKind: RuntimeKind | null;
   reusablePrompts: ReusablePrompt[];
   loadSlashCommandsForRepo: (
     repoPath: string,
@@ -85,14 +85,14 @@ export const useAgentStudioSlashCommands = ({
   const repoSlashCommandsQuery = useQuery({
     ...repoRuntimeSlashCommandsQueryOptions(
       workspaceRepoPath ?? "",
-      composerRuntimeKind ?? DEFAULT_RUNTIME_KIND,
+      selectedRuntimeKind ?? DEFAULT_RUNTIME_KIND,
       loadSlashCommandsForRepo,
     ),
     enabled:
       runtimeSupportsSlashCommands &&
       workspaceRepoPath !== null &&
       activeExternalSessionId === null &&
-      composerRuntimeKind !== null,
+      selectedRuntimeKind !== null,
   });
   const runtimeSlashCommandCatalog = hasActiveSession
     ? (activeSessionSlashCommandsQuery.data ?? null)

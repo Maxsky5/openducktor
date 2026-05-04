@@ -9,11 +9,11 @@ import type { ComboboxOption } from "@/components/ui/combobox";
 
 type ModelSelectionOptions = {
   selectedModelEntry: AgentModelCatalog["models"][number] | null;
-  agentOptions: ComboboxOption[];
+  agentProfileOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ReturnType<typeof toModelGroupsByProvider>;
   variantOptions: ComboboxOption[];
-  activeSessionAgentColors: Record<string, string>;
+  agentAccentColorsByProfileId: Record<string, string>;
 };
 
 const findSelectedModelEntry = (
@@ -32,7 +32,7 @@ const findSelectedModelEntry = (
   );
 };
 
-const toAgentOptionsWithSelectedFallback = (
+const toAgentProfileOptionsWithSelectedFallback = (
   selectionCatalog: AgentModelCatalog | null,
   selectedModelSelection: AgentModelSelection | null,
 ): ComboboxOption[] => {
@@ -97,7 +97,7 @@ const toVariantOptions = (
   }));
 };
 
-const toActiveSessionAgentColors = (
+const toAgentAccentColorsByProfileId = (
   selectionCatalog: AgentModelCatalog | null,
 ): Record<string, string> => {
   if (!selectionCatalog) {
@@ -128,10 +128,13 @@ export const resolveModelSelectionOptions = ({
   const selectedModelEntry = findSelectedModelEntry(selectionCatalog, selectedModelSelection);
   return {
     selectedModelEntry,
-    agentOptions: toAgentOptionsWithSelectedFallback(selectionCatalog, selectedModelSelection),
+    agentProfileOptions: toAgentProfileOptionsWithSelectedFallback(
+      selectionCatalog,
+      selectedModelSelection,
+    ),
     modelOptions: toModelOptionsWithSelectedFallback(selectionCatalog, selectedModelSelection),
     modelGroups: toModelGroupsByProvider(selectionCatalog),
     variantOptions: toVariantOptions(selectedModelEntry, selectedModelSelection),
-    activeSessionAgentColors: toActiveSessionAgentColors(selectionCatalog),
+    agentAccentColorsByProfileId: toAgentAccentColorsByProfileId(selectionCatalog),
   };
 };

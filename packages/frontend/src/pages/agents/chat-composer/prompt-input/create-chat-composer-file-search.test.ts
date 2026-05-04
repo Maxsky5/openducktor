@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
-import { createAgentStudioFileSearch } from "./use-file-search";
+import { createChatComposerFileSearch } from "./create-chat-composer-file-search";
 
 const FILE_SEARCH_RESULTS: AgentFileSearchResult[] = [
   {
@@ -21,15 +21,15 @@ const createQueryClient = (): QueryClient =>
     },
   });
 
-describe("createAgentStudioFileSearch", () => {
+describe("createChatComposerFileSearch", () => {
   test("fails fast on unready active session runtime before unsupported capability handling", async () => {
     const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
-    const searchFiles = createAgentStudioFileSearch({
+    const searchFiles = createChatComposerFileSearch({
       hasActiveSession: true,
       activeSessionRuntimeQueryInput: null,
       activeSessionRuntimeQueryError: null,
       workspaceRepoPath: "/repo",
-      composerRuntimeKind: "opencode",
+      selectedRuntimeKind: "opencode",
       supportsFileSearch: false,
       queryClient: createQueryClient(),
       loadFileSearchForRepo: async () => FILE_SEARCH_RESULTS,
@@ -44,7 +44,7 @@ describe("createAgentStudioFileSearch", () => {
 
   test("returns empty results for ready active sessions on runtimes without file search", async () => {
     const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
-    const searchFiles = createAgentStudioFileSearch({
+    const searchFiles = createChatComposerFileSearch({
       hasActiveSession: true,
       activeSessionRuntimeQueryInput: {
         repoPath: "/repo",
@@ -53,7 +53,7 @@ describe("createAgentStudioFileSearch", () => {
       },
       activeSessionRuntimeQueryError: null,
       workspaceRepoPath: "/repo",
-      composerRuntimeKind: "opencode",
+      selectedRuntimeKind: "opencode",
       supportsFileSearch: false,
       queryClient: createQueryClient(),
       loadFileSearchForRepo: async () => FILE_SEARCH_RESULTS,
