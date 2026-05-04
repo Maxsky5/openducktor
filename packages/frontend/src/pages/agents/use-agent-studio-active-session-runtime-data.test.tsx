@@ -283,4 +283,50 @@ describe("useAgentStudioActiveSessionRuntimeData", () => {
       await harness.unmount();
     }
   });
+
+  test("does not query session todos when the session already has todos", async () => {
+    const sessionTodos = [
+      {
+        id: "todo-1",
+        content: "Keep hydrated todos",
+        status: "pending" as const,
+        priority: "medium" as const,
+      },
+    ];
+    const readSessionModelCatalog = mock(async () => CATALOG);
+    const readSessionTodos = mock(async () => {
+      throw new Error("todos should not be queried");
+    });
+    const harness = createHookHarness(useAgentStudioActiveSessionRuntimeData, {
+      session: createAgentSessionFixture({
+        externalSessionId: "external-1",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/repo",
+        modelCatalog: null,
+        isLoadingModelCatalog: true,
+        todos: sessionTodos,
+      }),
+      agentStudioReadinessState: "ready",
+      runtimeDefinitions: createDefaultRuntimeDefinitions(),
+      readSessionModelCatalog,
+      readSessionTodos,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.session?.modelCatalog?.models[0]?.id === CATALOG.models[0]?.id &&
+          state.session?.isLoadingModelCatalog === false,
+      );
+
+      expect(readSessionModelCatalog).toHaveBeenCalledTimes(1);
+      expect(readSessionTodos).not.toHaveBeenCalled();
+      expect(harness.getLatest()?.session?.todos).toEqual(sessionTodos);
+      expect(harness.getLatest()?.runtimeDataError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

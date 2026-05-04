@@ -69,7 +69,8 @@ export const useAgentStudioActiveSessionRuntimeData = ({
   const supportsTodos = runtimeDefinition
     ? runtimeSupportsCapability(runtimeDefinition, "optionalSurfaces.supportsTodos")
     : false;
-  const shouldHydrateTodos = shouldHydrateRuntimeData && session !== null && supportsTodos;
+  const shouldHydrateTodos =
+    shouldHydrateRuntimeData && session !== null && session.todos.length === 0 && supportsTodos;
   const catalogQuery = useQuery({
     queryKey:
       shouldHydrateRuntimeData && runtimeQueryInput
