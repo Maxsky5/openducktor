@@ -351,7 +351,6 @@ export class OpencodeSdkAdapter
     return listOpencodeLiveAgentSessionSnapshots({
       createClient: this.createClient,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
-      repoPath: input.repoPath,
       now: this.now,
       ...(input.directories ? { directories: input.directories } : {}),
     });

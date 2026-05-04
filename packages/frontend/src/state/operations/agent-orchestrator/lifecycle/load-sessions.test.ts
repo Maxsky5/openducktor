@@ -1161,7 +1161,7 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     expect(liveSnapshotCalls).toBe(1);
-    expect(getSession(state, "external-stale").runtimeId).toBe("runtime-repo");
+    expect(getSession(state, "external-stale").runtimeId).toBeNull();
     expect(getSession(state, "external-stale").workingDirectory).toBe("/tmp/repo/worktree");
   });
 
@@ -1389,7 +1389,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(getSession(state, "external-1").runtimeId).toBe("runtime-root");
     expect(getSession(state, "external-1").workingDirectory).toBe("/tmp/repo/worktree");
-    expect(getSession(state, "external-2").runtimeId).toBe("runtime-root");
+    expect(getSession(state, "external-2").runtimeId).toBeNull();
     expect(getSession(state, "external-2").workingDirectory).toBe("/tmp/repo/worktree");
     expect(sessionMessagesToArray(getSession(state, "external-1"))).toEqual([]);
     expect(sessionMessagesToArray(getSession(state, "external-2"))).toEqual([]);

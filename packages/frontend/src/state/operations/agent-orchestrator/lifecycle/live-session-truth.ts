@@ -222,11 +222,15 @@ export const applyLiveSessionTruthToSession = (
   }
 
   if (truth.type === "missing_session") {
+    const runtimeId =
+      options.missingSessionRuntimeId !== undefined
+        ? options.missingSessionRuntimeId
+        : truth.runtimeId;
     return {
       ...current,
       status: current.status === "running" ? "idle" : current.status,
       runtimeKind: truth.runtimeKind,
-      runtimeId: options.missingSessionRuntimeId ?? truth.runtimeId,
+      runtimeId,
       workingDirectory: truth.workingDirectory,
       pendingApprovals: [],
       pendingQuestions: [],

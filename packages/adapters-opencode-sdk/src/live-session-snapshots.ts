@@ -12,7 +12,6 @@ import type { ClientFactory } from "./types";
 export type ListOpencodeLiveAgentSessionSnapshotsInput = {
   createClient: ClientFactory;
   runtimeEndpoint: string;
-  repoPath: string;
   directories?: string[];
   now: () => string;
 };
