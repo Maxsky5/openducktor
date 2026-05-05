@@ -4,12 +4,9 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { createSessionMessageOwner } from "@/test-utils/session-message-test-helpers";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
-  extractLatestContextUsage,
-  resolveDraftSelection,
-  resolveSessionSelection,
-  toModelDescriptorByKey,
-  toRoleDefaultSelection,
-} from "./use-agent-studio-model-selection-model";
+  extractLatestSessionContextUsage,
+  indexModelDescriptorsByProviderAndModel,
+} from "./context-usage-resolution";
 
 const CATALOG: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -44,11 +41,6 @@ const CATALOG: AgentModelCatalog = {
       hidden: false,
       color: "#f59e0b",
     },
-    {
-      name: "hidden-subagent",
-      mode: "subagent",
-      hidden: true,
-    },
   ],
 };
 
@@ -71,173 +63,16 @@ const createAssistantMessage = (
   };
 };
 
-describe("use-agent-studio-model-selection-model", () => {
-  test("maps repo role defaults to model selection shape", () => {
-    expect(toRoleDefaultSelection(null)).toBeNull();
-    expect(
-      toRoleDefaultSelection({
-        runtimeKind: "opencode",
-        providerId: "",
-        modelId: "gpt-5",
-        variant: "high",
-        profileId: "spec-agent",
-      }),
-    ).toBeNull();
-
-    expect(
-      toRoleDefaultSelection({
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "high",
-        profileId: "spec-agent",
-      }),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "spec-agent",
-    });
-
-    expect(
-      toRoleDefaultSelection(
-        {
-          providerId: "anthropic",
-          modelId: "claude-sonnet",
-          variant: "",
-          profileId: "",
-        },
-        "opencode",
-      ),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "anthropic",
-      modelId: "claude-sonnet",
-    });
-
-    expect(
-      toRoleDefaultSelection(
-        {
-          runtimeKind: "opencode",
-          providerId: "anthropic",
-          modelId: "claude-sonnet",
-          variant: "",
-          profileId: "",
-        },
-        "opencode",
-      ),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "anthropic",
-      modelId: "claude-sonnet",
-    });
-  });
-
-  test("resolves draft selection by normalizing existing selection then falling back", () => {
-    expect(
-      resolveDraftSelection({
-        catalog: CATALOG,
-        existingSelection: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "missing-variant",
-          profileId: "hidden-subagent",
-        },
-        roleDefaultSelection: null,
-      }),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-    });
-
-    expect(
-      resolveDraftSelection({
-        catalog: CATALOG,
-        existingSelection: null,
-        roleDefaultSelection: {
-          runtimeKind: "opencode",
-          providerId: "anthropic",
-          modelId: "claude-sonnet",
-        },
-      }),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "anthropic",
-      modelId: "claude-sonnet",
-    });
-
-    expect(
-      resolveDraftSelection({
-        catalog: CATALOG,
-        existingSelection: null,
-        roleDefaultSelection: null,
-      }),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "spec-agent",
-    });
-  });
-
-  test("resolves preferred session selection using selected model before defaults", () => {
-    expect(
-      resolveSessionSelection({
-        catalog: CATALOG,
-        selectedModel: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "high",
-          profileId: "spec-agent",
-        },
-        roleDefaultSelection: {
-          runtimeKind: "opencode",
-          providerId: "anthropic",
-          modelId: "claude-sonnet",
-        },
-      }),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "spec-agent",
-    });
-
-    expect(
-      resolveSessionSelection({
-        catalog: CATALOG,
-        selectedModel: {
-          runtimeKind: "opencode",
-          providerId: "missing",
-          modelId: "model",
-        },
-        roleDefaultSelection: null,
-      }),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "spec-agent",
-    });
-  });
-
+describe("context-usage-resolution", () => {
   test("indexes model descriptors by provider and model id", () => {
-    const lookup = toModelDescriptorByKey(CATALOG);
+    const lookup = indexModelDescriptorsByProviderAndModel(CATALOG);
     expect(lookup.get("openai::gpt-5")?.id).toBe("openai/gpt-5");
     expect(lookup.get("anthropic::claude-sonnet")?.id).toBe("anthropic/claude-sonnet");
-    expect(toModelDescriptorByKey(null).size).toBe(0);
+    expect(indexModelDescriptorsByProviderAndModel(null).size).toBe(0);
   });
 
   test("extracts latest assistant context usage with descriptor fallback", () => {
-    const lookup = toModelDescriptorByKey(CATALOG);
+    const lookup = indexModelDescriptorsByProviderAndModel(CATALOG);
     const messages: AgentChatMessage[] = [
       createAssistantMessage({
         totalTokens: 12,
@@ -252,7 +87,7 @@ describe("use-agent-studio-model-selection-model", () => {
     ];
 
     expect(
-      extractLatestContextUsage({
+      extractLatestSessionContextUsage({
         session: createSessionMessageOwner(messages),
         modelDescriptorByKey: lookup,
       }),
@@ -264,7 +99,7 @@ describe("use-agent-studio-model-selection-model", () => {
   });
 
   test("prefers live session context usage over assistant message history", () => {
-    const lookup = toModelDescriptorByKey(CATALOG);
+    const lookup = indexModelDescriptorsByProviderAndModel(CATALOG);
     const messages: AgentChatMessage[] = [
       createAssistantMessage({
         totalTokens: 12,
@@ -273,7 +108,7 @@ describe("use-agent-studio-model-selection-model", () => {
     ];
 
     expect(
-      extractLatestContextUsage({
+      extractLatestSessionContextUsage({
         session: createSessionMessageOwner(messages),
         liveContextUsage: {
           totalTokens: 44,
@@ -290,10 +125,10 @@ describe("use-agent-studio-model-selection-model", () => {
   });
 
   test("derives live session context window from stored model identity without scanning messages", () => {
-    const lookup = toModelDescriptorByKey(CATALOG);
+    const lookup = indexModelDescriptorsByProviderAndModel(CATALOG);
 
     expect(
-      extractLatestContextUsage({
+      extractLatestSessionContextUsage({
         session: null,
         liveContextUsage: {
           totalTokens: 44,
@@ -310,7 +145,7 @@ describe("use-agent-studio-model-selection-model", () => {
   });
 
   test("merges newer live token totals with older assistant-message metadata", () => {
-    const lookup = toModelDescriptorByKey(CATALOG);
+    const lookup = indexModelDescriptorsByProviderAndModel(CATALOG);
     const messages: AgentChatMessage[] = [
       createAssistantMessage({
         totalTokens: 24,
@@ -320,7 +155,7 @@ describe("use-agent-studio-model-selection-model", () => {
     ];
 
     expect(
-      extractLatestContextUsage({
+      extractLatestSessionContextUsage({
         session: createSessionMessageOwner(messages),
         liveContextUsage: {
           totalTokens: 31,
@@ -335,7 +170,7 @@ describe("use-agent-studio-model-selection-model", () => {
   });
 
   test("prefers selected-model fallback metadata before older assistant-message history", () => {
-    const lookup = toModelDescriptorByKey(CATALOG);
+    const lookup = indexModelDescriptorsByProviderAndModel(CATALOG);
     const messages: AgentChatMessage[] = [
       createAssistantMessage({
         totalTokens: 24,
@@ -345,7 +180,7 @@ describe("use-agent-studio-model-selection-model", () => {
     ];
 
     expect(
-      extractLatestContextUsage({
+      extractLatestSessionContextUsage({
         session: createSessionMessageOwner(messages),
         liveContextUsage: {
           totalTokens: 31,
@@ -362,7 +197,7 @@ describe("use-agent-studio-model-selection-model", () => {
   });
 
   test("falls back to an older assistant message when the latest tokenized one has no usable context window", () => {
-    const lookup = toModelDescriptorByKey(CATALOG);
+    const lookup = indexModelDescriptorsByProviderAndModel(CATALOG);
     const messages: AgentChatMessage[] = [
       createAssistantMessage({
         totalTokens: 12,
@@ -374,7 +209,7 @@ describe("use-agent-studio-model-selection-model", () => {
     ];
 
     expect(
-      extractLatestContextUsage({
+      extractLatestSessionContextUsage({
         session: createSessionMessageOwner(messages),
         modelDescriptorByKey: lookup,
       }),
@@ -385,7 +220,7 @@ describe("use-agent-studio-model-selection-model", () => {
   });
 
   test("returns null when no assistant message has a usable context window", () => {
-    const lookup = toModelDescriptorByKey(CATALOG);
+    const lookup = indexModelDescriptorsByProviderAndModel(CATALOG);
     const messages: AgentChatMessage[] = [
       createAssistantMessage({
         totalTokens: 34,
@@ -393,7 +228,7 @@ describe("use-agent-studio-model-selection-model", () => {
     ];
 
     expect(
-      extractLatestContextUsage({
+      extractLatestSessionContextUsage({
         session: createSessionMessageOwner(messages),
         modelDescriptorByKey: lookup,
       }),
@@ -401,7 +236,7 @@ describe("use-agent-studio-model-selection-model", () => {
   });
 
   test("uses selected model context window as final fallback", () => {
-    const lookup = toModelDescriptorByKey(CATALOG);
+    const lookup = indexModelDescriptorsByProviderAndModel(CATALOG);
     const messages: AgentChatMessage[] = [
       createAssistantMessage({
         totalTokens: 55,
@@ -409,7 +244,7 @@ describe("use-agent-studio-model-selection-model", () => {
     ];
 
     expect(
-      extractLatestContextUsage({
+      extractLatestSessionContextUsage({
         session: createSessionMessageOwner(messages),
         modelDescriptorByKey: lookup,
         fallbackContextWindow: 50_000,

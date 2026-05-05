@@ -12,18 +12,14 @@ import {
   createAgentSessionFixture,
   createDeferred,
   enableReactActEnvironment,
-} from "./agent-studio-test-utils";
-import {
-  resolveActiveSessionSelectionState,
-  useAgentStudioModelSelection,
-} from "./use-agent-studio-model-selection";
+} from "../agent-studio-test-utils";
+import { useAgentStudioChatComposer } from "./use-agent-studio-chat-composer";
 
 enableReactActEnvironment();
 
 let messageCounter = 0;
 
-type HookArgs = Parameters<typeof useAgentStudioModelSelection>[0];
-type LegacyHookArgs = HookArgs & { workspaceRepoPath?: string | null };
+type HookArgs = Parameters<typeof useAgentStudioChatComposer>[0];
 
 const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
   workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
@@ -151,7 +147,7 @@ const createActiveSession = (overrides = {}) =>
   });
 
 const createHookHarness = (
-  initialProps: LegacyHookArgs,
+  initialProps: HookArgs,
   options: { runtimeDefinitions?: RuntimeDescriptor[] } = {},
 ) => {
   const runtimeDefinitions = options.runtimeDefinitions ?? [OPENCODE_RUNTIME_DESCRIPTOR];
@@ -179,16 +175,7 @@ const createHookHarness = (
     );
 
   return createSharedHookHarness(
-    (props: LegacyHookArgs) =>
-      useAgentStudioModelSelection({
-        ...props,
-        activeWorkspace:
-          "workspaceRepoPath" in props
-            ? props.workspaceRepoPath
-              ? createActiveWorkspace(props.workspaceRepoPath)
-              : null
-            : (props.activeWorkspace ?? null),
-      }),
+    (props: HookArgs) => useAgentStudioChatComposer(props),
     initialProps,
     { wrapper },
   );
@@ -211,7 +198,7 @@ const createAssistantMessage = (
   };
 };
 
-const createBaseProps = (overrides: Partial<LegacyHookArgs> = {}): LegacyHookArgs => ({
+const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: createActiveWorkspace("/repo"),
   activeSession: null,
   activeSessionSummary: null,
@@ -223,71 +210,7 @@ const createBaseProps = (overrides: Partial<LegacyHookArgs> = {}): LegacyHookArg
   ...overrides,
 });
 
-describe("useAgentStudioModelSelection", () => {
-  test("prefers hydrated session runtime fields while preserving summary selection fallback", () => {
-    const hydratedSession = createActiveSession({
-      runtimeKind: "opencode",
-      workingDirectory: "/repo/session-worktree",
-    });
-    const summary = {
-      externalSessionId: "external-1",
-      repoPath: "/repo",
-      taskId: "task-1",
-      role: "spec" as const,
-      status: "idle" as const,
-      startedAt: "2026-02-20T10:00:00.000Z",
-      workingDirectory: "/repo",
-      runtimeKind: "opencode" as const,
-      selectedModel: {
-        runtimeKind: "opencode" as const,
-        providerId: "anthropic",
-        modelId: "claude-sonnet",
-        profileId: "build-agent",
-      },
-      pendingApprovals: [],
-      pendingQuestions: [],
-    };
-
-    const state = resolveActiveSessionSelectionState(hydratedSession, summary);
-
-    expect(state.externalSessionId).toBe("external-1");
-    expect(state.selectedModel).toEqual(hydratedSession.selectedModel);
-    expect(state.runtimeKind).toBe("opencode");
-    expect(state.workingDirectory).toBe("/repo/session-worktree");
-    expect(state.isLoadingModelCatalog).toBe(false);
-    expect(state.hasSelection).toBe(true);
-  });
-
-  test("keeps summary selection available while the hydrated session is missing", () => {
-    const summary = {
-      externalSessionId: "external-1",
-      repoPath: "/repo",
-      taskId: "task-1",
-      role: "spec" as const,
-      status: "idle" as const,
-      startedAt: "2026-02-20T10:00:00.000Z",
-      workingDirectory: "/repo",
-      runtimeKind: "opencode" as const,
-      selectedModel: {
-        runtimeKind: "opencode" as const,
-        providerId: "anthropic",
-        modelId: "claude-sonnet",
-        profileId: "build-agent",
-      },
-      pendingApprovals: [],
-      pendingQuestions: [],
-    };
-
-    const state = resolveActiveSessionSelectionState(null, summary);
-
-    expect(state.externalSessionId).toBe("external-1");
-    expect(state.selectedModel).toEqual(summary.selectedModel);
-    expect(state.runtimeKind).toBe("opencode");
-    expect(state.workingDirectory).toBe("/repo");
-    expect(state.isLoadingModelCatalog).toBe(true);
-    expect(state.hasSelection).toBe(true);
-  });
-
+describe("useAgentStudioChatComposer", () => {
   test("uses repo role defaults when available", async () => {
     const harness = createHookHarness(
       createBaseProps({
@@ -301,19 +224,21 @@ describe("useAgentStudioModelSelection", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.waitFor((state) => state.selectedModelSelection?.variant === "high");
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.selectedModelSelection?.variant === "high");
 
-    const state = harness.getLatest();
-    expect(state.selectedModelSelection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "spec-agent",
-    });
-
-    await harness.unmount();
+      const state = harness.getLatest();
+      expect(state.selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "spec-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("keeps repo defaults selectable when composer catalog is unavailable", async () => {
@@ -369,32 +294,36 @@ describe("useAgentStudioModelSelection", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
 
-    expect(harness.getLatest().selectedModelSelection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "spec-agent",
-    });
-
-    await harness.unmount();
+      expect(harness.getLatest().selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "spec-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("publishes agent colors from composer catalog before a session is started", async () => {
     const harness = createHookHarness(createBaseProps());
 
-    await harness.mount();
-    await harness.waitFor((state) => state.agentOptions.length > 0);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.agentProfileOptions.length > 0);
 
-    const state = harness.getLatest();
-    expect(state.activeSessionAgentColors).toMatchObject({
-      "spec-agent": "#f59e0b",
-    });
-
-    await harness.unmount();
+      const state = harness.getLatest();
+      expect(state.agentAccentColorsByProfileId).toMatchObject({
+        "spec-agent": "#f59e0b",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("keeps the selected session model while the full session object is still hydrating", async () => {
@@ -458,12 +387,14 @@ describe("useAgentStudioModelSelection", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.waitFor((state) => state.isSlashCommandsLoading === false);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
-    expect(readSessionSlashCommands).not.toHaveBeenCalled();
-
-    await harness.unmount();
+      expect(readSessionSlashCommands).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("searches repo files through the repo runtime before a session starts", async () => {
@@ -745,38 +676,40 @@ describe("useAgentStudioModelSelection", () => {
   test("updates draft selections through model and variant handlers", async () => {
     const harness = createHookHarness(createBaseProps());
 
-    await harness.mount();
-    await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
-    });
-    await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
+      await harness.run(() => {
+        harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
+      });
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectModel("openai/gpt-5");
-    });
-    await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
+      await harness.run(() => {
+        harness.getLatest().handleSelectModel("openai/gpt-5");
+      });
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectVariant("high");
-    });
-    await harness.waitFor((state) => state.selectedModelSelection?.variant === "high");
+      await harness.run(() => {
+        harness.getLatest().handleSelectVariant("high");
+      });
+      await harness.waitFor((state) => state.selectedModelSelection?.variant === "high");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectAgent("build-agent");
-    });
+      await harness.run(() => {
+        harness.getLatest().handleSelectAgentProfile("build-agent");
+      });
 
-    const state = harness.getLatest();
-    expect(state.selectedModelSelection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "build-agent",
-    });
-
-    await harness.unmount();
+      const state = harness.getLatest();
+      expect(state.selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "build-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("routes selection updates to active sessions via callback", async () => {
@@ -790,22 +723,24 @@ describe("useAgentStudioModelSelection", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectVariant("high");
-    });
+      await harness.run(() => {
+        harness.getLatest().handleSelectVariant("high");
+      });
 
-    expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "spec-agent",
-    });
-
-    await harness.unmount();
+      expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "spec-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("preserves active session model when catalog cannot produce a replacement", async () => {
@@ -821,19 +756,72 @@ describe("useAgentStudioModelSelection", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
-    expect(harness.getLatest().selectedModelSelection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "spec-agent",
+      expect(harness.getLatest().selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec-agent",
+      });
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("dedupes active session model repair writes while session state converges", async () => {
+    const updateAgentSessionModel = mock(
+      (..._args: Parameters<HookArgs["updateAgentSessionModel"]>) => {},
+    );
+    const firstUpdateAgentSessionModel: HookArgs["updateAgentSessionModel"] = (...args) => {
+      updateAgentSessionModel(...args);
+    };
+    const secondUpdateAgentSessionModel: HookArgs["updateAgentSessionModel"] = (...args) => {
+      updateAgentSessionModel(...args);
+    };
+    const activeSession = createActiveSession({
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "missing",
+        profileId: "spec-agent",
+      },
     });
-    expect(updateAgentSessionModel).toHaveBeenCalledTimes(0);
 
-    await harness.unmount();
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+        updateAgentSessionModel: firstUpdateAgentSessionModel,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => updateAgentSessionModel.mock.calls.length === 1);
+
+      await harness.update(
+        createBaseProps({
+          activeSession,
+          updateAgentSessionModel: secondUpdateAgentSessionModel,
+        }),
+      );
+
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+      expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("does not load the repo composer catalog while an active session owns runtime catalog loading", async () => {
@@ -905,7 +893,7 @@ describe("useAgentStudioModelSelection", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        workspaceRepoPath: "/repo-a",
+        activeWorkspace: createActiveWorkspace("/repo-a"),
         loadCatalog,
       }),
     );
@@ -916,7 +904,7 @@ describe("useAgentStudioModelSelection", () => {
 
       await harness.update(
         createBaseProps({
-          workspaceRepoPath: "/repo-b",
+          activeWorkspace: createActiveWorkspace("/repo-b"),
           loadCatalog,
         }),
       );
@@ -973,7 +961,7 @@ describe("useAgentStudioModelSelection", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        workspaceRepoPath: "/repo-a",
+        activeWorkspace: createActiveWorkspace("/repo-a"),
         repoSettings: createRepoSettings({
           runtimeKind: "opencode",
           providerId: "openai",
@@ -1001,7 +989,7 @@ describe("useAgentStudioModelSelection", () => {
 
       await harness.update(
         createBaseProps({
-          workspaceRepoPath: "/repo-b",
+          activeWorkspace: createActiveWorkspace("/repo-b"),
           repoSettings: createRepoSettings({
             runtimeKind: "opencode",
             providerId: "anthropic",
@@ -1037,7 +1025,7 @@ describe("useAgentStudioModelSelection", () => {
   test("does not reuse stale repo defaults while waiting for the next repo settings", async () => {
     const harness = createHookHarness(
       createBaseProps({
-        workspaceRepoPath: "/repo-a",
+        activeWorkspace: createActiveWorkspace("/repo-a"),
         repoSettings: createRepoSettings({
           runtimeKind: "opencode",
           providerId: "openai",
@@ -1061,7 +1049,7 @@ describe("useAgentStudioModelSelection", () => {
 
       await harness.update(
         createBaseProps({
-          workspaceRepoPath: "/repo-b",
+          activeWorkspace: createActiveWorkspace("/repo-b"),
           repoSettings: null,
           loadCatalog: async () => {
             throw new Error("catalog unavailable");
@@ -1078,7 +1066,7 @@ describe("useAgentStudioModelSelection", () => {
 
       await harness.update(
         createBaseProps({
-          workspaceRepoPath: "/repo-b",
+          activeWorkspace: createActiveWorkspace("/repo-b"),
           repoSettings: createRepoSettings({
             runtimeKind: "opencode",
             providerId: "anthropic",
@@ -1167,6 +1155,51 @@ describe("useAgentStudioModelSelection", () => {
         totalTokens: 35_022,
         contextWindow: 200_000,
         outputLimit: 8_192,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("recomputes context usage from messages after live usage ends", async () => {
+    const activeSession = createActiveSession({
+      contextUsage: {
+        totalTokens: 35_022,
+        contextWindow: 200_000,
+        outputLimit: 8_192,
+      },
+      messages: [
+        createAssistantMessage({
+          totalTokens: 12,
+          contextWindow: 40_000,
+          outputLimit: 1_000,
+        }),
+      ],
+    });
+
+    const harness = createHookHarness(createBaseProps({ activeSession }));
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+        totalTokens: 35_022,
+        contextWindow: 200_000,
+        outputLimit: 8_192,
+      });
+
+      await harness.update(
+        createBaseProps({
+          activeSession: {
+            ...activeSession,
+            contextUsage: null,
+          },
+        }),
+      );
+
+      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+        totalTokens: 12,
+        contextWindow: 40_000,
+        outputLimit: 1_000,
       });
     } finally {
       await harness.unmount();
