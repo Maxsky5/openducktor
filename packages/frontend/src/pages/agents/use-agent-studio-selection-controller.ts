@@ -18,10 +18,6 @@ import {
   resolveAgentStudioSessionSelection,
   resolveAgentStudioTaskId,
 } from "./agents-page-selection";
-import {
-  type RuntimeAttachmentSource,
-  selectRuntimeAttachmentCandidates,
-} from "./use-agent-studio-runtime-attachment-retry";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
@@ -51,8 +47,6 @@ type UseAgentStudioSelectionControllerArgs = {
     repoReadinessState: AgentStudioReadinessState;
     recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
-  runtimeAttachmentSources: RuntimeAttachmentSource[];
-  refreshRuntimeAttachmentSources: () => Promise<void>;
   runtimeDefinitions: RuntimeDescriptor[];
   readSessionModelCatalog: (
     repoPath: string,
@@ -196,15 +190,12 @@ export function useAgentStudioSelectionController({
   updateQuery,
   hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
   ensureSessionReadyForView,
-  runtimeAttachmentSources,
-  refreshRuntimeAttachmentSources,
   runtimeDefinitions,
   readSessionModelCatalog,
   readSessionTodos,
   clearComposerInput,
   onContextSwitchIntent,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const sessionsByTaskSortCacheRef = useRef<SessionsByTaskSortCache>(new Map());
   const effectiveTaskIdParam = isRepoNavigationBoundaryPending ? "" : taskIdParam;
   const effectiveSessionParam = isRepoNavigationBoundaryPending ? null : sessionParam;
@@ -404,16 +395,6 @@ export function useAgentStudioSelectionController({
     viewRole === "build"
       ? resolveBuildContinuationLaunchAction(viewSelectedTask)
       : firstLaunchAction(viewRole);
-  const runtimeAttachmentCandidates = useMemo(
-    () =>
-      selectRuntimeAttachmentCandidates({
-        repoPath: workspaceRepoPath ?? "",
-        session: viewSessionRuntimeData.session,
-        runtimeSources: runtimeAttachmentSources,
-      }),
-    [workspaceRepoPath, viewSessionRuntimeData.session, runtimeAttachmentSources],
-  );
-
   const {
     isActiveTaskHydrated,
     isActiveTaskHydrationFailed,
@@ -427,8 +408,6 @@ export function useAgentStudioSelectionController({
     activeSession: viewSessionRuntimeData.session,
     repoReadinessState: agentStudioReadinessState,
     ensureSessionReadyForView,
-    refreshRuntimeAttachmentSources,
-    runtimeAttachmentCandidates,
   });
 
   return {

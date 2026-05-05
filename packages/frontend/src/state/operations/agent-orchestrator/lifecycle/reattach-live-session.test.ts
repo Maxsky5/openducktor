@@ -7,15 +7,13 @@ import { createReattachLiveSession } from "./reattach-live-session";
 
 const localHttpRuntimeResolution: ResolvedHydrationRuntime = {
   ok: true,
-  runtimeKind: "opencode",
-  runtimeId: "runtime-1",
+  runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
   workingDirectory: "/tmp/repo/worktree",
 };
 
 const stdioRuntimeResolution: ResolvedHydrationRuntime = {
   ok: true,
-  runtimeKind: "opencode",
-  runtimeId: "runtime-stdio",
+  runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
   workingDirectory: "/tmp/repo/worktree",
 };
 
@@ -35,11 +33,11 @@ const toSessionPresenceSnapshot = (
   toAgentSessionPresenceSnapshotFromLiveSnapshot({
     ref: {
       repoPath: "/tmp/repo",
-      runtimeKind: runtimeResolution.runtimeKind,
+      runtimeKind: runtimeResolution.runtimeRef.runtimeKind,
       externalSessionId: sessionRecordFixture.externalSessionId,
       workingDirectory: runtimeResolution.workingDirectory,
     },
-    runtimeId: runtimeResolution.runtimeId,
+    runtimeId: runtimeResolution === stdioRuntimeResolution ? "runtime-stdio" : "runtime-1",
     snapshot,
   });
 

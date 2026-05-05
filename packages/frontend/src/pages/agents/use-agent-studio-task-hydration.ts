@@ -5,10 +5,6 @@ import {
   type AgentStudioReadinessState,
   deriveAgentStudioTaskHydrationState,
 } from "./agent-studio-task-hydration-state";
-import {
-  type RuntimeAttachmentCandidate,
-  useAgentStudioRuntimeAttachmentRetry,
-} from "./use-agent-studio-runtime-attachment-retry";
 
 type UseAgentStudioTaskHydrationParams = {
   activeWorkspace: ActiveWorkspace | null;
@@ -21,8 +17,6 @@ type UseAgentStudioTaskHydrationParams = {
     repoReadinessState: AgentStudioReadinessState;
     recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
-  refreshRuntimeAttachmentSources: () => Promise<void>;
-  runtimeAttachmentCandidates: RuntimeAttachmentCandidate[];
 };
 
 type UseAgentStudioTaskHydrationResult = {
@@ -40,32 +34,15 @@ export function useAgentStudioTaskHydration({
   activeSession,
   agentStudioReadinessState,
   ensureSessionReadyForView,
-  refreshRuntimeAttachmentSources,
-  runtimeAttachmentCandidates,
 }: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
   const activeExternalSessionId = activeSession?.externalSessionId ?? null;
   const [requestState, setRequestState] = useState<{
     externalSessionId: string | null;
     status: "idle" | "pending" | "failed";
   }>({ externalSessionId: null, status: "idle" });
-  const activeRuntimeAttachmentKey =
-    activeWorkspace && activeTaskId && activeExternalSessionId
-      ? `${activeWorkspace.repoPath}::${activeTaskId}::${activeExternalSessionId}`
-      : null;
   const lifecycle = deriveAgentStudioTaskHydrationState({
     activeSession,
     agentStudioReadinessState,
-  });
-
-  useAgentStudioRuntimeAttachmentRetry({
-    activeTaskId,
-    activeExternalSessionId,
-    shouldWaitForSessionRuntime: lifecycle.shouldWaitForRuntimeAttachment,
-    activeRuntimeAttachmentKey,
-    runtimeAttachmentCandidates,
-    ensureSessionReadyForView,
-    refreshRuntimeAttachmentSources,
-    repoReadinessState: agentStudioReadinessState,
   });
 
   const isRequestFailed =
@@ -78,7 +55,7 @@ export function useAgentStudioTaskHydration({
       return;
     }
 
-    if (!shouldEnsureSessionReady || lifecycle.phase === "waiting_for_runtime_attachment") {
+    if (!shouldEnsureSessionReady) {
       setRequestState((current) =>
         current.externalSessionId === activeExternalSessionId && current.status === "pending"
           ? { externalSessionId: activeExternalSessionId, status: "idle" }
@@ -112,7 +89,6 @@ export function useAgentStudioTaskHydration({
     activeTaskId,
     agentStudioReadinessState,
     ensureSessionReadyForView,
-    lifecycle.phase,
     shouldEnsureSessionReady,
   ]);
 

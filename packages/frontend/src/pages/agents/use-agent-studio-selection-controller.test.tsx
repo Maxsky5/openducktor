@@ -87,8 +87,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   updateQuery: () => {},
   hydrateRequestedTaskSessionHistory: async () => {},
   ensureSessionReadyForView: async () => false,
-  runtimeAttachmentSources: [],
-  refreshRuntimeAttachmentSources: async () => {},
   runtimeDefinitions: createDefaultRuntimeDefinitions(),
   readSessionModelCatalog: async () => emptyCatalog,
   readSessionTodos: async () => [],

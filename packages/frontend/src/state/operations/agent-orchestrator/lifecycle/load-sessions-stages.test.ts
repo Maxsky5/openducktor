@@ -1410,8 +1410,7 @@ describe("load-sessions-stages", () => {
           repoPath: "/tmp/repo",
           resolveHydrationRuntime: async () => ({
             ok: true,
-            runtimeKind: "opencode",
-            runtimeId: "runtime-stdio",
+            runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
             workingDirectory: "/tmp/repo/worktree",
           }),
           readSessionPresence: async () => createStalePresence("external-1", "/tmp/repo/worktree"),
@@ -1468,6 +1467,7 @@ describe("load-sessions-stages", () => {
       isStaleRepoOperation: () => stale,
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
+      livePresenceMode: "apply",
       runtimePlanner: {
         repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => {
@@ -1527,8 +1527,7 @@ describe("load-sessions-stages", () => {
           stale = true;
           return {
             ok: true,
-            runtimeKind: "opencode",
-            runtimeId: "runtime-1",
+            runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
             workingDirectory: "/tmp/repo/worktree",
           };
         },
@@ -1544,7 +1543,7 @@ describe("load-sessions-stages", () => {
     expect(stateHarness.getState()["external-1"]).toEqual(initialSession);
   });
 
-  test("clears a stale session title when the live snapshot has no custom title", async () => {
+  test("does not let live presence title projection block history hydration", async () => {
     const stateHarness = createStateHarness({
       "external-1": createSession({
         title: "Fallback title",
@@ -1582,8 +1581,7 @@ describe("load-sessions-stages", () => {
         repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => ({
           ok: true,
-          runtimeKind: "opencode",
-          runtimeId: "runtime-1",
+          runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
           workingDirectory: "/tmp/repo/worktree",
         }),
         readSessionPresence: async () =>
@@ -1602,7 +1600,8 @@ describe("load-sessions-stages", () => {
       getRepoPromptOverrides: async () => ({}),
     });
 
-    expect(stateHarness.getState()["external-1"]?.title).toBeUndefined();
+    expect(stateHarness.getState()["external-1"]?.title).toBe("Fallback title");
+    expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("hydrated");
   });
 
   test("hydrates parent subagent pending permission overlay from live child snapshots", async () => {
@@ -1670,12 +1669,12 @@ describe("load-sessions-stages", () => {
       isStaleRepoOperation: () => false,
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
+      livePresenceMode: "apply",
       runtimePlanner: {
         repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => ({
           ok: true,
-          runtimeKind: "opencode",
-          runtimeId: "runtime-1",
+          runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
           workingDirectory: "/tmp/repo/worktree",
         }),
         readSessionPresence: async (record: AgentSessionRecord) => {
@@ -1807,8 +1806,7 @@ describe("load-sessions-stages", () => {
         repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => ({
           ok: true,
-          runtimeKind: "opencode",
-          runtimeId: "runtime-1",
+          runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
           workingDirectory: "/tmp/repo/worktree",
         }),
         readSessionPresence: async (record: AgentSessionRecord) => {
@@ -1951,12 +1949,12 @@ describe("load-sessions-stages", () => {
         isStaleRepoOperation: () => false,
         recordsToHydrate: [createRecord()],
         historyHydrationSessionIds: new Set(["external-1"]),
+        livePresenceMode: "apply",
         runtimePlanner: {
           repoPath: "/tmp/repo",
           resolveHydrationRuntime: async () => ({
             ok: true,
-            runtimeKind: "opencode",
-            runtimeId: "runtime-1",
+            runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
             workingDirectory: "/tmp/repo/worktree",
           }),
           readSessionPresence: async (record: AgentSessionRecord) => {
@@ -2111,8 +2109,7 @@ describe("load-sessions-stages", () => {
     expect(snapshotRequests).toEqual([]);
     expect(resolution).toEqual({
       ok: true,
-      runtimeKind: "opencode",
-      runtimeId: "runtime-1",
+      runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
       workingDirectory,
     });
   });
@@ -2167,8 +2164,7 @@ describe("load-sessions-stages", () => {
     expect(snapshotRequests).toEqual([]);
     expect(resolution).toEqual({
       ok: true,
-      runtimeKind: "opencode",
-      runtimeId: "runtime-1",
+      runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
       workingDirectory,
     });
   });
@@ -2225,8 +2221,7 @@ describe("load-sessions-stages", () => {
     expect(snapshotRequests).toEqual([]);
     expect(resolution).toEqual({
       ok: true,
-      runtimeKind: "opencode",
-      runtimeId: "runtime-stdio-root",
+      runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
       workingDirectory,
     });
   });
@@ -2360,8 +2355,7 @@ describe("load-sessions-stages", () => {
         repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => ({
           ok: true,
-          runtimeKind: "opencode",
-          runtimeId: "runtime-1",
+          runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
           workingDirectory: "/tmp/repo/worktree",
         }),
         readSessionPresence: async () => {
@@ -2437,7 +2431,7 @@ describe("load-sessions-stages", () => {
       throw new Error("Expected runtime resolution to succeed");
     }
 
-    expect(result.runtimeId).toBe("runtime-stdio-a");
+    expect(result.runtimeRef).toEqual({ repoPath: "/tmp/repo", runtimeKind: "opencode" });
     expect(result.workingDirectory).toBe(workingDirectory);
   });
 

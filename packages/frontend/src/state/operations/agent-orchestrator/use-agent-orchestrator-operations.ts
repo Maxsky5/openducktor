@@ -647,9 +647,8 @@ export function useAgentOrchestratorOperations({
     () =>
       createSessionHydrationOperations({
         loadAgentSessions,
-        getSessionSnapshot: (externalSessionId) => sessionsRef.current[externalSessionId],
       }),
-    [loadAgentSessions, sessionsRef],
+    [loadAgentSessions],
   );
 
   const retrySessionRuntimeAttachment = useCallback(
@@ -676,7 +675,7 @@ export function useAgentOrchestratorOperations({
 
       let attached = false;
       try {
-        attached = await sessionHydration.recoverSessionRuntimeAndHydrateRequestedTaskSession({
+        await sessionHydration.retrySessionRuntimeAttachment({
           taskId,
           externalSessionId,
           ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
@@ -684,6 +683,7 @@ export function useAgentOrchestratorOperations({
           ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
           ...(persistedRecords ? { persistedRecords } : {}),
         });
+        attached = hasAttachedRuntime(sessionsRef.current[externalSessionId]);
       } catch (error) {
         attached = hasAttachedRuntime(sessionsRef.current[externalSessionId]);
         updateSession(
@@ -711,7 +711,6 @@ export function useAgentOrchestratorOperations({
       taskId,
       externalSessionId,
       repoReadinessState,
-      recoveryDedupKey,
       historyPreludeMode,
       allowLiveSessionResume,
       persistedRecords,
@@ -734,17 +733,6 @@ export function useAgentOrchestratorOperations({
         return lifecycle.phase === "ready";
       }
 
-      if (lifecycle.phase === "waiting_for_runtime_attachment") {
-        return retrySessionRuntimeAttachment({
-          taskId,
-          externalSessionId,
-          ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
-          ...(historyPreludeMode ? { historyPreludeMode } : {}),
-          ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
-          ...(persistedRecords ? { persistedRecords } : {}),
-        });
-      }
-
       await sessionHydration.hydrateRequestedTaskSession({
         taskId,
         externalSessionId,
@@ -754,7 +742,7 @@ export function useAgentOrchestratorOperations({
       });
       return true;
     },
-    [retrySessionRuntimeAttachment, sessionHydration, sessionsRef],
+    [sessionHydration, sessionsRef],
   );
 
   const repoSessionHydrationService = useMemo(

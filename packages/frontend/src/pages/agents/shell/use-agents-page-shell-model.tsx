@@ -1,5 +1,4 @@
 import type { AgentRole } from "@openducktor/core";
-import { useQueries } from "@tanstack/react-query";
 import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { SessionStartModal } from "@/components/features/agents";
@@ -29,7 +28,6 @@ import {
   useTasksState,
   useWorkspaceState,
 } from "@/state/app-state-provider";
-import { runtimeListQueryOptions } from "@/state/queries/runtime";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
 import {
   type AgentStudioOrchestrationSelectionContext,
@@ -38,10 +36,6 @@ import {
 import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "../use-agent-studio-query-sync";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
-import {
-  type RuntimeAttachmentSource,
-  refreshRuntimeAttachmentSources,
-} from "../use-agent-studio-runtime-attachment-retry";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
 import { useAgentStudioReadiness } from "../use-agents-page-readiness";
 import {
@@ -228,32 +222,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   );
 
   const clearComposerInput = signalContextSwitchIntent;
-  const runtimeListQueries = useQueries({
-    queries:
-      workspaceRepoPath === null
-        ? []
-        : runtimeDefinitions.map((definition) => ({
-            ...runtimeListQueryOptions(definition.kind, workspaceRepoPath),
-          })),
-  });
-  const runtimeListRefetchersRef = useRef<Array<() => Promise<unknown>>>([]);
-  useEffect(() => {
-    runtimeListRefetchersRef.current = runtimeListQueries.map((query) => query.refetch);
-  }, [runtimeListQueries]);
-  const runtimeAttachmentSources = useMemo<RuntimeAttachmentSource[]>(
-    () =>
-      runtimeListQueries.flatMap((query) =>
-        (query.data ?? []).map((runtime) => ({
-          kind: runtime.kind,
-          repoPath: runtime.repoPath,
-        })),
-      ),
-    [runtimeListQueries],
-  );
-  const refreshRuntimeAttachmentSourceList = useCallback(async (): Promise<void> => {
-    await refreshRuntimeAttachmentSources(runtimeListRefetchersRef.current);
-  }, []);
-
   const readiness = useAgentStudioReadiness({
     activeWorkspace,
     runtimeDefinitions,
@@ -279,8 +247,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     agentStudioReadinessState: readiness.agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
     ensureSessionReadyForView,
-    runtimeAttachmentSources,
-    refreshRuntimeAttachmentSources: refreshRuntimeAttachmentSourceList,
     runtimeDefinitions,
     readSessionModelCatalog,
     readSessionTodos,

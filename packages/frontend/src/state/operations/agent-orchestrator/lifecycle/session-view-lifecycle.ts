@@ -4,17 +4,13 @@ import {
   requiresHydratedAgentSessionHistory,
 } from "../support/history-hydration";
 import { getSessionMessageCount } from "../support/messages";
-import {
-  hasAttachedSessionRuntime,
-  isWaitingForAttachedWorktreeRuntime,
-} from "../support/session-runtime-attachment";
+import { hasAttachedSessionRuntime } from "../support/session-runtime-attachment";
 
 export type SessionRepoReadinessState = "ready" | "checking" | "blocked";
 
 export type AgentSessionViewLifecyclePhase =
   | "idle"
   | "blocked_on_repo"
-  | "waiting_for_runtime_attachment"
   | "recovering_runtime"
   | "needs_history"
   | "hydrating_history"
@@ -29,7 +25,6 @@ export type AgentSessionViewLifecycle = {
   isHydratingHistory: boolean;
   isHistoryHydrationFailed: boolean;
   shouldEnsureReadyForView: boolean;
-  shouldWaitForRuntimeAttachment: boolean;
 };
 
 export const deriveAgentSessionViewLifecycle = ({
@@ -48,7 +43,6 @@ export const deriveAgentSessionViewLifecycle = ({
       isHydratingHistory: false,
       isHistoryHydrationFailed: false,
       shouldEnsureReadyForView: false,
-      shouldWaitForRuntimeAttachment: false,
     };
   }
 
@@ -56,10 +50,6 @@ export const deriveAgentSessionViewLifecycle = ({
   const historyHydrationState = getAgentSessionHistoryHydrationState(session);
   const hasTranscript = getSessionMessageCount(session) > 0;
   const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
-  const shouldWaitForRuntimeAttachment =
-    repoReadinessState === "ready" &&
-    sessionNeedsHydration &&
-    isWaitingForAttachedWorktreeRuntime(session);
 
   if (repoReadinessState !== "ready" && sessionNeedsHydration && !hasTranscript) {
     return {
@@ -70,7 +60,6 @@ export const deriveAgentSessionViewLifecycle = ({
       isHydratingHistory: false,
       isHistoryHydrationFailed: false,
       shouldEnsureReadyForView: false,
-      shouldWaitForRuntimeAttachment: false,
     };
   }
 
@@ -83,20 +72,6 @@ export const deriveAgentSessionViewLifecycle = ({
       isHydratingHistory: false,
       isHistoryHydrationFailed: false,
       shouldEnsureReadyForView: false,
-      shouldWaitForRuntimeAttachment,
-    };
-  }
-
-  if (shouldWaitForRuntimeAttachment) {
-    return {
-      phase: "waiting_for_runtime_attachment",
-      canReadRuntimeData: false,
-      canRenderHistory: hasTranscript,
-      isWaitingForRuntimeReadiness: true,
-      isHydratingHistory: false,
-      isHistoryHydrationFailed: false,
-      shouldEnsureReadyForView: true,
-      shouldWaitForRuntimeAttachment: true,
     };
   }
 
@@ -109,7 +84,6 @@ export const deriveAgentSessionViewLifecycle = ({
       isHydratingHistory: false,
       isHistoryHydrationFailed: false,
       shouldEnsureReadyForView: false,
-      shouldWaitForRuntimeAttachment: false,
     };
   }
 
@@ -122,7 +96,6 @@ export const deriveAgentSessionViewLifecycle = ({
       isHydratingHistory: true,
       isHistoryHydrationFailed: false,
       shouldEnsureReadyForView: false,
-      shouldWaitForRuntimeAttachment: false,
     };
   }
 
@@ -135,7 +108,6 @@ export const deriveAgentSessionViewLifecycle = ({
       isHydratingHistory: false,
       isHistoryHydrationFailed: false,
       shouldEnsureReadyForView: repoReadinessState === "ready",
-      shouldWaitForRuntimeAttachment: false,
     };
   }
 
@@ -148,7 +120,6 @@ export const deriveAgentSessionViewLifecycle = ({
       isHydratingHistory: false,
       isHistoryHydrationFailed: false,
       shouldEnsureReadyForView: repoReadinessState === "ready",
-      shouldWaitForRuntimeAttachment: false,
     };
   }
 
@@ -162,7 +133,6 @@ export const deriveAgentSessionViewLifecycle = ({
       isHydratingHistory: false,
       isHistoryHydrationFailed: true,
       shouldEnsureReadyForView: repoReadinessState === "ready",
-      shouldWaitForRuntimeAttachment: false,
     };
   }
 
@@ -174,6 +144,5 @@ export const deriveAgentSessionViewLifecycle = ({
     isHydratingHistory: false,
     isHistoryHydrationFailed: false,
     shouldEnsureReadyForView: false,
-    shouldWaitForRuntimeAttachment: false,
   };
 };

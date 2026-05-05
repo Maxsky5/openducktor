@@ -6,10 +6,6 @@ import {
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionHistoryPreludeMode, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import {
-  type RuntimeAttachmentCandidate,
-  useAgentChatRuntimeAttachmentRetry,
-} from "./use-agent-chat-runtime-attachment-retry";
 
 type UseAgentChatSessionHydrationParams = {
   activeWorkspace: ActiveWorkspace | null;
@@ -28,8 +24,6 @@ type UseAgentChatSessionHydrationParams = {
     allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<boolean>;
-  refreshRuntimeAttachmentSources: () => Promise<void>;
-  runtimeAttachmentCandidates: RuntimeAttachmentCandidate[];
 };
 
 export type AgentChatSessionHydrationResult = {
@@ -50,35 +44,15 @@ export function useAgentChatSessionHydration({
   persistedRecords,
   repoReadinessState,
   ensureSessionReadyForView,
-  refreshRuntimeAttachmentSources,
-  runtimeAttachmentCandidates,
 }: UseAgentChatSessionHydrationParams): AgentChatSessionHydrationResult {
   const activeExternalSessionId = activeSession?.externalSessionId ?? null;
   const [requestState, setRequestState] = useState<{
     externalSessionId: string | null;
     status: "idle" | "pending" | "failed";
   }>({ externalSessionId: null, status: "idle" });
-  const activeRuntimeAttachmentKey =
-    activeWorkspace && activeTaskId && activeExternalSessionId
-      ? `${activeWorkspace.repoPath}::${activeTaskId}::${activeExternalSessionId}`
-      : null;
   const lifecycle = deriveAgentSessionViewLifecycle({
     session: activeSession,
     repoReadinessState,
-  });
-
-  useAgentChatRuntimeAttachmentRetry({
-    activeTaskId,
-    activeExternalSessionId,
-    shouldWaitForSessionRuntime: lifecycle.shouldWaitForRuntimeAttachment,
-    activeRuntimeAttachmentKey,
-    runtimeAttachmentCandidates,
-    ensureSessionReadyForView,
-    refreshRuntimeAttachmentSources,
-    repoReadinessState,
-    ...(historyPreludeMode ? { historyPreludeMode } : {}),
-    ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
-    ...(persistedRecords ? { persistedRecords } : {}),
   });
 
   const isRequestFailed =
@@ -91,7 +65,7 @@ export function useAgentChatSessionHydration({
       return;
     }
 
-    if (!shouldEnsureSessionReady || lifecycle.phase === "waiting_for_runtime_attachment") {
+    if (!shouldEnsureSessionReady) {
       setRequestState((current) =>
         current.externalSessionId === activeExternalSessionId && current.status === "pending"
           ? { externalSessionId: activeExternalSessionId, status: "idle" }
@@ -129,7 +103,6 @@ export function useAgentChatSessionHydration({
     ensureSessionReadyForView,
     historyPreludeMode,
     allowLiveSessionResume,
-    lifecycle.phase,
     persistedRecords,
     repoReadinessState,
     shouldEnsureSessionReady,

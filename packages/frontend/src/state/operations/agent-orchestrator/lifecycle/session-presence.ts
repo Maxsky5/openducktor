@@ -54,8 +54,7 @@ export const createSessionPresenceReader = ({
     }
 
     return readPresence({
-      repoPath,
-      runtimeKind: runtimeResolution.runtimeKind,
+      ...runtimeResolution.runtimeRef,
       externalSessionId: record.externalSessionId,
       workingDirectory: runtimeResolution.workingDirectory,
     });

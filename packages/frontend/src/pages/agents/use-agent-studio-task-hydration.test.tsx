@@ -53,8 +53,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeSession: null,
   agentStudioReadinessState: "ready",
   ensureSessionReadyForView: async () => true,
-  refreshRuntimeAttachmentSources: async () => {},
-  runtimeAttachmentCandidates: [],
   ...overrides,
 });
 
