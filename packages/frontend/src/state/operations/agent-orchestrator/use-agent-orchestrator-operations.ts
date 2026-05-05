@@ -2,7 +2,6 @@ import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
 import type { AgentSessionHistoryPreludeMode, AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
@@ -20,7 +19,6 @@ import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-st
 import { useRepoSessionHydrationEffects } from "./hooks/use-repo-session-hydration-effects";
 import { useRuntimeTranscriptAttachment } from "./hooks/use-runtime-transcript-attachment";
 import { createLoadAgentSessions } from "./lifecycle/load-sessions";
-import { prepareRepoSessionPresencePreloads } from "./lifecycle/repo-session-presence-preloads";
 import { AgentSessionPresenceStore } from "./lifecycle/session-presence-store";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
@@ -150,24 +148,12 @@ export function useAgentOrchestratorOperations({
       sessionsRef,
       updateSession,
     });
-  const prepareSessionPresencePreloads = useCallback(
-    ({ repoPath, records }: { repoPath: string; records: AgentSessionRecord[] }) =>
-      prepareRepoSessionPresencePreloads({
-        repoPath,
-        records,
-        loadRuntimeList: (runtimeKind, runtimeListRepoPath) =>
-          loadRuntimeListFromQuery(queryClient, runtimeKind, runtimeListRepoPath),
-        listSessionPresence: agentEngine.listSessionPresence,
-      }),
-    [agentEngine.listSessionPresence, queryClient],
-  );
   useRepoSessionHydrationEffects({
     workspaceRepoPath,
     tasks,
     currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
     agentSessionPresenceStore,
     sessionHydration,
-    prepareRepoSessionPresencePreloads: prepareSessionPresencePreloads,
   });
   const ensureRuntime = useMemo(
     () =>
