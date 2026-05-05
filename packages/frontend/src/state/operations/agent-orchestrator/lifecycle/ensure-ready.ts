@@ -213,14 +213,6 @@ export const createEnsureSessionReady = ({
           });
           return;
         }
-        updateSession(
-          externalSessionId,
-          (current) =>
-            applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
-              missingSessionRuntimeId: null,
-            }),
-          { persist: false },
-        );
         await cleanupAttachedSessionOrThrow({
           action: "detach",
           operation: "ensure-ready-detach-missing-attached-session",
@@ -230,21 +222,27 @@ export const createEnsureSessionReady = ({
           role: session.role,
         });
         removeSessionUnsubscriber(externalSessionId);
+        updateSession(
+          externalSessionId,
+          (current) =>
+            applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
+              missingSessionRuntimeId: null,
+            }),
+          { persist: false },
+        );
         assertNotStale();
         throw new Error(`Runtime did not report attached session '${externalSessionId}'.`);
       }
-      if (session.runtimeId !== null) {
-        await cleanupAttachedSessionOrThrow({
-          action: "stop",
-          operation: "ensure-ready-stop-attached-error-session",
-          cleanupErrorMessage: `Failed to stop attached error session '${externalSessionId}' before preparing it`,
-          externalSessionId,
-          taskId: session.taskId,
-          role: session.role,
-        });
-        removeSessionUnsubscriber(externalSessionId);
-        assertNotStale();
-      }
+      await cleanupAttachedSessionOrThrow({
+        action: "stop",
+        operation: "ensure-ready-stop-attached-error-session",
+        cleanupErrorMessage: `Failed to stop attached error session '${externalSessionId}' before preparing it`,
+        externalSessionId,
+        taskId: session.taskId,
+        role: session.role,
+      });
+      removeSessionUnsubscriber(externalSessionId);
+      assertNotStale();
     }
 
     const task = taskRef.current.find((entry) => entry.id === session.taskId);
