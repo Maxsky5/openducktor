@@ -98,6 +98,8 @@ describe("buildAgentSystemPrompt", () => {
       "technology-agnostic",
       "requirements-quality self-check",
       "Produce complete specification markdown focused on user value, scope, requirements, edge cases, constraints, risks, acceptance criteria, and validation, then self-check it for completeness, clarity, and consistency.",
+      'When revising an existing spec, replace it with the final current version only; fold accepted changes into the relevant sections instead of adding change logs, revision history, deltas, or "what changed" sections.',
+      "The persisted spec is for Builder consumption, so it must describe the final requirements and not the path taken to reach them.",
       "inspect relevant project files with read/list/search tools and cite concrete file paths",
     ]);
     expect(prompt).not.toContain("<obp_tool_call>");
@@ -122,6 +124,8 @@ describe("buildAgentSystemPrompt", () => {
       "Run a cross-artifact consistency check against the spec and repo reality",
       "Write the plan as an execution document the builder can follow directly",
       "not as a passive restatement of the spec.",
+      'When revising an existing plan, replace it with the final current version only; fold accepted changes into the ordered execution plan instead of adding change logs, revision history, deltas, or "what changed" sections.',
+      "The persisted plan is for Builder execution, so it must describe the final implementation strategy and not the path taken to reach it.",
     ]);
   });
 
@@ -225,7 +229,7 @@ describe("buildAgentSystemPrompt", () => {
       {
         type: "override_base_version_mismatch",
         templateId: "system.role.spec.base",
-        builtinVersion: 3,
+        builtinVersion: 4,
         overrideBaseVersion: 999,
       },
     ]);
