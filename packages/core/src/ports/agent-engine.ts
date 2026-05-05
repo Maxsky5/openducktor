@@ -96,6 +96,12 @@ export type ListLiveAgentSessionsInput = RepoRuntimeRef & {
 
 export type ReadLiveAgentSessionSnapshotInput = LiveAgentSessionRef;
 
+export type ListLiveSessionTruthInput = RepoRuntimeRef & {
+  directories?: string[];
+};
+
+export type ReadLiveSessionTruthInput = LiveAgentSessionRef;
+
 export type LoadAgentSessionDiffInput = RepoRuntimeSessionOperationInput & {
   externalSessionId: ExternalSessionId;
   runtimeHistoryAnchor?: RuntimeHistoryAnchor;
@@ -151,6 +157,49 @@ export type LiveAgentSessionSnapshot = LiveAgentSessionSummary & {
   pendingQuestions: AgentPendingQuestionRequest[];
 };
 
+export type LiveAgentSessionClassification =
+  | "waiting_for_question"
+  | "waiting_for_permission"
+  | "retrying"
+  | "running"
+  | "idle";
+
+export type LiveSessionTruthClassification =
+  | LiveAgentSessionClassification
+  | "persisted_only"
+  | "stale";
+
+export type LiveSessionTruth =
+  | {
+      type: "live";
+      classification: LiveAgentSessionClassification;
+      ref: LiveAgentSessionRef;
+      runtimeId: string | null;
+      title: string;
+      startedAt: string;
+      status: LiveAgentSessionStatus;
+      agentSessionStatus: "running" | "idle";
+      pendingApprovals: AgentPendingApprovalRequest[];
+      pendingQuestions: AgentPendingQuestionRequest[];
+    }
+  | {
+      type: "stale";
+      classification: "stale";
+      ref: LiveAgentSessionRef;
+      runtimeId: string | null;
+      pendingApprovals: [];
+      pendingQuestions: [];
+    }
+  | {
+      type: "persisted_only";
+      classification: "persisted_only";
+      ref: LiveAgentSessionRef;
+      runtimeId: null;
+      reason: string;
+      pendingApprovals: [];
+      pendingQuestions: [];
+    };
+
 export type ReplyApprovalInput = {
   externalSessionId: ExternalSessionId;
   requestId: RuntimePendingInputRequestId;
@@ -191,12 +240,8 @@ export interface AgentSessionPort {
   detachSession(externalSessionId: ExternalSessionId): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
   listLiveAgentSessions(input: ListLiveAgentSessionsInput): Promise<LiveAgentSessionSummary[]>;
-  listLiveAgentSessionSnapshots(
-    input: ListLiveAgentSessionsInput,
-  ): Promise<LiveAgentSessionSnapshot[]>;
-  readLiveAgentSessionSnapshot(
-    input: ReadLiveAgentSessionSnapshotInput,
-  ): Promise<LiveAgentSessionSnapshot | null>;
+  listLiveSessionTruths(input: ListLiveSessionTruthInput): Promise<LiveSessionTruth[]>;
+  readLiveSessionTruth(input: ReadLiveSessionTruthInput): Promise<LiveSessionTruth>;
   hasSession(externalSessionId: ExternalSessionId): boolean;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;

@@ -1,5 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { LiveAgentSessionSnapshot } from "@openducktor/core";
+import type {
+  LiveAgentSessionRef,
+  LiveAgentSessionSnapshot,
+  LiveSessionTruth,
+} from "@openducktor/core";
+import { toLiveSessionTruthFromSnapshot } from "@openducktor/core";
 import {
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
@@ -43,4 +48,32 @@ export const createLiveAgentSessionSnapshotFixture = (
     pendingQuestions: [],
     ...overrides,
   };
+};
+
+export const createLiveSessionTruthFixture = ({
+  ref: refOverrides = {},
+  runtimeId = "runtime-1",
+  snapshot: snapshotOverrides = {},
+}: {
+  ref?: Partial<LiveAgentSessionRef>;
+  runtimeId?: string | null;
+  snapshot?: Partial<LiveAgentSessionSnapshot>;
+} = {}): LiveSessionTruth => {
+  const ref: LiveAgentSessionRef = {
+    repoPath: "/tmp/repo",
+    runtimeKind: "opencode",
+    workingDirectory: "/tmp/repo/worktree",
+    externalSessionId: "external-1",
+    ...refOverrides,
+  };
+
+  return toLiveSessionTruthFromSnapshot({
+    ref,
+    runtimeId,
+    snapshot: createLiveAgentSessionSnapshotFixture({
+      externalSessionId: ref.externalSessionId,
+      workingDirectory: ref.workingDirectory,
+      ...snapshotOverrides,
+    }),
+  });
 };

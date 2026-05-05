@@ -1,9 +1,5 @@
 import type { AgentSessionRecord, RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  LiveAgentSessionRef,
-  LiveAgentSessionSnapshot,
-} from "@openducktor/core";
+import type { AgentEnginePort, LiveAgentSessionRef } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { errorMessage } from "@/lib/errors";
 import { appQueryClient } from "@/lib/query-client";
@@ -55,8 +51,6 @@ import {
   applyLiveSessionTruthToSession,
   createLiveSessionTruthReader,
   type LiveSessionTruth,
-  toLiveSessionTruthFromResolvedSnapshot,
-  toMissingRuntimeLiveSessionTruth,
 } from "./live-session-truth";
 import { createReattachLiveSession } from "./reattach-live-session";
 
@@ -70,7 +64,8 @@ export type SessionLifecycleAdapter = Pick<
   AgentEnginePort,
   "hasSession" | "loadSessionHistory" | "resumeSession" | "attachSession"
 > & {
-  listLiveAgentSessionSnapshots?: AgentEnginePort["listLiveAgentSessionSnapshots"];
+  listLiveSessionTruths?: AgentEnginePort["listLiveSessionTruths"];
+  readLiveSessionTruth?: AgentEnginePort["readLiveSessionTruth"];
 };
 
 export type SessionLoadIntent = {
@@ -107,41 +102,14 @@ export type PersistedSessionMergeStageOutput = {
 export type HydrationRuntimePlanner = {
   repoPath: string;
   resolveHydrationRuntime: (record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>;
-  readLiveSessionTruth?: (record: AgentSessionRecord) => Promise<LiveSessionTruth>;
-  /** @deprecated Use readLiveSessionTruth for classification-aware consumers. */
-  loadLiveAgentSessionSnapshot: (
-    record: AgentSessionRecord,
-    runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }>,
-  ) => Promise<LiveAgentSessionSnapshot | null>;
+  readLiveSessionTruth: (record: AgentSessionRecord) => Promise<LiveSessionTruth>;
 };
 
 const readPlannerLiveSessionTruth = async (
   runtimePlanner: HydrationRuntimePlanner,
   record: AgentSessionRecord,
 ): Promise<LiveSessionTruth> => {
-  const readLiveSessionTruth = runtimePlanner.readLiveSessionTruth;
-  if (readLiveSessionTruth) {
-    return readLiveSessionTruth(record);
-  }
-  const runtimeResolution = await runtimePlanner.resolveHydrationRuntime(record);
-  if (!runtimeResolution.ok) {
-    return toMissingRuntimeLiveSessionTruth({
-      record,
-      runtimeKind: runtimeResolution.runtimeKind,
-      reason: runtimeResolution.reason,
-    });
-  }
-  const snapshot = await runtimePlanner.loadLiveAgentSessionSnapshot(record, runtimeResolution);
-  return toLiveSessionTruthFromResolvedSnapshot({
-    sessionRef: {
-      repoPath: runtimePlanner.repoPath,
-      runtimeKind: runtimeResolution.runtimeKind,
-      externalSessionId: record.externalSessionId,
-      workingDirectory: runtimeResolution.workingDirectory,
-    },
-    runtimeId: runtimeResolution.runtimeId,
-    snapshot,
-  });
+  return runtimePlanner.readLiveSessionTruth(record);
 };
 
 export type RuntimeResolutionPlannerStageInput = {
@@ -528,77 +496,75 @@ export const createRuntimeResolutionPlannerStage = async ({
     );
 
   const preloadedLiveAgentSessionsByKey =
-    options?.preloadedLiveAgentSessionsByKey ?? new Map<string, LiveAgentSessionSnapshot[]>();
+    options?.preloadedLiveAgentSessionsByKey ?? new Map<string, LiveSessionTruth[]>();
 
   const resolveHydrationRuntime = createHydrationRuntimeResolver({
     repoPath: intent.repoPath,
     runtimesByKind,
   });
   const liveAgentSessionScanCache =
-    adapter.listLiveAgentSessionSnapshots || preloadedLiveAgentSessionsByKey.size > 0
+    adapter.listLiveSessionTruths || preloadedLiveAgentSessionsByKey.size > 0
       ? new LiveAgentSessionCache(
           {
-            listLiveAgentSessionSnapshots: async (input) => {
-              if (!adapter.listLiveAgentSessionSnapshots) {
-                throw new Error(
-                  "Live agent session snapshots are unavailable for session scanning.",
-                );
+            listLiveSessionTruths: async (input) => {
+              if (!adapter.listLiveSessionTruths) {
+                throw new Error("Live session truths are unavailable for session scanning.");
               }
-              return adapter.listLiveAgentSessionSnapshots(input);
+              return adapter.listLiveSessionTruths(input);
             },
           },
           preloadedLiveAgentSessionsByKey.size > 0 ? preloadedLiveAgentSessionsByKey : undefined,
         )
       : null;
 
-  const readSnapshot = async ({
+  const readTruth = async ({
     repoPath,
     runtimeKind,
     workingDirectory,
     externalSessionId,
-  }: LiveAgentSessionRef): Promise<LiveAgentSessionSnapshot | null> => {
-    const storedSnapshot = liveAgentSessionStore?.readSnapshot({
+  }: LiveAgentSessionRef): Promise<LiveSessionTruth> => {
+    const storedTruth = liveAgentSessionStore?.readTruth({
       repoPath,
       runtimeKind,
       workingDirectory,
       externalSessionId,
     });
-    if (storedSnapshot) {
-      return storedSnapshot;
+    if (storedTruth) {
+      return storedTruth;
     }
 
-    if (!liveAgentSessionScanCache) {
-      throw new Error("Live agent session snapshots are unavailable for session hydration.");
+    const truths = liveAgentSessionScanCache
+      ? await liveAgentSessionScanCache.load({
+          repoPath,
+          runtimeKind,
+          directories: [workingDirectory],
+        })
+      : [];
+    const truth = truths.find((candidate) => candidate.ref.externalSessionId === externalSessionId);
+    if (truth) {
+      return truth;
     }
-    const snapshots = await liveAgentSessionScanCache.load({
+
+    if (!adapter.readLiveSessionTruth) {
+      throw new Error("Live session truth reads are unavailable for session hydration.");
+    }
+    return adapter.readLiveSessionTruth({
       repoPath,
       runtimeKind,
-      directories: [workingDirectory],
+      workingDirectory,
+      externalSessionId,
     });
-    return snapshots.find((snapshot) => snapshot.externalSessionId === externalSessionId) ?? null;
   };
   const readLiveSessionTruth = createLiveSessionTruthReader({
     repoPath: intent.repoPath,
     resolveHydrationRuntime,
-    readSnapshot,
+    readTruth,
   });
-  const loadLiveAgentSessionSnapshot = async (
-    record: AgentSessionRecord,
-    runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }>,
-  ): Promise<LiveAgentSessionSnapshot | null> => {
-    return readSnapshot({
-      repoPath: intent.repoPath,
-      runtimeKind: runtimeResolution.runtimeKind,
-      workingDirectory: runtimeResolution.workingDirectory,
-      externalSessionId: record.externalSessionId,
-    });
-  };
 
   return {
     repoPath: intent.repoPath,
     resolveHydrationRuntime,
     readLiveSessionTruth,
-    loadLiveAgentSessionSnapshot,
   };
 };
 
@@ -683,10 +649,8 @@ export const reconcileLiveSessionsStage = async ({
   if (!intent.shouldReconcileLiveSessions) {
     return { reattachedSessionIds: new Set<string>() };
   }
-  if (!adapter.listLiveAgentSessionSnapshots) {
-    throw new Error(
-      "Live agent session snapshots are unavailable for live session reconciliation.",
-    );
+  if (!adapter.listLiveSessionTruths) {
+    throw new Error("Live session truths are unavailable for live session reconciliation.");
   }
 
   const maybeResumeLiveRecord = createReattachLiveSession({
@@ -847,14 +811,15 @@ export const hydrateSessionRecordsStage = async ({
 
     const { runtimeKind, runtimeId, workingDirectory } = runtimeResolution;
     if (!shouldHydrateHistory) {
-      const liveSessionTruth =
-        loadMode === "reconcile_live"
-          ? await readPlannerLiveSessionTruth(runtimePlanner, record)
-          : null;
+      const shouldReadLiveTruth =
+        loadMode === "reconcile_live" || loadMode === "recover_runtime_attachment";
+      const liveSessionTruth = shouldReadLiveTruth
+        ? await readPlannerLiveSessionTruth(runtimePlanner, record)
+        : null;
       if (isStaleRepoOperation()) {
         return;
       }
-      if (loadMode === "reconcile_live" && liveSessionTruth) {
+      if (liveSessionTruth) {
         updateSession(
           record.externalSessionId,
           (current) =>

@@ -5,6 +5,7 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { type LiveSessionTruth, toLiveSessionTruthFromSnapshot } from "@openducktor/core";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import {
@@ -14,18 +15,57 @@ import {
   someSessionMessageForTest,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState as BaseAgentSessionState } from "@/types/agent-orchestrator";
-import { createDeferred, createTaskCardFixture } from "../test-utils";
+import {
+  createDeferred,
+  createLiveSessionTruthFixture,
+  createTaskCardFixture,
+} from "../test-utils";
 import { liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createLoadAgentSessions } from "./load-sessions";
+import type { SessionLifecycleAdapter } from "./load-sessions-stages";
 
 type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
 
 type LegacyRunSummary = { runId: string; worktreePath: string };
 
+type LoadSessionHistoryInput = Parameters<
+  NonNullable<SessionLifecycleAdapter["loadSessionHistory"]>
+>[0];
+type ResumeSessionInput = Parameters<NonNullable<SessionLifecycleAdapter["resumeSession"]>>[0];
+type AttachSessionInput = Parameters<NonNullable<SessionLifecycleAdapter["attachSession"]>>[0];
+type ListLiveSessionTruthsInput = Parameters<
+  NonNullable<SessionLifecycleAdapter["listLiveSessionTruths"]>
+>[0];
+type ReadLiveSessionTruthInput = Parameters<
+  NonNullable<SessionLifecycleAdapter["readLiveSessionTruth"]>
+>[0];
+type LiveSessionTruthFromSnapshotInput = Parameters<typeof toLiveSessionTruthFromSnapshot>[0];
+
+type SessionLifecycleAdapterOverrides = Partial<
+  Omit<SessionLifecycleAdapter, "listLiveSessionTruths" | "readLiveSessionTruth">
+> & {
+  listLiveSessionTruths?: (input: ListLiveSessionTruthsInput) => Promise<unknown[]>;
+  readLiveSessionTruth?: (input: ReadLiveSessionTruthInput) => Promise<unknown>;
+};
+
 let legacyHost!: { runsList: (repoPath?: string) => Promise<LegacyRunSummary[]> };
 
 const taskFixture = createTaskCardFixture({ title: "Task" });
+
+const createTruth = (
+  externalSessionId: string,
+  workingDirectory: string,
+  overrides: Record<string, unknown> = {},
+) =>
+  createLiveSessionTruthFixture({
+    ref: { externalSessionId, workingDirectory },
+    snapshot: {
+      externalSessionId,
+      workingDirectory,
+      ...overrides,
+    },
+  });
 
 const getSession = (
   state: Record<string, AgentSessionState>,
@@ -70,27 +110,84 @@ const persistedSessionRecord = (
 };
 
 const createAdapter = (
-  overrides: Partial<Parameters<typeof createLoadAgentSessions>[0]["adapter"]> = {},
-): Parameters<typeof createLoadAgentSessions>[0]["adapter"] => ({
-  hasSession: () => false,
-  listLiveAgentSessionSnapshots: async () => [],
-  loadSessionHistory: async () => [],
-  resumeSession: async (input) => ({
-    externalSessionId: input.externalSessionId,
-    role: input.role,
-    startedAt: "2026-02-22T08:00:00.000Z",
-    status: "idle",
-    runtimeKind: input.runtimeKind,
-  }),
-  attachSession: async (input) => ({
-    externalSessionId: input.externalSessionId,
-    role: input.role,
-    startedAt: "2026-02-22T08:00:00.000Z",
-    status: "idle",
-    runtimeKind: input.runtimeKind,
-  }),
-  ...overrides,
-});
+  overrides: SessionLifecycleAdapterOverrides = {},
+): SessionLifecycleAdapter => {
+  let cachedTruths: LiveSessionTruth[] | null = null;
+  const loadTruths = async (...args: [ListLiveSessionTruthsInput]) => {
+    if (!cachedTruths) {
+      const truths = (await overrides.listLiveSessionTruths?.(...args)) ?? [];
+      cachedTruths = truths.map((truth) => {
+        if (truth && typeof truth === "object" && "ref" in truth) {
+          return truth as LiveSessionTruth;
+        }
+
+        const snapshot = truth as LiveSessionTruthFromSnapshotInput["snapshot"] & {
+          externalSessionId: string;
+          workingDirectory: string;
+        };
+
+        return toLiveSessionTruthFromSnapshot({
+          ref: {
+            repoPath: "/tmp/repo",
+            runtimeKind: "opencode",
+            externalSessionId: snapshot.externalSessionId,
+            workingDirectory: snapshot.workingDirectory,
+          },
+          runtimeId: null,
+          snapshot: snapshot as LiveSessionTruthFromSnapshotInput["snapshot"],
+        });
+      });
+    }
+
+    return cachedTruths;
+  };
+
+  return {
+    hasSession: () => false,
+    loadSessionHistory: async () => [],
+    resumeSession: async (input: ResumeSessionInput) => ({
+      externalSessionId: input.externalSessionId,
+      role: input.role,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      status: "idle",
+      runtimeKind: input.runtimeKind,
+    }),
+    attachSession: async (input: AttachSessionInput) => ({
+      externalSessionId: input.externalSessionId,
+      role: input.role,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      status: "idle",
+      runtimeKind: input.runtimeKind,
+    }),
+    ...overrides,
+    listLiveSessionTruths: loadTruths,
+    readLiveSessionTruth: async (record: ReadLiveSessionTruthInput) => {
+      await loadTruths({
+        repoPath: record.repoPath ?? "/tmp/repo",
+        runtimeKind: record.runtimeKind ?? "opencode",
+        directories: [record.workingDirectory ?? "/tmp/repo/worktree"],
+      });
+
+      const match = cachedTruths?.find(
+        (truth) => truth.ref.externalSessionId === record.externalSessionId,
+      );
+      if (match) {
+        return match;
+      }
+
+      return toLiveSessionTruthFromSnapshot({
+        ref: {
+          repoPath: record.repoPath ?? "/tmp/repo",
+          runtimeKind: record.runtimeKind ?? "opencode",
+          externalSessionId: record.externalSessionId,
+          workingDirectory: record.workingDirectory ?? "/tmp/repo/worktree",
+        },
+        runtimeId: null,
+        snapshot: null,
+      });
+    },
+  };
+};
 
 const waitForHistoryCallCount = async (
   getHistoryCalls: () => number,
@@ -538,7 +635,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter({
         loadSessionHistory: async () => [],
-        listLiveAgentSessionSnapshots: async () => [
+        listLiveSessionTruths: async () => [
           {
             externalSessionId: "external-1",
             title: "Session",
@@ -710,7 +807,7 @@ describe("agent-orchestrator-load-sessions", () => {
             ],
           },
         ],
-        listLiveAgentSessionSnapshots: async () => [],
+        listLiveSessionTruths: async () => [],
       }),
       repoEpochRef: { current: 2 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -827,7 +924,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
-        loadSessionHistory: async (input) => {
+        loadSessionHistory: async (input: LoadSessionHistoryInput) => {
           historyLoadInput = {
             repoPath: input.repoPath,
             runtimeKind: input.runtimeKind,
@@ -900,18 +997,16 @@ describe("agent-orchestrator-load-sessions", () => {
         [
           "opencode::http://127.0.0.1:4444::/tmp/repo/worktree",
           [
-            {
-              externalSessionId: "external-live",
+            createTruth("external-live", "/tmp/repo/worktree", {
               title: "BUILD task-1",
-              workingDirectory: "/tmp/repo/worktree",
               startedAt: "2026-02-22T08:00:00.000Z",
               status: { type: "busy" },
               pendingApprovals: [],
               pendingQuestions: [],
-            },
+            }),
           ],
         ],
-      ]),
+      ]) as Map<string, LiveSessionTruth[]>,
     });
 
     expect(historyLoadInput).not.toBeNull();
@@ -975,6 +1070,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
+        listLiveSessionTruths: async () => [createTruth("external-1", "/tmp/repo/worktree")],
         loadSessionHistory: async () => {
           historyLoads += 1;
           return [];
@@ -1106,7 +1202,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
-        listLiveAgentSessionSnapshots: async () => {
+        listLiveSessionTruths: async () => {
           liveSnapshotCalls += 1;
           return [];
         },
@@ -1220,18 +1316,22 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
-        listLiveAgentSessionSnapshots: async (input) => {
+        listLiveSessionTruths: async (input: ListLiveSessionTruthsInput) => {
           observedSnapshotDirectories.push(input.directories ?? []);
           return [
-            {
-              externalSessionId: "external-1",
-              title: "BUILD task-1",
-              workingDirectory: "/tmp/repo/worktree",
-              startedAt: "2026-02-22T08:00:00.000Z",
-              status: { type: "busy" },
-              pendingApprovals: [],
-              pendingQuestions: [],
-            },
+            createLiveSessionTruthFixture({
+              ref: { externalSessionId: "external-1", workingDirectory: "/tmp/repo/worktree" },
+              runtimeId: "runtime-root",
+              snapshot: {
+                externalSessionId: "external-1",
+                title: "BUILD task-1",
+                workingDirectory: "/tmp/repo/worktree",
+                startedAt: "2026-02-22T08:00:00.000Z",
+                status: { type: "busy" },
+                pendingApprovals: [],
+                pendingQuestions: [],
+              },
+            }),
           ];
         },
         loadSessionHistory: async () => {
@@ -1285,7 +1385,7 @@ describe("agent-orchestrator-load-sessions", () => {
       ]),
     });
 
-    expect(observedSnapshotDirectories).toEqual([]);
+    expect(observedSnapshotDirectories).toEqual([["/tmp/repo/worktree"]]);
     expect(getSession(state, "external-1").runtimeId).toBe("runtime-root");
     expect(getSession(state, "external-1").workingDirectory).toBe("/tmp/repo/worktree");
     expect(getSession(state, "external-1").historyHydrationState).toBe("not_requested");
@@ -1329,16 +1429,22 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
-        listLiveAgentSessionSnapshots: async () => [
-          {
-            externalSessionId: "external-1",
-            title: "BUILD task-1",
-            workingDirectory: "/tmp/repo/worktree",
-            startedAt: "2026-02-22T08:00:00.000Z",
-            status: { type: "busy" },
-            pendingApprovals: [],
-            pendingQuestions: [],
-          },
+        listLiveSessionTruths: async () => [
+          createLiveSessionTruthFixture({
+            ref: {
+              repoPath: "/tmp/repo",
+              runtimeKind: "opencode",
+              externalSessionId: "external-1",
+              workingDirectory: "/tmp/repo/worktree",
+            },
+            runtimeId: "runtime-root",
+            snapshot: {
+              title: "BUILD task-1",
+              status: { type: "busy" },
+              pendingApprovals: [],
+              pendingQuestions: [],
+            },
+          }),
         ],
       }),
       repoEpochRef: { current: 2 },
@@ -1470,7 +1576,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter({
         hasSession: () => attachedToAdapter,
-        listLiveAgentSessionSnapshots: async () => {
+        listLiveSessionTruths: async () => {
           liveSnapshotLoads += 1;
           return [
             {
@@ -1531,7 +1637,7 @@ describe("agent-orchestrator-load-sessions", () => {
             },
           ];
         },
-        resumeSession: async (input) => {
+        resumeSession: async (input: ResumeSessionInput) => {
           resumeCalls += 1;
           attachedToAdapter = true;
           return {
@@ -1542,7 +1648,7 @@ describe("agent-orchestrator-load-sessions", () => {
             runtimeKind: input.runtimeKind,
           };
         },
-        attachSession: async (input) => {
+        attachSession: async (input: AttachSessionInput) => {
           attachCalls += 1;
           attachedToAdapter = true;
           return {
@@ -1648,7 +1754,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(resumeCalls).toBe(0);
     expect(attachCalls).toBe(1);
     expect(attachedListeners).toBe(2);
-    expect(liveSnapshotLoads).toBe(2);
+    expect(liveSnapshotLoads).toBe(1);
     expect(
       sessionMessagesToArray(getSession(state, "external-1")).map((message) => message.id),
     ).toEqual(hydratedMessageIds);
@@ -1747,7 +1853,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter({
         hasSession: () => attachedToAdapter,
-        listLiveAgentSessionSnapshots: async () => [
+        listLiveSessionTruths: async () => [
           {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
@@ -1779,7 +1885,7 @@ describe("agent-orchestrator-load-sessions", () => {
             },
           ];
         },
-        resumeSession: async (input) => {
+        resumeSession: async (input: ResumeSessionInput) => {
           resumeCalls += 1;
           attachedToAdapter = true;
           return {
@@ -1894,7 +2000,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter({
         hasSession: () => attachedToAdapter,
-        listLiveAgentSessionSnapshots: async () => [
+        listLiveSessionTruths: async () => [
           {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
@@ -1926,7 +2032,7 @@ describe("agent-orchestrator-load-sessions", () => {
             },
           ];
         },
-        resumeSession: async (input) => {
+        resumeSession: async (input: ResumeSessionInput) => {
           resumeCalls += 1;
           attachedToAdapter = true;
           return {
@@ -2025,7 +2131,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter({
         hasSession: () => false,
-        listLiveAgentSessionSnapshots: async () => [
+        listLiveSessionTruths: async () => [
           {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
@@ -2037,7 +2143,7 @@ describe("agent-orchestrator-load-sessions", () => {
             pendingQuestions: [],
           },
         ],
-        resumeSession: async (input) => {
+        resumeSession: async (input: ResumeSessionInput) => {
           resumeCalls += 1;
           return {
             externalSessionId: input.externalSessionId,
@@ -2150,24 +2256,30 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const liveAgentSessionStore = new LiveAgentSessionStore();
-    liveAgentSessionStore.replaceRepoSnapshots(
+    liveAgentSessionStore.replaceRepoTruths(
       "/tmp/repo",
       new Map([
         [
           liveAgentSessionLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
           [
-            {
-              externalSessionId: "external-1",
-              title: "BUILD task-1",
-              workingDirectory: "/tmp/repo/worktree",
-              startedAt: "2026-02-22T08:00:00.000Z",
-              status: { type: "busy" },
-              pendingApprovals: [],
-              pendingQuestions: [],
-            },
+            createLiveSessionTruthFixture({
+              ref: {
+                repoPath: "/tmp/repo",
+                runtimeKind: "opencode",
+                externalSessionId: "external-1",
+                workingDirectory: "/tmp/repo/worktree",
+              },
+              runtimeId: "runtime-1",
+              snapshot: {
+                title: "BUILD task-1",
+                status: { type: "busy" },
+                pendingApprovals: [],
+                pendingQuestions: [],
+              },
+            }),
           ],
         ],
-      ]),
+      ]) as Map<string, LiveSessionTruth[]>,
     );
 
     const loadAgentSessions = createLoadAgentSessions({
@@ -2177,7 +2289,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
-        listLiveAgentSessionSnapshots: async () => {
+        listLiveSessionTruths: async () => {
           throw new Error("should not reload live snapshots");
         },
       }),
@@ -2269,7 +2381,7 @@ describe("agent-orchestrator-load-sessions", () => {
           historyLoads += 1;
           return [];
         },
-        listLiveAgentSessionSnapshots: async () => [
+        listLiveSessionTruths: async () => [
           {
             externalSessionId: "external-live",
             title: "BUILD task-1",
@@ -2362,7 +2474,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
-        attachSession: async (input) => {
+        attachSession: async (input: AttachSessionInput) => {
           attachCalls.push({ externalSessionId: input.externalSessionId });
           return {
             externalSessionId: input.externalSessionId,
@@ -2372,7 +2484,7 @@ describe("agent-orchestrator-load-sessions", () => {
             runtimeKind: input.runtimeKind,
           };
         },
-        listLiveAgentSessionSnapshots: async () => [
+        listLiveSessionTruths: async () => [
           {
             externalSessionId: "external-child-1",
             title: "Child live session",
@@ -2510,7 +2622,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter({
         loadSessionHistory: async () => [],
-        listLiveAgentSessionSnapshots: async ({ directories }) => {
+        listLiveSessionTruths: async ({ directories }: { directories?: string[] }) => {
           observedSnapshotDirectories = directories ?? [];
           return [
             {
@@ -2605,7 +2717,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter({
         loadSessionHistory: async () => historyDeferred.promise,
-        listLiveAgentSessionSnapshots: async () => [
+        listLiveSessionTruths: async () => [
           {
             externalSessionId: "external-live",
             title: "BUILD task-1",
@@ -2826,7 +2938,15 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
-        loadSessionHistory: async ({ repoPath, runtimeKind, workingDirectory }) => {
+        loadSessionHistory: async ({
+          repoPath,
+          runtimeKind,
+          workingDirectory,
+        }: {
+          repoPath?: string;
+          runtimeKind?: string;
+          workingDirectory?: string;
+        }) => {
           observedRuntimeEndpoint = `${repoPath}:${runtimeKind}:${workingDirectory}`;
           return [];
         },
@@ -2921,7 +3041,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(ensuredRuntimeKinds).toEqual([]);
     expect(observedRuntimeEndpoint).toBe("/tmp/repo:opencode:/tmp/repo");
     expect(state["external-1"]?.runtimeKind).toBe("opencode");
-    expect(state["external-1"]?.runtimeId).toBe("runtime-1");
+    expect(state["external-1"]?.runtimeId).toBeNull();
   });
 
   test("rejects requested-session warmup when persisted runtime metadata is missing", async () => {
@@ -3277,7 +3397,7 @@ describe("agent-orchestrator-load-sessions", () => {
           parts: [],
         },
       ],
-      listLiveAgentSessionSnapshots: async () => [
+      listLiveSessionTruths: async () => [
         {
           externalSessionId: "external-session-1",
           title: "BUILD task-1",
@@ -3562,8 +3682,8 @@ describe("agent-orchestrator-load-sessions", () => {
       hostModule.host.runtimeList = originalRuntimeList;
     }
 
-    expect(observedRuntimeEndpoint as string | null).toBe("runtime-1");
-    expect(state["external-qa-1"]?.runtimeId).toBe("runtime-1");
+    expect(observedRuntimeEndpoint as string | null).toBeNull();
+    expect(state["external-qa-1"]?.runtimeId).toBeNull();
     expect(state["external-qa-1"]?.workingDirectory).toBe("/tmp/repo/worktree");
     expect(sessionMessagesToArray(getSession(state, "external-qa-1")).length).toBeGreaterThan(0);
   });
@@ -3684,7 +3804,7 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["external-qa-root"]?.runtimeId).toBe("runtime-root");
+    expect(state["external-qa-root"]?.runtimeId).toBeNull();
     expect(
       state["external-qa-root"] ? sessionMessagesToArray(state["external-qa-root"]) : undefined,
     ).toHaveLength(1);
@@ -3893,7 +4013,7 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["external-1"]?.runtimeId).toBe("runtime-shared");
+    expect(state["external-1"]?.runtimeId).toBeNull();
     expect(state["external-1"]?.workingDirectory).toBe("/tmp/repo/conflict-worktree");
     expect(sessionMessagesToArray(getSession(state, "external-1")).length).toBeGreaterThan(0);
   });
@@ -4038,7 +4158,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
-        listLiveAgentSessionSnapshots: async () => [
+        listLiveSessionTruths: async () => [
           {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
@@ -4069,7 +4189,7 @@ describe("agent-orchestrator-load-sessions", () => {
             },
           ];
         },
-        resumeSession: async (input) => {
+        resumeSession: async (input: ResumeSessionInput) => {
           resumeCalls += 1;
           return {
             externalSessionId: input.externalSessionId,
@@ -4187,7 +4307,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
-        listLiveAgentSessionSnapshots: async () => [
+        listLiveSessionTruths: async () => [
           {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
@@ -4198,7 +4318,7 @@ describe("agent-orchestrator-load-sessions", () => {
             pendingQuestions: [],
           },
         ],
-        resumeSession: async (input) => {
+        resumeSession: async (input: ResumeSessionInput) => {
           await resumeDeferred.promise;
           return {
             externalSessionId: input.externalSessionId,
@@ -4299,8 +4419,8 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceName: "Active Workspace",
       },
       adapter: createAdapter({
-        listLiveAgentSessionSnapshots: async () => [],
-        resumeSession: async (input) => {
+        listLiveSessionTruths: async () => [],
+        resumeSession: async (input: ResumeSessionInput) => {
           resumeCalls += 1;
           return {
             externalSessionId: input.externalSessionId,
@@ -4408,7 +4528,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter({
         hasSession: () => true,
-        listLiveAgentSessionSnapshots: async () => [
+        listLiveSessionTruths: async () => [
           {
             externalSessionId: "external-1",
             title: "PLANNER task-1",
@@ -4520,7 +4640,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
       adapter: createAdapter({
         hasSession: () => false,
-        resumeSession: async (input) => {
+        resumeSession: async (input: ResumeSessionInput) => {
           resumeCalls.push({
             externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,
@@ -4533,7 +4653,7 @@ describe("agent-orchestrator-load-sessions", () => {
             runtimeKind: input.runtimeKind,
           };
         },
-        listLiveAgentSessionSnapshots: async () => [
+        listLiveSessionTruths: async () => [
           {
             externalSessionId: "external-1",
             title: "BUILDER task-1",

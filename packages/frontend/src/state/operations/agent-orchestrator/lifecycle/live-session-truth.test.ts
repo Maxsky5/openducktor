@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { LiveAgentSessionSnapshot } from "@openducktor/core";
+import {
+  type LiveSessionTruth,
+  toLiveSessionTruthFromSnapshot,
+  toPersistedOnlyLiveSessionTruth,
+} from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   applyLiveSessionTruthToSession,
   createLiveSessionTruthReader,
   isAttachableLiveSessionTruth,
-  toLiveSessionTruthFromResolvedSnapshot,
 } from "./live-session-truth";
 
 const recordFixture: AgentSessionRecord = {
@@ -48,19 +51,6 @@ const createSessionState = (overrides: Partial<AgentSessionState> = {}): AgentSe
   ...overrides,
 });
 
-const createSnapshot = (
-  overrides: Partial<LiveAgentSessionSnapshot> = {},
-): LiveAgentSessionSnapshot => ({
-  externalSessionId: "external-1",
-  title: " Builder Session ",
-  startedAt: "2026-03-01T09:00:00.000Z",
-  status: { type: "idle" },
-  pendingApprovals: [],
-  pendingQuestions: [],
-  workingDirectory: "/tmp/repo/worktree",
-  ...overrides,
-});
-
 const sessionRefFixture = {
   repoPath: "/tmp/repo",
   runtimeKind: "opencode" as const,
@@ -70,7 +60,7 @@ const sessionRefFixture = {
 
 describe("live-session-truth", () => {
   test("classifies missing runtime as persisted-only without reading live snapshots", async () => {
-    let snapshotReads = 0;
+    let truthReads = 0;
     const readTruth = createLiveSessionTruthReader({
       repoPath: "/tmp/repo",
       resolveHydrationRuntime: async () => ({
@@ -78,22 +68,25 @@ describe("live-session-truth", () => {
         runtimeKind: "opencode",
         reason: "No live repo runtime found.",
       }),
-      readSnapshot: async () => {
-        snapshotReads += 1;
-        return null;
+      readTruth: async () => {
+        truthReads += 1;
+        return toPersistedOnlyLiveSessionTruth({
+          ref: sessionRefFixture,
+          reason: "No live repo runtime found.",
+        });
       },
     });
 
     const truth = await readTruth(recordFixture);
 
-    expect(truth.type).toBe("missing_runtime");
+    expect(truth.type).toBe("persisted_only");
     expect(truth.classification).toBe("persisted_only");
-    expect(snapshotReads).toBe(0);
+    expect(truthReads).toBe(0);
   });
 
   test("classifies missing live session as stale and clears pending input when applied", () => {
-    const truth = toLiveSessionTruthFromResolvedSnapshot({
-      sessionRef: sessionRefFixture,
+    const truth = toLiveSessionTruthFromSnapshot({
+      ref: sessionRefFixture,
       runtimeId: "runtime-1",
       snapshot: null,
     });
@@ -110,10 +103,18 @@ describe("live-session-truth", () => {
     const liveApproval = {
       requestId: "live-approval",
     } as AgentSessionState["pendingApprovals"][number];
-    const truth = toLiveSessionTruthFromResolvedSnapshot({
-      sessionRef: sessionRefFixture,
+    const truth = toLiveSessionTruthFromSnapshot({
+      ref: sessionRefFixture,
       runtimeId: "runtime-1",
-      snapshot: createSnapshot({ pendingApprovals: [liveApproval] }),
+      snapshot: {
+        externalSessionId: "external-1",
+        title: " Builder Session ",
+        startedAt: "2026-03-01T09:00:00.000Z",
+        status: { type: "idle" },
+        pendingApprovals: [liveApproval],
+        pendingQuestions: [],
+        workingDirectory: "/tmp/repo/worktree",
+      },
     });
 
     const applied = applyLiveSessionTruthToSession(createSessionState(), truth);
@@ -124,12 +125,18 @@ describe("live-session-truth", () => {
   });
 
   test("maps retry truth to running session status without pending input", () => {
-    const truth = toLiveSessionTruthFromResolvedSnapshot({
-      sessionRef: sessionRefFixture,
+    const truth = toLiveSessionTruthFromSnapshot({
+      ref: sessionRefFixture,
       runtimeId: "runtime-1",
-      snapshot: createSnapshot({
+      snapshot: {
+        externalSessionId: "external-1",
+        title: " Builder Session ",
+        startedAt: "2026-03-01T09:00:00.000Z",
         status: { type: "retry", attempt: 2, message: "try again", nextEpochMs: 1234 },
-      }),
+        pendingApprovals: [],
+        pendingQuestions: [],
+        workingDirectory: "/tmp/repo/worktree",
+      },
     });
 
     const applied = applyLiveSessionTruthToSession(createSessionState({ status: "idle" }), truth);
@@ -146,24 +153,28 @@ describe("live-session-truth", () => {
   });
 
   test("treats pending input and non-idle runtime status as attachable", () => {
-    const idleTruth = toLiveSessionTruthFromResolvedSnapshot({
-      sessionRef: sessionRefFixture,
-      runtimeId: "runtime-1",
-      snapshot: createSnapshot(),
-    });
-    const busyTruth = toLiveSessionTruthFromResolvedSnapshot({
-      sessionRef: sessionRefFixture,
-      runtimeId: "runtime-1",
-      snapshot: createSnapshot({ status: { type: "busy" } }),
-    });
-    const questionTruth = toLiveSessionTruthFromResolvedSnapshot({
-      sessionRef: sessionRefFixture,
-      runtimeId: "runtime-1",
-      snapshot: createSnapshot({
-        pendingQuestions: [
-          { requestId: "question-1" } as AgentSessionState["pendingQuestions"][number],
-        ],
-      }),
+    const createTruth = (overrides: Partial<LiveSessionTruth> = {}) =>
+      toLiveSessionTruthFromSnapshot({
+        ref: sessionRefFixture,
+        runtimeId: "runtime-1",
+        snapshot: {
+          externalSessionId: "external-1",
+          title: " Builder Session ",
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: { type: "idle" },
+          pendingApprovals: [],
+          pendingQuestions: [],
+          workingDirectory: "/tmp/repo/worktree",
+          ...overrides,
+        } as never,
+      });
+
+    const idleTruth = createTruth();
+    const busyTruth = createTruth({ status: { type: "busy" } as never });
+    const questionTruth = createTruth({
+      pendingQuestions: [
+        { requestId: "question-1" } as AgentSessionState["pendingQuestions"][number],
+      ] as never,
     });
 
     expect(isAttachableLiveSessionTruth(idleTruth)).toBe(false);

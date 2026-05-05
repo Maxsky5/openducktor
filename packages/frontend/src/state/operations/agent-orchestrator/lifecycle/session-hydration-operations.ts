@@ -3,7 +3,7 @@ import type {
   RuntimeInstanceSummary,
   RuntimeKind,
 } from "@openducktor/contracts";
-import type { LiveAgentSessionSnapshot } from "@openducktor/core";
+import type { LiveSessionTruth } from "@openducktor/core";
 import type {
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadOptions,
@@ -46,7 +46,7 @@ export type SessionHydrationOperations = {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
+    preloadedLiveAgentSessionsByKey?: Map<string, LiveSessionTruth[]>;
   }) => Promise<void>;
   loadAgentSessions: LoadAgentSessions;
 };

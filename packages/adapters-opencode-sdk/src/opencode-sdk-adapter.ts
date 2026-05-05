@@ -14,13 +14,14 @@ import type {
   ForkAgentSessionInput,
   ListAgentModelsInput,
   ListLiveAgentSessionsInput,
-  LiveAgentSessionSnapshot,
+  ListLiveSessionTruthInput,
   LiveAgentSessionSummary,
+  LiveSessionTruth,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
   LoadAgentSessionTodosInput,
-  ReadLiveAgentSessionSnapshotInput,
+  ReadLiveSessionTruthInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
@@ -28,6 +29,7 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
+import { toLiveSessionTruthFromSnapshot } from "@openducktor/core";
 import {
   connectMcpServer,
   getMcpStatus,
@@ -139,6 +141,35 @@ export class OpencodeSdkAdapter
       workingDirectory: input.workingDirectory,
       action,
     });
+  }
+
+  private async resolveRuntimeClientInputWithRuntimeId(
+    input: OpencodeRuntimeResolutionInput,
+    action: string,
+    options: { requireLive?: boolean } = {},
+  ) {
+    if (!this.repoRuntimeResolver) {
+      throw new Error(
+        `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime '${input.runtimeKind}'.`,
+      );
+    }
+    const runtimeRef = {
+      repoPath: input.repoPath,
+      runtimeKind: input.runtimeKind,
+    };
+    const runtime = options.requireLive
+      ? await this.repoRuntimeResolver.requireRepoRuntime(runtimeRef)
+      : await this.repoRuntimeResolver.ensureRepoRuntime(runtimeRef);
+    return {
+      ...toOpencodeRuntimeClientInput({
+        runtime,
+        repoPath: input.repoPath,
+        runtimeKind: input.runtimeKind,
+        workingDirectory: input.workingDirectory,
+        action,
+      }),
+      runtimeId: runtime.runtimeId,
+    };
   }
 
   getRuntimeDefinition(): RuntimeDescriptor {
@@ -333,40 +364,74 @@ export class OpencodeSdkAdapter
   async listLiveAgentSessions(
     input: ListLiveAgentSessionsInput,
   ): Promise<LiveAgentSessionSummary[]> {
-    const snapshots = await this.listLiveAgentSessionSnapshots(input);
-    return snapshots.map(
-      ({ pendingApprovals: _pendingApprovals, pendingQuestions: _pendingQuestions, ...rest }) =>
-        rest,
-    );
+    const truths = await this.listLiveSessionTruths(input);
+    return truths.flatMap((truth) => {
+      if (truth.type !== "live") {
+        return [];
+      }
+      return [
+        {
+          externalSessionId: truth.ref.externalSessionId,
+          title: truth.title,
+          workingDirectory: truth.ref.workingDirectory,
+          startedAt: truth.startedAt,
+          status: truth.status,
+        },
+      ];
+    });
   }
 
-  async listLiveAgentSessionSnapshots(
-    input: ListLiveAgentSessionsInput,
-  ): Promise<LiveAgentSessionSnapshot[]> {
-    const runtimeClientInput = await this.resolveRuntimeClientInput(
+  async listLiveSessionTruths(input: ListLiveSessionTruthInput): Promise<LiveSessionTruth[]> {
+    const runtimeClientInput = await this.resolveRuntimeClientInputWithRuntimeId(
       { ...input, workingDirectory: input.repoPath },
-      "list live agent sessions",
+      "list live session truths",
       { requireLive: true },
     );
-    return listOpencodeLiveAgentSessionSnapshots({
+    const snapshots = await listOpencodeLiveAgentSessionSnapshots({
       createClient: this.createClient,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       now: this.now,
       ...(input.directories ? { directories: input.directories } : {}),
     });
+    return snapshots.map((snapshot) =>
+      toLiveSessionTruthFromSnapshot({
+        ref: {
+          repoPath: input.repoPath,
+          runtimeKind: input.runtimeKind,
+          workingDirectory: snapshot.workingDirectory,
+          externalSessionId: snapshot.externalSessionId,
+        },
+        runtimeId: runtimeClientInput.runtimeId ?? null,
+        snapshot,
+      }),
+    );
   }
 
-  async readLiveAgentSessionSnapshot(
-    input: ReadLiveAgentSessionSnapshotInput,
-  ): Promise<LiveAgentSessionSnapshot | null> {
-    const snapshots = await this.listLiveAgentSessionSnapshots({
-      repoPath: input.repoPath,
-      runtimeKind: input.runtimeKind,
-      directories: [input.workingDirectory],
-    });
-    return (
-      snapshots.find((snapshot) => snapshot.externalSessionId === input.externalSessionId) ?? null
+  async readLiveSessionTruth(input: ReadLiveSessionTruthInput): Promise<LiveSessionTruth> {
+    const runtimeClientInput = await this.resolveRuntimeClientInputWithRuntimeId(
+      input,
+      "read live session truth",
+      { requireLive: true },
     );
+    const snapshots = await listOpencodeLiveAgentSessionSnapshots({
+      createClient: this.createClient,
+      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
+      directories: [input.workingDirectory],
+      now: this.now,
+    });
+    const snapshot =
+      snapshots.find((candidate) => candidate.externalSessionId === input.externalSessionId) ??
+      null;
+    return toLiveSessionTruthFromSnapshot({
+      ref: snapshot
+        ? {
+            ...input,
+            workingDirectory: snapshot.workingDirectory,
+          }
+        : input,
+      runtimeId: runtimeClientInput.runtimeId ?? null,
+      snapshot,
+    });
   }
 
   hasSession(externalSessionId: string): boolean {

@@ -14,7 +14,6 @@ import {
   applyLiveSessionTruthToSession,
   type LiveSessionTruth,
   liveSessionTruthHasPendingInput,
-  readResolvedLiveSessionTruth,
 } from "./live-session-truth";
 
 type EnsureSessionReadyDependencies = {
@@ -136,12 +135,10 @@ export const createEnsureSessionReady = ({
 
     const readLiveTruth = async ({
       runtimeKind,
-      runtimeId,
       workingDirectory,
       externalSessionId,
     }: {
       runtimeKind: AgentSessionState["runtimeKind"];
-      runtimeId: string | null;
       workingDirectory: string;
       externalSessionId: string;
     }) => {
@@ -151,15 +148,11 @@ export const createEnsureSessionReady = ({
       if (workingDirectory.trim().length === 0) {
         throw new Error(`Session '${externalSessionId}' has no working directory.`);
       }
-      return readResolvedLiveSessionTruth({
-        ref: {
-          repoPath,
-          runtimeKind,
-          workingDirectory,
-          externalSessionId,
-        },
-        runtimeId,
-        readSnapshot: (snapshotInput) => adapter.readLiveAgentSessionSnapshot(snapshotInput),
+      return adapter.readLiveSessionTruth({
+        repoPath,
+        runtimeKind,
+        workingDirectory,
+        externalSessionId,
       });
     };
 
@@ -170,7 +163,7 @@ export const createEnsureSessionReady = ({
       if (truth.type !== "live" || !shouldAttachListener) {
         return;
       }
-      attachSessionListener(repoPath, truth.externalSessionId);
+      attachSessionListener(repoPath, truth.ref.externalSessionId);
     };
 
     assertNotStale();
@@ -185,7 +178,6 @@ export const createEnsureSessionReady = ({
     if (adapter.hasSession(externalSessionId)) {
       if (session.status !== "error") {
         const attachedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
-        const attachedRuntimeId = session.runtimeId;
         const attachedWorkingDirectory = session.workingDirectory;
         const shouldAttachListener = shouldReattachListenerForAttachedSession(
           session.status,
@@ -194,7 +186,6 @@ export const createEnsureSessionReady = ({
 
         const liveSessionTruth = await readLiveTruth({
           runtimeKind: attachedRuntimeKind,
-          runtimeId: attachedRuntimeId,
           workingDirectory: attachedWorkingDirectory,
           externalSessionId: session.externalSessionId,
         });
@@ -294,7 +285,6 @@ export const createEnsureSessionReady = ({
 
     const liveSessionTruth = await readLiveTruth({
       runtimeKind: requestedRuntimeKind,
-      runtimeId: runtime.runtimeId,
       workingDirectory: runtime.workingDirectory,
       externalSessionId: session.externalSessionId,
     });
@@ -303,7 +293,7 @@ export const createEnsureSessionReady = ({
     if (liveSessionTruth.type !== "live") {
       await stopSessionOrThrow({
         operation: "ensure-ready-stop-missing-live-session-after-resume",
-        cleanupErrorMessage: `Failed to stop resumed session '${externalSessionId}' after live snapshot was missing`,
+        cleanupErrorMessage: `Failed to stop resumed session '${externalSessionId}' after live truth was stale`,
         externalSessionId,
         taskId: session.taskId,
         role: session.role,

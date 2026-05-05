@@ -76,8 +76,8 @@ export const createReattachLiveSession = ({
       const resumeResult = await awaitUnlessStale(
         attachMissingLiveSession({
           record,
-          runtimeKind: liveSessionTruth.runtimeKind,
-          workingDirectory: liveSessionTruth.workingDirectory,
+          runtimeKind: liveSessionTruth.ref.runtimeKind,
+          workingDirectory: liveSessionTruth.ref.workingDirectory,
         }),
       );
       if (resumeResult === STALE_REPO_ABORT) {

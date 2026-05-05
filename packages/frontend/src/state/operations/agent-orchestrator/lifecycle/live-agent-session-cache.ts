@@ -1,5 +1,5 @@
 import type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, LiveAgentSessionSnapshot } from "@openducktor/core";
+import type { AgentEnginePort, LiveSessionTruth } from "@openducktor/core";
 import { normalizeWorkingDirectory } from "../support/core";
 
 export const getLiveAgentSessionCacheKey = (repoPath: string, runtimeKind: RuntimeKind): string =>
@@ -12,21 +12,21 @@ export const liveAgentSessionLookupKey = (
 ): string =>
   `${getLiveAgentSessionCacheKey(repoPath, runtimeKind)}::${normalizeWorkingDirectory(workingDirectory)}`;
 
-type LiveAgentSessionScanner = Pick<AgentEnginePort, "listLiveAgentSessionSnapshots">;
+type LiveAgentSessionScanner = Pick<AgentEnginePort, "listLiveSessionTruths">;
 
 export class LiveAgentSessionCache {
-  private readonly scansByKey = new Map<string, LiveAgentSessionSnapshot[]>();
+  private readonly scansByKey = new Map<string, LiveSessionTruth[]>();
 
   constructor(
     private readonly adapter: LiveAgentSessionScanner,
-    private readonly preloadedByKey?: Map<string, LiveAgentSessionSnapshot[]>,
+    private readonly preloadedByKey?: Map<string, LiveSessionTruth[]>,
   ) {}
 
   async load(
     input: RepoRuntimeRef & {
       directories: string[];
     },
-  ): Promise<LiveAgentSessionSnapshot[]> {
+  ): Promise<LiveSessionTruth[]> {
     const normalizedDirectories = Array.from(
       new Set(
         input.directories
@@ -54,7 +54,7 @@ export class LiveAgentSessionCache {
       }
     }
 
-    const sessions = await this.adapter.listLiveAgentSessionSnapshots({
+    const sessions = await this.adapter.listLiveSessionTruths({
       repoPath: input.repoPath,
       runtimeKind: input.runtimeKind,
       ...(normalizedDirectories.length > 0 ? { directories: normalizedDirectories } : {}),

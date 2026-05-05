@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { LiveAgentSessionSnapshot } from "@openducktor/core";
+import { toLiveSessionTruthFromSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
-import { toLiveSessionTruthFromResolvedSnapshot } from "./live-session-truth";
 import { createReattachLiveSession } from "./reattach-live-session";
 
 const localHttpRuntimeResolution: ResolvedHydrationRuntime = {
@@ -30,11 +29,11 @@ const sessionRecordFixture: AgentSessionRecord = {
 };
 
 const toLiveTruth = (
-  snapshot: LiveAgentSessionSnapshot | null,
+  snapshot: Parameters<typeof toLiveSessionTruthFromSnapshot>[0]["snapshot"],
   runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }> = localHttpRuntimeResolution,
 ) =>
-  toLiveSessionTruthFromResolvedSnapshot({
-    sessionRef: {
+  toLiveSessionTruthFromSnapshot({
+    ref: {
       repoPath: "/tmp/repo",
       runtimeKind: runtimeResolution.runtimeKind,
       externalSessionId: sessionRecordFixture.externalSessionId,

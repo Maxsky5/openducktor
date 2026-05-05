@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   classifyLiveAgentSessionSnapshot,
   toLiveAgentSessionRuntimeStatus,
+  toLiveSessionTruthFromSnapshot,
+  toPersistedOnlyLiveSessionTruth,
 } from "./live-session-classification";
 
 describe("live-session-classification", () => {
@@ -58,5 +60,92 @@ describe("live-session-classification", () => {
 
     expect(classification).toBe("idle");
     expect(toLiveAgentSessionRuntimeStatus(classification)).toBe("idle");
+  });
+
+  test("builds live truth from a runtime snapshot", () => {
+    const truth = toLiveSessionTruthFromSnapshot({
+      ref: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      },
+      runtimeId: "runtime-1",
+      snapshot: {
+        externalSessionId: "session-1",
+        title: "Build session",
+        workingDirectory: "/repo/worktree",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        status: { type: "busy" },
+        pendingApprovals: [],
+        pendingQuestions: [],
+      },
+    });
+
+    expect(truth).toEqual({
+      type: "live",
+      classification: "running",
+      ref: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      },
+      runtimeId: "runtime-1",
+      title: "Build session",
+      startedAt: "2026-02-22T12:00:00.000Z",
+      status: { type: "busy" },
+      agentSessionStatus: "running",
+      pendingApprovals: [],
+      pendingQuestions: [],
+    });
+  });
+
+  test("builds stale truth when a runtime snapshot is absent", () => {
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+    };
+
+    expect(
+      toLiveSessionTruthFromSnapshot({
+        ref,
+        runtimeId: "runtime-1",
+        snapshot: null,
+      }),
+    ).toEqual({
+      type: "stale",
+      classification: "stale",
+      ref,
+      runtimeId: "runtime-1",
+      pendingApprovals: [],
+      pendingQuestions: [],
+    });
+  });
+
+  test("builds persisted-only truth for records without a live runtime", () => {
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+    };
+
+    expect(
+      toPersistedOnlyLiveSessionTruth({
+        ref,
+        reason: "runtime missing",
+      }),
+    ).toEqual({
+      type: "persisted_only",
+      classification: "persisted_only",
+      ref,
+      runtimeId: null,
+      reason: "runtime missing",
+      pendingApprovals: [],
+      pendingQuestions: [],
+    });
   });
 });

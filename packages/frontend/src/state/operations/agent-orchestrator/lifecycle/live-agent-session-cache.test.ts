@@ -1,14 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { LiveAgentSessionSnapshot } from "@openducktor/core";
-import { createLiveAgentSessionSnapshotFixture } from "../test-utils";
+import { createLiveSessionTruthFixture } from "../test-utils";
 import {
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
   liveAgentSessionLookupKey,
 } from "./live-agent-session-cache";
 
-const createSnapshot = (externalSessionId: string): LiveAgentSessionSnapshot =>
-  createLiveAgentSessionSnapshotFixture({ externalSessionId });
+const createTruth = (externalSessionId: string) =>
+  createLiveSessionTruthFixture({ ref: { externalSessionId } });
 
 describe("live-agent-session-cache", () => {
   test("builds cache keys from repo path, runtime kind, and normalized working directories", () => {
@@ -19,10 +18,10 @@ describe("live-agent-session-cache", () => {
   });
 
   test("reuses preloaded single-directory snapshots without scanning", async () => {
-    const preloadedSessions = [createSnapshot("external-1")];
-    const listLiveAgentSessionSnapshots = mock(async () => [createSnapshot("external-2")]);
+    const preloadedSessions = [createTruth("external-1")];
+    const listLiveSessionTruths = mock(async () => [createTruth("external-2")]);
     const cache = new LiveAgentSessionCache(
-      { listLiveAgentSessionSnapshots },
+      { listLiveSessionTruths },
       new Map([
         [
           liveAgentSessionLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
@@ -44,13 +43,13 @@ describe("live-agent-session-cache", () => {
 
     expect(first).toBe(preloadedSessions);
     expect(second).toBe(preloadedSessions);
-    expect(listLiveAgentSessionSnapshots).not.toHaveBeenCalled();
+    expect(listLiveSessionTruths).not.toHaveBeenCalled();
   });
 
   test("normalizes, de-dupes, and sorts directory inputs before scanning and cache reuse", async () => {
-    const scannedSessions = [createSnapshot("external-1")];
-    const listLiveAgentSessionSnapshots = mock(async () => scannedSessions);
-    const cache = new LiveAgentSessionCache({ listLiveAgentSessionSnapshots });
+    const scannedSessions = [createTruth("external-1")];
+    const listLiveSessionTruths = mock(async () => scannedSessions);
+    const cache = new LiveAgentSessionCache({ listLiveSessionTruths });
 
     const first = await cache.load({
       repoPath: "/tmp/repo",
@@ -65,8 +64,8 @@ describe("live-agent-session-cache", () => {
 
     expect(first).toBe(scannedSessions);
     expect(second).toBe(scannedSessions);
-    expect(listLiveAgentSessionSnapshots).toHaveBeenCalledTimes(1);
-    expect(listLiveAgentSessionSnapshots).toHaveBeenCalledWith({
+    expect(listLiveSessionTruths).toHaveBeenCalledTimes(1);
+    expect(listLiveSessionTruths).toHaveBeenCalledWith({
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
       directories: ["/tmp/repo/a", "/tmp/repo/b"],
@@ -74,14 +73,14 @@ describe("live-agent-session-cache", () => {
   });
 
   test("bypasses preloaded single-directory data when scanning multiple directories", async () => {
-    const scannedSessions = [createSnapshot("external-2")];
-    const listLiveAgentSessionSnapshots = mock(async () => scannedSessions);
+    const scannedSessions = [createTruth("external-2")];
+    const listLiveSessionTruths = mock(async () => scannedSessions);
     const cache = new LiveAgentSessionCache(
-      { listLiveAgentSessionSnapshots },
+      { listLiveSessionTruths },
       new Map([
         [
           liveAgentSessionLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
-          [createSnapshot("external-1")],
+          [createTruth("external-1")],
         ],
       ]),
     );
@@ -93,12 +92,12 @@ describe("live-agent-session-cache", () => {
     });
 
     expect(loaded).toBe(scannedSessions);
-    expect(listLiveAgentSessionSnapshots).toHaveBeenCalledTimes(1);
+    expect(listLiveSessionTruths).toHaveBeenCalledTimes(1);
   });
 
   test("rejects empty directory scans instead of widening to all sessions", async () => {
-    const listLiveAgentSessionSnapshots = mock(async () => [createSnapshot("external-1")]);
-    const cache = new LiveAgentSessionCache({ listLiveAgentSessionSnapshots });
+    const listLiveSessionTruths = mock(async () => [createTruth("external-1")]);
+    const cache = new LiveAgentSessionCache({ listLiveSessionTruths });
 
     await expect(
       cache.load({
@@ -108,6 +107,6 @@ describe("live-agent-session-cache", () => {
       }),
     ).rejects.toThrow("Cannot scan live agent sessions without a valid working directory.");
 
-    expect(listLiveAgentSessionSnapshots).not.toHaveBeenCalled();
+    expect(listLiveSessionTruths).not.toHaveBeenCalled();
   });
 });

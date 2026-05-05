@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
-import type { ReadLiveAgentSessionSnapshotInput } from "@openducktor/core";
+import { toLiveSessionTruthFromSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createDeferred, createLiveAgentSessionSnapshotFixture } from "../test-utils";
+import { createDeferred, createLiveSessionTruthFixture } from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
 
 const withCapturedConsoleError = async (
@@ -74,7 +74,13 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 
 const createAdapter = () => {
   const adapter = new OpencodeSdkAdapter();
-  adapter.listLiveAgentSessionSnapshots = async () => [];
+  adapter.listLiveSessionTruths = async () => [];
+  adapter.readLiveSessionTruth = async (input) =>
+    toLiveSessionTruthFromSnapshot({
+      ref: input,
+      runtimeId: null,
+      snapshot: null,
+    });
   return adapter;
 };
 
@@ -118,21 +124,21 @@ describe("agent-orchestrator-ensure-ready", () => {
     let attachCalls = 0;
     let stopCalls = 0;
     let resumeCalls = 0;
-    const readSnapshotCalls: ReadLiveAgentSessionSnapshotInput[] = [];
+    const readSnapshotCalls: Parameters<OpencodeSdkAdapter["readLiveSessionTruth"]>[0][] = [];
 
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
-    const originalReadLiveAgentSessionSnapshot = adapter.readLiveAgentSessionSnapshot;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveSessionTruths;
+    const originalReadLiveAgentSessionSnapshot = adapter.readLiveSessionTruth;
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => {
+    adapter.listLiveSessionTruths = async () => {
       throw new Error("ensure-ready must use the single-session snapshot read");
     };
-    adapter.readLiveAgentSessionSnapshot = async (input) => {
+    adapter.readLiveSessionTruth = async (input) => {
       readSnapshotCalls.push(input);
-      return createLiveAgentSessionSnapshotFixture();
+      return createLiveSessionTruthFixture({ ref: input });
     };
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -205,8 +211,8 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
-      adapter.readLiveAgentSessionSnapshot = originalReadLiveAgentSessionSnapshot;
+      adapter.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
+      adapter.readLiveSessionTruth = originalReadLiveAgentSessionSnapshot;
     }
   });
 
@@ -220,7 +226,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const originalHasSession = adapter.hasSession;
     const originalDetachSession = adapter.detachSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalReadLiveAgentSessionSnapshot = adapter.readLiveAgentSessionSnapshot;
+    const originalReadLiveAgentSessionSnapshot = adapter.readLiveSessionTruth;
     adapter.hasSession = () => attached;
     adapter.detachSession = async (externalSessionId) => {
       expect(externalSessionId).toBe("external-1");
@@ -237,7 +243,17 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
-    adapter.readLiveAgentSessionSnapshot = async () => null;
+    adapter.readLiveSessionTruth = async () =>
+      toLiveSessionTruthFromSnapshot({
+        ref: {
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+          externalSessionId: "external-1",
+        },
+        runtimeId: "runtime-1",
+        snapshot: null,
+      });
 
     const sessionsRef = {
       current: {
@@ -298,7 +314,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter.hasSession = originalHasSession;
       adapter.detachSession = originalDetachSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.readLiveAgentSessionSnapshot = originalReadLiveAgentSessionSnapshot;
+      adapter.readLiveSessionTruth = originalReadLiveAgentSessionSnapshot;
     }
   });
 
@@ -308,7 +324,13 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [createLiveAgentSessionSnapshotFixture()];
+    adapter.readLiveSessionTruth = async () =>
+      createLiveSessionTruthFixture({
+        snapshot: {
+          title: "Builder Session",
+        },
+      });
+    adapter.listLiveSessionTruths = async () => [createLiveSessionTruthFixture()];
 
     const sessionsRef = {
       current: {
@@ -368,7 +390,13 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [createLiveAgentSessionSnapshotFixture()];
+    adapter.readLiveSessionTruth = async () =>
+      createLiveSessionTruthFixture({
+        snapshot: {
+          title: "Builder Session",
+        },
+      });
+    adapter.listLiveSessionTruths = async () => [createLiveSessionTruthFixture()];
 
     const sessionsRef = {
       current: {
@@ -487,8 +515,31 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveSessionTruths;
     adapter.hasSession = () => true;
+    adapter.readLiveSessionTruth = async () =>
+      createLiveSessionTruthFixture({
+        snapshot: {
+          title: "BUILD task-1",
+          status: { type: "busy" },
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["**/.env"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
+        },
+      });
     adapter.resumeSession = async () => {
       resumeCalls += 1;
       return {
@@ -499,31 +550,34 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
-    adapter.listLiveAgentSessionSnapshots = async () => [
-      {
-        externalSessionId: "external-1",
-        title: "BUILD task-1",
-        workingDirectory: "/tmp/repo/worktree",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        status: { type: "busy" },
-        pendingApprovals: [
-          {
-            requestId: "perm-1",
-            requestType: "permission_grant" as const,
-            title: `Approve permission: ${"read"}`,
-            summary: `Approval request for ${"read"}.`,
-            affectedPaths: ["**/.env"],
-            action: { name: "read" },
-            mutation: "read_only" as const,
-            supportedReplyOutcomes: [
-              "approve_once" as const,
-              "approve_session" as const,
-              "reject" as const,
-            ],
-          },
-        ],
-        pendingQuestions: [],
-      },
+    adapter.listLiveSessionTruths = async () => [
+      createLiveSessionTruthFixture({
+        ref: { repoPath: "/tmp/repo", workingDirectory: "/tmp/repo/worktree" },
+        snapshot: {
+          externalSessionId: "external-1",
+          title: "BUILD task-1",
+          workingDirectory: "/tmp/repo/worktree",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "busy" },
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["**/.env"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
+          pendingQuestions: [],
+        },
+      }),
     ];
 
     const sessionsRef = {
@@ -593,7 +647,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
     }
   });
 
@@ -1068,8 +1122,14 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveSessionTruths;
     adapter.hasSession = () => false;
+    adapter.readLiveSessionTruth = async () =>
+      createLiveSessionTruthFixture({
+        snapshot: {
+          title: "Builder Session",
+        },
+      });
     adapter.resumeSession = async (input) => {
       resumedInput = input;
       return {
@@ -1080,17 +1140,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
-    adapter.listLiveAgentSessionSnapshots = async () => [
-      {
-        externalSessionId: "external-1",
-        title: "Builder Session",
-        workingDirectory: "/tmp/repo/worktree",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        status: { type: "idle" },
-        pendingApprovals: [],
-        pendingQuestions: [],
-      },
-    ];
+    adapter.listLiveSessionTruths = async () => [createLiveSessionTruthFixture()];
 
     const sessionsRef = {
       current: {
@@ -1151,7 +1201,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
     }
   });
 
@@ -1164,8 +1214,14 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListLiveAgentSessionSnapshots = adapter.listLiveSessionTruths;
     adapter.hasSession = () => false;
+    adapter.readLiveSessionTruth = async () =>
+      createLiveSessionTruthFixture({
+        snapshot: {
+          title: "Builder Session",
+        },
+      });
     adapter.resumeSession = async (input) => {
       resumedInput = input;
       return {
@@ -1176,17 +1232,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
-    adapter.listLiveAgentSessionSnapshots = async () => [
-      {
-        externalSessionId: "external-1",
-        title: "Session",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        status: { type: "idle" },
-        pendingApprovals: [],
-        pendingQuestions: [],
-        workingDirectory: "/tmp/repo/worktree",
-      },
-    ];
+    adapter.listLiveSessionTruths = async () => [createLiveSessionTruthFixture()];
 
     const sessionsRef = {
       current: {
@@ -1244,7 +1290,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
     }
   });
 
