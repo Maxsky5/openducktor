@@ -3,14 +3,14 @@ use super::command_support::{
     deserialize_args, handle_repo_path_operation, handle_repo_path_operation_blocking,
     run_headless_blocking, serialize_value, service_error, CommandResult, HeadlessState,
 };
+use crate::command_helpers::run_service_blocking_tokio;
+use crate::command_payloads::{
+    RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
+    SettingsSnapshotResponsePayload,
+};
 use crate::commands::workspace::{
     resolve_staged_local_attachment_path, stage_local_attachment_to_temp,
     ResolvedLocalAttachmentPayload, StagedLocalAttachmentPayload,
-};
-use crate::run_service_blocking_tokio;
-use crate::{
-    RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
-    SettingsSnapshotResponsePayload,
 };
 use anyhow::anyhow;
 use host_application::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshot};
@@ -363,7 +363,7 @@ async fn handle_workspace_save_settings_snapshot(
 ) -> CommandResult {
     let WorkspaceSaveSettingsSnapshotArgs { snapshot } = deserialize_args(args)?;
     let service = state.service.clone();
-    let crate::SettingsSnapshotPayload {
+    let SettingsSnapshotPayload {
         theme,
         git,
         chat,

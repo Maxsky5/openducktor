@@ -4,9 +4,8 @@ use super::events::{build_sse_response, parse_last_event_id, HeadlessEventBus};
 use crate::commands::workspace::is_staged_local_attachment_path;
 use crate::external_task_sync::ExternalTaskSyncEvent;
 use crate::pull_request_sync::start_pull_request_sync_loop;
-use crate::{
-    startup_phase_service_bootstrap, startup_phase_shutdown_hooks_with_gate, startup_phase_tracing,
-};
+use crate::shutdown::startup_phase_shutdown_hooks_with_gate;
+use crate::startup::{startup_phase_service_bootstrap, startup_phase_tracing};
 use anyhow::Context;
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, Query, State};

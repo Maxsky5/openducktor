@@ -1,6 +1,8 @@
-use crate::{
-    as_error, run_service_blocking, AppState, RepoConfigPayload, RepoSettingsPayload,
-    SettingsSnapshotPayload, SettingsSnapshotResponsePayload,
+use crate::app_state::AppState;
+use crate::command_helpers::{as_error, run_service_blocking};
+use crate::command_payloads::{
+    RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
+    SettingsSnapshotResponsePayload,
 };
 use base64::Engine;
 use host_application::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshot};
@@ -445,11 +447,14 @@ mod tests {
         workspace_save_settings_snapshot, workspace_update_global_git_config,
         workspace_update_repo_config, HookSet,
     };
+    use crate::app_state::AppState;
+    use crate::command_payloads::{
+        RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
+    };
     use crate::command_services::git::{
         authorized_worktree_cache, cache_key, read_worktree_state_token, resolve_working_dir,
         AuthorizedWorktreeCacheEntry,
     };
-    use crate::{AppState, RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload};
     use host_application::AppService;
     use host_domain::{TaskStore, WorkspaceRecord, TASK_METADATA_NAMESPACE};
     use host_infra_beads::BeadsTaskStore;
