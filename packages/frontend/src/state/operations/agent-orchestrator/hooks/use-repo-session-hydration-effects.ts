@@ -1,5 +1,6 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { RepoSessionPresencePreloads } from "../lifecycle/repo-session-presence-preloads";
 import { createRepoSessionHydrationService } from "../lifecycle/repo-session-hydration-service";
 import type { SessionHydrationOperations } from "../lifecycle/session-hydration-operations";
 import type { AgentSessionPresenceStore } from "../lifecycle/session-presence-store";
@@ -13,6 +14,10 @@ type UseRepoSessionHydrationEffectsArgs = {
     SessionHydrationOperations,
     "bootstrapTaskSessions" | "reconcileLiveTaskSessions"
   >;
+  prepareRepoSessionPresencePreloads?: (input: {
+    repoPath: string;
+    records: AgentSessionRecord[];
+  }) => Promise<RepoSessionPresencePreloads>;
 };
 
 export const useRepoSessionHydrationEffects = ({
@@ -21,6 +26,7 @@ export const useRepoSessionHydrationEffects = ({
   currentWorkspaceRepoPathRef,
   agentSessionPresenceStore,
   sessionHydration,
+  prepareRepoSessionPresencePreloads,
 }: UseRepoSessionHydrationEffectsArgs) => {
   const [sessionRetryTick, setSessionRetryTick] = useState(0);
 
@@ -29,11 +35,12 @@ export const useRepoSessionHydrationEffects = ({
       createRepoSessionHydrationService({
         sessionHydration,
         agentSessionPresenceStore,
+        ...(prepareRepoSessionPresencePreloads ? { prepareRepoSessionPresencePreloads } : {}),
         onRetryRequested: () => {
           setSessionRetryTick((current) => current + 1);
         },
       }),
-    [agentSessionPresenceStore, sessionHydration],
+    [agentSessionPresenceStore, prepareRepoSessionPresencePreloads, sessionHydration],
   );
 
   const isCurrentActiveRepo = useCallback(

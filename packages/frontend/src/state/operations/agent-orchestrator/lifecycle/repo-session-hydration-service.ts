@@ -1,4 +1,5 @@
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { RepoSessionPresencePreloads } from "./repo-session-presence-preloads";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
 import type { AgentSessionPresenceStore } from "./session-presence-store";
 
@@ -21,6 +22,7 @@ const toTaskRecordKey = (taskId: string, records: AgentSessionRecord[]): string 
 export const createRepoSessionHydrationService = ({
   sessionHydration,
   agentSessionPresenceStore,
+  prepareRepoSessionPresencePreloads,
   onRetryRequested,
 }: {
   sessionHydration: Pick<
@@ -28,6 +30,10 @@ export const createRepoSessionHydrationService = ({
     "bootstrapTaskSessions" | "reconcileLiveTaskSessions"
   >;
   agentSessionPresenceStore: AgentSessionPresenceStore;
+  prepareRepoSessionPresencePreloads?: (input: {
+    repoPath: string;
+    records: AgentSessionRecord[];
+  }) => Promise<RepoSessionPresencePreloads>;
   onRetryRequested: () => void;
 }) => {
   const bootstrappedTasksByRepo: Record<string, Set<string>> = {};
@@ -73,6 +79,36 @@ export const createRepoSessionHydrationService = ({
     const delayMs = nextSessionRetryDelayMs(attempt);
     console.error(
       `Failed to ${scope} agent sessions for task '${taskId}' in repo '${repoPath}'. Retrying in ${delayMs}ms.`,
+      error,
+    );
+    retryTimeoutsByKey[retryKey] = setTimeout(() => {
+      delete retryTimeoutsByKey[retryKey];
+      onRetryRequested();
+    }, delayMs);
+  };
+
+  const preloadRetryKey = (repoPath: string): string => `reconcile-preload::${repoPath}`;
+
+  const clearPreloadRetry = (repoPath: string): void => {
+    const retryKey = preloadRetryKey(repoPath);
+    const timeout = retryTimeoutsByKey[retryKey];
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+      delete retryTimeoutsByKey[retryKey];
+    }
+    delete retryAttemptsByKey[retryKey];
+  };
+
+  const schedulePreloadRetry = (repoPath: string, error: unknown): void => {
+    const retryKey = preloadRetryKey(repoPath);
+    if (retryTimeoutsByKey[retryKey] !== undefined) {
+      return;
+    }
+    const attempt = retryAttemptsByKey[retryKey] ?? 0;
+    retryAttemptsByKey[retryKey] = attempt + 1;
+    const delayMs = nextSessionRetryDelayMs(attempt);
+    console.error(
+      `Failed to preload agent session presence for repo '${repoPath}'. Retrying in ${delayMs}ms.`,
       error,
     );
     retryTimeoutsByKey[retryKey] = setTimeout(() => {
@@ -168,11 +204,43 @@ export const createRepoSessionHydrationService = ({
         inFlight.add(entry.task.id);
       }
       try {
+        if (pendingTaskEntries.length === 0) {
+          return;
+        }
+        let preloads: RepoSessionPresencePreloads | null = null;
+        if (prepareRepoSessionPresencePreloads) {
+          try {
+            preloads = await prepareRepoSessionPresencePreloads({
+              repoPath,
+              records: pendingTaskEntries.flatMap((entry) => entry.records),
+            });
+          } catch (error) {
+            if (!isCancelled() && isCurrentRepo(repoPath)) {
+              schedulePreloadRetry(repoPath, error);
+            }
+            return;
+          }
+          if (isCancelled() || !isCurrentRepo(repoPath)) {
+            return;
+          }
+          agentSessionPresenceStore.replaceRepoPresence(
+            repoPath,
+            preloads.preloadedSessionPresenceByKey,
+          );
+          clearPreloadRetry(repoPath);
+        }
+
         const results = await Promise.allSettled(
           pendingTaskEntries.map(async ({ task, records, recordKey }) => {
             await sessionHydration.reconcileLiveTaskSessions({
               taskId: task.id,
               persistedRecords: records,
+              ...(preloads
+                ? {
+                    preloadedRuntimeLists: preloads.preloadedRuntimeLists,
+                    preloadedSessionPresenceByKey: preloads.preloadedSessionPresenceByKey,
+                  }
+                : {}),
             });
             return { taskId: task.id, recordKey };
           }),

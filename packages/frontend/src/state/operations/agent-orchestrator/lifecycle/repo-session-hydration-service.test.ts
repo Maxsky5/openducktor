@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  RuntimeInstanceSummary,
+  RuntimeKind,
+  TaskCard,
+} from "@openducktor/contracts";
+import type { AgentSessionPresenceSnapshot } from "@openducktor/core";
 import { createRepoSessionHydrationService } from "./repo-session-hydration-service";
 import { AgentSessionPresenceStore } from "./session-presence-store";
 
@@ -145,7 +151,7 @@ describe("repo-session-hydration-service", () => {
   test("reconcile delegates repo-scoped persisted records without pre-scanning runtimes", async () => {
     const reconcileCalls: Array<{
       taskId: string;
-      persistedRecords: AgentSessionRecord[];
+      persistedRecords?: AgentSessionRecord[];
     }> = [];
     const agentSessionPresenceStore = new AgentSessionPresenceStore();
 
@@ -239,6 +245,119 @@ describe("repo-session-hydration-service", () => {
     });
 
     expect(reconcileCalls).toEqual(["task-1"]);
+    service.dispose();
+  });
+
+  test("reconcile preloads repo session presence once and shares it with every pending task", async () => {
+    const reconcileCalls: Array<{
+      taskId: string;
+      persistedRecords?: AgentSessionRecord[];
+      preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
+      preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
+    }> = [];
+    const preloadCalls: AgentSessionRecord[][] = [];
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
+    const preloadedRuntimeLists = new Map<RuntimeKind, RuntimeInstanceSummary[]>();
+    const preloadedSessionPresenceByKey = new Map<string, AgentSessionPresenceSnapshot[]>();
+    const taskA = taskWithSessionAt("task-a", "external-a", "/tmp/repo/worktree-a");
+    const firstTaskASession = taskA.agentSessions?.[0];
+    if (!firstTaskASession) {
+      throw new Error("Expected seeded task session");
+    }
+    taskA.agentSessions = [
+      firstTaskASession,
+      { ...firstTaskASession, externalSessionId: "external-a-2" },
+    ];
+    const taskB = taskWithSessionAt("task-b", "external-b", "/tmp/repo/worktree-b");
+    const emptyTask = taskWithSession("task-empty", "external-empty");
+    emptyTask.agentSessions = [];
+
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async (input) => {
+          reconcileCalls.push(input);
+        },
+      },
+      agentSessionPresenceStore,
+      prepareRepoSessionPresencePreloads: async ({ records }) => {
+        preloadCalls.push(records);
+        return { preloadedRuntimeLists, preloadedSessionPresenceByKey };
+      },
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [taskA, taskB, emptyTask],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [taskA, taskB, emptyTask],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(preloadCalls).toEqual([
+      [...(taskA.agentSessions ?? []), ...(taskB.agentSessions ?? [])],
+    ]);
+    expect(reconcileCalls).toHaveLength(2);
+    expect(reconcileCalls.map((call) => call.taskId).sort()).toEqual(["task-a", "task-b"]);
+    for (const call of reconcileCalls) {
+      expect(call.preloadedRuntimeLists).toBe(preloadedRuntimeLists);
+      expect(call.preloadedSessionPresenceByKey).toBe(preloadedSessionPresenceByKey);
+    }
+    service.dispose();
+  });
+
+  test("reconcile schedules one repo retry when repo preload fails", async () => {
+    let retryRequests = 0;
+    const reconcileCalls: string[] = [];
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
+    const retryTriggered = createDeferred<void>();
+
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId }) => {
+          reconcileCalls.push(taskId);
+        },
+      },
+      agentSessionPresenceStore,
+      prepareRepoSessionPresencePreloads: async () => {
+        throw new Error("preload failed");
+      },
+      onRetryRequested: () => {
+        retryRequests += 1;
+        retryTriggered.resolve();
+      },
+    });
+
+    await withSuppressedExpectedConsoleErrors({
+      expectedCount: 1,
+      isExpected: (args) =>
+        typeof args[0] === "string" &&
+        args[0].startsWith("Failed to preload agent session presence for repo '/tmp/repo'"),
+      run: async () => {
+        await service.reconcilePendingTasks({
+          repoPath,
+          tasks: [taskWithSession("task-a", "external-a"), taskWithSession("task-b", "external-b")],
+          isCancelled: () => false,
+          isCurrentRepo: () => true,
+        });
+      },
+    });
+
+    const retryResult = await Promise.race([
+      retryTriggered.promise.then(() => "retried" as const),
+      Bun.sleep(600).then(() => "timeout" as const),
+    ]);
+
+    expect(reconcileCalls).toEqual([]);
+    expect(retryRequests).toBe(1);
+    expect(retryResult).toBe("retried");
     service.dispose();
   });
 

@@ -1,4 +1,9 @@
-import type { AgentSessionRecord, RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  RepoRuntimeRef,
+  RuntimeInstanceSummary,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import { normalizeWorkingDirectory } from "../support/core";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 
@@ -14,13 +19,31 @@ export type ResolvedHydrationRuntime =
       reason: string;
     };
 
+export const findRepoRuntime = ({
+  repoPath,
+  runtimeKind,
+  runtimes,
+}: {
+  repoPath: string;
+  runtimeKind: RuntimeKind;
+  runtimes: RuntimeInstanceSummary[];
+}): RuntimeInstanceSummary | null => {
+  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+  return (
+    runtimes.find(
+      (runtime) =>
+        runtime.kind === runtimeKind &&
+        normalizeWorkingDirectory(runtime.repoPath) === normalizedRepoPath,
+    ) ?? null
+  );
+};
+
 export const createHydrationRuntimeResolver = ({
   repoPath,
 }: {
   repoPath: string;
 }): ((record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>) => {
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-
   return async (record: AgentSessionRecord): Promise<ResolvedHydrationRuntime> => {
     const runtimeKind = readPersistedRuntimeKind(record);
     const workingDirectory = normalizeWorkingDirectory(record.workingDirectory);
