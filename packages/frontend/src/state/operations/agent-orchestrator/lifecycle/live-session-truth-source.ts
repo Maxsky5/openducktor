@@ -1,4 +1,9 @@
-import type { AgentEnginePort, LiveAgentSessionRef, LiveSessionTruth } from "@openducktor/core";
+import {
+  type AgentEnginePort,
+  type LiveAgentSessionRef,
+  type LiveSessionTruth,
+  toLiveSessionTruthFromSnapshot,
+} from "@openducktor/core";
 import { LiveAgentSessionCache, liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 
@@ -10,6 +15,10 @@ type LiveSessionTruthSourceAdapter = {
 export type LiveSessionTruthSource = {
   read: (ref: LiveAgentSessionRef) => Promise<LiveSessionTruth>;
 };
+
+type PreloadedTruthLookup =
+  | { type: "hit"; truth: LiveSessionTruth }
+  | { type: "miss"; hasAuthoritativeEntry: boolean };
 
 export const createLiveSessionTruthSource = ({
   adapter,
@@ -29,13 +38,30 @@ export const createLiveSessionTruthSource = ({
       )
     : null;
 
-  const readPreloadedTruth = (ref: LiveAgentSessionRef): LiveSessionTruth | null => {
-    const truths = preloadedTruthsByKey.get(
-      liveAgentSessionLookupKey(ref.repoPath, ref.runtimeKind, ref.workingDirectory),
+  const toStaleTruth = (ref: LiveAgentSessionRef): LiveSessionTruth =>
+    toLiveSessionTruthFromSnapshot({
+      ref,
+      runtimeId: null,
+      snapshot: null,
+    });
+
+  const readPreloadedTruth = (ref: LiveAgentSessionRef): PreloadedTruthLookup => {
+    const lookupKey = liveAgentSessionLookupKey(
+      ref.repoPath,
+      ref.runtimeKind,
+      ref.workingDirectory,
     );
-    return (
-      truths?.find((candidate) => candidate.ref.externalSessionId === ref.externalSessionId) ?? null
+    if (!preloadedTruthsByKey.has(lookupKey)) {
+      return { type: "miss", hasAuthoritativeEntry: false };
+    }
+    const truths = preloadedTruthsByKey.get(lookupKey) ?? [];
+    const truth = truths.find(
+      (candidate) => candidate.ref.externalSessionId === ref.externalSessionId,
     );
+    if (truth) {
+      return { type: "hit", truth };
+    }
+    return { type: "miss", hasAuthoritativeEntry: true };
   };
 
   const read = async (ref: LiveAgentSessionRef): Promise<LiveSessionTruth> => {
@@ -45,22 +71,28 @@ export const createLiveSessionTruthSource = ({
     }
 
     const preloadedTruth = readPreloadedTruth(ref);
-    if (preloadedTruth) {
-      return preloadedTruth;
+    if (preloadedTruth.type === "hit") {
+      return preloadedTruth.truth;
+    }
+    if (preloadedTruth.hasAuthoritativeEntry && liveAgentSessionScanCache) {
+      return toStaleTruth(ref);
     }
 
-    const truths = liveAgentSessionScanCache
-      ? await liveAgentSessionScanCache.load({
-          repoPath: ref.repoPath,
-          runtimeKind: ref.runtimeKind,
-          directories: [ref.workingDirectory],
-        })
-      : [];
-    const scannedTruth = truths.find(
-      (candidate) => candidate.ref.externalSessionId === ref.externalSessionId,
-    );
-    if (scannedTruth) {
-      return scannedTruth;
+    if (liveAgentSessionScanCache) {
+      const truths = await liveAgentSessionScanCache.load({
+        repoPath: ref.repoPath,
+        runtimeKind: ref.runtimeKind,
+        directories: [ref.workingDirectory],
+      });
+      const scannedTruth = truths.find(
+        (candidate) => candidate.ref.externalSessionId === ref.externalSessionId,
+      );
+      if (scannedTruth) {
+        return scannedTruth;
+      }
+      // OpenCode direct truth reads repeat the same directory-scoped scan. A successful
+      // scan miss is authoritative; do not probe again and multiply hydration latency.
+      return toStaleTruth(ref);
     }
 
     if (!adapter.readLiveSessionTruth) {

@@ -86,16 +86,69 @@ describe("live-session-truth-source", () => {
     expect(readLiveSessionTruth).not.toHaveBeenCalled();
   });
 
-  test("uses direct truth reads after a cache miss", async () => {
+  test("treats a scanned miss as authoritative without a duplicate direct read", async () => {
+    const firstRef = createTruth("external-1").ref;
+    const secondRef = createTruth("external-2").ref;
+    const scanInputs: ListLiveSessionTruthsInput[] = [];
+    const listLiveSessionTruths = mock(async (input: ListLiveSessionTruthsInput) => {
+      scanInputs.push(input);
+      return [];
+    });
+    const readLiveSessionTruth = mock(async () => {
+      throw new Error("should not repeat a directory scan through a direct read");
+    });
+    const source = createLiveSessionTruthSource({
+      adapter: { listLiveSessionTruths, readLiveSessionTruth },
+    });
+
+    const firstTruth = await source.read(firstRef);
+    const secondTruth = await source.read(secondRef);
+
+    expect(firstTruth.type).toBe("stale");
+    expect(firstTruth.runtimeId).toBeNull();
+    expect(secondTruth.type).toBe("stale");
+    expect(scanInputs).toEqual([
+      {
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        directories: ["/tmp/repo/worktree"],
+      },
+    ]);
+    expect(readLiveSessionTruth).not.toHaveBeenCalled();
+  });
+
+  test("treats a preloaded empty directory as authoritative when scanning is available", async () => {
+    const ref = createTruth("external-1").ref;
+    const listLiveSessionTruths = mock(async () => {
+      throw new Error("should not scan an already preloaded directory");
+    });
+    const readLiveSessionTruth = mock(async () => {
+      throw new Error("should not directly read after an authoritative preloaded miss");
+    });
+    const source = createLiveSessionTruthSource({
+      adapter: { listLiveSessionTruths, readLiveSessionTruth },
+      preloadedLiveAgentSessionsByKey: new Map([
+        [liveAgentSessionLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"), []],
+      ]),
+    });
+
+    const truth = await source.read(ref);
+
+    expect(truth.type).toBe("stale");
+    expect(truth.runtimeId).toBeNull();
+    expect(listLiveSessionTruths).not.toHaveBeenCalled();
+    expect(readLiveSessionTruth).not.toHaveBeenCalled();
+  });
+
+  test("uses direct truth reads when no scan or preloaded source is available", async () => {
     const directTruth = createTruth("external-1");
     const readInputs: ReadLiveSessionTruthInput[] = [];
-    const listLiveSessionTruths = mock(async () => []);
     const readLiveSessionTruth = mock(async (input: ReadLiveSessionTruthInput) => {
       readInputs.push(input);
       return directTruth;
     });
     const source = createLiveSessionTruthSource({
-      adapter: { listLiveSessionTruths, readLiveSessionTruth },
+      adapter: { readLiveSessionTruth },
     });
 
     const truth = await source.read(directTruth.ref);
