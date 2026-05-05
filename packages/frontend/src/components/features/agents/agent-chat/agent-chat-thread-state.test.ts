@@ -34,6 +34,23 @@ describe("getAgentChatThreadState", () => {
     expect(state.statusOverlay?.description).toBe("Loading the selected conversation.");
   });
 
+  test("treats missing transcript rows as conversation-loading state", () => {
+    const state = getAgentChatThreadState({
+      isSessionViewLoading: false,
+      isSessionHistoryLoading: false,
+      isWaitingForRuntimeReadiness: false,
+      readinessState: "ready",
+      blockedReason: "",
+      isTranscriptRenderDeferred: false,
+      isTranscriptRowsMissing: true,
+    });
+
+    expect(state.isTranscriptLoading).toBe(true);
+    expect(state.hideTranscriptWhileDeferred).toBe(false);
+    expect(state.statusOverlay?.kind).toBe("session_loading");
+    expect(state.statusOverlay?.description).toBe("Loading the selected conversation.");
+  });
+
   test("shows blocked card only for explicit blocked reason", () => {
     const visible = getAgentChatThreadState({
       isSessionViewLoading: false,

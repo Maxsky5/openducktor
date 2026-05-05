@@ -2195,19 +2195,17 @@ describe("use-agent-orchestrator-operations", () => {
       host.runtimeList = async () => [];
       await clearAppQueryClient();
 
-      await expect(
-        harness.run(async () => {
-          await harness.getLatest().retrySessionRuntimeAttachment({
-            taskId: "task-1",
-            externalSessionId: "external-1",
-            persistedRecords: [persistedBuildSessionFixture],
-          });
-        }),
-      ).rejects.toThrow("No live repo runtime found");
+      await harness.run(async () => {
+        await harness.getLatest().retrySessionRuntimeAttachment({
+          taskId: "task-1",
+          externalSessionId: "external-1",
+          persistedRecords: [persistedBuildSessionFixture],
+        });
+      });
 
       expect(
         harness.getLatest().sessionStore.getSessionSnapshot("external-1")?.runtimeRecoveryState,
-      ).toBe("failed");
+      ).toBe("waiting_for_runtime");
 
       host.runtimeList = async () => [
         {
@@ -2243,16 +2241,9 @@ describe("use-agent-orchestrator-operations", () => {
       });
 
       const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("external-1");
-      expect(attachCalls).toBe(1);
+      expect(attachCalls).toBe(0);
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
-      expect(recoveredSession?.historyHydrationState).toBe("hydrated");
-      expect(
-        recoveredSession
-          ? sessionMessagesToArray(recoveredSession).some(
-              (message) => message.content === "Recovered history",
-            )
-          : false,
-      ).toBe(true);
+      expect(recoveredSession?.historyHydrationState).toBe("not_requested");
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
@@ -2263,7 +2254,7 @@ describe("use-agent-orchestrator-operations", () => {
     }
   });
 
-  test("starts requested history hydration inside the recovery operation once runtime recovery succeeds", async () => {
+  test("keeps runtime recovery separate from requested history hydration", async () => {
     const originalRuntimeList = host.runtimeList;
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
@@ -2352,10 +2343,10 @@ describe("use-agent-orchestrator-operations", () => {
         });
       });
 
-      expect(loadSessionHistoryCalls).toBe(1);
+      expect(loadSessionHistoryCalls).toBe(0);
       expect(
         harness.getLatest().sessionStore.getSessionSnapshot("external-1")?.historyHydrationState,
-      ).toBe("hydrated");
+      ).toBe("not_requested");
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
@@ -2847,7 +2838,7 @@ describe("use-agent-orchestrator-operations", () => {
     }
   });
 
-  test("retries requested history hydration after recovery when the prior hydration state failed", async () => {
+  test("does not retry requested history hydration from runtime recovery", async () => {
     const originalRuntimeList = host.runtimeList;
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
@@ -2947,10 +2938,10 @@ describe("use-agent-orchestrator-operations", () => {
         });
       });
 
-      expect(loadSessionHistoryCalls).toBe(1);
+      expect(loadSessionHistoryCalls).toBe(0);
       expect(
         harness.getLatest().sessionStore.getSessionSnapshot("external-1")?.historyHydrationState,
-      ).toBe("hydrated");
+      ).toBe("not_requested");
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;
@@ -2961,7 +2952,7 @@ describe("use-agent-orchestrator-operations", () => {
     }
   });
 
-  test("keeps runtime recovery idle when history hydration fails after runtime recovery succeeds", async () => {
+  test("keeps runtime recovery idle without coupling it to history hydration failures", async () => {
     const originalRuntimeList = host.runtimeList;
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
@@ -3023,19 +3014,17 @@ describe("use-agent-orchestrator-operations", () => {
       });
       await clearAppQueryClient();
 
-      await expect(
-        harness.run(async () => {
-          await harness.getLatest().retrySessionRuntimeAttachment({
-            taskId: "task-1",
-            externalSessionId: "external-1",
-            persistedRecords: [persistedBuildSessionFixture],
-          });
-        }),
-      ).rejects.toThrow("history unavailable");
+      await harness.run(async () => {
+        await harness.getLatest().retrySessionRuntimeAttachment({
+          taskId: "task-1",
+          externalSessionId: "external-1",
+          persistedRecords: [persistedBuildSessionFixture],
+        });
+      });
 
       const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("external-1");
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
-      expect(recoveredSession?.historyHydrationState).toBe("failed");
+      expect(recoveredSession?.historyHydrationState).toBe("not_requested");
       expect(recoveredSession?.runtimeId).toBe("runtime-1");
     } finally {
       await harness.unmount();
@@ -3047,7 +3036,7 @@ describe("use-agent-orchestrator-operations", () => {
     }
   });
 
-  test("requests history after recovery when the session already has a local transcript tail", async () => {
+  test("leaves local transcript tail untouched during runtime recovery", async () => {
     const originalRuntimeList = host.runtimeList;
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
@@ -3156,19 +3145,15 @@ describe("use-agent-orchestrator-operations", () => {
         });
       });
 
-      expect(loadSessionHistoryCalls).toBe(1);
+      expect(loadSessionHistoryCalls).toBe(0);
       const recoveredSession = harness.getLatest().sessionStore.getSessionSnapshot("external-1");
       expect(recoveredSession?.runtimeRecoveryState).toBe("idle");
-      expect(recoveredSession?.historyHydrationState).toBe("hydrated");
+      expect(recoveredSession?.historyHydrationState).toBe("failed");
       const recoveredContents = recoveredSession
         ? sessionMessagesToArray(recoveredSession).map((message) => message.content)
         : [];
-      expect(recoveredContents).toContain("Recovered history tail");
       expect(recoveredContents).toContain("Local transcript still present");
-      expect(recoveredContents.every((content) => !content.startsWith("Session started"))).toBe(
-        true,
-      );
-      expect(recoveredContents.some((content) => content.includes("System prompt:"))).toBe(true);
+      expect(recoveredContents).not.toContain("Recovered history tail");
     } finally {
       await harness.unmount();
       host.runtimeList = originalRuntimeList;

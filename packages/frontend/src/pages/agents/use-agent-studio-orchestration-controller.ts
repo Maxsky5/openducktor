@@ -25,6 +25,7 @@ import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions
 
 export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionControllerResult & {
   contextSwitchVersion: number;
+  isSessionSelectionResolving: boolean;
 };
 
 export type AgentStudioOrchestrationReadinessContext = {
@@ -95,6 +96,7 @@ type AgentStudioPageModelsViewContext = Pick<
   | "viewRole"
   | "viewSelectedTask"
   | "contextSwitchVersion"
+  | "isSessionSelectionResolving"
   | "isActiveTaskHydrated"
   | "isActiveTaskHydrationFailed"
   | "isViewSessionHistoryHydrated"
@@ -221,6 +223,7 @@ export const buildAgentStudioPageModelsArgs = ({
       ),
       isSessionHistoryHydrated: view.isViewSessionHistoryHydrated,
       isSessionHistoryHydrating: view.isViewSessionHistoryHydrating,
+      isSessionSelectionResolving: view.isSessionSelectionResolving,
       isWaitingForRuntimeReadiness: view.isViewSessionWaitingForRuntimeReadiness,
       isSessionHistoryHydrationFailed: view.isViewSessionHistoryHydrationFailed,
       contextSwitchVersion: view.contextSwitchVersion,
@@ -407,6 +410,7 @@ export function useAgentStudioOrchestrationController({
       viewRole,
       viewSelectedTask,
       contextSwitchVersion,
+      isSessionSelectionResolving: selection.isSessionSelectionResolving,
       isActiveTaskHydrated,
       isActiveTaskHydrationFailed: selection.isActiveTaskHydrationFailed,
       isViewSessionHistoryHydrated: selection.isViewSessionHistoryHydrated,

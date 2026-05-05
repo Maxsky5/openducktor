@@ -89,7 +89,7 @@ export const createLoadAgentSessions = ({
     const shouldRecoverRuntimeAttachment =
       mode === "recover_runtime_attachment" && requestedSessionId !== null;
     const shouldReconcileRequestedLiveSession =
-      shouldHydrateRequestedSession && options?.allowLiveSessionResume !== false;
+      shouldHydrateRequestedSession && options?.allowLiveSessionResume === true;
     const shouldReconcileLiveSessions =
       mode === "reconcile_live" ||
       shouldRecoverRuntimeAttachment ||
@@ -248,6 +248,7 @@ export const createLoadAgentSessions = ({
         runtimePlanner,
         promptAssembler,
         getRepoPromptOverrides,
+        livePresenceMode: intent.shouldReconcileLiveSessions ? "apply" : "skip",
       });
     };
 

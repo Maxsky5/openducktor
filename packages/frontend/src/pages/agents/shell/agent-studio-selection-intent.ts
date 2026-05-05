@@ -18,7 +18,7 @@ export const isSelectionIntentResolved = (params: {
   }
 
   if (selectionIntent.externalSessionId === null) {
-    return sessionParam !== null;
+    return sessionParam === null;
   }
 
   return selectionIntent.externalSessionId === sessionParam;

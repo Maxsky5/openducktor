@@ -36,7 +36,7 @@ describe("deriveAgentStudioTaskHydrationState", () => {
     expect(lifecycle.isWaitingForRuntimeReadiness).toBe(true);
   });
 
-  test("waits for a build session runtime attachment even after page readiness turns ready", () => {
+  test("hydrates a build session history even when runtime attachment is missing", () => {
     const lifecycle = deriveAgentStudioTaskHydrationState({
       activeSession: {
         externalSessionId: "external-1",
@@ -66,8 +66,7 @@ describe("deriveAgentStudioTaskHydrationState", () => {
       agentStudioReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("waiting_for_runtime_attachment");
-    expect(lifecycle.shouldWaitForRuntimeAttachment).toBe(true);
+    expect(lifecycle.phase).toBe("needs_history");
     expect(lifecycle.shouldEnsureReadyForView).toBe(true);
   });
 
@@ -176,10 +175,10 @@ describe("deriveAgentStudioTaskHydrationState", () => {
       agentStudioReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("waiting_for_runtime_attachment");
+    expect(lifecycle.phase).toBe("needs_history");
     expect(lifecycle.canRenderHistory).toBe(true);
     expect(lifecycle.isHistoryHydrationFailed).toBe(false);
-    expect(lifecycle.shouldWaitForRuntimeAttachment).toBe(true);
+    expect(lifecycle.shouldEnsureReadyForView).toBe(true);
   });
 
   test("requests background hydration once an attached session still has transcript after a prior history failure", () => {
@@ -223,7 +222,6 @@ describe("deriveAgentStudioTaskHydrationState", () => {
     expect(lifecycle.canRenderHistory).toBe(true);
     expect(lifecycle.isHistoryHydrationFailed).toBe(false);
     expect(lifecycle.shouldEnsureReadyForView).toBe(true);
-    expect(lifecycle.shouldWaitForRuntimeAttachment).toBe(false);
   });
 
   test("renders empty history when hydration already completed successfully", () => {
@@ -259,5 +257,40 @@ describe("deriveAgentStudioTaskHydrationState", () => {
     expect(lifecycle.phase).toBe("ready");
     expect(lifecycle.canRenderHistory).toBe(true);
     expect(lifecycle.isHydratingHistory).toBe(false);
+  });
+
+  test("keeps hydrated build sessions renderable without runtime attachment", () => {
+    const lifecycle = deriveAgentStudioTaskHydrationState({
+      activeSession: {
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        repoPath: "/repo-a",
+        role: "build",
+        status: "idle",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        runtimeKind: "opencode",
+        runtimeId: null,
+        workingDirectory: "/repo-a/worktree",
+        messages: [],
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        contextUsage: null,
+        pendingApprovals: [],
+        pendingQuestions: [],
+        todos: [],
+        modelCatalog: null,
+        selectedModel: null,
+        isLoadingModelCatalog: false,
+        runtimeRecoveryState: "idle",
+        historyHydrationState: "hydrated",
+      },
+      agentStudioReadinessState: "ready",
+    });
+
+    expect(lifecycle.phase).toBe("ready");
+    expect(lifecycle.canRenderHistory).toBe(true);
+    expect(lifecycle.canReadRuntimeData).toBe(false);
   });
 });

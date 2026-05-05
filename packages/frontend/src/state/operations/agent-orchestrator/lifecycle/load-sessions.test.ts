@@ -678,6 +678,7 @@ describe("agent-orchestrator-load-sessions", () => {
         mode: "requested_history",
         targetExternalSessionId: "external-1",
         historyPolicy: "requested_only",
+        allowLiveSessionResume: true,
       });
     } finally {
       hostModule.host.agentSessionsList = originalList;
@@ -1710,6 +1711,7 @@ describe("agent-orchestrator-load-sessions", () => {
       persistedRecords,
       preloadedRuntimeLists: runtimeLists,
       historyPolicy: "requested_only",
+      allowLiveSessionResume: true,
     });
 
     const hydratedSession = state["external-1"];
@@ -2320,6 +2322,7 @@ describe("agent-orchestrator-load-sessions", () => {
     await loadAgentSessions("task-1", {
       mode: "requested_history",
       targetExternalSessionId: "external-1",
+      allowLiveSessionResume: true,
       persistedRecords: [
         persistedSessionRecord({
           runtimeKind: "opencode",
@@ -2539,6 +2542,7 @@ describe("agent-orchestrator-load-sessions", () => {
       mode: "requested_history",
       targetExternalSessionId: "external-child-1",
       historyPolicy: "requested_only",
+      allowLiveSessionResume: true,
       preloadedRuntimeLists,
       persistedRecords: [
         persistedSessionRecord({
@@ -2655,6 +2659,7 @@ describe("agent-orchestrator-load-sessions", () => {
       mode: "requested_history",
       targetExternalSessionId: "external-1",
       historyPolicy: "requested_only",
+      allowLiveSessionResume: true,
       persistedRecords: [
         persistedSessionRecord({
           runtimeKind: "opencode",
@@ -3507,6 +3512,7 @@ describe("agent-orchestrator-load-sessions", () => {
       targetExternalSessionId: "external-session-1",
       persistedRecords: [record],
       preloadedRuntimeLists: new Map([["opencode", hostRuntimeList]]),
+      allowLiveSessionResume: true,
     });
 
     expect(setSessionsByIdCalls.length).toBeGreaterThan(0);
@@ -3815,9 +3821,10 @@ describe("agent-orchestrator-load-sessions", () => {
     ).toHaveLength(1);
   });
 
-  test("fails fast when the runtime list cache has no live repo runtime during hydration", async () => {
+  test("hydrates requested history without probing the runtime list cache", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
+    const presenceCalls: string[] = [];
 
     const setSessionsById = (
       updater:
@@ -3849,7 +3856,16 @@ describe("agent-orchestrator-load-sessions", () => {
         workspaceId: "workspace-1",
         workspaceName: "Active Workspace",
       },
-      adapter: createAdapter(),
+      adapter: createAdapter({
+        listSessionPresence: async () => {
+          presenceCalls.push("list");
+          throw new Error("requested history should not list live session presence");
+        },
+        readSessionPresence: async () => {
+          presenceCalls.push("read");
+          throw new Error("requested history should not read live session presence");
+        },
+      }),
       repoEpochRef: { current: 2 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
@@ -3887,13 +3903,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     try {
-      await expect(
-        loadAgentSessions("task-1", {
-          mode: "requested_history",
-          targetExternalSessionId: "external-1",
-          historyPolicy: "requested_only",
-        }),
-      ).rejects.toThrow("No live repo runtime found");
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetExternalSessionId: "external-1",
+        historyPolicy: "requested_only",
+      });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -3902,8 +3916,9 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     expect(runtimeEnsureCalls).toEqual([]);
+    expect(presenceCalls).toEqual([]);
     expect(appQueryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
-    expect(state["external-1"]?.historyHydrationState).toBe("failed");
+    expect(state["external-1"]?.historyHydrationState).toBe("hydrated");
   });
 
   test("hydrates build worktree sessions through the shared repo runtime", async () => {
@@ -4023,7 +4038,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(sessionMessagesToArray(getSession(state, "external-1")).length).toBeGreaterThan(0);
   });
 
-  test("does not ensure a shared workspace runtime for qa sessions on non-root working directories", async () => {
+  test("hydrates qa worktree history without ensuring a shared workspace runtime", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
     const ensuredRuntimeKinds: string[] = [];
@@ -4106,13 +4121,11 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     try {
-      await expect(
-        loadAgentSessions("task-1", {
-          mode: "requested_history",
-          targetExternalSessionId: "external-qa-worktree",
-          historyPolicy: "requested_only",
-        }),
-      ).rejects.toThrow("No live repo runtime found");
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetExternalSessionId: "external-qa-worktree",
+        historyPolicy: "requested_only",
+      });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
@@ -4122,7 +4135,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(ensuredRuntimeKinds).toEqual([]);
     expect(state["external-qa-worktree"]?.runtimeId).toBeNull();
-    expect(state["external-qa-worktree"]?.historyHydrationState).toBe("failed");
+    expect(state["external-qa-worktree"]?.historyHydrationState).toBe("hydrated");
   });
 
   test("resumes live persisted sessions without eagerly hydrating transcript history", async () => {

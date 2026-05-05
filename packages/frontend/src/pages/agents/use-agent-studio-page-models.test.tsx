@@ -96,6 +96,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isTaskHydrating: false,
     isSessionHistoryHydrated: true,
     isSessionHistoryHydrating: false,
+    isSessionSelectionResolving: false,
     isWaitingForRuntimeReadiness: false,
     isSessionHistoryHydrationFailed: false,
     contextSwitchVersion: 0,

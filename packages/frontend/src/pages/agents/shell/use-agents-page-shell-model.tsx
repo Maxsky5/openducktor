@@ -1,5 +1,4 @@
 import type { AgentRole } from "@openducktor/core";
-import { useQueries } from "@tanstack/react-query";
 import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { SessionStartModal } from "@/components/features/agents";
@@ -29,7 +28,6 @@ import {
   useTasksState,
   useWorkspaceState,
 } from "@/state/app-state-provider";
-import { runtimeListQueryOptions } from "@/state/queries/runtime";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
 import {
   type AgentStudioOrchestrationSelectionContext,
@@ -38,10 +36,6 @@ import {
 import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "../use-agent-studio-query-sync";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
-import {
-  type RuntimeAttachmentSource,
-  refreshRuntimeAttachmentSources,
-} from "../use-agent-studio-runtime-attachment-retry";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
 import { useAgentStudioReadiness } from "../use-agents-page-readiness";
 import {
@@ -184,6 +178,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const navigationType = useNavigationType();
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const [selectionIntent, setSelectionIntent] = useState<AgentStudioSelectionIntent | null>(null);
+  const [sessionlessSelection, setSessionlessSelection] =
+    useState<AgentStudioSelectionIntent | null>(null);
   const [gitConflictQuickActionContext, setGitConflictQuickActionContext] =
     useState<AgentStudioGitConflictQuickActionContext | null>(null);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
@@ -217,6 +213,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const scheduleSelectionIntent = useCallback(
     (intent: { taskId: string; externalSessionId: string | null; role: AgentRole }): void => {
       setSelectionIntent(intent);
+      setSessionlessSelection(intent.externalSessionId === null ? intent : null);
     },
     [],
   );
@@ -228,32 +225,13 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   );
 
   const clearComposerInput = signalContextSwitchIntent;
-  const runtimeListQueries = useQueries({
-    queries:
-      workspaceRepoPath === null
-        ? []
-        : runtimeDefinitions.map((definition) => ({
-            ...runtimeListQueryOptions(definition.kind, workspaceRepoPath),
-          })),
-  });
-  const runtimeListRefetchersRef = useRef<Array<() => Promise<unknown>>>([]);
-  useEffect(() => {
-    runtimeListRefetchersRef.current = runtimeListQueries.map((query) => query.refetch);
-  }, [runtimeListQueries]);
-  const runtimeAttachmentSources = useMemo<RuntimeAttachmentSource[]>(
-    () =>
-      runtimeListQueries.flatMap((query) =>
-        (query.data ?? []).map((runtime) => ({
-          kind: runtime.kind,
-          repoPath: runtime.repoPath,
-        })),
-      ),
-    [runtimeListQueries],
-  );
-  const refreshRuntimeAttachmentSourceList = useCallback(async (): Promise<void> => {
-    await refreshRuntimeAttachmentSources(runtimeListRefetchersRef.current);
-  }, []);
-
+  const activeSessionlessSelection =
+    sessionlessSelection &&
+    sessionlessSelection.taskId === taskIdParam &&
+    sessionlessSelection.role === roleFromQuery &&
+    sessionParam === null
+      ? sessionlessSelection
+      : null;
   const readiness = useAgentStudioReadiness({
     activeWorkspace,
     runtimeDefinitions,
@@ -274,13 +252,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     sessionParam,
     hasExplicitRoleParam,
     roleFromQuery,
-    selectionIntent,
+    selectionIntent: selectionIntent ?? activeSessionlessSelection,
     updateQuery: scheduleQueryUpdate,
     agentStudioReadinessState: readiness.agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
     ensureSessionReadyForView,
-    runtimeAttachmentSources,
-    refreshRuntimeAttachmentSources: refreshRuntimeAttachmentSourceList,
     runtimeDefinitions,
     readSessionModelCatalog,
     readSessionTodos,
@@ -309,6 +285,17 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       setSelectionIntent(null);
     }
   }, [isRepoNavigationBoundaryPending, roleFromQuery, selectionIntent, sessionParam, taskIdParam]);
+
+  const isSessionSelectionResolving = Boolean(
+    selectionIntent &&
+      !isRepoNavigationBoundaryPending &&
+      !isSelectionIntentResolved({
+        selectionIntent,
+        taskIdParam,
+        sessionParam,
+        roleFromQuery,
+      }),
+  );
 
   const openTaskDetails = useCallback((): void => {
     if (!selection.viewSelectedTask) {
@@ -432,6 +419,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     selection: {
       ...selection,
       contextSwitchVersion,
+      isSessionSelectionResolving,
       isLoadingTasks: isForegroundLoadingTasks,
     },
     readiness,

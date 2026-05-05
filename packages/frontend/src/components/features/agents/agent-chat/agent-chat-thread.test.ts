@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -586,6 +586,15 @@ describe("AgentChatThread", () => {
     globalThis.cancelAnimationFrame = ((frameId: number) => {
       animationFrameCallbacks.delete(frameId);
     }) as typeof cancelAnimationFrame;
+    const flushAnimationFrames = async () => {
+      const pendingFrames = Array.from(animationFrameCallbacks.entries());
+      animationFrameCallbacks.clear();
+      await act(async () => {
+        for (const [, callback] of pendingFrames) {
+          callback(performance.now());
+        }
+      });
+    };
 
     try {
       const attachmentMessages = Array.from({ length: 80 }, (_, index) =>
@@ -641,10 +650,79 @@ describe("AgentChatThread", () => {
         }),
       );
 
-      expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(1);
+      expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(0);
+
+      expect(animationFrameCallbacks.size).toBeGreaterThan(0);
+      await flushAnimationFrames();
+      await flushAnimationFrames();
+
+      await waitFor(() => {
+        expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(2);
+      });
       expect(rendered.queryByText("Attachment message 1")).toBeNull();
+      expect(rendered.queryByText("Attachment message 79")).not.toBeNull();
       expect(rendered.queryByText("Attachment message 80")).not.toBeNull();
       expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
+
+      rendered.unmount();
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
+  });
+
+  test("keeps stale same-session rows visible without a loading overlay", async () => {
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+    const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
+    let nextAnimationFrameId = 1;
+
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      const frameId = nextAnimationFrameId;
+      nextAnimationFrameId += 1;
+      animationFrameCallbacks.set(frameId, callback);
+      return frameId;
+    }) as typeof requestAnimationFrame;
+    globalThis.cancelAnimationFrame = ((frameId: number) => {
+      animationFrameCallbacks.delete(frameId);
+    }) as typeof cancelAnimationFrame;
+
+    try {
+      const initialMessages = [
+        buildMessage("assistant", "Baseline transcript", { id: "assistant-1" }),
+      ];
+      const session = buildSession({
+        externalSessionId: "session-streaming",
+        messages: initialMessages,
+      });
+      const rendered = render(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session,
+          },
+        }),
+      );
+
+      rendered.rerender(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: {
+              ...session,
+              status: "running",
+              messages: [
+                ...initialMessages,
+                buildMessage("assistant", "Streaming update", { id: "assistant-2" }),
+              ],
+            },
+          },
+        }),
+      );
+
+      expect(rendered.queryByText("Loading session")).toBeNull();
+      expect(rendered.queryByText("Baseline transcript")).not.toBeNull();
+      expect(animationFrameCallbacks.size).toBeGreaterThan(0);
 
       rendered.unmount();
     } finally {

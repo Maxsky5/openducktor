@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  type AgentSessionRecord,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeInstanceSummary,
-  type RuntimeKind,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { createHydrationRuntimeResolver } from "./hydration-runtime-resolution";
 
 const createRecord = (
@@ -20,121 +15,55 @@ const createRecord = (
   selectedModel: null,
 });
 
-const createRuntime = ({
-  runtimeKind = "opencode",
-  runtimeId = "runtime-1",
-  repoPath = "/tmp/repo",
-  workingDirectory = "/tmp/repo",
-}: {
-  runtimeKind?: RuntimeKind;
-  runtimeId?: string;
-  repoPath?: string;
-  workingDirectory?: string;
-} = {}): RuntimeInstanceSummary => ({
-  kind: runtimeKind,
-  runtimeId,
-  repoPath,
-  taskId: null,
-  role: "workspace",
-  workingDirectory,
-  runtimeRoute: {
-    type: "local_http",
-    endpoint: "http://127.0.0.1:4555",
-  },
-  startedAt: "2026-03-01T10:00:00.000Z",
-  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-});
-
 describe("createHydrationRuntimeResolver", () => {
-  test("selects the live repo runtime for the persisted runtime kind", async () => {
+  test("builds a logical repo runtime ref from persisted session metadata", async () => {
     const record = createRecord("opencode", "planner", "/tmp/repo/worktree");
     const resolveHydrationRuntime = createHydrationRuntimeResolver({
       repoPath: "/tmp/repo",
-      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
-        [
-          "opencode",
-          [
-            createRuntime({ runtimeId: "wrong-repo-runtime", repoPath: "/tmp/other" }),
-            createRuntime({ runtimeId: "repo-runtime", repoPath: "/tmp/repo" }),
-          ],
-        ],
-      ]),
     });
 
     const result = await resolveHydrationRuntime(record);
 
     expect(result).toEqual({
       ok: true,
-      runtimeKind: "opencode",
-      runtimeId: "repo-runtime",
-      workingDirectory: record.workingDirectory,
-    });
-  });
-
-  test("returns an error when no live runtime exists for the persisted runtime kind", async () => {
-    const record = createRecord("opencode", "planner", "/tmp/repo/worktree");
-    const resolveHydrationRuntime = createHydrationRuntimeResolver({
-      repoPath: "/tmp/repo",
-      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
-    });
-
-    const result = await resolveHydrationRuntime(record);
-
-    expect(result).toEqual({
-      ok: false,
-      runtimeKind: "opencode",
-      reason: "No live repo runtime found for repo /tmp/repo and runtime opencode.",
-    });
-  });
-
-  test("returns an error when no runtime exists for the requested repo", async () => {
-    const resolveHydrationRuntime = createHydrationRuntimeResolver({
-      repoPath: "/tmp/repo",
-      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([["opencode", []]]),
-    });
-
-    const result = await resolveHydrationRuntime(createRecord("opencode", "build", "/tmp/repo"));
-
-    expect(result).toEqual({
-      ok: false,
-      runtimeKind: "opencode",
-      reason: "No live repo runtime found for repo /tmp/repo and runtime opencode.",
-    });
-  });
-
-  test("returns an error when a runtime exists for a different repo", async () => {
-    const resolveHydrationRuntime = createHydrationRuntimeResolver({
-      repoPath: "/tmp/repo",
-      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
-        ["opencode", [createRuntime({ runtimeId: "wrong-repo-runtime", repoPath: "/tmp/other" })]],
-      ]),
-    });
-
-    const result = await resolveHydrationRuntime(createRecord("opencode", "planner", "/tmp/repo"));
-
-    expect(result).toEqual({
-      ok: false,
-      runtimeKind: "opencode",
-      reason: "No live repo runtime found for repo /tmp/repo and runtime opencode.",
-    });
-  });
-
-  test("passes through the record working directory", async () => {
-    const record = createRecord("opencode", "planner", "/tmp/repo/worktree");
-    const resolveHydrationRuntime = createHydrationRuntimeResolver({
-      repoPath: "/tmp/repo",
-      runtimesByKind: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
-        ["opencode", [createRuntime({ runtimeId: "repo-runtime", repoPath: "/tmp/repo" })]],
-      ]),
-    });
-
-    const result = await resolveHydrationRuntime(record);
-
-    expect(result).toEqual({
-      ok: true,
-      runtimeKind: "opencode",
-      runtimeId: "repo-runtime",
+      runtimeRef: {
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+      },
       workingDirectory: "/tmp/repo/worktree",
+    });
+  });
+
+  test("normalizes equivalent repo and working-directory paths", async () => {
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo/",
+    });
+
+    const result = await resolveHydrationRuntime(
+      createRecord("opencode", "build", "/tmp/repo/worktree/"),
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      runtimeRef: {
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+      },
+      workingDirectory: "/tmp/repo/worktree",
+    });
+  });
+
+  test("returns an actionable error when persisted working directory is missing", async () => {
+    const resolveHydrationRuntime = createHydrationRuntimeResolver({
+      repoPath: "/tmp/repo",
+    });
+
+    const result = await resolveHydrationRuntime(createRecord("opencode", "build", "   "));
+
+    expect(result).toEqual({
+      ok: false,
+      runtimeKind: "opencode",
+      reason: "Cannot hydrate session external-1 without a working directory.",
     });
   });
 });

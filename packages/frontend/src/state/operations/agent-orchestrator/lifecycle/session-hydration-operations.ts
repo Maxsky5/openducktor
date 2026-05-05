@@ -7,13 +7,7 @@ import type { AgentSessionPresenceSnapshot } from "@openducktor/core";
 import type {
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadOptions,
-  AgentSessionState,
 } from "@/types/agent-orchestrator";
-import {
-  getAgentSessionHistoryHydrationState,
-  requiresHydratedAgentSessionHistory,
-} from "../support/history-hydration";
-import { hasAttachedSessionRuntime } from "../support/session-runtime-attachment";
 
 type LoadAgentSessions = (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
 
@@ -26,14 +20,6 @@ export type SessionHydrationOperations = {
     allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
-  recoverSessionRuntimeAndHydrateRequestedTaskSession: (input: {
-    taskId: string;
-    externalSessionId: string;
-    recoveryDedupKey?: string | null;
-    historyPreludeMode?: AgentSessionHistoryPreludeMode;
-    allowLiveSessionResume?: boolean;
-    persistedRecords?: AgentSessionRecord[];
-  }) => Promise<boolean>;
   retrySessionRuntimeAttachment: (input: {
     taskId: string;
     externalSessionId: string;
@@ -53,10 +39,8 @@ export type SessionHydrationOperations = {
 
 export const createSessionHydrationOperations = ({
   loadAgentSessions,
-  getSessionSnapshot,
 }: {
   loadAgentSessions: LoadAgentSessions;
-  getSessionSnapshot: (externalSessionId: string) => AgentSessionState | undefined;
 }): SessionHydrationOperations => {
   const withPersistedRecords = (
     options: AgentSessionLoadOptions,
@@ -81,63 +65,11 @@ export const createSessionHydrationOperations = ({
             targetExternalSessionId: externalSessionId,
             historyPolicy: "requested_only",
             ...(historyPreludeMode ? { historyPreludeMode } : {}),
-            ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
+            allowLiveSessionResume: allowLiveSessionResume ?? false,
           },
           persistedRecords,
         ),
       ),
-    recoverSessionRuntimeAndHydrateRequestedTaskSession: async ({
-      taskId,
-      externalSessionId,
-      recoveryDedupKey,
-      historyPreludeMode,
-      allowLiveSessionResume,
-      persistedRecords,
-    }) => {
-      await loadAgentSessions(
-        taskId,
-        withPersistedRecords(
-          {
-            mode: "recover_runtime_attachment",
-            targetExternalSessionId: externalSessionId,
-            ...(recoveryDedupKey ? { recoveryDedupKey } : {}),
-            historyPolicy: "none",
-            ...(historyPreludeMode ? { historyPreludeMode } : {}),
-            ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
-          },
-          persistedRecords,
-        ),
-      );
-
-      const recoveredSession = getSessionSnapshot(externalSessionId);
-      const attached = hasAttachedSessionRuntime(recoveredSession);
-      const historyHydrationState = getAgentSessionHistoryHydrationState(recoveredSession);
-      const shouldHydrateAfterRecovery =
-        recoveredSession !== undefined &&
-        attached &&
-        requiresHydratedAgentSessionHistory(recoveredSession) &&
-        historyHydrationState !== "hydrating";
-
-      if (!shouldHydrateAfterRecovery) {
-        return attached;
-      }
-
-      await loadAgentSessions(
-        taskId,
-        withPersistedRecords(
-          {
-            mode: "requested_history",
-            targetExternalSessionId: externalSessionId,
-            historyPolicy: "requested_only",
-            ...(historyPreludeMode ? { historyPreludeMode } : {}),
-            ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
-          },
-          persistedRecords,
-        ),
-      );
-
-      return attached;
-    },
     retrySessionRuntimeAttachment: ({
       taskId,
       externalSessionId,

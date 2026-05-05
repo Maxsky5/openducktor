@@ -87,8 +87,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   updateQuery: () => {},
   hydrateRequestedTaskSessionHistory: async () => {},
   ensureSessionReadyForView: async () => false,
-  runtimeAttachmentSources: [],
-  refreshRuntimeAttachmentSources: async () => {},
   runtimeDefinitions: createDefaultRuntimeDefinitions(),
   readSessionModelCatalog: async () => emptyCatalog,
   readSessionTodos: async () => [],
@@ -232,6 +230,35 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.activeSession?.externalSessionId).toBe("session-2");
       expect(latest.viewTaskId).toBe("task-2");
       expect(latest.viewActiveSession?.externalSessionId).toBe("session-2");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("opts normal view hydration into live session resume", async () => {
+    const ensureSessionReadyForView = mock(async () => true);
+    const session = createSession("task-1", "session-live", {
+      historyHydrationState: "not_requested",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        sessions: [session],
+        taskIdParam: "task-1",
+        sessionParam: "session-live",
+        ensureSessionReadyForView,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(ensureSessionReadyForView).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: "task-1",
+          externalSessionId: "session-live",
+          allowLiveSessionResume: true,
+        }),
+      );
     } finally {
       await harness.unmount();
     }
