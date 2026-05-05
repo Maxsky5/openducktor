@@ -118,6 +118,7 @@ export const applyLiveSessionTruthToSession = (
 
   return {
     ...current,
+    status: current.status === "running" ? "idle" : current.status,
     runtimeKind: truth.ref.runtimeKind,
     runtimeId: null,
     workingDirectory: truth.ref.workingDirectory,

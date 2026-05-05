@@ -112,35 +112,59 @@ const persistedSessionRecord = (
 const createAdapter = (
   overrides: SessionLifecycleAdapterOverrides = {},
 ): SessionLifecycleAdapter => {
-  let cachedTruths: LiveSessionTruth[] | null = null;
   const loadTruths = async (...args: [ListLiveSessionTruthsInput]) => {
-    if (!cachedTruths) {
-      const truths = (await overrides.listLiveSessionTruths?.(...args)) ?? [];
-      cachedTruths = truths.map((truth) => {
-        if (truth && typeof truth === "object" && "ref" in truth) {
-          return truth as LiveSessionTruth;
-        }
+    const truths = (await overrides.listLiveSessionTruths?.(...args)) ?? [];
+    return truths.map((truth) => {
+      if (truth && typeof truth === "object" && "ref" in truth) {
+        return truth as LiveSessionTruth;
+      }
 
-        const snapshot = truth as LiveSessionTruthFromSnapshotInput["snapshot"] & {
-          externalSessionId: string;
-          workingDirectory: string;
-        };
+      const snapshot = truth as LiveSessionTruthFromSnapshotInput["snapshot"] & {
+        externalSessionId: string;
+        workingDirectory: string;
+      };
+
+      return toLiveSessionTruthFromSnapshot({
+        ref: {
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          externalSessionId: snapshot.externalSessionId,
+          workingDirectory: snapshot.workingDirectory,
+        },
+        runtimeId: null,
+        snapshot: snapshot as LiveSessionTruthFromSnapshotInput["snapshot"],
+      });
+    });
+  };
+
+  const readLiveSessionTruth = overrides.readLiveSessionTruth
+    ? async (input: ReadLiveSessionTruthInput) =>
+        overrides.readLiveSessionTruth?.(input) as Promise<LiveSessionTruth>
+    : async (record: ReadLiveSessionTruthInput) => {
+        const truths = await loadTruths({
+          repoPath: record.repoPath ?? "/tmp/repo",
+          runtimeKind: record.runtimeKind ?? "opencode",
+          directories: [record.workingDirectory ?? "/tmp/repo/worktree"],
+        });
+
+        const match = truths.find(
+          (truth) => truth.ref.externalSessionId === record.externalSessionId,
+        );
+        if (match) {
+          return match;
+        }
 
         return toLiveSessionTruthFromSnapshot({
           ref: {
-            repoPath: "/tmp/repo",
-            runtimeKind: "opencode",
-            externalSessionId: snapshot.externalSessionId,
-            workingDirectory: snapshot.workingDirectory,
+            repoPath: record.repoPath ?? "/tmp/repo",
+            runtimeKind: record.runtimeKind ?? "opencode",
+            externalSessionId: record.externalSessionId,
+            workingDirectory: record.workingDirectory ?? "/tmp/repo/worktree",
           },
           runtimeId: null,
-          snapshot: snapshot as LiveSessionTruthFromSnapshotInput["snapshot"],
+          snapshot: null,
         });
-      });
-    }
-
-    return cachedTruths;
-  };
+      };
 
   return {
     hasSession: () => false,
@@ -161,31 +185,7 @@ const createAdapter = (
     }),
     ...overrides,
     listLiveSessionTruths: loadTruths,
-    readLiveSessionTruth: async (record: ReadLiveSessionTruthInput) => {
-      await loadTruths({
-        repoPath: record.repoPath ?? "/tmp/repo",
-        runtimeKind: record.runtimeKind ?? "opencode",
-        directories: [record.workingDirectory ?? "/tmp/repo/worktree"],
-      });
-
-      const match = cachedTruths?.find(
-        (truth) => truth.ref.externalSessionId === record.externalSessionId,
-      );
-      if (match) {
-        return match;
-      }
-
-      return toLiveSessionTruthFromSnapshot({
-        ref: {
-          repoPath: record.repoPath ?? "/tmp/repo",
-          runtimeKind: record.runtimeKind ?? "opencode",
-          externalSessionId: record.externalSessionId,
-          workingDirectory: record.workingDirectory ?? "/tmp/repo/worktree",
-        },
-        runtimeId: null,
-        snapshot: null,
-      });
-    },
+    readLiveSessionTruth,
   };
 };
 
@@ -1754,7 +1754,7 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(resumeCalls).toBe(0);
     expect(attachCalls).toBe(1);
     expect(attachedListeners).toBe(2);
-    expect(liveSnapshotLoads).toBe(1);
+    expect(liveSnapshotLoads).toBe(2);
     expect(
       sessionMessagesToArray(getSession(state, "external-1")).map((message) => message.id),
     ).toEqual(hydratedMessageIds);

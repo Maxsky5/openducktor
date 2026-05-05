@@ -71,9 +71,9 @@ export const createLiveSessionTruthFixture = ({
     ref,
     runtimeId,
     snapshot: createLiveAgentSessionSnapshotFixture({
+      ...snapshotOverrides,
       externalSessionId: ref.externalSessionId,
       workingDirectory: ref.workingDirectory,
-      ...snapshotOverrides,
     }),
   });
 };

@@ -3287,7 +3287,7 @@ describe("use-agent-orchestrator-operations", () => {
         expect(new Set(scannedEndpoints)).toEqual(
           new Set(["/tmp/repo:opencode:/tmp/repo/worktree"]),
         );
-        expect(listLiveSessionTruthsCalls).toBeLessThan(3);
+        expect(listLiveSessionTruthsCalls).toBe(1);
       } finally {
         await harness.unmount();
         host.agentSessionsList = originalAgentSessionsList;
