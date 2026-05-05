@@ -34,7 +34,7 @@ describe("getAgentChatThreadState", () => {
     expect(state.statusOverlay?.description).toBe("Loading the selected conversation.");
   });
 
-  test("treats pending transcript rows as conversation-loading state", () => {
+  test("treats missing transcript rows as conversation-loading state", () => {
     const state = getAgentChatThreadState({
       isSessionViewLoading: false,
       isSessionHistoryLoading: false,
@@ -42,7 +42,7 @@ describe("getAgentChatThreadState", () => {
       readinessState: "ready",
       blockedReason: "",
       isTranscriptRenderDeferred: false,
-      isTranscriptRowsPending: true,
+      isTranscriptRowsMissing: true,
     });
 
     expect(state.isTranscriptLoading).toBe(true);

@@ -671,6 +671,66 @@ describe("AgentChatThread", () => {
     }
   });
 
+  test("keeps stale same-session rows visible without a loading overlay", async () => {
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+    const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
+    let nextAnimationFrameId = 1;
+
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      const frameId = nextAnimationFrameId;
+      nextAnimationFrameId += 1;
+      animationFrameCallbacks.set(frameId, callback);
+      return frameId;
+    }) as typeof requestAnimationFrame;
+    globalThis.cancelAnimationFrame = ((frameId: number) => {
+      animationFrameCallbacks.delete(frameId);
+    }) as typeof cancelAnimationFrame;
+
+    try {
+      const initialMessages = [
+        buildMessage("assistant", "Baseline transcript", { id: "assistant-1" }),
+      ];
+      const session = buildSession({
+        externalSessionId: "session-streaming",
+        messages: initialMessages,
+      });
+      const rendered = render(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session,
+          },
+        }),
+      );
+
+      rendered.rerender(
+        createElement(AgentChatThread, {
+          model: {
+            ...buildBaseModel(),
+            session: {
+              ...session,
+              status: "running",
+              messages: [
+                ...initialMessages,
+                buildMessage("assistant", "Streaming update", { id: "assistant-2" }),
+              ],
+            },
+          },
+        }),
+      );
+
+      expect(rendered.queryByText("Loading session")).toBeNull();
+      expect(rendered.queryByText("Baseline transcript")).not.toBeNull();
+      expect(animationFrameCallbacks.size).toBeGreaterThan(0);
+
+      rendered.unmount();
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
+  });
+
   test("keeps the latest user turn uncontained after a running session completes", async () => {
     const externalSessionId = "session-completed-scroll";
     const messages = Array.from({ length: 12 }, (_, index) => [

@@ -649,11 +649,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       readinessState,
       blockedReason,
       isTranscriptRenderDeferred,
-      isTranscriptRowsPending,
+      isTranscriptRowsMissing,
     });
 
   useEffect(() => {
-    if (!session || hideTranscriptWhileDeferred || hasCurrentRowsForActiveSession) {
+    if (!session || hideTranscriptWhileDeferred || !isTranscriptRowsPending) {
       return;
     }
 
@@ -679,7 +679,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       cancelled = true;
       globalThis.cancelAnimationFrame(frameId);
     };
-  }, [hasCurrentRowsForActiveSession, hideTranscriptWhileDeferred, session, showThinkingMessages]);
+  }, [hideTranscriptWhileDeferred, isTranscriptRowsPending, session, showThinkingMessages]);
 
   const transcriptState = hasRowsForActiveSession
     ? resolvedTranscriptState

@@ -407,6 +407,7 @@ export function useAgentStudioSelectionController({
     activeTaskId: viewTaskId,
     activeSession: viewSessionRuntimeData.session,
     repoReadinessState: agentStudioReadinessState,
+    allowLiveSessionResume: true,
     ensureSessionReadyForView,
   });
 
