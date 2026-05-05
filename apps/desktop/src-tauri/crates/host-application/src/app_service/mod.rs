@@ -21,6 +21,7 @@ pub mod build_orchestrator;
 mod dev_server_manager;
 mod filesystem;
 mod git_operations;
+mod git_paths;
 mod git_provider;
 mod git_worktrees;
 mod hook_security;

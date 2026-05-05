@@ -9,7 +9,7 @@ use host_infra_system::{
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::git_operations::resolve_execution_path;
+use super::git_paths::resolve_execution_path;
 use super::AppService;
 
 fn is_definitive_non_worktree_git_error(error: &anyhow::Error) -> bool {
