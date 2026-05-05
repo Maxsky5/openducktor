@@ -32,7 +32,7 @@ describe("session-presence-source", () => {
     const source = createAgentSessionPresenceSnapshotSource({
       adapter: { listSessionPresence, readSessionPresence },
       agentSessionPresenceStore: store,
-      preloadedLiveAgentSessionsByKey: new Map([
+      preloadedSessionPresenceByKey: new Map([
         [
           agentSessionPresenceLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
           [preloadedPresence],
@@ -51,7 +51,7 @@ describe("session-presence-source", () => {
     const preloadedPresence = createPresence("external-1");
     const source = createAgentSessionPresenceSnapshotSource({
       adapter: {},
-      preloadedLiveAgentSessionsByKey: new Map([
+      preloadedSessionPresenceByKey: new Map([
         [
           agentSessionPresenceLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
           [preloadedPresence],
@@ -130,7 +130,7 @@ describe("session-presence-source", () => {
     });
     const source = createAgentSessionPresenceSnapshotSource({
       adapter: { listSessionPresence, readSessionPresence },
-      preloadedLiveAgentSessionsByKey: new Map([
+      preloadedSessionPresenceByKey: new Map([
         [agentSessionPresenceLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"), []],
       ]),
     });

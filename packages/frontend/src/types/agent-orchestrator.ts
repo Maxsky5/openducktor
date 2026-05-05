@@ -210,5 +210,5 @@ export type AgentSessionLoadOptions = {
   allowLiveSessionResume?: boolean;
   persistedRecords?: AgentSessionRecord[];
   preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-  preloadedLiveAgentSessionsByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
+  preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
 };

@@ -94,8 +94,6 @@ export type ListLiveAgentSessionsInput = RepoRuntimeRef & {
   directories?: string[];
 };
 
-export type ReadLiveAgentSessionSnapshotInput = AgentSessionRef;
-
 export type ListSessionPresenceInput = RepoRuntimeRef & {
   directories?: string[];
 };

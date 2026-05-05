@@ -23,14 +23,14 @@ type PreloadedPresenceLookup =
 export const createAgentSessionPresenceSnapshotSource = ({
   adapter,
   agentSessionPresenceStore,
-  preloadedLiveAgentSessionsByKey,
+  preloadedSessionPresenceByKey,
 }: {
   adapter: AgentSessionPresenceSnapshotSourceAdapter;
   agentSessionPresenceStore?: AgentSessionPresenceStore;
-  preloadedLiveAgentSessionsByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
+  preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
 }): AgentSessionPresenceSnapshotSource => {
   const preloadedPresenceByKey =
-    preloadedLiveAgentSessionsByKey ?? new Map<string, AgentSessionPresenceSnapshot[]>();
+    preloadedSessionPresenceByKey ?? new Map<string, AgentSessionPresenceSnapshot[]>();
   const sessionPresenceScanCache = adapter.listSessionPresence
     ? new AgentSessionPresenceCache(
         { listSessionPresence: adapter.listSessionPresence },

@@ -101,6 +101,29 @@ describe("agent-session-presence", () => {
     });
   });
 
+  test("fails fast when a runtime snapshot has no runtime id", () => {
+    expect(() =>
+      toAgentSessionPresenceSnapshotFromLiveSnapshot({
+        ref: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        },
+        runtimeId: null,
+        snapshot: {
+          externalSessionId: "session-1",
+          title: "Build session",
+          workingDirectory: "/repo/worktree",
+          startedAt: "2026-02-22T12:00:00.000Z",
+          status: { type: "busy" },
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      }),
+    ).toThrow("Runtime session presence requires a live runtime id.");
+  });
+
   test("builds stale snapshot when a runtime snapshot is absent", () => {
     const ref = {
       repoPath: "/repo",

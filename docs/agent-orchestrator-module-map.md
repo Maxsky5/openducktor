@@ -30,7 +30,7 @@ Files:
 - `lifecycle/load-sessions.ts`
 - `lifecycle/load-sessions-stages.ts`
 - `lifecycle/reattach-live-session.ts`
-- `lifecycle/live-agent-session-cache.ts`
+- `lifecycle/session-presence-cache.ts`
 - `lifecycle/hydration-runtime-resolution.ts`
 
 Owns:
@@ -144,9 +144,9 @@ Must not own:
 - Canonical live-session reattach path.
 - If a runtime reports a persisted session live, this is the only place that should resume/attach it.
 
-`lifecycle/live-agent-session-cache.ts`
+`lifecycle/session-presence-cache.ts`
 
-- Owns endpoint + directory grouping for live agent session scans.
+- Owns repo/runtime + directory grouping for session presence scans.
 - This is infrastructure-level sharing, not UI-level dedupe.
 
 `lifecycle/hydration-runtime-resolution.ts`
@@ -253,12 +253,12 @@ Use these as the first-line safety net:
 
 The refactor improved the system materially, but a few design choices are still carrying too much weight.
 
-### 1. Live session classification boundary
+### 1. Session presence classification boundary
 
-Live session classification now has one orchestration-facing boundary:
-`packages/frontend/src/state/operations/agent-orchestrator/lifecycle/live-session-truth.ts`.
-It classifies normalized live snapshots from `AgentEnginePort.listLiveAgentSessionSnapshots`
-and applies the same live/stale/persisted-only truth across hydration, live reattach,
+Session presence classification now has one orchestration-facing boundary:
+`packages/frontend/src/state/operations/agent-orchestrator/lifecycle/session-presence.ts`.
+It classifies normalized runtime snapshots from `AgentEnginePort.listSessionPresence`
+and applies the same runtime/stale/persisted-only presence across hydration, live reattach,
 and readiness recovery.
 
 Runtime-specific interpretation stays in the runtime adapter. For OpenCode,
@@ -267,7 +267,7 @@ payload parsing, pending approval/question grouping, directory normalization, an
 payload errors before frontend code sees normalized snapshots.
 
 Keep this boundary narrow:
-- status + pending permissions + pending questions belong in the live snapshot/truth path
+- status + pending permissions + pending questions belong in the session presence path
 - persisted runtime/session metadata decides stale vs persisted-only in frontend lifecycle code
 - event streams still own post-attachment live updates
 - TanStack Query still owns stable model catalog/todos reads

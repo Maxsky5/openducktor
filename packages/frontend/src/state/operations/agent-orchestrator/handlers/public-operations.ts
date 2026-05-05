@@ -68,7 +68,7 @@ type CreatePublicOperationsArgs = {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedLiveAgentSessionsByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
+    preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
   }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (

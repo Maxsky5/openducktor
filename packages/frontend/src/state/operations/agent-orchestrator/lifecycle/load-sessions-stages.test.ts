@@ -2016,7 +2016,7 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createRuntime(workingDirectory)]],
         ]),
-        preloadedLiveAgentSessionsByKey: new Map([
+        preloadedSessionPresenceByKey: new Map([
           [
             agentSessionPresenceLookupKey("/tmp/repo", "opencode", workingDirectory),
             [
@@ -2118,7 +2118,7 @@ describe("load-sessions-stages", () => {
 
   test("runtime planner reuses cached live snapshots without re-scanning", async () => {
     const workingDirectory = "/tmp/repo/worktree";
-    const preloadedLiveAgentSessionsByKey = new Map([
+    const preloadedSessionPresenceByKey = new Map([
       [agentSessionPresenceLookupKey("/tmp/repo", "opencode", workingDirectory), []],
     ]);
     const snapshotRequests: Array<{ directories?: string[] }> = [];
@@ -2134,7 +2134,7 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createRuntime("/tmp/repo")]],
         ]),
-        preloadedLiveAgentSessionsByKey,
+        preloadedSessionPresenceByKey,
       },
       adapter: {
         hasSession: () => false,
@@ -2246,7 +2246,7 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createRuntime(workingDirectory)]],
         ]),
-        preloadedLiveAgentSessionsByKey: new Map([
+        preloadedSessionPresenceByKey: new Map([
           [
             agentSessionPresenceLookupKey("/tmp/repo", "opencode", workingDirectory),
             [
@@ -2304,7 +2304,7 @@ describe("load-sessions-stages", () => {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
           ["opencode", [createRuntime(workingDirectory)]],
         ]),
-        preloadedLiveAgentSessionsByKey: new Map([
+        preloadedSessionPresenceByKey: new Map([
           [agentSessionPresenceLookupKey("/tmp/repo", "opencode", workingDirectory), []],
         ]),
       },
@@ -2356,7 +2356,7 @@ describe("load-sessions-stages", () => {
             ],
           ],
         ]),
-        preloadedLiveAgentSessionsByKey: new Map([
+        preloadedSessionPresenceByKey: new Map([
           [
             agentSessionPresenceLookupKey("/tmp/repo", "opencode", workingDirectory),
             [

@@ -497,8 +497,8 @@ export const createRuntimeResolutionPlannerStage = async ({
       ),
     );
 
-  const preloadedLiveAgentSessionsByKey =
-    options?.preloadedLiveAgentSessionsByKey ?? new Map<string, AgentSessionPresenceSnapshot[]>();
+  const preloadedSessionPresenceByKey =
+    options?.preloadedSessionPresenceByKey ?? new Map<string, AgentSessionPresenceSnapshot[]>();
 
   const resolveHydrationRuntime = createHydrationRuntimeResolver({
     repoPath: intent.repoPath,
@@ -506,7 +506,7 @@ export const createRuntimeResolutionPlannerStage = async ({
   });
   const sessionPresenceSource = createAgentSessionPresenceSnapshotSource({
     adapter,
-    preloadedLiveAgentSessionsByKey,
+    preloadedSessionPresenceByKey,
     ...(agentSessionPresenceStore ? { agentSessionPresenceStore } : {}),
   });
   const readSessionPresence = createSessionPresenceReader({

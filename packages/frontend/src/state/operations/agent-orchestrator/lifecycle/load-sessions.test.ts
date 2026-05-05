@@ -998,7 +998,7 @@ describe("agent-orchestrator-load-sessions", () => {
           ],
         ],
       ]),
-      preloadedLiveAgentSessionsByKey: new Map([
+      preloadedSessionPresenceByKey: new Map([
         [
           "opencode::http://127.0.0.1:4444::/tmp/repo/worktree",
           [
