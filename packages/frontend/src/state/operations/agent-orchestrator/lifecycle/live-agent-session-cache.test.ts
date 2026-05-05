@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { createLiveSessionTruthFixture } from "../test-utils";
+import { createDeferred, createLiveSessionTruthFixture } from "../test-utils";
 import {
   getLiveAgentSessionCacheKey,
   LiveAgentSessionCache,
@@ -70,6 +70,62 @@ describe("live-agent-session-cache", () => {
       runtimeKind: "opencode",
       directories: ["/tmp/repo/a", "/tmp/repo/b"],
     });
+  });
+
+  test("coalesces concurrent same-key scans", async () => {
+    const scannedSessions = [createTruth("external-1")];
+    const scanDeferred = createDeferred<typeof scannedSessions>();
+    const listLiveSessionTruths = mock(async () => scanDeferred.promise);
+    const cache = new LiveAgentSessionCache({ listLiveSessionTruths });
+
+    const firstLoad = cache.load({
+      repoPath: "/tmp/repo",
+      runtimeKind: "opencode",
+      directories: ["/tmp/repo/worktree/"],
+    });
+    const secondLoad = cache.load({
+      repoPath: "/tmp/repo",
+      runtimeKind: "opencode",
+      directories: ["/tmp/repo/worktree"],
+    });
+
+    expect(listLiveSessionTruths).toHaveBeenCalledTimes(1);
+
+    scanDeferred.resolve(scannedSessions);
+    const [first, second] = await Promise.all([firstLoad, secondLoad]);
+    const third = await cache.load({
+      repoPath: "/tmp/repo",
+      runtimeKind: "opencode",
+      directories: ["/tmp/repo/worktree"],
+    });
+
+    expect(first).toBe(scannedSessions);
+    expect(second).toBe(scannedSessions);
+    expect(third).toBe(scannedSessions);
+    expect(listLiveSessionTruths).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not cache failed in-flight scans", async () => {
+    const scannedSessions = [createTruth("external-1")];
+    let attempts = 0;
+    const listLiveSessionTruths = mock(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error("scan failed");
+      }
+      return scannedSessions;
+    });
+    const cache = new LiveAgentSessionCache({ listLiveSessionTruths });
+    const input = {
+      repoPath: "/tmp/repo",
+      runtimeKind: "opencode" as const,
+      directories: ["/tmp/repo/worktree"],
+    };
+
+    await expect(cache.load(input)).rejects.toThrow("scan failed");
+    await expect(cache.load(input)).resolves.toBe(scannedSessions);
+
+    expect(listLiveSessionTruths).toHaveBeenCalledTimes(2);
   });
 
   test("bypasses preloaded single-directory data when scanning multiple directories", async () => {

@@ -16,6 +16,7 @@ type LiveAgentSessionScanner = Pick<AgentEnginePort, "listLiveSessionTruths">;
 
 export class LiveAgentSessionCache {
   private readonly scansByKey = new Map<string, LiveSessionTruth[]>();
+  private readonly inFlightScansByKey = new Map<string, Promise<LiveSessionTruth[]>>();
 
   constructor(
     private readonly adapter: LiveAgentSessionScanner,
@@ -54,12 +55,25 @@ export class LiveAgentSessionCache {
       }
     }
 
-    const sessions = await this.adapter.listLiveSessionTruths({
-      repoPath: input.repoPath,
-      runtimeKind: input.runtimeKind,
-      ...(normalizedDirectories.length > 0 ? { directories: normalizedDirectories } : {}),
-    });
-    this.scansByKey.set(key, sessions);
-    return sessions;
+    const inFlightScan = this.inFlightScansByKey.get(key);
+    if (inFlightScan) {
+      return inFlightScan;
+    }
+
+    const scan = this.adapter
+      .listLiveSessionTruths({
+        repoPath: input.repoPath,
+        runtimeKind: input.runtimeKind,
+        ...(normalizedDirectories.length > 0 ? { directories: normalizedDirectories } : {}),
+      })
+      .then((sessions) => {
+        this.scansByKey.set(key, sessions);
+        return sessions;
+      })
+      .finally(() => {
+        this.inFlightScansByKey.delete(key);
+      });
+    this.inFlightScansByKey.set(key, scan);
+    return scan;
   }
 }
