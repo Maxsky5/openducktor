@@ -20,11 +20,14 @@ pub mod build_orchestrator;
 
 mod dev_server_manager;
 mod filesystem;
+mod git_operations;
 mod git_provider;
+mod git_worktrees;
 mod hook_security;
 mod mcp_bridge_process;
 mod mcp_bridge_registry;
 mod odt_mcp;
+mod open_in_tools;
 mod opencode_runtime;
 mod process_registry;
 mod repo_init;
@@ -34,13 +37,14 @@ mod runtime_session_status;
 mod runtime_startup;
 mod service_core;
 mod startup_metrics;
-mod system_workspace_git;
+mod system_checks;
 mod task_enrichment;
 mod task_workflow;
 #[cfg(test)]
 pub(crate) mod test_support;
 mod workflow_rules;
 mod workspace_policy;
+mod workspace_settings;
 
 pub(crate) use hook_security::run_hook_commands_allow_failure;
 pub use odt_mcp::{
@@ -74,8 +78,7 @@ pub(crate) use runtime_session_status::{
     RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshot,
 };
 pub(crate) use service_core::{
-    AgentRuntimeProcess, CachedRuntimeCheck, DevServerGroupRuntime, McpBridgeProcess,
-    RuntimeCleanupTarget,
+    AgentRuntimeProcess, DevServerGroupRuntime, McpBridgeProcess, RuntimeCleanupTarget,
 };
 pub use service_core::{AppService, DevServerEmitter};
 #[cfg(test)]
