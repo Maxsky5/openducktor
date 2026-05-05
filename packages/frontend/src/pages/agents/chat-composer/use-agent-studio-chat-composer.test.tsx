@@ -13,7 +13,6 @@ import {
   createDeferred,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
-import { resolveActiveSessionChatComposerContext } from "./session-context/active-session-chat-composer-context";
 import { useAgentStudioChatComposer } from "./use-agent-studio-chat-composer";
 
 enableReactActEnvironment();
@@ -212,70 +211,6 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useAgentStudioChatComposer", () => {
-  test("prefers hydrated session runtime fields while preserving summary selection fallback", () => {
-    const hydratedSession = createActiveSession({
-      runtimeKind: "opencode",
-      workingDirectory: "/repo/session-worktree",
-    });
-    const summary = {
-      externalSessionId: "external-1",
-      repoPath: "/repo",
-      taskId: "task-1",
-      role: "spec" as const,
-      status: "idle" as const,
-      startedAt: "2026-02-20T10:00:00.000Z",
-      workingDirectory: "/repo",
-      runtimeKind: "opencode" as const,
-      selectedModel: {
-        runtimeKind: "opencode" as const,
-        providerId: "anthropic",
-        modelId: "claude-sonnet",
-        profileId: "build-agent",
-      },
-      pendingApprovals: [],
-      pendingQuestions: [],
-    };
-
-    const state = resolveActiveSessionChatComposerContext(hydratedSession, summary);
-
-    expect(state.externalSessionId).toBe("external-1");
-    expect(state.selectedModel).toEqual(hydratedSession.selectedModel);
-    expect(state.runtimeKind).toBe("opencode");
-    expect(state.workingDirectory).toBe("/repo/session-worktree");
-    expect(state.isLoadingModelCatalog).toBe(false);
-    expect(state.hasActiveSession).toBe(true);
-  });
-
-  test("keeps summary selection available while the hydrated session is missing", () => {
-    const summary = {
-      externalSessionId: "external-1",
-      repoPath: "/repo",
-      taskId: "task-1",
-      role: "spec" as const,
-      status: "idle" as const,
-      startedAt: "2026-02-20T10:00:00.000Z",
-      workingDirectory: "/repo",
-      runtimeKind: "opencode" as const,
-      selectedModel: {
-        runtimeKind: "opencode" as const,
-        providerId: "anthropic",
-        modelId: "claude-sonnet",
-        profileId: "build-agent",
-      },
-      pendingApprovals: [],
-      pendingQuestions: [],
-    };
-
-    const state = resolveActiveSessionChatComposerContext(null, summary);
-
-    expect(state.externalSessionId).toBe("external-1");
-    expect(state.selectedModel).toEqual(summary.selectedModel);
-    expect(state.runtimeKind).toBe("opencode");
-    expect(state.workingDirectory).toBe("/repo");
-    expect(state.isLoadingModelCatalog).toBe(true);
-    expect(state.hasActiveSession).toBe(true);
-  });
-
   test("uses repo role defaults when available", async () => {
     const harness = createHookHarness(
       createBaseProps({

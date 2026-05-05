@@ -9,6 +9,25 @@ import type {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
+import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
+import { useActiveSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-active-session-context-usage";
+import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
+import { toRoleDefaultModelSelection } from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
+import { resolveSelectedRuntimeKindForChatComposer } from "@/features/agent-chat-composer/model-selection/selected-runtime-kind";
+import {
+  resolveRoleDefaultSelectionForComposer,
+  resolveSelectedModelSelection,
+  resolveSelectionCatalogLoading,
+  resolveSelectionForNewSession,
+} from "@/features/agent-chat-composer/model-selection/selection-resolution";
+import { useActiveSessionModelSelectionRepair } from "@/features/agent-chat-composer/model-selection/use-active-session-model-selection-repair";
+import { useAgentStudioDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
+import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
+import { createChatComposerFileSearch } from "@/features/agent-chat-composer/prompt-input/create-chat-composer-file-search";
+import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
+import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
+import { resolveActiveSessionChatComposerContext } from "@/features/agent-chat-composer/session-context/active-session-chat-composer-context";
+import { pickDefaultVisibleSelectionForCatalog } from "@/features/session-start";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
@@ -16,25 +35,6 @@ import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agen
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
-import { pickDefaultVisibleSelectionForCatalog } from "../agents-page-selection";
-import type { AgentStudioContextUsage } from "./context-usage/context-usage-resolution";
-import { useActiveSessionContextUsage } from "./context-usage/use-active-session-context-usage";
-import { resolveModelSelectionOptions } from "./model-selection/model-selection-options";
-import { toRoleDefaultModelSelection } from "./model-selection/model-selection-preferences";
-import { resolveSelectedRuntimeKindForChatComposer } from "./model-selection/selected-runtime-kind";
-import {
-  resolveRoleDefaultSelectionForComposer,
-  resolveSelectedModelSelection,
-  resolveSelectionCatalogLoading,
-  resolveSelectionForNewSession,
-} from "./model-selection/selection-resolution";
-import { useActiveSessionModelSelectionRepair } from "./model-selection/use-active-session-model-selection-repair";
-import { useAgentStudioDraftModelSelectionState } from "./model-selection/use-draft-model-selection";
-import { useModelSelectionActions } from "./model-selection/use-model-selection-actions";
-import { createChatComposerFileSearch } from "./prompt-input/create-chat-composer-file-search";
-import { resolveRuntimePromptInputSupport } from "./prompt-input/runtime-prompt-input-support";
-import { useChatComposerSlashCommands } from "./prompt-input/use-chat-composer-slash-commands";
-import { resolveActiveSessionChatComposerContext } from "./session-context/active-session-chat-composer-context";
 
 type UseAgentStudioChatComposerArgs = {
   activeWorkspace: ActiveWorkspace | null;

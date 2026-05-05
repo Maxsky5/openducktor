@@ -1,5 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import { coerceVisibleSelectionToCatalog } from "../../agents-page-selection";
+import { coerceVisibleSelectionToCatalog } from "@/features/session-start";
 
 export const resolveRoleDefaultSelectionForComposer = ({
   hasActiveSession,

@@ -1,6 +1,6 @@
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useEffect } from "react";
-import { isSameSelection } from "../../agents-page-selection";
+import { isSameSelection } from "@/features/session-start";
 import { resolveActiveSessionModelSelection } from "./model-selection-preferences";
 
 export const useActiveSessionModelSelectionRepair = ({

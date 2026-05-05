@@ -1,9 +1,9 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   coerceVisibleSelectionToCatalog,
   pickDefaultVisibleSelectionForCatalog,
-} from "../../agents-page-selection";
+} from "@/features/session-start";
+import type { RepoSettingsInput } from "@/types/state-slices";
 
 export const toRoleDefaultModelSelection = (
   roleDefault: RepoSettingsInput["agentDefaults"][AgentRole] | null | undefined,

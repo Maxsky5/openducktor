@@ -1,13 +1,13 @@
 # packages/frontend/src/pages/agents/chat-composer/
 
 ## Responsibility
-Focused internals for Agent Studio chat composer state: model/catalog selection, UI option mapping, prompt-input affordances, active-session context usage, draft/session repair, and selection actions.
+Agent Studio page adapter for reusable agent chat composer state.
 
 ## Design Patterns
-Expose the route-facing chat composer hook directly from `use-agent-studio-chat-composer.ts`. Do not keep compatibility facades when they preserve misleading names. Split files by responsibility instead of grouping unrelated composer concerns in one folder.
+Expose the route-facing chat composer hook directly from `use-agent-studio-chat-composer.ts`. Keep reusable composer mechanics in `features/agent-chat-composer/`; this folder should only adapt Agent Studio route state to that feature.
 
 ## Data & Control Flow
-The implementation resolves workspace/session context and delegates to `session-context/`, `model-selection/`, `prompt-input/`, and `context-usage/`. File search and slash commands keep using TanStack Query option builders from `state/queries` and must preserve repo-vs-active-session runtime boundaries.
+The implementation resolves workspace, role, repo settings, active session, and runtime context, then delegates model selection, prompt input, file search, slash commands, and context usage to `features/agent-chat-composer/`.
 
 ## Integration Points
-Uses shared selection helpers from `../agents-page-selection`. Route orchestration should import `useAgentStudioChatComposer` directly.
+Route orchestration should import `useAgentStudioChatComposer` directly. Reusable chat UI should use `components/features/agents/agent-chat` and reusable composer state helpers should use `features/agent-chat-composer`.
