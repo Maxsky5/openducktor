@@ -34,6 +34,7 @@ const baseArgs: BuildArgs = {
     viewRole: "planner",
     viewSelectedTask: task,
     contextSwitchVersion: 4,
+    isSessionSelectionResolving: false,
     isActiveTaskHydrated: true,
     isActiveTaskHydrationFailed: false,
     isViewSessionHistoryHydrated: true,

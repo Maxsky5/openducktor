@@ -178,6 +178,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const navigationType = useNavigationType();
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const [selectionIntent, setSelectionIntent] = useState<AgentStudioSelectionIntent | null>(null);
+  const [sessionlessSelection, setSessionlessSelection] =
+    useState<AgentStudioSelectionIntent | null>(null);
   const [gitConflictQuickActionContext, setGitConflictQuickActionContext] =
     useState<AgentStudioGitConflictQuickActionContext | null>(null);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
@@ -211,6 +213,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const scheduleSelectionIntent = useCallback(
     (intent: { taskId: string; externalSessionId: string | null; role: AgentRole }): void => {
       setSelectionIntent(intent);
+      setSessionlessSelection(intent.externalSessionId === null ? intent : null);
     },
     [],
   );
@@ -222,6 +225,13 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   );
 
   const clearComposerInput = signalContextSwitchIntent;
+  const activeSessionlessSelection =
+    sessionlessSelection &&
+    sessionlessSelection.taskId === taskIdParam &&
+    sessionlessSelection.role === roleFromQuery &&
+    sessionParam === null
+      ? sessionlessSelection
+      : null;
   const readiness = useAgentStudioReadiness({
     activeWorkspace,
     runtimeDefinitions,
@@ -242,7 +252,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     sessionParam,
     hasExplicitRoleParam,
     roleFromQuery,
-    selectionIntent,
+    selectionIntent: selectionIntent ?? activeSessionlessSelection,
     updateQuery: scheduleQueryUpdate,
     agentStudioReadinessState: readiness.agentStudioReadinessState,
     hydrateRequestedTaskSessionHistory,
@@ -275,6 +285,17 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       setSelectionIntent(null);
     }
   }, [isRepoNavigationBoundaryPending, roleFromQuery, selectionIntent, sessionParam, taskIdParam]);
+
+  const isSessionSelectionResolving = Boolean(
+    selectionIntent &&
+      !isRepoNavigationBoundaryPending &&
+      !isSelectionIntentResolved({
+        selectionIntent,
+        taskIdParam,
+        sessionParam,
+        roleFromQuery,
+      }),
+  );
 
   const openTaskDetails = useCallback((): void => {
     if (!selection.viewSelectedTask) {
@@ -398,6 +419,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     selection: {
       ...selection,
       contextSwitchVersion,
+      isSessionSelectionResolving,
       isLoadingTasks: isForegroundLoadingTasks,
     },
     readiness,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -586,6 +586,15 @@ describe("AgentChatThread", () => {
     globalThis.cancelAnimationFrame = ((frameId: number) => {
       animationFrameCallbacks.delete(frameId);
     }) as typeof cancelAnimationFrame;
+    const flushAnimationFrames = async () => {
+      const pendingFrames = Array.from(animationFrameCallbacks.entries());
+      animationFrameCallbacks.clear();
+      await act(async () => {
+        for (const [, callback] of pendingFrames) {
+          callback(performance.now());
+        }
+      });
+    };
 
     try {
       const attachmentMessages = Array.from({ length: 80 }, (_, index) =>
@@ -641,8 +650,17 @@ describe("AgentChatThread", () => {
         }),
       );
 
-      expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(1);
+      expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(0);
+
+      expect(animationFrameCallbacks.size).toBeGreaterThan(0);
+      await flushAnimationFrames();
+      await flushAnimationFrames();
+
+      await waitFor(() => {
+        expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(2);
+      });
       expect(rendered.queryByText("Attachment message 1")).toBeNull();
+      expect(rendered.queryByText("Attachment message 79")).not.toBeNull();
       expect(rendered.queryByText("Attachment message 80")).not.toBeNull();
       expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
 

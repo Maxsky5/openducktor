@@ -9,6 +9,7 @@ type BuildAgentChatThreadStateArgs = Pick<
   | "blockedReason"
 > & {
   isTranscriptRenderDeferred: boolean;
+  isTranscriptRowsPending?: boolean;
 };
 
 export type AgentChatThreadState = {
@@ -29,9 +30,13 @@ export const getAgentChatThreadState = ({
   readinessState,
   blockedReason,
   isTranscriptRenderDeferred,
+  isTranscriptRowsPending = false,
 }: BuildAgentChatThreadStateArgs): AgentChatThreadState => {
   const isTranscriptLoading =
-    isSessionViewLoading || isSessionHistoryLoading || isTranscriptRenderDeferred;
+    isSessionViewLoading ||
+    isSessionHistoryLoading ||
+    isTranscriptRenderDeferred ||
+    isTranscriptRowsPending;
   const hideTranscriptWhileDeferred = isTranscriptRenderDeferred;
   const statusOverlay = (() => {
     if (
@@ -57,7 +62,7 @@ export const getAgentChatThreadState = ({
       kind: "session_loading" as const,
       title: "Loading session",
       description:
-        isSessionHistoryLoading || isTranscriptRenderDeferred
+        isSessionHistoryLoading || isTranscriptRenderDeferred || isTranscriptRowsPending
           ? "Loading the selected conversation."
           : "Preparing the selected session view.",
     };
