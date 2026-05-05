@@ -44,6 +44,9 @@ type EnsureSessionReadyDependencies = {
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
+type ConfirmedLiveSessionTruth = Extract<LiveSessionTruth, { type: "live" }>;
+type AttachedSessionCleanupAction = "detach" | "stop";
+
 const STALE_PREPARE_ERROR = "Workspace changed while preparing session.";
 const PENDING_INPUT_NOT_READY_ERROR = "Session is waiting for pending runtime input.";
 
@@ -82,13 +85,15 @@ export const createEnsureSessionReady = ({
     const assertNotStale = (): void => {
       throwIfRepoStale(isStaleRepoOperation, STALE_PREPARE_ERROR);
     };
-    const stopSessionOrThrow = async ({
+    const cleanupAttachedSessionOrThrow = async ({
+      action,
       operation,
       cleanupErrorMessage,
       externalSessionId: targetExternalSessionId,
       taskId,
       role,
     }: {
+      action: AttachedSessionCleanupAction;
       operation: string;
       cleanupErrorMessage: string;
       externalSessionId: string;
@@ -98,7 +103,13 @@ export const createEnsureSessionReady = ({
       try {
         await runOrchestratorTask(
           operation,
-          async () => adapter.stopSession(targetExternalSessionId),
+          async () => {
+            if (action === "detach") {
+              await adapter.detachSession(targetExternalSessionId);
+              return;
+            }
+            await adapter.stopSession(targetExternalSessionId);
+          },
           {
             tags: { repoPath, externalSessionId: targetExternalSessionId, taskId, role },
           },
@@ -107,30 +118,14 @@ export const createEnsureSessionReady = ({
         throw new Error(`${cleanupErrorMessage}: ${errorMessage(error)}`, { cause: error });
       }
     };
-    const detachSessionOrThrow = async ({
-      operation,
-      cleanupErrorMessage,
-      externalSessionId: targetExternalSessionId,
-      taskId,
-      role,
-    }: {
-      operation: string;
-      cleanupErrorMessage: string;
-      externalSessionId: string;
-      taskId: string;
-      role: AgentSessionState["role"];
-    }): Promise<void> => {
-      try {
-        await runOrchestratorTask(
-          operation,
-          async () => adapter.detachSession(targetExternalSessionId),
-          {
-            tags: { repoPath, externalSessionId: targetExternalSessionId, taskId, role },
-          },
-        );
-      } catch (error) {
-        throw new Error(`${cleanupErrorMessage}: ${errorMessage(error)}`, { cause: error });
+
+    const removeSessionUnsubscriber = (targetExternalSessionId: string): void => {
+      const existingUnsubscriber = unsubscribersRef.current.get(targetExternalSessionId);
+      if (!existingUnsubscriber) {
+        return;
       }
+      existingUnsubscriber();
+      unsubscribersRef.current.delete(targetExternalSessionId);
     };
 
     const readLiveTruth = async ({
@@ -156,14 +151,32 @@ export const createEnsureSessionReady = ({
       });
     };
 
-    const attachListenerIfLiveTruthConfirmed = (
-      truth: LiveSessionTruth,
-      shouldAttachListener: boolean,
+    const applyConfirmedLiveTruth = (
+      truth: ConfirmedLiveSessionTruth,
+      {
+        shouldAttachListener,
+        promptOverrides,
+        persistFalse = false,
+      }: {
+        shouldAttachListener: boolean;
+        promptOverrides?: RepoPromptOverrides;
+        persistFalse?: boolean;
+      },
     ): void => {
-      if (truth.type !== "live" || !shouldAttachListener) {
-        return;
+      updateSession(
+        externalSessionId,
+        (current) =>
+          applyLiveSessionTruthToSession(current, truth, {
+            ...(promptOverrides ? { promptOverrides } : {}),
+          }),
+        persistFalse ? { persist: false } : undefined,
+      );
+      if (shouldAttachListener) {
+        attachSessionListener(repoPath, truth.ref.externalSessionId);
       }
-      attachSessionListener(repoPath, truth.ref.externalSessionId);
+      if (!allowPendingInput && liveSessionTruthHasPendingInput(truth)) {
+        throw new Error(PENDING_INPUT_NOT_READY_ERROR);
+      }
     };
 
     assertNotStale();
@@ -191,18 +204,12 @@ export const createEnsureSessionReady = ({
         });
         assertNotStale();
         if (liveSessionTruth.type === "live") {
-          updateSession(
-            externalSessionId,
-            (current) => applyLiveSessionTruthToSession(current, liveSessionTruth),
-            { persist: false },
-          );
-          attachListenerIfLiveTruthConfirmed(liveSessionTruth, shouldAttachListener);
-          if (!allowPendingInput && liveSessionTruthHasPendingInput(liveSessionTruth)) {
-            throw new Error(PENDING_INPUT_NOT_READY_ERROR);
-          }
+          applyConfirmedLiveTruth(liveSessionTruth, {
+            shouldAttachListener,
+            persistFalse: true,
+          });
           return;
         }
-        const existingUnsubscriber = unsubscribersRef.current.get(externalSessionId);
         updateSession(
           externalSessionId,
           (current) =>
@@ -211,33 +218,28 @@ export const createEnsureSessionReady = ({
             }),
           { persist: false },
         );
-        await detachSessionOrThrow({
+        await cleanupAttachedSessionOrThrow({
+          action: "detach",
           operation: "ensure-ready-detach-missing-attached-session",
           cleanupErrorMessage: `Failed to detach stale attached session '${externalSessionId}' before preparing it`,
           externalSessionId,
           taskId: session.taskId,
           role: session.role,
         });
-        if (existingUnsubscriber) {
-          existingUnsubscriber();
-          unsubscribersRef.current.delete(externalSessionId);
-        }
+        removeSessionUnsubscriber(externalSessionId);
         assertNotStale();
         throw new Error(`Runtime did not report attached session '${externalSessionId}'.`);
       }
       if (session.runtimeId !== null) {
-        const existingUnsubscriber = unsubscribersRef.current.get(externalSessionId);
-        await stopSessionOrThrow({
+        await cleanupAttachedSessionOrThrow({
+          action: "stop",
           operation: "ensure-ready-stop-attached-error-session",
           cleanupErrorMessage: `Failed to stop attached error session '${externalSessionId}' before preparing it`,
           externalSessionId,
           taskId: session.taskId,
           role: session.role,
         });
-        if (existingUnsubscriber) {
-          existingUnsubscriber();
-          unsubscribersRef.current.delete(externalSessionId);
-        }
+        removeSessionUnsubscriber(externalSessionId);
         assertNotStale();
       }
     }
@@ -273,7 +275,8 @@ export const createEnsureSessionReady = ({
     });
 
     if (isStaleRepoOperation()) {
-      await stopSessionOrThrow({
+      await cleanupAttachedSessionOrThrow({
+        action: "stop",
         operation: "ensure-ready-stop-session-after-stale-resume",
         cleanupErrorMessage: `${STALE_PREPARE_ERROR} Failed to stop stale resumed session '${externalSessionId}'`,
         externalSessionId,
@@ -291,7 +294,8 @@ export const createEnsureSessionReady = ({
     assertNotStale();
 
     if (liveSessionTruth.type !== "live") {
-      await stopSessionOrThrow({
+      await cleanupAttachedSessionOrThrow({
+        action: "stop",
         operation: "ensure-ready-stop-missing-live-session-after-resume",
         cleanupErrorMessage: `Failed to stop resumed session '${externalSessionId}' after live truth was stale`,
         externalSessionId,
@@ -301,22 +305,12 @@ export const createEnsureSessionReady = ({
       throw new Error(`Runtime did not report resumed session '${externalSessionId}'.`);
     }
 
-    attachListenerIfLiveTruthConfirmed(
-      liveSessionTruth,
-      !unsubscribersRef.current.has(externalSessionId),
-    );
-
     assertNotStale();
 
-    updateSession(externalSessionId, (current) =>
-      applyLiveSessionTruthToSession(current, liveSessionTruth, {
-        promptOverrides: promptContext.promptOverrides,
-      }),
-    );
-
-    if (!allowPendingInput && liveSessionTruthHasPendingInput(liveSessionTruth)) {
-      throw new Error(PENDING_INPUT_NOT_READY_ERROR);
-    }
+    applyConfirmedLiveTruth(liveSessionTruth, {
+      shouldAttachListener: !unsubscribersRef.current.has(externalSessionId),
+      promptOverrides: promptContext.promptOverrides,
+    });
 
     if (isStaleRepoOperation()) {
       return;
