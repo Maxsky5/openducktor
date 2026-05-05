@@ -105,11 +105,11 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     this.listAvailableSlashCommands = this.listAvailableSlashCommands.bind(this);
     this.searchFiles = this.searchFiles.bind(this);
     this.listLiveAgentSessions = this.listLiveAgentSessions.bind(this);
-    this.listLiveAgentSessionSnapshots = this.listLiveAgentSessionSnapshots.bind(this);
+    this.listSessionPresence = this.listSessionPresence.bind(this);
+    this.readSessionPresence = this.readSessionPresence.bind(this);
     this.hasSession = this.hasSession.bind(this);
     this.loadSessionHistory = this.loadSessionHistory.bind(this);
     this.loadSessionTodos = this.loadSessionTodos.bind(this);
-    this.listLiveAgentSessionPendingInput = this.listLiveAgentSessionPendingInput.bind(this);
     this.updateSessionModel = this.updateSessionModel.bind(this);
     this.sendUserMessage = this.sendUserMessage.bind(this);
     this.replyApproval = this.replyApproval.bind(this);
@@ -216,12 +216,16 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     ).listLiveAgentSessions(input);
   }
 
-  listLiveAgentSessionSnapshots(
-    input: Parameters<AgentEnginePort["listLiveAgentSessionSnapshots"]>[0],
-  ) {
+  listSessionPresence(input: Parameters<AgentEnginePort["listSessionPresence"]>[0]) {
     return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "live agent session snapshot discovery"),
-    ).listLiveAgentSessionSnapshots(input);
+      this.requireInputRuntimeKind(input.runtimeKind, "live session snapshot discovery"),
+    ).listSessionPresence(input);
+  }
+
+  readSessionPresence(input: Parameters<AgentEnginePort["readSessionPresence"]>[0]) {
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "live session snapshot read"),
+    ).readSessionPresence(input);
   }
 
   hasSession(externalSessionId: string): boolean {
@@ -238,14 +242,6 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     return this.getAdapter(
       this.requireInputRuntimeKind(input.runtimeKind, "session todos"),
     ).loadSessionTodos(input);
-  }
-
-  listLiveAgentSessionPendingInput(
-    input: Parameters<AgentEnginePort["listLiveAgentSessionPendingInput"]>[0],
-  ) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "live agent session pending input"),
-    ).listLiveAgentSessionPendingInput(input);
   }
 
   updateSessionModel(input: Parameters<AgentEnginePort["updateSessionModel"]>[0]) {

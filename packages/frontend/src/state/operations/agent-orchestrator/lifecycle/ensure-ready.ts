@@ -10,6 +10,11 @@ import { shouldReattachListenerForAttachedSession, throwIfRepoStale } from "../s
 import { loadSessionPromptContext } from "../support/session-prompt";
 import { isWorkflowAgentSession } from "../support/session-purpose";
 import { requireSessionRuntimeKindForPersistence } from "../support/session-runtime-metadata";
+import {
+  type AgentSessionPresenceSnapshot,
+  applyAgentSessionPresenceSnapshotToSession,
+  sessionPresenceHasPendingInput,
+} from "./session-presence";
 
 type EnsureSessionReadyDependencies = {
   activeWorkspace: ActiveWorkspace | null;
@@ -39,27 +44,14 @@ type EnsureSessionReadyDependencies = {
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
+type ConfirmedAgentSessionPresenceSnapshot = Extract<
+  AgentSessionPresenceSnapshot,
+  { presence: "runtime" }
+>;
+type AttachedSessionCleanupAction = "detach" | "stop";
+
 const STALE_PREPARE_ERROR = "Workspace changed while preparing session.";
 const PENDING_INPUT_NOT_READY_ERROR = "Session is waiting for pending runtime input.";
-const normalizeLiveSessionTitle = (title: string | undefined): string | undefined => {
-  const trimmed = title?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : undefined;
-};
-
-const toLiveSessionState = (
-  status: Awaited<ReturnType<AgentEnginePort["listLiveAgentSessionSnapshots"]>>[number]["status"],
-): AgentSessionState["status"] => {
-  if (status.type === "busy" || status.type === "retry") {
-    return "running";
-  }
-  return "idle";
-};
-
-const hasPendingInput = (
-  session: Pick<AgentSessionState, "pendingApprovals" | "pendingQuestions">,
-) => {
-  return session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0;
-};
 
 export const createEnsureSessionReady = ({
   activeWorkspace,
@@ -96,13 +88,15 @@ export const createEnsureSessionReady = ({
     const assertNotStale = (): void => {
       throwIfRepoStale(isStaleRepoOperation, STALE_PREPARE_ERROR);
     };
-    const stopSessionOrThrow = async ({
+    const cleanupAttachedSessionOrThrow = async ({
+      action,
       operation,
       cleanupErrorMessage,
       externalSessionId: targetExternalSessionId,
       taskId,
       role,
     }: {
+      action: AttachedSessionCleanupAction;
       operation: string;
       cleanupErrorMessage: string;
       externalSessionId: string;
@@ -112,7 +106,13 @@ export const createEnsureSessionReady = ({
       try {
         await runOrchestratorTask(
           operation,
-          async () => adapter.stopSession(targetExternalSessionId),
+          async () => {
+            if (action === "detach") {
+              await adapter.detachSession(targetExternalSessionId);
+              return;
+            }
+            await adapter.stopSession(targetExternalSessionId);
+          },
           {
             tags: { repoPath, externalSessionId: targetExternalSessionId, taskId, role },
           },
@@ -122,26 +122,64 @@ export const createEnsureSessionReady = ({
       }
     };
 
-    const loadLiveSnapshot = async ({
-      repoPath,
+    const removeSessionUnsubscriber = (targetExternalSessionId: string): void => {
+      const existingUnsubscriber = unsubscribersRef.current.get(targetExternalSessionId);
+      if (!existingUnsubscriber) {
+        return;
+      }
+      existingUnsubscriber();
+      unsubscribersRef.current.delete(targetExternalSessionId);
+    };
+
+    const readSessionPresenceSnapshot = async ({
       runtimeKind,
       workingDirectory,
       externalSessionId,
     }: {
-      repoPath: string;
       runtimeKind: AgentSessionState["runtimeKind"];
       workingDirectory: string;
       externalSessionId: string;
     }) => {
-      if (!runtimeKind || workingDirectory.trim().length === 0) {
-        return null;
+      if (!runtimeKind) {
+        throw new Error(`Session '${externalSessionId}' has no runtime kind.`);
       }
-      const snapshots = await adapter.listLiveAgentSessionSnapshots({
+      if (workingDirectory.trim().length === 0) {
+        throw new Error(`Session '${externalSessionId}' has no working directory.`);
+      }
+      return adapter.readSessionPresence({
         repoPath,
         runtimeKind,
-        directories: [workingDirectory],
+        workingDirectory,
+        externalSessionId,
       });
-      return snapshots.find((entry) => entry.externalSessionId === externalSessionId) ?? null;
+    };
+
+    const applyConfirmedSessionPresenceSnapshot = (
+      snapshot: ConfirmedAgentSessionPresenceSnapshot,
+      {
+        shouldAttachListener,
+        promptOverrides,
+        persistFalse = false,
+      }: {
+        shouldAttachListener: boolean;
+        promptOverrides?: RepoPromptOverrides;
+        persistFalse?: boolean;
+      },
+    ): void => {
+      updateSession(
+        externalSessionId,
+        (current) =>
+          applyAgentSessionPresenceSnapshotToSession(current, snapshot, {
+            ...(promptOverrides ? { promptOverrides } : {}),
+          }),
+        persistFalse ? { persist: false } : undefined,
+      );
+      if (shouldAttachListener) {
+        attachSessionListener(repoPath, snapshot.ref.externalSessionId);
+      }
+      if (!allowPendingInput && sessionPresenceHasPendingInput(snapshot)) {
+        throw new Error(PENDING_INPUT_NOT_READY_ERROR);
+      }
     };
 
     assertNotStale();
@@ -154,80 +192,57 @@ export const createEnsureSessionReady = ({
     }
 
     if (adapter.hasSession(externalSessionId)) {
-      if (
-        shouldReattachListenerForAttachedSession(
-          session.status,
-          unsubscribersRef.current.has(externalSessionId),
-        )
-      ) {
-        attachSessionListener(repoPath, externalSessionId);
-      }
       if (session.status !== "error") {
         const attachedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
-        const attachedRuntimeId = session.runtimeId;
         const attachedWorkingDirectory = session.workingDirectory;
+        const shouldAttachListener = shouldReattachListenerForAttachedSession(
+          session.status,
+          unsubscribersRef.current.has(externalSessionId),
+        );
 
-        const liveSnapshot = await loadLiveSnapshot({
-          repoPath,
+        const sessionPresence = await readSessionPresenceSnapshot({
           runtimeKind: attachedRuntimeKind,
           workingDirectory: attachedWorkingDirectory,
           externalSessionId: session.externalSessionId,
         });
         assertNotStale();
-        if (liveSnapshot) {
-          const pendingApprovals = liveSnapshot.pendingApprovals;
-          const pendingQuestions = liveSnapshot.pendingQuestions;
-          const liveSessionTitle = normalizeLiveSessionTitle(liveSnapshot.title);
-          updateSession(
-            externalSessionId,
-            (current) => ({
-              ...current,
-              status: toLiveSessionState(liveSnapshot.status),
-              runtimeId: attachedRuntimeId,
-              workingDirectory: attachedWorkingDirectory,
-              ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
-              pendingApprovals,
-              pendingQuestions,
-              runtimeKind: attachedRuntimeKind,
-            }),
-            { persist: false },
-          );
-          if (!allowPendingInput && hasPendingInput({ pendingApprovals, pendingQuestions })) {
-            throw new Error(PENDING_INPUT_NOT_READY_ERROR);
-          }
+        if (sessionPresence.presence === "runtime") {
+          applyConfirmedSessionPresenceSnapshot(sessionPresence, {
+            shouldAttachListener,
+            persistFalse: true,
+          });
           return;
         }
-        if (attachedRuntimeId === null || !adapter.listLiveAgentSessionSnapshots) {
-          updateSession(
-            externalSessionId,
-            (current) => ({
-              ...current,
-              runtimeId: attachedRuntimeId,
-              workingDirectory: attachedWorkingDirectory,
-              pendingApprovals: [],
-              pendingQuestions: [],
-              runtimeKind: attachedRuntimeKind,
-            }),
-            { persist: false },
-          );
-          return;
-        }
-      }
-      if (session.runtimeId !== null) {
-        const existingUnsubscriber = unsubscribersRef.current.get(externalSessionId);
-        await stopSessionOrThrow({
-          operation: "ensure-ready-stop-attached-error-session",
-          cleanupErrorMessage: `Failed to stop attached error session '${externalSessionId}' before preparing it`,
+        await cleanupAttachedSessionOrThrow({
+          action: "detach",
+          operation: "ensure-ready-detach-missing-attached-session",
+          cleanupErrorMessage: `Failed to detach stale attached session '${externalSessionId}' before preparing it`,
           externalSessionId,
           taskId: session.taskId,
           role: session.role,
         });
-        if (existingUnsubscriber) {
-          existingUnsubscriber();
-          unsubscribersRef.current.delete(externalSessionId);
-        }
+        removeSessionUnsubscriber(externalSessionId);
+        updateSession(
+          externalSessionId,
+          (current) =>
+            applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
+              missingSessionRuntimeId: null,
+            }),
+          { persist: false },
+        );
         assertNotStale();
+        throw new Error(`Runtime did not report attached session '${externalSessionId}'.`);
       }
+      await cleanupAttachedSessionOrThrow({
+        action: "stop",
+        operation: "ensure-ready-stop-attached-error-session",
+        cleanupErrorMessage: `Failed to stop attached error session '${externalSessionId}' before preparing it`,
+        externalSessionId,
+        taskId: session.taskId,
+        role: session.role,
+      });
+      removeSessionUnsubscriber(externalSessionId);
+      assertNotStale();
     }
 
     const task = taskRef.current.find((entry) => entry.id === session.taskId);
@@ -261,7 +276,8 @@ export const createEnsureSessionReady = ({
     });
 
     if (isStaleRepoOperation()) {
-      await stopSessionOrThrow({
+      await cleanupAttachedSessionOrThrow({
+        action: "stop",
         operation: "ensure-ready-stop-session-after-stale-resume",
         cleanupErrorMessage: `${STALE_PREPARE_ERROR} Failed to stop stale resumed session '${externalSessionId}'`,
         externalSessionId,
@@ -271,38 +287,32 @@ export const createEnsureSessionReady = ({
       throw new Error(STALE_PREPARE_ERROR);
     }
 
-    if (!unsubscribersRef.current.has(externalSessionId)) {
-      attachSessionListener(repoPath, externalSessionId);
-    }
-
-    assertNotStale();
-
-    const liveSnapshot = await loadLiveSnapshot({
-      repoPath,
+    const sessionPresence = await readSessionPresenceSnapshot({
       runtimeKind: requestedRuntimeKind,
       workingDirectory: runtime.workingDirectory,
       externalSessionId: session.externalSessionId,
     });
     assertNotStale();
-    const pendingApprovals = liveSnapshot?.pendingApprovals ?? [];
-    const pendingQuestions = liveSnapshot?.pendingQuestions ?? [];
-    const liveSessionTitle = normalizeLiveSessionTitle(liveSnapshot?.title);
 
-    updateSession(externalSessionId, (current) => ({
-      ...current,
-      status: liveSnapshot ? toLiveSessionState(liveSnapshot.status) : "idle",
-      runtimeKind: requestedRuntimeKind,
-      runtimeId: runtime.runtimeId,
-      workingDirectory: runtime.workingDirectory,
-      ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
-      promptOverrides: promptContext.promptOverrides,
-      pendingApprovals,
-      pendingQuestions,
-    }));
-
-    if (!allowPendingInput && hasPendingInput({ pendingApprovals, pendingQuestions })) {
-      throw new Error(PENDING_INPUT_NOT_READY_ERROR);
+    if (sessionPresence.presence !== "runtime") {
+      await cleanupAttachedSessionOrThrow({
+        action: "stop",
+        operation: "ensure-ready-stop-missing-live-session-after-resume",
+        cleanupErrorMessage: `Failed to stop resumed session '${externalSessionId}' after live snapshot was stale`,
+        externalSessionId,
+        taskId: session.taskId,
+        role: session.role,
+      });
+      throw new Error(`Runtime did not report resumed session '${externalSessionId}'.`);
     }
+
+    assertNotStale();
+
+    removeSessionUnsubscriber(externalSessionId);
+    applyConfirmedSessionPresenceSnapshot(sessionPresence, {
+      shouldAttachListener: true,
+      promptOverrides: promptContext.promptOverrides,
+    });
 
     if (isStaleRepoOperation()) {
       return;

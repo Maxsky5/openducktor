@@ -29,9 +29,9 @@ import {
 } from ".";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
-import { LiveAgentSessionStore } from "./lifecycle/live-agent-session-store";
 import { createRepoSessionHydrationService } from "./lifecycle/repo-session-hydration-service";
 import { createSessionHydrationOperations } from "./lifecycle/session-hydration-operations";
+import { AgentSessionPresenceStore } from "./lifecycle/session-presence-store";
 import {
   deriveAgentSessionViewLifecycle,
   type SessionRepoReadinessState,
@@ -406,7 +406,7 @@ export function useAgentOrchestratorOperations({
     [agentEngine, removeSessionIds, sessionsRef],
   );
 
-  const liveAgentSessionStore = useMemo(() => new LiveAgentSessionStore(), []);
+  const agentSessionPresenceStore = useMemo(() => new AgentSessionPresenceStore(), []);
 
   const attachSessionListener = useCallback(
     (repoPath: string, externalSessionId: string): void => {
@@ -630,14 +630,14 @@ export function useAgentOrchestratorOperations({
         attachSessionListener,
         loadRepoPromptOverrides,
         loadTaskDocuments,
-        liveAgentSessionStore,
+        agentSessionPresenceStore,
       }),
     [
       activeWorkspace,
       agentEngine,
       attachSessionListener,
       commitSessions,
-      liveAgentSessionStore,
+      agentSessionPresenceStore,
       refBridges,
       updateSession,
     ],
@@ -761,12 +761,12 @@ export function useAgentOrchestratorOperations({
     () =>
       createRepoSessionHydrationService({
         sessionHydration,
-        liveAgentSessionStore,
+        agentSessionPresenceStore,
         onRetryRequested: () => {
           setSessionRetryTick((current) => current + 1);
         },
       }),
-    [liveAgentSessionStore, sessionHydration],
+    [agentSessionPresenceStore, sessionHydration],
   );
 
   const isCurrentActiveRepo = useCallback(

@@ -1,14 +1,13 @@
 import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
-import type { LiveAgentSessionSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
-import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
+import {
+  type AgentSessionPresenceSnapshot,
+  applyAgentSessionPresenceSnapshotToSession,
+  isAttachableAgentSessionPresenceSnapshot,
+} from "./session-presence";
 
 const STALE_REPO_ABORT = Symbol("stale-repo-abort");
-const normalizeLiveSessionTitle = (title: string): string | undefined => {
-  const trimmed = title.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-};
 
 type CreateReattachLiveSessionArgs = {
   adapter: {
@@ -22,13 +21,7 @@ type CreateReattachLiveSessionArgs = {
   ) => void;
   attachSessionListener?: (repoPath: string, externalSessionId: string) => void;
   promptOverrides: import("@openducktor/contracts").RepoPromptOverrides;
-  resolveHydrationRuntime: (record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>;
-  listLiveAgentSessions: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    directories: string[],
-  ) => Promise<LiveAgentSessionSnapshot[]>;
+  readSessionPresence: (record: AgentSessionRecord) => Promise<AgentSessionPresenceSnapshot>;
   attachMissingLiveSession?: (input: {
     record: AgentSessionRecord;
     runtimeKind: RuntimeKind;
@@ -36,7 +29,6 @@ type CreateReattachLiveSessionArgs = {
   }) => Promise<void>;
   allowAttachMissingSession?: boolean;
   isStaleRepoOperation: () => boolean;
-  toLiveSessionState: (status: LiveAgentSessionSnapshot["status"]) => AgentSessionState["status"];
 };
 
 export const createReattachLiveSession = ({
@@ -45,21 +37,11 @@ export const createReattachLiveSession = ({
   updateSession,
   attachSessionListener,
   promptOverrides,
-  resolveHydrationRuntime,
-  listLiveAgentSessions,
+  readSessionPresence,
   attachMissingLiveSession,
   allowAttachMissingSession = true,
   isStaleRepoOperation,
-  toLiveSessionState,
 }: CreateReattachLiveSessionArgs) => {
-  const isAttachableLiveSnapshot = (snapshot: LiveAgentSessionSnapshot): boolean => {
-    if (snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0) {
-      return true;
-    }
-
-    return snapshot.status.type !== "idle";
-  };
-
   const awaitUnlessStale = async <T>(
     operation: Promise<T>,
   ): Promise<T | typeof STALE_REPO_ABORT> => {
@@ -72,33 +54,15 @@ export const createReattachLiveSession = ({
       return false;
     }
 
-    const runtimeResolution = await awaitUnlessStale(resolveHydrationRuntime(record));
-    if (runtimeResolution === STALE_REPO_ABORT) {
-      return false;
-    }
-    if (!runtimeResolution.ok) {
-      return false;
-    }
-
-    const externalSessionId = record.externalSessionId;
     const attachedExistingSession = adapter.hasSession(record.externalSessionId);
-    const liveAgentSessions = await awaitUnlessStale(
-      listLiveAgentSessions(repoPath, runtimeResolution.runtimeKind, record.workingDirectory, [
-        record.workingDirectory,
-      ]),
-    );
-    if (liveAgentSessions === STALE_REPO_ABORT) {
+    const sessionPresence = await awaitUnlessStale(readSessionPresence(record));
+    if (sessionPresence === STALE_REPO_ABORT) {
       return false;
     }
-    const liveSession = liveAgentSessions.find(
-      (session) => session.externalSessionId === externalSessionId,
-    );
-    if (!liveSession || !isAttachableLiveSnapshot(liveSession)) {
+    if (!isAttachableAgentSessionPresenceSnapshot(sessionPresence)) {
       return false;
     }
 
-    const nextStatus = toLiveSessionState(liveSession.status);
-    const liveSessionTitle = normalizeLiveSessionTitle(liveSession.title);
     const selectedModel = normalizePersistedSelection(record.selectedModel);
     if (!attachedExistingSession) {
       if (!allowAttachMissingSession) {
@@ -112,8 +76,8 @@ export const createReattachLiveSession = ({
       const resumeResult = await awaitUnlessStale(
         attachMissingLiveSession({
           record,
-          runtimeKind: runtimeResolution.runtimeKind,
-          workingDirectory: runtimeResolution.workingDirectory,
+          runtimeKind: sessionPresence.ref.runtimeKind,
+          workingDirectory: sessionPresence.ref.workingDirectory,
         }),
       );
       if (resumeResult === STALE_REPO_ABORT) {
@@ -127,19 +91,11 @@ export const createReattachLiveSession = ({
     attachSessionListener(repoPath, record.externalSessionId);
     updateSession(
       record.externalSessionId,
-      (current) => ({
-        ...current,
-        runtimeKind: runtimeResolution.runtimeKind,
-        runtimeId: runtimeResolution.runtimeId,
-        workingDirectory: runtimeResolution.workingDirectory,
-        runtimeRecoveryState: "idle",
-        status: nextStatus,
-        ...(liveSessionTitle ? { title: liveSessionTitle } : {}),
-        pendingApprovals: liveSession.pendingApprovals,
-        pendingQuestions: liveSession.pendingQuestions,
-        promptOverrides,
-        selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),
-      }),
+      (current) =>
+        applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
+          promptOverrides,
+          selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),
+        }),
       { persist: false },
     );
     return true;

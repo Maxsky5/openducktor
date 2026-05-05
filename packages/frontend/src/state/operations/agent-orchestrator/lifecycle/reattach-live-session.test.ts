@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
+import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 import { createReattachLiveSession } from "./reattach-live-session";
@@ -26,6 +27,21 @@ const sessionRecordFixture: AgentSessionRecord = {
   startedAt: "2026-03-22T12:00:00.000Z",
   selectedModel: null,
 };
+
+const toSessionPresenceSnapshot = (
+  snapshot: Parameters<typeof toAgentSessionPresenceSnapshotFromLiveSnapshot>[0]["snapshot"],
+  runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }> = localHttpRuntimeResolution,
+) =>
+  toAgentSessionPresenceSnapshotFromLiveSnapshot({
+    ref: {
+      repoPath: "/tmp/repo",
+      runtimeKind: runtimeResolution.runtimeKind,
+      externalSessionId: sessionRecordFixture.externalSessionId,
+      workingDirectory: runtimeResolution.workingDirectory,
+    },
+    runtimeId: runtimeResolution.runtimeId,
+    snapshot,
+  });
 
 const createSessionStateFixture = (): AgentSessionState => ({
   externalSessionId: "external-1",
@@ -88,24 +104,20 @@ describe("reattach-live-session", () => {
         attachedSessionId = externalSessionId;
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
       attachMissingLiveSession: async () => {
         resumed = true;
       },
-      listLiveAgentSessions: async () => [
-        {
+      readSessionPresence: async () =>
+        toSessionPresenceSnapshot({
           externalSessionId: "external-1",
           title: "Session",
-          role: "build",
           startedAt: "2026-03-22T12:00:00.000Z",
           status: { type: "idle" },
           pendingApprovals: [],
           pendingQuestions: [],
           workingDirectory: "/tmp/repo/worktree",
-        },
-      ],
+        }),
       isStaleRepoOperation: () => false,
-      toLiveSessionState: () => "idle",
     });
 
     const reattached = await reattachLiveSession(sessionRecordFixture);
@@ -136,15 +148,13 @@ describe("reattach-live-session", () => {
         attachedSessionId = externalSessionId;
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
       attachMissingLiveSession: async () => {
         resumed = true;
       },
-      listLiveAgentSessions: async () => [
-        {
+      readSessionPresence: async () =>
+        toSessionPresenceSnapshot({
           externalSessionId: "external-1",
           title: "Session",
-          role: "build",
           startedAt: "2026-03-22T12:00:00.000Z",
           status: { type: "idle" },
           pendingApprovals: [
@@ -165,10 +175,8 @@ describe("reattach-live-session", () => {
           ],
           pendingQuestions: [],
           workingDirectory: "/tmp/repo/worktree",
-        },
-      ],
+        }),
       isStaleRepoOperation: () => false,
-      toLiveSessionState: () => "idle",
     });
 
     const reattached = await reattachLiveSession(sessionRecordFixture);
@@ -214,25 +222,21 @@ describe("reattach-live-session", () => {
         attachedSessionId = externalSessionId;
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
       attachMissingLiveSession: async () => {
         resumed = true;
       },
       allowAttachMissingSession: false,
-      listLiveAgentSessions: async () => [
-        {
+      readSessionPresence: async () =>
+        toSessionPresenceSnapshot({
           externalSessionId: "external-1",
           title: "Session",
-          role: "build",
           startedAt: "2026-03-22T12:00:00.000Z",
           status: { type: "busy" },
           pendingApprovals: [],
           pendingQuestions: [],
           workingDirectory: "/tmp/repo/worktree",
-        },
-      ],
+        }),
       isStaleRepoOperation: () => false,
-      toLiveSessionState: () => "running",
     });
 
     const reattached = await reattachLiveSession(sessionRecordFixture);
@@ -259,11 +263,9 @@ describe("reattach-live-session", () => {
       },
       attachSessionListener: () => {},
       promptOverrides: {},
-      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
       attachMissingLiveSession: async () => {},
-      listLiveAgentSessions: async () => [],
+      readSessionPresence: async () => toSessionPresenceSnapshot(null),
       isStaleRepoOperation: () => false,
-      toLiveSessionState: () => "idle",
     });
 
     const reattached = await reattachLiveSession(sessionRecordFixture);
@@ -293,25 +295,21 @@ describe("reattach-live-session", () => {
         attachedSessionId = externalSessionId;
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
       attachMissingLiveSession: async () => {
         resumeCalls += 1;
         stale = true;
       },
-      listLiveAgentSessions: async () => [
-        {
+      readSessionPresence: async () =>
+        toSessionPresenceSnapshot({
           externalSessionId: "external-1",
           title: "Session",
-          role: "build",
           startedAt: "2026-03-22T12:00:00.000Z",
           status: { type: "busy" },
           pendingApprovals: [],
           pendingQuestions: [],
           workingDirectory: "/tmp/repo/worktree",
-        },
-      ],
+        }),
       isStaleRepoOperation: () => stale,
-      toLiveSessionState: () => "running",
     });
 
     const reattached = await reattachLiveSession(sessionRecordFixture);
@@ -338,27 +336,22 @@ describe("reattach-live-session", () => {
         throw new Error("should not attach stale session");
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => localHttpRuntimeResolution,
       attachMissingLiveSession: async () => {
         resumeCalls += 1;
       },
-      listLiveAgentSessions: async () => {
+      readSessionPresence: async () => {
         stale = true;
-        return [
-          {
-            externalSessionId: "external-1",
-            title: "Session",
-            role: "build",
-            startedAt: "2026-03-22T12:00:00.000Z",
-            status: { type: "busy" },
-            pendingApprovals: [],
-            pendingQuestions: [],
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        ];
+        return toSessionPresenceSnapshot({
+          externalSessionId: "external-1",
+          title: "Session",
+          startedAt: "2026-03-22T12:00:00.000Z",
+          status: { type: "busy" },
+          pendingApprovals: [],
+          pendingQuestions: [],
+          workingDirectory: "/tmp/repo/worktree",
+        });
       },
       isStaleRepoOperation: () => stale,
-      toLiveSessionState: () => "running",
     });
 
     const reattached = await reattachLiveSession(sessionRecordFixture);
@@ -383,16 +376,14 @@ describe("reattach-live-session", () => {
         throw new Error("should not attach unsupported session");
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => stdioRuntimeResolution,
       attachMissingLiveSession: async () => {
         resumeCalls += 1;
       },
-      listLiveAgentSessions: async () => {
+      readSessionPresence: async () => {
         liveLookupCalls += 1;
-        return [];
+        return toSessionPresenceSnapshot(null, stdioRuntimeResolution);
       },
       isStaleRepoOperation: () => false,
-      toLiveSessionState: () => "idle",
     });
 
     const reattached = await reattachLiveSession(sessionRecordFixture);
@@ -415,13 +406,11 @@ describe("reattach-live-session", () => {
         throw new Error("should not attach failed session");
       },
       promptOverrides: {},
-      resolveHydrationRuntime: async () => stdioRuntimeResolution,
       attachMissingLiveSession: async () => {},
-      listLiveAgentSessions: async () => {
+      readSessionPresence: async () => {
         throw new Error("live lookup failed");
       },
       isStaleRepoOperation: () => false,
-      toLiveSessionState: () => "idle",
     });
 
     await expect(reattachLiveSession(sessionRecordFixture)).rejects.toThrow("live lookup failed");

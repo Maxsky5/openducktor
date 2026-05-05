@@ -1,5 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { LiveAgentSessionSnapshot } from "@openducktor/core";
+import type {
+  AgentSessionPresenceSnapshot,
+  AgentSessionRef,
+  LiveAgentSessionSnapshot,
+} from "@openducktor/core";
+import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import {
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
@@ -35,12 +40,40 @@ export const createLiveAgentSessionSnapshotFixture = (
 
   return {
     externalSessionId,
-    title: overrides.title ?? `Session ${externalSessionId}`,
+    title: overrides.title ?? "BUILD task-1",
     workingDirectory: "/tmp/repo/worktree",
     startedAt: "2026-02-22T08:00:00.000Z",
-    status: { type: "busy" },
+    status: { type: "idle" },
     pendingApprovals: [],
     pendingQuestions: [],
     ...overrides,
   };
+};
+
+export const createAgentSessionPresenceSnapshotFixture = ({
+  ref: refOverrides = {},
+  runtimeId = "runtime-1",
+  snapshot: snapshotOverrides = {},
+}: {
+  ref?: Partial<AgentSessionRef>;
+  runtimeId?: string;
+  snapshot?: Partial<LiveAgentSessionSnapshot>;
+} = {}): AgentSessionPresenceSnapshot => {
+  const ref: AgentSessionRef = {
+    repoPath: "/tmp/repo",
+    runtimeKind: "opencode",
+    workingDirectory: "/tmp/repo/worktree",
+    externalSessionId: "external-1",
+    ...refOverrides,
+  };
+
+  return toAgentSessionPresenceSnapshotFromLiveSnapshot({
+    ref,
+    runtimeId,
+    snapshot: createLiveAgentSessionSnapshotFixture({
+      ...snapshotOverrides,
+      externalSessionId: ref.externalSessionId,
+      workingDirectory: ref.workingDirectory,
+    }),
+  });
 };

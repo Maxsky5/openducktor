@@ -9,7 +9,11 @@ import {
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { attachAgentSessionListener } from "../events/session-events";
-import { createDeferred, createTaskCardFixture } from "../test-utils";
+import {
+  createAgentSessionPresenceSnapshotFixture,
+  createDeferred,
+  createTaskCardFixture,
+} from "../test-utils";
 import { createAgentSessionActions } from "./session-actions";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
@@ -45,6 +49,17 @@ const getSession = (
     throw new Error(`Expected session ${externalSessionId}`);
   }
   return session;
+};
+
+const mockAgentSessionPresenceSnapshot = (
+  adapter: OpencodeSdkAdapter,
+  snapshot: ReturnType<
+    typeof createAgentSessionPresenceSnapshotFixture
+  > = createAgentSessionPresenceSnapshotFixture(),
+): ReturnType<typeof createAgentSessionPresenceSnapshotFixture> => {
+  adapter.listSessionPresence = async () => [snapshot];
+  adapter.readSessionPresence = async () => snapshot;
+  return snapshot;
 };
 
 describe("agent-orchestrator/handlers/session-actions", () => {
@@ -1139,38 +1154,45 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("replies to permission after resuming a session with pending live input", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalResumeSession = adapter.resumeSession;
     const originalReplyApproval = adapter.replyApproval;
     let resumeCalls = 0;
     let replyCalls = 0;
     adapter.hasSession = () => false;
-    adapter.listLiveAgentSessionSnapshots = async () => [
-      {
-        externalSessionId: "external-session-1",
-        title: "Build",
-        workingDirectory: "/tmp/repo",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        status: { type: "idle" },
-        pendingApprovals: [
-          {
-            requestId: "perm-1",
-            requestType: "permission_grant" as const,
-            title: `Approve permission: ${"read"}`,
-            summary: `Approval request for ${"read"}.`,
-            affectedPaths: [".env"],
-            action: { name: "read" },
-            mutation: "read_only" as const,
-            supportedReplyOutcomes: [
-              "approve_once" as const,
-              "approve_session" as const,
-              "reject" as const,
-            ],
-          },
-        ],
-        pendingQuestions: [],
-      },
-    ];
+    mockAgentSessionPresenceSnapshot(
+      adapter,
+      createAgentSessionPresenceSnapshotFixture({
+        ref: {
+          externalSessionId: "external-session-1",
+          workingDirectory: "/tmp/repo",
+        },
+        snapshot: {
+          externalSessionId: "external-session-1",
+          title: "Build",
+          workingDirectory: "/tmp/repo",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "idle" },
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: [".env"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
+          pendingQuestions: [],
+        },
+      }),
+    );
     adapter.resumeSession = async (input) => {
       resumeCalls += 1;
       return {
@@ -1254,7 +1276,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([]);
     } finally {
       adapter.hasSession = originalHasSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.resumeSession = originalResumeSession;
       adapter.replyApproval = originalReplyApproval;
     }
@@ -1363,28 +1385,35 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("answers question after resuming a session with pending live input", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalResumeSession = adapter.resumeSession;
     const originalReplyQuestion = adapter.replyQuestion;
     let resumeCalls = 0;
     let replyCalls = 0;
     adapter.hasSession = () => false;
-    adapter.listLiveAgentSessionSnapshots = async () => [
-      {
-        externalSessionId: "external-session-1",
-        title: "Build",
-        workingDirectory: "/tmp/repo",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        status: { type: "idle" },
-        pendingApprovals: [],
-        pendingQuestions: [
-          {
-            requestId: "question-1",
-            questions: [{ header: "Confirm", question: "Confirm", options: [], custom: false }],
-          },
-        ],
-      },
-    ];
+    mockAgentSessionPresenceSnapshot(
+      adapter,
+      createAgentSessionPresenceSnapshotFixture({
+        ref: {
+          externalSessionId: "external-session-1",
+          workingDirectory: "/tmp/repo",
+        },
+        snapshot: {
+          externalSessionId: "external-session-1",
+          title: "Build",
+          workingDirectory: "/tmp/repo",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "idle" },
+          pendingApprovals: [],
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [{ header: "Confirm", question: "Confirm", options: [], custom: false }],
+            },
+          ],
+        },
+      }),
+    );
     adapter.resumeSession = async (input) => {
       resumeCalls += 1;
       return {
@@ -1466,7 +1495,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([]);
     } finally {
       adapter.hasSession = originalHasSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.resumeSession = originalResumeSession;
       adapter.replyQuestion = originalReplyQuestion;
     }
@@ -1475,11 +1504,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("sends user message without mutating the transcript optimistically", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [];
+    mockAgentSessionPresenceSnapshot(adapter);
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -1542,7 +1571,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
     } finally {
       adapter.hasSession = originalHasSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
@@ -1550,12 +1579,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("does not hydrate requested history before sending to an attached session", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     const callOrder: string[] = [];
 
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [];
+    mockAgentSessionPresenceSnapshot(adapter);
     adapter.sendUserMessage = async () => {
       callOrder.push("send");
     };
@@ -1616,7 +1645,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.historyHydrationState).toBe("not_requested");
     } finally {
       adapter.hasSession = originalHasSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
@@ -1624,28 +1653,31 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("does not send a free-form message if ensure-ready reveals pending input", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
 
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [
-      {
-        externalSessionId: "external-1",
-        status: { type: "idle" },
-        title: "Session 1",
-        model: null,
-        workingDirectory: "/tmp/repo/worktree",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        pendingApprovals: [],
-        pendingQuestions: [
-          {
-            requestId: "question-1",
-            questions: [{ header: "Confirm", question: "Confirm", options: [] }],
-          },
-        ],
-      },
-    ];
+    mockAgentSessionPresenceSnapshot(
+      adapter,
+      createAgentSessionPresenceSnapshotFixture({
+        ref: { externalSessionId: "external-1", workingDirectory: "/tmp/repo/worktree" },
+        snapshot: {
+          externalSessionId: "external-1",
+          status: { type: "idle" },
+          title: "Session 1",
+          workingDirectory: "/tmp/repo/worktree",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          pendingApprovals: [],
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [{ header: "Confirm", question: "Confirm", options: [] }],
+            },
+          ],
+        },
+      }),
+    );
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -1706,7 +1738,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
     } finally {
       adapter.hasSession = originalHasSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
@@ -1937,12 +1969,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("marks session as error when send fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     let clearCalls = 0;
 
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [];
+    mockAgentSessionPresenceSnapshot(adapter);
     adapter.sendUserMessage = async () => {
       throw new Error("send failed");
     };
@@ -2007,7 +2039,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(clearCalls).toBe(1);
     } finally {
       adapter.hasSession = originalHasSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
@@ -2015,7 +2047,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("preserves active turn drafts and timing for busy queued sends", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     const sendCalls: Array<{
       externalSessionId: string;
@@ -2023,7 +2055,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }> = [];
 
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [];
+    mockAgentSessionPresenceSnapshot(
+      adapter,
+      createAgentSessionPresenceSnapshotFixture({ snapshot: { status: { type: "busy" } } }),
+    );
     adapter.sendUserMessage = async (input) => {
       sendCalls.push({
         externalSessionId: input.externalSessionId,
@@ -2108,7 +2143,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(turnModelBySessionRef.current["session-1"]?.modelId).toBe("gpt-5");
     } finally {
       adapter.hasSession = originalHasSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
@@ -2116,12 +2151,15 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("keeps the active turn running when a busy queued send fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     let clearCalls = 0;
 
     adapter.hasSession = () => true;
-    adapter.listLiveAgentSessionSnapshots = async () => [];
+    mockAgentSessionPresenceSnapshot(
+      adapter,
+      createAgentSessionPresenceSnapshotFixture({ snapshot: { status: { type: "busy" } } }),
+    );
     adapter.sendUserMessage = async () => {
       throw new Error("queued send failed");
     };
@@ -2208,7 +2246,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(turnModelBySessionRef.current["session-1"]?.modelId).toBe("gpt-5");
     } finally {
       adapter.hasSession = originalHasSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });

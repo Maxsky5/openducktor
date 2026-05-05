@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
-import { LiveAgentSessionStore } from "./live-agent-session-store";
 import { createRepoSessionHydrationService } from "./repo-session-hydration-service";
+import { AgentSessionPresenceStore } from "./session-presence-store";
 
 const createDeferred = <T>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -104,7 +104,7 @@ describe("repo-session-hydration-service", () => {
     const deferred = createDeferred<void>();
     let bootstrapCalls = 0;
     let retryRequests = 0;
-    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
 
     const service = createRepoSessionHydrationService({
       sessionHydration: {
@@ -114,7 +114,7 @@ describe("repo-session-hydration-service", () => {
         },
         reconcileLiveTaskSessions: async () => {},
       },
-      liveAgentSessionStore,
+      agentSessionPresenceStore,
       onRetryRequested: () => {
         retryRequests += 1;
       },
@@ -147,7 +147,7 @@ describe("repo-session-hydration-service", () => {
       taskId: string;
       persistedRecords: AgentSessionRecord[];
     }> = [];
-    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
 
     const mixedTask = taskWithSessionAt("task-mixed", "external-repo", repoPath);
     const firstSession = mixedTask.agentSessions?.[0];
@@ -178,7 +178,7 @@ describe("repo-session-hydration-service", () => {
           );
         },
       },
-      liveAgentSessionStore,
+      agentSessionPresenceStore,
       onRetryRequested: () => {},
     });
 
@@ -211,7 +211,7 @@ describe("repo-session-hydration-service", () => {
 
   test("does not reconcile unchanged persisted records more than once", async () => {
     const reconcileCalls: string[] = [];
-    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
     const task = taskWithSession("task-1", "external-1");
 
     const service = createRepoSessionHydrationService({
@@ -221,7 +221,7 @@ describe("repo-session-hydration-service", () => {
           reconcileCalls.push(taskId);
         },
       },
-      liveAgentSessionStore,
+      agentSessionPresenceStore,
       onRetryRequested: () => {},
     });
 
@@ -244,7 +244,7 @@ describe("repo-session-hydration-service", () => {
 
   test("does not mark empty-session tasks as bootstrapped", async () => {
     const bootstrapCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
-    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
     const emptyTask = taskWithSession("task-1", "external-1");
     emptyTask.agentSessions = [];
     const taskWithLaterSession = taskWithSession("task-1", "external-1");
@@ -256,7 +256,7 @@ describe("repo-session-hydration-service", () => {
         },
         reconcileLiveTaskSessions: async () => {},
       },
-      liveAgentSessionStore,
+      agentSessionPresenceStore,
       onRetryRequested: () => {},
     });
 
@@ -282,7 +282,7 @@ describe("repo-session-hydration-service", () => {
   test("reconcile schedules retries when reconciliation throws", async () => {
     let retryRequests = 0;
     const reconcileCalls: string[] = [];
-    const liveAgentSessionStore = new LiveAgentSessionStore();
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
     const retryTriggered = createDeferred<void>();
 
     const service = createRepoSessionHydrationService({
@@ -293,7 +293,7 @@ describe("repo-session-hydration-service", () => {
           throw new Error(`Failed to reconcile ${taskId}`);
         },
       },
-      liveAgentSessionStore,
+      agentSessionPresenceStore,
       onRetryRequested: () => {
         retryRequests += 1;
         retryTriggered.resolve();

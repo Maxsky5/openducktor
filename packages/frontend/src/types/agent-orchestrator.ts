@@ -9,12 +9,12 @@ import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
   AgentRole,
+  AgentSessionPresenceSnapshot,
   AgentSessionTodoItem,
   AgentSubagentExecutionMode,
   AgentSubagentStatus,
   AgentUserMessageDisplayPart,
   AgentUserMessageState,
-  LiveAgentSessionSnapshot,
 } from "@openducktor/core";
 
 export type AgentChatMessageMeta =
@@ -210,5 +210,5 @@ export type AgentSessionLoadOptions = {
   allowLiveSessionResume?: boolean;
   persistedRecords?: AgentSessionRecord[];
   preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-  preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
+  preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
 };

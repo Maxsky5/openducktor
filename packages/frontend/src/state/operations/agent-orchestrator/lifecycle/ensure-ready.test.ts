@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
+import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createDeferred } from "../test-utils";
+import { createAgentSessionPresenceSnapshotFixture, createDeferred } from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
 
 const withCapturedConsoleError = async (
@@ -73,7 +74,13 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 
 const createAdapter = () => {
   const adapter = new OpencodeSdkAdapter();
-  adapter.listLiveAgentSessionSnapshots = async () => [];
+  adapter.listSessionPresence = async () => [];
+  adapter.readSessionPresence = async (input) =>
+    toAgentSessionPresenceSnapshotFromLiveSnapshot({
+      ref: input,
+      runtimeId: null,
+      snapshot: null,
+    });
   return adapter;
 };
 
@@ -117,12 +124,22 @@ describe("agent-orchestrator-ensure-ready", () => {
     let attachCalls = 0;
     let stopCalls = 0;
     let resumeCalls = 0;
+    const readSnapshotCalls: Parameters<OpencodeSdkAdapter["readSessionPresence"]>[0][] = [];
 
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
+    const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
     adapter.hasSession = () => true;
+    adapter.listSessionPresence = async () => {
+      throw new Error("ensure-ready must use the single-session snapshot read");
+    };
+    adapter.readSessionPresence = async (input) => {
+      readSnapshotCalls.push(input);
+      return createAgentSessionPresenceSnapshotFixture({ ref: input });
+    };
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
@@ -142,6 +159,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         "session-1": buildSession({ status: "idle" }),
       },
     };
+    const unsubscribersRef = { current: new Map<string, () => void>() };
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -154,7 +172,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      unsubscribersRef,
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -164,6 +182,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       attachSessionListener: () => {
         attachCalls += 1;
+        unsubscribersRef.current.set("session-1", () => {});
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -177,12 +196,248 @@ describe("agent-orchestrator-ensure-ready", () => {
     try {
       await ensureReady("session-1");
       expect(attachCalls).toBe(1);
+      expect(unsubscribersRef.current.has("session-1")).toBe(true);
       expect(stopCalls).toBe(0);
       expect(resumeCalls).toBe(0);
+      expect(readSnapshotCalls).toEqual([
+        {
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+          externalSessionId: "external-1",
+        },
+      ]);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
+      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
+      adapter.readSessionPresence = originalReadLiveAgentSessionSnapshot;
+    }
+  });
+
+  test("clears stale local attachment before failing on missing live attached session", async () => {
+    let attached = true;
+    let detachCalls = 0;
+    let resumeCalls = 0;
+    let unsubscribeCalls = 0;
+
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalDetachSession = adapter.detachSession;
+    const originalResumeSession = adapter.resumeSession;
+    const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
+    adapter.hasSession = () => attached;
+    adapter.detachSession = async (externalSessionId) => {
+      expect(externalSessionId).toBe("external-1");
+      attached = false;
+      detachCalls += 1;
+    };
+    adapter.resumeSession = async () => {
+      resumeCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        status: "idle",
+      };
+    };
+    adapter.readSessionPresence = async () =>
+      toAgentSessionPresenceSnapshotFromLiveSnapshot({
+        ref: {
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+          externalSessionId: "external-1",
+        },
+        runtimeId: "runtime-1",
+        snapshot: null,
+      });
+
+    const sessionsRef = {
+      current: {
+        "external-1": buildSession({ status: "idle", runtimeId: "runtime-1" }),
+      },
+    };
+    const unsubscribersRef = {
+      current: new Map<string, () => void>([
+        [
+          "external-1",
+          () => {
+            unsubscribeCalls += 1;
+          },
+        ],
+      ]),
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef,
+      updateSession: (_externalSessionId, updater) => {
+        const current = sessionsRef.current["external-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["external-1"] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await expect(ensureReady("external-1")).rejects.toThrow(
+        "Runtime did not report attached session 'external-1'.",
+      );
+      expect(detachCalls).toBe(1);
+      expect(resumeCalls).toBe(0);
+      expect(attached).toBe(false);
+      expect(unsubscribeCalls).toBe(1);
+      expect(unsubscribersRef.current.has("external-1")).toBe(false);
+      expect(sessionsRef.current["external-1"]?.runtimeId).toBeNull();
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.detachSession = originalDetachSession;
+      adapter.resumeSession = originalResumeSession;
+      adapter.readSessionPresence = originalReadLiveAgentSessionSnapshot;
+    }
+  });
+
+  test("leaves local state intact when stale attached session detach fails", async () => {
+    let resumeCalls = 0;
+    let unsubscribeCalls = 0;
+    let updateCalls = 0;
+
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalDetachSession = adapter.detachSession;
+    const originalResumeSession = adapter.resumeSession;
+    const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
+    adapter.hasSession = () => true;
+    adapter.detachSession = async () => {
+      throw new Error("detach boom");
+    };
+    adapter.resumeSession = async () => {
+      resumeCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        status: "idle",
+      };
+    };
+    adapter.readSessionPresence = async () =>
+      toAgentSessionPresenceSnapshotFromLiveSnapshot({
+        ref: {
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+          externalSessionId: "external-1",
+        },
+        runtimeId: "runtime-1",
+        snapshot: null,
+      });
+
+    const sessionsRef = {
+      current: {
+        "external-1": buildSession({
+          status: "idle",
+          runtimeId: "runtime-1",
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
+        }),
+      },
+    };
+    const unsubscribersRef = {
+      current: new Map<string, () => void>([
+        [
+          "external-1",
+          () => {
+            unsubscribeCalls += 1;
+          },
+        ],
+      ]),
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef,
+      updateSession: (_externalSessionId, updater) => {
+        updateCalls += 1;
+        const current = sessionsRef.current["external-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["external-1"] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await withCapturedConsoleError(async (calls) => {
+        await expect(ensureReady("external-1")).rejects.toThrow(
+          "Failed to detach stale attached session 'external-1' before preparing it: detach boom",
+        );
+        expect(calls).toHaveLength(1);
+        expect(String(calls[0]?.[1] ?? "")).toBe("ensure-ready-detach-missing-attached-session");
+      });
+      expect(updateCalls).toBe(0);
+      expect(resumeCalls).toBe(0);
+      expect(unsubscribeCalls).toBe(0);
+      expect(unsubscribersRef.current.has("external-1")).toBe(true);
+      expect(sessionsRef.current["external-1"]?.runtimeId).toBe("runtime-1");
+      expect(sessionsRef.current["external-1"]?.pendingApprovals).toHaveLength(1);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.detachSession = originalDetachSession;
+      adapter.resumeSession = originalResumeSession;
+      adapter.readSessionPresence = originalReadLiveAgentSessionSnapshot;
     }
   });
 
@@ -192,6 +447,13 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => true;
+    adapter.readSessionPresence = async () =>
+      createAgentSessionPresenceSnapshotFixture({
+        snapshot: {
+          title: "Builder Session",
+        },
+      });
+    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
     const sessionsRef = {
       current: {
@@ -251,6 +513,13 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => true;
+    adapter.readSessionPresence = async () =>
+      createAgentSessionPresenceSnapshotFixture({
+        snapshot: {
+          title: "Builder Session",
+        },
+      });
+    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
     const sessionsRef = {
       current: {
@@ -369,8 +638,31 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
     adapter.hasSession = () => true;
+    adapter.readSessionPresence = async () =>
+      createAgentSessionPresenceSnapshotFixture({
+        snapshot: {
+          title: "BUILD task-1",
+          status: { type: "busy" },
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["**/.env"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
+        },
+      });
     adapter.resumeSession = async () => {
       resumeCalls += 1;
       return {
@@ -381,31 +673,34 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
-    adapter.listLiveAgentSessionSnapshots = async () => [
-      {
-        externalSessionId: "external-1",
-        title: "BUILD task-1",
-        workingDirectory: "/tmp/repo/worktree",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        status: { type: "busy" },
-        pendingApprovals: [
-          {
-            requestId: "perm-1",
-            requestType: "permission_grant" as const,
-            title: `Approve permission: ${"read"}`,
-            summary: `Approval request for ${"read"}.`,
-            affectedPaths: ["**/.env"],
-            action: { name: "read" },
-            mutation: "read_only" as const,
-            supportedReplyOutcomes: [
-              "approve_once" as const,
-              "approve_session" as const,
-              "reject" as const,
-            ],
-          },
-        ],
-        pendingQuestions: [],
-      },
+    adapter.listSessionPresence = async () => [
+      createAgentSessionPresenceSnapshotFixture({
+        ref: { repoPath: "/tmp/repo", workingDirectory: "/tmp/repo/worktree" },
+        snapshot: {
+          externalSessionId: "external-1",
+          title: "BUILD task-1",
+          workingDirectory: "/tmp/repo/worktree",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "busy" },
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["**/.env"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
+          pendingQuestions: [],
+        },
+      }),
     ];
 
     const sessionsRef = {
@@ -455,7 +750,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       );
       expect(attachCalls).toBe(1);
       expect(resumeCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.status).toBe("running");
+      expect(sessionsRef.current["session-1"]?.status).toBe("idle");
       expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([
         {
           requestId: "perm-1",
@@ -475,11 +770,123 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
     }
   });
 
-  test("recovers attached error session and clears pending requests without a live snapshot", async () => {
+  test("fails fast when an attached session with legacy runtime metadata is missing from the live snapshot", async () => {
+    let attachCalls = 0;
+    let ensureRuntimeCalls = 0;
+    let resumeCalls = 0;
+
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalResumeSession = adapter.resumeSession;
+    adapter.hasSession = () => true;
+    adapter.resumeSession = async () => {
+      resumeCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        status: "idle",
+      };
+    };
+
+    const sessionsRef = {
+      current: {
+        "session-1": buildSession({
+          status: "idle",
+          runtimeId: null,
+          pendingApprovals: [
+            {
+              requestId: "perm-1",
+              requestType: "permission_grant" as const,
+              title: `Approve permission: ${"read"}`,
+              summary: `Approval request for ${"read"}.`,
+              affectedPaths: ["*"],
+              action: { name: "read" },
+              mutation: "read_only" as const,
+              supportedReplyOutcomes: [
+                "approve_once" as const,
+                "approve_session" as const,
+                "reject" as const,
+              ],
+            },
+          ],
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Confirm",
+                  question: "Confirm",
+                  options: [],
+                  multiple: false,
+                  custom: false,
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    };
+    const unsubscribersRef = { current: new Map<string, () => void>() };
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef,
+      updateSession: (_externalSessionId, updater) => {
+        const current = sessionsRef.current["session-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["session-1"] = updater(current);
+      },
+      attachSessionListener: () => {
+        attachCalls += 1;
+        unsubscribersRef.current.set("session-1", () => {});
+      },
+      ensureRuntime: async () => {
+        ensureRuntimeCalls += 1;
+        return {
+          kind: "opencode",
+          runtimeKind: "opencode",
+          runtimeId: null,
+          workingDirectory: "/tmp/repo/worktree",
+        };
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await expect(ensureReady("session-1")).rejects.toThrow(
+        "Runtime did not report attached session 'session-1'.",
+      );
+
+      expect(attachCalls).toBe(0);
+      expect(unsubscribersRef.current.has("session-1")).toBe(false);
+      expect(ensureRuntimeCalls).toBe(0);
+      expect(resumeCalls).toBe(0);
+      expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([]);
+      expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([]);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.resumeSession = originalResumeSession;
+    }
+  });
+
+  test("fails fast when a resumed session is missing from the live snapshot", async () => {
     let attachCalls = 0;
     let unsubscribeCalls = 0;
     let stopCalls = 0;
@@ -586,18 +993,113 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await ensureReady("session-1");
+      await expect(ensureReady("session-1")).rejects.toThrow(
+        "Runtime did not report resumed session 'session-1'.",
+      );
 
       expect(unsubscribeCalls).toBe(1);
-      expect(stopCalls).toBe(1);
+      expect(stopCalls).toBe(2);
       expect(resumeCalls).toBe(1);
-      expect(attachCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.status).toBe("idle");
-      expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([]);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([]);
+      expect(attachCalls).toBe(0);
+      expect(sessionsRef.current["session-1"]?.status).toBe("error");
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
+      adapter.resumeSession = originalResumeSession;
+    }
+  });
+
+  test("clears stale listener handles and reattaches after successful resume", async () => {
+    let attachCalls = 0;
+    let unsubscribeCalls = 0;
+    let resumeCalls = 0;
+
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalResumeSession = adapter.resumeSession;
+    adapter.hasSession = () => false;
+    adapter.resumeSession = async () => {
+      resumeCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        status: "idle",
+      };
+    };
+    adapter.readSessionPresence = async (input) =>
+      toAgentSessionPresenceSnapshotFromLiveSnapshot({
+        ref: input,
+        runtimeId: "runtime-1",
+        snapshot: {
+          externalSessionId: "external-1",
+          title: "BUILD task-1",
+          workingDirectory: "/tmp/repo/worktree",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "idle" },
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      });
+
+    const sessionsRef = {
+      current: {
+        "session-1": buildSession({ status: "idle", runtimeId: null }),
+      },
+    };
+    const unsubscribersRef = {
+      current: new Map<string, () => void>([
+        [
+          "session-1",
+          () => {
+            unsubscribeCalls += 1;
+          },
+        ],
+      ]),
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef,
+      updateSession: (_externalSessionId, updater) => {
+        const current = sessionsRef.current["session-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["session-1"] = updater(current);
+      },
+      attachSessionListener: () => {
+        attachCalls += 1;
+        unsubscribersRef.current.set("session-1", () => {});
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: null,
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await ensureReady("session-1");
+
+      expect(resumeCalls).toBe(1);
+      expect(unsubscribeCalls).toBe(1);
+      expect(attachCalls).toBe(1);
+      expect(unsubscribersRef.current.has("session-1")).toBe(true);
+    } finally {
+      adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
     }
   });
@@ -685,6 +1187,108 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
+    }
+  });
+
+  test("stops attached error sessions even when persisted runtime id is missing", async () => {
+    let attachCalls = 0;
+    let resumeCalls = 0;
+    let stopCalls = 0;
+    let unsubscribeCalls = 0;
+
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalStopSession = adapter.stopSession;
+    const originalResumeSession = adapter.resumeSession;
+    const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
+    adapter.hasSession = () => true;
+    adapter.stopSession = async () => {
+      stopCalls += 1;
+    };
+    adapter.resumeSession = async () => {
+      resumeCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        status: "idle",
+      };
+    };
+    adapter.readSessionPresence = async (input) =>
+      toAgentSessionPresenceSnapshotFromLiveSnapshot({
+        ref: input,
+        runtimeId: "runtime-1",
+        snapshot: {
+          externalSessionId: "external-1",
+          title: "BUILD task-1",
+          workingDirectory: "/tmp/repo/worktree",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "idle" },
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      });
+
+    const sessionsRef = {
+      current: {
+        "session-1": buildSession({ status: "error", runtimeId: null }),
+      },
+    };
+    const unsubscribersRef = {
+      current: new Map<string, () => void>([
+        [
+          "session-1",
+          () => {
+            unsubscribeCalls += 1;
+          },
+        ],
+      ]),
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef,
+      updateSession: (_externalSessionId, updater) => {
+        const current = sessionsRef.current["session-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["session-1"] = updater(current);
+      },
+      attachSessionListener: () => {
+        attachCalls += 1;
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: null,
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await ensureReady("session-1");
+
+      expect(stopCalls).toBe(1);
+      expect(resumeCalls).toBe(1);
+      expect(unsubscribeCalls).toBe(1);
+      expect(attachCalls).toBe(1);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.stopSession = originalStopSession;
+      adapter.resumeSession = originalResumeSession;
+      adapter.readSessionPresence = originalReadLiveAgentSessionSnapshot;
     }
   });
 
@@ -838,8 +1442,14 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveAgentSessionSnapshots;
+    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
     adapter.hasSession = () => false;
+    adapter.readSessionPresence = async () =>
+      createAgentSessionPresenceSnapshotFixture({
+        snapshot: {
+          title: "Builder Session",
+        },
+      });
     adapter.resumeSession = async (input) => {
       resumedInput = input;
       return {
@@ -850,17 +1460,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
-    adapter.listLiveAgentSessionSnapshots = async () => [
-      {
-        externalSessionId: "external-1",
-        title: "Builder Session",
-        workingDirectory: "/tmp/repo/worktree",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        status: { type: "idle" },
-        pendingApprovals: [],
-        pendingQuestions: [],
-      },
-    ];
+    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
     const sessionsRef = {
       current: {
@@ -921,7 +1521,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.listLiveAgentSessionSnapshots = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
     }
   });
 
@@ -934,7 +1534,14 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
+    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
     adapter.hasSession = () => false;
+    adapter.readSessionPresence = async () =>
+      createAgentSessionPresenceSnapshotFixture({
+        snapshot: {
+          title: "Builder Session",
+        },
+      });
     adapter.resumeSession = async (input) => {
       resumedInput = input;
       return {
@@ -945,6 +1552,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
+    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
     const sessionsRef = {
       current: {
@@ -1002,6 +1610,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
+      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
     }
   });
 

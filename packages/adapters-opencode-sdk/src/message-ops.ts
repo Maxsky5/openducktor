@@ -50,61 +50,84 @@ const readString = (record: Record<string, unknown>, keys: string[]): string | u
 
 const normalizeQuestionOptions = (
   value: unknown,
+  requestId: string,
+  questionIndex: number,
 ): AgentPendingQuestionRequest["questions"][number]["options"] => {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return value.flatMap((entry) => {
+  return value.map((entry, optionIndex) => {
     const record = asRecord(entry);
     if (!record) {
-      return [];
+      throw new Error(
+        `Malformed Opencode pending question payload '${requestId}': option ${optionIndex} for question ${questionIndex} must be an object.`,
+      );
     }
     const label = readString(record, ["label"]);
     if (!label) {
-      return [];
+      throw new Error(
+        `Malformed Opencode pending question payload '${requestId}': option ${optionIndex} for question ${questionIndex} is missing label.`,
+      );
     }
     const description = readString(record, ["description"]) ?? label;
-    return [{ label, description }];
+    return { label, description };
   });
 };
 
-const normalizePendingQuestion = (value: unknown): AgentPendingQuestionRequest | null => {
+const normalizePendingQuestion = (value: unknown): AgentPendingQuestionRequest => {
   const record = asRecord(value);
   if (!record) {
-    return null;
+    throw new Error("Malformed Opencode pending question payload: expected an object.");
   }
   const requestId = readString(record, ["id", "requestID", "requestId"]);
   const sessionId = readString(record, ["sessionID", "sessionId", "session_id"]);
   const rawQuestions = record.questions;
-  if (!requestId || !sessionId || !Array.isArray(rawQuestions)) {
-    return null;
+  if (!requestId) {
+    throw new Error("Malformed Opencode pending question payload: missing request id.");
+  }
+  if (!sessionId) {
+    throw new Error("Malformed Opencode pending question payload: missing session id.");
+  }
+  if (!Array.isArray(rawQuestions)) {
+    throw new Error(
+      `Malformed Opencode pending question payload '${requestId}': missing questions array.`,
+    );
   }
 
-  const questions = rawQuestions.flatMap((entry) => {
+  const questions = rawQuestions.map((entry, questionIndex) => {
     const question = asRecord(entry);
     if (!question) {
-      return [];
+      throw new Error(
+        `Malformed Opencode pending question payload '${requestId}': question ${questionIndex} must be an object.`,
+      );
     }
     const header = readString(question, ["header", "title", "label"]);
     const prompt = readString(question, ["question", "title", "header"]);
-    if (!header || !prompt) {
-      return [];
+    if (!header) {
+      throw new Error(
+        `Malformed Opencode pending question payload '${requestId}': question ${questionIndex} is missing header.`,
+      );
     }
-    const options = normalizeQuestionOptions(question.options);
-    return [
-      {
-        header,
-        question: prompt,
-        options,
-        ...(typeof question.multiple === "boolean" ? { multiple: question.multiple } : {}),
-        ...(typeof question.custom === "boolean" ? { custom: question.custom } : {}),
-      },
-    ];
+    if (!prompt) {
+      throw new Error(
+        `Malformed Opencode pending question payload '${requestId}': question ${questionIndex} is missing question text.`,
+      );
+    }
+    const options = normalizeQuestionOptions(question.options, requestId, questionIndex);
+    return {
+      header,
+      question: prompt,
+      options,
+      ...(typeof question.multiple === "boolean" ? { multiple: question.multiple } : {}),
+      ...(typeof question.custom === "boolean" ? { custom: question.custom } : {}),
+    };
   });
 
   if (questions.length === 0) {
-    return null;
+    throw new Error(
+      `Malformed Opencode pending question payload '${requestId}': missing questions.`,
+    );
   }
 
   return {
@@ -119,6 +142,14 @@ const readPendingSessionId = (value: unknown): string | undefined => {
     return undefined;
   }
   return readString(record, ["sessionID", "sessionId", "session_id"]);
+};
+
+const requirePendingSessionId = (kind: "approval" | "question", value: unknown): string => {
+  const sessionId = readPendingSessionId(value);
+  if (!sessionId) {
+    throw new Error(`Malformed Opencode pending ${kind} payload: missing session id.`);
+  }
+  return sessionId;
 };
 
 const hasCompletedAssistantMessage = (value: unknown): boolean => {
@@ -522,7 +553,7 @@ export const loadSessionTodos = async (
   }
 };
 
-export const listLiveAgentSessionPendingInput = async (
+export const listOpencodeLiveSessionPendingInput = async (
   createClient: ClientFactory,
   input: {
     runtimeEndpoint: string;
@@ -561,21 +592,15 @@ export const listLiveAgentSessionPendingInput = async (
   > = {};
 
   for (const entry of permissions) {
-    const sessionId = readPendingSessionId(entry);
+    const sessionId = requirePendingSessionId("approval", entry);
     const normalized = normalizeOpenCodeApprovalRequest(entry);
-    if (!sessionId || !normalized) {
-      continue;
-    }
     bySession[sessionId] ??= { approvals: [], questions: [] };
     bySession[sessionId].approvals.push(normalized);
   }
 
   for (const entry of questions) {
-    const sessionId = readPendingSessionId(entry);
+    const sessionId = requirePendingSessionId("question", entry);
     const normalized = normalizePendingQuestion(entry);
-    if (!sessionId || !normalized) {
-      continue;
-    }
     bySession[sessionId] ??= { approvals: [], questions: [] };
     bySession[sessionId].questions.push(normalized);
   }

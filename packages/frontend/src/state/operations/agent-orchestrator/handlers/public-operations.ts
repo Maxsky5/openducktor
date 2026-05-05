@@ -10,10 +10,10 @@ import type {
   AgentModelSelection,
   AgentRole,
   AgentSessionHistoryMessage,
+  AgentSessionPresenceSnapshot,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
-  LiveAgentSessionSnapshot,
 } from "@openducktor/core";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -68,7 +68,7 @@ type CreatePublicOperationsArgs = {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedLiveAgentSessionsByKey?: Map<string, LiveAgentSessionSnapshot[]>;
+    preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
   }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (

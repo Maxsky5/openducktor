@@ -48,18 +48,19 @@ export type ParsedOpenCodePermissionRequest = {
   metadata?: UnknownRecord;
 };
 
-export const normalizeOpenCodeApprovalRequest = (
-  value: unknown,
-): AgentPendingApprovalRequest | null => {
+export const normalizeOpenCodeApprovalRequest = (value: unknown): AgentPendingApprovalRequest => {
   const record = asRecord(value);
   if (!record) {
-    return null;
+    throw new Error("Malformed Opencode pending approval payload: expected an object.");
   }
 
   const requestId = readString(record, ["id", "requestID", "requestId"]);
   const permission = readString(record, ["permission"]);
-  if (!requestId || !permission) {
-    return null;
+  if (!requestId) {
+    throw new Error("Malformed Opencode pending approval payload: missing request id.");
+  }
+  if (!permission) {
+    throw new Error("Malformed Opencode pending approval payload: missing permission.");
   }
 
   return toAgentApprovalRequestFromOpenCodePermission({
