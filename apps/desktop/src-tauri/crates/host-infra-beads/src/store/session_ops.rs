@@ -1,12 +1,15 @@
 use super::*;
+use serde::{de::DeserializeOwned, Serialize};
+use serde_json::Map;
 use std::collections::HashSet;
 
-fn parse_pull_request_record(value: &Value) -> Option<PullRequestRecord> {
+fn parse_record<T: DeserializeOwned>(value: &Value) -> Option<T> {
     serde_json::from_value(value.clone()).ok()
 }
 
-fn parse_direct_merge_record(value: &Value) -> Option<DirectMergeRecord> {
-    serde_json::from_value(value.clone()).ok()
+enum PullRequestSyncRefresh {
+    Refresh,
+    Skip,
 }
 
 impl BeadsTaskStore {
@@ -41,23 +44,23 @@ impl BeadsTaskStore {
 
         let pull_request = namespace
             .and_then(|ns| ns.get("pullRequest"))
-            .and_then(parse_pull_request_record)
+            .and_then(parse_record::<PullRequestRecord>)
             .or_else(|| {
                 namespace
                     .and_then(|ns| ns.get("delivery"))
                     .and_then(Value::as_object)
                     .and_then(|delivery| delivery.get("linkedPullRequest"))
-                    .and_then(parse_pull_request_record)
+                    .and_then(parse_record::<PullRequestRecord>)
             });
         let direct_merge = namespace
             .and_then(|ns| ns.get("directMerge"))
-            .and_then(parse_direct_merge_record)
+            .and_then(parse_record::<DirectMergeRecord>)
             .or_else(|| {
                 namespace
                     .and_then(|ns| ns.get("delivery"))
                     .and_then(Value::as_object)
                     .and_then(|delivery| delivery.get("directMerge"))
-                    .and_then(parse_direct_merge_record)
+                    .and_then(parse_record::<DirectMergeRecord>)
             });
         let target_branch = namespace.and_then(crate::metadata::metadata_target_branch);
 
@@ -217,28 +220,58 @@ impl BeadsTaskStore {
         Ok(())
     }
 
+    fn set_namespace_value<T: Serialize>(
+        namespace_map: &mut Map<String, Value>,
+        key: &str,
+        value: Option<T>,
+    ) -> Result<()> {
+        match value {
+            Some(value) => {
+                namespace_map.insert(key.to_string(), serde_json::to_value(value)?);
+            }
+            None => {
+                namespace_map.remove(key);
+            }
+        }
+        Ok(())
+    }
+
+    fn update_delivery_namespace(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        pull_request_sync_refresh: PullRequestSyncRefresh,
+        update_namespace: impl FnOnce(&mut Map<String, Value>) -> Result<()>,
+    ) -> Result<()> {
+        let (mut root, namespace_key, mut namespace_map) =
+            self.load_namespace(repo_path, task_id)?;
+
+        update_namespace(&mut namespace_map)?;
+        namespace_map.remove("delivery");
+        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
+
+        match pull_request_sync_refresh {
+            PullRequestSyncRefresh::Refresh => {
+                self.refresh_cached_pull_request_sync_candidate_from_store(repo_path, task_id)?;
+            }
+            PullRequestSyncRefresh::Skip => {}
+        }
+
+        Ok(())
+    }
+
     pub(super) fn set_pull_request_impl(
         &self,
         repo_path: &Path,
         task_id: &str,
         pull_request: Option<PullRequestRecord>,
     ) -> Result<()> {
-        let (mut root, namespace_key, mut namespace_map) =
-            self.load_namespace(repo_path, task_id)?;
-
-        match pull_request {
-            Some(value) => {
-                namespace_map.insert("pullRequest".to_string(), serde_json::to_value(value)?);
-            }
-            None => {
-                namespace_map.remove("pullRequest");
-            }
-        }
-
-        namespace_map.remove("delivery");
-        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
-        self.refresh_cached_pull_request_sync_candidate_from_store(repo_path, task_id)?;
-        Ok(())
+        self.update_delivery_namespace(
+            repo_path,
+            task_id,
+            PullRequestSyncRefresh::Refresh,
+            |namespace_map| Self::set_namespace_value(namespace_map, "pullRequest", pull_request),
+        )
     }
 
     pub(super) fn set_delivery_metadata_impl(
@@ -248,31 +281,15 @@ impl BeadsTaskStore {
         pull_request: Option<PullRequestRecord>,
         direct_merge: Option<DirectMergeRecord>,
     ) -> Result<()> {
-        let (mut root, namespace_key, mut namespace_map) =
-            self.load_namespace(repo_path, task_id)?;
-
-        match pull_request {
-            Some(value) => {
-                namespace_map.insert("pullRequest".to_string(), serde_json::to_value(value)?);
-            }
-            None => {
-                namespace_map.remove("pullRequest");
-            }
-        }
-
-        match direct_merge {
-            Some(value) => {
-                namespace_map.insert("directMerge".to_string(), serde_json::to_value(value)?);
-            }
-            None => {
-                namespace_map.remove("directMerge");
-            }
-        }
-
-        namespace_map.remove("delivery");
-        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
-        self.refresh_cached_pull_request_sync_candidate_from_store(repo_path, task_id)?;
-        Ok(())
+        self.update_delivery_namespace(
+            repo_path,
+            task_id,
+            PullRequestSyncRefresh::Refresh,
+            |namespace_map| {
+                Self::set_namespace_value(namespace_map, "pullRequest", pull_request)?;
+                Self::set_namespace_value(namespace_map, "directMerge", direct_merge)
+            },
+        )
     }
 
     pub(super) fn set_direct_merge_record_impl(
@@ -281,21 +298,12 @@ impl BeadsTaskStore {
         task_id: &str,
         direct_merge: Option<DirectMergeRecord>,
     ) -> Result<()> {
-        let (mut root, namespace_key, mut namespace_map) =
-            self.load_namespace(repo_path, task_id)?;
-
-        match direct_merge {
-            Some(value) => {
-                namespace_map.insert("directMerge".to_string(), serde_json::to_value(value)?);
-            }
-            None => {
-                namespace_map.remove("directMerge");
-            }
-        }
-
-        namespace_map.remove("delivery");
-        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
-        Ok(())
+        self.update_delivery_namespace(
+            repo_path,
+            task_id,
+            PullRequestSyncRefresh::Skip,
+            |namespace_map| Self::set_namespace_value(namespace_map, "directMerge", direct_merge),
+        )
     }
 
     pub(super) fn get_task_metadata_impl(
