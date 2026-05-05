@@ -7,6 +7,7 @@ use host_infra_system::{
     resolve_effective_worktree_base_dir_for_workspace, run_command,
 };
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use super::git_paths::resolve_execution_path;
@@ -32,15 +33,21 @@ fn resolve_worktree_path(repo_path: &Path, worktree_path: &Path) -> PathBuf {
     repo_path.join(worktree_path)
 }
 
-fn path_is_within_root(root: &Path, candidate: &Path) -> bool {
-    let normalized_root = normalize_path_for_comparison(root.to_string_lossy().as_ref());
-    let normalized_candidate = normalize_path_for_comparison(candidate.to_string_lossy().as_ref());
+fn path_is_within_root(root: &Path, candidate: &Path) -> Result<bool> {
+    let normalized_root = normalize_path_for_comparison(root)?;
+    let normalized_candidate = normalize_path_for_comparison(candidate)?;
 
-    normalized_candidate.starts_with(&normalized_root)
+    Ok(normalized_candidate.starts_with(&normalized_root))
 }
 
-fn normalize_path_for_comparison(path: &str) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| Path::new(path).to_path_buf())
+fn normalize_path_for_comparison(path: &Path) -> Result<PathBuf> {
+    match fs::canonicalize(path) {
+        Ok(normalized) => Ok(normalized),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(path.to_path_buf()),
+        Err(error) => {
+            Err(error).with_context(|| format!("Failed to canonicalize path: {}", path.display()))
+        }
+    }
 }
 
 impl AppService {
@@ -50,7 +57,7 @@ impl AppService {
         candidate_path: &Path,
     ) -> Result<bool> {
         let repo_path_ref = Path::new(repo_path);
-        if path_is_within_root(repo_path_ref, candidate_path) {
+        if path_is_within_root(repo_path_ref, candidate_path)? {
             return Ok(true);
         }
 
@@ -61,7 +68,7 @@ impl AppService {
         )?;
 
         Ok(
-            path_is_within_root(managed_worktree_base.as_path(), candidate_path)
+            path_is_within_root(managed_worktree_base.as_path(), candidate_path)?
                 || self.is_recorded_task_worktree_path(repo_path, candidate_path)?,
         )
     }
@@ -71,20 +78,26 @@ impl AppService {
         repo_path: &str,
         candidate_path: &Path,
     ) -> Result<bool> {
-        let normalized_candidate =
-            normalize_path_for_comparison(candidate_path.to_string_lossy().as_ref());
-        let normalized_repo = normalize_path_for_comparison(repo_path);
+        let normalized_candidate = normalize_path_for_comparison(candidate_path)?;
+        let normalized_repo = normalize_path_for_comparison(Path::new(repo_path))?;
         if normalized_candidate == normalized_repo {
             return Ok(false);
         }
 
-        Ok(self
+        for session in self
             .task_store
             .list_tasks(Path::new(repo_path))?
             .into_iter()
             .flat_map(|task| task.agent_sessions.into_iter())
-            .map(|session| normalize_path_for_comparison(session.working_directory.as_str()))
-            .any(|recorded_path| recorded_path == normalized_candidate))
+        {
+            let recorded_path =
+                normalize_path_for_comparison(Path::new(session.working_directory.as_str()))?;
+            if recorded_path == normalized_candidate {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
     }
 
     pub fn git_create_worktree(
@@ -183,9 +196,8 @@ impl AppService {
         let requested_worktree_path = Path::new(worktree);
         let effective_worktree_path = resolve_worktree_path(repo_path_ref, requested_worktree_path);
 
-        let normalized_repo = normalize_path_for_comparison(&repo_path);
-        let normalized_worktree =
-            normalize_path_for_comparison(effective_worktree_path.to_string_lossy().as_ref());
+        let normalized_repo = normalize_path_for_comparison(Path::new(&repo_path))?;
+        let normalized_worktree = normalize_path_for_comparison(effective_worktree_path.as_path())?;
         if normalized_repo == normalized_worktree {
             return Err(anyhow!("worktree path cannot be the repository root"));
         }

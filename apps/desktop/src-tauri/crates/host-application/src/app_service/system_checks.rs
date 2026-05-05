@@ -11,8 +11,8 @@ use std::time::{Duration, Instant};
 use super::service_core::CachedRuntimeCheck;
 use super::AppService;
 
-pub(super) const RUNTIME_CHECK_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
-pub(super) const GH_NON_INTERACTIVE_ENV: [(&str, &str); 1] = [("GH_PROMPT_DISABLED", "1")];
+const RUNTIME_CHECK_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const GH_NON_INTERACTIVE_ENV: [(&str, &str); 1] = [("GH_PROMPT_DISABLED", "1")];
 
 fn build_beads_check(repo_store_health: RepoStoreHealth) -> BeadsCheck {
     let beads_error = (!repo_store_health.is_ready
