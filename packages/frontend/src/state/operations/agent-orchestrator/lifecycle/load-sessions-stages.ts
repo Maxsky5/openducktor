@@ -45,7 +45,7 @@ import {
   createHydrationRuntimeResolver,
   type ResolvedHydrationRuntime,
 } from "./hydration-runtime-resolution";
-import { LiveAgentSessionCache } from "./live-agent-session-cache";
+import { LiveAgentSessionCache, liveAgentSessionLookupKey } from "./live-agent-session-cache";
 import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import {
   applyLiveSessionTruthToSession,
@@ -112,6 +112,10 @@ const readPlannerLiveSessionTruth = async (
   return runtimePlanner.readLiveSessionTruth(record);
 };
 
+type LiveSessionTruthSource = {
+  read: (ref: LiveAgentSessionRef) => Promise<LiveSessionTruth>;
+};
+
 export type RuntimeResolutionPlannerStageInput = {
   intent: SessionLoadIntent;
   options?: AgentSessionLoadOptions;
@@ -172,6 +176,65 @@ export type HistoryHydrationStageInput = {
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
 const EMPTY_PROMPT_OVERRIDES: RepoPromptOverrides = {};
+
+const createLiveSessionTruthSource = ({
+  adapter,
+  liveAgentSessionStore,
+  preloadedLiveAgentSessionsByKey,
+}: {
+  adapter: SessionLifecycleAdapter;
+  liveAgentSessionStore: LiveAgentSessionStore | undefined;
+  preloadedLiveAgentSessionsByKey: Map<string, LiveSessionTruth[]>;
+}): LiveSessionTruthSource => {
+  const liveAgentSessionScanCache = adapter.listLiveSessionTruths
+    ? new LiveAgentSessionCache(
+        { listLiveSessionTruths: adapter.listLiveSessionTruths },
+        preloadedLiveAgentSessionsByKey.size > 0 ? preloadedLiveAgentSessionsByKey : undefined,
+      )
+    : null;
+
+  const readPreloadedTruth = (ref: LiveAgentSessionRef): LiveSessionTruth | null => {
+    const truths = preloadedLiveAgentSessionsByKey.get(
+      liveAgentSessionLookupKey(ref.repoPath, ref.runtimeKind, ref.workingDirectory),
+    );
+    return (
+      truths?.find((candidate) => candidate.ref.externalSessionId === ref.externalSessionId) ?? null
+    );
+  };
+
+  const read = async (ref: LiveAgentSessionRef): Promise<LiveSessionTruth> => {
+    const storedTruth = liveAgentSessionStore?.readTruth(ref);
+    if (storedTruth) {
+      return storedTruth;
+    }
+
+    const preloadedTruth = readPreloadedTruth(ref);
+    if (preloadedTruth) {
+      return preloadedTruth;
+    }
+
+    const truths = liveAgentSessionScanCache
+      ? await liveAgentSessionScanCache.load({
+          repoPath: ref.repoPath,
+          runtimeKind: ref.runtimeKind,
+          directories: [ref.workingDirectory],
+        })
+      : [];
+    const scannedTruth = truths.find(
+      (candidate) => candidate.ref.externalSessionId === ref.externalSessionId,
+    );
+    if (scannedTruth) {
+      return scannedTruth;
+    }
+
+    if (!adapter.readLiveSessionTruth) {
+      throw new Error("Live session truth reads are unavailable for session hydration.");
+    }
+    return adapter.readLiveSessionTruth(ref);
+  };
+
+  return { read };
+};
 
 const readSubagentSessionIds = (
   externalSessionId: string,
@@ -502,63 +565,15 @@ export const createRuntimeResolutionPlannerStage = async ({
     repoPath: intent.repoPath,
     runtimesByKind,
   });
-  const liveAgentSessionScanCache =
-    adapter.listLiveSessionTruths || preloadedLiveAgentSessionsByKey.size > 0
-      ? new LiveAgentSessionCache(
-          {
-            listLiveSessionTruths: async (input) => {
-              if (!adapter.listLiveSessionTruths) {
-                throw new Error("Live session truths are unavailable for session scanning.");
-              }
-              return adapter.listLiveSessionTruths(input);
-            },
-          },
-          preloadedLiveAgentSessionsByKey.size > 0 ? preloadedLiveAgentSessionsByKey : undefined,
-        )
-      : null;
-
-  const readTruth = async ({
-    repoPath,
-    runtimeKind,
-    workingDirectory,
-    externalSessionId,
-  }: LiveAgentSessionRef): Promise<LiveSessionTruth> => {
-    const storedTruth = liveAgentSessionStore?.readTruth({
-      repoPath,
-      runtimeKind,
-      workingDirectory,
-      externalSessionId,
-    });
-    if (storedTruth) {
-      return storedTruth;
-    }
-
-    const truths = liveAgentSessionScanCache
-      ? await liveAgentSessionScanCache.load({
-          repoPath,
-          runtimeKind,
-          directories: [workingDirectory],
-        })
-      : [];
-    const truth = truths.find((candidate) => candidate.ref.externalSessionId === externalSessionId);
-    if (truth) {
-      return truth;
-    }
-
-    if (!adapter.readLiveSessionTruth) {
-      throw new Error("Live session truth reads are unavailable for session hydration.");
-    }
-    return adapter.readLiveSessionTruth({
-      repoPath,
-      runtimeKind,
-      workingDirectory,
-      externalSessionId,
-    });
-  };
+  const liveSessionTruthSource = createLiveSessionTruthSource({
+    adapter,
+    liveAgentSessionStore,
+    preloadedLiveAgentSessionsByKey,
+  });
   const readLiveSessionTruth = createLiveSessionTruthReader({
     repoPath: intent.repoPath,
     resolveHydrationRuntime,
-    readTruth,
+    readTruth: liveSessionTruthSource.read,
   });
 
   return {

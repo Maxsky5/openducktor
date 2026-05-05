@@ -2287,6 +2287,61 @@ describe("load-sessions-stages", () => {
     expect(snapshot).toEqual(liveSnapshot);
   });
 
+  test("runtime planner falls back to single truth read after preloaded-only cache miss", async () => {
+    const workingDirectory = "/tmp/repo/worktree";
+    const liveTruth = createLiveTruth("external-1", workingDirectory, {
+      title: "Builder Session",
+      startedAt: "2026-03-01T09:00:00.000Z",
+      status: { type: "busy" },
+      pendingApprovals: [],
+      pendingQuestions: [],
+    });
+    const readTruthCalls: Array<{ externalSessionId: string; workingDirectory: string }> = [];
+
+    const planner = await createRuntimeResolutionPlannerStage({
+      intent: createIntent(),
+      options: {
+        preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
+          ["opencode", [createRuntime(workingDirectory)]],
+        ]),
+        preloadedLiveAgentSessionsByKey: new Map([
+          [liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory), []],
+        ]),
+      },
+      adapter: {
+        hasSession: () => false,
+        loadSessionHistory: async () => [],
+        attachSession: async (input: AttachSessionInput) => ({
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+        resumeSession: async (input: ResumeSessionInput) => ({
+          externalSessionId: input.externalSessionId,
+          role: input.role,
+          startedAt: "2026-03-01T09:00:00.000Z",
+          status: "idle",
+          runtimeKind: input.runtimeKind,
+        }),
+        readLiveSessionTruth: async (input) => {
+          readTruthCalls.push({
+            externalSessionId: input.externalSessionId,
+            workingDirectory: input.workingDirectory,
+          });
+          return liveTruth;
+        },
+      },
+      recordsToHydrate: [createRecord({ workingDirectory })],
+    });
+
+    const truth = await planner.readLiveSessionTruth(createRecord({ workingDirectory }));
+
+    expect(truth).toEqual(liveTruth);
+    expect(readTruthCalls).toEqual([{ externalSessionId: "external-1", workingDirectory }]);
+  });
+
   test("runtime planner uses preloaded snapshots to disambiguate same-directory stdio runtimes", async () => {
     const workingDirectory = "/tmp/repo/worktree";
     const planner = await createRuntimeResolutionPlannerStage({
