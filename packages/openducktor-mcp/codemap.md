@@ -6,7 +6,8 @@ MCP server package that exposes OpenDucktor workflow tools over stdio and forwar
 ## Design Patterns
 - Shared tool schema registry drives registration, response shaping, and workspace-scoped filtering.
 - Store/context resolution fails fast on missing discovery, invalid workspace scope, or legacy inputs.
-- Tool execution is normalized into structured MCP results and errors.
+- Package metadata exposes a compiled CLI/bin entrypoint, while tool execution is normalized into structured MCP results and errors.
+- Package metadata publishes the compiled `openducktor-mcp` bin from the dist build.
 
 ## Data & Control Flow
 `src/index.ts` parses CLI args, resolves host/store context, registers tool schemas/handlers, and connects stdio transport. `src/odt-task-store.ts` validates tool input and calls the host bridge; `src/host-bridge-client.ts` performs health/invoke HTTP calls; `src/store-context.ts` discovers and validates bridge context.

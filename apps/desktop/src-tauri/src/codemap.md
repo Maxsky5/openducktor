@@ -1,13 +1,13 @@
 # apps/desktop/src-tauri/src/
 
 ## Responsibility
-Tauri-facing shell for desktop and local web-host execution. It contains command wrappers, headless server glue, the dedicated web-host binary, and startup plumbing for the desktop/web-host split.
+Tauri-facing shell for desktop and local web-host execution. It contains app state, command helpers/payloads, logging, startup/shutdown plumbing, command wrappers, headless server glue, and the dedicated web-host binary.
 
 ## Design
-Commands are grouped by domain under `commands/`; shared transport-neutral command behavior lives under `command_services/`; local web mode uses `headless/` to register the same operations over HTTP/SSE; and `bin/openducktor_web_host.rs` provides the standalone web-host entrypoint. Shared helpers keep command handlers thin and push real work into `AppService`, while generated schemas keep IPC shapes aligned.
+`app_state.rs`, `command_helpers.rs`, `command_payloads.rs`, `logging.rs`, `startup.rs`, and `shutdown.rs` hold cross-cutting host plumbing. Commands are grouped by domain under `commands/`; shared transport-neutral command behavior lives under `command_services/`; local web mode uses `headless/` to register the same operations over HTTP/SSE; and `bin/openducktor_web_host.rs` provides the standalone web-host entrypoint.
 
 ## Flow
-`main.rs` starts the desktop app and keeps the legacy browser-backend compatibility flag; `bin/openducktor_web_host.rs` starts the dedicated web host with a required frontend origin and control token. `lib.rs` builds state, services, emitters, command services, and command registration; transport command modules validate/deserialise request data, then delegate shared behavior to command service modules.
+`main.rs` starts the desktop app and keeps the browser-backend compatibility flag; `lib.rs` builds state, services, emitters, and command registration before delegating to startup/headless. Transport command modules validate and deserialize request data, then hand off to shared command-service modules.
 
 ## Integration
 Bridges Tauri, browser-backend HTTP, SSE relays, and the `host-application` service layer. Uses `host-domain` payloads throughout so UI and headless paths stay aligned.

@@ -2,19 +2,19 @@
 
 ## Responsibility
 
-Shared React/Vite frontend package for OpenDucktor. It owns App composition, reusable components, route screens, app-state/query orchestration, styles, markdown/document helpers, test utilities, and the shell-bridge contract used by desktop and local web shells.
+Shared React/Vite frontend package for OpenDucktor. It owns App composition, reusable components, route screens, app-state/query orchestration, styles, markdown/document helpers, test utilities, and the shell-bridge contract used by desktop and browser shells.
 
-## Design Patterns
+## Design/Patterns
 
 - `src/index.ts` exposes the package entrypoint, shell bootstrap API, styles subpath, and shell-bridge contract types.
-- `src/shell-bootstrap.tsx` owns shared startup ordering: shell readiness, root resolution, bridge configuration, settings/theme preload, crash shell, router, and app render.
-- `src/lib/shell-bridge.ts` is the host boundary. Shared UI code reaches host operations through this bridge instead of importing Tauri or web transport APIs directly.
+- `src/shell-bootstrap-workflow.ts` owns the shared bootstrap sequence; `src/shell-bootstrap.tsx` binds that workflow to the DOM, router, theme preload, and crash shell.
+- `src/lib/shell-bridge.ts` is the host boundary. Shared UI code reaches host operations through this bridge instead of importing Tauri or browser transport APIs directly.
 - `src/components`, `src/pages`, `src/state`, `src/features`, `src/lib`, and `src/test-utils` keep the layered frontend structure, now shell-neutral.
 
-## Data & Control Flow
+## Flow
 
-Shells call `bootstrapOpenDucktorShell(...)` with shell-specific readiness and bridge factory inputs. The shared bootstrap resolves the root, configures the bridge, preloads settings/theme, renders routes, and uses `hostClient`/event subscriptions through the configured bridge.
+Shells call `bootstrapOpenDucktorShell(...)` with shell-specific bridge inputs. The shared workflow resolves the root, configures the bridge, preloads settings/theme, and renders the app through the configured shell bridge.
 
-## Integration Points
+## Integration
 
-Desktop integration lives in `apps/desktop/src/desktop-shell-bridge.ts`; web integration lives in `packages/openducktor-web/src/browser-shell-bridge.ts` and `local-host-transport.ts`.
+Desktop integration lives in `apps/desktop/src/desktop-shell-bridge.ts`; shared host seams live in `src/lib/shell-bridge.ts` and the browser/web shell adapters.

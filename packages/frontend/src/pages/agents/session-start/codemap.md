@@ -1,13 +1,17 @@
 # packages/frontend/src/pages/agents/session-start/
 
 ## Responsibility
+
 Agent Studio session-start bridge: modal flow, runtime selection, reuse-state handling, fresh-session creation, kickoff prompt dispatch, and the session-specific launch helper used by the shell and Kanban flows.
 
-## Design Patterns
+## Design/Patterns
+
 This folder is a thin adapter over `features/session-start`, layering Agent Studio-specific inputs, query updates, kickoff prompts, and feedback handling onto the shared workflow.
 
-## Data & Control Flow
+## Flow
+
 Shell/page model code calls the exported flow hook, which coordinates modal decisions, runtime selection, reuse state, session launch, kickoff messaging, and selection/query updates.
 
-## Integration Points
+## Integration
+
 `use-agent-studio-session-start-flow.ts`, `use-agent-studio-fresh-session-creation.ts`, `use-agent-studio-session-start-session.ts`, and `features/session-start`.

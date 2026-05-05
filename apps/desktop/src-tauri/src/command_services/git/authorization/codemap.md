@@ -1,10 +1,10 @@
 # apps/desktop/src-tauri/src/command_services/git/authorization/
 
 ## Responsibility
-Validate repo and worktree paths before shared git command services run.
+Resolve and cache authorized repo/worktree membership before shared git command services run.
 
 ## Design
-`resolution.rs` canonicalizes filesystem paths and enforces authorized worktree scope; `cache.rs` and `metadata.rs` keep repo-specific lookups cheap and invalidatable.
+`resolution.rs` canonicalizes filesystem paths and enforces authorized worktree scope; `cache.rs` manages repo-specific membership caching and invalidation; `listing.rs` shells out to `git worktree list`; `metadata.rs` reads gitdir/commondir and worktree state tokens.
 
 ## Flow
 Inputs move from raw repo/worktree strings to canonical paths, then through authorization checks against repo metadata and cached worktree state tokens.

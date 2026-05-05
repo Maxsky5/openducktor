@@ -1,10 +1,10 @@
 # apps/desktop/src-tauri/crates/host-application/src/app_service/
 
 ## Responsibility
-Core application-service implementation for runtimes, tasks, workflows, workspace policy, and host coordination.
+Core application-service implementation for runtimes, tasks, workflows, workspace policy, git helpers, and host coordination.
 
 ## Design
-The module tree splits by concern: build orchestration, runtime orchestration/registry, OpenCode runtime process lifecycle, MCP bridge process/registry, task workflow/document service, dev-server management, startup metrics, and policy enforcement. Runtime definitions, routes, and live connections are handled as distinct inputs at the service boundary, and the service keeps workspace policy separate from runtime startup state.
+The module tree splits by concern: build orchestration, runtime orchestration/registry, OpenCode runtime process lifecycle, MCP bridge process/registry, task workflow/document service, dev-server management, git path/provider/worktree helpers, system checks, startup metrics, and policy enforcement. Runtime definitions, routes, and live connections remain distinct inputs at the service boundary, and extracted `git_*`, `system_checks`, and `workspace_*` modules keep those concerns isolated.
 
 ## Flow
 `AppService` receives a command request, resolves repo/runtime state, executes the appropriate sub-service, and returns typed `host_domain` results or actionable errors.

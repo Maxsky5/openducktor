@@ -1,13 +1,13 @@
 # apps/desktop/src-tauri/crates/
 
 ## Responsibility
-Workspace-local Rust crates that implement host-domain models, the application service layer, infra adapters, and test support.
+Workspace-local Rust crates that implement host-domain models, the application service layer, and infra adapters.
 
 ## Design
-Hexagonal boundaries are explicit: `host-domain` defines contracts, `host-application` orchestrates workflows, and infra crates implement ports with CLI/config/filesystem/process integrations. Runtime definitions, routes, and live connections stay separate across those layers.
+Hexagonal boundaries are explicit: `host-domain` defines contracts, `host-application` orchestrates workflows, and infra crates implement ports with CLI/config/filesystem/process/beads integrations. Runtime definitions, routes, and live connections stay separate across those layers.
 
 ## Flow
-Commands and Tauri startup depend inward on `host-application`; that crate depends on `host-domain`; infra crates implement the task store, git, config, and runtime plumbing behind those contracts without duplicating runtime capability metadata.
+Commands, command services, and Tauri startup depend inward on `host-application`; that crate depends on `host-domain`; infra crates implement the task store, git, config, and runtime plumbing behind those contracts without duplicating runtime capability metadata.
 
 ## Integration
 These crates are the Rust host surface used by `src/lib.rs`, browser-backend handlers, and the desktop command layer.

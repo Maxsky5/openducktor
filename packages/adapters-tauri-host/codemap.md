@@ -6,6 +6,7 @@ Typed Tauri IPC adapter exposing desktop host commands for workspace, task, file
 ## Design Patterns
 - Thin `invoke` wrappers with schema-validated inputs/outputs.
 - Domain client composition keeps workspace, runtime, and task reads isolated but exposed through one host client.
+- Package export surfaces stay on `src/index.ts`, which composes the host client from the underlying command clients.
 - Task metadata caching dedupes host reads without hiding invalidation events.
 - Workspace and task clients stay separate so freshness rules can be applied per command family.
 

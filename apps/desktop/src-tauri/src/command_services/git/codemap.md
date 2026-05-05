@@ -4,7 +4,7 @@
 Shared git command behavior for branch, diff, status, worktree, push/pull, rebase, conflict, authorization, and snapshot operations.
 
 ## Design
-`requests.rs` owns transport-neutral command inputs, `authorization/` validates repo/worktree scope, `snapshot.rs` centralizes snapshot hashing, and `mod.rs` exposes one shared function per command.
+`requests.rs` owns transport-neutral command inputs, `authorization/` handles canonical path validation/cache/listing/metadata, `snapshot.rs` centralizes snapshot hashing, and `mod.rs` exposes one shared function per command plus shared repo/worktree authorization helpers.
 
 ## Flow
 Git command services authorize the repo/effective working directory, validate required fields and diff scope, call `AppService` or `GitPort`, invalidate worktree caches after successful worktree mutations, and return classified errors.

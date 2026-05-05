@@ -1,13 +1,17 @@
 # apps/desktop/src/
 
 ## Responsibility
+
 Thin desktop shell source for the Tauri application. Shared App, routes, components, feature orchestration, state/query layers, styles, and host-backed UI utilities live under `packages/frontend/src`.
 
-## Design Patterns
+## Design/Patterns
+
 Keep this folder intentionally small. Shell-specific code configures `ShellBridge` implementations and delegates all shared rendering to `@openducktor/frontend`.
 
-## Data & Control Flow
-`main.tsx` imports `@openducktor/frontend/styles.css` and calls `bootstrapOpenDucktorShell(...)` with `createDesktopShellBridge` as the shell-specific adapter factory.
+## Flow
 
-## Integration Points
+`main.tsx` imports `@openducktor/frontend/styles.css` and calls `bootstrapOpenDucktorShell(...)` directly with `createDesktopShellBridge`; there is no separate mount layer here.
+
+## Integration
+
 `desktop-shell-bridge.ts` is the only Tauri API usage in this folder. It adapts Tauri invoke/event APIs to the shared frontend shell-bridge contract.

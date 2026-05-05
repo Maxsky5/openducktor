@@ -1,7 +1,7 @@
 # packages/core/src/services/
 
 ## Responsibility
-Reusable core workflow services for runtime connection validation, OpenDucktor tool selection, planner spec handling, todos, prompts, and kanban mapping.
+Reusable core workflow services for runtime connection validation, approval policy, session presence, OpenDucktor tool selection, planner spec handling, todos, prompts, and kanban mapping.
 
 ## Design Patterns
 - Small stateless helpers with explicit error paths.
@@ -9,12 +9,13 @@ Reusable core workflow services for runtime connection validation, OpenDucktor t
 - Services depend only on core/contract types, not on concrete adapter APIs.
 
 ## Data & Control Flow
+- `approval-policy.ts` classifies approval requests and shell/tool mutations for approval-gated roles.
+- `agent-session-presence.ts` classifies live runtime snapshots into session presence states.
 - `odt-workflow-tools.ts` resolves canonical and aliased `odt_*` tool ids and role-scoped tool selections.
 - `runtime-connections.ts` validates repo/runtime refs and session working-directory inputs before adapter calls.
 - `planner-spec-service.ts`, `agent-session-todos.ts`, `agent-system-prompts.ts`, and `agent-user-message-parts.ts` transform workflow data into core-facing structures.
-- `agent-system-prompts.ts` assembles role, kickoff, message, and permission prompts from task context, git context, workflow guards, and repo guidance.
 
 ## Integration Points
-- Consumed by adapter layers when building runtime clients and permissions.
+- Consumed by adapter layers when building runtime clients and approval handling.
 - Depends on `@openducktor/contracts` descriptors and role/tool enums.
 - Feeds prompt text into the MCP/server orchestration layers without coupling to a specific shell.
