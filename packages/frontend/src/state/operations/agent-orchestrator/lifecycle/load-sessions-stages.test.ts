@@ -24,6 +24,7 @@ import {
   hydrateSessionRecordsStage,
   mergeHydratedMessages,
   preparePersistedSessionMergeStage,
+  reconcileLiveSessionsStage,
   type SessionLifecycleAdapter,
   type SessionLoadIntent,
   type UpdateSession,
@@ -2340,6 +2341,43 @@ describe("load-sessions-stages", () => {
 
     expect(snapshot).toEqual(sessionPresenceSnapshot);
     expect(readPresenceCalls).toEqual([{ externalSessionId: "external-1", workingDirectory }]);
+  });
+
+  test("reconciles sessions through single presence reads when scans are unavailable", async () => {
+    const stateHarness = createStateHarness({ "external-1": createSession() });
+    const adapter = createLifecycleAdapter();
+    let readPresenceCalls = 0;
+    delete adapter.listSessionPresence;
+
+    const result = await reconcileLiveSessionsStage({
+      intent: createIntent({ shouldReconcileLiveSessions: true }),
+      adapter,
+      updateSession: stateHarness.updateSession,
+      attachSessionListener: () => {},
+      isStaleRepoOperation: () => false,
+      recordsToHydrate: [createRecord()],
+      runtimePlanner: {
+        repoPath: "/tmp/repo",
+        resolveHydrationRuntime: async () => ({
+          ok: true,
+          runtimeKind: "opencode",
+          runtimeId: "runtime-1",
+          workingDirectory: "/tmp/repo/worktree",
+        }),
+        readSessionPresence: async () => {
+          readPresenceCalls += 1;
+          return createStalePresence("external-1", "/tmp/repo/worktree");
+        },
+      },
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(readPresenceCalls).toBe(1);
+    expect(result.reattachedSessionIds.size).toBe(0);
   });
 
   test("runtime planner uses preloaded snapshots to disambiguate same-directory stdio runtimes", async () => {

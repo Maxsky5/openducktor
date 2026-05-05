@@ -42,6 +42,41 @@ describe("session-presence-store", () => {
     ).toEqual(expectedPresence);
   });
 
+  test("normalizes repo buckets for equivalent repo paths", () => {
+    const store = new AgentSessionPresenceStore();
+    const expectedPresence = createPresence("external-1", workingDirectory);
+
+    store.replaceRepoPresence(
+      `${repoPath}/`,
+      new Map([
+        [agentSessionPresenceLookupKey(repoPath, "opencode", workingDirectory), [expectedPresence]],
+      ]),
+      1_000,
+    );
+
+    expect(
+      store.readPresence({
+        repoPath,
+        runtimeKind: "opencode",
+        workingDirectory,
+        externalSessionId: "external-1",
+        nowMs: 1_500,
+      }),
+    ).toEqual(expectedPresence);
+
+    store.clearRepo(repoPath);
+
+    expect(
+      store.readPresence({
+        repoPath: `${repoPath}/`,
+        runtimeKind: "opencode",
+        workingDirectory,
+        externalSessionId: "external-1",
+        nowMs: 1_500,
+      }),
+    ).toBeNull();
+  });
+
   test("treats repo snapshots as isolated and clearable", () => {
     const store = new AgentSessionPresenceStore();
     const repoOnePresence = createPresence("external-1", repoOneWorkingDirectory);

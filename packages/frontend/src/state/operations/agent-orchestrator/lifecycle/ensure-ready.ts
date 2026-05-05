@@ -310,8 +310,9 @@ export const createEnsureSessionReady = ({
 
     assertNotStale();
 
+    removeSessionUnsubscriber(externalSessionId);
     applyConfirmedSessionPresenceSnapshot(sessionPresence, {
-      shouldAttachListener: !unsubscribersRef.current.has(externalSessionId),
+      shouldAttachListener: true,
       promptOverrides: promptContext.promptOverrides,
     });
 

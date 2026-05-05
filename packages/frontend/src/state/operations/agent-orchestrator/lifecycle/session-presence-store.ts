@@ -1,4 +1,5 @@
 import type { AgentSessionPresenceSnapshot, AgentSessionRef } from "@openducktor/core";
+import { normalizeWorkingDirectory } from "../support/core";
 import { agentSessionPresenceLookupKey } from "./session-presence-cache";
 
 const DEFAULT_PRESENCE_MAX_AGE_MS = 5_000;
@@ -12,7 +13,7 @@ export class AgentSessionPresenceStore {
   private readonly presenceByRepo = new Map<string, Map<string, StoredAgentSessionPresence>>();
 
   clearRepo(repoPath: string): void {
-    this.presenceByRepo.delete(repoPath);
+    this.presenceByRepo.delete(normalizeWorkingDirectory(repoPath));
   }
 
   replaceRepoPresence(
@@ -20,6 +21,7 @@ export class AgentSessionPresenceStore {
     presenceByKey: Map<string, AgentSessionPresenceSnapshot[]>,
     loadedAtMs = Date.now(),
   ): void {
+    const repoKey = normalizeWorkingDirectory(repoPath);
     const nextPresence = new Map<string, StoredAgentSessionPresence>();
     for (const [lookupKey, sessions] of presenceByKey) {
       nextPresence.set(lookupKey, {
@@ -27,7 +29,7 @@ export class AgentSessionPresenceStore {
         sessions,
       });
     }
-    this.presenceByRepo.set(repoPath, nextPresence);
+    this.presenceByRepo.set(repoKey, nextPresence);
   }
 
   readPresence(
@@ -36,7 +38,7 @@ export class AgentSessionPresenceStore {
       nowMs?: number;
     },
   ): AgentSessionPresenceSnapshot | null {
-    const repoPresence = this.presenceByRepo.get(input.repoPath);
+    const repoPresence = this.presenceByRepo.get(normalizeWorkingDirectory(input.repoPath));
     if (!repoPresence) {
       return null;
     }

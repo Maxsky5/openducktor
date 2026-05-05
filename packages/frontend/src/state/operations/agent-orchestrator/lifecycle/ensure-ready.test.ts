@@ -886,6 +886,101 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
+  test("clears stale listener handles and reattaches after successful resume", async () => {
+    let attachCalls = 0;
+    let unsubscribeCalls = 0;
+    let resumeCalls = 0;
+
+    const adapter = createAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalResumeSession = adapter.resumeSession;
+    adapter.hasSession = () => false;
+    adapter.resumeSession = async () => {
+      resumeCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        status: "idle",
+      };
+    };
+    adapter.readSessionPresence = async (input) =>
+      toAgentSessionPresenceSnapshotFromLiveSnapshot({
+        ref: input,
+        runtimeId: "runtime-1",
+        snapshot: {
+          externalSessionId: "external-1",
+          title: "BUILD task-1",
+          workingDirectory: "/tmp/repo/worktree",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: { type: "idle" },
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+      });
+
+    const sessionsRef = {
+      current: {
+        "session-1": buildSession({ status: "idle", runtimeId: null }),
+      },
+    };
+    const unsubscribersRef = {
+      current: new Map<string, () => void>([
+        [
+          "session-1",
+          () => {
+            unsubscribeCalls += 1;
+          },
+        ],
+      ]),
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef,
+      updateSession: (_externalSessionId, updater) => {
+        const current = sessionsRef.current["session-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["session-1"] = updater(current);
+      },
+      attachSessionListener: () => {
+        attachCalls += 1;
+        unsubscribersRef.current.set("session-1", () => {});
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: null,
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    try {
+      await ensureReady("session-1");
+
+      expect(resumeCalls).toBe(1);
+      expect(unsubscribeCalls).toBe(1);
+      expect(attachCalls).toBe(1);
+      expect(unsubscribersRef.current.has("session-1")).toBe(true);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.resumeSession = originalResumeSession;
+    }
+  });
+
   test("fails when stopping an attached error session fails", async () => {
     let resumeCalls = 0;
     let unsubscribeCalls = 0;

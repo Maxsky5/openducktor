@@ -603,10 +603,6 @@ export const reconcileLiveSessionsStage = async ({
   if (!intent.shouldReconcileLiveSessions) {
     return { reattachedSessionIds: new Set<string>() };
   }
-  if (!adapter.listSessionPresence) {
-    throw new Error("Session presence reads are unavailable for session reconciliation.");
-  }
-
   const maybeResumeLiveRecord = createReattachLiveSession({
     adapter,
     repoPath: intent.repoPath,
