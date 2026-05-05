@@ -1,8 +1,4 @@
-import type {
-  AgentSessionRecord,
-  RepoRuntimeRef,
-  RuntimeKind,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord, RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 import { normalizeWorkingDirectory } from "../support/core";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 
