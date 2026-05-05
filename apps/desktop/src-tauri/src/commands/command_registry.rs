@@ -2,7 +2,6 @@ use crate::commands::agent_sessions::*;
 use crate::commands::build::*;
 use crate::commands::documents::*;
 use crate::commands::filesystem::*;
-use crate::commands::git::command_handlers::*;
 use crate::commands::runtime::*;
 use crate::commands::system::*;
 use crate::commands::tasks::*;
@@ -33,24 +32,24 @@ pub(crate) fn register_desktop_commands<R: tauri::Runtime>(
         workspace_get_settings_snapshot,
         workspace_update_global_git_config,
         workspace_save_settings_snapshot,
-        git_get_branches,
-        git_get_current_branch,
-        git_switch_branch,
-        git_create_worktree,
-        git_remove_worktree,
-        git_push_branch,
-        git_get_status,
-        git_get_diff,
-        git_commits_ahead_behind,
-        git_get_worktree_status,
-        git_get_worktree_status_summary,
-        git_commit_all,
-        git_reset_worktree_selection,
-        git_fetch_remote,
-        git_pull_branch,
-        git_rebase_branch,
-        git_rebase_abort,
-        git_abort_conflict,
+        crate::commands::git::command_handlers::git_get_branches,
+        crate::commands::git::command_handlers::git_get_current_branch,
+        crate::commands::git::command_handlers::git_switch_branch,
+        crate::commands::git::command_handlers::git_create_worktree,
+        crate::commands::git::command_handlers::git_remove_worktree,
+        crate::commands::git::command_handlers::git_push_branch,
+        crate::commands::git::command_handlers::git_get_status,
+        crate::commands::git::command_handlers::git_get_diff,
+        crate::commands::git::command_handlers::git_commits_ahead_behind,
+        crate::commands::git::command_handlers::git_get_worktree_status,
+        crate::commands::git::command_handlers::git_get_worktree_status_summary,
+        crate::commands::git::command_handlers::git_commit_all,
+        crate::commands::git::command_handlers::git_reset_worktree_selection,
+        crate::commands::git::command_handlers::git_fetch_remote,
+        crate::commands::git::command_handlers::git_pull_branch,
+        crate::commands::git::command_handlers::git_rebase_branch,
+        crate::commands::git::command_handlers::git_rebase_abort,
+        crate::commands::git::command_handlers::git_abort_conflict,
         tasks_list,
         task_create,
         task_update,
@@ -109,8 +108,9 @@ mod tests {
 
     #[test]
     fn default_capability_permissions_are_minimal_and_shell_free() {
-        let capability: Value = serde_json::from_str(include_str!("../capabilities/default.json"))
-            .expect("default capability JSON should parse");
+        let capability: Value =
+            serde_json::from_str(include_str!("../../capabilities/default.json"))
+                .expect("default capability JSON should parse");
         let permissions = capability
             .get("permissions")
             .and_then(Value::as_array)

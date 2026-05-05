@@ -1,7 +1,6 @@
 mod app_state;
 mod command_helpers;
 mod command_payloads;
-mod command_registry;
 mod command_services;
 mod commands;
 mod external_task_sync;

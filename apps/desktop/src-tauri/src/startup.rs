@@ -1,5 +1,5 @@
 use crate::app_state::{AppState, PullRequestSyncLoopState};
-use crate::command_registry::register_desktop_commands;
+use crate::commands::command_registry::register_desktop_commands;
 use crate::external_task_sync::{start_task_event_relay, TaskEventRelayState, TASK_EVENT_NAME};
 use crate::logging::init_tracing_subscriber;
 #[cfg(all(feature = "cef", target_os = "macos"))]
