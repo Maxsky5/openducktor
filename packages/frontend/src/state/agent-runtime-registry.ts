@@ -105,8 +105,8 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     this.listAvailableSlashCommands = this.listAvailableSlashCommands.bind(this);
     this.searchFiles = this.searchFiles.bind(this);
     this.listLiveAgentSessions = this.listLiveAgentSessions.bind(this);
-    this.listLiveSessionTruths = this.listLiveSessionTruths.bind(this);
-    this.readLiveSessionTruth = this.readLiveSessionTruth.bind(this);
+    this.listSessionPresence = this.listSessionPresence.bind(this);
+    this.readSessionPresence = this.readSessionPresence.bind(this);
     this.hasSession = this.hasSession.bind(this);
     this.loadSessionHistory = this.loadSessionHistory.bind(this);
     this.loadSessionTodos = this.loadSessionTodos.bind(this);
@@ -216,16 +216,16 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     ).listLiveAgentSessions(input);
   }
 
-  listLiveSessionTruths(input: Parameters<AgentEnginePort["listLiveSessionTruths"]>[0]) {
+  listSessionPresence(input: Parameters<AgentEnginePort["listSessionPresence"]>[0]) {
     return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "live session truth discovery"),
-    ).listLiveSessionTruths(input);
+      this.requireInputRuntimeKind(input.runtimeKind, "live session snapshot discovery"),
+    ).listSessionPresence(input);
   }
 
-  readLiveSessionTruth(input: Parameters<AgentEnginePort["readLiveSessionTruth"]>[0]) {
+  readSessionPresence(input: Parameters<AgentEnginePort["readSessionPresence"]>[0]) {
     return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "live session truth read"),
-    ).readLiveSessionTruth(input);
+      this.requireInputRuntimeKind(input.runtimeKind, "live session snapshot read"),
+    ).readSessionPresence(input);
   }
 
   hasSession(externalSessionId: string): boolean {

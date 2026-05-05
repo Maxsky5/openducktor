@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
-import { toLiveSessionTruthFromSnapshot } from "@openducktor/core";
+import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createDeferred, createLiveSessionTruthFixture } from "../test-utils";
+import { createAgentSessionPresenceSnapshotFixture, createDeferred } from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
 
 const withCapturedConsoleError = async (
@@ -74,9 +74,9 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 
 const createAdapter = () => {
   const adapter = new OpencodeSdkAdapter();
-  adapter.listLiveSessionTruths = async () => [];
-  adapter.readLiveSessionTruth = async (input) =>
-    toLiveSessionTruthFromSnapshot({
+  adapter.listSessionPresence = async () => [];
+  adapter.readSessionPresence = async (input) =>
+    toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: input,
       runtimeId: null,
       snapshot: null,
@@ -124,21 +124,21 @@ describe("agent-orchestrator-ensure-ready", () => {
     let attachCalls = 0;
     let stopCalls = 0;
     let resumeCalls = 0;
-    const readSnapshotCalls: Parameters<OpencodeSdkAdapter["readLiveSessionTruth"]>[0][] = [];
+    const readSnapshotCalls: Parameters<OpencodeSdkAdapter["readSessionPresence"]>[0][] = [];
 
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveSessionTruths;
-    const originalReadLiveAgentSessionSnapshot = adapter.readLiveSessionTruth;
+    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
+    const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
     adapter.hasSession = () => true;
-    adapter.listLiveSessionTruths = async () => {
+    adapter.listSessionPresence = async () => {
       throw new Error("ensure-ready must use the single-session snapshot read");
     };
-    adapter.readLiveSessionTruth = async (input) => {
+    adapter.readSessionPresence = async (input) => {
       readSnapshotCalls.push(input);
-      return createLiveSessionTruthFixture({ ref: input });
+      return createAgentSessionPresenceSnapshotFixture({ ref: input });
     };
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -211,8 +211,8 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
-      adapter.readLiveSessionTruth = originalReadLiveAgentSessionSnapshot;
+      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
+      adapter.readSessionPresence = originalReadLiveAgentSessionSnapshot;
     }
   });
 
@@ -226,7 +226,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const originalHasSession = adapter.hasSession;
     const originalDetachSession = adapter.detachSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalReadLiveAgentSessionSnapshot = adapter.readLiveSessionTruth;
+    const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
     adapter.hasSession = () => attached;
     adapter.detachSession = async (externalSessionId) => {
       expect(externalSessionId).toBe("external-1");
@@ -243,8 +243,8 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
-    adapter.readLiveSessionTruth = async () =>
-      toLiveSessionTruthFromSnapshot({
+    adapter.readSessionPresence = async () =>
+      toAgentSessionPresenceSnapshotFromLiveSnapshot({
         ref: {
           repoPath: "/tmp/repo",
           runtimeKind: "opencode",
@@ -314,7 +314,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter.hasSession = originalHasSession;
       adapter.detachSession = originalDetachSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.readLiveSessionTruth = originalReadLiveAgentSessionSnapshot;
+      adapter.readSessionPresence = originalReadLiveAgentSessionSnapshot;
     }
   });
 
@@ -324,13 +324,13 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => true;
-    adapter.readLiveSessionTruth = async () =>
-      createLiveSessionTruthFixture({
+    adapter.readSessionPresence = async () =>
+      createAgentSessionPresenceSnapshotFixture({
         snapshot: {
           title: "Builder Session",
         },
       });
-    adapter.listLiveSessionTruths = async () => [createLiveSessionTruthFixture()];
+    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
     const sessionsRef = {
       current: {
@@ -390,13 +390,13 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     adapter.hasSession = () => true;
-    adapter.readLiveSessionTruth = async () =>
-      createLiveSessionTruthFixture({
+    adapter.readSessionPresence = async () =>
+      createAgentSessionPresenceSnapshotFixture({
         snapshot: {
           title: "Builder Session",
         },
       });
-    adapter.listLiveSessionTruths = async () => [createLiveSessionTruthFixture()];
+    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
     const sessionsRef = {
       current: {
@@ -515,10 +515,10 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveSessionTruths;
+    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
     adapter.hasSession = () => true;
-    adapter.readLiveSessionTruth = async () =>
-      createLiveSessionTruthFixture({
+    adapter.readSessionPresence = async () =>
+      createAgentSessionPresenceSnapshotFixture({
         snapshot: {
           title: "BUILD task-1",
           status: { type: "busy" },
@@ -550,8 +550,8 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
-    adapter.listLiveSessionTruths = async () => [
-      createLiveSessionTruthFixture({
+    adapter.listSessionPresence = async () => [
+      createAgentSessionPresenceSnapshotFixture({
         ref: { repoPath: "/tmp/repo", workingDirectory: "/tmp/repo/worktree" },
         snapshot: {
           externalSessionId: "external-1",
@@ -647,7 +647,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
     }
   });
 
@@ -1122,10 +1122,10 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveSessionTruths;
+    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
     adapter.hasSession = () => false;
-    adapter.readLiveSessionTruth = async () =>
-      createLiveSessionTruthFixture({
+    adapter.readSessionPresence = async () =>
+      createAgentSessionPresenceSnapshotFixture({
         snapshot: {
           title: "Builder Session",
         },
@@ -1140,7 +1140,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
-    adapter.listLiveSessionTruths = async () => [createLiveSessionTruthFixture()];
+    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
     const sessionsRef = {
       current: {
@@ -1201,7 +1201,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
     }
   });
 
@@ -1214,10 +1214,10 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalHasSession = adapter.hasSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listLiveSessionTruths;
+    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
     adapter.hasSession = () => false;
-    adapter.readLiveSessionTruth = async () =>
-      createLiveSessionTruthFixture({
+    adapter.readSessionPresence = async () =>
+      createAgentSessionPresenceSnapshotFixture({
         snapshot: {
           title: "Builder Session",
         },
@@ -1232,7 +1232,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         status: "idle",
       };
     };
-    adapter.listLiveSessionTruths = async () => [createLiveSessionTruthFixture()];
+    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
     const sessionsRef = {
       current: {
@@ -1290,7 +1290,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
     }
   });
 

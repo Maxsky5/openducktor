@@ -93,24 +93,25 @@ describe("agent-runtime-registry", () => {
   test("keeps runtime engine methods bound when passed as callbacks", async () => {
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-    const originalListLiveSessionTruths = OpencodeSdkAdapter.prototype.listLiveSessionTruths;
+    const originalListAgentSessionPresenceSnapshots =
+      OpencodeSdkAdapter.prototype.listSessionPresence;
     const listAvailableModels = mock(async () => ({
       models: [],
       defaultModelsByProvider: {},
     }));
     const loadSessionTodos = mock(async () => []);
-    const listLiveSessionTruths = mock(async () => []);
+    const listSessionPresence = mock(async () => []);
 
     try {
       OpencodeSdkAdapter.prototype.listAvailableModels = listAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = loadSessionTodos;
-      OpencodeSdkAdapter.prototype.listLiveSessionTruths = listLiveSessionTruths;
+      OpencodeSdkAdapter.prototype.listSessionPresence = listSessionPresence;
 
       const engine = createAgentRuntimeRegistry().createAgentEngine();
       const {
         listAvailableModels: readModels,
         loadSessionTodos: readTodos,
-        listLiveSessionTruths: readTruths,
+        listSessionPresence: readPresences,
       } = engine;
 
       await readModels({
@@ -125,7 +126,7 @@ describe("agent-runtime-registry", () => {
         externalSessionId: "external-1",
       });
 
-      await readTruths({
+      await readPresences({
         runtimeKind: "opencode",
         repoPath: "/repo",
         directories: ["/tmp/repo"],
@@ -133,11 +134,11 @@ describe("agent-runtime-registry", () => {
 
       expect(listAvailableModels).toHaveBeenCalledTimes(1);
       expect(loadSessionTodos).toHaveBeenCalledTimes(1);
-      expect(listLiveSessionTruths).toHaveBeenCalledTimes(1);
+      expect(listSessionPresence).toHaveBeenCalledTimes(1);
     } finally {
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-      OpencodeSdkAdapter.prototype.listLiveSessionTruths = originalListLiveSessionTruths;
+      OpencodeSdkAdapter.prototype.listSessionPresence = originalListAgentSessionPresenceSnapshots;
     }
   });
 

@@ -6,6 +6,7 @@ import type {
   AgentRole,
   AgentSessionHistoryMessage,
   AgentSessionPort,
+  AgentSessionPresenceSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
   AgentWorkspaceInspectionPort,
@@ -14,14 +15,13 @@ import type {
   ForkAgentSessionInput,
   ListAgentModelsInput,
   ListLiveAgentSessionsInput,
-  ListLiveSessionTruthInput,
+  ListSessionPresenceInput,
   LiveAgentSessionSummary,
-  LiveSessionTruth,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
   LoadAgentSessionTodosInput,
-  ReadLiveSessionTruthInput,
+  ReadSessionPresenceInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
@@ -29,7 +29,7 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
-import { toLiveSessionTruthFromSnapshot } from "@openducktor/core";
+import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import {
   connectMcpServer,
   getMcpStatus,
@@ -97,6 +97,13 @@ const requireWorkflowRole = (session: SessionRecord): AgentRole => {
   throw new Error(
     `Session ${session.summary.externalSessionId} is a transcript and cannot send messages.`,
   );
+};
+
+const requireSessionPresenceRuntimeId = (runtimeId: string | null | undefined): string => {
+  if (runtimeId) {
+    return runtimeId;
+  }
+  throw new Error("Runtime session presence requires a live runtime id.");
 };
 
 export class OpencodeSdkAdapter
@@ -364,29 +371,32 @@ export class OpencodeSdkAdapter
   async listLiveAgentSessions(
     input: ListLiveAgentSessionsInput,
   ): Promise<LiveAgentSessionSummary[]> {
-    const truths = await this.listLiveSessionTruths(input);
-    return truths.flatMap((truth) => {
-      if (truth.type !== "live") {
+    const snapshots = await this.listSessionPresence(input);
+    return snapshots.flatMap((snapshot) => {
+      if (snapshot.presence !== "runtime") {
         return [];
       }
       return [
         {
-          externalSessionId: truth.ref.externalSessionId,
-          title: truth.title,
-          workingDirectory: truth.ref.workingDirectory,
-          startedAt: truth.startedAt,
-          status: truth.status,
+          externalSessionId: snapshot.ref.externalSessionId,
+          title: snapshot.title,
+          workingDirectory: snapshot.ref.workingDirectory,
+          startedAt: snapshot.startedAt,
+          status: snapshot.status,
         },
       ];
     });
   }
 
-  async listLiveSessionTruths(input: ListLiveSessionTruthInput): Promise<LiveSessionTruth[]> {
+  async listSessionPresence(
+    input: ListSessionPresenceInput,
+  ): Promise<AgentSessionPresenceSnapshot[]> {
     const runtimeClientInput = await this.resolveRuntimeClientInputWithRuntimeId(
       { ...input, workingDirectory: input.repoPath },
-      "list live session truths",
+      "list session presence",
       { requireLive: true },
     );
+    const runtimeId = requireSessionPresenceRuntimeId(runtimeClientInput.runtimeId);
     const snapshots = await listOpencodeLiveAgentSessionSnapshots({
       createClient: this.createClient,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
@@ -394,25 +404,28 @@ export class OpencodeSdkAdapter
       ...(input.directories ? { directories: input.directories } : {}),
     });
     return snapshots.map((snapshot) =>
-      toLiveSessionTruthFromSnapshot({
+      toAgentSessionPresenceSnapshotFromLiveSnapshot({
         ref: {
           repoPath: input.repoPath,
           runtimeKind: input.runtimeKind,
           workingDirectory: snapshot.workingDirectory,
           externalSessionId: snapshot.externalSessionId,
         },
-        runtimeId: runtimeClientInput.runtimeId ?? null,
+        runtimeId,
         snapshot,
       }),
     );
   }
 
-  async readLiveSessionTruth(input: ReadLiveSessionTruthInput): Promise<LiveSessionTruth> {
+  async readSessionPresence(
+    input: ReadSessionPresenceInput,
+  ): Promise<AgentSessionPresenceSnapshot> {
     const runtimeClientInput = await this.resolveRuntimeClientInputWithRuntimeId(
       input,
-      "read live session truth",
+      "read session presence",
       { requireLive: true },
     );
+    const runtimeId = requireSessionPresenceRuntimeId(runtimeClientInput.runtimeId);
     const snapshots = await listOpencodeLiveAgentSessionSnapshots({
       createClient: this.createClient,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
@@ -422,14 +435,14 @@ export class OpencodeSdkAdapter
     const snapshot =
       snapshots.find((candidate) => candidate.externalSessionId === input.externalSessionId) ??
       null;
-    return toLiveSessionTruthFromSnapshot({
+    return toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: snapshot
         ? {
             ...input,
             workingDirectory: snapshot.workingDirectory,
           }
         : input,
-      runtimeId: runtimeClientInput.runtimeId ?? null,
+      runtimeId,
       snapshot,
     });
   }

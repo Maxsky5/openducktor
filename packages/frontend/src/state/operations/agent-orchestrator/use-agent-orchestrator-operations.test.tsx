@@ -13,18 +13,14 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { host } from "../shared/host";
 import { createSessionMessagesState } from "./support/messages";
-import { createLiveSessionTruthFixture } from "./test-utils";
+import { createAgentSessionPresenceSnapshotFixture } from "./test-utils";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
-type ListLiveSessionTruthsInput = Parameters<
-  NonNullable<AgentEnginePort["listLiveSessionTruths"]>
->[0];
-type ReadLiveSessionTruthInput = Parameters<
-  NonNullable<AgentEnginePort["readLiveSessionTruth"]>
->[0];
+type ListSessionPresenceInput = Parameters<NonNullable<AgentEnginePort["listSessionPresence"]>>[0];
+type ReadSessionPresenceInput = Parameters<NonNullable<AgentEnginePort["readSessionPresence"]>>[0];
 type OpencodeSdkAdapterPrototype = Pick<
   OpencodeSdkAdapter,
-  "listLiveSessionTruths" | "readLiveSessionTruth"
+  "listSessionPresence" | "readSessionPresence"
 >;
 
 const opencodeSdkAdapterPrototype = OpencodeSdkAdapter.prototype as OpencodeSdkAdapterPrototype;
@@ -315,8 +311,8 @@ describe("use-agent-orchestrator-operations", () => {
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
   const originalRuntimeList = host.runtimeList;
   const originalRuntimeEnsure = host.runtimeEnsure;
-  const originalListLiveAgentSessionSnapshots = OpencodeSdkAdapter.prototype.listLiveSessionTruths;
-  const originalReadLiveSessionTruth = OpencodeSdkAdapter.prototype.readLiveSessionTruth;
+  const originalListLiveAgentSessionSnapshots = OpencodeSdkAdapter.prototype.listSessionPresence;
+  const originalReadAgentSessionPresenceSnapshot = OpencodeSdkAdapter.prototype.readSessionPresence;
 
   beforeEach(() => {
     host.workspaceGetRepoConfig = async () =>
@@ -383,23 +379,23 @@ describe("use-agent-orchestrator-operations", () => {
         kind: runtimeKind,
       },
     });
-    opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [
-      createLiveSessionTruthFixture(),
+    opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+      createAgentSessionPresenceSnapshotFixture(),
     ];
-    opencodeSdkAdapterPrototype.readLiveSessionTruth = async (input: ReadLiveSessionTruthInput) => {
-      const truths = await opencodeSdkAdapterPrototype.listLiveSessionTruths({
+    opencodeSdkAdapterPrototype.readSessionPresence = async (input: ReadSessionPresenceInput) => {
+      const snapshots = await opencodeSdkAdapterPrototype.listSessionPresence({
         repoPath: input.repoPath ?? "/tmp/repo",
         runtimeKind: input.runtimeKind ?? "opencode",
         directories: [input.workingDirectory ?? "/tmp/repo/worktree"],
       });
-      const match = truths.find(
-        (truth: ReturnType<typeof createLiveSessionTruthFixture>) =>
-          truth.ref.externalSessionId === input.externalSessionId,
+      const match = snapshots.find(
+        (snapshot: ReturnType<typeof createAgentSessionPresenceSnapshotFixture>) =>
+          snapshot.ref.externalSessionId === input.externalSessionId,
       );
       if (match) {
         return match;
       }
-      return createLiveSessionTruthFixture({
+      return createAgentSessionPresenceSnapshotFixture({
         ref: {
           repoPath: input.repoPath ?? "/tmp/repo",
           runtimeKind: input.runtimeKind ?? "opencode",
@@ -415,8 +411,8 @@ describe("use-agent-orchestrator-operations", () => {
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     host.runtimeList = originalRuntimeList;
     host.runtimeEnsure = originalRuntimeEnsure;
-    opencodeSdkAdapterPrototype.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
-    opencodeSdkAdapterPrototype.readLiveSessionTruth = originalReadLiveSessionTruth;
+    opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
+    opencodeSdkAdapterPrototype.readSessionPresence = originalReadAgentSessionPresenceSnapshot;
   });
 
   test("reattaches listener before send when adapter session exists", async () => {
@@ -564,8 +560,8 @@ describe("use-agent-orchestrator-operations", () => {
         defaultModelsByProvider: {},
         profiles: [],
       });
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [
-        createLiveSessionTruthFixture({
+      opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+        createAgentSessionPresenceSnapshotFixture({
           snapshot: {
             title: "PLANNER task-1",
             workingDirectory: "/tmp/repo/worktree",
@@ -1210,7 +1206,7 @@ describe("use-agent-orchestrator-operations", () => {
       const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
       const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
       const originalListLiveAgentSessionSnapshots =
-        OpencodeSdkAdapter.prototype.listLiveSessionTruths;
+        OpencodeSdkAdapter.prototype.listSessionPresence;
       const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
       const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
       const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
@@ -1248,8 +1244,8 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.sendUserMessage = async () => {
         sendCalls += 1;
       };
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [
-        createLiveSessionTruthFixture({
+      opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+        createAgentSessionPresenceSnapshotFixture({
           ref: { externalSessionId: "external-1", workingDirectory: "/tmp/repo" },
           snapshot: {
             title: "SPEC task-1",
@@ -1407,7 +1403,7 @@ describe("use-agent-orchestrator-operations", () => {
         OpencodeSdkAdapter.prototype.stopSession = originalStopSession;
         OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
         OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
-        opencodeSdkAdapterPrototype.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
+        opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
         OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
         OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
         OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
@@ -1989,8 +1985,8 @@ describe("use-agent-orchestrator-operations", () => {
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         },
       ];
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [
-        createLiveSessionTruthFixture({
+      opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+        createAgentSessionPresenceSnapshotFixture({
           snapshot: {
             title: "BUILD task-1",
             workingDirectory: "/tmp/repo/worktree",
@@ -2079,10 +2075,10 @@ describe("use-agent-orchestrator-operations", () => {
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         },
       ];
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => {
+      opencodeSdkAdapterPrototype.listSessionPresence = async () => {
         liveSnapshotScans += 1;
         return [
-          createLiveSessionTruthFixture({
+          createAgentSessionPresenceSnapshotFixture({
             ref: { externalSessionId: "external-1", workingDirectory: "/tmp/repo/worktree" },
             snapshot: { title: "BUILD task-1", status: { type: "idle" } },
           }),
@@ -2135,12 +2131,11 @@ describe("use-agent-orchestrator-operations", () => {
     const originalRuntimeList = host.runtimeList;
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
-    const originalListLiveAgentSessionSnapshots =
-      OpencodeSdkAdapter.prototype.listLiveSessionTruths;
+    const originalListLiveAgentSessionSnapshots = OpencodeSdkAdapter.prototype.listSessionPresence;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     host.runtimeList = async () => [];
-    opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [];
+    opencodeSdkAdapterPrototype.listSessionPresence = async () => [];
     let attachCalls = 0;
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [
       {
@@ -2227,8 +2222,8 @@ describe("use-agent-orchestrator-operations", () => {
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         },
       ];
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [
-        createLiveSessionTruthFixture({
+      opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+        createAgentSessionPresenceSnapshotFixture({
           snapshot: {
             title: "BUILD task-1",
             workingDirectory: "/tmp/repo/worktree",
@@ -2263,7 +2258,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.runtimeList = originalRuntimeList;
       OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
+      opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
@@ -2272,8 +2267,7 @@ describe("use-agent-orchestrator-operations", () => {
     const originalRuntimeList = host.runtimeList;
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
-    const originalListLiveAgentSessionSnapshots =
-      OpencodeSdkAdapter.prototype.listLiveSessionTruths;
+    const originalListLiveAgentSessionSnapshots = OpencodeSdkAdapter.prototype.listSessionPresence;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     let loadSessionHistoryCalls = 0;
@@ -2291,8 +2285,8 @@ describe("use-agent-orchestrator-operations", () => {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       },
     ];
-    opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [
-      createLiveSessionTruthFixture({
+    opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+      createAgentSessionPresenceSnapshotFixture({
         snapshot: {
           title: "BUILD task-1",
           workingDirectory: "/tmp/repo/worktree",
@@ -2367,7 +2361,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.runtimeList = originalRuntimeList;
       OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
+      opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
@@ -2857,8 +2851,7 @@ describe("use-agent-orchestrator-operations", () => {
     const originalRuntimeList = host.runtimeList;
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
-    const originalListLiveAgentSessionSnapshots =
-      OpencodeSdkAdapter.prototype.listLiveSessionTruths;
+    const originalListLiveAgentSessionSnapshots = OpencodeSdkAdapter.prototype.listSessionPresence;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     let loadSessionHistoryCalls = 0;
@@ -2876,8 +2869,8 @@ describe("use-agent-orchestrator-operations", () => {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       },
     ];
-    opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [
-      createLiveSessionTruthFixture({
+    opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+      createAgentSessionPresenceSnapshotFixture({
         snapshot: {
           title: "BUILD task-1",
           workingDirectory: "/tmp/repo/worktree",
@@ -2963,7 +2956,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.runtimeList = originalRuntimeList;
       OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
+      opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
@@ -2972,8 +2965,7 @@ describe("use-agent-orchestrator-operations", () => {
     const originalRuntimeList = host.runtimeList;
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
-    const originalListLiveAgentSessionSnapshots =
-      OpencodeSdkAdapter.prototype.listLiveSessionTruths;
+    const originalListLiveAgentSessionSnapshots = OpencodeSdkAdapter.prototype.listSessionPresence;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     host.runtimeList = async () => [
@@ -2989,8 +2981,8 @@ describe("use-agent-orchestrator-operations", () => {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       },
     ];
-    opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [
-      createLiveSessionTruthFixture({
+    opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+      createAgentSessionPresenceSnapshotFixture({
         snapshot: {
           title: "BUILD task-1",
           workingDirectory: "/tmp/repo/worktree",
@@ -3050,7 +3042,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.runtimeList = originalRuntimeList;
       OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
+      opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
@@ -3059,8 +3051,7 @@ describe("use-agent-orchestrator-operations", () => {
     const originalRuntimeList = host.runtimeList;
     const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
     const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
-    const originalListLiveAgentSessionSnapshots =
-      OpencodeSdkAdapter.prototype.listLiveSessionTruths;
+    const originalListLiveAgentSessionSnapshots = OpencodeSdkAdapter.prototype.listSessionPresence;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
     let loadSessionHistoryCalls = 0;
@@ -3078,8 +3069,8 @@ describe("use-agent-orchestrator-operations", () => {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       },
     ];
-    opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [
-      createLiveSessionTruthFixture({
+    opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+      createAgentSessionPresenceSnapshotFixture({
         ref: { externalSessionId: "external-1", workingDirectory: "/tmp/repo/worktree" },
         snapshot: { title: "BUILD task-1", status: { type: "busy" } },
       }),
@@ -3183,7 +3174,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.runtimeList = originalRuntimeList;
       OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = originalListLiveAgentSessionSnapshots;
+      opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
@@ -3200,7 +3191,7 @@ describe("use-agent-orchestrator-operations", () => {
       const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
       const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
-      let listLiveSessionTruthsCalls = 0;
+      let listSessionPresenceCalls = 0;
       const scannedEndpoints: string[] = [];
 
       host.agentSessionsList = async () => [persistedBuildSessionFixture];
@@ -3239,15 +3230,13 @@ describe("use-agent-orchestrator-operations", () => {
             descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
           },
         ] as Awaited<ReturnType<typeof host.runtimeList>>;
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = async (
-        input: ListLiveSessionTruthsInput,
-      ) => {
-        listLiveSessionTruthsCalls += 1;
+      opencodeSdkAdapterPrototype.listSessionPresence = async (input: ListSessionPresenceInput) => {
+        listSessionPresenceCalls += 1;
         scannedEndpoints.push(
           `${input.repoPath}:${input.runtimeKind}:${input.directories?.join(",") ?? ""}`,
         );
         return [
-          createLiveSessionTruthFixture({
+          createAgentSessionPresenceSnapshotFixture({
             snapshot: {
               title: "BUILD task-1",
               workingDirectory: "/tmp/repo/worktree",
@@ -3287,7 +3276,7 @@ describe("use-agent-orchestrator-operations", () => {
         expect(new Set(scannedEndpoints)).toEqual(
           new Set(["/tmp/repo:opencode:/tmp/repo/worktree"]),
         );
-        expect(listLiveSessionTruthsCalls).toBe(1);
+        expect(listSessionPresenceCalls).toBe(1);
       } finally {
         await harness.unmount();
         host.agentSessionsList = originalAgentSessionsList;
@@ -3315,9 +3304,9 @@ describe("use-agent-orchestrator-operations", () => {
       const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
       const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
       const runtimeSessionsDeferred =
-        createDeferred<Awaited<ReturnType<OpencodeSdkAdapter["listLiveSessionTruths"]>>>();
+        createDeferred<Awaited<ReturnType<OpencodeSdkAdapter["listSessionPresence"]>>>();
 
-      let listLiveSessionTruthsCalls = 0;
+      let listSessionPresenceCalls = 0;
 
       host.agentSessionsList = async () => [persistedBuildSessionFixture];
       host.agentSessionUpsert = async () => {};
@@ -3355,8 +3344,8 @@ describe("use-agent-orchestrator-operations", () => {
             descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
           },
         ] as Awaited<ReturnType<typeof host.runtimeList>>;
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => {
-        listLiveSessionTruthsCalls += 1;
+      opencodeSdkAdapterPrototype.listSessionPresence = async () => {
+        listSessionPresenceCalls += 1;
         return runtimeSessionsDeferred.promise;
       };
       OpencodeSdkAdapter.prototype.resumeSession = async (input) => ({
@@ -3386,10 +3375,10 @@ describe("use-agent-orchestrator-operations", () => {
           tasks: [{ ...taskFixtureWithPersistedBuildSession }],
         });
 
-        expect(listLiveSessionTruthsCalls).toBe(1);
+        expect(listSessionPresenceCalls).toBe(1);
 
         runtimeSessionsDeferred.resolve([
-          createLiveSessionTruthFixture({
+          createAgentSessionPresenceSnapshotFixture({
             ref: {
               externalSessionId: "external-1",
               workingDirectory: "/tmp/repo/worktree",
@@ -3406,7 +3395,7 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.run(async () => {
           await runtimeSessionsDeferred.promise;
         });
-        expect(listLiveSessionTruthsCalls).toBe(1);
+        expect(listSessionPresenceCalls).toBe(1);
       } finally {
         runtimeSessionsDeferred.resolve([]);
         await harness.unmount();
@@ -3563,8 +3552,8 @@ describe("use-agent-orchestrator-operations", () => {
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         },
       ];
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [
-        createLiveSessionTruthFixture({
+      opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+        createAgentSessionPresenceSnapshotFixture({
           ref: { externalSessionId: "external-1", workingDirectory: "/tmp/repo/worktree" },
           snapshot: {
             title: "BUILD task-1",
@@ -3572,7 +3561,7 @@ describe("use-agent-orchestrator-operations", () => {
             status: { type: "busy" },
           },
         }),
-        createLiveSessionTruthFixture({
+        createAgentSessionPresenceSnapshotFixture({
           ref: { externalSessionId: "external-2", workingDirectory: "/tmp/repo/worktree" },
           snapshot: {
             title: "BUILD task-2",
@@ -3679,8 +3668,8 @@ describe("use-agent-orchestrator-operations", () => {
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         },
       ];
-      opencodeSdkAdapterPrototype.listLiveSessionTruths = async () => [
-        createLiveSessionTruthFixture({
+      opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+        createAgentSessionPresenceSnapshotFixture({
           ref: { externalSessionId: "external-2", workingDirectory: "/tmp/repo/worktree" },
           snapshot: { title: "BUILD task-2", status: { type: "busy" } },
         }),

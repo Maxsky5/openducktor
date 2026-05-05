@@ -1,18 +1,18 @@
 import type { AgentSessionRecord, RepoPromptOverrides } from "@openducktor/contracts";
 import {
-  type LiveAgentSessionRef,
-  type LiveSessionTruth,
+  type AgentSessionPresenceSnapshot,
+  type AgentSessionRef,
   type RepoRuntimeRef,
-  toPersistedOnlyLiveSessionTruth,
+  toPersistedOnlyAgentSessionPresenceSnapshot,
 } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 
-export type { LiveSessionTruth, LiveSessionTruthClassification } from "@openducktor/core";
+export type { AgentSessionPresence, AgentSessionPresenceSnapshot } from "@openducktor/core";
 
-type LiveSessionTruthReader = (input: LiveAgentSessionRef) => Promise<LiveSessionTruth>;
+type SessionPresenceReader = (input: AgentSessionRef) => Promise<AgentSessionPresenceSnapshot>;
 
-export const toMissingRuntimeLiveSessionTruth = ({
+export const toMissingRuntimeAgentSessionPresenceSnapshot = ({
   record,
   repoPath,
   runtimeKind,
@@ -22,8 +22,8 @@ export const toMissingRuntimeLiveSessionTruth = ({
   repoPath: RepoRuntimeRef["repoPath"];
   runtimeKind: RepoRuntimeRef["runtimeKind"];
   reason: string;
-}): LiveSessionTruth =>
-  toPersistedOnlyLiveSessionTruth({
+}): AgentSessionPresenceSnapshot =>
+  toPersistedOnlyAgentSessionPresenceSnapshot({
     ref: {
       repoPath,
       runtimeKind,
@@ -33,19 +33,19 @@ export const toMissingRuntimeLiveSessionTruth = ({
     reason,
   });
 
-export const createLiveSessionTruthReader = ({
+export const createSessionPresenceReader = ({
   repoPath,
   resolveHydrationRuntime,
-  readTruth,
+  readPresence,
 }: {
   repoPath: RepoRuntimeRef["repoPath"];
   resolveHydrationRuntime: (record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>;
-  readTruth: LiveSessionTruthReader;
-}): ((record: AgentSessionRecord) => Promise<LiveSessionTruth>) => {
+  readPresence: SessionPresenceReader;
+}): ((record: AgentSessionRecord) => Promise<AgentSessionPresenceSnapshot>) => {
   return async (record) => {
     const runtimeResolution = await resolveHydrationRuntime(record);
     if (!runtimeResolution.ok) {
-      return toMissingRuntimeLiveSessionTruth({
+      return toMissingRuntimeAgentSessionPresenceSnapshot({
         record,
         repoPath,
         runtimeKind: runtimeResolution.runtimeKind,
@@ -53,7 +53,7 @@ export const createLiveSessionTruthReader = ({
       });
     }
 
-    return readTruth({
+    return readPresence({
       repoPath,
       runtimeKind: runtimeResolution.runtimeKind,
       externalSessionId: record.externalSessionId,
@@ -62,17 +62,19 @@ export const createLiveSessionTruthReader = ({
   };
 };
 
-export const isAttachableLiveSessionTruth = (truth: LiveSessionTruth): boolean => {
-  return truth.type === "live" && truth.classification !== "idle";
+export const isAttachableAgentSessionPresenceSnapshot = (
+  snapshot: AgentSessionPresenceSnapshot,
+): boolean => {
+  return snapshot.presence === "runtime" && snapshot.classification !== "idle";
 };
 
-export const liveSessionTruthHasPendingInput = (truth: LiveSessionTruth): boolean => {
-  return truth.pendingApprovals.length > 0 || truth.pendingQuestions.length > 0;
+export const sessionPresenceHasPendingInput = (snapshot: AgentSessionPresenceSnapshot): boolean => {
+  return snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0;
 };
 
-export const applyLiveSessionTruthToSession = (
+export const applyAgentSessionPresenceSnapshotToSession = (
   current: AgentSessionState,
-  truth: LiveSessionTruth,
+  snapshot: AgentSessionPresenceSnapshot,
   options: {
     promptOverrides?: RepoPromptOverrides;
     selectedModel?: AgentSessionState["selectedModel"];
@@ -82,33 +84,33 @@ export const applyLiveSessionTruthToSession = (
   const promptOverrides = options.promptOverrides ?? current.promptOverrides;
   const selectedModel = options.selectedModel ?? current.selectedModel;
   const promptOverridesPatch = promptOverrides ? { promptOverrides } : {};
-  if (truth.type === "live") {
+  if (snapshot.presence === "runtime") {
     return {
       ...current,
-      runtimeKind: truth.ref.runtimeKind,
-      runtimeId: truth.runtimeId,
-      workingDirectory: truth.ref.workingDirectory,
+      runtimeKind: snapshot.ref.runtimeKind,
+      runtimeId: snapshot.runtimeId,
+      workingDirectory: snapshot.ref.workingDirectory,
       runtimeRecoveryState: "idle",
-      status: truth.agentSessionStatus,
-      title: truth.title,
-      pendingApprovals: truth.pendingApprovals,
-      pendingQuestions: truth.pendingQuestions,
+      status: snapshot.agentSessionStatus,
+      title: snapshot.title,
+      pendingApprovals: snapshot.pendingApprovals,
+      pendingQuestions: snapshot.pendingQuestions,
       ...promptOverridesPatch,
       selectedModel,
     };
   }
 
-  if (truth.type === "stale") {
+  if (snapshot.presence === "stale") {
     const runtimeId =
       options.missingSessionRuntimeId !== undefined
         ? options.missingSessionRuntimeId
-        : truth.runtimeId;
+        : snapshot.runtimeId;
     return {
       ...current,
       status: current.status === "running" ? "idle" : current.status,
-      runtimeKind: truth.ref.runtimeKind,
+      runtimeKind: snapshot.ref.runtimeKind,
       runtimeId,
-      workingDirectory: truth.ref.workingDirectory,
+      workingDirectory: snapshot.ref.workingDirectory,
       pendingApprovals: [],
       pendingQuestions: [],
       ...promptOverridesPatch,
@@ -119,9 +121,9 @@ export const applyLiveSessionTruthToSession = (
   return {
     ...current,
     status: current.status === "running" ? "idle" : current.status,
-    runtimeKind: truth.ref.runtimeKind,
+    runtimeKind: snapshot.ref.runtimeKind,
     runtimeId: null,
-    workingDirectory: truth.ref.workingDirectory,
+    workingDirectory: snapshot.ref.workingDirectory,
     pendingApprovals: [],
     pendingQuestions: [],
     ...promptOverridesPatch,

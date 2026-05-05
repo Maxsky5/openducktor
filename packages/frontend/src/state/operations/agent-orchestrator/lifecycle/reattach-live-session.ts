@@ -2,10 +2,10 @@ import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import {
-  applyLiveSessionTruthToSession,
-  isAttachableLiveSessionTruth,
-  type LiveSessionTruth,
-} from "./live-session-truth";
+  type AgentSessionPresenceSnapshot,
+  applyAgentSessionPresenceSnapshotToSession,
+  isAttachableAgentSessionPresenceSnapshot,
+} from "./session-presence";
 
 const STALE_REPO_ABORT = Symbol("stale-repo-abort");
 
@@ -21,7 +21,7 @@ type CreateReattachLiveSessionArgs = {
   ) => void;
   attachSessionListener?: (repoPath: string, externalSessionId: string) => void;
   promptOverrides: import("@openducktor/contracts").RepoPromptOverrides;
-  readLiveSessionTruth: (record: AgentSessionRecord) => Promise<LiveSessionTruth>;
+  readSessionPresence: (record: AgentSessionRecord) => Promise<AgentSessionPresenceSnapshot>;
   attachMissingLiveSession?: (input: {
     record: AgentSessionRecord;
     runtimeKind: RuntimeKind;
@@ -37,7 +37,7 @@ export const createReattachLiveSession = ({
   updateSession,
   attachSessionListener,
   promptOverrides,
-  readLiveSessionTruth,
+  readSessionPresence,
   attachMissingLiveSession,
   allowAttachMissingSession = true,
   isStaleRepoOperation,
@@ -55,11 +55,11 @@ export const createReattachLiveSession = ({
     }
 
     const attachedExistingSession = adapter.hasSession(record.externalSessionId);
-    const liveSessionTruth = await awaitUnlessStale(readLiveSessionTruth(record));
-    if (liveSessionTruth === STALE_REPO_ABORT) {
+    const sessionPresence = await awaitUnlessStale(readSessionPresence(record));
+    if (sessionPresence === STALE_REPO_ABORT) {
       return false;
     }
-    if (!isAttachableLiveSessionTruth(liveSessionTruth)) {
+    if (!isAttachableAgentSessionPresenceSnapshot(sessionPresence)) {
       return false;
     }
 
@@ -76,8 +76,8 @@ export const createReattachLiveSession = ({
       const resumeResult = await awaitUnlessStale(
         attachMissingLiveSession({
           record,
-          runtimeKind: liveSessionTruth.ref.runtimeKind,
-          workingDirectory: liveSessionTruth.ref.workingDirectory,
+          runtimeKind: sessionPresence.ref.runtimeKind,
+          workingDirectory: sessionPresence.ref.workingDirectory,
         }),
       );
       if (resumeResult === STALE_REPO_ABORT) {
@@ -92,7 +92,7 @@ export const createReattachLiveSession = ({
     updateSession(
       record.externalSessionId,
       (current) =>
-        applyLiveSessionTruthToSession(current, liveSessionTruth, {
+        applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
           promptOverrides,
           selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),
         }),

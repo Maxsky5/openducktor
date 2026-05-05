@@ -11,10 +11,10 @@ import { loadSessionPromptContext } from "../support/session-prompt";
 import { isWorkflowAgentSession } from "../support/session-purpose";
 import { requireSessionRuntimeKindForPersistence } from "../support/session-runtime-metadata";
 import {
-  applyLiveSessionTruthToSession,
-  type LiveSessionTruth,
-  liveSessionTruthHasPendingInput,
-} from "./live-session-truth";
+  type AgentSessionPresenceSnapshot,
+  applyAgentSessionPresenceSnapshotToSession,
+  sessionPresenceHasPendingInput,
+} from "./session-presence";
 
 type EnsureSessionReadyDependencies = {
   activeWorkspace: ActiveWorkspace | null;
@@ -44,7 +44,10 @@ type EnsureSessionReadyDependencies = {
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
-type ConfirmedLiveSessionTruth = Extract<LiveSessionTruth, { type: "live" }>;
+type ConfirmedAgentSessionPresenceSnapshot = Extract<
+  AgentSessionPresenceSnapshot,
+  { presence: "runtime" }
+>;
 type AttachedSessionCleanupAction = "detach" | "stop";
 
 const STALE_PREPARE_ERROR = "Workspace changed while preparing session.";
@@ -128,7 +131,7 @@ export const createEnsureSessionReady = ({
       unsubscribersRef.current.delete(targetExternalSessionId);
     };
 
-    const readLiveTruth = async ({
+    const readSessionPresenceSnapshot = async ({
       runtimeKind,
       workingDirectory,
       externalSessionId,
@@ -143,7 +146,7 @@ export const createEnsureSessionReady = ({
       if (workingDirectory.trim().length === 0) {
         throw new Error(`Session '${externalSessionId}' has no working directory.`);
       }
-      return adapter.readLiveSessionTruth({
+      return adapter.readSessionPresence({
         repoPath,
         runtimeKind,
         workingDirectory,
@@ -151,8 +154,8 @@ export const createEnsureSessionReady = ({
       });
     };
 
-    const applyConfirmedLiveTruth = (
-      truth: ConfirmedLiveSessionTruth,
+    const applyConfirmedSessionPresenceSnapshot = (
+      snapshot: ConfirmedAgentSessionPresenceSnapshot,
       {
         shouldAttachListener,
         promptOverrides,
@@ -166,15 +169,15 @@ export const createEnsureSessionReady = ({
       updateSession(
         externalSessionId,
         (current) =>
-          applyLiveSessionTruthToSession(current, truth, {
+          applyAgentSessionPresenceSnapshotToSession(current, snapshot, {
             ...(promptOverrides ? { promptOverrides } : {}),
           }),
         persistFalse ? { persist: false } : undefined,
       );
       if (shouldAttachListener) {
-        attachSessionListener(repoPath, truth.ref.externalSessionId);
+        attachSessionListener(repoPath, snapshot.ref.externalSessionId);
       }
-      if (!allowPendingInput && liveSessionTruthHasPendingInput(truth)) {
+      if (!allowPendingInput && sessionPresenceHasPendingInput(snapshot)) {
         throw new Error(PENDING_INPUT_NOT_READY_ERROR);
       }
     };
@@ -197,14 +200,14 @@ export const createEnsureSessionReady = ({
           unsubscribersRef.current.has(externalSessionId),
         );
 
-        const liveSessionTruth = await readLiveTruth({
+        const sessionPresence = await readSessionPresenceSnapshot({
           runtimeKind: attachedRuntimeKind,
           workingDirectory: attachedWorkingDirectory,
           externalSessionId: session.externalSessionId,
         });
         assertNotStale();
-        if (liveSessionTruth.type === "live") {
-          applyConfirmedLiveTruth(liveSessionTruth, {
+        if (sessionPresence.presence === "runtime") {
+          applyConfirmedSessionPresenceSnapshot(sessionPresence, {
             shouldAttachListener,
             persistFalse: true,
           });
@@ -213,7 +216,7 @@ export const createEnsureSessionReady = ({
         updateSession(
           externalSessionId,
           (current) =>
-            applyLiveSessionTruthToSession(current, liveSessionTruth, {
+            applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
               missingSessionRuntimeId: null,
             }),
           { persist: false },
@@ -286,18 +289,18 @@ export const createEnsureSessionReady = ({
       throw new Error(STALE_PREPARE_ERROR);
     }
 
-    const liveSessionTruth = await readLiveTruth({
+    const sessionPresence = await readSessionPresenceSnapshot({
       runtimeKind: requestedRuntimeKind,
       workingDirectory: runtime.workingDirectory,
       externalSessionId: session.externalSessionId,
     });
     assertNotStale();
 
-    if (liveSessionTruth.type !== "live") {
+    if (sessionPresence.presence !== "runtime") {
       await cleanupAttachedSessionOrThrow({
         action: "stop",
         operation: "ensure-ready-stop-missing-live-session-after-resume",
-        cleanupErrorMessage: `Failed to stop resumed session '${externalSessionId}' after live truth was stale`,
+        cleanupErrorMessage: `Failed to stop resumed session '${externalSessionId}' after live snapshot was stale`,
         externalSessionId,
         taskId: session.taskId,
         role: session.role,
@@ -307,7 +310,7 @@ export const createEnsureSessionReady = ({
 
     assertNotStale();
 
-    applyConfirmedLiveTruth(liveSessionTruth, {
+    applyConfirmedSessionPresenceSnapshot(sessionPresence, {
       shouldAttachListener: !unsubscribersRef.current.has(externalSessionId),
       promptOverrides: promptContext.promptOverrides,
     });

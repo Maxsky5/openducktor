@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
-  type LiveSessionTruth,
-  toLiveSessionTruthFromSnapshot,
-  toPersistedOnlyLiveSessionTruth,
+  type AgentSessionPresenceSnapshot,
+  toAgentSessionPresenceSnapshotFromLiveSnapshot,
+  toPersistedOnlyAgentSessionPresenceSnapshot,
 } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
-  applyLiveSessionTruthToSession,
-  createLiveSessionTruthReader,
-  isAttachableLiveSessionTruth,
-} from "./live-session-truth";
+  applyAgentSessionPresenceSnapshotToSession,
+  createSessionPresenceReader,
+  isAttachableAgentSessionPresenceSnapshot,
+} from "./session-presence";
 
 const recordFixture: AgentSessionRecord = {
   externalSessionId: "external-1",
@@ -58,42 +58,42 @@ const sessionRefFixture = {
   externalSessionId: "external-1",
 };
 
-describe("live-session-truth", () => {
+describe("session-presence", () => {
   test("classifies missing runtime as persisted-only without reading live snapshots", async () => {
-    let truthReads = 0;
-    const readTruth = createLiveSessionTruthReader({
+    let snapshotReads = 0;
+    const readPresence = createSessionPresenceReader({
       repoPath: "/tmp/repo",
       resolveHydrationRuntime: async () => ({
         ok: false,
         runtimeKind: "opencode",
         reason: "No live repo runtime found.",
       }),
-      readTruth: async () => {
-        truthReads += 1;
-        return toPersistedOnlyLiveSessionTruth({
+      readPresence: async () => {
+        snapshotReads += 1;
+        return toPersistedOnlyAgentSessionPresenceSnapshot({
           ref: sessionRefFixture,
           reason: "No live repo runtime found.",
         });
       },
     });
 
-    const truth = await readTruth(recordFixture);
+    const snapshot = await readPresence(recordFixture);
 
-    expect(truth.type).toBe("persisted_only");
-    expect(truth.classification).toBe("persisted_only");
-    expect(truthReads).toBe(0);
+    expect(snapshot.presence).toBe("persisted_only");
+    expect(snapshot.classification).toBe("persisted_only");
+    expect(snapshotReads).toBe(0);
   });
 
   test("classifies missing live session as stale and clears pending input when applied", () => {
-    const truth = toLiveSessionTruthFromSnapshot({
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
       runtimeId: "runtime-1",
       snapshot: null,
     });
 
-    const applied = applyLiveSessionTruthToSession(createSessionState(), truth);
+    const applied = applyAgentSessionPresenceSnapshotToSession(createSessionState(), snapshot);
 
-    expect(truth.classification).toBe("stale");
+    expect(snapshot.classification).toBe("stale");
     expect(applied.status).toBe("idle");
     expect(applied.pendingApprovals).toEqual([]);
     expect(applied.pendingQuestions).toEqual([]);
@@ -103,7 +103,7 @@ describe("live-session-truth", () => {
     const liveApproval = {
       requestId: "live-approval",
     } as AgentSessionState["pendingApprovals"][number];
-    const truth = toLiveSessionTruthFromSnapshot({
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
       runtimeId: "runtime-1",
       snapshot: {
@@ -117,15 +117,15 @@ describe("live-session-truth", () => {
       },
     });
 
-    const applied = applyLiveSessionTruthToSession(createSessionState(), truth);
+    const applied = applyAgentSessionPresenceSnapshotToSession(createSessionState(), snapshot);
 
-    expect(truth.classification).toBe("waiting_for_permission");
+    expect(snapshot.classification).toBe("waiting_for_permission");
     expect(applied.pendingApprovals).toEqual([liveApproval]);
     expect(applied.pendingQuestions).toEqual([]);
   });
 
-  test("maps retry truth to running session status without pending input", () => {
-    const truth = toLiveSessionTruthFromSnapshot({
+  test("maps retry snapshot to running session status without pending input", () => {
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
       runtimeId: "runtime-1",
       snapshot: {
@@ -139,22 +139,25 @@ describe("live-session-truth", () => {
       },
     });
 
-    const applied = applyLiveSessionTruthToSession(createSessionState({ status: "idle" }), truth);
+    const applied = applyAgentSessionPresenceSnapshotToSession(
+      createSessionState({ status: "idle" }),
+      snapshot,
+    );
 
-    expect(truth.type).toBe("live");
-    expect(truth.classification).toBe("retrying");
-    if (truth.type !== "live") {
-      throw new Error("Expected live truth.");
+    expect(snapshot.presence).toBe("runtime");
+    expect(snapshot.classification).toBe("retrying");
+    if (snapshot.presence !== "runtime") {
+      throw new Error("Expected live snapshot.");
     }
-    expect(truth.agentSessionStatus).toBe("running");
+    expect(snapshot.agentSessionStatus).toBe("running");
     expect(applied.status).toBe("running");
     expect(applied.pendingApprovals).toEqual([]);
     expect(applied.pendingQuestions).toEqual([]);
   });
 
   test("treats pending input and non-idle runtime status as attachable", () => {
-    const createTruth = (overrides: Partial<LiveSessionTruth> = {}) =>
-      toLiveSessionTruthFromSnapshot({
+    const createPresence = (overrides: Partial<AgentSessionPresenceSnapshot> = {}) =>
+      toAgentSessionPresenceSnapshotFromLiveSnapshot({
         ref: sessionRefFixture,
         runtimeId: "runtime-1",
         snapshot: {
@@ -169,16 +172,16 @@ describe("live-session-truth", () => {
         } as never,
       });
 
-    const idleTruth = createTruth();
-    const busyTruth = createTruth({ status: { type: "busy" } as never });
-    const questionTruth = createTruth({
+    const idlePresence = createPresence();
+    const busyPresence = createPresence({ status: { type: "busy" } as never });
+    const questionPresence = createPresence({
       pendingQuestions: [
         { requestId: "question-1" } as AgentSessionState["pendingQuestions"][number],
       ] as never,
     });
 
-    expect(isAttachableLiveSessionTruth(idleTruth)).toBe(false);
-    expect(isAttachableLiveSessionTruth(busyTruth)).toBe(true);
-    expect(isAttachableLiveSessionTruth(questionTruth)).toBe(true);
+    expect(isAttachableAgentSessionPresenceSnapshot(idlePresence)).toBe(false);
+    expect(isAttachableAgentSessionPresenceSnapshot(busyPresence)).toBe(true);
+    expect(isAttachableAgentSessionPresenceSnapshot(questionPresence)).toBe(true);
   });
 });

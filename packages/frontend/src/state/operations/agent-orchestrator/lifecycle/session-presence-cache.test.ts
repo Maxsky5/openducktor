@@ -1,30 +1,30 @@
 import { describe, expect, mock, test } from "bun:test";
-import { createDeferred, createLiveSessionTruthFixture } from "../test-utils";
+import { createAgentSessionPresenceSnapshotFixture, createDeferred } from "../test-utils";
 import {
-  getLiveAgentSessionCacheKey,
-  LiveAgentSessionCache,
-  liveAgentSessionLookupKey,
-} from "./live-agent-session-cache";
+  AgentSessionPresenceCache,
+  agentSessionPresenceLookupKey,
+  getAgentSessionPresenceCacheKey,
+} from "./session-presence-cache";
 
-const createTruth = (externalSessionId: string) =>
-  createLiveSessionTruthFixture({ ref: { externalSessionId } });
+const createPresence = (externalSessionId: string) =>
+  createAgentSessionPresenceSnapshotFixture({ ref: { externalSessionId } });
 
-describe("live-agent-session-cache", () => {
+describe("session-presence-cache", () => {
   test("builds cache keys from repo path, runtime kind, and normalized working directories", () => {
-    expect(getLiveAgentSessionCacheKey("/tmp/repo/", "opencode")).toBe("/tmp/repo::opencode");
-    expect(liveAgentSessionLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree/")).toBe(
+    expect(getAgentSessionPresenceCacheKey("/tmp/repo/", "opencode")).toBe("/tmp/repo::opencode");
+    expect(agentSessionPresenceLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree/")).toBe(
       "/tmp/repo::opencode::/tmp/repo/worktree",
     );
   });
 
   test("reuses preloaded single-directory snapshots without scanning", async () => {
-    const preloadedSessions = [createTruth("external-1")];
-    const listLiveSessionTruths = mock(async () => [createTruth("external-2")]);
-    const cache = new LiveAgentSessionCache(
-      { listLiveSessionTruths },
+    const preloadedSessions = [createPresence("external-1")];
+    const listSessionPresence = mock(async () => [createPresence("external-2")]);
+    const cache = new AgentSessionPresenceCache(
+      { listSessionPresence },
       new Map([
         [
-          liveAgentSessionLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
+          agentSessionPresenceLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
           preloadedSessions,
         ],
       ]),
@@ -43,13 +43,13 @@ describe("live-agent-session-cache", () => {
 
     expect(first).toBe(preloadedSessions);
     expect(second).toBe(preloadedSessions);
-    expect(listLiveSessionTruths).not.toHaveBeenCalled();
+    expect(listSessionPresence).not.toHaveBeenCalled();
   });
 
   test("normalizes, de-dupes, and sorts directory inputs before scanning and cache reuse", async () => {
-    const scannedSessions = [createTruth("external-1")];
-    const listLiveSessionTruths = mock(async () => scannedSessions);
-    const cache = new LiveAgentSessionCache({ listLiveSessionTruths });
+    const scannedSessions = [createPresence("external-1")];
+    const listSessionPresence = mock(async () => scannedSessions);
+    const cache = new AgentSessionPresenceCache({ listSessionPresence });
 
     const first = await cache.load({
       repoPath: "/tmp/repo",
@@ -64,8 +64,8 @@ describe("live-agent-session-cache", () => {
 
     expect(first).toBe(scannedSessions);
     expect(second).toBe(scannedSessions);
-    expect(listLiveSessionTruths).toHaveBeenCalledTimes(1);
-    expect(listLiveSessionTruths).toHaveBeenCalledWith({
+    expect(listSessionPresence).toHaveBeenCalledTimes(1);
+    expect(listSessionPresence).toHaveBeenCalledWith({
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
       directories: ["/tmp/repo/a", "/tmp/repo/b"],
@@ -73,10 +73,10 @@ describe("live-agent-session-cache", () => {
   });
 
   test("coalesces concurrent same-key scans", async () => {
-    const scannedSessions = [createTruth("external-1")];
+    const scannedSessions = [createPresence("external-1")];
     const scanDeferred = createDeferred<typeof scannedSessions>();
-    const listLiveSessionTruths = mock(async () => scanDeferred.promise);
-    const cache = new LiveAgentSessionCache({ listLiveSessionTruths });
+    const listSessionPresence = mock(async () => scanDeferred.promise);
+    const cache = new AgentSessionPresenceCache({ listSessionPresence });
 
     const firstLoad = cache.load({
       repoPath: "/tmp/repo",
@@ -89,7 +89,7 @@ describe("live-agent-session-cache", () => {
       directories: ["/tmp/repo/worktree"],
     });
 
-    expect(listLiveSessionTruths).toHaveBeenCalledTimes(1);
+    expect(listSessionPresence).toHaveBeenCalledTimes(1);
 
     scanDeferred.resolve(scannedSessions);
     const [first, second] = await Promise.all([firstLoad, secondLoad]);
@@ -102,20 +102,20 @@ describe("live-agent-session-cache", () => {
     expect(first).toBe(scannedSessions);
     expect(second).toBe(scannedSessions);
     expect(third).toBe(scannedSessions);
-    expect(listLiveSessionTruths).toHaveBeenCalledTimes(1);
+    expect(listSessionPresence).toHaveBeenCalledTimes(1);
   });
 
   test("does not cache failed in-flight scans", async () => {
-    const scannedSessions = [createTruth("external-1")];
+    const scannedSessions = [createPresence("external-1")];
     let attempts = 0;
-    const listLiveSessionTruths = mock(async () => {
+    const listSessionPresence = mock(async () => {
       attempts += 1;
       if (attempts === 1) {
         throw new Error("scan failed");
       }
       return scannedSessions;
     });
-    const cache = new LiveAgentSessionCache({ listLiveSessionTruths });
+    const cache = new AgentSessionPresenceCache({ listSessionPresence });
     const input = {
       repoPath: "/tmp/repo",
       runtimeKind: "opencode" as const,
@@ -125,18 +125,18 @@ describe("live-agent-session-cache", () => {
     await expect(cache.load(input)).rejects.toThrow("scan failed");
     await expect(cache.load(input)).resolves.toBe(scannedSessions);
 
-    expect(listLiveSessionTruths).toHaveBeenCalledTimes(2);
+    expect(listSessionPresence).toHaveBeenCalledTimes(2);
   });
 
   test("bypasses preloaded single-directory data when scanning multiple directories", async () => {
-    const scannedSessions = [createTruth("external-2")];
-    const listLiveSessionTruths = mock(async () => scannedSessions);
-    const cache = new LiveAgentSessionCache(
-      { listLiveSessionTruths },
+    const scannedSessions = [createPresence("external-2")];
+    const listSessionPresence = mock(async () => scannedSessions);
+    const cache = new AgentSessionPresenceCache(
+      { listSessionPresence },
       new Map([
         [
-          liveAgentSessionLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
-          [createTruth("external-1")],
+          agentSessionPresenceLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
+          [createPresence("external-1")],
         ],
       ]),
     );
@@ -148,12 +148,12 @@ describe("live-agent-session-cache", () => {
     });
 
     expect(loaded).toBe(scannedSessions);
-    expect(listLiveSessionTruths).toHaveBeenCalledTimes(1);
+    expect(listSessionPresence).toHaveBeenCalledTimes(1);
   });
 
   test("rejects empty directory scans instead of widening to all sessions", async () => {
-    const listLiveSessionTruths = mock(async () => [createTruth("external-1")]);
-    const cache = new LiveAgentSessionCache({ listLiveSessionTruths });
+    const listSessionPresence = mock(async () => [createPresence("external-1")]);
+    const cache = new AgentSessionPresenceCache({ listSessionPresence });
 
     await expect(
       cache.load({
@@ -161,8 +161,8 @@ describe("live-agent-session-cache", () => {
         runtimeKind: "opencode",
         directories: ["", "   "],
       }),
-    ).rejects.toThrow("Cannot scan live agent sessions without a valid working directory.");
+    ).rejects.toThrow("Cannot scan session presence without a valid working directory.");
 
-    expect(listLiveSessionTruths).not.toHaveBeenCalled();
+    expect(listSessionPresence).not.toHaveBeenCalled();
   });
 });

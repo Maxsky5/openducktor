@@ -1,58 +1,64 @@
 import { describe, expect, test } from "bun:test";
-import type { LiveSessionTruth } from "@openducktor/core";
-import { createLiveSessionTruthFixture } from "../test-utils";
-import { liveAgentSessionLookupKey } from "./live-agent-session-cache";
-import { LiveAgentSessionStore } from "./live-agent-session-store";
+import type { AgentSessionPresenceSnapshot } from "@openducktor/core";
+import { createAgentSessionPresenceSnapshotFixture } from "../test-utils";
+import { agentSessionPresenceLookupKey } from "./session-presence-cache";
+import { AgentSessionPresenceStore } from "./session-presence-store";
 
 const repoPath = "/tmp/repo";
 const repoTwoPath = "/tmp/repo-two";
 const workingDirectory = "/tmp/repo/worktree";
 const repoOneWorkingDirectory = "/tmp/repo-one/worktree";
 
-const createTruth = (externalSessionId: string, workingDirectory: string): LiveSessionTruth =>
-  createLiveSessionTruthFixture({ ref: { externalSessionId, workingDirectory } });
+const createPresence = (
+  externalSessionId: string,
+  workingDirectory: string,
+): AgentSessionPresenceSnapshot =>
+  createAgentSessionPresenceSnapshotFixture({ ref: { externalSessionId, workingDirectory } });
 
-describe("live-agent-session-store", () => {
+describe("session-presence-store", () => {
   test("returns matching snapshots for the same repo and lookup key", () => {
-    const store = new LiveAgentSessionStore();
-    const expectedTruth = createTruth("external-1", workingDirectory);
+    const store = new AgentSessionPresenceStore();
+    const expectedPresence = createPresence("external-1", workingDirectory);
 
-    store.replaceRepoTruths(
+    store.replaceRepoPresence(
       repoPath,
       new Map([
-        [liveAgentSessionLookupKey(repoPath, "opencode", `${workingDirectory}/`), [expectedTruth]],
-      ]),
-      1_000,
-    );
-
-    expect(
-      store.readTruth({
-        repoPath,
-        runtimeKind: "opencode",
-        workingDirectory,
-        externalSessionId: "external-1",
-        nowMs: 5_500,
-      }),
-    ).toEqual(expectedTruth);
-  });
-
-  test("treats repo snapshots as isolated and clearable", () => {
-    const store = new LiveAgentSessionStore();
-    const repoOneTruth = createTruth("external-1", repoOneWorkingDirectory);
-
-    store.replaceRepoTruths(
-      "/tmp/repo-one",
-      new Map([
         [
-          liveAgentSessionLookupKey("/tmp/repo-one", "opencode", repoOneWorkingDirectory),
-          [repoOneTruth],
+          agentSessionPresenceLookupKey(repoPath, "opencode", `${workingDirectory}/`),
+          [expectedPresence],
         ],
       ]),
       1_000,
     );
 
     expect(
-      store.readTruth({
+      store.readPresence({
+        repoPath,
+        runtimeKind: "opencode",
+        workingDirectory,
+        externalSessionId: "external-1",
+        nowMs: 5_500,
+      }),
+    ).toEqual(expectedPresence);
+  });
+
+  test("treats repo snapshots as isolated and clearable", () => {
+    const store = new AgentSessionPresenceStore();
+    const repoOnePresence = createPresence("external-1", repoOneWorkingDirectory);
+
+    store.replaceRepoPresence(
+      "/tmp/repo-one",
+      new Map([
+        [
+          agentSessionPresenceLookupKey("/tmp/repo-one", "opencode", repoOneWorkingDirectory),
+          [repoOnePresence],
+        ],
+      ]),
+      1_000,
+    );
+
+    expect(
+      store.readPresence({
         repoPath: repoTwoPath,
         runtimeKind: "opencode",
         workingDirectory: repoOneWorkingDirectory,
@@ -64,7 +70,7 @@ describe("live-agent-session-store", () => {
     store.clearRepo("/tmp/repo-one");
 
     expect(
-      store.readTruth({
+      store.readPresence({
         repoPath: "/tmp/repo-one",
         runtimeKind: "opencode",
         workingDirectory: repoOneWorkingDirectory,
@@ -75,27 +81,29 @@ describe("live-agent-session-store", () => {
   });
 
   test("expires stale snapshots using the default or provided max age", () => {
-    const store = new LiveAgentSessionStore();
-    const truth = createTruth("external-1", workingDirectory);
+    const store = new AgentSessionPresenceStore();
+    const snapshot = createPresence("external-1", workingDirectory);
 
-    store.replaceRepoTruths(
+    store.replaceRepoPresence(
       repoPath,
-      new Map([[liveAgentSessionLookupKey(repoPath, "opencode", workingDirectory), [truth]]]),
+      new Map([
+        [agentSessionPresenceLookupKey(repoPath, "opencode", workingDirectory), [snapshot]],
+      ]),
       10_000,
     );
 
     expect(
-      store.readTruth({
+      store.readPresence({
         repoPath,
         runtimeKind: "opencode",
         workingDirectory: `${workingDirectory}/`,
         externalSessionId: "external-1",
         nowMs: 15_000,
       }),
-    ).toEqual(truth);
+    ).toEqual(snapshot);
 
     expect(
-      store.readTruth({
+      store.readPresence({
         repoPath,
         runtimeKind: "opencode",
         workingDirectory: `${workingDirectory}/`,
@@ -105,7 +113,7 @@ describe("live-agent-session-store", () => {
     ).toBeNull();
 
     expect(
-      store.readTruth({
+      store.readPresence({
         repoPath,
         runtimeKind: "opencode",
         workingDirectory: `${workingDirectory}/`,
@@ -113,10 +121,10 @@ describe("live-agent-session-store", () => {
         maxAgeMs: 10_000,
         nowMs: 20_000,
       }),
-    ).toEqual(truth);
+    ).toEqual(snapshot);
 
     expect(
-      store.readTruth({
+      store.readPresence({
         repoPath,
         runtimeKind: "opencode",
         workingDirectory: `${workingDirectory}/`,
@@ -128,21 +136,21 @@ describe("live-agent-session-store", () => {
   });
 
   test("returns null when the external session id is not present in the matched snapshot list", () => {
-    const store = new LiveAgentSessionStore();
+    const store = new AgentSessionPresenceStore();
 
-    store.replaceRepoTruths(
+    store.replaceRepoPresence(
       repoPath,
       new Map([
         [
-          liveAgentSessionLookupKey(repoPath, "opencode", workingDirectory),
-          [createTruth("external-1", workingDirectory)],
+          agentSessionPresenceLookupKey(repoPath, "opencode", workingDirectory),
+          [createPresence("external-1", workingDirectory)],
         ],
       ]),
       1_000,
     );
 
     expect(
-      store.readTruth({
+      store.readPresence({
         repoPath,
         runtimeKind: "opencode",
         workingDirectory,

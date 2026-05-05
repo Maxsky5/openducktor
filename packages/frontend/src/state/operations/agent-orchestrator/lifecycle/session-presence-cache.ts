@@ -1,33 +1,35 @@
 import type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, LiveSessionTruth } from "@openducktor/core";
+import type { AgentEnginePort, AgentSessionPresenceSnapshot } from "@openducktor/core";
 import { normalizeWorkingDirectory } from "../support/core";
 
-export const getLiveAgentSessionCacheKey = (repoPath: string, runtimeKind: RuntimeKind): string =>
-  `${normalizeWorkingDirectory(repoPath)}::${runtimeKind}`;
+export const getAgentSessionPresenceCacheKey = (
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+): string => `${normalizeWorkingDirectory(repoPath)}::${runtimeKind}`;
 
-export const liveAgentSessionLookupKey = (
+export const agentSessionPresenceLookupKey = (
   repoPath: string,
   runtimeKind: RuntimeKind,
   workingDirectory: string,
 ): string =>
-  `${getLiveAgentSessionCacheKey(repoPath, runtimeKind)}::${normalizeWorkingDirectory(workingDirectory)}`;
+  `${getAgentSessionPresenceCacheKey(repoPath, runtimeKind)}::${normalizeWorkingDirectory(workingDirectory)}`;
 
-type LiveAgentSessionScanner = Pick<AgentEnginePort, "listLiveSessionTruths">;
+type AgentSessionPresenceScanner = Pick<AgentEnginePort, "listSessionPresence">;
 
-export class LiveAgentSessionCache {
-  private readonly scansByKey = new Map<string, LiveSessionTruth[]>();
-  private readonly inFlightScansByKey = new Map<string, Promise<LiveSessionTruth[]>>();
+export class AgentSessionPresenceCache {
+  private readonly scansByKey = new Map<string, AgentSessionPresenceSnapshot[]>();
+  private readonly inFlightScansByKey = new Map<string, Promise<AgentSessionPresenceSnapshot[]>>();
 
   constructor(
-    private readonly adapter: LiveAgentSessionScanner,
-    private readonly preloadedByKey?: Map<string, LiveSessionTruth[]>,
+    private readonly adapter: AgentSessionPresenceScanner,
+    private readonly preloadedByKey?: Map<string, AgentSessionPresenceSnapshot[]>,
   ) {}
 
   async load(
     input: RepoRuntimeRef & {
       directories: string[];
     },
-  ): Promise<LiveSessionTruth[]> {
+  ): Promise<AgentSessionPresenceSnapshot[]> {
     const normalizedDirectories = Array.from(
       new Set(
         input.directories
@@ -36,9 +38,9 @@ export class LiveAgentSessionCache {
       ),
     ).sort();
     if (input.directories.length > 0 && normalizedDirectories.length === 0) {
-      throw new Error("Cannot scan live agent sessions without a valid working directory.");
+      throw new Error("Cannot scan session presence without a valid working directory.");
     }
-    const key = `${getLiveAgentSessionCacheKey(input.repoPath, input.runtimeKind)}::${normalizedDirectories.join("|")}`;
+    const key = `${getAgentSessionPresenceCacheKey(input.repoPath, input.runtimeKind)}::${normalizedDirectories.join("|")}`;
     const cached = this.scansByKey.get(key);
     if (cached) {
       return cached;
@@ -47,7 +49,7 @@ export class LiveAgentSessionCache {
     const [singleDirectory] = normalizedDirectories;
     if (singleDirectory && this.preloadedByKey) {
       const preloaded = this.preloadedByKey.get(
-        liveAgentSessionLookupKey(input.repoPath, input.runtimeKind, singleDirectory),
+        agentSessionPresenceLookupKey(input.repoPath, input.runtimeKind, singleDirectory),
       );
       if (preloaded) {
         this.scansByKey.set(key, preloaded);
@@ -61,7 +63,7 @@ export class LiveAgentSessionCache {
     }
 
     const scan = this.adapter
-      .listLiveSessionTruths({
+      .listSessionPresence({
         repoPath: input.repoPath,
         runtimeKind: input.runtimeKind,
         ...(normalizedDirectories.length > 0 ? { directories: normalizedDirectories } : {}),

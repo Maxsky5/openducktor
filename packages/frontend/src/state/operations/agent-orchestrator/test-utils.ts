@@ -1,10 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type {
-  LiveAgentSessionRef,
+  AgentSessionPresenceSnapshot,
+  AgentSessionRef,
   LiveAgentSessionSnapshot,
-  LiveSessionTruth,
 } from "@openducktor/core";
-import { toLiveSessionTruthFromSnapshot } from "@openducktor/core";
+import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import {
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
@@ -50,16 +50,16 @@ export const createLiveAgentSessionSnapshotFixture = (
   };
 };
 
-export const createLiveSessionTruthFixture = ({
+export const createAgentSessionPresenceSnapshotFixture = ({
   ref: refOverrides = {},
   runtimeId = "runtime-1",
   snapshot: snapshotOverrides = {},
 }: {
-  ref?: Partial<LiveAgentSessionRef>;
-  runtimeId?: string | null;
+  ref?: Partial<AgentSessionRef>;
+  runtimeId?: string;
   snapshot?: Partial<LiveAgentSessionSnapshot>;
-} = {}): LiveSessionTruth => {
-  const ref: LiveAgentSessionRef = {
+} = {}): AgentSessionPresenceSnapshot => {
+  const ref: AgentSessionRef = {
     repoPath: "/tmp/repo",
     runtimeKind: "opencode",
     workingDirectory: "/tmp/repo/worktree",
@@ -67,7 +67,7 @@ export const createLiveSessionTruthFixture = ({
     ...refOverrides,
   };
 
-  return toLiveSessionTruthFromSnapshot({
+  return toAgentSessionPresenceSnapshotFromLiveSnapshot({
     ref,
     runtimeId,
     snapshot: createLiveAgentSessionSnapshotFixture({

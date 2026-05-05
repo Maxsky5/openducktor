@@ -1,12 +1,12 @@
 import type {
-  LiveAgentSessionClassification,
-  LiveAgentSessionRef,
+  AgentSessionActivity,
+  AgentSessionPresenceSnapshot,
+  AgentSessionRef,
   LiveAgentSessionSnapshot,
   LiveAgentSessionStatus,
-  LiveSessionTruth,
 } from "../ports/agent-engine";
 
-export type LiveAgentSessionClassificationInput = {
+export type AgentSessionActivityInput = {
   status: LiveAgentSessionStatus;
   pendingApprovals: readonly unknown[];
   pendingQuestions: readonly unknown[];
@@ -23,7 +23,7 @@ export const classifyLiveAgentSessionSnapshot = ({
   status,
   pendingApprovals,
   pendingQuestions,
-}: LiveAgentSessionClassificationInput): LiveAgentSessionClassification => {
+}: AgentSessionActivityInput): AgentSessionActivity => {
   if (pendingQuestions.length > 0) {
     return "waiting_for_question";
   }
@@ -40,7 +40,7 @@ export const classifyLiveAgentSessionSnapshot = ({
 };
 
 export const toLiveAgentSessionRuntimeStatus = (
-  classification: LiveAgentSessionClassification,
+  classification: AgentSessionActivity,
 ): "running" | "idle" => {
   if (classification === "running" || classification === "retrying") {
     return "running";
@@ -48,18 +48,18 @@ export const toLiveAgentSessionRuntimeStatus = (
   return "idle";
 };
 
-export const toLiveSessionTruthFromSnapshot = ({
+export const toAgentSessionPresenceSnapshotFromLiveSnapshot = ({
   ref,
   runtimeId,
   snapshot,
 }: {
-  ref: LiveAgentSessionRef;
+  ref: AgentSessionRef;
   runtimeId: string | null;
   snapshot: LiveAgentSessionSnapshot | null;
-}): LiveSessionTruth => {
+}): AgentSessionPresenceSnapshot => {
   if (!snapshot) {
     return {
-      type: "stale",
+      presence: "stale",
       classification: "stale",
       ref,
       runtimeId,
@@ -68,9 +68,13 @@ export const toLiveSessionTruthFromSnapshot = ({
     };
   }
 
+  if (!runtimeId) {
+    throw new Error("Runtime session presence requires a live runtime id.");
+  }
+
   const classification = classifyLiveAgentSessionSnapshot(snapshot);
   return {
-    type: "live",
+    presence: "runtime",
     classification,
     ref,
     runtimeId,
@@ -83,14 +87,14 @@ export const toLiveSessionTruthFromSnapshot = ({
   };
 };
 
-export const toPersistedOnlyLiveSessionTruth = ({
+export const toPersistedOnlyAgentSessionPresenceSnapshot = ({
   ref,
   reason,
 }: {
-  ref: LiveAgentSessionRef;
+  ref: AgentSessionRef;
   reason: string;
-}): LiveSessionTruth => ({
-  type: "persisted_only",
+}): AgentSessionPresenceSnapshot => ({
+  presence: "persisted_only",
   classification: "persisted_only",
   ref,
   runtimeId: null,

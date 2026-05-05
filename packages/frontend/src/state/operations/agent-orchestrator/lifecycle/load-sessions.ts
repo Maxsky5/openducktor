@@ -6,7 +6,6 @@ import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-o
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { TaskDocuments } from "../runtime/runtime";
 import { getSessionMessageCount } from "../support/messages";
-import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import {
   createHydrationPromptAssemblerStage,
   createRuntimeResolutionPlannerStage,
@@ -17,6 +16,7 @@ import {
   type SessionLoadIntent,
   type UpdateSession,
 } from "./load-sessions-stages";
+import type { AgentSessionPresenceStore } from "./session-presence-store";
 
 type CreateLoadAgentSessionsArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -31,7 +31,7 @@ type CreateLoadAgentSessionsArgs = {
   attachSessionListener?: (repoPath: string, externalSessionId: string) => void;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadTaskDocuments?: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
-  liveAgentSessionStore?: LiveAgentSessionStore;
+  agentSessionPresenceStore?: AgentSessionPresenceStore;
 };
 
 export const createLoadAgentSessions = ({
@@ -47,7 +47,7 @@ export const createLoadAgentSessions = ({
   attachSessionListener,
   loadRepoPromptOverrides,
   loadTaskDocuments: _loadTaskDocuments,
-  liveAgentSessionStore,
+  agentSessionPresenceStore,
 }: CreateLoadAgentSessionsArgs): ((
   taskId: string,
   options?: AgentSessionLoadOptions,
@@ -195,7 +195,7 @@ export const createLoadAgentSessions = ({
         intent,
         ...(options ? { options } : {}),
         adapter,
-        ...(liveAgentSessionStore ? { liveAgentSessionStore } : {}),
+        ...(agentSessionPresenceStore ? { agentSessionPresenceStore } : {}),
         recordsToHydrate,
       });
       const promptAssembler = createHydrationPromptAssemblerStage({

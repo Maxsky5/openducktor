@@ -25,10 +25,10 @@ import type {
   AgentModelSelection,
   AgentRole,
   AgentSessionHistoryMessage,
+  AgentSessionPresenceSnapshot,
   AgentSessionTodoItem,
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
-  LiveSessionTruth,
 } from "@openducktor/core";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
@@ -184,7 +184,7 @@ export type AgentStateContextValue = {
     taskId: string;
     persistedRecords?: AgentSessionRecord[];
     preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedLiveAgentSessionsByKey?: Map<string, LiveSessionTruth[]>;
+    preloadedLiveAgentSessionsByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
   }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (

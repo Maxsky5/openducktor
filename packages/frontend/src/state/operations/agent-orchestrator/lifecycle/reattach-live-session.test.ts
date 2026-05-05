@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { toLiveSessionTruthFromSnapshot } from "@openducktor/core";
+import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 import { createReattachLiveSession } from "./reattach-live-session";
@@ -28,11 +28,11 @@ const sessionRecordFixture: AgentSessionRecord = {
   selectedModel: null,
 };
 
-const toLiveTruth = (
-  snapshot: Parameters<typeof toLiveSessionTruthFromSnapshot>[0]["snapshot"],
+const toSessionPresenceSnapshot = (
+  snapshot: Parameters<typeof toAgentSessionPresenceSnapshotFromLiveSnapshot>[0]["snapshot"],
   runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }> = localHttpRuntimeResolution,
 ) =>
-  toLiveSessionTruthFromSnapshot({
+  toAgentSessionPresenceSnapshotFromLiveSnapshot({
     ref: {
       repoPath: "/tmp/repo",
       runtimeKind: runtimeResolution.runtimeKind,
@@ -107,8 +107,8 @@ describe("reattach-live-session", () => {
       attachMissingLiveSession: async () => {
         resumed = true;
       },
-      readLiveSessionTruth: async () =>
-        toLiveTruth({
+      readSessionPresence: async () =>
+        toSessionPresenceSnapshot({
           externalSessionId: "external-1",
           title: "Session",
           startedAt: "2026-03-22T12:00:00.000Z",
@@ -151,8 +151,8 @@ describe("reattach-live-session", () => {
       attachMissingLiveSession: async () => {
         resumed = true;
       },
-      readLiveSessionTruth: async () =>
-        toLiveTruth({
+      readSessionPresence: async () =>
+        toSessionPresenceSnapshot({
           externalSessionId: "external-1",
           title: "Session",
           startedAt: "2026-03-22T12:00:00.000Z",
@@ -226,8 +226,8 @@ describe("reattach-live-session", () => {
         resumed = true;
       },
       allowAttachMissingSession: false,
-      readLiveSessionTruth: async () =>
-        toLiveTruth({
+      readSessionPresence: async () =>
+        toSessionPresenceSnapshot({
           externalSessionId: "external-1",
           title: "Session",
           startedAt: "2026-03-22T12:00:00.000Z",
@@ -264,7 +264,7 @@ describe("reattach-live-session", () => {
       attachSessionListener: () => {},
       promptOverrides: {},
       attachMissingLiveSession: async () => {},
-      readLiveSessionTruth: async () => toLiveTruth(null),
+      readSessionPresence: async () => toSessionPresenceSnapshot(null),
       isStaleRepoOperation: () => false,
     });
 
@@ -299,8 +299,8 @@ describe("reattach-live-session", () => {
         resumeCalls += 1;
         stale = true;
       },
-      readLiveSessionTruth: async () =>
-        toLiveTruth({
+      readSessionPresence: async () =>
+        toSessionPresenceSnapshot({
           externalSessionId: "external-1",
           title: "Session",
           startedAt: "2026-03-22T12:00:00.000Z",
@@ -339,9 +339,9 @@ describe("reattach-live-session", () => {
       attachMissingLiveSession: async () => {
         resumeCalls += 1;
       },
-      readLiveSessionTruth: async () => {
+      readSessionPresence: async () => {
         stale = true;
-        return toLiveTruth({
+        return toSessionPresenceSnapshot({
           externalSessionId: "external-1",
           title: "Session",
           startedAt: "2026-03-22T12:00:00.000Z",
@@ -379,9 +379,9 @@ describe("reattach-live-session", () => {
       attachMissingLiveSession: async () => {
         resumeCalls += 1;
       },
-      readLiveSessionTruth: async () => {
+      readSessionPresence: async () => {
         liveLookupCalls += 1;
-        return toLiveTruth(null, stdioRuntimeResolution);
+        return toSessionPresenceSnapshot(null, stdioRuntimeResolution);
       },
       isStaleRepoOperation: () => false,
     });
@@ -407,7 +407,7 @@ describe("reattach-live-session", () => {
       },
       promptOverrides: {},
       attachMissingLiveSession: async () => {},
-      readLiveSessionTruth: async () => {
+      readSessionPresence: async () => {
         throw new Error("live lookup failed");
       },
       isStaleRepoOperation: () => false,

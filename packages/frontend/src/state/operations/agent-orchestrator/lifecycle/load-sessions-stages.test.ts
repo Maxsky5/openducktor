@@ -10,14 +10,13 @@ import {
   type AgentEnginePort,
   type LiveAgentSessionSnapshot,
   type LoadAgentSessionHistoryInput,
-  toLiveSessionTruthFromSnapshot,
+  toAgentSessionPresenceSnapshotFromLiveSnapshot,
 } from "@openducktor/core";
 import type { SetStateAction } from "react";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createLiveSessionTruthFixture } from "../test-utils";
-import { liveAgentSessionLookupKey } from "./live-agent-session-cache";
+import { createAgentSessionPresenceSnapshotFixture } from "../test-utils";
 import {
   createHydrationPromptAssemblerStage,
   createRuntimeResolutionPlannerStage,
@@ -29,11 +28,12 @@ import {
   type SessionLoadIntent,
   type UpdateSession,
 } from "./load-sessions-stages";
+import { agentSessionPresenceLookupKey } from "./session-presence-cache";
 
 type SessionStateMap = Record<string, AgentSessionState>;
 type AttachSessionInput = Parameters<AgentEnginePort["attachSession"]>[0];
 type ResumeSessionInput = Parameters<AgentEnginePort["resumeSession"]>[0];
-type ListLiveSessionTruthsInput = Parameters<AgentEnginePort["listLiveSessionTruths"]>[0];
+type ListSessionPresenceInput = Parameters<AgentEnginePort["listSessionPresence"]>[0];
 type LiveSnapshotOverrides = Omit<Partial<LiveAgentSessionSnapshot>, "title"> & {
   title?: string | undefined;
 };
@@ -50,7 +50,7 @@ const createLifecycleAdapter = (
   overrides: Partial<SessionLifecycleAdapter> = {},
 ): SessionLifecycleAdapter => ({
   hasSession: () => false,
-  listLiveSessionTruths: async () => [],
+  listSessionPresence: async () => [],
   loadSessionHistory: async () => [],
   attachSession: async (input) => createSessionSummary(input),
   resumeSession: async (input) => createSessionSummary(input),
@@ -106,12 +106,12 @@ const createIntent = (overrides: Partial<SessionLoadIntent> = {}): SessionLoadIn
   ...overrides,
 });
 
-const createLiveTruth = (
+const createSessionPresenceSnapshot = (
   externalSessionId: string,
   workingDirectory: string,
   overrides: LiveSnapshotOverrides = {},
 ) =>
-  createLiveSessionTruthFixture({
+  createAgentSessionPresenceSnapshotFixture({
     ref: {
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
@@ -130,8 +130,8 @@ const createLiveTruth = (
     } as Partial<LiveAgentSessionSnapshot>,
   });
 
-const createStaleTruth = (externalSessionId: string, workingDirectory: string) =>
-  toLiveSessionTruthFromSnapshot({
+const createStalePresence = (externalSessionId: string, workingDirectory: string) =>
+  toAgentSessionPresenceSnapshotFromLiveSnapshot({
     ref: {
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
@@ -1311,7 +1311,7 @@ describe("load-sessions-stages", () => {
             runtimeKind: "opencode",
             reason: "No live runtime found for working directory /tmp/repo/worktree.",
           }),
-          readLiveSessionTruth: async () => createStaleTruth("external-1", "/tmp/repo/worktree"),
+          readSessionPresence: async () => createStalePresence("external-1", "/tmp/repo/worktree"),
         } satisfies HydrationRuntimePlanner,
         promptAssembler: {
           buildHydrationPreludeMessages: async () => [],
@@ -1353,7 +1353,7 @@ describe("load-sessions-stages", () => {
             runtimeKind: "opencode",
             reason: "Multiple live stdio runtimes found for working directory /tmp/repo/worktree.",
           }),
-          readLiveSessionTruth: async () => createStaleTruth("external-1", "/tmp/repo/worktree"),
+          readSessionPresence: async () => createStalePresence("external-1", "/tmp/repo/worktree"),
         },
         promptAssembler: {
           buildHydrationPreludeMessages: async () => [],
@@ -1379,7 +1379,7 @@ describe("load-sessions-stages", () => {
         repoPath: "/tmp/repo",
         adapter: {
           hasSession: () => false,
-          listLiveSessionTruths: async () => [],
+          listSessionPresence: async () => [],
           loadSessionHistory: async (input: LoadAgentSessionHistoryInput) => {
             historyLoads += 1;
             historyInputs.push(input);
@@ -1413,7 +1413,7 @@ describe("load-sessions-stages", () => {
             runtimeId: "runtime-stdio",
             workingDirectory: "/tmp/repo/worktree",
           }),
-          readLiveSessionTruth: async () => createStaleTruth("external-1", "/tmp/repo/worktree"),
+          readSessionPresence: async () => createStalePresence("external-1", "/tmp/repo/worktree"),
         },
         promptAssembler: {
           buildHydrationPreludeMessages: async () => [],
@@ -1445,7 +1445,7 @@ describe("load-sessions-stages", () => {
       repoPath: "/tmp/repo",
       adapter: {
         hasSession: () => false,
-        listLiveSessionTruths: async () => [],
+        listSessionPresence: async () => [],
         loadSessionHistory: async () => [],
         attachSession: async (input: AttachSessionInput) => ({
           externalSessionId: input.externalSessionId,
@@ -1477,7 +1477,7 @@ describe("load-sessions-stages", () => {
             reason: "No live runtime found for working directory /tmp/repo/worktree.",
           };
         },
-        readLiveSessionTruth: async () => createStaleTruth("external-1", "/tmp/repo/worktree"),
+        readSessionPresence: async () => createStalePresence("external-1", "/tmp/repo/worktree"),
       },
       promptAssembler: {
         buildHydrationPreludeMessages: async () => [],
@@ -1498,7 +1498,7 @@ describe("load-sessions-stages", () => {
       repoPath: "/tmp/repo",
       adapter: {
         hasSession: () => false,
-        listLiveSessionTruths: async () => [],
+        listSessionPresence: async () => [],
         loadSessionHistory: async () => [],
         attachSession: async (input: AttachSessionInput) => ({
           externalSessionId: input.externalSessionId,
@@ -1531,7 +1531,7 @@ describe("load-sessions-stages", () => {
             workingDirectory: "/tmp/repo/worktree",
           };
         },
-        readLiveSessionTruth: async () => createStaleTruth("external-1", "/tmp/repo/worktree"),
+        readSessionPresence: async () => createStalePresence("external-1", "/tmp/repo/worktree"),
       },
       promptAssembler: {
         buildHydrationPreludeMessages: async () => [],
@@ -1555,7 +1555,7 @@ describe("load-sessions-stages", () => {
       repoPath: "/tmp/repo",
       adapter: {
         hasSession: () => false,
-        listLiveSessionTruths: async () => [],
+        listSessionPresence: async () => [],
         loadSessionHistory: async () => [],
         attachSession: async (input: AttachSessionInput) => ({
           externalSessionId: input.externalSessionId,
@@ -1585,8 +1585,8 @@ describe("load-sessions-stages", () => {
           runtimeId: "runtime-1",
           workingDirectory: "/tmp/repo/worktree",
         }),
-        readLiveSessionTruth: async () =>
-          createLiveTruth("external-1", "/tmp/repo/worktree", {
+        readSessionPresence: async () =>
+          createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
             title: undefined,
             startedAt: "2026-03-01T09:00:00.000Z",
             status: { type: "busy" },
@@ -1628,7 +1628,7 @@ describe("load-sessions-stages", () => {
       repoPath: "/tmp/repo",
       adapter: {
         hasSession: () => false,
-        listLiveSessionTruths: async () => [],
+        listSessionPresence: async () => [],
         loadSessionHistory: async () => [
           {
             messageId: "assistant-parent",
@@ -1677,11 +1677,11 @@ describe("load-sessions-stages", () => {
           runtimeId: "runtime-1",
           workingDirectory: "/tmp/repo/worktree",
         }),
-        readLiveSessionTruth: async (record: AgentSessionRecord) => {
+        readSessionPresence: async (record: AgentSessionRecord) => {
           const externalSessionId = record.externalSessionId;
           loadedSnapshotSessionIds.push(externalSessionId);
           if (externalSessionId === "external-1") {
-            return createLiveTruth("external-1", "/tmp/repo/worktree", {
+            return createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
               title: "Parent",
               startedAt: "2026-03-01T09:00:00.000Z",
               status: { type: "busy" },
@@ -1690,7 +1690,7 @@ describe("load-sessions-stages", () => {
             });
           }
           if (externalSessionId === "external-child-session") {
-            return createLiveTruth("external-child-session", "/tmp/repo/worktree", {
+            return createSessionPresenceSnapshot("external-child-session", "/tmp/repo/worktree", {
               title: "Child",
               startedAt: "2026-03-01T09:00:01.000Z",
               status: { type: "busy" },
@@ -1698,7 +1698,7 @@ describe("load-sessions-stages", () => {
               pendingQuestions: [],
             });
           }
-          return createStaleTruth(externalSessionId, "/tmp/repo/worktree");
+          return createStalePresence(externalSessionId, "/tmp/repo/worktree");
         },
       },
       promptAssembler: {
@@ -1761,7 +1761,7 @@ describe("load-sessions-stages", () => {
       repoPath: "/tmp/repo",
       adapter: {
         hasSession: () => false,
-        listLiveSessionTruths: async () => [],
+        listSessionPresence: async () => [],
         loadSessionHistory: async () => [
           {
             messageId: "assistant-parent",
@@ -1810,10 +1810,10 @@ describe("load-sessions-stages", () => {
           runtimeId: "runtime-1",
           workingDirectory: "/tmp/repo/worktree",
         }),
-        readLiveSessionTruth: async (record: AgentSessionRecord) => {
+        readSessionPresence: async (record: AgentSessionRecord) => {
           const externalSessionId = record.externalSessionId;
           if (externalSessionId === "external-1") {
-            return createLiveTruth("external-1", "/tmp/repo/worktree", {
+            return createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
               title: "Parent",
               startedAt: "2026-03-01T09:00:00.000Z",
               status: { type: "busy" },
@@ -1822,7 +1822,7 @@ describe("load-sessions-stages", () => {
             });
           }
           if (externalSessionId === "external-child-session") {
-            return createLiveTruth("external-child-session", "/tmp/repo/worktree", {
+            return createSessionPresenceSnapshot("external-child-session", "/tmp/repo/worktree", {
               title: "Child",
               startedAt: "2026-03-01T09:00:01.000Z",
               status: { type: "busy" },
@@ -1830,7 +1830,7 @@ describe("load-sessions-stages", () => {
               pendingQuestions: [],
             });
           }
-          return createStaleTruth(externalSessionId, "/tmp/repo/worktree");
+          return createStalePresence(externalSessionId, "/tmp/repo/worktree");
         },
       },
       promptAssembler: {
@@ -1909,7 +1909,7 @@ describe("load-sessions-stages", () => {
         repoPath: "/tmp/repo",
         adapter: {
           hasSession: () => false,
-          listLiveSessionTruths: async () => [],
+          listSessionPresence: async () => [],
           loadSessionHistory: async () => [
             {
               messageId: "assistant-parent",
@@ -1958,12 +1958,12 @@ describe("load-sessions-stages", () => {
             runtimeId: "runtime-1",
             workingDirectory: "/tmp/repo/worktree",
           }),
-          readLiveSessionTruth: async (record: AgentSessionRecord) => {
+          readSessionPresence: async (record: AgentSessionRecord) => {
             const externalSessionId = record.externalSessionId;
             if (externalSessionId === "external-child-session") {
               throw new Error("child snapshot unavailable");
             }
-            return createLiveTruth("external-1", "/tmp/repo/worktree", {
+            return createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
               title: "Parent",
               startedAt: "2026-03-01T09:00:00.000Z",
               status: { type: "busy" },
@@ -1996,7 +1996,7 @@ describe("load-sessions-stages", () => {
 
   test("runtime planner ignores stale hydrated runtime state and reuses preloaded live snapshots", async () => {
     const workingDirectory = "/tmp/repo/worktree";
-    const liveSnapshot = createLiveTruth("external-1", workingDirectory, {
+    const liveSnapshot = createSessionPresenceSnapshot("external-1", workingDirectory, {
       title: "Builder Session",
       startedAt: "2026-03-01T09:00:00.000Z",
       status: { type: "busy" },
@@ -2018,9 +2018,9 @@ describe("load-sessions-stages", () => {
         ]),
         preloadedLiveAgentSessionsByKey: new Map([
           [
-            liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory),
+            agentSessionPresenceLookupKey("/tmp/repo", "opencode", workingDirectory),
             [
-              createLiveTruth("external-1", workingDirectory, {
+              createSessionPresenceSnapshot("external-1", workingDirectory, {
                 title: "Builder Session",
                 startedAt: "2026-03-01T09:00:00.000Z",
                 status: { type: "busy" },
@@ -2048,7 +2048,7 @@ describe("load-sessions-stages", () => {
           status: "idle",
           runtimeKind: input.runtimeKind,
         }),
-        listLiveSessionTruths: async () => {
+        listSessionPresence: async () => {
           snapshotLoads += 1;
           return [];
         },
@@ -2056,7 +2056,7 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord({ role: "planner", workingDirectory })],
     });
 
-    const snapshot = await planner.readLiveSessionTruth(
+    const snapshot = await planner.readSessionPresence(
       createRecord({ role: "planner", workingDirectory }),
     );
 
@@ -2097,7 +2097,7 @@ describe("load-sessions-stages", () => {
           status: "idle",
           runtimeKind: input.runtimeKind,
         }),
-        listLiveSessionTruths: async (input: ListLiveSessionTruthsInput) => {
+        listSessionPresence: async (input: ListSessionPresenceInput) => {
           snapshotRequests.push(input.directories ? { directories: input.directories } : {});
           return [];
         },
@@ -2119,7 +2119,7 @@ describe("load-sessions-stages", () => {
   test("runtime planner reuses cached live snapshots without re-scanning", async () => {
     const workingDirectory = "/tmp/repo/worktree";
     const preloadedLiveAgentSessionsByKey = new Map([
-      [liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory), []],
+      [agentSessionPresenceLookupKey("/tmp/repo", "opencode", workingDirectory), []],
     ]);
     const snapshotRequests: Array<{ directories?: string[] }> = [];
 
@@ -2153,7 +2153,7 @@ describe("load-sessions-stages", () => {
           status: "idle",
           runtimeKind: input.runtimeKind,
         }),
-        listLiveSessionTruths: async (input: ListLiveSessionTruthsInput) => {
+        listSessionPresence: async (input: ListSessionPresenceInput) => {
           snapshotRequests.push(input.directories ? { directories: input.directories } : {});
           return [];
         },
@@ -2211,7 +2211,7 @@ describe("load-sessions-stages", () => {
           status: "idle",
           runtimeKind: input.runtimeKind,
         }),
-        listLiveSessionTruths: async (input: ListLiveSessionTruthsInput) => {
+        listSessionPresence: async (input: ListSessionPresenceInput) => {
           snapshotRequests.push(input.directories ? { directories: input.directories } : {});
           return [];
         },
@@ -2232,7 +2232,7 @@ describe("load-sessions-stages", () => {
 
   test("runtime planner reads preloaded live snapshots without a scan adapter", async () => {
     const workingDirectory = "/tmp/repo/worktree";
-    const liveSnapshot = createLiveTruth("external-1", workingDirectory, {
+    const liveSnapshot = createSessionPresenceSnapshot("external-1", workingDirectory, {
       title: "Builder Session",
       startedAt: "2026-03-01T09:00:00.000Z",
       status: { type: "busy" },
@@ -2248,9 +2248,9 @@ describe("load-sessions-stages", () => {
         ]),
         preloadedLiveAgentSessionsByKey: new Map([
           [
-            liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory),
+            agentSessionPresenceLookupKey("/tmp/repo", "opencode", workingDirectory),
             [
-              createLiveTruth("external-1", workingDirectory, {
+              createSessionPresenceSnapshot("external-1", workingDirectory, {
                 title: "Builder Session",
                 startedAt: "2026-03-01T09:00:00.000Z",
                 status: { type: "busy" },
@@ -2282,21 +2282,21 @@ describe("load-sessions-stages", () => {
       recordsToHydrate: [createRecord({ workingDirectory })],
     });
 
-    const snapshot = await planner.readLiveSessionTruth(createRecord({ workingDirectory }));
+    const snapshot = await planner.readSessionPresence(createRecord({ workingDirectory }));
 
     expect(snapshot).toEqual(liveSnapshot);
   });
 
-  test("runtime planner falls back to single truth read after preloaded-only cache miss", async () => {
+  test("runtime planner falls back to single snapshot read after preloaded-only cache miss", async () => {
     const workingDirectory = "/tmp/repo/worktree";
-    const liveTruth = createLiveTruth("external-1", workingDirectory, {
+    const sessionPresenceSnapshot = createSessionPresenceSnapshot("external-1", workingDirectory, {
       title: "Builder Session",
       startedAt: "2026-03-01T09:00:00.000Z",
       status: { type: "busy" },
       pendingApprovals: [],
       pendingQuestions: [],
     });
-    const readTruthCalls: Array<{ externalSessionId: string; workingDirectory: string }> = [];
+    const readPresenceCalls: Array<{ externalSessionId: string; workingDirectory: string }> = [];
 
     const planner = await createRuntimeResolutionPlannerStage({
       intent: createIntent(),
@@ -2305,7 +2305,7 @@ describe("load-sessions-stages", () => {
           ["opencode", [createRuntime(workingDirectory)]],
         ]),
         preloadedLiveAgentSessionsByKey: new Map([
-          [liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory), []],
+          [agentSessionPresenceLookupKey("/tmp/repo", "opencode", workingDirectory), []],
         ]),
       },
       adapter: {
@@ -2325,21 +2325,21 @@ describe("load-sessions-stages", () => {
           status: "idle",
           runtimeKind: input.runtimeKind,
         }),
-        readLiveSessionTruth: async (input) => {
-          readTruthCalls.push({
+        readSessionPresence: async (input) => {
+          readPresenceCalls.push({
             externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,
           });
-          return liveTruth;
+          return sessionPresenceSnapshot;
         },
       },
       recordsToHydrate: [createRecord({ workingDirectory })],
     });
 
-    const truth = await planner.readLiveSessionTruth(createRecord({ workingDirectory }));
+    const snapshot = await planner.readSessionPresence(createRecord({ workingDirectory }));
 
-    expect(truth).toEqual(liveTruth);
-    expect(readTruthCalls).toEqual([{ externalSessionId: "external-1", workingDirectory }]);
+    expect(snapshot).toEqual(sessionPresenceSnapshot);
+    expect(readPresenceCalls).toEqual([{ externalSessionId: "external-1", workingDirectory }]);
   });
 
   test("runtime planner uses preloaded snapshots to disambiguate same-directory stdio runtimes", async () => {
@@ -2358,9 +2358,9 @@ describe("load-sessions-stages", () => {
         ]),
         preloadedLiveAgentSessionsByKey: new Map([
           [
-            liveAgentSessionLookupKey("/tmp/repo", "opencode", workingDirectory),
+            agentSessionPresenceLookupKey("/tmp/repo", "opencode", workingDirectory),
             [
-              createLiveTruth("external-1", workingDirectory, {
+              createSessionPresenceSnapshot("external-1", workingDirectory, {
                 title: "Builder Session",
                 startedAt: "2026-03-01T09:00:00.000Z",
                 status: { type: "busy" },

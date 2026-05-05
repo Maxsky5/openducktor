@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   classifyLiveAgentSessionSnapshot,
+  toAgentSessionPresenceSnapshotFromLiveSnapshot,
   toLiveAgentSessionRuntimeStatus,
-  toLiveSessionTruthFromSnapshot,
-  toPersistedOnlyLiveSessionTruth,
-} from "./live-session-classification";
+  toPersistedOnlyAgentSessionPresenceSnapshot,
+} from "./agent-session-presence";
 
-describe("live-session-classification", () => {
+describe("agent-session-presence", () => {
   test("classifies pending questions before approvals and retry status", () => {
     const classification = classifyLiveAgentSessionSnapshot({
       status: { type: "retry", attempt: 2, message: "try again", nextEpochMs: 1234 },
@@ -62,8 +62,8 @@ describe("live-session-classification", () => {
     expect(toLiveAgentSessionRuntimeStatus(classification)).toBe("idle");
   });
 
-  test("builds live truth from a runtime snapshot", () => {
-    const truth = toLiveSessionTruthFromSnapshot({
+  test("builds live snapshot from a runtime snapshot", () => {
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: {
         repoPath: "/repo",
         runtimeKind: "opencode",
@@ -82,8 +82,8 @@ describe("live-session-classification", () => {
       },
     });
 
-    expect(truth).toEqual({
-      type: "live",
+    expect(snapshot).toEqual({
+      presence: "runtime",
       classification: "running",
       ref: {
         repoPath: "/repo",
@@ -101,7 +101,7 @@ describe("live-session-classification", () => {
     });
   });
 
-  test("builds stale truth when a runtime snapshot is absent", () => {
+  test("builds stale snapshot when a runtime snapshot is absent", () => {
     const ref = {
       repoPath: "/repo",
       runtimeKind: "opencode" as const,
@@ -110,13 +110,13 @@ describe("live-session-classification", () => {
     };
 
     expect(
-      toLiveSessionTruthFromSnapshot({
+      toAgentSessionPresenceSnapshotFromLiveSnapshot({
         ref,
         runtimeId: "runtime-1",
         snapshot: null,
       }),
     ).toEqual({
-      type: "stale",
+      presence: "stale",
       classification: "stale",
       ref,
       runtimeId: "runtime-1",
@@ -125,7 +125,7 @@ describe("live-session-classification", () => {
     });
   });
 
-  test("builds persisted-only truth for records without a live runtime", () => {
+  test("builds persisted-only snapshot for records without a live runtime", () => {
     const ref = {
       repoPath: "/repo",
       runtimeKind: "opencode" as const,
@@ -134,12 +134,12 @@ describe("live-session-classification", () => {
     };
 
     expect(
-      toPersistedOnlyLiveSessionTruth({
+      toPersistedOnlyAgentSessionPresenceSnapshot({
         ref,
         reason: "runtime missing",
       }),
     ).toEqual({
-      type: "persisted_only",
+      presence: "persisted_only",
       classification: "persisted_only",
       ref,
       runtimeId: null,

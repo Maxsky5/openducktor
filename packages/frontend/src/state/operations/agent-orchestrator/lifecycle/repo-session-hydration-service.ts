@@ -1,6 +1,6 @@
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
-import type { LiveAgentSessionStore } from "./live-agent-session-store";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
+import type { AgentSessionPresenceStore } from "./session-presence-store";
 
 type HydrationScope = "bootstrap" | "reconcile";
 
@@ -20,14 +20,14 @@ const toTaskRecordKey = (taskId: string, records: AgentSessionRecord[]): string 
 
 export const createRepoSessionHydrationService = ({
   sessionHydration,
-  liveAgentSessionStore,
+  agentSessionPresenceStore,
   onRetryRequested,
 }: {
   sessionHydration: Pick<
     SessionHydrationOperations,
     "bootstrapTaskSessions" | "reconcileLiveTaskSessions"
   >;
-  liveAgentSessionStore: LiveAgentSessionStore;
+  agentSessionPresenceStore: AgentSessionPresenceStore;
   onRetryRequested: () => void;
 }) => {
   const bootstrappedTasksByRepo: Record<string, Set<string>> = {};
@@ -83,7 +83,7 @@ export const createRepoSessionHydrationService = ({
 
   return {
     resetRepo(repoPath: string): void {
-      liveAgentSessionStore.clearRepo(repoPath);
+      agentSessionPresenceStore.clearRepo(repoPath);
       getOrCreateRepoSet(bootstrappedTasksByRepo, repoPath).clear();
       getOrCreateRepoSet(reconciledRecordKeysByRepo, repoPath).clear();
       getOrCreateRepoSet(inFlightReconcileTasksByRepo, repoPath).clear();

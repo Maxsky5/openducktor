@@ -26,11 +26,11 @@ import type {
   RuntimePendingInputRequestId,
 } from "../types/agent-orchestrator";
 
-type RepoRuntimeSessionOperationInput = RepoRuntimeRef & {
+type RuntimeWorkingDirectoryRef = RepoRuntimeRef & {
   workingDirectory: string;
 };
 
-export type LiveAgentSessionRef = RepoRuntimeSessionOperationInput & {
+export type AgentSessionRef = RuntimeWorkingDirectoryRef & {
   externalSessionId: ExternalSessionId;
 };
 
@@ -73,12 +73,12 @@ export type UpdateAgentSessionModelInput = {
   model: AgentModelSelection | null;
 };
 
-export type LoadAgentSessionHistoryInput = RepoRuntimeSessionOperationInput & {
+export type LoadAgentSessionHistoryInput = RuntimeWorkingDirectoryRef & {
   externalSessionId: ExternalSessionId;
   limit?: number;
 };
 
-export type LoadAgentSessionTodosInput = RepoRuntimeSessionOperationInput & {
+export type LoadAgentSessionTodosInput = RuntimeWorkingDirectoryRef & {
   externalSessionId: ExternalSessionId;
 };
 
@@ -86,7 +86,7 @@ export type ListAgentModelsInput = RepoRuntimeRef;
 
 export type ListAgentSlashCommandsInput = RepoRuntimeRef;
 
-export type SearchAgentFilesInput = RepoRuntimeSessionOperationInput & {
+export type SearchAgentFilesInput = RuntimeWorkingDirectoryRef & {
   query: string;
 };
 
@@ -94,20 +94,20 @@ export type ListLiveAgentSessionsInput = RepoRuntimeRef & {
   directories?: string[];
 };
 
-export type ReadLiveAgentSessionSnapshotInput = LiveAgentSessionRef;
+export type ReadLiveAgentSessionSnapshotInput = AgentSessionRef;
 
-export type ListLiveSessionTruthInput = RepoRuntimeRef & {
+export type ListSessionPresenceInput = RepoRuntimeRef & {
   directories?: string[];
 };
 
-export type ReadLiveSessionTruthInput = LiveAgentSessionRef;
+export type ReadSessionPresenceInput = AgentSessionRef;
 
-export type LoadAgentSessionDiffInput = RepoRuntimeSessionOperationInput & {
+export type LoadAgentSessionDiffInput = RuntimeWorkingDirectoryRef & {
   externalSessionId: ExternalSessionId;
   runtimeHistoryAnchor?: RuntimeHistoryAnchor;
 };
 
-export type LoadAgentFileStatusInput = RepoRuntimeSessionOperationInput;
+export type LoadAgentFileStatusInput = RuntimeWorkingDirectoryRef;
 
 export type AgentSessionHistoryMessage =
   | {
@@ -157,24 +157,21 @@ export type LiveAgentSessionSnapshot = LiveAgentSessionSummary & {
   pendingQuestions: AgentPendingQuestionRequest[];
 };
 
-export type LiveAgentSessionClassification =
+export type AgentSessionActivity =
   | "waiting_for_question"
   | "waiting_for_permission"
   | "retrying"
   | "running"
   | "idle";
 
-export type LiveSessionTruthClassification =
-  | LiveAgentSessionClassification
-  | "persisted_only"
-  | "stale";
+export type AgentSessionPresence = "runtime" | "persisted_only" | "stale";
 
-export type LiveSessionTruth =
+export type AgentSessionPresenceSnapshot =
   | {
-      type: "live";
-      classification: LiveAgentSessionClassification;
-      ref: LiveAgentSessionRef;
-      runtimeId: string | null;
+      presence: "runtime";
+      classification: AgentSessionActivity;
+      ref: AgentSessionRef;
+      runtimeId: string;
       title: string;
       startedAt: string;
       status: LiveAgentSessionStatus;
@@ -183,17 +180,17 @@ export type LiveSessionTruth =
       pendingQuestions: AgentPendingQuestionRequest[];
     }
   | {
-      type: "stale";
+      presence: "stale";
       classification: "stale";
-      ref: LiveAgentSessionRef;
+      ref: AgentSessionRef;
       runtimeId: string | null;
       pendingApprovals: [];
       pendingQuestions: [];
     }
   | {
-      type: "persisted_only";
+      presence: "persisted_only";
       classification: "persisted_only";
-      ref: LiveAgentSessionRef;
+      ref: AgentSessionRef;
       runtimeId: null;
       reason: string;
       pendingApprovals: [];
@@ -240,8 +237,8 @@ export interface AgentSessionPort {
   detachSession(externalSessionId: ExternalSessionId): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
   listLiveAgentSessions(input: ListLiveAgentSessionsInput): Promise<LiveAgentSessionSummary[]>;
-  listLiveSessionTruths(input: ListLiveSessionTruthInput): Promise<LiveSessionTruth[]>;
-  readLiveSessionTruth(input: ReadLiveSessionTruthInput): Promise<LiveSessionTruth>;
+  listSessionPresence(input: ListSessionPresenceInput): Promise<AgentSessionPresenceSnapshot[]>;
+  readSessionPresence(input: ReadSessionPresenceInput): Promise<AgentSessionPresenceSnapshot>;
   hasSession(externalSessionId: ExternalSessionId): boolean;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;

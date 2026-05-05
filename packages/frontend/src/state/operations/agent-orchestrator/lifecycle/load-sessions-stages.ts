@@ -45,14 +45,14 @@ import {
   createHydrationRuntimeResolver,
   type ResolvedHydrationRuntime,
 } from "./hydration-runtime-resolution";
-import type { LiveAgentSessionStore } from "./live-agent-session-store";
-import {
-  applyLiveSessionTruthToSession,
-  createLiveSessionTruthReader,
-  type LiveSessionTruth,
-} from "./live-session-truth";
-import { createLiveSessionTruthSource } from "./live-session-truth-source";
 import { createReattachLiveSession } from "./reattach-live-session";
+import {
+  type AgentSessionPresenceSnapshot,
+  applyAgentSessionPresenceSnapshotToSession,
+  createSessionPresenceReader,
+} from "./session-presence";
+import { createAgentSessionPresenceSnapshotSource } from "./session-presence-source";
+import type { AgentSessionPresenceStore } from "./session-presence-store";
 
 export type UpdateSession = (
   externalSessionId: string,
@@ -64,8 +64,8 @@ export type SessionLifecycleAdapter = Pick<
   AgentEnginePort,
   "hasSession" | "loadSessionHistory" | "resumeSession" | "attachSession"
 > & {
-  listLiveSessionTruths?: AgentEnginePort["listLiveSessionTruths"];
-  readLiveSessionTruth?: AgentEnginePort["readLiveSessionTruth"];
+  listSessionPresence?: AgentEnginePort["listSessionPresence"];
+  readSessionPresence?: AgentEnginePort["readSessionPresence"];
 };
 
 export type SessionLoadIntent = {
@@ -102,21 +102,21 @@ export type PersistedSessionMergeStageOutput = {
 export type HydrationRuntimePlanner = {
   repoPath: string;
   resolveHydrationRuntime: (record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>;
-  readLiveSessionTruth: (record: AgentSessionRecord) => Promise<LiveSessionTruth>;
+  readSessionPresence: (record: AgentSessionRecord) => Promise<AgentSessionPresenceSnapshot>;
 };
 
-const readPlannerLiveSessionTruth = async (
+const readPlannerAgentSessionPresenceSnapshot = async (
   runtimePlanner: HydrationRuntimePlanner,
   record: AgentSessionRecord,
-): Promise<LiveSessionTruth> => {
-  return runtimePlanner.readLiveSessionTruth(record);
+): Promise<AgentSessionPresenceSnapshot> => {
+  return runtimePlanner.readSessionPresence(record);
 };
 
 export type RuntimeResolutionPlannerStageInput = {
   intent: SessionLoadIntent;
   options?: AgentSessionLoadOptions;
   adapter: SessionLifecycleAdapter;
-  liveAgentSessionStore?: LiveAgentSessionStore;
+  agentSessionPresenceStore?: AgentSessionPresenceStore;
   recordsToHydrate: AgentSessionRecord[];
 };
 
@@ -244,16 +244,18 @@ const loadHydratedSubagentPendingInputOverlay = async ({
   await Promise.all(
     childExternalSessionIds.map(async (childExternalSessionId) => {
       try {
-        const truth = await readPlannerLiveSessionTruth(runtimePlanner, {
+        const snapshot = await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, {
           ...record,
           externalSessionId: childExternalSessionId,
         });
         scannedChildExternalSessionIds.push(childExternalSessionId);
-        if (truth.type === "live" && truth.pendingApprovals.length > 0) {
-          pendingApprovalsByChildExternalSessionId[childExternalSessionId] = truth.pendingApprovals;
+        if (snapshot.presence === "runtime" && snapshot.pendingApprovals.length > 0) {
+          pendingApprovalsByChildExternalSessionId[childExternalSessionId] =
+            snapshot.pendingApprovals;
         }
-        if (truth.type === "live" && truth.pendingQuestions.length > 0) {
-          pendingQuestionsByChildExternalSessionId[childExternalSessionId] = truth.pendingQuestions;
+        if (snapshot.presence === "runtime" && snapshot.pendingQuestions.length > 0) {
+          pendingQuestionsByChildExternalSessionId[childExternalSessionId] =
+            snapshot.pendingQuestions;
         }
       } catch (error) {
         console.warn(
@@ -472,7 +474,7 @@ export const createRuntimeResolutionPlannerStage = async ({
   intent,
   options,
   adapter,
-  liveAgentSessionStore,
+  agentSessionPresenceStore,
   recordsToHydrate,
 }: RuntimeResolutionPlannerStageInput): Promise<HydrationRuntimePlanner> => {
   const recordsNeedingRuntimeResolution = recordsToHydrate;
@@ -496,27 +498,27 @@ export const createRuntimeResolutionPlannerStage = async ({
     );
 
   const preloadedLiveAgentSessionsByKey =
-    options?.preloadedLiveAgentSessionsByKey ?? new Map<string, LiveSessionTruth[]>();
+    options?.preloadedLiveAgentSessionsByKey ?? new Map<string, AgentSessionPresenceSnapshot[]>();
 
   const resolveHydrationRuntime = createHydrationRuntimeResolver({
     repoPath: intent.repoPath,
     runtimesByKind,
   });
-  const liveSessionTruthSource = createLiveSessionTruthSource({
+  const sessionPresenceSource = createAgentSessionPresenceSnapshotSource({
     adapter,
     preloadedLiveAgentSessionsByKey,
-    ...(liveAgentSessionStore ? { liveAgentSessionStore } : {}),
+    ...(agentSessionPresenceStore ? { agentSessionPresenceStore } : {}),
   });
-  const readLiveSessionTruth = createLiveSessionTruthReader({
+  const readSessionPresence = createSessionPresenceReader({
     repoPath: intent.repoPath,
     resolveHydrationRuntime,
-    readTruth: liveSessionTruthSource.read,
+    readPresence: sessionPresenceSource.read,
   });
 
   return {
     repoPath: intent.repoPath,
     resolveHydrationRuntime,
-    readLiveSessionTruth,
+    readSessionPresence,
   };
 };
 
@@ -601,8 +603,8 @@ export const reconcileLiveSessionsStage = async ({
   if (!intent.shouldReconcileLiveSessions) {
     return { reattachedSessionIds: new Set<string>() };
   }
-  if (!adapter.listLiveSessionTruths) {
-    throw new Error("Live session truths are unavailable for live session reconciliation.");
+  if (!adapter.listSessionPresence) {
+    throw new Error("Session presence reads are unavailable for session reconciliation.");
   }
 
   const maybeResumeLiveRecord = createReattachLiveSession({
@@ -611,7 +613,8 @@ export const reconcileLiveSessionsStage = async ({
     updateSession,
     ...(attachSessionListener ? { attachSessionListener } : {}),
     promptOverrides: EMPTY_PROMPT_OVERRIDES,
-    readLiveSessionTruth: (record) => readPlannerLiveSessionTruth(runtimePlanner, record),
+    readSessionPresence: (record) =>
+      readPlannerAgentSessionPresenceSnapshot(runtimePlanner, record),
     attachMissingLiveSession: async ({ record, runtimeKind, workingDirectory }) => {
       const promptOverrides = await getRepoPromptOverrides();
       if (isStaleRepoOperation()) {
@@ -707,7 +710,7 @@ type HydrateSessionRecordInput = {
 type HydratedRecordHistoryState = {
   promptOverrides: RepoPromptOverrides;
   history: Awaited<ReturnType<SessionLifecycleAdapter["loadSessionHistory"]>>;
-  liveSessionTruth: LiveSessionTruth;
+  sessionPresence: AgentSessionPresenceSnapshot;
   hydratedMessages: AgentSessionState["messages"];
   hydratedSubagentPendingInputByExternalSessionId: HydratedSubagentPendingInputOverlay;
   selectedModel: ReturnType<typeof normalizePersistedSelection>;
@@ -800,19 +803,19 @@ const hydrateRuntimeOnlyRecord = async ({
   runtimeResolution: SuccessfulHydrationRuntime;
   runtimePlanner: HydrationRuntimePlanner;
 }): Promise<void> => {
-  const shouldReadLiveTruth =
+  const shouldReadSessionPresenceSnapshot =
     loadMode === "reconcile_live" || loadMode === "recover_runtime_attachment";
-  const liveSessionTruth = shouldReadLiveTruth
-    ? await readPlannerLiveSessionTruth(runtimePlanner, record)
+  const sessionPresence = shouldReadSessionPresenceSnapshot
+    ? await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, record)
     : null;
   if (isStaleRepoOperation()) {
     return;
   }
-  if (liveSessionTruth) {
+  if (sessionPresence) {
     updateSession(
       record.externalSessionId,
       (current) =>
-        applyLiveSessionTruthToSession(current, liveSessionTruth, {
+        applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
           promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
           missingSessionRuntimeId: null,
         }),
@@ -840,21 +843,26 @@ const applyHydratedRecordHistory = (
   {
     promptOverrides,
     history,
-    liveSessionTruth,
+    sessionPresence,
     hydratedMessages,
     hydratedSubagentPendingInputByExternalSessionId,
     selectedModel,
   }: HydratedRecordHistoryState,
 ): AgentSessionState => {
   const liveSessionStatus =
-    liveSessionTruth.type === "live" ? liveSessionTruth.agentSessionStatus : null;
-  const liveSessionTitle = liveSessionTruth.type === "live" ? liveSessionTruth.title : undefined;
-  const sessionWithLiveTruth = applyLiveSessionTruthToSession(current, liveSessionTruth, {
-    promptOverrides,
-  });
+    sessionPresence.presence === "runtime" ? sessionPresence.agentSessionStatus : null;
+  const liveSessionTitle =
+    sessionPresence.presence === "runtime" ? sessionPresence.title : undefined;
+  const sessionWithSessionPresenceSnapshot = applyAgentSessionPresenceSnapshotToSession(
+    current,
+    sessionPresence,
+    {
+      promptOverrides,
+    },
+  );
   const nextSession: AgentSessionState = {
-    ...sessionWithLiveTruth,
-    status: liveSessionStatus ?? sessionWithLiveTruth.status,
+    ...sessionWithSessionPresenceSnapshot,
+    status: liveSessionStatus ?? sessionWithSessionPresenceSnapshot.status,
     historyHydrationState: "hydrated",
     runtimeRecoveryState: "idle",
     subagentPendingApprovalsByExternalSessionId: mergeSubagentPendingApprovalOverlay({
@@ -875,7 +883,7 @@ const applyHydratedRecordHistory = (
     messages: mergeHydratedMessages(current.externalSessionId, hydratedMessages, current.messages),
   };
 
-  if (liveSessionTruth.type === "live") {
+  if (sessionPresence.presence === "runtime") {
     if (liveSessionTitle) {
       nextSession.title = liveSessionTitle;
     } else {
@@ -919,7 +927,7 @@ const hydrateRecordHistory = async ({
     externalSessionId: record.externalSessionId,
     limit: INITIAL_SESSION_HISTORY_LIMIT,
   });
-  const liveSessionTruth = await readPlannerLiveSessionTruth(runtimePlanner, record);
+  const sessionPresence = await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, record);
   const selectedModel = normalizePersistedSelection(record.selectedModel);
   const hydratedMessages = createSessionMessagesState(record.externalSessionId, [
     ...getSessionMessagesSlice(
@@ -947,7 +955,7 @@ const hydrateRecordHistory = async ({
       applyHydratedRecordHistory(current, {
         promptOverrides,
         history,
-        liveSessionTruth,
+        sessionPresence,
         hydratedMessages,
         hydratedSubagentPendingInputByExternalSessionId,
         selectedModel,
