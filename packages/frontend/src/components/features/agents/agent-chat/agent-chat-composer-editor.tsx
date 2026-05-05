@@ -1,5 +1,6 @@
 import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
 import { type ReactElement, useLayoutEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -325,30 +326,33 @@ export function AgentChatComposerEditor({
 
   return (
     <div className="relative">
-      {composerFileReferenceTooltip ? (
-        <div
-          className={cn(
-            "pointer-events-none fixed z-50 max-w-80 rounded-md bg-foreground px-3 py-1.5 text-xs text-background text-balance shadow-sm",
-            composerFileReferenceTooltip.side === "top"
-              ? "-translate-x-1/2 -translate-y-full"
-              : "-translate-x-1/2",
-          )}
-          style={{
-            left: `${composerFileReferenceTooltip.left}px`,
-            top: `${composerFileReferenceTooltip.top}px`,
-          }}
-        >
-          <div>{composerFileReferenceTooltip.path}</div>
-          <div
-            className={cn(
-              "absolute left-1/2 size-2.5 -translate-x-1/2 rotate-45 bg-foreground",
-              composerFileReferenceTooltip.side === "top"
-                ? "bottom-0 translate-y-1/2"
-                : "top-0 -translate-y-1/2",
-            )}
-          />
-        </div>
-      ) : null}
+      {composerFileReferenceTooltip
+        ? createPortal(
+            <div
+              className={cn(
+                "pointer-events-none fixed z-50 max-w-80 rounded-md bg-foreground px-3 py-1.5 text-xs text-background text-balance shadow-sm",
+                composerFileReferenceTooltip.side === "top"
+                  ? "-translate-x-1/2 -translate-y-full"
+                  : "-translate-x-1/2",
+              )}
+              style={{
+                left: `${composerFileReferenceTooltip.left}px`,
+                top: `${composerFileReferenceTooltip.top}px`,
+              }}
+            >
+              <div>{composerFileReferenceTooltip.path}</div>
+              <div
+                className={cn(
+                  "absolute left-1/2 size-2.5 -translate-x-1/2 rotate-45 bg-foreground",
+                  composerFileReferenceTooltip.side === "top"
+                    ? "bottom-0 translate-y-1/2"
+                    : "top-0 -translate-y-1/2",
+                )}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
       {showFileMenu ? (
         <AgentChatComposerFileMenu
           results={fileSearchResults}
