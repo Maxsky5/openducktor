@@ -4,10 +4,7 @@ use super::command_support::{
     run_headless_blocking, serialize_value, service_error, CommandResult, HeadlessState,
 };
 use crate::command_helpers::run_service_blocking_tokio;
-use crate::command_payloads::{
-    RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
-    SettingsSnapshotResponsePayload,
-};
+use crate::command_payloads::{RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload};
 use crate::commands::workspace::{
     resolve_staged_local_attachment_path, stage_local_attachment_to_temp,
     ResolvedLocalAttachmentPayload, StagedLocalAttachmentPayload,
@@ -298,7 +295,7 @@ fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResul
         .service
         .workspace_get_settings_snapshot()
         .map_err(service_error)?;
-    serialize_value(SettingsSnapshotResponsePayload {
+    serialize_value(SettingsSnapshotPayload {
         theme: snapshot.theme,
         git: snapshot.git,
         chat: snapshot.chat,

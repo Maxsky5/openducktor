@@ -98,22 +98,9 @@ pub(crate) struct RepoSettingsPayload {
     pub(crate) agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SettingsSnapshotPayload {
-    pub(crate) theme: String,
-    pub(crate) git: host_infra_system::GlobalGitConfig,
-    pub(crate) chat: host_infra_system::ChatSettings,
-    pub(crate) reusable_prompts: Vec<host_infra_system::ReusablePrompt>,
-    pub(crate) kanban: host_infra_system::KanbanSettings,
-    pub(crate) autopilot: host_infra_system::AutopilotSettings,
-    pub(crate) workspaces: HashMap<String, host_infra_system::RepoConfig>,
-    pub(crate) global_prompt_overrides: host_infra_system::PromptOverrides,
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct SettingsSnapshotResponsePayload {
     pub(crate) theme: String,
     pub(crate) git: host_infra_system::GlobalGitConfig,
     pub(crate) chat: host_infra_system::ChatSettings,

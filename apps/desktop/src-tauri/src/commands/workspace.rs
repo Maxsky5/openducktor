@@ -1,9 +1,6 @@
 use crate::app_state::AppState;
 use crate::command_helpers::{as_error, run_service_blocking};
-use crate::command_payloads::{
-    RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
-    SettingsSnapshotResponsePayload,
-};
+use crate::command_payloads::{RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload};
 use base64::Engine;
 use host_application::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshot};
 use host_infra_system::HookSet;
@@ -363,9 +360,9 @@ pub async fn workspace_detect_github_repository(
 #[tauri::command]
 pub async fn workspace_get_settings_snapshot(
     state: State<'_, AppState>,
-) -> Result<SettingsSnapshotResponsePayload, String> {
+) -> Result<SettingsSnapshotPayload, String> {
     let snapshot = as_error(state.service.workspace_get_settings_snapshot())?;
-    Ok(SettingsSnapshotResponsePayload {
+    Ok(SettingsSnapshotPayload {
         theme: snapshot.theme,
         git: snapshot.git,
         chat: snapshot.chat,

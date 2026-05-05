@@ -69,9 +69,15 @@ fn resolve_host_owner_pid() -> anyhow::Result<u32> {
                     "{HOST_OWNER_PID_ENV} is set but empty; expected the owning OpenDucktor process id"
                 ));
             }
-            trimmed.parse::<u32>().with_context(|| {
+            let pid = trimmed.parse::<u32>().with_context(|| {
                 format!("{HOST_OWNER_PID_ENV} must be a positive process id, got {trimmed:?}")
-            })
+            })?;
+            if pid == 0 {
+                return Err(anyhow::anyhow!(
+                    "{HOST_OWNER_PID_ENV} must be a positive process id, got {trimmed:?}"
+                ));
+            }
+            Ok(pid)
         }
         Err(std::env::VarError::NotPresent) => Ok(std::process::id()),
         Err(error) => Err(error).context(format!("failed reading {HOST_OWNER_PID_ENV}")),
@@ -149,7 +155,9 @@ pub(crate) fn run_desktop() -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use anyhow::anyhow;
+    use host_test_support::{lock_env, EnvVarGuard};
     use std::fs;
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
     use std::time::SystemTime;
@@ -184,6 +192,7 @@ mod tests {
         let config_path = root.join("config.json");
         fs::create_dir_all(&root)?;
         fs::write(&config_path, "{ invalid json")?;
+        #[cfg(unix)]
         fs::set_permissions(&config_path, fs::Permissions::from_mode(0o600))?;
 
         let config_store = AppConfigStore::from_path(config_path.clone());
@@ -223,6 +232,7 @@ mod tests {
         let runtime_path = root.join("runtime-config.json");
         fs::create_dir_all(&root)?;
         fs::write(&runtime_path, "{ invalid json")?;
+        #[cfg(unix)]
         fs::set_permissions(&runtime_path, fs::Permissions::from_mode(0o600))?;
         let runtime_store = RuntimeConfigStore::from_user_settings_store(&config_store);
 
@@ -250,6 +260,21 @@ mod tests {
 
         let _ = fs::remove_dir_all(root);
         Ok(())
+    }
+
+    #[test]
+    fn resolve_host_owner_pid_rejects_zero_env_value() {
+        let _env_lock = lock_env();
+        let _guard = EnvVarGuard::set("OPENDUCKTOR_HOST_OWNER_PID", "0");
+
+        let error = resolve_host_owner_pid().expect_err("zero pid should be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("OPENDUCKTOR_HOST_OWNER_PID must be a positive process id"),
+            "error should explain positive pid requirement: {error:#}"
+        );
     }
 
     #[test]
