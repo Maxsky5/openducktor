@@ -1,15 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { resolveActiveSessionChatComposerContext } from "./active-session-chat-composer-context";
+import {
+  type ActiveSessionChatComposerSession,
+  type ActiveSessionChatComposerSummary,
+  resolveActiveSessionChatComposerContext,
+} from "./active-session-chat-composer-context";
 
-const makeSummary = (): AgentSessionSummary => ({
+const makeSummary = (): ActiveSessionChatComposerSummary => ({
   externalSessionId: "external-1",
   repoPath: "/repo",
-  taskId: "task-1",
-  role: "spec",
   status: "idle",
-  startedAt: "2026-02-20T10:00:00.000Z",
   workingDirectory: "/repo",
   runtimeKind: "opencode",
   selectedModel: {
@@ -18,28 +17,25 @@ const makeSummary = (): AgentSessionSummary => ({
     modelId: "claude-sonnet",
     profileId: "build-agent",
   },
-  pendingApprovals: [],
-  pendingQuestions: [],
 });
 
-const makeHydratedSession = (): AgentSessionState =>
-  ({
-    externalSessionId: "external-1",
-    repoPath: "/repo",
-    status: "idle",
-    selectedModel: {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      profileId: "spec-agent",
-    },
-    modelCatalog: null,
+const makeHydratedSession = (): ActiveSessionChatComposerSession => ({
+  externalSessionId: "external-1",
+  repoPath: "/repo",
+  status: "idle",
+  selectedModel: {
     runtimeKind: "opencode",
-    workingDirectory: "/repo/session-worktree",
-    isLoadingModelCatalog: false,
-    contextUsage: null,
-    messages: [],
-  }) as unknown as AgentSessionState;
+    providerId: "openai",
+    modelId: "gpt-5",
+    profileId: "spec-agent",
+  },
+  modelCatalog: null,
+  runtimeKind: "opencode",
+  workingDirectory: "/repo/session-worktree",
+  isLoadingModelCatalog: false,
+  contextUsage: null,
+  messages: [],
+});
 
 describe("active-session-chat-composer-context", () => {
   test("prefers hydrated session runtime fields while preserving summary selection fallback", () => {

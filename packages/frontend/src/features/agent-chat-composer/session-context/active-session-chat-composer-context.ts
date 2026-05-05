@@ -2,6 +2,25 @@ import type { AgentModelSelection } from "@openducktor/core";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
+export type ActiveSessionChatComposerSession = Pick<
+  AgentSessionState,
+  | "externalSessionId"
+  | "repoPath"
+  | "status"
+  | "selectedModel"
+  | "modelCatalog"
+  | "runtimeKind"
+  | "workingDirectory"
+  | "isLoadingModelCatalog"
+  | "contextUsage"
+  | "messages"
+>;
+
+export type ActiveSessionChatComposerSummary = Pick<
+  AgentSessionSummary,
+  "externalSessionId" | "repoPath" | "status" | "selectedModel" | "runtimeKind" | "workingDirectory"
+>;
+
 export type ActiveSessionChatComposerContext = {
   externalSessionId: string | null;
   repoPath: string;
@@ -17,8 +36,8 @@ export type ActiveSessionChatComposerContext = {
 };
 
 export const resolveActiveSessionChatComposerContext = (
-  activeSession: AgentSessionState | null,
-  activeSessionSummary: AgentSessionSummary | null,
+  activeSession: ActiveSessionChatComposerSession | null,
+  activeSessionSummary: ActiveSessionChatComposerSummary | null,
 ): ActiveSessionChatComposerContext => {
   const externalSessionId =
     activeSession?.externalSessionId ?? activeSessionSummary?.externalSessionId ?? null;

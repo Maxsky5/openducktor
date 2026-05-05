@@ -387,12 +387,14 @@ describe("useAgentStudioChatComposer", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.waitFor((state) => state.isSlashCommandsLoading === false);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
-    expect(readSessionSlashCommands).not.toHaveBeenCalled();
-
-    await harness.unmount();
+      expect(readSessionSlashCommands).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("searches repo files through the repo runtime before a session starts", async () => {
@@ -754,19 +756,72 @@ describe("useAgentStudioChatComposer", () => {
       }),
     );
 
-    await harness.mount();
-    await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
-    expect(harness.getLatest().selectedModelSelection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "spec-agent",
+      expect(harness.getLatest().selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec-agent",
+      });
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("dedupes active session model repair writes while session state converges", async () => {
+    const updateAgentSessionModel = mock(
+      (..._args: Parameters<HookArgs["updateAgentSessionModel"]>) => {},
+    );
+    const firstUpdateAgentSessionModel: HookArgs["updateAgentSessionModel"] = (...args) => {
+      updateAgentSessionModel(...args);
+    };
+    const secondUpdateAgentSessionModel: HookArgs["updateAgentSessionModel"] = (...args) => {
+      updateAgentSessionModel(...args);
+    };
+    const activeSession = createActiveSession({
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "missing",
+        profileId: "spec-agent",
+      },
     });
-    expect(updateAgentSessionModel).toHaveBeenCalledTimes(0);
 
-    await harness.unmount();
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+        updateAgentSessionModel: firstUpdateAgentSessionModel,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => updateAgentSessionModel.mock.calls.length === 1);
+
+      await harness.update(
+        createBaseProps({
+          activeSession,
+          updateAgentSessionModel: secondUpdateAgentSessionModel,
+        }),
+      );
+
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+      expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("does not load the repo composer catalog while an active session owns runtime catalog loading", async () => {
@@ -1100,6 +1155,51 @@ describe("useAgentStudioChatComposer", () => {
         totalTokens: 35_022,
         contextWindow: 200_000,
         outputLimit: 8_192,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("recomputes context usage from messages after live usage ends", async () => {
+    const activeSession = createActiveSession({
+      contextUsage: {
+        totalTokens: 35_022,
+        contextWindow: 200_000,
+        outputLimit: 8_192,
+      },
+      messages: [
+        createAssistantMessage({
+          totalTokens: 12,
+          contextWindow: 40_000,
+          outputLimit: 1_000,
+        }),
+      ],
+    });
+
+    const harness = createHookHarness(createBaseProps({ activeSession }));
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+        totalTokens: 35_022,
+        contextWindow: 200_000,
+        outputLimit: 8_192,
+      });
+
+      await harness.update(
+        createBaseProps({
+          activeSession: {
+            ...activeSession,
+            contextUsage: null,
+          },
+        }),
+      );
+
+      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+        totalTokens: 12,
+        contextWindow: 40_000,
+        outputLimit: 1_000,
       });
     } finally {
       await harness.unmount();

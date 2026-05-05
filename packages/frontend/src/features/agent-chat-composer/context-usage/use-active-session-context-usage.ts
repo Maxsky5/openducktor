@@ -108,11 +108,7 @@ export const useActiveSessionContextUsage = ({
         return null;
       }
 
-      return commitCachedUsage(
-        nextUsage,
-        Number.MAX_SAFE_INTEGER,
-        activeSessionMessages ?? activeSessionMessageOwnerForContextUsage?.messages ?? [],
-      );
+      return commitCachedUsage(nextUsage, Number.MAX_SAFE_INTEGER, activeSessionMessages ?? []);
     }
 
     let nextUsageEntry: AgentStudioContextUsageEntry = null;
@@ -122,7 +118,8 @@ export const useActiveSessionContextUsage = ({
         cached &&
         activeExternalSessionIdForContextUsage !== null &&
         cached.externalSessionId === activeExternalSessionIdForContextUsage &&
-        cached.metadataKey === metadataKey
+        cached.metadataKey === metadataKey &&
+        cached.sourceIndex !== Number.MAX_SAFE_INTEGER
       ) {
         const firstChangedMessageIndex = findFirstChangedSessionMessageIndex(
           cached.messages,
