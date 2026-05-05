@@ -1,6 +1,6 @@
+use crate::command_payloads::{TaskCreatePayload, TaskUpdatePayload};
 use crate::command_services::error::{CommandServiceError, CommandServiceResult};
 use crate::command_services::issue_type::parse_issue_type;
-use crate::{TaskCreatePayload, TaskUpdatePayload};
 use host_application::AppService;
 use host_domain::{CreateTaskInput, TaskCard, TaskStatus, UpdateTaskPatch};
 use serde::Deserialize;
@@ -200,7 +200,7 @@ mod tests {
         command_reason, delete_subtasks_or_default, list, map_task_create_payload,
         map_task_update_payload, TasksListRequest,
     };
-    use crate::{TaskCreatePayload, TaskUpdatePayload};
+    use crate::command_payloads::{TaskCreatePayload, TaskUpdatePayload};
     use host_domain::IssueType;
 
     #[test]

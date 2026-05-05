@@ -132,6 +132,9 @@ version = "2"
 default-features = false
 features = [ "test" ]
 
+[dev-dependencies.host-test-support]
+path = "crates/host-test-support"
+
 [patch.crates-io.tauri]
 git = "https://github.com/tauri-apps/tauri"
 branch = "feat/cef"

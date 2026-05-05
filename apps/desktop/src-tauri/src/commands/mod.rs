@@ -1,5 +1,6 @@
 pub mod agent_sessions;
 pub mod build;
+pub(crate) mod command_registry;
 pub mod documents;
 pub mod filesystem;
 pub mod git;

@@ -4,7 +4,7 @@ use super::command_support::{
     service_error, CommandResult, HeadlessState, RepoTaskArgs,
 };
 use super::events::make_dev_server_emitter;
-use crate::runtime_ensure_failure_kind;
+use crate::command_helpers::{run_service_blocking_tokio, runtime_ensure_failure_kind};
 use host_domain::{AgentRuntimeKind, AgentSessionStopRequest};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -121,7 +121,7 @@ async fn handle_build_start(state: &HeadlessState, args: Value) -> CommandResult
     } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        crate::run_service_blocking_tokio("build_start", move || {
+        run_service_blocking_tokio("build_start", move || {
             service.build_start(&repo_path, &task_id, runtime_kind.as_str())
         })
         .await
@@ -133,7 +133,7 @@ async fn handle_dev_server_get_state(state: &HeadlessState, args: Value) -> Comm
     let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        crate::run_service_blocking_tokio("dev_server_get_state", move || {
+        run_service_blocking_tokio("dev_server_get_state", move || {
             service.dev_server_get_state(&repo_path, &task_id)
         })
         .await
@@ -146,7 +146,7 @@ async fn handle_dev_server_start(state: &HeadlessState, args: Value) -> CommandR
     let service = state.service.clone();
     let emitter = make_dev_server_emitter(state.dev_server_events.clone());
     serialize_value(
-        crate::run_service_blocking_tokio("dev_server_start", move || {
+        run_service_blocking_tokio("dev_server_start", move || {
             service.dev_server_start(&repo_path, &task_id, emitter)
         })
         .await
@@ -158,7 +158,7 @@ async fn handle_dev_server_stop(state: &HeadlessState, args: Value) -> CommandRe
     let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        crate::run_service_blocking_tokio("dev_server_stop", move || {
+        run_service_blocking_tokio("dev_server_stop", move || {
             service.dev_server_stop(&repo_path, &task_id)
         })
         .await
@@ -171,7 +171,7 @@ async fn handle_dev_server_restart(state: &HeadlessState, args: Value) -> Comman
     let service = state.service.clone();
     let emitter = make_dev_server_emitter(state.dev_server_events.clone());
     serialize_value(
-        crate::run_service_blocking_tokio("dev_server_restart", move || {
+        run_service_blocking_tokio("dev_server_restart", move || {
             service.dev_server_restart(&repo_path, &task_id, emitter)
         })
         .await
@@ -183,7 +183,7 @@ async fn handle_agent_session_stop(state: &HeadlessState, args: Value) -> Comman
     let AgentSessionStopArgs { request } = deserialize_args(args)?;
     let service = state.service.clone();
     Ok(json!({
-        "ok": crate::run_service_blocking_tokio("agent_session_stop", move || {
+        "ok": run_service_blocking_tokio("agent_session_stop", move || {
             service.agent_session_stop(request)
         })
         .await
@@ -218,7 +218,7 @@ async fn handle_task_worktree_get(state: &HeadlessState, args: Value) -> Command
     let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        crate::run_service_blocking_tokio("task_worktree_get", move || {
+        run_service_blocking_tokio("task_worktree_get", move || {
             service.task_worktree_get(&repo_path, &task_id)
         })
         .await
@@ -241,7 +241,7 @@ async fn handle_runtime_ensure(state: &HeadlessState, args: Value) -> CommandRes
     } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        crate::run_service_blocking_tokio("runtime_ensure", move || {
+        run_service_blocking_tokio("runtime_ensure", move || {
             service.runtime_ensure(runtime_kind.as_str(), &repo_path)
         })
         .await
@@ -261,7 +261,7 @@ async fn handle_runtime_startup_status(state: &HeadlessState, args: Value) -> Co
     } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        crate::run_service_blocking_tokio("runtime_startup_status", move || {
+        run_service_blocking_tokio("runtime_startup_status", move || {
             service.runtime_startup_status(runtime_kind.as_str(), &repo_path)
         })
         .await
@@ -276,7 +276,7 @@ async fn handle_repo_runtime_health(state: &HeadlessState, args: Value) -> Comma
     } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        crate::run_service_blocking_tokio("repo_runtime_health", move || {
+        run_service_blocking_tokio("repo_runtime_health", move || {
             service.repo_runtime_health(runtime_kind.as_str(), &repo_path)
         })
         .await
@@ -291,7 +291,7 @@ async fn handle_repo_runtime_health_status(state: &HeadlessState, args: Value) -
     } = deserialize_args(args)?;
     let service = state.service.clone();
     serialize_value(
-        crate::run_service_blocking_tokio("repo_runtime_health_status", move || {
+        run_service_blocking_tokio("repo_runtime_health_status", move || {
             service.repo_runtime_health_status(runtime_kind.as_str(), &repo_path)
         })
         .await

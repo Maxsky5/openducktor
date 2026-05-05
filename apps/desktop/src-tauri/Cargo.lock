@@ -2650,6 +2650,7 @@ dependencies = [
  "host-domain",
  "host-infra-beads",
  "host-infra-system",
+ "host-test-support",
  "mime_guess",
  "objc2",
  "objc2-app-kit",

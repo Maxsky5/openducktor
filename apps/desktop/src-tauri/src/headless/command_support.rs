@@ -1,8 +1,8 @@
 use super::command_registry::CommandRegistry;
 use super::events::HeadlessEventBus;
+use crate::command_helpers::run_service_blocking_tokio;
 use crate::command_services::error::{CommandServiceError, CommandServiceResult};
 use crate::command_services::git::invalidate_worktree_resolution_cache_for_repo;
-use crate::run_service_blocking_tokio;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
