@@ -1,6 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createNoopEngine, createSession, taskFixture } from "./agent-session-hook-test-fixtures";
+import {
+  createNoopEngine,
+  createSession,
+  createTaskFixture,
+} from "./agent-session-hook-test-fixtures";
 import { useAgentSessionListeners } from "./use-agent-session-listeners";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 
@@ -16,7 +20,7 @@ describe("useAgentSessionListeners", () => {
           workspaceName: "Workspace",
           repoPath: "/tmp/repo",
         },
-        tasks: [taskFixture],
+        tasks: [createTaskFixture()],
       });
       const listeners = useAgentSessionListeners({
         agentEngine: createNoopEngine(),

@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createNoopEngine } from "./agent-session-hook-test-fixtures";
+import { createNoopEngine, createSession } from "./agent-session-hook-test-fixtures";
 import { useRuntimeTranscriptAttachment } from "./use-runtime-transcript-attachment";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -70,7 +70,7 @@ describe("useRuntimeTranscriptAttachment", () => {
         repoPath: "/tmp/repo",
         externalSessionId: "transcript-1",
         runtimeKind: "opencode",
-        runtimeId: " runtime-1 ",
+        runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
       }),
     );
@@ -115,5 +115,47 @@ describe("useRuntimeTranscriptAttachment", () => {
     expect(removeSessionIds).toHaveBeenCalledWith(["transcript-fail"]);
     await harness.unmount();
     await failingHarness.unmount();
+  });
+
+  test("does not detach a pre-existing runtime session when transcript request becomes stale", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    const unsubscribersRef = { current: new Map<string, () => void>() };
+    const attachSessionListener = mock(() => undefined);
+    const detachSession = mock(async () => undefined);
+    const engine = createNoopEngine({
+      hasSession: () => true,
+      detachSession,
+      loadSessionHistory: async () => [],
+    });
+    const Harness = () =>
+      useRuntimeTranscriptAttachment({
+        agentEngine: engine,
+        sessionsRef,
+        unsubscribersRef,
+        ...createSessionStoreCallbacks(sessionsRef),
+        attachSessionListener,
+        removeSessionIds: mock(() => undefined),
+      });
+    const harness = createHookHarness(Harness, undefined);
+    await harness.mount();
+    await harness.run(async (attachTranscript) => {
+      const attachPromise = attachTranscript({
+        repoPath: "/tmp/repo",
+        externalSessionId: "transcript-1",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo",
+      });
+      sessionsRef.current = {
+        "transcript-1": createSession({
+          externalSessionId: "transcript-1",
+          runtimeId: "other-runtime",
+        }),
+      };
+      await attachPromise;
+    });
+
+    expect(detachSession).not.toHaveBeenCalled();
+    await harness.unmount();
   });
 });

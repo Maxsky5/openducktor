@@ -2,7 +2,7 @@ import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-export const taskFixture: TaskCard = {
+export const createTaskFixture = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
   title: "Task",
   description: "",
@@ -27,18 +27,26 @@ export const taskFixture: TaskCard = {
   },
   updatedAt: "2026-03-01T09:00:00.000Z",
   createdAt: "2026-03-01T09:00:00.000Z",
-};
+  ...overrides,
+});
 
-export const sessionRecord: AgentSessionRecord = {
+export const createSessionRecord = (
+  overrides: Partial<AgentSessionRecord> = {},
+): AgentSessionRecord => ({
   runtimeKind: "opencode",
   externalSessionId: "external-1",
   role: "build",
   startedAt: "2026-03-01T09:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
   selectedModel: null,
-};
+  ...overrides,
+});
 
-export const taskWithSession: TaskCard = { ...taskFixture, agentSessions: [sessionRecord] };
+export const createTaskWithSession = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+  ...createTaskFixture(),
+  agentSessions: [createSessionRecord()],
+  ...overrides,
+});
 
 export const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",

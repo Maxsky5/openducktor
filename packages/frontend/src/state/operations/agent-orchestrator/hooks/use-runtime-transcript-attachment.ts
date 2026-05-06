@@ -57,7 +57,7 @@ export const useRuntimeTranscriptAttachment = ({
       };
       const detachRuntimeSessionIfPresent = async (): Promise<void> => {
         unsubscribeTranscriptListener();
-        if (agentEngine.hasSession(input.externalSessionId)) {
+        if (!hadRuntimeSession && agentEngine.hasSession(input.externalSessionId)) {
           await agentEngine.detachSession(input.externalSessionId);
         }
       };
