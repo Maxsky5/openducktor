@@ -9,7 +9,7 @@ Normalize OpenCode global/session event streams into OpenDucktor session events,
 - Directory-scoped global events are re-tagged before session routing.
 
 ## Data & Control Flow
-`shared.ts` holds per-session stream state and correlation helpers, `message-events.ts` maps message/delta updates, `session-events.ts` maps lifecycle, approval, question, and todo events, and `schemas.ts` validates fragile OpenCode payload shapes before mutation.
+`shared.ts` holds per-session stream state and low-level correlation helpers. `message-events.ts` is the thin message-event dispatcher; `message-updated-events.ts`, `message-part-events.ts`, `assistant-message-events.ts`, `user-message-events.ts`, and `subagent-message-events.ts` split message update, part, assistant, user, and subagent correlation concerns. `session-events.ts` maps lifecycle, approval, question, and todo events, and `schemas.ts` validates fragile OpenCode payload shapes before mutation.
 
 ## Integration Points
 - `src/event-stream.ts` and `src/opencode-sdk-adapter.ts`
