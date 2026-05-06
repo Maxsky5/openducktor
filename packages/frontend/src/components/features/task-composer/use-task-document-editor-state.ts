@@ -169,11 +169,6 @@ export function useTaskDocumentEditorState({
           loadTimeoutMs,
         );
         if (sequence !== loadSequence.current) {
-          inFlightSections.current[section] = false;
-          transitionDocumentSection(section, (currentSection) => ({
-            ...currentSection,
-            isLoading: false,
-          }));
           return;
         }
 
@@ -188,11 +183,6 @@ export function useTaskDocumentEditorState({
         }));
       } catch (reason) {
         if (sequence !== loadSequence.current) {
-          inFlightSections.current[section] = false;
-          transitionDocumentSection(section, (currentSection) => ({
-            ...currentSection,
-            isLoading: false,
-          }));
           return;
         }
 

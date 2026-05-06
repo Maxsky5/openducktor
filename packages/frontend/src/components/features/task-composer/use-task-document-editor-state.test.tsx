@@ -146,17 +146,19 @@ describe("useTaskDocumentEditorState", () => {
     );
 
     await harness.run(async () => {
+      first.resolve({ markdown: "# Task 1", updatedAt: "2026-02-20T10:00:00Z" });
+    });
+
+    expect(harness.getLatest().documents.spec.serverMarkdown).toBe("");
+    expect(harness.getLatest().documents.spec.isLoading).toBe(true);
+
+    await harness.run(async () => {
       second.resolve({ markdown: "# Task 2", updatedAt: "2026-02-20T11:00:00Z" });
     });
     await harness.waitFor((state) => state.documents.spec.serverMarkdown === "# Task 2");
 
     expect(harness.getLatest().documents.spec.serverMarkdown).toBe("# Task 2");
-
-    await harness.run(async () => {
-      first.resolve({ markdown: "# Task 1", updatedAt: "2026-02-20T10:00:00Z" });
-    });
-
-    expect(harness.getLatest().documents.spec.serverMarkdown).toBe("# Task 2");
+    expect(harness.getLatest().documents.spec.isLoading).toBe(false);
 
     await harness.unmount();
   });
@@ -191,13 +193,17 @@ describe("useTaskDocumentEditorState", () => {
     );
 
     await harness.run(async () => {
+      first.reject(new Error("stale task failed"));
+    });
+
+    expect(harness.getLatest().documents.spec.serverMarkdown).toBe("");
+    expect(harness.getLatest().documents.spec.error).toBeNull();
+    expect(harness.getLatest().documents.spec.isLoading).toBe(true);
+
+    await harness.run(async () => {
       second.resolve({ markdown: "# Task 2", updatedAt: "2026-02-20T11:00:00Z" });
     });
     await harness.waitFor((state) => state.documents.spec.serverMarkdown === "# Task 2");
-
-    await harness.run(async () => {
-      first.reject(new Error("stale task failed"));
-    });
 
     const state = harness.getLatest();
     expect(state.documents.spec.serverMarkdown).toBe("# Task 2");
