@@ -1,0 +1,69 @@
+import { describe, expect, mock, test } from "bun:test";
+import type { AgentSessionRecord } from "@openducktor/contracts";
+import { QueryClient } from "@tanstack/react-query";
+import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { runtimeQueryKeys } from "@/state/queries/runtime";
+import { taskQueryKeys } from "@/state/queries/tasks";
+import { createSessionPersistenceEffects } from "./session-persistence-effects";
+
+const sessionRecord: AgentSessionRecord = {
+  runtimeKind: "opencode",
+  externalSessionId: "session-1",
+  role: "build",
+  startedAt: "2026-02-22T08:00:00.000Z",
+  workingDirectory: "/repo/worktree",
+  selectedModel: null,
+};
+
+const createQueryClient = (): QueryClient =>
+  new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+describe("createSessionPersistenceEffects", () => {
+  test("persists through the injected host port and updates the injected query client", async () => {
+    const queryClient = createQueryClient();
+    const upsert = mock(async () => undefined);
+    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
+    const effects = createSessionPersistenceEffects({
+      workspaceRepoPath: "/repo",
+      queryClient,
+      hostPort: { agentSessionUpsert: upsert },
+    });
+
+    await effects.persistSessionRecord("task-1", sessionRecord);
+
+    expect(upsert).toHaveBeenCalledWith("/repo", "task-1", sessionRecord);
+    expect(
+      queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list("/repo", "task-1")),
+    ).toEqual([sessionRecord]);
+  });
+
+  test("invalidates stop-related queries on the injected query client", async () => {
+    const queryClient = createQueryClient();
+    const invalidatedKeys: unknown[] = [];
+    const originalInvalidateQueries = queryClient.invalidateQueries.bind(queryClient);
+    queryClient.invalidateQueries = (async (filters = {}) => {
+      invalidatedKeys.push(filters.queryKey);
+      return originalInvalidateQueries({ ...filters, refetchType: "none" });
+    }) as QueryClient["invalidateQueries"];
+    const effects = createSessionPersistenceEffects({
+      workspaceRepoPath: "/repo",
+      queryClient,
+      hostPort: { agentSessionUpsert: async () => undefined },
+    });
+
+    await effects.invalidateSessionStopQueries({
+      repoPath: "/repo",
+      taskId: "task-1",
+      runtimeKind: "opencode",
+    });
+
+    expect(invalidatedKeys).toContainEqual(taskQueryKeys.repoData("/repo"));
+    expect(invalidatedKeys).toContainEqual(agentSessionQueryKeys.list("/repo", "task-1"));
+    expect(invalidatedKeys).toContainEqual(runtimeQueryKeys.list("opencode", "/repo"));
+  });
+});
