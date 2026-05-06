@@ -36,6 +36,10 @@ export const emitAssistantPart = (
   roleHint?: string,
   markActive = true,
 ): boolean => {
+  if (!isAssistantMessage(runtime, part.messageID, roleHint)) {
+    return false;
+  }
+
   const mapped = mapPartToAgentStreamPart(part);
   if (!mapped) {
     return false;

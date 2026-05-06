@@ -113,7 +113,9 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
 
       runtime.partsById.set(rawPartId, partWithPendingDelta);
       normalizedParts.push(partWithPendingDelta);
-      emitAssistantPart(runtime, partWithPendingDelta, role);
+      if (isAssistantRole) {
+        emitAssistantPart(runtime, partWithPendingDelta, role);
+      }
     }
   }
 

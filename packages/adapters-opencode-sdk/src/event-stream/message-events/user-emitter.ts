@@ -1,8 +1,13 @@
 import type { AgentUserMessageDisplayPart, AgentUserMessageState } from "@openducktor/core";
-import type { readMessageModelSelection } from "../../message-normalizers";
+import {
+  ensureVisibleUserTextDisplayParts,
+  normalizeUserMessageDisplayParts,
+  type readMessageModelSelection,
+  readVisibleUserTextFromDisplayParts,
+} from "../../message-normalizers";
 import type { SessionMessageMetadata } from "../../types";
 import type { EventStreamRuntime } from "../shared";
-import { buildKnownUserMessageContent } from "./user-display";
+import { getKnownMessageParts } from "./helpers";
 
 export const persistUserMessageMetadata = (input: {
   session: ReturnType<EventStreamRuntime["getSession"]>;
@@ -44,6 +49,36 @@ const buildUserMessageSignature = (input: {
     variant: model?.variant ?? null,
     profileId: model?.profileId ?? null,
   });
+};
+
+const buildKnownUserMessageContent = (
+  runtime: EventStreamRuntime,
+  input: {
+    messageId: string;
+    visible?: string;
+    displayParts?: AgentUserMessageDisplayPart[];
+  },
+): { visible: string; displayParts: AgentUserMessageDisplayPart[] } | null => {
+  const session = runtime.getSession(runtime.externalSessionId);
+  const metadata = session?.messageMetadataById.get(input.messageId);
+  const fallbackText = metadata?.text ?? "";
+  let displayParts = input.displayParts;
+  if (displayParts === undefined) {
+    const knownDisplayParts = normalizeUserMessageDisplayParts(
+      getKnownMessageParts(runtime, input.messageId),
+    );
+    displayParts = ensureVisibleUserTextDisplayParts(
+      knownDisplayParts.length > 0 ? knownDisplayParts : (metadata?.displayParts ?? []),
+      fallbackText,
+    );
+  }
+  const textFromParts = input.visible ?? readVisibleUserTextFromDisplayParts(displayParts);
+  const visible = textFromParts.length > 0 ? textFromParts : fallbackText;
+  if (visible.trim().length === 0 && displayParts.length === 0) {
+    return null;
+  }
+
+  return { visible, displayParts };
 };
 
 export const emitUserMessage = (

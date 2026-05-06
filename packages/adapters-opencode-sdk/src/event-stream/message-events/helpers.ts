@@ -39,7 +39,13 @@ export const applyPendingDeltas = (
 };
 
 export const getKnownMessageParts = (runtime: EventStreamRuntime, messageId: string): Part[] => {
-  return [...runtime.partsById.values()].filter((part) => part.messageID === messageId);
+  const parts: Part[] = [];
+  for (const part of runtime.partsById.values()) {
+    if (part.messageID === messageId) {
+      parts.push(part);
+    }
+  }
+  return parts;
 };
 
 export const hasTerminalStopSignalInParts = (
