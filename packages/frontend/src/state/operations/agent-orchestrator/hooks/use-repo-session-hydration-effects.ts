@@ -1,7 +1,7 @@
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { RepoSessionPresencePreloads } from "../lifecycle/repo-session-presence-preloads";
 import { createRepoSessionHydrationService } from "../lifecycle/repo-session-hydration-service";
+import type { RepoSessionPresencePreloads } from "../lifecycle/repo-session-presence-preloads";
 import type { SessionHydrationOperations } from "../lifecycle/session-hydration-operations";
 import type { AgentSessionPresenceStore } from "../lifecycle/session-presence-store";
 

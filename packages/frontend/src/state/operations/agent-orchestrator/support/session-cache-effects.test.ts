@@ -62,7 +62,7 @@ describe("createSessionCacheEffects", () => {
       runtimeKind: "opencode",
     });
 
-    expect(invalidatedKeys).toContainEqual(taskQueryKeys.repoData("/repo"));
+    expect(invalidatedKeys).toContainEqual(taskQueryKeys.repoDataPrefix("/repo"));
     expect(invalidatedKeys).toContainEqual(agentSessionQueryKeys.list("/repo", "task-1"));
     expect(invalidatedKeys).toContainEqual(runtimeQueryKeys.list("opencode", "/repo"));
   });
