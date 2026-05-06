@@ -19,6 +19,7 @@ import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/task
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { repoTaskDataQueryOptions } from "../../queries/tasks";
+import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 import { host } from "../shared/host";
 import {
   DEFERRED_BY_USER_REASON,
@@ -117,6 +118,10 @@ export function useTaskOperations({
     repoPath: string;
     description: string;
   } | null>(null);
+  const lastTaskLoadErrorToastRef = useRef<{
+    repoPath: string;
+    description: string;
+  } | null>(null);
   const [detectingPullRequestTaskId, setDetectingPullRequestTaskId] = useState<string | null>(null);
   const [linkingMergedPullRequestTaskId, setLinkingMergedPullRequestTaskId] = useState<
     string | null
@@ -127,9 +132,14 @@ export function useTaskOperations({
     pullRequest: PullRequest;
   } | null>(null);
   const currentWorkspaceRepoPathRef = useRef(activeRepoPath);
+  const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
+  const settingsSnapshot = settingsSnapshotQuery.isError
+    ? null
+    : (settingsSnapshotQuery.data ?? null);
+  const doneVisibleDays = settingsSnapshot?.kanban.doneVisibleDays ?? null;
   const repoTaskDataQuery = useQuery({
-    ...repoTaskDataQueryOptions(activeRepoPath ?? "__disabled__"),
-    enabled: activeRepoPath !== null,
+    ...repoTaskDataQueryOptions(activeRepoPath ?? "__disabled__", doneVisibleDays ?? -1),
+    enabled: activeRepoPath !== null && doneVisibleDays !== null,
   });
 
   useEffect(() => {
@@ -139,12 +149,43 @@ export function useTaskOperations({
       manualRefreshTokenRef.current += 1;
       setIsManualLoadingTasks(false);
       lastTaskRefreshToastRef.current = null;
+      lastTaskLoadErrorToastRef.current = null;
       setDetectingPullRequestTaskId(null);
       setLinkingMergedPullRequestTaskId(null);
       setUnlinkingPullRequestTaskId(null);
       setPendingMergedPullRequest(null);
     }
   }, [activeRepoPath]);
+
+  useEffect(() => {
+    const taskLoadError = settingsSnapshotQuery.isError
+      ? settingsSnapshotQuery.error
+      : repoTaskDataQuery.isError
+        ? repoTaskDataQuery.error
+        : null;
+
+    if (!taskLoadError || !activeRepoPath) {
+      if (!taskLoadError) {
+        lastTaskLoadErrorToastRef.current = null;
+      }
+      return;
+    }
+
+    const description = summarizeTaskLoadError({ error: taskLoadError });
+    const lastToast = lastTaskLoadErrorToastRef.current;
+    if (lastToast?.repoPath === activeRepoPath && lastToast.description === description) {
+      return;
+    }
+
+    lastTaskLoadErrorToastRef.current = { repoPath: activeRepoPath, description };
+    toast.error("Failed to load tasks", { description });
+  }, [
+    activeRepoPath,
+    repoTaskDataQuery.error,
+    repoTaskDataQuery.isError,
+    settingsSnapshotQuery.error,
+    settingsSnapshotQuery.isError,
+  ]);
 
   const refreshTaskData = useCallback(
     async (repoPath: string, taskIdOrIds?: string | string[]): Promise<void> => {
@@ -158,8 +199,8 @@ export function useTaskOperations({
         queryClient,
         repoPath,
         taskIds
-          ? { forceFreshTaskList: true, taskDocumentStrategy: "refresh", taskIds }
-          : undefined,
+          ? { taskDocumentStrategy: "refresh", taskIds }
+          : { forceFreshTaskList: true, taskDocumentStrategy: "none" },
       );
     },
     [queryClient],
@@ -653,9 +694,13 @@ export function useTaskOperations({
     setPendingMergedPullRequest(null);
   }, []);
 
-  const tasks = activeRepoPath ? (repoTaskDataQuery.data?.tasks ?? []) : [];
+  const tasks =
+    activeRepoPath && doneVisibleDays !== null ? (repoTaskDataQuery.data?.tasks ?? []) : [];
+  const isSettingsLoadingForActiveRepo = activeRepoPath !== null && settingsSnapshotQuery.isPending;
+  const isTaskQueryLoadingForActiveRepo =
+    activeRepoPath !== null && doneVisibleDays !== null && repoTaskDataQuery.isPending;
   const isForegroundLoadingTasks =
-    isManualLoadingTasks || (activeRepoPath !== null && repoTaskDataQuery.isPending);
+    isManualLoadingTasks || isSettingsLoadingForActiveRepo || isTaskQueryLoadingForActiveRepo;
   const isRefreshingTasksInBackground =
     activeRepoPath !== null && repoTaskDataQuery.isFetching && !isForegroundLoadingTasks;
   const isLoadingTasks = isForegroundLoadingTasks;

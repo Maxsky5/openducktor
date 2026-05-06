@@ -11,40 +11,20 @@ export type RepoTaskData = {
 
 export const taskQueryKeys = {
   all: ["tasks"] as const,
-  repoData: (repoPath: string) => [...taskQueryKeys.all, "repo-data", repoPath] as const,
-  visibleTasks: (repoPath: string) => [...taskQueryKeys.all, "visible-tasks", repoPath] as const,
-  kanbanDataPrefix: (repoPath: string) => [...taskQueryKeys.all, "kanban-data", repoPath] as const,
+  repoDataPrefix: (repoPath: string) => [...taskQueryKeys.all, "repo-data", repoPath] as const,
+  repoData: (repoPath: string, doneVisibleDays: number) =>
+    [...taskQueryKeys.repoDataPrefix(repoPath), doneVisibleDays] as const,
   kanbanData: (repoPath: string, doneVisibleDays: number) =>
-    [...taskQueryKeys.kanbanDataPrefix(repoPath), doneVisibleDays] as const,
+    taskQueryKeys.repoData(repoPath, doneVisibleDays),
 };
 
-export const repoTaskDataQueryOptions = (repoPath: string) =>
+export const repoTaskDataQueryOptions = (repoPath: string, doneVisibleDays: number) =>
   queryOptions({
-    queryKey: taskQueryKeys.repoData(repoPath),
+    queryKey: taskQueryKeys.repoData(repoPath, doneVisibleDays),
     queryFn: async (): Promise<RepoTaskData> => {
       return {
-        tasks: toVisibleTasks(await host.tasksList(repoPath)),
+        tasks: toVisibleTasks(await host.tasksList(repoPath, doneVisibleDays)),
       };
-    },
-    staleTime: TASK_DATA_STALE_TIME_MS,
-  });
-
-export const repoVisibleTasksQueryOptions = (repoPath: string) =>
-  queryOptions({
-    queryKey: taskQueryKeys.visibleTasks(repoPath),
-    queryFn: async ({ client }): Promise<TaskCard[]> => {
-      const repoTaskData = await client.fetchQuery(repoTaskDataQueryOptions(repoPath));
-      return repoTaskData.tasks;
-    },
-    staleTime: TASK_DATA_STALE_TIME_MS,
-  });
-
-export const kanbanTaskListQueryOptions = (repoPath: string, doneVisibleDays: number) =>
-  queryOptions({
-    queryKey: taskQueryKeys.kanbanData(repoPath, doneVisibleDays),
-    queryFn: async (): Promise<TaskCard[]> => {
-      const taskList = await host.tasksList(repoPath, doneVisibleDays);
-      return toVisibleTasks(taskList);
     },
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
@@ -52,22 +32,9 @@ export const kanbanTaskListQueryOptions = (repoPath: string, doneVisibleDays: nu
 export const loadRepoTaskDataFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
-): Promise<RepoTaskData> => {
-  const taskDataPromise = queryClient.fetchQuery({
-    ...repoTaskDataQueryOptions(repoPath),
-    queryFn: async (): Promise<RepoTaskData> => {
-      const repoTaskData = {
-        tasks: toVisibleTasks(await host.tasksList(repoPath)),
-      };
-      return repoTaskData;
-    },
-  });
-
-  return taskDataPromise.then((repoTaskData) => {
-    queryClient.setQueryData(taskQueryKeys.visibleTasks(repoPath), repoTaskData.tasks);
-    return repoTaskData;
-  });
-};
+  doneVisibleDays: number,
+): Promise<RepoTaskData> =>
+  queryClient.fetchQuery(repoTaskDataQueryOptions(repoPath, doneVisibleDays));
 
 export const invalidateRepoTaskDataQueries = (
   queryClient: QueryClient,
@@ -77,8 +44,8 @@ export const invalidateRepoTaskDataQueries = (
   },
 ) => {
   return queryClient.invalidateQueries({
-    queryKey: taskQueryKeys.repoData(repoPath),
-    exact: true,
+    queryKey: taskQueryKeys.repoDataPrefix(repoPath),
+    exact: false,
     ...(options?.refetchType ? { refetchType: options.refetchType } : {}),
   });
 };
@@ -91,7 +58,7 @@ export const invalidateKanbanTaskQueries = (
   },
 ) => {
   return queryClient.invalidateQueries({
-    queryKey: taskQueryKeys.kanbanDataPrefix(repoPath),
+    queryKey: taskQueryKeys.repoDataPrefix(repoPath),
     exact: false,
     ...(options?.refetchType ? { refetchType: options.refetchType } : {}),
   });
@@ -102,7 +69,7 @@ export const refetchActiveKanbanQueries = (
   repoPath: string,
 ): Promise<void> =>
   queryClient.refetchQueries({
-    queryKey: taskQueryKeys.kanbanDataPrefix(repoPath),
+    queryKey: taskQueryKeys.repoDataPrefix(repoPath),
     exact: false,
     type: "active",
   });
@@ -110,33 +77,36 @@ export const refetchActiveKanbanQueries = (
 const cachedKanbanQueryKeysForRepo = (
   queryClient: QueryClient,
   repoPath: string,
-): Array<ReturnType<typeof taskQueryKeys.kanbanData>> =>
+): Array<ReturnType<typeof taskQueryKeys.repoData>> =>
   queryClient
     .getQueryCache()
     .findAll({
-      queryKey: taskQueryKeys.kanbanDataPrefix(repoPath),
+      queryKey: taskQueryKeys.repoDataPrefix(repoPath),
       exact: false,
     })
     .map((query) => query.queryKey)
     .filter(
-      (queryKey): queryKey is ReturnType<typeof taskQueryKeys.kanbanData> =>
+      (queryKey): queryKey is ReturnType<typeof taskQueryKeys.repoData> =>
         queryKey[0] === taskQueryKeys.all[0] &&
-        queryKey[1] === "kanban-data" &&
+        queryKey[1] === "repo-data" &&
         queryKey[2] === repoPath &&
-        typeof queryKey[3] === "number",
+        typeof queryKey[3] === "number" &&
+        queryKey[3] >= 0,
     );
 
 export const refreshCachedKanbanQueries = async (
   queryClient: QueryClient,
   repoPath: string,
-  options?: { force?: boolean },
+  options?: { force?: boolean; excludeDoneVisibleDays?: number },
 ): Promise<void> => {
-  const cachedQueryKeys = cachedKanbanQueryKeysForRepo(queryClient, repoPath);
+  const cachedQueryKeys = cachedKanbanQueryKeysForRepo(queryClient, repoPath).filter(
+    ([, , , doneVisibleDays]) => doneVisibleDays !== options?.excludeDoneVisibleDays,
+  );
   const force = options?.force ?? true;
   await Promise.all(
     cachedQueryKeys.map(([, , , doneVisibleDays]) =>
       queryClient.fetchQuery({
-        ...kanbanTaskListQueryOptions(repoPath, doneVisibleDays),
+        ...repoTaskDataQueryOptions(repoPath, doneVisibleDays),
         ...(force ? { staleTime: 0 } : {}),
       }),
     ),
@@ -150,22 +120,14 @@ export const invalidateRepoTaskListQueries = (
     refetchType?: "active" | "inactive" | "all" | "none";
   },
 ) => {
-  return Promise.all([
-    invalidateRepoTaskDataQueries(queryClient, repoPath, options),
-    queryClient.invalidateQueries({
-      queryKey: taskQueryKeys.visibleTasks(repoPath),
-      exact: true,
-      ...(options?.refetchType ? { refetchType: options.refetchType } : {}),
-    }),
-    invalidateKanbanTaskQueries(queryClient, repoPath, options),
-  ]);
+  return invalidateRepoTaskDataQueries(queryClient, repoPath, options);
 };
 
 export const invalidateRepoTaskQueries = (
   queryClient: QueryClient,
   repoPath: string,
-): Promise<unknown[]> =>
-  Promise.all([invalidateRepoTaskListQueries(queryClient, repoPath, { refetchType: "none" })]);
+): Promise<unknown> =>
+  invalidateRepoTaskListQueries(queryClient, repoPath, { refetchType: "none" });
 
 export const upsertAgentSessionInRepoTaskData = (
   queryClient: QueryClient,
@@ -222,19 +184,11 @@ export const upsertAgentSessionInRepoTaskData = (
     return { ...current, tasks: nextTasks };
   };
 
-  queryClient.setQueryData<RepoTaskData | undefined>(
-    taskQueryKeys.repoData(repoPath),
-    updateRepoTaskData,
-  );
-  queryClient.setQueryData<TaskCard[] | undefined>(
-    taskQueryKeys.visibleTasks(repoPath),
-    updateTasks,
-  );
-  queryClient.setQueriesData<TaskCard[] | undefined>(
+  queryClient.setQueriesData<RepoTaskData | undefined>(
     {
-      queryKey: taskQueryKeys.kanbanDataPrefix(repoPath),
+      queryKey: taskQueryKeys.repoDataPrefix(repoPath),
       exact: false,
     },
-    (current): TaskCard[] | undefined => updateTasks(current),
+    updateRepoTaskData,
   );
 };

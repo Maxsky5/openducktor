@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { defaultSpecTemplateMarkdown } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
@@ -23,6 +23,18 @@ type LegacyHookArgs = {
 };
 
 const createEmptyDocument = () => ({ markdown: "", updatedAt: null as string | null });
+const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+
+const createSettingsSnapshotFixture = () => ({
+  theme: "light" as const,
+  git: { defaultMergeMethod: "merge_commit" as const },
+  chat: { showThinkingMessages: false },
+  reusablePrompts: [],
+  kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" as const },
+  autopilot: { rules: [] },
+  workspaces: {},
+  globalPromptOverrides: {},
+});
 
 type TaskDocumentSection = "spec" | "plan" | "qa";
 
@@ -117,6 +129,14 @@ const createHookHarness = (initialArgs: LegacyHookArgs) => {
 };
 
 describe("use-spec-operations", () => {
+  beforeEach(() => {
+    host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshotFixture()) as never;
+  });
+
+  afterEach(() => {
+    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+  });
+
   test("guards operations when no active workspace is selected", async () => {
     const harness = createHookHarness({ activeRepo: null });
 
@@ -420,11 +440,11 @@ describe("use-spec-operations", () => {
       markdown: "# Old plan (empty scope key)",
       updatedAt: "2026-02-22T10:00:00.000Z",
     });
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), {
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a", 1), {
       tasks: [],
     });
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), []);
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), []);
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), { tasks: [] });
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), { tasks: [] });
 
     try {
       await harness.mount();
@@ -457,7 +477,7 @@ describe("use-spec-operations", () => {
       expect(
         queryClient.getQueryState(["task-documents", "plan", "", "task-1"])?.isInvalidated,
       ).toBe(true);
-      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a"))?.isInvalidated).toBe(
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a", 1))?.isInvalidated).toBe(
         false,
       );
       expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 1))?.isInvalidated).toBe(
@@ -539,11 +559,11 @@ describe("use-spec-operations", () => {
       markdown: "# Old spec (empty scope key)",
       updatedAt: "2026-02-22T10:00:00.000Z",
     });
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), {
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a", 1), {
       tasks: [],
     });
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), []);
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), []);
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 1), { tasks: [] });
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo-a", 7), { tasks: [] });
 
     try {
       await harness.mount();
@@ -565,7 +585,7 @@ describe("use-spec-operations", () => {
       expect(
         queryClient.getQueryState(["task-documents", "spec", "", "task-1"])?.isInvalidated,
       ).toBe(true);
-      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a"))?.isInvalidated).toBe(
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a", 1))?.isInvalidated).toBe(
         false,
       );
       expect(queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 1))?.isInvalidated).toBe(

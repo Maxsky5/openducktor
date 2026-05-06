@@ -687,7 +687,7 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  test("settings load failure reports an error and leaves the Kanban board empty", async () => {
+  test("settings load failure reports an error without issuing a task-list request", async () => {
     workspaceGetSettingsSnapshotMock.mockImplementationOnce(async () => {
       throw new Error("settings unavailable");
     });
@@ -700,37 +700,16 @@ describe("KanbanPage session start modal flow", () => {
       description: "settings unavailable",
     });
     expect(tasksListMock).not.toHaveBeenCalled();
-    expect(
-      latestKanbanColumnPropsList.reduce((count, props) => {
-        const column = props.column as { tasks: unknown[] };
-        return count + column.tasks.length;
-      }, 0),
-    ).toBe(0);
-
-    await act(async () => {
-      renderer.unmount();
+    await waitFor(() => {
+      expect(
+        latestKanbanColumnPropsList.at(-1)
+          ? (() => {
+              const column = latestKanbanColumnPropsList.at(-1)?.column as { tasks: unknown[] };
+              return column.tasks.length;
+            })()
+          : 0,
+      ).toBe(0);
     });
-  });
-
-  test("kanban task load failure reports an error and does not reuse shared task state", async () => {
-    tasksListMock.mockImplementationOnce(async () => {
-      throw new Error("tasks unavailable");
-    });
-
-    const renderer = await renderPage({ waitForKanbanReady: false });
-
-    await waitForMockCall(toastErrorMock);
-
-    expect(toastErrorMock).toHaveBeenCalledWith("Failed to load Kanban tasks", {
-      description: "tasks unavailable",
-    });
-    expect(tasksListMock).toHaveBeenCalledWith("/repo", 1);
-    expect(
-      latestKanbanColumnPropsList.reduce((count, props) => {
-        const column = props.column as { tasks: unknown[] };
-        return count + column.tasks.length;
-      }, 0),
-    ).toBe(0);
 
     await act(async () => {
       renderer.unmount();

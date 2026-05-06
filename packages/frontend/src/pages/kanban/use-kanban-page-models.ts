@@ -12,7 +12,6 @@ import {
   useTasksState,
   useWorkspaceState,
 } from "@/state";
-import { kanbanTaskListQueryOptions } from "@/state/queries/tasks";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
@@ -76,9 +75,9 @@ export function useKanbanPageModels({
     humanApproveTask,
     humanRequestChangesTask,
     setTaskTargetBranch,
+    tasks,
   } = useTasksState();
   const reportedSettingsErrorRef = useRef<string | null>(null);
-  const reportedKanbanTasksErrorRef = useRef<string | null>(null);
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
   const openAgentStudioTabOnBackgroundSessionStart =
@@ -86,10 +85,6 @@ export function useKanbanPageModels({
   const emptyColumnDisplay =
     settingsSnapshotQuery.data?.kanban.emptyColumnDisplay ??
     DEFAULT_KANBAN_SETTINGS.emptyColumnDisplay;
-  const kanbanTaskListQuery = useQuery({
-    ...kanbanTaskListQueryOptions(workspaceRepoPath ?? "__disabled__", doneVisibleDays ?? 0),
-    enabled: workspaceRepoPath !== null && doneVisibleDays !== undefined,
-  });
   useEffect(() => {
     if (!settingsSnapshotQuery.isError) {
       reportedSettingsErrorRef.current = null;
@@ -107,30 +102,13 @@ export function useKanbanPageModels({
     });
   }, [settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
 
-  useEffect(() => {
-    if (!kanbanTaskListQuery.isError) {
-      reportedKanbanTasksErrorRef.current = null;
-      return;
-    }
-
-    const description = errorMessage(kanbanTaskListQuery.error);
-    if (reportedKanbanTasksErrorRef.current === description) {
-      return;
-    }
-
-    reportedKanbanTasksErrorRef.current = description;
-    toast.error("Failed to load Kanban tasks", {
-      description,
-    });
-  }, [kanbanTaskListQuery.error, kanbanTaskListQuery.isError]);
-
-  const kanbanTasks = workspaceRepoPath ? (kanbanTaskListQuery.data ?? []) : [];
+  const kanbanTasks = workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : [];
   const isLoadingKanbanTasks = isKanbanForegroundLoading({
     hasActiveWorkspace: workspaceRepoPath !== null,
     isForegroundLoadingTasks,
     isSettingsPending: settingsSnapshotQuery.isPending,
     doneVisibleDays,
-    isKanbanPending: kanbanTaskListQuery.isPending,
+    isKanbanPending: false,
   });
   const navigate = useNavigate();
 

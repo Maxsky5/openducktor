@@ -1,21 +1,49 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, SettingsSnapshot, TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
+import { documentQueryKeys } from "./documents";
 import { refreshRepoTaskViewsFromQuery } from "./task-view-sync";
 import {
   invalidateRepoTaskQueries,
-  kanbanTaskListQueryOptions,
   loadRepoTaskDataFromQuery,
   refetchActiveKanbanQueries,
   refreshCachedKanbanQueries,
   repoTaskDataQueryOptions,
-  repoVisibleTasksQueryOptions,
   taskQueryKeys,
   upsertAgentSessionInRepoTaskData,
 } from "./tasks";
+import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "./workspace";
 
 const DONE_VISIBLE_DAYS = 1;
+
+const settingsSnapshotFixture: SettingsSnapshot = {
+  theme: "light",
+  git: { defaultMergeMethod: "merge_commit" },
+  chat: { showThinkingMessages: false },
+  reusablePrompts: [],
+  kanban: { doneVisibleDays: DONE_VISIBLE_DAYS, emptyColumnDisplay: "show" },
+  autopilot: { rules: [] },
+  workspaces: {},
+  globalPromptOverrides: {},
+};
+
+const createDeferred = <T>() => {
+  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+
+  return {
+    promise,
+    resolve: (value: T | PromiseLike<T>) => {
+      if (!resolve) {
+        throw new Error("Deferred resolver unavailable");
+      }
+      resolve(value);
+    },
+  };
+};
 
 const taskFixture: TaskCard = {
   id: "task-1",
@@ -53,51 +81,33 @@ const sessionFixture: AgentSessionRecord = {
   selectedModel: null,
 };
 
-const createDeferred = <T>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve;
-    reject = promiseReject;
-  });
-  return { promise, reject, resolve };
-};
-
 describe("tasks query cache helpers", () => {
   const originalTasksList = host.tasksList;
+  const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
 
   afterEach(() => {
     host.tasksList = originalTasksList;
+    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
   test("upsertAgentSessionInRepoTaskData inserts a persisted session into the repo task cache", () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS), {
       tasks: [taskFixture],
     });
-    queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [taskFixture]);
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS), [
-      taskFixture,
-    ] satisfies TaskCard[]);
 
     upsertAgentSessionInRepoTaskData(queryClient, "/repo", "task-1", sessionFixture);
 
     const repoTaskData = queryClient.getQueryData<{
       tasks: TaskCard[];
-    }>(taskQueryKeys.repoData("/repo"));
-    const kanbanTasks = queryClient.getQueryData<TaskCard[]>(
-      taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS),
-    );
-    const visibleTasks = queryClient.getQueryData<TaskCard[]>(taskQueryKeys.visibleTasks("/repo"));
+    }>(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS));
 
     expect(repoTaskData?.tasks[0]?.agentSessions).toEqual([sessionFixture]);
-    expect(visibleTasks?.[0]?.agentSessions).toEqual([sessionFixture]);
-    expect(kanbanTasks?.[0]?.agentSessions).toEqual([sessionFixture]);
   });
 
   test("upsertAgentSessionInRepoTaskData replaces the existing persisted session for the same id", () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS), {
       tasks: [
         {
           ...taskFixture,
@@ -105,18 +115,6 @@ describe("tasks query cache helpers", () => {
         },
       ],
     });
-    queryClient.setQueryData(taskQueryKeys.visibleTasks("/repo"), [
-      {
-        ...taskFixture,
-        agentSessions: [sessionFixture],
-      },
-    ] satisfies TaskCard[]);
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS), [
-      {
-        ...taskFixture,
-        agentSessions: [sessionFixture],
-      },
-    ] satisfies TaskCard[]);
 
     const updatedSession: AgentSessionRecord = {
       ...sessionFixture,
@@ -127,44 +125,24 @@ describe("tasks query cache helpers", () => {
 
     const repoTaskData = queryClient.getQueryData<{
       tasks: TaskCard[];
-    }>(taskQueryKeys.repoData("/repo"));
-    const kanbanTasks = queryClient.getQueryData<TaskCard[]>(
-      taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS),
-    );
-    const visibleTasks = queryClient.getQueryData<TaskCard[]>(taskQueryKeys.visibleTasks("/repo"));
+    }>(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS));
 
     expect(repoTaskData?.tasks[0]?.agentSessions).toEqual([updatedSession]);
-    expect(visibleTasks?.[0]?.agentSessions).toEqual([updatedSession]);
-    expect(kanbanTasks?.[0]?.agentSessions).toEqual([updatedSession]);
   });
 
-  test("repoVisibleTasksQueryOptions loads visible tasks", async () => {
+  test("canonical repo task-data query loads visible board tasks", async () => {
     const queryClient = new QueryClient();
     const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
 
     host.tasksList = tasksList;
 
-    const tasks = await queryClient.fetchQuery(repoVisibleTasksQueryOptions("/repo"));
-
-    expect(tasks).toEqual([taskFixture]);
-    expect(tasksList).toHaveBeenCalledWith("/repo");
-  });
-
-  test("repo visible task reads share the canonical repo task-data query", async () => {
-    const queryClient = new QueryClient();
-    const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
-
-    host.tasksList = tasksList;
-
-    const [repoTaskData, visibleTasks] = await Promise.all([
-      queryClient.fetchQuery(repoTaskDataQueryOptions("/repo")),
-      queryClient.fetchQuery(repoVisibleTasksQueryOptions("/repo")),
-    ]);
+    const repoTaskData = await queryClient.fetchQuery(
+      repoTaskDataQueryOptions("/repo", DONE_VISIBLE_DAYS),
+    );
 
     expect(repoTaskData.tasks).toEqual([taskFixture]);
-    expect(visibleTasks).toEqual([taskFixture]);
     expect(tasksList).toHaveBeenCalledTimes(1);
-    expect(tasksList).toHaveBeenCalledWith("/repo");
+    expect(tasksList).toHaveBeenCalledWith("/repo", DONE_VISIBLE_DAYS);
   });
 
   test("loadRepoTaskDataFromQuery prepopulates visible tasks cache", async () => {
@@ -173,29 +151,10 @@ describe("tasks query cache helpers", () => {
 
     host.tasksList = tasksList;
 
-    const repoTaskData = await loadRepoTaskDataFromQuery(queryClient, "/repo");
+    const repoTaskData = await loadRepoTaskDataFromQuery(queryClient, "/repo", DONE_VISIBLE_DAYS);
 
     expect(repoTaskData.tasks).toEqual([taskFixture]);
-    expect(queryClient.getQueryData<TaskCard[]>(taskQueryKeys.visibleTasks("/repo"))).toEqual([
-      taskFixture,
-    ]);
-  });
-
-  test("loadRepoTaskDataFromQuery syncs visible tasks when it joins an in-flight repo-data read", async () => {
-    const queryClient = new QueryClient();
-    const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
-
-    host.tasksList = tasksList;
-
-    await Promise.all([
-      queryClient.fetchQuery(repoTaskDataQueryOptions("/repo")),
-      loadRepoTaskDataFromQuery(queryClient, "/repo"),
-    ]);
-
-    expect(tasksList).toHaveBeenCalledTimes(1);
-    expect(queryClient.getQueryData<TaskCard[]>(taskQueryKeys.visibleTasks("/repo"))).toEqual([
-      taskFixture,
-    ]);
+    expect(tasksList).toHaveBeenCalledWith("/repo", DONE_VISIBLE_DAYS);
   });
 
   test("refetchActiveKanbanQueries refreshes only active kanban queries for the target repo", async () => {
@@ -236,17 +195,17 @@ describe("tasks query cache helpers", () => {
 
     host.tasksList = tasksList;
 
-    const repoAObserver = new QueryObserver(queryClient, kanbanTaskListQueryOptions("/repo-a", 1));
-    const repoBObserver = new QueryObserver(queryClient, kanbanTaskListQueryOptions("/repo-b", 1));
+    const repoAObserver = new QueryObserver(queryClient, repoTaskDataQueryOptions("/repo-a", 1));
+    const repoBObserver = new QueryObserver(queryClient, repoTaskDataQueryOptions("/repo-b", 1));
     const unsubscribeRepoA = repoAObserver.subscribe(() => {});
     const unsubscribeRepoB = repoBObserver.subscribe(() => {});
 
     try {
       await repoAObserver.refetch();
       await repoBObserver.refetch();
-      const initialRepoBTaskId = queryClient.getQueryData<TaskCard[]>(
+      const initialRepoBTaskId = queryClient.getQueryData<{ tasks: TaskCard[] }>(
         taskQueryKeys.kanbanData("/repo-b", 1),
-      )?.[0]?.id;
+      )?.tasks[0]?.id;
       tasksList.mockClear();
 
       await invalidateRepoTaskQueries(queryClient, "/repo-a");
@@ -263,10 +222,12 @@ describe("tasks query cache helpers", () => {
       expect(tasksList).toHaveBeenCalledTimes(1);
       expect(tasksList).toHaveBeenCalledWith("/repo-a", 1);
       expect(
-        queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo-a", 1))?.[0]?.id,
+        queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo-a", 1))
+          ?.tasks[0]?.id,
       ).toBe("repo-a-2");
       expect(
-        queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo-b", 1))?.[0]?.id,
+        queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo-b", 1))
+          ?.tasks[0]?.id,
       ).toBe(initialRepoBTaskId);
       expect(
         queryClient.getQueryState(taskQueryKeys.kanbanData("/repo-a", 1))?.isInvalidated ?? false,
@@ -282,7 +243,9 @@ describe("tasks query cache helpers", () => {
     const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
     host.tasksList = tasksList;
 
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS), [taskFixture]);
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS), {
+      tasks: [taskFixture],
+    });
 
     await invalidateRepoTaskQueries(queryClient, "/repo");
     tasksList.mockClear();
@@ -320,9 +283,9 @@ describe("tasks query cache helpers", () => {
     );
     host.tasksList = tasksList;
 
-    await queryClient.fetchQuery(kanbanTaskListQueryOptions("/repo", 1));
-    await queryClient.fetchQuery(kanbanTaskListQueryOptions("/repo", 7));
-    await queryClient.fetchQuery(kanbanTaskListQueryOptions("/other", 1));
+    await queryClient.fetchQuery(repoTaskDataQueryOptions("/repo", 1));
+    await queryClient.fetchQuery(repoTaskDataQueryOptions("/repo", 7));
+    await queryClient.fetchQuery(repoTaskDataQueryOptions("/other", 1));
 
     currentStatus = "in_progress";
     tasksList.mockClear();
@@ -333,153 +296,206 @@ describe("tasks query cache helpers", () => {
     expect(tasksList).toHaveBeenCalledWith("/repo", 1);
     expect(tasksList).toHaveBeenCalledWith("/repo", 7);
     expect(
-      queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo", 1))?.[0]?.status,
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo", 1))?.tasks[0]
+        ?.status,
     ).toBe("in_progress");
     expect(
-      queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo", 7))?.[0]?.status,
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo", 7))?.tasks[0]
+        ?.status,
     ).toBe("in_progress");
     expect(
-      queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/other", 1))?.[0]?.status,
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/other", 1))?.tasks[0]
+        ?.status,
     ).toBe("open");
   });
 
-  test("concurrent repo task view refreshes queue one trailing task-list refresh", async () => {
+  test("concurrent canonical task reads share one host call", async () => {
     const queryClient = new QueryClient();
-    let repoRefreshCount = 0;
-    let kanbanRefreshCount = 0;
-    const tasksList = mock(
-      async (repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => {
-        if (repoPath !== "/repo") {
-          throw new Error(`Unexpected repo path: ${repoPath}`);
-        }
-
-        if (doneVisibleDays === undefined) {
-          repoRefreshCount += 1;
-        } else {
-          kanbanRefreshCount += 1;
-        }
-
-        return [
-          {
-            ...taskFixture,
-            id:
-              doneVisibleDays === undefined
-                ? `repo-data-${repoRefreshCount}`
-                : `kanban-${kanbanRefreshCount}`,
-          },
-        ];
-      },
-    );
-    host.tasksList = tasksList;
-    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS), [taskFixture]);
-
-    await Promise.all([
-      refreshRepoTaskViewsFromQuery(queryClient, "/repo"),
-      refreshRepoTaskViewsFromQuery(queryClient, "/repo"),
-    ]);
-
-    expect(tasksList).toHaveBeenCalledTimes(4);
-    expect(tasksList).toHaveBeenCalledWith("/repo");
-    expect(tasksList).toHaveBeenCalledWith("/repo", DONE_VISIBLE_DAYS);
-    expect(
-      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
-        ?.id,
-    ).toBe("repo-data-2");
-    expect(
-      queryClient.getQueryData<TaskCard[]>(
-        taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS),
-      )?.[0]?.id,
-    ).toBe("kanban-2");
-  });
-
-  test("startup task queries and lifecycle refresh share in-flight task-list reads", async () => {
-    const queryClient = new QueryClient();
-    const tasksList = mock(
-      async (repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => {
-        if (repoPath !== "/repo") {
-          throw new Error(`Unexpected repo path: ${repoPath}`);
-        }
-
-        return [
-          {
-            ...taskFixture,
-            id: doneVisibleDays === undefined ? "repo-data" : `kanban-${doneVisibleDays}`,
-          },
-        ];
-      },
-    );
+    const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
     host.tasksList = tasksList;
 
-    await Promise.all([
-      queryClient.fetchQuery(repoTaskDataQueryOptions("/repo")),
-      queryClient.fetchQuery(kanbanTaskListQueryOptions("/repo", DONE_VISIBLE_DAYS)),
-      refreshRepoTaskViewsFromQuery(queryClient, "/repo"),
+    const [repoTaskData, sameRepoTaskData] = await Promise.all([
+      queryClient.fetchQuery(repoTaskDataQueryOptions("/repo", DONE_VISIBLE_DAYS)),
+      queryClient.fetchQuery(repoTaskDataQueryOptions("/repo", DONE_VISIBLE_DAYS)),
     ]);
 
-    expect(tasksList).toHaveBeenCalledTimes(2);
-    expect(tasksList).toHaveBeenCalledWith("/repo");
+    expect(repoTaskData.tasks).toEqual([taskFixture]);
+    expect(sameRepoTaskData.tasks).toEqual([taskFixture]);
+    expect(tasksList).toHaveBeenCalledTimes(1);
     expect(tasksList).toHaveBeenCalledWith("/repo", DONE_VISIBLE_DAYS);
   });
 
-  test("force-fresh task refresh does not join a stale pre-existing repo-data fetch", async () => {
+  test("repo task view refresh resolves settings before document side effects", async () => {
     const queryClient = new QueryClient();
-    const staleList = createDeferred<TaskCard[]>();
-    let callCount = 0;
+    const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
+    const settingsLoad = mock(async (): Promise<SettingsSnapshot> => {
+      throw new Error("settings unavailable");
+    });
+    host.tasksList = tasksList;
+    host.workspaceGetSettingsSnapshot = settingsLoad;
+    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
+      markdown: "cached spec",
+      updatedAt: null,
+    });
+
+    await expect(
+      refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+        taskDocumentStrategy: "remove",
+        taskIds: ["task-1"],
+      }),
+    ).rejects.toThrow("settings unavailable");
+
+    expect(settingsLoad).toHaveBeenCalledTimes(1);
+    expect(tasksList).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
+        documentQueryKeys.spec("/repo", "task-1"),
+      ),
+    ).toEqual({
+      markdown: "cached spec",
+      updatedAt: null,
+    });
+
+    host.workspaceGetSettingsSnapshot = mock(
+      async (): Promise<SettingsSnapshot> => settingsSnapshotFixture,
+    );
+
+    await refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      taskDocumentStrategy: "remove",
+      taskIds: ["task-1"],
+    });
+
+    expect(tasksList).toHaveBeenCalledWith("/repo", DONE_VISIBLE_DAYS);
+    expect(queryClient.getQueryData(documentQueryKeys.spec("/repo", "task-1"))).toBeUndefined();
+  });
+
+  test("repo task view refresh rejects cached settings from an errored settings query", async () => {
+    const queryClient = new QueryClient();
+    const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
+    host.tasksList = tasksList;
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
+      markdown: "cached spec",
+      updatedAt: null,
+    });
+    host.workspaceGetSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => {
+      throw new Error("settings unavailable");
+    });
+
+    await expect(
+      queryClient.fetchQuery({
+        ...settingsSnapshotQueryOptions(),
+        staleTime: 0,
+      }),
+    ).rejects.toThrow("settings unavailable");
+
+    await expect(
+      refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+        taskDocumentStrategy: "remove",
+        taskIds: ["task-1"],
+      }),
+    ).rejects.toThrow("settings unavailable");
+
+    expect(tasksList).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
+        documentQueryKeys.spec("/repo", "task-1"),
+      ),
+    ).toEqual({
+      markdown: "cached spec",
+      updatedAt: null,
+    });
+  });
+
+  test("repo task view refresh revalidates invalidated cached settings before side effects", async () => {
+    const queryClient = new QueryClient();
+    const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
+    host.tasksList = tasksList;
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
+      markdown: "cached spec",
+      updatedAt: null,
+    });
+    await queryClient.invalidateQueries({
+      queryKey: workspaceQueryKeys.settingsSnapshot(),
+      exact: true,
+      refetchType: "none",
+    });
+    host.workspaceGetSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => {
+      throw new Error("settings unavailable");
+    });
+
+    await expect(
+      refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+        taskDocumentStrategy: "remove",
+        taskIds: ["task-1"],
+      }),
+    ).rejects.toThrow("settings unavailable");
+
+    expect(tasksList).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
+        documentQueryKeys.spec("/repo", "task-1"),
+      ),
+    ).toEqual({
+      markdown: "cached spec",
+      updatedAt: null,
+    });
+  });
+
+  test("forced repo task view refresh bypasses older in-flight task reads", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    const firstTaskRead = createDeferred<TaskCard[]>();
     const tasksList = mock(async (): Promise<TaskCard[]> => {
-      callCount += 1;
-      if (callCount === 1) {
-        return staleList.promise;
+      if (tasksList.mock.calls.length === 1) {
+        return firstTaskRead.promise;
       }
-
       return [{ ...taskFixture, id: "fresh" }];
     });
     host.tasksList = tasksList;
 
-    const staleFetch = queryClient.fetchQuery(repoTaskDataQueryOptions("/repo")).catch(() => {
-      // The force-fresh refresh cancels the pre-existing read so it cannot publish stale data.
-    });
-    await Promise.resolve();
-
-    const refresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+    const olderRead = queryClient
+      .fetchQuery(repoTaskDataQueryOptions("/repo", DONE_VISIBLE_DAYS))
+      .catch(() => null);
+    await refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
       forceFreshTaskList: true,
+      taskDocumentStrategy: "none",
     });
-    staleList.resolve([{ ...taskFixture, id: "stale" }]);
-    await Promise.all([staleFetch, refresh]);
+    firstTaskRead.resolve([{ ...taskFixture, id: "stale" }]);
+    await olderRead;
 
     expect(tasksList).toHaveBeenCalledTimes(2);
     expect(
-      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
-        ?.id,
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(
+        taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
+      )?.tasks[0]?.id,
     ).toBe("fresh");
   });
 
-  test("force-fresh task refresh cancels a stale coalesced refresh before publishing", async () => {
+  test("forced repo task view refresh updates cached done-visible variants", async () => {
     const queryClient = new QueryClient();
-    const staleList = createDeferred<TaskCard[]>();
-    let callCount = 0;
-    const tasksList = mock(async (): Promise<TaskCard[]> => {
-      callCount += 1;
-      if (callCount === 1) {
-        return staleList.promise;
-      }
-
-      return [{ ...taskFixture, id: "fresh" }];
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo", 7), {
+      tasks: [{ ...taskFixture, id: "stale-7" }],
     });
+    const tasksList = mock(
+      async (_repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => [
+        { ...taskFixture, id: `fresh-${doneVisibleDays}` },
+      ],
+    );
     host.tasksList = tasksList;
 
-    const staleRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo");
-    await Promise.resolve();
-
-    const forceFreshRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+    await refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
       forceFreshTaskList: true,
+      taskDocumentStrategy: "none",
     });
-    staleList.resolve([{ ...taskFixture, id: "stale" }]);
-    await Promise.all([staleRefresh, forceFreshRefresh]);
 
-    expect(tasksList).toHaveBeenCalledTimes(2);
+    expect(tasksList).toHaveBeenCalledWith("/repo", DONE_VISIBLE_DAYS);
+    expect(tasksList).toHaveBeenCalledWith("/repo", 7);
     expect(
-      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo", 7))?.tasks[0]
         ?.id,
-    ).toBe("fresh");
+    ).toBe("fresh-7");
   });
 });
