@@ -197,7 +197,8 @@ const createDeferred = <T,>() => {
 };
 
 const createTestDependencies = (
-  overrides: Partial<OrchestratorDependencies["hostPort"]> = {},
+  hostOverrides: Partial<OrchestratorDependencies["hostPort"]> = {},
+  runtimeHostOverrides: Partial<OrchestratorDependencies["runtimeHostPort"]> = {},
 ): OrchestratorDependencies => ({
   queryClient: new QueryClient({
     defaultOptions: {
@@ -206,6 +207,15 @@ const createTestDependencies = (
     },
   }),
   hostPort: {
+    agentSessionUpsert: async () => undefined,
+    agentSessionStop: async () => undefined,
+    taskWorktreeGet: async () => ({
+      workingDirectory: "/tmp/repo/worktree",
+      source: "active_build_run",
+    }),
+    ...hostOverrides,
+  },
+  runtimeHostPort: {
     buildStart: async (_repoPath, _taskId, runtimeKind) => ({
       runtimeKind,
       runtimeId: "runtime-1",
@@ -223,13 +233,7 @@ const createTestDependencies = (
       startedAt: "2026-02-22T08:00:00.000Z",
       descriptor: { ...OPENCODE_RUNTIME_DESCRIPTOR, kind: runtimeKind },
     }),
-    agentSessionUpsert: async () => undefined,
-    agentSessionStop: async () => undefined,
-    taskWorktreeGet: async () => ({
-      workingDirectory: "/tmp/repo/worktree",
-      source: "active_build_run",
-    }),
-    ...overrides,
+    ...runtimeHostOverrides,
   },
 });
 

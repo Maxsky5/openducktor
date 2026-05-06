@@ -32,7 +32,7 @@ type CreateLoadAgentSessionsArgs = {
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadTaskDocuments?: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   agentSessionPresenceStore?: AgentSessionPresenceStore;
-  queryClient?: QueryClient;
+  queryClient: QueryClient;
 };
 
 export const createLoadAgentSessions = ({
@@ -178,9 +178,6 @@ export const createLoadAgentSessions = ({
           loadPersistedRecords: async () => {
             if (options?.persistedRecords) {
               return options.persistedRecords;
-            }
-            if (!queryClient) {
-              throw new Error("Agent session query client is unavailable.");
             }
             return loadAgentSessionListFromQuery(queryClient, repoPath, taskId);
           },

@@ -17,6 +17,7 @@ import { useAgentSessionTurnTiming } from "./hooks/use-agent-session-turn-timing
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionHydrationEffects } from "./hooks/use-repo-session-hydration-effects";
 import { useRuntimeTranscriptAttachment } from "./hooks/use-runtime-transcript-attachment";
+import { useSessionHydrationOperations } from "./hooks/use-session-hydration-operations";
 import { createLoadAgentSessions } from "./lifecycle/load-sessions";
 import { AgentSessionPresenceStore } from "./lifecycle/session-presence-store";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
@@ -64,7 +65,7 @@ export function useAgentOrchestratorOperations({
     () => dependencies ?? createDefaultAgentOrchestratorDependencies(),
     [dependencies],
   );
-  const { queryClient, hostPort } = resolvedDependencies;
+  const { queryClient, hostPort, runtimeHostPort } = resolvedDependencies;
   const { sessionStore, refBridges, commitSessions } = useOrchestratorSessionState({
     activeWorkspace,
     tasks,
@@ -139,18 +140,28 @@ export function useAgentOrchestratorOperations({
     ],
   );
   const { sessionHydration, retrySessionRuntimeAttachment, ensureSessionReadyForView } =
-    useRepoSessionHydrationEffects({
-      workspaceRepoPath,
-      tasks,
-      sessionsRef,
-      currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
-      agentSessionPresenceStore,
+    useSessionHydrationOperations({
       loadAgentSessions,
+      sessionsRef,
       updateSession,
     });
+  useRepoSessionHydrationEffects({
+    workspaceRepoPath,
+    tasks,
+    currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
+    agentSessionPresenceStore,
+    sessionHydration,
+  });
   const ensureRuntime = useMemo(
-    () => createEnsureRuntime({ refreshTaskData, hostClient: hostPort }),
-    [refreshTaskData, hostPort],
+    () =>
+      createEnsureRuntime({
+        refreshTaskData,
+        hostClient: {
+          ...runtimeHostPort,
+          taskWorktreeGet: hostPort.taskWorktreeGet,
+        },
+      }),
+    [refreshTaskData, runtimeHostPort, hostPort.taskWorktreeGet],
   );
   const sessionActions = useMemo(
     () =>
