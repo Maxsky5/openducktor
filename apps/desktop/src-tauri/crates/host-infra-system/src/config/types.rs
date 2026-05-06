@@ -733,9 +733,11 @@ mod tests {
         )
         .expect("config should deserialize");
 
-        assert!(config
-            .general
-            .open_agent_studio_tab_on_background_session_start);
+        assert!(
+            config
+                .general
+                .open_agent_studio_tab_on_background_session_start
+        );
     }
 
     #[test]

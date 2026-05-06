@@ -202,9 +202,11 @@ mod tests {
 
         assert_eq!(snapshot.chat, ChatSettings::default());
         assert_eq!(snapshot.general, GeneralSettings::default());
-        assert!(snapshot
-            .general
-            .open_agent_studio_tab_on_background_session_start);
+        assert!(
+            snapshot
+                .general
+                .open_agent_studio_tab_on_background_session_start
+        );
         assert!(snapshot.reusable_prompts.is_empty());
         assert!(!snapshot.chat.show_thinking_messages);
         assert_eq!(snapshot.kanban.done_visible_days, 1);
@@ -229,9 +231,11 @@ mod tests {
         let snapshot = service
             .workspace_get_settings_snapshot()
             .expect("settings snapshot should reload");
-        assert!(!snapshot
-            .general
-            .open_agent_studio_tab_on_background_session_start);
+        assert!(
+            !snapshot
+                .general
+                .open_agent_studio_tab_on_background_session_start
+        );
     }
 
     #[test]

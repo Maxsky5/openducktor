@@ -1107,6 +1107,7 @@ mod tests {
             "snapshot": {
                 "theme": snapshot.theme,
                 "git": snapshot.git,
+                "general": snapshot.general,
                 "chat": snapshot.chat,
                 "reusablePrompts": snapshot.reusable_prompts,
                 "kanban": snapshot.kanban,
@@ -1198,6 +1199,7 @@ mod tests {
             "snapshot": {
                 "theme": snapshot.theme.clone(),
                 "git": snapshot.git.clone(),
+                "general": snapshot.general.clone(),
                 "reusablePrompts": snapshot.reusable_prompts.clone(),
                 "kanban": snapshot.kanban.clone(),
                 "autopilot": snapshot.autopilot.clone(),
@@ -1216,6 +1218,7 @@ mod tests {
             "snapshot": {
                 "theme": snapshot.theme,
                 "git": snapshot.git,
+                "general": snapshot.general,
                 "chat": {
                     "showThinkingMessages": true
                 },
