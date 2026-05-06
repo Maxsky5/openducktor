@@ -131,6 +131,10 @@ export const settleDraftToIdle = (
 ): boolean => {
   let shouldClear = false;
   context.store.updateSession(context.store.externalSessionId, (current) => {
+    if (current.status === "starting") {
+      return current;
+    }
+
     const finalized = finalizeDraftAssistantMessage(
       current,
       timestamp,
