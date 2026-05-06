@@ -33,7 +33,7 @@ const withRuntimeRecoveryState = (
     : { ...session, runtimeRecoveryState };
 };
 
-export const useSessionHydrationOperations = ({
+export const useAgentSessionHydration = ({
   loadAgentSessions,
   sessionsRef,
   updateSession,

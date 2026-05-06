@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { AgentSessionPresenceStore } from "../lifecycle/session-presence-store";
-import { taskWithSession } from "./orchestrator-hook-test-fixtures";
+import { taskWithSession } from "./agent-session-hook-test-fixtures";
 import { useRepoSessionHydrationEffects } from "./use-repo-session-hydration-effects";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

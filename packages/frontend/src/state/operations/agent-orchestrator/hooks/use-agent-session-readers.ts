@@ -2,7 +2,7 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback } from "react";
 
-export const useAgentEngineReaders = (agentEngine: AgentEnginePort) => {
+export const useAgentSessionReaders = (agentEngine: AgentEnginePort) => {
   const readSessionModelCatalog = useCallback(
     (repoPath: string, runtimeKind: RuntimeKind) =>
       agentEngine.listAvailableModels({ repoPath, runtimeKind }),

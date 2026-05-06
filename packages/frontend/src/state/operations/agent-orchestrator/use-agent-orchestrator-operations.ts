@@ -10,22 +10,20 @@ import type {
 } from "@/types/state-slices";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { createAgentSessionActions } from "./handlers/session-actions";
-import { useAgentEngineReaders } from "./hooks/use-agent-engine-readers";
+import { useAgentSessionHydration } from "./hooks/use-agent-session-hydration";
 import { useAgentSessionListeners } from "./hooks/use-agent-session-listeners";
 import { useAgentSessionMutations } from "./hooks/use-agent-session-mutations";
+import { useAgentSessionReaders } from "./hooks/use-agent-session-readers";
 import { useAgentSessionTurnTiming } from "./hooks/use-agent-session-turn-timing";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionHydrationEffects } from "./hooks/use-repo-session-hydration-effects";
 import { useRuntimeTranscriptAttachment } from "./hooks/use-runtime-transcript-attachment";
-import { useSessionHydrationOperations } from "./hooks/use-session-hydration-operations";
 import { createLoadAgentSessions } from "./lifecycle/load-sessions";
 import { AgentSessionPresenceStore } from "./lifecycle/session-presence-store";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
-import {
-  type AgentOrchestratorDependencies,
-  createDefaultAgentOrchestratorDependencies,
-} from "./support/orchestrator-dependencies";
-import { createSessionPersistenceEffects } from "./support/session-persistence-effects";
+import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
+import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
+import { createSessionCacheEffects } from "./support/session-cache-effects";
 
 type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -72,11 +70,11 @@ export function useAgentOrchestratorOperations({
   });
   const { sessionsRef, unsubscribersRef } = refBridges;
   const agentSessionPresenceStore = useMemo(() => new AgentSessionPresenceStore(), []);
-  const sessionPersistenceEffects = useMemo(
-    () => createSessionPersistenceEffects({ workspaceRepoPath, queryClient, hostPort }),
+  const sessionCacheEffects = useMemo(
+    () => createSessionCacheEffects({ workspaceRepoPath, queryClient, hostPort }),
     [workspaceRepoPath, queryClient, hostPort],
   );
-  const { persistSessionRecord, invalidateSessionStopQueries } = sessionPersistenceEffects;
+  const { persistSessionRecord, invalidateSessionStopQueries } = sessionCacheEffects;
   const turnTiming = useAgentSessionTurnTiming({
     assistantTurnTimingBySessionRef: refBridges.assistantTurnTimingBySessionRef,
   });
@@ -140,7 +138,7 @@ export function useAgentOrchestratorOperations({
     ],
   );
   const { sessionHydration, retrySessionRuntimeAttachment, ensureSessionReadyForView } =
-    useSessionHydrationOperations({
+    useAgentSessionHydration({
       loadAgentSessions,
       sessionsRef,
       updateSession,
@@ -209,7 +207,7 @@ export function useAgentOrchestratorOperations({
       updateSession,
     ],
   );
-  const readers = useAgentEngineReaders(agentEngine);
+  const readers = useAgentSessionReaders(agentEngine);
 
   return useMemo<UseAgentOrchestratorOperationsResult>(() => {
     const operations = createOrchestratorPublicOperations({

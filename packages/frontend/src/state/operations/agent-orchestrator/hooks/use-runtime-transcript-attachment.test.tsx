@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createNoopEngine } from "./orchestrator-hook-test-fixtures";
+import { createNoopEngine } from "./agent-session-hook-test-fixtures";
 import { useRuntimeTranscriptAttachment } from "./use-runtime-transcript-attachment";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

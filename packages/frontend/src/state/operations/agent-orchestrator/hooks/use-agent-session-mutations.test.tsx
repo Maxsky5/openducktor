@@ -3,7 +3,7 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createSession } from "./orchestrator-hook-test-fixtures";
+import { createSession } from "./agent-session-hook-test-fixtures";
 import { useAgentSessionMutations } from "./use-agent-session-mutations";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

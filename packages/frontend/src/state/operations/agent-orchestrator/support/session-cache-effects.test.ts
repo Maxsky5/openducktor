@@ -4,7 +4,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { taskQueryKeys } from "@/state/queries/tasks";
-import { createSessionPersistenceEffects } from "./session-persistence-effects";
+import { createSessionCacheEffects } from "./session-cache-effects";
 
 const sessionRecord: AgentSessionRecord = {
   runtimeKind: "opencode",
@@ -23,12 +23,12 @@ const createQueryClient = (): QueryClient =>
     },
   });
 
-describe("createSessionPersistenceEffects", () => {
+describe("createSessionCacheEffects", () => {
   test("persists through the injected host port and updates the injected query client", async () => {
     const queryClient = createQueryClient();
     const upsert = mock(async () => undefined);
     queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
-    const effects = createSessionPersistenceEffects({
+    const effects = createSessionCacheEffects({
       workspaceRepoPath: "/repo",
       queryClient,
       hostPort: { agentSessionUpsert: upsert },
@@ -50,7 +50,7 @@ describe("createSessionPersistenceEffects", () => {
       invalidatedKeys.push(filters.queryKey);
       return originalInvalidateQueries({ ...filters, refetchType: "none" });
     }) as QueryClient["invalidateQueries"];
-    const effects = createSessionPersistenceEffects({
+    const effects = createSessionCacheEffects({
       workspaceRepoPath: "/repo",
       queryClient,
       hostPort: { agentSessionUpsert: async () => undefined },

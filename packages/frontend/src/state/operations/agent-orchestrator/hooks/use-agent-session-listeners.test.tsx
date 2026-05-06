@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createNoopEngine, createSession, taskFixture } from "./orchestrator-hook-test-fixtures";
+import { createNoopEngine, createSession, taskFixture } from "./agent-session-hook-test-fixtures";
 import { useAgentSessionListeners } from "./use-agent-session-listeners";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 

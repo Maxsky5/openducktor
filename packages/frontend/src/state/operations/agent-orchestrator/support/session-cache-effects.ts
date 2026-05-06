@@ -6,19 +6,19 @@ import {
 } from "@/state/queries/agent-sessions";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { invalidateRepoTaskQueries, upsertAgentSessionInRepoTaskData } from "@/state/queries/tasks";
-import type { AgentOrchestratorHostPort } from "./orchestrator-dependencies";
+import type { AgentOrchestratorHostPort } from "./orchestrator-ports";
 
-type CreateSessionPersistenceEffectsArgs = {
+type CreateSessionCacheEffectsArgs = {
   workspaceRepoPath: string | null;
   queryClient: QueryClient;
   hostPort: Pick<AgentOrchestratorHostPort, "agentSessionUpsert">;
 };
 
-export const createSessionPersistenceEffects = ({
+export const createSessionCacheEffects = ({
   workspaceRepoPath,
   queryClient,
   hostPort,
-}: CreateSessionPersistenceEffectsArgs) => {
+}: CreateSessionCacheEffectsArgs) => {
   const persistSessionRecord = async (
     taskId: string,
     record: AgentSessionRecord,
