@@ -48,6 +48,39 @@ const createOrReuseSession = async ({
   return executeFreshStart({ ctx, input, deps });
 };
 
+const toSessionCreationInput = ({
+  input,
+  targetWorkingDirectory,
+}: {
+  input: StartAgentSessionInput;
+  targetWorkingDirectory?: string | null;
+}): StartSessionCreationInput => {
+  if (input.startMode === "reuse") {
+    return {
+      startMode: "reuse",
+      sourceExternalSessionId: input.sourceExternalSessionId,
+    };
+  }
+
+  if (input.startMode === "fork") {
+    return {
+      startMode: "fork",
+      selectedModel: input.selectedModel,
+      sourceExternalSessionId: input.sourceExternalSessionId,
+    };
+  }
+
+  return {
+    startMode: "fresh",
+    selectedModel: input.selectedModel,
+    ...(targetWorkingDirectory !== undefined
+      ? { targetWorkingDirectory }
+      : input.targetWorkingDirectory !== undefined
+        ? { targetWorkingDirectory: input.targetWorkingDirectory }
+        : {}),
+  };
+};
+
 const attachSessionListenerAndGuard = async ({
   startedCtx,
   session,
@@ -160,16 +193,12 @@ export const createStartAgentSession = ({
     const startPromise = Promise.resolve().then(async (): Promise<string> => {
       const startResult = await createOrReuseSession({
         ctx: startCtx,
-        input: {
-          ...(input.startMode === "fresh"
-            ? {
-                ...input,
-                ...(freshStartTarget?.targetWorkingDirectory !== undefined
-                  ? { targetWorkingDirectory: freshStartTarget.targetWorkingDirectory }
-                  : {}),
-              }
-            : input),
-        },
+        input: toSessionCreationInput({
+          input,
+          ...(freshStartTarget?.targetWorkingDirectory !== undefined
+            ? { targetWorkingDirectory: freshStartTarget.targetWorkingDirectory }
+            : {}),
+        }),
         deps: {
           session,
           runtime,

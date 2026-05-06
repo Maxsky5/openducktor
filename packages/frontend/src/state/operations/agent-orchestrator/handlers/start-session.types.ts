@@ -139,13 +139,11 @@ export type StartSessionCreationInput =
       startMode: "fresh";
       selectedModel: AgentModelSelection;
       targetWorkingDirectory?: string | null;
-      initialStatusRelease?: InitialSessionStatusRelease;
     }
   | {
       startMode: "fork";
       selectedModel: AgentModelSelection;
       sourceExternalSessionId: string;
-      initialStatusRelease?: InitialSessionStatusRelease;
     };
 
 export type ResolvedRuntimeAndModel = {
