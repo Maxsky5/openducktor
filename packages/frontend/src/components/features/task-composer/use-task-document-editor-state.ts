@@ -107,6 +107,21 @@ export function useTaskDocumentEditorState({
 
   documentsRef.current = documents;
 
+  const transitionDocumentSection = useCallback(
+    (
+      section: TaskDocumentSection,
+      update: (current: DocumentSectionState) => DocumentSectionState,
+    ): void => {
+      const snapshot: TaskDocumentEditorState = {
+        ...documentsRef.current,
+        [section]: update(documentsRef.current[section]),
+      };
+      documentsRef.current = snapshot;
+      setDocuments(snapshot);
+    },
+    [],
+  );
+
   useEffect(() => {
     const contextChanged =
       previousContext.current?.open !== open || previousContext.current?.taskId !== taskId;
@@ -141,16 +156,11 @@ export function useTaskDocumentEditorState({
       }
 
       inFlightSections.current[section] = true;
-      const loadingSnapshot: TaskDocumentEditorState = {
-        ...documentsRef.current,
-        [section]: {
-          ...documentsRef.current[section],
-          isLoading: true,
-          error: null,
-        },
-      };
-      documentsRef.current = loadingSnapshot;
-      setDocuments(loadingSnapshot);
+      transitionDocumentSection(section, (currentSection) => ({
+        ...currentSection,
+        isLoading: true,
+        error: null,
+      }));
 
       const sequence = loadSequence.current;
       try {
@@ -159,63 +169,33 @@ export function useTaskDocumentEditorState({
           loadTimeoutMs,
         );
         if (sequence !== loadSequence.current) {
-          inFlightSections.current[section] = false;
-          const staleSnapshot: TaskDocumentEditorState = {
-            ...documentsRef.current,
-            [section]: {
-              ...documentsRef.current[section],
-              isLoading: false,
-            },
-          };
-          documentsRef.current = staleSnapshot;
-          setDocuments(staleSnapshot);
           return;
         }
 
         inFlightSections.current[section] = false;
-        const successSnapshot: TaskDocumentEditorState = {
-          ...documentsRef.current,
-          [section]: {
-            serverMarkdown: payload.markdown,
-            draftMarkdown: payload.markdown,
-            updatedAt: payload.updatedAt,
-            isLoading: false,
-            loaded: true,
-            error: payload.error ?? null,
-          },
-        };
-        documentsRef.current = successSnapshot;
-        setDocuments(successSnapshot);
+        transitionDocumentSection(section, () => ({
+          serverMarkdown: payload.markdown,
+          draftMarkdown: payload.markdown,
+          updatedAt: payload.updatedAt,
+          isLoading: false,
+          loaded: true,
+          error: payload.error ?? null,
+        }));
       } catch (reason) {
         if (sequence !== loadSequence.current) {
-          inFlightSections.current[section] = false;
-          const staleSnapshot: TaskDocumentEditorState = {
-            ...documentsRef.current,
-            [section]: {
-              ...documentsRef.current[section],
-              isLoading: false,
-            },
-          };
-          documentsRef.current = staleSnapshot;
-          setDocuments(staleSnapshot);
           return;
         }
 
         inFlightSections.current[section] = false;
-        const errorSnapshot: TaskDocumentEditorState = {
-          ...documentsRef.current,
-          [section]: {
-            ...documentsRef.current[section],
-            isLoading: false,
-            loaded: false,
-            error: toErrorMessage(reason),
-          },
-        };
-        documentsRef.current = errorSnapshot;
-        setDocuments(errorSnapshot);
+        transitionDocumentSection(section, (currentSection) => ({
+          ...currentSection,
+          isLoading: false,
+          loaded: false,
+          error: toErrorMessage(reason),
+        }));
       }
     },
-    [loadPlanDocument, loadSpecDocument, loadTimeoutMs, open, taskId],
+    [loadPlanDocument, loadSpecDocument, loadTimeoutMs, open, taskId, transitionDocumentSection],
   );
 
   useEffect(() => {

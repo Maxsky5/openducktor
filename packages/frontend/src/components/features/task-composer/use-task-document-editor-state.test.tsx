@@ -146,17 +146,69 @@ describe("useTaskDocumentEditorState", () => {
     );
 
     await harness.run(async () => {
+      first.resolve({ markdown: "# Task 1", updatedAt: "2026-02-20T10:00:00Z" });
+    });
+
+    expect(harness.getLatest().documents.spec.serverMarkdown).toBe("");
+    expect(harness.getLatest().documents.spec.isLoading).toBe(true);
+
+    await harness.run(async () => {
       second.resolve({ markdown: "# Task 2", updatedAt: "2026-02-20T11:00:00Z" });
     });
     await harness.waitFor((state) => state.documents.spec.serverMarkdown === "# Task 2");
 
     expect(harness.getLatest().documents.spec.serverMarkdown).toBe("# Task 2");
+    expect(harness.getLatest().documents.spec.isLoading).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("ignores stale rejection after task context changes", async () => {
+    const first = createDeferred<{ markdown: string; updatedAt: string | null }>();
+    const second = createDeferred<{ markdown: string; updatedAt: string | null }>();
+
+    const loadSpecDocument = async (taskId: string) => {
+      if (taskId === "task-1") {
+        return first.promise;
+      }
+      if (taskId === "task-2") {
+        return second.promise;
+      }
+      throw new Error(`Unexpected taskId ${taskId}`);
+    };
+
+    const harness = createHookHarness(
+      createBaseProps({
+        taskId: "task-1",
+        loadSpecDocument,
+      }),
+    );
+
+    await harness.mount();
+    await harness.update(
+      createBaseProps({
+        taskId: "task-2",
+        loadSpecDocument,
+      }),
+    );
 
     await harness.run(async () => {
-      first.resolve({ markdown: "# Task 1", updatedAt: "2026-02-20T10:00:00Z" });
+      first.reject(new Error("stale task failed"));
     });
 
-    expect(harness.getLatest().documents.spec.serverMarkdown).toBe("# Task 2");
+    expect(harness.getLatest().documents.spec.serverMarkdown).toBe("");
+    expect(harness.getLatest().documents.spec.error).toBeNull();
+    expect(harness.getLatest().documents.spec.isLoading).toBe(true);
+
+    await harness.run(async () => {
+      second.resolve({ markdown: "# Task 2", updatedAt: "2026-02-20T11:00:00Z" });
+    });
+    await harness.waitFor((state) => state.documents.spec.serverMarkdown === "# Task 2");
+
+    const state = harness.getLatest();
+    expect(state.documents.spec.serverMarkdown).toBe("# Task 2");
+    expect(state.documents.spec.error).toBeNull();
+    expect(state.documents.spec.isLoading).toBe(false);
 
     await harness.unmount();
   });
