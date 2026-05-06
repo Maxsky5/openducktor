@@ -4,6 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
+import type { InitialSessionStatusReleasePolicy } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { executeSessionStart } from "./session-start-execution";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
@@ -71,7 +72,7 @@ const resolvePostStartMessage = async ({
 
 const resolveInitialStatusRelease = (
   postStartMessage: string | null,
-): "after_listener_attach" | "after_first_send_attempt" => {
+): InitialSessionStatusReleasePolicy => {
   if (postStartMessage === null) {
     return "after_listener_attach";
   }
@@ -80,13 +81,8 @@ const resolveInitialStatusRelease = (
 };
 
 const requirePostStartMessageSender = (
-  postStartMessage: string | null,
   sendAgentMessage: StartSessionWorkflowArgs["sendAgentMessage"],
-): NonNullable<StartSessionWorkflowArgs["sendAgentMessage"]> | null => {
-  if (postStartMessage === null) {
-    return null;
-  }
-
+): NonNullable<StartSessionWorkflowArgs["sendAgentMessage"]> => {
   if (!sendAgentMessage) {
     throw new Error("Post-start messaging is unavailable.");
   }
@@ -100,7 +96,7 @@ const startSessionFromIntent = ({
   initialStatusRelease,
   startAgentSession,
 }: Pick<StartSessionWorkflowArgs, "intent" | "selection" | "startAgentSession"> & {
-  initialStatusRelease: "after_listener_attach" | "after_first_send_attempt";
+  initialStatusRelease: InitialSessionStatusReleasePolicy;
 }): Promise<string> => {
   if (intent.startMode === "reuse") {
     return executeSessionStart({
@@ -295,7 +291,6 @@ export const startSessionWorkflow = async ({
     intent,
     task,
   });
-  const postStartMessageSender = requirePostStartMessageSender(postStartMessage, sendAgentMessage);
   const initialStatusRelease = resolveInitialStatusRelease(postStartMessage);
 
   const externalSessionId = await startSessionFromIntent({
@@ -311,11 +306,10 @@ export const startSessionWorkflow = async ({
       postStartActionError: null,
     };
   }
+
+  const postStartMessageSender = requirePostStartMessageSender(sendAgentMessage);
   const runPostStartAction = async (): Promise<Error | null> => {
     try {
-      if (!postStartMessageSender) {
-        return null;
-      }
       await postStartMessageSender(externalSessionId, [
         {
           kind: "text",

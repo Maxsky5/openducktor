@@ -2,6 +2,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { isTodoToolName, settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { finalizeDraftAssistantMessage } from "../support/assistant-meta";
 import { sanitizeStreamingText } from "../support/core";
+import { shouldKeepPendingOutboundSendActiveOnIdle } from "../support/pending-outbound-send";
 import type {
   DraftChannel,
   DraftChannelValueMap,
@@ -134,13 +135,7 @@ export const settleDraftToIdle = (
     if (current.status === "starting") {
       return current;
     }
-    if (
-      current.pendingUserMessageStartedAt !== undefined &&
-      current.draftAssistantText.trim().length === 0 &&
-      current.draftReasoningText.trim().length === 0 &&
-      current.pendingApprovals.length === 0 &&
-      current.pendingQuestions.length === 0
-    ) {
+    if (shouldKeepPendingOutboundSendActiveOnIdle(current)) {
       return current;
     }
 

@@ -6,6 +6,7 @@ import {
   toPersistedOnlyAgentSessionPresenceSnapshot,
 } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { hasPendingOutboundSend } from "../support/pending-outbound-send";
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 
 export type { AgentSessionPresence, AgentSessionPresenceSnapshot } from "@openducktor/core";
@@ -90,7 +91,7 @@ export const applyAgentSessionPresenceSnapshotToSession = (
       if (options.preserveStartingStatusForIdlePresence === true && current.status === "starting") {
         status = "starting";
       }
-      if (current.pendingUserMessageStartedAt !== undefined && current.status === "running") {
+      if (hasPendingOutboundSend(current)) {
         status = "running";
       }
     }
@@ -115,7 +116,7 @@ export const applyAgentSessionPresenceSnapshotToSession = (
       options.missingSessionRuntimeId !== undefined
         ? options.missingSessionRuntimeId
         : snapshot.runtimeId;
-    if (current.pendingUserMessageStartedAt !== undefined && current.status === "running") {
+    if (hasPendingOutboundSend(current)) {
       return {
         ...current,
         runtimeRecoveryState: "recovering_runtime",
@@ -139,7 +140,7 @@ export const applyAgentSessionPresenceSnapshotToSession = (
     };
   }
 
-  if (current.pendingUserMessageStartedAt !== undefined && current.status === "running") {
+  if (hasPendingOutboundSend(current)) {
     return {
       ...current,
       runtimeKind: snapshot.ref.runtimeKind,
