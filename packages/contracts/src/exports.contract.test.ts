@@ -28,6 +28,7 @@ import type {
   FailureKind,
   FileDiff,
   FileStatus,
+  GeneralSettings,
   GitBranch,
   GitCommitAllRequest,
   GitCommitAllResult,
@@ -179,6 +180,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "buildBlockedResultSchema",
   "buildCompletedResultSchema",
   "chatSettingsSchema",
+  "DEFAULT_GENERAL_SETTINGS",
   "REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER",
   "REUSABLE_PROMPT_TRIGGER_PATTERN",
   "reusablePromptSchema",
@@ -242,6 +244,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitWorktreeSummarySchema",
   "kanbanSettingsSchema",
   "kanbanEmptyColumnDisplaySchema",
+  "generalSettingsSchema",
   "globalConfigSchema",
   "globalGitConfigSchema",
   "GetWorkspacesInputSchema",
@@ -476,6 +479,7 @@ type ExportedTypeContract = {
   GitWorktreeStatusSnapshot: GitWorktreeStatusSnapshot;
   GitWorktreeSummary: GitWorktreeSummary;
   GlobalConfig: GlobalConfig;
+  GeneralSettings: GeneralSettings;
   KanbanEmptyColumnDisplay: KanbanEmptyColumnDisplay;
   KanbanSettings: KanbanSettings;
   IssueType: IssueType;
