@@ -214,6 +214,27 @@ describe("resolveBuildContinuationLaunchAction", () => {
 });
 
 describe("useKanbanSessionStartFlow", () => {
+  test("rejects session starts while settings are unavailable", async () => {
+    const args = createBaseArgs();
+    args.openAgentStudioTabOnBackgroundSessionStart = null;
+
+    const harness = createHookHarness(args);
+    await harness.mount();
+
+    await expect(
+      harness.getLatest().startSessionIntent({
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        postStartAction: "kickoff",
+      }),
+    ).rejects.toThrow("Cannot start Kanban session because settings have not loaded.");
+
+    expect(harness.getLatest().sessionStartModal).toBeNull();
+
+    await harness.unmount();
+  });
+
   test("opens the shared session start modal for QA review", async () => {
     const args = createBaseArgs();
     args.tasks = [createTaskCardFixture({ id: "TASK-1", status: "ai_review" })];

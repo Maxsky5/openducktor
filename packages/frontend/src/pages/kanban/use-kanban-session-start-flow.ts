@@ -41,7 +41,7 @@ type UseKanbanSessionStartFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
-  openAgentStudioTabOnBackgroundSessionStart: boolean;
+  openAgentStudioTabOnBackgroundSessionStart: boolean | null;
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
   navigate: NavigateFunction;
@@ -205,6 +205,10 @@ export function useKanbanSessionStartFlow({
 
   const startSessionIntent = useCallback(
     async (intent: KanbanSessionStartIntent): Promise<string | undefined> => {
+      if (openAgentStudioTabOnBackgroundSessionStart === null) {
+        throw new Error("Cannot start Kanban session because settings have not loaded.");
+      }
+
       const selectedTask = tasksRef.current.find((task) => task.id === intent.taskId) ?? null;
       const taskSessions = sessionsRef.current.filter(
         (session) => session.taskId === intent.taskId,

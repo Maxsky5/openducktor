@@ -81,9 +81,8 @@ export function useKanbanPageModels({
   const reportedKanbanTasksErrorRef = useRef<string | null>(null);
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
-  const openAgentStudioTabOnBackgroundSessionStart = settingsSnapshotQuery.data
-    ? settingsSnapshotQuery.data.general.openAgentStudioTabOnBackgroundSessionStart
-    : false;
+  const openAgentStudioTabOnBackgroundSessionStart =
+    settingsSnapshotQuery.data?.general.openAgentStudioTabOnBackgroundSessionStart ?? null;
   const emptyColumnDisplay =
     settingsSnapshotQuery.data?.kanban.emptyColumnDisplay ??
     DEFAULT_KANBAN_SETTINGS.emptyColumnDisplay;
