@@ -44,7 +44,11 @@ type UseTaskOperationsResult = {
   pendingMergedPullRequest: { taskId: string; pullRequest: PullRequest } | null;
   setIsLoadingTasks: (value: boolean) => void;
   clearTaskData: () => void;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  refreshTaskData: (
+    repoPath: string,
+    taskIdOrIds?: string | string[],
+    options?: { forceFreshTaskList?: boolean },
+  ) => Promise<void>;
   refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   refreshTasks: () => Promise<void>;
   syncPullRequests: (taskId: string) => Promise<void>;
@@ -188,7 +192,11 @@ export function useTaskOperations({
   ]);
 
   const refreshTaskData = useCallback(
-    async (repoPath: string, taskIdOrIds?: string | string[]): Promise<void> => {
+    async (
+      repoPath: string,
+      taskIdOrIds?: string | string[],
+      options?: { forceFreshTaskList?: boolean },
+    ): Promise<void> => {
       const taskIds =
         typeof taskIdOrIds === "string"
           ? [taskIdOrIds]
@@ -200,7 +208,10 @@ export function useTaskOperations({
         repoPath,
         taskIds
           ? { taskDocumentStrategy: "refresh", taskIds }
-          : { forceFreshTaskList: true, taskDocumentStrategy: "none" },
+          : {
+              forceFreshTaskList: options?.forceFreshTaskList ?? true,
+              taskDocumentStrategy: "none",
+            },
       );
     },
     [queryClient],

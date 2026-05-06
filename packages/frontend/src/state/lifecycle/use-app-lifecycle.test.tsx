@@ -570,7 +570,9 @@ describe("useAppLifecycle", () => {
         activeRepo: "/repo",
       });
 
-      expect(baseArgs.refreshTaskData).toHaveBeenCalledWith("/repo");
+      expect(baseArgs.refreshTaskData).toHaveBeenCalledWith("/repo", undefined, {
+        forceFreshTaskList: false,
+      });
       expect(baseArgs.refreshBranches).toHaveBeenCalledWith(false);
 
       const activeHarness = requireHarness();
@@ -809,7 +811,9 @@ describe("useAppLifecycle", () => {
         await Promise.resolve();
       });
 
-      expect(baseArgs.refreshTaskData).toHaveBeenCalledWith("/repo");
+      expect(baseArgs.refreshTaskData).toHaveBeenCalledWith("/repo", undefined, {
+        forceFreshTaskList: false,
+      });
       expect(refreshRuntimeCheck).toHaveBeenCalledTimes(2);
       expect(baseArgs.refreshBranches).toHaveBeenCalledWith(false);
     } finally {

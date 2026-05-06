@@ -20,6 +20,7 @@ const DONE_VISIBLE_DAYS = 1;
 const settingsSnapshotFixture: SettingsSnapshot = {
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
+  general: { openAgentStudioTabOnBackgroundSessionStart: true },
   chat: { showThinkingMessages: false },
   reusablePrompts: [],
   kanban: { doneVisibleDays: DONE_VISIBLE_DAYS, emptyColumnDisplay: "show" },
@@ -471,6 +472,28 @@ describe("tasks query cache helpers", () => {
         taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
       )?.tasks[0]?.id,
     ).toBe("fresh");
+  });
+
+  test("non-forced repo task view refresh joins an older in-flight task read", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    const taskRead = createDeferred<TaskCard[]>();
+    const tasksList = mock(async (): Promise<TaskCard[]> => taskRead.promise);
+    host.tasksList = tasksList;
+
+    const olderRead = queryClient.fetchQuery(repoTaskDataQueryOptions("/repo", DONE_VISIBLE_DAYS));
+    const refresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      taskDocumentStrategy: "none",
+    });
+    taskRead.resolve([{ ...taskFixture, id: "joined" }]);
+    await Promise.all([olderRead, refresh]);
+
+    expect(tasksList).toHaveBeenCalledTimes(1);
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(
+        taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
+      )?.tasks[0]?.id,
+    ).toBe("joined");
   });
 
   test("forced repo task view refresh updates cached done-visible variants", async () => {
