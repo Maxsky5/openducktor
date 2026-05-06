@@ -1,4 +1,4 @@
-import type { InitialSessionStatusRelease } from "@/types/agent-orchestrator";
+import type { InitialSessionStatusReleasePolicy } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { requireSelectedModelRuntimeKindForStart } from "../support/session-runtime-metadata";
@@ -123,7 +123,7 @@ const attachSessionListenerAndGuard = async ({
   startedCtx: StartedSessionContext;
   session: SessionDependencies;
   runtime: RuntimeDependencies;
-  initialStatusRelease: InitialSessionStatusRelease | undefined;
+  initialStatusRelease: InitialSessionStatusReleasePolicy;
 }): Promise<void> => {
   session.attachSessionListener(startedCtx.repoPath, startedCtx.summary.externalSessionId);
 
@@ -153,6 +153,20 @@ const attachSessionListenerAndGuard = async ({
     runtime,
     startedCtx,
   });
+};
+
+const getInitialStatusRelease = (
+  input: StartAgentSessionInput,
+): InitialSessionStatusReleasePolicy => {
+  if (input.startMode === "reuse") {
+    return "after_listener_attach";
+  }
+
+  if (!input.initialStatusRelease) {
+    return "after_listener_attach";
+  }
+
+  return input.initialStatusRelease;
 };
 
 export const createStartAgentSession = ({
@@ -247,7 +261,7 @@ export const createStartAgentSession = ({
         startedCtx: startResult.ctx,
         session,
         runtime,
-        initialStatusRelease: input.startMode === "reuse" ? undefined : input.initialStatusRelease,
+        initialStatusRelease: getInitialStatusRelease(input),
       });
 
       return startResult.ctx.summary.externalSessionId;

@@ -1,5 +1,5 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { InitialSessionStatusRelease } from "@/types/agent-orchestrator";
+import type { InitialSessionStatusReleasePolicy } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 
 type StartAgentSessionInput = Parameters<AgentStateContextValue["startAgentSession"]>[0];
@@ -18,14 +18,14 @@ export type FreshSessionStartExecutionRequest = SessionStartExecutionRequestBase
   startMode: "fresh";
   selectedModel: AgentModelSelection;
   targetWorkingDirectory?: string | null;
-  initialStatusRelease?: InitialSessionStatusRelease;
+  initialStatusRelease: InitialSessionStatusReleasePolicy;
 };
 
 export type ForkSessionStartExecutionRequest = SessionStartExecutionRequestBase & {
   startMode: "fork";
   selectedModel: AgentModelSelection;
   sourceExternalSessionId: string;
-  initialStatusRelease?: InitialSessionStatusRelease;
+  initialStatusRelease: InitialSessionStatusReleasePolicy;
 };
 
 export type SessionStartExecutionRequest =
@@ -49,7 +49,7 @@ const prepareFreshSessionStartInput = ({
   selectedModel,
   startMode: "fresh",
   ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
-  ...(initialStatusRelease ? { initialStatusRelease } : {}),
+  initialStatusRelease,
 });
 
 const prepareReuseSessionStartInput = ({
@@ -75,7 +75,7 @@ const prepareForkSessionStartInput = ({
   selectedModel,
   startMode: "fork",
   sourceExternalSessionId,
-  ...(initialStatusRelease ? { initialStatusRelease } : {}),
+  initialStatusRelease,
 });
 
 export const prepareSessionStartInput = (

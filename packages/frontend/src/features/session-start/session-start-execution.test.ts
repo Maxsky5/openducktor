@@ -32,6 +32,7 @@ describe("session-start-execution", () => {
       role: "qa",
       startMode: "fresh",
       selectedModel: BUILD_SELECTION,
+      initialStatusRelease: "after_listener_attach",
     });
 
     expect(result).toEqual({
@@ -39,6 +40,7 @@ describe("session-start-execution", () => {
       role: "qa",
       selectedModel: BUILD_SELECTION,
       startMode: "fresh",
+      initialStatusRelease: "after_listener_attach",
     });
   });
 
@@ -50,6 +52,7 @@ describe("session-start-execution", () => {
       role: "spec",
       startMode: "fresh",
       selectedModel: BUILD_SELECTION,
+      initialStatusRelease: "after_listener_attach",
       startAgentSession,
     });
 

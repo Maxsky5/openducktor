@@ -114,6 +114,25 @@ const settleStartingSession = (
   );
 };
 
+const ensureSessionReadyForSend = async ({
+  externalSessionId,
+  ensureSessionReady,
+  sessionsRef,
+  updateSession,
+}: {
+  externalSessionId: string;
+  ensureSessionReady: (externalSessionId: string) => Promise<void>;
+  sessionsRef: { current: Record<string, AgentSessionState> };
+  updateSession: SessionActionsDependencies["updateSession"];
+}): Promise<void> => {
+  try {
+    await ensureSessionReady(externalSessionId);
+  } catch (error) {
+    settleStartingSession(externalSessionId, "error", sessionsRef, updateSession);
+    throw error;
+  }
+};
+
 const applyQuestionAnswerToSession = (
   session: AgentSessionState,
   requestId: string,
@@ -213,12 +232,12 @@ export const createAgentSessionActions = ({
       }
     }
 
-    try {
-      await ensureSessionReady(externalSessionId);
-    } catch (error) {
-      settleStartingSession(externalSessionId, "error", sessionsRef, updateSession);
-      throw error;
-    }
+    await ensureSessionReadyForSend({
+      externalSessionId,
+      ensureSessionReady,
+      sessionsRef,
+      updateSession,
+    });
 
     const readySession = sessionsRef.current[externalSessionId];
     if (!readySession || isAgentSessionWaitingInput(readySession)) {

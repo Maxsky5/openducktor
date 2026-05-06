@@ -34,7 +34,7 @@ import type { SessionRepoReadinessState } from "@/state/operations/agent-orchest
 import type {
   AgentSessionLoadOptions,
   AgentSessionState,
-  InitialSessionStatusRelease,
+  InitialSessionStatusReleasePolicy,
 } from "./agent-orchestrator";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
@@ -244,7 +244,7 @@ export type AgentStateContextValue = {
           selectedModel: AgentModelSelection;
           startMode: "fresh";
           targetWorkingDirectory?: string | null;
-          initialStatusRelease?: InitialSessionStatusRelease;
+          initialStatusRelease?: InitialSessionStatusReleasePolicy;
         }
       | {
           taskId: string;
@@ -253,7 +253,7 @@ export type AgentStateContextValue = {
           selectedModel: AgentModelSelection;
           startMode: "fork";
           sourceExternalSessionId: string;
-          initialStatusRelease?: InitialSessionStatusRelease;
+          initialStatusRelease?: InitialSessionStatusReleasePolicy;
         },
   ) => Promise<string>;
   sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
