@@ -462,7 +462,7 @@ export const createAgentSessionActions = ({
         ...current,
         pendingApprovals: current.pendingApprovals.filter((entry) => entry.requestId !== requestId),
       }),
-      { persist: true },
+      { persist: false },
     );
     clearSubagentPendingApprovalFromSessions({
       sessionsRef,
@@ -502,7 +502,7 @@ export const createAgentSessionActions = ({
           messages,
         };
       },
-      { persist: true },
+      { persist: false },
     );
     clearSubagentPendingQuestionFromSessions({
       sessionsRef,

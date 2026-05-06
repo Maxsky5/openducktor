@@ -201,7 +201,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         }),
       },
     };
-
     const actions = createAgentSessionActions({
       activeWorkspace: {
         repoPath: "/tmp/repo",
@@ -394,7 +393,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         }),
       },
     };
-
     const actions = createAgentSessionActions({
       activeWorkspace: {
         repoPath: "/tmp/repo",
@@ -1096,6 +1094,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         }),
       },
     };
+    const updateSessionOptions: unknown[] = [];
 
     const actions = createAgentSessionActions({
       activeWorkspace: {
@@ -1112,11 +1111,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
+      updateSession: (externalSessionId, updater, options) => {
         const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
+        updateSessionOptions.push(options);
         sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
@@ -1140,10 +1140,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         modelId: "gpt-5",
       });
       expect(sessionsRef.current["session-1"]?.selectedModel?.modelId).toBe("gpt-5");
+      expect(updateSessionOptions).toEqual([{ persist: true }]);
 
       await actions.replyAgentApproval("session-1", "perm-1", "approve_once");
       expect(replyCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
+      expect(updateSessionOptions).toEqual([{ persist: true }, { persist: false }]);
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.updateSessionModel = originalUpdateSessionModel;
@@ -1328,6 +1330,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         }),
       },
     };
+    const updateSessionOptions: unknown[] = [];
 
     const actions = createAgentSessionActions({
       activeWorkspace: {
@@ -1344,11 +1347,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map() },
       turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
+      updateSession: (externalSessionId, updater, options) => {
         const current = sessionsRef.current[externalSessionId];
         if (!current) {
           return;
         }
+        updateSessionOptions.push(options);
         sessionsRef.current[externalSessionId] = updater(current);
       },
       attachSessionListener: () => {},
@@ -1370,6 +1374,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.answerAgentQuestion("session-1", "question-1", [["yes"]]);
       expect(replyCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
+      expect(updateSessionOptions).toEqual([{ persist: false }]);
       const message = sessionMessageAt(getSession(sessionsRef), 0);
       if (!message || message.meta?.kind !== "tool") {
         throw new Error("Expected tool message metadata");

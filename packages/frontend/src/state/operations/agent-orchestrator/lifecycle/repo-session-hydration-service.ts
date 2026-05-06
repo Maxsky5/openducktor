@@ -185,10 +185,16 @@ export const createRepoSessionHydrationService = ({
               records: pendingTaskEntries.flatMap((entry) => entry.records),
             });
           } catch (error) {
-            if (!isCancelled() && isCurrentRepo(repoPath)) {
-              for (const entry of pendingTaskEntries) {
-                scheduleRetry("reconcile", repoPath, entry.task.id, error);
-              }
+            if (isCancelled() || !isCurrentRepo(repoPath)) {
+              return;
+            }
+            await Promise.allSettled(
+              pendingTaskEntries.map(({ task, records }) =>
+                sessionHydration.bootstrapTaskSessions(task.id, records),
+              ),
+            );
+            for (const entry of pendingTaskEntries) {
+              scheduleRetry("reconcile", repoPath, entry.task.id, error);
             }
             return;
           }

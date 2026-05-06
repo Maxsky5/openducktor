@@ -1496,14 +1496,17 @@ describe("agent-orchestrator-session-events", () => {
         }),
       },
     };
+    const updateSessionOptions: unknown[] = [];
     const updateSession = (
       externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
+      options?: unknown,
     ) => {
       const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
+      updateSessionOptions.push(options);
       sessionsRef.current = {
         ...sessionsRef.current,
         [externalSessionId]: updater(current),
@@ -1572,6 +1575,7 @@ describe("agent-orchestrator-session-events", () => {
         ],
       },
     ]);
+    expect(updateSessionOptions).toContainEqual({ persist: false });
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
@@ -2996,14 +3000,17 @@ describe("agent-orchestrator-session-events", () => {
       },
     };
 
+    const updateSessionOptions: unknown[] = [];
     const updateSession = (
       externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
+      options?: unknown,
     ) => {
       const current = sessionsRef.current[externalSessionId];
       if (!current) {
         return;
       }
+      updateSessionOptions.push(options);
       sessionsRef.current = {
         ...sessionsRef.current,
         [externalSessionId]: updater(current),
@@ -3060,6 +3067,7 @@ describe("agent-orchestrator-session-events", () => {
     expect(sessionsRef.current["session-1"]?.todos).toHaveLength(1);
     expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+    expect(updateSessionOptions).toContainEqual({ persist: false });
   });
 
   test("renders a cancelled session notice when a user-requested stop finishes normally", () => {

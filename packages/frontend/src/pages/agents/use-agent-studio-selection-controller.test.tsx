@@ -371,6 +371,47 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
+  test("loads runtime data once when selected and view sessions are the same", async () => {
+    const readSessionTodos = mock(async () => [
+      {
+        id: "todo-1",
+        content: "Check startup",
+        status: "pending" as const,
+        priority: "medium" as const,
+      },
+    ]);
+    const buildSession = createSession("task-1", "session-build", {
+      role: "build",
+      runtimeKind: "opencode",
+      runtimeId: "runtime-1",
+      workingDirectory: "/repo",
+      status: "idle",
+      todos: [],
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        sessions: [buildSession],
+        taskIdParam: "task-1",
+        sessionParam: "session-build",
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+        readSessionTodos,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((latest) => latest.viewActiveSession?.todos.length === 1);
+
+      expect(readSessionTodos).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().activeSession?.todos).toEqual(
+        harness.getLatest().viewActiveSession?.todos,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("suppresses stale query task and session selection while repo boundary reset is pending", async () => {
     const readSessionModelCatalog = mock(async () => emptyCatalog);
     const readSessionTodos = mock(async () => []);

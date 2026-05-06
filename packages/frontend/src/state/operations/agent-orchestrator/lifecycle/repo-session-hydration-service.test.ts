@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionPresenceSnapshot } from "@openducktor/core";
 import { createAgentSessionPresenceSnapshotFixture } from "../test-utils";
@@ -211,6 +211,45 @@ describe("repo-session-hydration-service", () => {
       },
     ]);
     service.dispose();
+  });
+
+  test("hydrates durable sessions when live presence preload fails", async () => {
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
+    const task = taskWithSession("task-1", "external-1");
+    const taskRecords = task.agentSessions ?? [];
+    const bootstrapCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    const reconcileLiveTaskSessions = mock(async () => {});
+    const prepareRepoSessionPresencePreloads = mock(async () => {
+      throw new Error("presence scan failed");
+    });
+    const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const service = createRepoSessionHydrationService({
+        sessionHydration: {
+          bootstrapTaskSessions: async (taskId, records) => {
+            bootstrapCalls.push({ taskId, records: records ?? [] });
+          },
+          reconcileLiveTaskSessions,
+        },
+        agentSessionPresenceStore,
+        prepareRepoSessionPresencePreloads,
+        onRetryRequested: () => {},
+      });
+
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [task],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
+
+      expect(bootstrapCalls).toEqual([{ taskId: "task-1", records: taskRecords }]);
+      expect(reconcileLiveTaskSessions).toHaveBeenCalledTimes(0);
+      service.dispose();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   test("does not reconcile unchanged task records twice", async () => {

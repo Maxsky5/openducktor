@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type {
   AgentSessionRecord,
   RuntimeInstanceSummary,
@@ -1877,7 +1877,7 @@ describe("load-sessions-stages", () => {
     });
   });
 
-  test("skips failed child pending input overlays without failing parent hydration", async () => {
+  test("fails parent hydration when child pending input cannot be hydrated", async () => {
     const stalePermission = {
       requestId: "stale-perm",
       requestType: "permission_grant" as const,
@@ -1900,11 +1900,8 @@ describe("load-sessions-stages", () => {
         },
       }),
     });
-    const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
-    let warnedMessage: string | undefined;
-
-    try {
-      await hydrateSessionRecordsStage({
+    await expect(
+      hydrateSessionRecordsStage({
         repoPath: "/tmp/repo",
         adapter: {
           hasSession: () => false,
@@ -1976,21 +1973,18 @@ describe("load-sessions-stages", () => {
           buildHydrationSystemPrompt: async () => "",
         },
         getRepoPromptOverrides: async () => ({}),
-      });
-      warnedMessage = consoleWarnSpy.mock.calls[0]?.[0] as string | undefined;
-    } finally {
-      consoleWarnSpy.mockRestore();
-    }
+      }),
+    ).rejects.toThrow(
+      "Failed to hydrate subagent pending input: subagent session 'external-child-session': child snapshot unavailable",
+    );
 
-    expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("hydrated");
+    expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("failed");
     expect(
       stateHarness.getState()["external-1"]?.subagentPendingApprovalsByExternalSessionId,
-    ).toEqual({
-      "external-child-session": [stalePermission],
-    });
-    expect(warnedMessage).toContain(
-      "Failed to hydrate pending input for subagent session 'external-child-session': child snapshot unavailable",
-    );
+    ).toBeUndefined();
+    expect(
+      stateHarness.getState()["external-1"]?.subagentPendingQuestionsByExternalSessionId,
+    ).toBeUndefined();
   });
 
   test("runtime planner ignores stale hydrated runtime state and reuses preloaded live snapshots", async () => {

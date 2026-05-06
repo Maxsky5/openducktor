@@ -60,33 +60,6 @@ export const useRepoSessionHydrationEffects = ({
   }, [workspaceRepoPath, repoSessionHydrationService]);
 
   useEffect(() => {
-    if (!workspaceRepoPath) {
-      return;
-    }
-    void sessionRetryTick;
-    let cancelled = false;
-
-    void (async () => {
-      await repoSessionHydrationService.bootstrapPendingTasks({
-        repoPath: workspaceRepoPath,
-        tasks,
-        isCancelled: () => cancelled,
-        isCurrentRepo: isCurrentActiveRepo,
-      });
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    workspaceRepoPath,
-    isCurrentActiveRepo,
-    repoSessionHydrationService,
-    sessionRetryTick,
-    tasks,
-  ]);
-
-  useEffect(() => {
     if (!workspaceRepoPath || tasks.length === 0) {
       return;
     }

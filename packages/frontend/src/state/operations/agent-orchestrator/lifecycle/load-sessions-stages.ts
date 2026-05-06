@@ -242,6 +242,7 @@ const loadHydratedSubagentPendingInputOverlay = async ({
   const pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId = {};
   const pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId = {};
   const scannedChildExternalSessionIds: string[] = [];
+  const failures: string[] = [];
   await Promise.all(
     childExternalSessionIds.map(async (childExternalSessionId) => {
       try {
@@ -259,12 +260,13 @@ const loadHydratedSubagentPendingInputOverlay = async ({
             snapshot.pendingQuestions;
         }
       } catch (error) {
-        console.warn(
-          `Failed to hydrate pending input for subagent session '${childExternalSessionId}': ${errorMessage(error)}`,
-        );
+        failures.push(`subagent session '${childExternalSessionId}': ${errorMessage(error)}`);
       }
     }),
   );
+  if (failures.length > 0) {
+    throw new Error(`Failed to hydrate subagent pending input: ${failures.join("; ")}`);
+  }
 
   return toHydratedSubagentPendingInputOverlay(
     scannedChildExternalSessionIds,
@@ -702,6 +704,8 @@ const markHistoryHydrationFailed = (
     (current) => ({
       ...current,
       historyHydrationState: "failed",
+      subagentPendingApprovalsByExternalSessionId: undefined,
+      subagentPendingQuestionsByExternalSessionId: undefined,
     }),
     { persist: false },
   );
