@@ -1587,9 +1587,15 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
+    const committedStatuses: AgentSessionState["status"][] = [];
 
     adapter.hasSession = () => true;
-    mockAgentSessionPresenceSnapshot(adapter);
+    mockAgentSessionPresenceSnapshot(
+      adapter,
+      createAgentSessionPresenceSnapshotFixture({
+        snapshot: { status: { type: "idle" } },
+      }),
+    );
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -1620,7 +1626,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         if (!current) {
           return;
         }
-        sessionsRef.current[externalSessionId] = updater(current);
+        const next = updater(current);
+        if (current.status === "starting") {
+          expect(next.status).not.toBe("idle");
+        }
+        committedStatuses.push(next.status);
+        sessionsRef.current[externalSessionId] = next;
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
@@ -1640,6 +1651,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
 
       expect(sendCalls).toBe(1);
+      expect(committedStatuses).not.toContain("idle");
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
     } finally {
       adapter.hasSession = originalHasSession;

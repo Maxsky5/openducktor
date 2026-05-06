@@ -78,19 +78,29 @@ export const applyAgentSessionPresenceSnapshotToSession = (
     promptOverrides?: RepoPromptOverrides;
     selectedModel?: AgentSessionState["selectedModel"];
     missingSessionRuntimeId?: string | null;
+    preserveStartingStatusForIdlePresence?: boolean;
   } = {},
 ): AgentSessionState => {
   const promptOverrides = options.promptOverrides ?? current.promptOverrides;
   const selectedModel = options.selectedModel ?? current.selectedModel;
   const promptOverridesPatch = promptOverrides ? { promptOverrides } : {};
   if (snapshot.presence === "runtime") {
+    let status: AgentSessionState["status"] = snapshot.agentSessionStatus;
+    if (
+      options.preserveStartingStatusForIdlePresence === true &&
+      current.status === "starting" &&
+      snapshot.agentSessionStatus === "idle"
+    ) {
+      status = "starting";
+    }
+
     return {
       ...current,
       runtimeKind: snapshot.ref.runtimeKind,
       runtimeId: snapshot.runtimeId,
       workingDirectory: snapshot.ref.workingDirectory,
       runtimeRecoveryState: "idle",
-      status: snapshot.agentSessionStatus,
+      status,
       title: snapshot.title,
       pendingApprovals: snapshot.pendingApprovals,
       pendingQuestions: snapshot.pendingQuestions,
