@@ -240,6 +240,7 @@ export type AgentStateContextValue = {
           selectedModel: AgentModelSelection;
           startMode: "fresh";
           targetWorkingDirectory?: string | null;
+          holdStartingStatusUntilFirstMessage?: boolean;
         }
       | {
           taskId: string;
@@ -248,6 +249,7 @@ export type AgentStateContextValue = {
           selectedModel: AgentModelSelection;
           startMode: "fork";
           sourceExternalSessionId: string;
+          holdStartingStatusUntilFirstMessage?: boolean;
         },
   ) => Promise<string>;
   sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;

@@ -17,12 +17,14 @@ export type FreshSessionStartExecutionRequest = SessionStartExecutionRequestBase
   startMode: "fresh";
   selectedModel: AgentModelSelection;
   targetWorkingDirectory?: string | null;
+  holdStartingStatusUntilFirstMessage?: boolean;
 };
 
 export type ForkSessionStartExecutionRequest = SessionStartExecutionRequestBase & {
   startMode: "fork";
   selectedModel: AgentModelSelection;
   sourceExternalSessionId: string;
+  holdStartingStatusUntilFirstMessage?: boolean;
 };
 
 export type SessionStartExecutionRequest =
@@ -39,12 +41,14 @@ const prepareFreshSessionStartInput = ({
   role,
   selectedModel,
   targetWorkingDirectory,
+  holdStartingStatusUntilFirstMessage,
 }: FreshSessionStartExecutionRequest): StartAgentSessionInput => ({
   taskId,
   role,
   selectedModel,
   startMode: "fresh",
   ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
+  ...(holdStartingStatusUntilFirstMessage ? { holdStartingStatusUntilFirstMessage } : {}),
 });
 
 const prepareReuseSessionStartInput = ({
@@ -63,12 +67,14 @@ const prepareForkSessionStartInput = ({
   role,
   selectedModel,
   sourceExternalSessionId,
+  holdStartingStatusUntilFirstMessage,
 }: ForkSessionStartExecutionRequest): StartAgentSessionInput => ({
   taskId,
   role,
   selectedModel,
   startMode: "fork",
   sourceExternalSessionId,
+  ...(holdStartingStatusUntilFirstMessage ? { holdStartingStatusUntilFirstMessage } : {}),
 });
 
 export const prepareSessionStartInput = (

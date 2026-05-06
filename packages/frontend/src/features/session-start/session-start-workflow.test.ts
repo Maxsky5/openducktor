@@ -178,4 +178,38 @@ describe("session-start-workflow", () => {
     expect(sentText).toContain("Update the acceptance criteria and rerun the desktop tests.");
     expect(sentText).toContain("Use taskId TASK-3 for every odt_* tool call.");
   });
+
+  test("holds fresh kickoff sessions in starting state until the kickoff message runs", async () => {
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => "session-build-new");
+
+    await startSessionWorkflow({
+      activeWorkspace: null,
+      queryClient: new QueryClient(),
+      intent: {
+        taskId: "TASK-4",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        startMode: "fresh",
+        postStartAction: "kickoff",
+      },
+      selection: BUILD_SELECTION,
+      task: createTaskCardFixture({
+        id: "TASK-4",
+        title: "Start implementation",
+        description: "desc",
+        status: "ready_for_dev",
+        priority: 1,
+      }),
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startMode: "fresh",
+        holdStartingStatusUntilFirstMessage: true,
+      }),
+    );
+  });
 });

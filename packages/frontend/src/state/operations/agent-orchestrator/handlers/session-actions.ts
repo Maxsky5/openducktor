@@ -188,14 +188,46 @@ export const createAgentSessionActions = ({
         throw new Error(unavailableRoleErrorMessage(task, currentSession.role));
       }
       if (isAgentSessionWaitingInput(currentSession)) {
+        if (currentSession.status === "starting") {
+          updateSession(
+            externalSessionId,
+            (current) => ({
+              ...current,
+              status: "idle",
+            }),
+            { persist: false },
+          );
+        }
         return;
       }
     }
 
-    await ensureSessionReady(externalSessionId);
+    try {
+      await ensureSessionReady(externalSessionId);
+    } catch (error) {
+      updateSession(
+        externalSessionId,
+        (current) => ({
+          ...current,
+          status: current.status === "starting" ? "error" : current.status,
+        }),
+        { persist: false },
+      );
+      throw error;
+    }
 
     const readySession = sessionsRef.current[externalSessionId];
     if (!readySession || isAgentSessionWaitingInput(readySession)) {
+      if (readySession?.status === "starting") {
+        updateSession(
+          externalSessionId,
+          (current) => ({
+            ...current,
+            status: "idle",
+          }),
+          { persist: false },
+        );
+      }
       return;
     }
 

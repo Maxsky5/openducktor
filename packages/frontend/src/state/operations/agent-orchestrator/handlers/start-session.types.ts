@@ -28,6 +28,7 @@ export type StartAgentSessionInput =
       selectedModel: AgentModelSelection;
       startMode: "fresh";
       targetWorkingDirectory?: string | null;
+      holdStartingStatusUntilFirstMessage?: boolean;
     }
   | {
       taskId: string;
@@ -35,6 +36,7 @@ export type StartAgentSessionInput =
       selectedModel: AgentModelSelection;
       startMode: "fork";
       sourceExternalSessionId: string;
+      holdStartingStatusUntilFirstMessage?: boolean;
     };
 
 export type SessionStateById = Record<string, AgentSessionState>;
@@ -133,11 +135,13 @@ export type StartSessionCreationInput =
       startMode: "fresh";
       selectedModel: AgentModelSelection;
       targetWorkingDirectory?: string | null;
+      holdStartingStatusUntilFirstMessage?: boolean;
     }
   | {
       startMode: "fork";
       selectedModel: AgentModelSelection;
       sourceExternalSessionId: string;
+      holdStartingStatusUntilFirstMessage?: boolean;
     };
 
 export type ResolvedRuntimeAndModel = {

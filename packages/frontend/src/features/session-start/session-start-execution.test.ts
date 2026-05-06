@@ -74,4 +74,22 @@ describe("session-start-execution", () => {
       }),
     );
   });
+
+  test("prepareSessionStartInput can hold fresh sessions in starting state before kickoff", async () => {
+    const result = await prepareSessionStartInput({
+      taskId: "TASK-1",
+      role: "build",
+      startMode: "fresh",
+      selectedModel: BUILD_SELECTION,
+      holdStartingStatusUntilFirstMessage: true,
+    });
+
+    expect(result).toEqual({
+      taskId: "TASK-1",
+      role: "build",
+      selectedModel: BUILD_SELECTION,
+      startMode: "fresh",
+      holdStartingStatusUntilFirstMessage: true,
+    });
+  });
 });

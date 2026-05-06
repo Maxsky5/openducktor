@@ -48,14 +48,20 @@ const attachSessionListenerAndGuard = async ({
   startedCtx,
   session,
   runtime,
+  holdStartingStatusUntilFirstMessage,
 }: {
   startedCtx: StartedSessionContext;
   session: SessionDependencies;
   runtime: RuntimeDependencies;
+  holdStartingStatusUntilFirstMessage: boolean;
 }): Promise<void> => {
   session.attachSessionListener(startedCtx.repoPath, startedCtx.summary.externalSessionId);
 
   if (!startedCtx.isStaleRepoOperation()) {
+    if (holdStartingStatusUntilFirstMessage) {
+      return;
+    }
+
     session.setSessionsById((current) => {
       const currentSession = current[startedCtx.summary.externalSessionId];
       if (!currentSession || currentSession.status !== "starting") {
@@ -175,6 +181,8 @@ export const createStartAgentSession = ({
         startedCtx: startResult.ctx,
         session,
         runtime,
+        holdStartingStatusUntilFirstMessage:
+          input.startMode !== "reuse" && input.holdStartingStatusUntilFirstMessage === true,
       });
 
       return startResult.ctx.summary.externalSessionId;

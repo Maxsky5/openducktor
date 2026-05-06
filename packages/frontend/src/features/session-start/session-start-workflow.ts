@@ -195,6 +195,20 @@ export const startSessionWorkflow = async ({
     ...(humanRequestChangesTask ? { humanRequestChangesTask } : {}),
   });
 
+  const postStartMessage =
+    intent.postStartAction === "none"
+      ? null
+      : await buildPostStartMessage({
+          activeWorkspace,
+          queryClient,
+          intent,
+          task,
+        });
+
+  if (postStartMessage !== null && !sendAgentMessage) {
+    throw new Error("Post-start messaging is unavailable.");
+  }
+
   const externalSessionId =
     intent.startMode === "reuse"
       ? await executeSessionStart({
@@ -211,6 +225,7 @@ export const startSessionWorkflow = async ({
             startMode: "fork",
             selectedModel: requireSelectedModel(selection, "fork"),
             sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "fork"),
+            holdStartingStatusUntilFirstMessage: postStartMessage !== null,
             startAgentSession,
           })
         : await executeSessionStart({
@@ -221,10 +236,11 @@ export const startSessionWorkflow = async ({
             ...(intent.targetWorkingDirectory !== undefined
               ? { targetWorkingDirectory: intent.targetWorkingDirectory }
               : {}),
+            holdStartingStatusUntilFirstMessage: postStartMessage !== null,
             startAgentSession,
           });
 
-  if (intent.postStartAction === "none") {
+  if (postStartMessage === null) {
     return {
       externalSessionId,
       postStartActionError: null,
@@ -233,18 +249,14 @@ export const startSessionWorkflow = async ({
   if (!sendAgentMessage) {
     throw new Error("Post-start messaging is unavailable.");
   }
+  const postStartMessageSender = sendAgentMessage;
 
   const runPostStartAction = async (): Promise<Error | null> => {
     try {
-      await sendAgentMessage(externalSessionId, [
+      await postStartMessageSender(externalSessionId, [
         {
           kind: "text",
-          text: await buildPostStartMessage({
-            activeWorkspace,
-            queryClient,
-            intent,
-            task,
-          }),
+          text: postStartMessage,
         },
       ]);
       return null;
