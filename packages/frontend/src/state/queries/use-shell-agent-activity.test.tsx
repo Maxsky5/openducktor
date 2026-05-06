@@ -109,6 +109,7 @@ beforeEach(async () => {
   mock.module("../app-state-provider", () => ({
     ...actualAppStateProviderModule,
     useAgentActivitySessions: () => currentActivitySessions,
+    useTasksState: () => ({ tasks: currentVisibleTasks }),
   }));
   ({ useShellAgentActivity } = await import("./use-shell-agent-activity"));
 });

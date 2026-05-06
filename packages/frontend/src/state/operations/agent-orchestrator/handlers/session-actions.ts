@@ -63,7 +63,11 @@ type SessionActionsDependencies = {
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   clearTurnDuration: (externalSessionId: string, completedTimestamp?: string) => void;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  refreshTaskData: (
+    repoPath: string,
+    taskIdOrIds?: string | string[],
+    options?: { forceFreshTaskList?: boolean },
+  ) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   stopAuthoritativeSession?: (target: AgentSessionStopTarget) => Promise<void>;
   invalidateSessionStopQueries?: (input: {
@@ -462,7 +466,7 @@ export const createAgentSessionActions = ({
         ...current,
         pendingApprovals: current.pendingApprovals.filter((entry) => entry.requestId !== requestId),
       }),
-      { persist: true },
+      { persist: false },
     );
     clearSubagentPendingApprovalFromSessions({
       sessionsRef,
@@ -502,7 +506,7 @@ export const createAgentSessionActions = ({
           messages,
         };
       },
-      { persist: true },
+      { persist: false },
     );
     clearSubagentPendingQuestionFromSessions({
       sessionsRef,

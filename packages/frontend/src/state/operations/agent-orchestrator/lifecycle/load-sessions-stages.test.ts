@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type {
   AgentSessionRecord,
   RuntimeInstanceSummary,
@@ -1877,7 +1877,7 @@ describe("load-sessions-stages", () => {
     });
   });
 
-  test("skips failed child pending input overlays without failing parent hydration", async () => {
+  test("keeps successful child pending input when another child hydration fails", async () => {
     const stalePermission = {
       requestId: "stale-perm",
       requestType: "permission_grant" as const,
@@ -1892,6 +1892,11 @@ describe("load-sessions-stages", () => {
         "reject" as const,
       ],
     };
+    const livePermission = {
+      ...stalePermission,
+      requestId: "live-perm",
+      affectedPaths: ["live/**"],
+    };
     const stateHarness = createStateHarness({
       "external-1": createSession({
         historyHydrationState: "hydrating",
@@ -1900,11 +1905,8 @@ describe("load-sessions-stages", () => {
         },
       }),
     });
-    const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
-    let warnedMessage: string | undefined;
-
-    try {
-      await hydrateSessionRecordsStage({
+    await expect(
+      hydrateSessionRecordsStage({
         repoPath: "/tmp/repo",
         adapter: {
           hasSession: () => false,
@@ -1925,6 +1927,16 @@ describe("load-sessions-stages", () => {
                   agent: "explorer",
                   description: "Inspect session state",
                   externalSessionId: "external-child-session",
+                },
+                {
+                  kind: "subagent",
+                  messageId: "assistant-parent",
+                  partId: "subtask-2",
+                  correlationKey: "part:assistant-parent:subtask-2",
+                  status: "running",
+                  agent: "explorer",
+                  description: "Inspect second session state",
+                  externalSessionId: "external-success-child-session",
                 },
               ],
             },
@@ -1962,6 +1974,19 @@ describe("load-sessions-stages", () => {
             if (externalSessionId === "external-child-session") {
               throw new Error("child snapshot unavailable");
             }
+            if (externalSessionId === "external-success-child-session") {
+              return createSessionPresenceSnapshot(
+                "external-success-child-session",
+                "/tmp/repo/worktree",
+                {
+                  title: "Child",
+                  startedAt: "2026-03-01T09:00:01.000Z",
+                  status: { type: "busy" },
+                  pendingApprovals: [livePermission],
+                  pendingQuestions: [],
+                },
+              );
+            }
             return createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
               title: "Parent",
               startedAt: "2026-03-01T09:00:00.000Z",
@@ -1976,21 +2001,20 @@ describe("load-sessions-stages", () => {
           buildHydrationSystemPrompt: async () => "",
         },
         getRepoPromptOverrides: async () => ({}),
-      });
-      warnedMessage = consoleWarnSpy.mock.calls[0]?.[0] as string | undefined;
-    } finally {
-      consoleWarnSpy.mockRestore();
-    }
+      }),
+    ).rejects.toThrow(
+      "Failed to hydrate subagent pending input: subagent session 'external-child-session': child snapshot unavailable",
+    );
 
-    expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("hydrated");
+    expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("failed");
     expect(
       stateHarness.getState()["external-1"]?.subagentPendingApprovalsByExternalSessionId,
     ).toEqual({
-      "external-child-session": [stalePermission],
+      "external-success-child-session": [livePermission],
     });
-    expect(warnedMessage).toContain(
-      "Failed to hydrate pending input for subagent session 'external-child-session': child snapshot unavailable",
-    );
+    expect(
+      stateHarness.getState()["external-1"]?.subagentPendingQuestionsByExternalSessionId,
+    ).toBeUndefined();
   });
 
   test("runtime planner ignores stale hydrated runtime state and reuses preloaded live snapshots", async () => {

@@ -86,7 +86,11 @@ export type TaskRefreshOptions = {
 };
 
 export type TaskControlContextValue = {
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  refreshTaskData: (
+    repoPath: string,
+    taskIdOrIds?: string | string[],
+    options?: { forceFreshTaskList?: boolean },
+  ) => Promise<void>;
   refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   clearTaskData: () => void;
   setIsLoadingTasks: (value: boolean) => void;

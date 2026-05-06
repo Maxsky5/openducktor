@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
   type AgentActivitySummary,
@@ -7,8 +6,7 @@ import {
 } from "@/components/layout/sidebar/agent-activity-model";
 import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { useAgentActivitySessions } from "../app-state-provider";
-import { repoVisibleTasksQueryOptions } from "./tasks";
+import { useAgentActivitySessions, useTasksState } from "../app-state-provider";
 
 const EMPTY_AGENT_ACTIVITY_SUMMARY: AgentActivitySummary = {
   activeSessionCount: 0,
@@ -60,7 +58,7 @@ export const useShellAgentActivity = (
   activeWorkspace: ActiveWorkspace | null,
 ): AgentActivitySummary => {
   const sessions = useAgentActivitySessions();
-  const activeRepoPath = activeWorkspace?.repoPath ?? null;
+  const { tasks } = useTasksState();
   const visibleSessions = useMemo(
     () => filterSessionsForRepo(sessions, activeWorkspace),
     [activeWorkspace, sessions],
@@ -70,12 +68,7 @@ export const useShellAgentActivity = (
     () => selectTaskTitlesForActivity(activityTaskIds),
     [activityTaskIds],
   );
-  const taskTitleQuery = useQuery({
-    ...repoVisibleTasksQueryOptions(activeRepoPath ?? "__shell-activity-disabled__"),
-    enabled: activeRepoPath !== null && activityTaskIds.length > 0,
-    select: selectTaskTitles,
-  });
-  const taskTitleById = taskTitleQuery.data ?? EMPTY_TASK_TITLES;
+  const taskTitleById = useMemo(() => selectTaskTitles(tasks), [selectTaskTitles, tasks]);
 
   return useMemo(() => {
     if (activeWorkspace === null || visibleSessions.length === 0) {

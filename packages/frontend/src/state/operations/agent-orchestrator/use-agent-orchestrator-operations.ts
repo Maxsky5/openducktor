@@ -19,6 +19,7 @@ import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-st
 import { useRepoSessionHydrationEffects } from "./hooks/use-repo-session-hydration-effects";
 import { useRuntimeTranscriptAttachment } from "./hooks/use-runtime-transcript-attachment";
 import { createLoadAgentSessions } from "./lifecycle/load-sessions";
+import { prepareRepoSessionPresencePreloads } from "./lifecycle/repo-session-presence-preloads";
 import { AgentSessionPresenceStore } from "./lifecycle/session-presence-store";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
@@ -28,7 +29,11 @@ import { createSessionCacheEffects } from "./support/session-cache-effects";
 type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  refreshTaskData: (
+    repoPath: string,
+    taskIdOrIds?: string | string[],
+    options?: { forceFreshTaskList?: boolean },
+  ) => Promise<void>;
   agentEngine: AgentEnginePort;
   /**
    * Optional dependency seam for tests and specialized callers.
@@ -148,12 +153,22 @@ export function useAgentOrchestratorOperations({
       sessionsRef,
       updateSession,
     });
+  const prepareSessionPresencePreloads = useCallback(
+    ({ repoPath, records }: { repoPath: string; records: AgentSessionRecord[] }) =>
+      prepareRepoSessionPresencePreloads({
+        repoPath,
+        records,
+        listSessionPresence: (input) => agentEngine.listSessionPresence(input),
+      }),
+    [agentEngine],
+  );
   useRepoSessionHydrationEffects({
     workspaceRepoPath,
     tasks,
     currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
     agentSessionPresenceStore,
     sessionHydration,
+    prepareRepoSessionPresencePreloads: prepareSessionPresencePreloads,
   });
   const ensureRuntime = useMemo(
     () =>

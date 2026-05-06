@@ -272,13 +272,6 @@ export function useAgentStudioSelectionController({
     sessionsForTask,
   ]);
   const activeSession = useAgentSession(activeSessionSummary?.externalSessionId ?? null);
-  const activeSessionRuntimeData = useAgentChatSessionRuntimeData({
-    session: activeSession,
-    runtimeDefinitions,
-    repoReadinessState: agentStudioReadinessState,
-    readSessionModelCatalog,
-    readSessionTodos,
-  });
 
   const latestSessionByTaskId = useMemo(() => {
     const latestByTask = new Map<string, AgentSessionSummary>();
@@ -383,6 +376,17 @@ export function useAgentStudioSelectionController({
     viewSessionsForTask,
   ]);
   const viewActiveSession = useAgentSession(viewSelection.activeSession?.externalSessionId ?? null);
+  const isActiveSessionSameAsViewSession =
+    activeSession !== null &&
+    viewActiveSession !== null &&
+    activeSession.externalSessionId === viewActiveSession.externalSessionId;
+  const activeSessionRuntimeDataForDistinctSession = useAgentChatSessionRuntimeData({
+    session: isActiveSessionSameAsViewSession ? null : activeSession,
+    runtimeDefinitions,
+    repoReadinessState: agentStudioReadinessState,
+    readSessionModelCatalog,
+    readSessionTodos,
+  });
   const viewSessionRuntimeData = useAgentChatSessionRuntimeData({
     session: viewActiveSession,
     runtimeDefinitions,
@@ -390,6 +394,9 @@ export function useAgentStudioSelectionController({
     readSessionModelCatalog,
     readSessionTodos,
   });
+  const activeSessionRuntimeData = isActiveSessionSameAsViewSession
+    ? viewSessionRuntimeData
+    : activeSessionRuntimeDataForDistinctSession;
   const viewRole = viewSelection.role;
   const viewLaunchActionId: SessionLaunchActionId =
     viewRole === "build"

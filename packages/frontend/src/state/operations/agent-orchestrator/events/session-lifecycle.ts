@@ -602,7 +602,7 @@ export const handlePermissionRequired = (
         toPendingApproval(event),
       ],
     }),
-    { persist: true },
+    { persist: false },
   );
   patchParentSubagentSessionLink(context, event);
   recordParentSubagentPendingApproval(context, event);
@@ -629,7 +629,7 @@ export const handleQuestionRequired = (
         toPendingQuestion(event),
       ],
     }),
-    { persist: true },
+    { persist: false },
   );
   patchParentSubagentSessionLink(context, event);
   recordParentSubagentPendingQuestion(context, event);

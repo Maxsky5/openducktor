@@ -48,7 +48,11 @@ export type AttachAgentSessionListenerParams = {
   recordTurnUserMessageTimestamp?: RecordTurnTimestamp;
   resolveTurnDurationMs: ResolveTurnDuration;
   clearTurnDuration: (externalSessionId: string, completedTimestamp?: string) => void;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  refreshTaskData: (
+    repoPath: string,
+    taskIdOrIds?: string | string[],
+    options?: { forceFreshTaskList?: boolean },
+  ) => Promise<void>;
   resolveRuntimeDefinition?: (runtimeKind: RuntimeKind) => RuntimeDescriptor | null;
 };
 

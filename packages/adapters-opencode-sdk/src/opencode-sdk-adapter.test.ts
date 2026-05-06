@@ -327,7 +327,7 @@ describe("opencode-sdk-adapter", () => {
     expect(requireRepoRuntime).not.toHaveBeenCalled();
   });
 
-  test("resumeSession requires an existing repo runtime instead of ensuring one", async () => {
+  test("resumeSession ensures the repo runtime without listing live runtimes", async () => {
     const mockClient = makeMockClient();
     const ensureRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
     const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
@@ -350,14 +350,14 @@ describe("opencode-sdk-adapter", () => {
       externalSessionId: "external-session-1",
     });
 
-    expect(ensureRepoRuntime).not.toHaveBeenCalled();
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(ensureRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(requireRepoRuntime).not.toHaveBeenCalled();
     expect(mockClient.getCalls).toEqual([
       { directory: defaultWorkingDirectory, sessionID: "external-session-1" },
     ]);
   });
 
-  test("live session reads require an existing repo runtime instead of ensuring one", async () => {
+  test("live session scans ensure the repo runtime without listing live runtimes", async () => {
     const mockClient = makeMockClient();
     const ensureRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
     const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
@@ -375,8 +375,8 @@ describe("opencode-sdk-adapter", () => {
       runtimeKind: "opencode",
     });
 
-    expect(ensureRepoRuntime).not.toHaveBeenCalled();
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(ensureRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(requireRepoRuntime).not.toHaveBeenCalled();
   });
 
   test("startSession registers and stopSession tears down the session", async () => {

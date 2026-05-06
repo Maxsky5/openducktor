@@ -26,6 +26,10 @@ const mergePendingRequestsByRequestId = <T extends { requestId: string }>(
   currentEntries: T[] | undefined,
   hydratedEntries: T[] | undefined,
 ): T[] | undefined => {
+  if (hydratedEntries !== undefined && hydratedEntries.length === 0) {
+    return undefined;
+  }
+
   const mergedByRequestId = new Map<string, T>();
   for (const entry of currentEntries ?? []) {
     mergedByRequestId.set(entry.requestId, entry);

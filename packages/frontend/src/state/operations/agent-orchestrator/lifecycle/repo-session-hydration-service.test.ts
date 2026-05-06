@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionPresenceSnapshot } from "@openducktor/core";
+import { createAgentSessionPresenceSnapshotFixture } from "../test-utils";
 import { createRepoSessionHydrationService } from "./repo-session-hydration-service";
+import { agentSessionPresenceLookupKey } from "./session-presence-cache";
 import { AgentSessionPresenceStore } from "./session-presence-store";
 
 const createDeferred = <T>() => {
@@ -57,48 +60,6 @@ const taskWithSession = (taskId: string, externalSessionId: string): TaskCard =>
   ],
 });
 
-const taskWithSessionAt = (
-  taskId: string,
-  externalSessionId: string,
-  workingDirectory: string,
-): TaskCard => {
-  const task = taskWithSession(taskId, externalSessionId);
-  const session = task.agentSessions?.[0];
-  if (!session) {
-    throw new Error("Expected seeded task session");
-  }
-  task.agentSessions = [{ ...session, workingDirectory }];
-  return task;
-};
-
-const withSuppressedExpectedConsoleErrors = async ({
-  expectedCount,
-  isExpected,
-  run,
-}: {
-  expectedCount: number;
-  isExpected: (args: Parameters<typeof console.error>) => boolean;
-  run: () => Promise<void>;
-}): Promise<void> => {
-  const originalError = console.error;
-  let suppressedCount = 0;
-  console.error = (...args: Parameters<typeof console.error>): void => {
-    if (isExpected(args)) {
-      suppressedCount += 1;
-      return;
-    }
-
-    originalError(...args);
-  };
-
-  try {
-    await run();
-    expect(suppressedCount).toBe(expectedCount);
-  } finally {
-    console.error = originalError;
-  }
-};
-
 describe("repo-session-hydration-service", () => {
   test("does not start bootstrap twice while the first bootstrap is still in flight", async () => {
     const deferred = createDeferred<void>();
@@ -142,106 +103,6 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
-  test("reconcile delegates repo-scoped persisted records without pre-scanning runtimes", async () => {
-    const reconcileCalls: Array<{
-      taskId: string;
-      persistedRecords: AgentSessionRecord[];
-    }> = [];
-    const agentSessionPresenceStore = new AgentSessionPresenceStore();
-
-    const mixedTask = taskWithSessionAt("task-mixed", "external-repo", repoPath);
-    const firstSession = mixedTask.agentSessions?.[0];
-    if (!firstSession) {
-      throw new Error("Expected seeded task session");
-    }
-    mixedTask.agentSessions = [
-      firstSession,
-      {
-        ...firstSession,
-        externalSessionId: "external-worktree",
-        workingDirectory: worktreePath,
-      },
-    ];
-
-    const emptyTask = taskWithSessionAt("task-empty", "external-empty", repoPath);
-    emptyTask.agentSessions = [];
-
-    const service = createRepoSessionHydrationService({
-      sessionHydration: {
-        bootstrapTaskSessions: async () => {},
-        reconcileLiveTaskSessions: async (input) => {
-          reconcileCalls.push(
-            input as {
-              taskId: string;
-              persistedRecords: AgentSessionRecord[];
-            },
-          );
-        },
-      },
-      agentSessionPresenceStore,
-      onRetryRequested: () => {},
-    });
-
-    await service.reconcilePendingTasks({
-      repoPath,
-      tasks: [mixedTask, emptyTask],
-      isCancelled: () => false,
-      isCurrentRepo: () => true,
-    });
-
-    expect(reconcileCalls).toEqual([
-      {
-        taskId: "task-mixed",
-        persistedRecords: [
-          {
-            ...firstSession,
-            externalSessionId: "external-repo",
-            workingDirectory: repoPath,
-          },
-          {
-            ...firstSession,
-            externalSessionId: "external-worktree",
-            workingDirectory: worktreePath,
-          },
-        ],
-      },
-    ]);
-    service.dispose();
-  });
-
-  test("does not reconcile unchanged persisted records more than once", async () => {
-    const reconcileCalls: string[] = [];
-    const agentSessionPresenceStore = new AgentSessionPresenceStore();
-    const task = taskWithSession("task-1", "external-1");
-
-    const service = createRepoSessionHydrationService({
-      sessionHydration: {
-        bootstrapTaskSessions: async () => {},
-        reconcileLiveTaskSessions: async ({ taskId }) => {
-          reconcileCalls.push(taskId);
-        },
-      },
-      agentSessionPresenceStore,
-      onRetryRequested: () => {},
-    });
-
-    await service.reconcilePendingTasks({
-      repoPath,
-      tasks: [task],
-      isCancelled: () => false,
-      isCurrentRepo: () => true,
-    });
-    await service.reconcilePendingTasks({
-      repoPath,
-      tasks: [task],
-      isCancelled: () => false,
-      isCurrentRepo: () => true,
-    });
-
-    expect(reconcileCalls).toEqual(["task-1"]);
-    service.dispose();
-  });
-
   test("does not mark empty-session tasks as bootstrapped", async () => {
     const bootstrapCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
     const agentSessionPresenceStore = new AgentSessionPresenceStore();
@@ -279,50 +140,150 @@ describe("repo-session-hydration-service", () => {
     service.dispose();
   });
 
-  test("reconcile schedules retries when reconciliation throws", async () => {
-    let retryRequests = 0;
-    const reconcileCalls: string[] = [];
+  test("reconciles pending tasks with a shared preloaded presence map", async () => {
     const agentSessionPresenceStore = new AgentSessionPresenceStore();
-    const retryTriggered = createDeferred<void>();
+    const presenceSnapshot = createAgentSessionPresenceSnapshotFixture({
+      ref: { repoPath, runtimeKind: "opencode", workingDirectory: worktreePath },
+    });
+    const preloadedSessionPresenceByKey = new Map<string, AgentSessionPresenceSnapshot[]>([
+      [agentSessionPresenceLookupKey(repoPath, "opencode", worktreePath), [presenceSnapshot]],
+    ]);
+    const reconcileCalls: Array<{
+      taskId: string;
+      persistedRecords: AgentSessionRecord[];
+      preloaded: unknown;
+    }> = [];
+    const prepareRepoSessionPresencePreloads = mock(async ({ records }) => ({
+      preloadedSessionPresenceByKey,
+      recordCount: records.length,
+    }));
 
+    const taskOne = taskWithSession("task-1", "external-1");
+    const taskTwo = taskWithSession("task-2", "external-2");
+    const taskOneRecords = taskOne.agentSessions ?? [];
+    const taskTwoRecords = taskTwo.agentSessions ?? [];
     const service = createRepoSessionHydrationService({
       sessionHydration: {
         bootstrapTaskSessions: async () => {},
-        reconcileLiveTaskSessions: async ({ taskId }) => {
-          reconcileCalls.push(taskId);
-          throw new Error(`Failed to reconcile ${taskId}`);
+        reconcileLiveTaskSessions: async ({
+          taskId,
+          persistedRecords,
+          preloadedSessionPresenceByKey,
+        }) => {
+          if (!persistedRecords) {
+            throw new Error("Expected persisted records for reconciliation");
+          }
+          reconcileCalls.push({
+            taskId,
+            persistedRecords,
+            preloaded: preloadedSessionPresenceByKey,
+          });
         },
       },
       agentSessionPresenceStore,
-      onRetryRequested: () => {
-        retryRequests += 1;
-        retryTriggered.resolve();
-      },
+      prepareRepoSessionPresencePreloads,
+      onRetryRequested: () => {},
     });
 
-    await withSuppressedExpectedConsoleErrors({
-      expectedCount: 1,
-      isExpected: (args) =>
-        typeof args[0] === "string" &&
-        args[0].startsWith("Failed to reconcile agent sessions for task 'task-failing'"),
-      run: async () => {
-        await service.reconcilePendingTasks({
-          repoPath,
-          tasks: [taskWithSession("task-failing", "external-failing")],
-          isCancelled: () => false,
-          isCurrentRepo: () => true,
-        });
-      },
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [taskOne, taskTwo],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
     });
 
-    const retryResult = await Promise.race([
-      retryTriggered.promise.then(() => "retried" as const),
-      Bun.sleep(600).then(() => "timeout" as const),
+    expect(prepareRepoSessionPresencePreloads).toHaveBeenCalledTimes(1);
+    expect(prepareRepoSessionPresencePreloads.mock.calls[0]?.[0].records).toEqual([
+      ...taskOneRecords,
+      ...taskTwoRecords,
     ]);
+    expect(agentSessionPresenceStore.readPresence(presenceSnapshot.ref)).toEqual(presenceSnapshot);
+    expect(reconcileCalls).toEqual([
+      {
+        taskId: "task-1",
+        persistedRecords: taskOneRecords,
+        preloaded: preloadedSessionPresenceByKey,
+      },
+      {
+        taskId: "task-2",
+        persistedRecords: taskTwoRecords,
+        preloaded: preloadedSessionPresenceByKey,
+      },
+    ]);
+    service.dispose();
+  });
 
-    expect(reconcileCalls).toEqual(["task-failing"]);
-    expect(retryRequests).toBe(1);
-    expect(retryResult).toBe("retried");
+  test("hydrates durable sessions when live presence preload fails", async () => {
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
+    const task = taskWithSession("task-1", "external-1");
+    const taskRecords = task.agentSessions ?? [];
+    const bootstrapCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    const reconcileLiveTaskSessions = mock(async () => {});
+    const prepareRepoSessionPresencePreloads = mock(async () => {
+      throw new Error("presence scan failed");
+    });
+    const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const service = createRepoSessionHydrationService({
+        sessionHydration: {
+          bootstrapTaskSessions: async (taskId, records) => {
+            bootstrapCalls.push({ taskId, records: records ?? [] });
+          },
+          reconcileLiveTaskSessions,
+        },
+        agentSessionPresenceStore,
+        prepareRepoSessionPresencePreloads,
+        onRetryRequested: () => {},
+      });
+
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [task],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+      });
+
+      expect(bootstrapCalls).toEqual([{ taskId: "task-1", records: taskRecords }]);
+      expect(reconcileLiveTaskSessions).toHaveBeenCalledTimes(0);
+      service.dispose();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  test("does not reconcile unchanged task records twice", async () => {
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
+    const reconcileLiveTaskSessions = mock(async () => {});
+    const prepareRepoSessionPresencePreloads = mock(async () => ({
+      preloadedSessionPresenceByKey: new Map(),
+    }));
+    const task = taskWithSession("task-1", "external-1");
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions,
+      },
+      agentSessionPresenceStore,
+      prepareRepoSessionPresencePreloads,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(prepareRepoSessionPresencePreloads).toHaveBeenCalledTimes(1);
+    expect(reconcileLiveTaskSessions).toHaveBeenCalledTimes(1);
     service.dispose();
   });
 });

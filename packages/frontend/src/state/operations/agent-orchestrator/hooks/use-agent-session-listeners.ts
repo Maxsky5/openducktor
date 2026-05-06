@@ -28,7 +28,11 @@ type UseAgentSessionListenersArgs = {
     messages?: AgentSessionState["messages"],
   ) => number | undefined;
   clearTurnDuration: (externalSessionId: string, completedTimestamp?: string) => void;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  refreshTaskData: (
+    repoPath: string,
+    taskIdOrIds?: string | string[],
+    options?: { forceFreshTaskList?: boolean },
+  ) => Promise<void>;
 };
 
 export const useAgentSessionListeners = ({

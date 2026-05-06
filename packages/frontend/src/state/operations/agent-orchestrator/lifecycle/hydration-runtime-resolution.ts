@@ -20,7 +20,6 @@ export const createHydrationRuntimeResolver = ({
   repoPath: string;
 }): ((record: AgentSessionRecord) => Promise<ResolvedHydrationRuntime>) => {
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-
   return async (record: AgentSessionRecord): Promise<ResolvedHydrationRuntime> => {
     const runtimeKind = readPersistedRuntimeKind(record);
     const workingDirectory = normalizeWorkingDirectory(record.workingDirectory);

@@ -16,7 +16,8 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { documentQueryKeys } from "../../queries/documents";
-import { kanbanTaskListQueryOptions, taskQueryKeys } from "../../queries/tasks";
+import { repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
+import { workspaceQueryKeys } from "../../queries/workspace";
 import {
   attachAgentSessionListener,
   type SessionEventAdapter,
@@ -53,6 +54,18 @@ const TASK_REFRESH_WARNING = "Pull request sync failed during task refresh";
 const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
 const originalToastSuccess = toast.success;
+const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+
+const createSettingsSnapshotFixture = () => ({
+  theme: "light" as const,
+  git: { defaultMergeMethod: "merge_commit" as const },
+  chat: { showThinkingMessages: false },
+  reusablePrompts: [],
+  kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" as const },
+  autopilot: { rules: [] },
+  workspaces: {},
+  globalPromptOverrides: {},
+});
 
 const createDeferred = <T,>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -210,13 +223,13 @@ const createTaskAndKanbanHarness = (initialArgs: LegacyHookArgs, doneVisibleDays
     const operations = useTaskOperations(args);
     const activeRepoPath = args.activeWorkspace?.repoPath ?? null;
     const kanbanTaskListQuery = useQuery({
-      ...kanbanTaskListQueryOptions(activeRepoPath ?? "__disabled__", doneVisibleDays),
+      ...repoTaskDataQueryOptions(activeRepoPath ?? "__disabled__", doneVisibleDays),
       enabled: activeRepoPath !== null,
     });
 
     latest = {
       operations,
-      kanbanTasks: activeRepoPath ? (kanbanTaskListQuery.data ?? []) : [],
+      kanbanTasks: activeRepoPath ? (kanbanTaskListQuery.data?.tasks ?? []) : [],
       isPendingKanban: activeRepoPath !== null && kanbanTaskListQuery.isPending,
       isFetchingKanban:
         activeRepoPath !== null &&
@@ -277,12 +290,12 @@ const assertScheduledKanbanRefetchStaysBackground = async ({
   const runsRefreshDeferred = createDeferred<RunSummary[]>();
   const repoPullRequestSync = mock(async () => repoPullRequestSyncDeferred.promise);
   const tasksList = mock(async (_repoPath: string, doneVisibleDays?: number) => {
+    repoTaskListCallCount += 1;
     if (typeof doneVisibleDays === "number") {
       kanbanTaskListCallCount += 1;
       return kanbanTaskListCallCount === 1 ? initialTasks : kanbanRefreshDeferred.promise;
     }
 
-    repoTaskListCallCount += 1;
     return repoTaskListCallCount === 1 ? initialTasks : repoTaskRefreshDeferred.promise;
   });
   const runsList = mock(async (): Promise<RunSummary[]> => {
@@ -390,12 +403,14 @@ describe("use-task-operations", () => {
     (toast as { success: typeof toast.success }).success = mock(
       (_message: string, _options?: { description?: string }) => "",
     ) as unknown as typeof toast.success;
+    host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshotFixture()) as never;
   });
 
   afterEach(() => {
     console.error = originalConsoleError;
     console.warn = originalConsoleWarn;
     toast.success = originalToastSuccess;
+    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
   test("refreshTaskData filters deferred tasks", async () => {
@@ -453,7 +468,7 @@ describe("use-task-operations", () => {
       await harness.waitFor((value) => value.tasks.map((task) => task.id).join(",") === "A");
 
       expect(harness.getLatest().tasks.map((task) => task.id)).toEqual(["A"]);
-      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(tasksList).toHaveBeenCalledWith("/repo", 1);
     } finally {
       await harness.unmount();
       host.tasksList = original.tasksList;
@@ -494,6 +509,9 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.status === "open");
+      expect(harness.getLatest().tasks[0]?.status).toBe("open");
+
       await harness.run(async (value) => {
         await value.refreshTaskData("/repo");
       });
@@ -511,6 +529,74 @@ describe("use-task-operations", () => {
       await harness.unmount();
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
+    }
+  });
+
+  test("settings load failure does not leave task loading stuck", async () => {
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    const queryClient = createQueryClient();
+    const original = {
+      tasksList: host.tasksList,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+      toastError: toast.error,
+    };
+    host.tasksList = tasksList;
+    host.workspaceGetSettingsSnapshot = mock(async () => {
+      throw new Error("settings unavailable");
+    }) as never;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    queryClient.setQueryData(
+      workspaceQueryKeys.settingsSnapshot(),
+      createSettingsSnapshotFixture(),
+    );
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo", 1), {
+      tasks: [makeTask("cached", "open")],
+    });
+    await queryClient.invalidateQueries({
+      queryKey: workspaceQueryKeys.settingsSnapshot(),
+      exact: true,
+      refetchType: "none",
+    });
+
+    let latest: ReturnType<typeof useTaskOperations> | null = null;
+    const args = normalizeHookArgs({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
+    });
+    const Harness = () => {
+      latest = useTaskOperations(args);
+      return null;
+    };
+    const getLatest = (): ReturnType<typeof useTaskOperations> => {
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+      return latest;
+    };
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const harness = createSharedHookHarness(Harness, {}, { wrapper });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => toastError.mock.calls.length > 0);
+
+      await harness.waitFor(() => getLatest().tasks[0]?.id === "cached");
+
+      expect(tasksList).not.toHaveBeenCalled();
+      expect(getLatest().tasks[0]?.id).toBe("cached");
+      expect(toastError).toHaveBeenCalledWith("Failed to load tasks", {
+        description: "Task store unavailable. settings unavailable",
+      });
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+      host.tasksList = original.tasksList;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      toast.error = original.toastError;
     }
   });
 
@@ -1406,7 +1492,7 @@ describe("use-task-operations", () => {
       expect(
         tasksList.mock.calls.some((call) => {
           const args = call as unknown[];
-          return args[0] === "/repo" && args.length === 1;
+          return args[0] === "/repo" && args[1] === 1;
         }),
       ).toBe(true);
       expect(
@@ -1459,9 +1545,10 @@ describe("use-task-operations", () => {
     );
 
     try {
-      await queryClient.fetchQuery(kanbanTaskListQueryOptions("/repo", 1));
+      await queryClient.fetchQuery(repoTaskDataQueryOptions("/repo", 1));
       expect(
-        queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo", 1))?.[0]?.status,
+        queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.kanbanData("/repo", 1))
+          ?.tasks[0]?.status,
       ).toBe("ready_for_dev");
 
       await harness.mount();
@@ -1482,16 +1569,10 @@ describe("use-task-operations", () => {
       await harness.waitFor(
         () =>
           latest?.tasks[0]?.status === "in_progress" &&
-          queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/repo", 1))?.[0]
-            ?.status === "in_progress",
+          queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.kanbanData("/repo", 1))
+            ?.tasks[0]?.status === "in_progress",
       );
 
-      expect(
-        tasksList.mock.calls.some((call) => {
-          const args = call as unknown[];
-          return args[0] === "/repo" && args.length === 1;
-        }),
-      ).toBe(true);
       expect(
         tasksList.mock.calls.some((call) => {
           const args = call as unknown[];
@@ -1575,7 +1656,7 @@ describe("use-task-operations", () => {
     );
 
     try {
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo", 1), {
         tasks: [makeTask("A", "ready_for_dev")],
         runs: [] satisfies RunSummary[],
       });
@@ -1602,7 +1683,7 @@ describe("use-task-operations", () => {
           queryClient.getQueryData<{
             tasks: TaskCard[];
             runs: RunSummary[];
-          }>(taskQueryKeys.repoData("/repo"))?.tasks[0]?.status === "in_progress" &&
+          }>(taskQueryKeys.repoData("/repo", 1))?.tasks[0]?.status === "in_progress" &&
           queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
             documentQueryKeys.plan("/repo", "A"),
           )?.markdown === "# New plan",
@@ -1610,7 +1691,7 @@ describe("use-task-operations", () => {
       );
 
       expect(host.taskDocumentGetFresh).toHaveBeenCalledWith("/repo", "A", "plan");
-      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(tasksList).toHaveBeenCalledWith("/repo", 1);
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
           documentQueryKeys.plan("/repo", "A"),
@@ -1669,7 +1750,7 @@ describe("use-task-operations", () => {
     );
 
     try {
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo", 1), {
         tasks: [{ ...makeTask("A", "open"), subtaskIds: ["B"] }, makeTask("B", "open")],
         runs: [] satisfies RunSummary[],
       });
@@ -1683,6 +1764,7 @@ describe("use-task-operations", () => {
       });
 
       await harness.mount();
+      await harness.waitFor(() => latest?.tasks.length === 2);
       await harness.run(async () => {
         if (!latest) {
           throw new Error("Hook not mounted");
@@ -1694,7 +1776,7 @@ describe("use-task-operations", () => {
       await harness.waitFor(
         () =>
           queryClient.getQueryData<{ tasks: TaskCard[]; runs: RunSummary[] }>(
-            taskQueryKeys.repoData("/repo"),
+            taskQueryKeys.repoData("/repo", 1),
           )?.tasks.length === 0,
         1000,
       );
@@ -1820,7 +1902,7 @@ describe("use-task-operations", () => {
         expect(
           tasksList.mock.calls.some((call) => {
             const args = call as unknown[];
-            return args[0] === "/repo" && args.length === 1;
+            return args[0] === "/repo" && args[1] === 1;
           }),
         ).toBe(true);
         expect(
@@ -1901,7 +1983,7 @@ describe("use-task-operations", () => {
       });
 
       expect(taskPullRequestDetect).toHaveBeenCalledWith("/repo", "A");
-      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(tasksList).toHaveBeenCalledWith("/repo", 1);
       expect(harness.getLatest().tasks[0]?.pullRequest?.number).toBe(17);
       expect(toastSuccess).toHaveBeenCalledWith("Pull request linked", {
         description: "PR #17",
@@ -2131,7 +2213,7 @@ describe("use-task-operations", () => {
         mergedAt: "2026-02-20T10:00:00Z",
         closedAt: "2026-02-20T10:00:00Z",
       });
-      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(tasksList).toHaveBeenCalledWith("/repo", 1);
       expect(harness.getLatest().pendingMergedPullRequest).toBeNull();
       expect(harness.getLatest().linkingMergedPullRequestTaskId).toBeNull();
       expect(toastSuccess).toHaveBeenCalledWith("Merged pull request linked", {
@@ -2224,7 +2306,7 @@ describe("use-task-operations", () => {
       expect(
         tasksList.mock.calls.some((call) => {
           const args = call as unknown[];
-          return args[0] === "/repo" && args.length === 1;
+          return args[0] === "/repo" && args[1] === 1;
         }),
       ).toBe(true);
       expect(
@@ -2477,7 +2559,7 @@ describe("use-task-operations", () => {
       });
 
       expect(taskPullRequestUnlink).toHaveBeenCalledWith("/repo", "A");
-      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(tasksList).toHaveBeenCalledWith("/repo", 1);
       expect(harness.getLatest().tasks[0]?.pullRequest).toBeUndefined();
       expect(toastSuccess).toHaveBeenCalledWith("Pull request unlinked", {
         description: "A",
@@ -2653,7 +2735,7 @@ describe("use-task-operations", () => {
       expect(
         tasksList.mock.calls.some((call) => {
           const args = call as unknown[];
-          return args[0] === "/repo" && args.length === 1;
+          return args[0] === "/repo" && args[1] === 1;
         }),
       ).toBe(true);
       expect(

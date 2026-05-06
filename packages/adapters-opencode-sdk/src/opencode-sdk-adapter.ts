@@ -225,9 +225,7 @@ export class OpencodeSdkAdapter
       return existing.summary;
     }
 
-    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "resume session", {
-      requireLive: true,
-    });
+    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "resume session");
     const client = this.createClient(runtimeClientInput);
     const detail = await client.session.get({
       directory: input.workingDirectory,
@@ -394,7 +392,6 @@ export class OpencodeSdkAdapter
     const runtimeClientInput = await this.resolveRuntimeClientInputWithRuntimeId(
       { ...input, workingDirectory: input.repoPath },
       "list session presence",
-      { requireLive: true },
     );
     const runtimeId = requireSessionPresenceRuntimeId(runtimeClientInput.runtimeId);
     const snapshots = await listOpencodeLiveAgentSessionSnapshots({

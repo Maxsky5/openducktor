@@ -42,7 +42,11 @@ type UseAppLifecycleArgs = {
   refreshBranches: (force?: boolean) => Promise<void>;
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
   refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  refreshTaskData: (
+    repoPath: string,
+    taskIdOrIds?: string | string[],
+    options?: { forceFreshTaskList?: boolean },
+  ) => Promise<void>;
   clearBranchData: () => void;
   beadsPreparationToastDelayMs?: number;
 };
@@ -219,7 +223,7 @@ export function useAppLifecycle({
           }
         }
 
-        await refreshTaskData(activeRepoPath);
+        await refreshTaskData(activeRepoPath, undefined, { forceFreshTaskList: false });
         if (!beadsCheck.repoStoreHealth.isReady) {
           try {
             const refreshedBeadsCheck = await refreshBeadsCheckForRepo(activeRepoPath, true);
@@ -267,7 +271,10 @@ export function useAppLifecycle({
 
         if (tasksResult.status === "rejected") {
           toast.error("Repository tasks unavailable", {
-            description: summarizeTaskLoadError({ error: tasksResult.reason, repoStoreHealth }),
+            description: summarizeTaskLoadError({
+              error: tasksResult.reason,
+              repoStoreHealth,
+            }),
           });
         }
       })
