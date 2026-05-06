@@ -7,11 +7,11 @@ use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::Request;
 use host_application::AppService;
 use host_domain::{
-    is_syncable_pull_request_state, is_terminal_task_status, AgentSessionDocument, AgentWorkflows,
-    CreateTaskInput, DirectMergeRecord, IssueType, PullRequestRecord, QaReportDocument, QaVerdict,
-    RepoStoreAttachmentHealth, RepoStoreHealth, RepoStoreHealthCategory, RepoStoreHealthStatus,
-    RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState, SpecDocument, TaskCard,
-    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentSessionDocument, AgentWorkflows, CreateTaskInput, DirectMergeRecord, IssueType,
+    PullRequestRecord, QaReportDocument, QaVerdict, RepoStoreAttachmentHealth, RepoStoreHealth,
+    RepoStoreHealthCategory, RepoStoreHealthStatus, RepoStoreSharedServerHealth,
+    RepoStoreSharedServerOwnershipState, SpecDocument, TaskCard, TaskDocumentSummary, TaskMetadata,
+    TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RepoConfig};
@@ -24,7 +24,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Default)]
 struct TestTaskStoreState {
-    ensure_calls: Vec<String>,
     created_inputs: Vec<CreateTaskInput>,
     tasks: Vec<TaskCard>,
 }
@@ -60,10 +59,7 @@ impl TaskStore for TestTaskStore {
     }
 
     fn ensure_repo_initialized(&self, repo_path: &std::path::Path) -> Result<()> {
-        let mut state = self.state.lock().expect("task store lock poisoned");
-        state
-            .ensure_calls
-            .push(repo_path.to_string_lossy().to_string());
+        let _ = repo_path;
         Ok(())
     }
 
@@ -76,16 +72,10 @@ impl TaskStore for TestTaskStore {
         &self,
         repo_path: &std::path::Path,
     ) -> Result<Vec<TaskCard>> {
-        Ok(self
-            .list_tasks(repo_path)?
-            .into_iter()
-            .filter(|task| {
-                !is_terminal_task_status(&task.status)
-                    && task.pull_request.as_ref().is_some_and(|pull_request| {
-                        is_syncable_pull_request_state(pull_request.state.as_str())
-                    })
-            })
-            .collect())
+        let _ = repo_path;
+        Err(anyhow!(
+            "list_pull_request_sync_candidates not implemented in headless test store"
+        ))
     }
 
     fn get_task(&self, _repo_path: &std::path::Path, task_id: &str) -> Result<TaskCard> {
@@ -330,20 +320,6 @@ fn make_task(id: &str, title: &str, status: TaskStatus, labels: Vec<&str>) -> Ta
     }
 }
 
-fn make_pull_request(number: u32, state: &str) -> PullRequestRecord {
-    PullRequestRecord {
-        provider_id: "github".to_string(),
-        number,
-        url: format!("https://github.com/example/repo/pull/{number}"),
-        state: state.to_string(),
-        created_at: "2026-04-09T00:00:00Z".to_string(),
-        updated_at: "2026-04-09T00:00:00Z".to_string(),
-        last_synced_at: None,
-        merged_at: None,
-        closed_at: None,
-    }
-}
-
 #[tokio::test]
 async fn serve_browser_backend_stops_pull_request_sync_loop_when_server_returns() {
     let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, 0))
@@ -372,43 +348,6 @@ async fn serve_browser_backend_stops_pull_request_sync_loop_when_server_returns(
     .expect("server should shut down cleanly");
 
     assert!(stop_requested.load(Ordering::SeqCst));
-}
-
-#[test]
-fn headless_test_store_filters_pull_request_sync_candidates_like_production() {
-    let task_state = Arc::new(Mutex::new(TestTaskStoreState {
-        ensure_calls: Vec::new(),
-        created_inputs: Vec::new(),
-        tasks: {
-            let mut open_candidate =
-                make_task("task-1", "Open candidate", TaskStatus::Open, vec![]);
-            open_candidate.pull_request = Some(make_pull_request(11, "open"));
-
-            let mut closed_candidate =
-                make_task("task-2", "Closed task", TaskStatus::Closed, vec![]);
-            closed_candidate.pull_request = Some(make_pull_request(12, "open"));
-
-            let mut merged_candidate = make_task("task-3", "Merged PR", TaskStatus::Open, vec![]);
-            merged_candidate.pull_request = Some(make_pull_request(13, "merged"));
-
-            let no_pull_request = make_task("task-4", "No PR", TaskStatus::Open, vec![]);
-
-            vec![
-                open_candidate,
-                closed_candidate,
-                merged_candidate,
-                no_pull_request,
-            ]
-        },
-    }));
-    let store = TestTaskStore::new(task_state);
-
-    let candidates = store
-        .list_pull_request_sync_candidates(std::path::Path::new("/repo"))
-        .expect("candidate listing should succeed");
-
-    assert_eq!(candidates.len(), 1);
-    assert_eq!(candidates[0].id, "task-1");
 }
 
 #[tokio::test]
@@ -637,23 +576,25 @@ fn test_state_fixture() -> TestStateFixture {
     let task_store: Arc<dyn TaskStore> = Arc::new(
         BeadsTaskStore::with_metadata_namespace_and_config("openducktor", config_store.clone()),
     );
-    let service = Arc::new(AppService::new(task_store, config_store));
-    let registry = Arc::new(build_registry().expect("registry should build"));
 
     TestStateFixture {
-        state: HeadlessState {
-            service,
-            events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
-            dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
-            task_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
-            pull_request_sync_stop_requested: Arc::new(AtomicBool::new(false)),
-            registry,
-            shutdown_signal: Arc::new(Notify::new()),
-            shutdown_started: Arc::new(AtomicBool::new(false)),
-            control_token: None,
-            app_token: None,
-        },
+        state: headless_state(task_store, config_store),
         root,
+    }
+}
+
+fn headless_state(task_store: Arc<dyn TaskStore>, config_store: AppConfigStore) -> HeadlessState {
+    HeadlessState {
+        service: Arc::new(AppService::new(task_store, config_store)),
+        events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+        dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+        task_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+        pull_request_sync_stop_requested: Arc::new(AtomicBool::new(false)),
+        registry: Arc::new(build_registry().expect("registry should build")),
+        shutdown_signal: Arc::new(Notify::new()),
+        shutdown_started: Arc::new(AtomicBool::new(false)),
+        control_token: None,
+        app_token: None,
     }
 }
 
@@ -692,28 +633,14 @@ fn test_state_fixture_with_task_store(
         .expect("repo config should be saved");
 
     let task_state = Arc::new(Mutex::new(TestTaskStoreState {
-        ensure_calls: Vec::new(),
         created_inputs: Vec::new(),
         tasks,
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(TestTaskStore::new(task_state.clone()));
-    let service = Arc::new(AppService::new(task_store, config_store));
-    let registry = Arc::new(build_registry().expect("registry should build"));
 
     (
         TestStateFixture {
-            state: HeadlessState {
-                service,
-                events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
-                dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
-                task_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
-                pull_request_sync_stop_requested: Arc::new(AtomicBool::new(false)),
-                registry,
-                shutdown_signal: Arc::new(Notify::new()),
-                shutdown_started: Arc::new(AtomicBool::new(false)),
-                control_token: None,
-                app_token: None,
-            },
+            state: headless_state(task_store, config_store),
             root,
         },
         task_state,
