@@ -121,6 +121,7 @@ export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSn
   return {
     theme: snapshot.theme,
     git: normalizeGlobalGitConfigForSave(snapshot.git),
+    general: snapshot.general,
     chat: snapshot.chat,
     reusablePrompts: normalizeReusablePromptsForSave(snapshot.reusablePrompts),
     kanban: snapshot.kanban,

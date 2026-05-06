@@ -169,6 +169,26 @@ pub struct ChatSettings {
     pub show_thinking_messages: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneralSettings {
+    #[serde(default = "default_open_agent_studio_tab_on_background_session_start")]
+    pub open_agent_studio_tab_on_background_session_start: bool,
+}
+
+const fn default_open_agent_studio_tab_on_background_session_start() -> bool {
+    true
+}
+
+impl Default for GeneralSettings {
+    fn default() -> Self {
+        Self {
+            open_agent_studio_tab_on_background_session_start:
+                default_open_agent_studio_tab_on_background_session_start(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct PersistedChatSettings {
@@ -452,6 +472,8 @@ struct PersistedGlobalConfigV2 {
     #[serde(default)]
     pub git: GlobalGitConfig,
     #[serde(default)]
+    pub general: GeneralSettings,
+    #[serde(default)]
     pub chat: PersistedChatSettings,
     #[serde(default)]
     pub reusable_prompts: Option<Vec<ReusablePrompt>>,
@@ -498,6 +520,8 @@ pub struct GlobalConfig {
     #[serde(default)]
     pub git: GlobalGitConfig,
     #[serde(default)]
+    pub general: GeneralSettings,
+    #[serde(default)]
     pub chat: ChatSettings,
     #[serde(default)]
     pub reusable_prompts: Vec<ReusablePrompt>,
@@ -524,6 +548,7 @@ impl TryFrom<PersistedGlobalConfigV2> for GlobalConfig {
             active_workspace: config.active_workspace,
             theme: config.theme,
             git: config.git,
+            general: config.general,
             chat: config.chat.clone().into(),
             reusable_prompts: config
                 .reusable_prompts
@@ -545,6 +570,7 @@ impl From<GlobalConfig> for PersistedGlobalConfigV2 {
             active_workspace: value.active_workspace,
             theme: value.theme,
             git: value.git,
+            general: value.general,
             chat: value.chat.into(),
             reusable_prompts: Some(value.reusable_prompts),
             kanban: value.kanban,
@@ -564,6 +590,7 @@ impl Default for GlobalConfig {
             active_workspace: None,
             theme: default_theme(),
             git: GlobalGitConfig::default(),
+            general: GeneralSettings::default(),
             chat: ChatSettings::default(),
             reusable_prompts: Vec::new(),
             kanban: KanbanSettings::default(),
@@ -694,6 +721,23 @@ mod tests {
             KanbanEmptyColumnDisplay::Show
         );
         assert!(config.reusable_prompts.is_empty());
+    }
+
+    #[test]
+    fn deserialize_global_config_defaults_missing_general_settings_enabled() {
+        let config = deserialize_global_config(
+            r#"{
+                "version": 2,
+                "theme": "light"
+            }"#,
+        )
+        .expect("config should deserialize");
+
+        assert!(
+            config
+                .general
+                .open_agent_studio_tab_on_background_session_start
+        );
     }
 
     #[test]

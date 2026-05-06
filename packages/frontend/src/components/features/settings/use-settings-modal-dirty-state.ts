@@ -2,6 +2,7 @@ import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useCallback, useEffect, useState } from "react";
 
 export type DirtySections = {
+  general: boolean;
   chat: boolean;
   reusablePrompts: boolean;
   globalGit: boolean;
@@ -12,6 +13,7 @@ export type DirtySections = {
 };
 
 export const EMPTY_DIRTY_SECTIONS: DirtySections = {
+  general: false,
   chat: false,
   reusablePrompts: false,
   globalGit: false,

@@ -9,6 +9,7 @@ import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-
 import { host } from "@/state/operations/shared/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { toTabsStorageKey } from "../agents/agent-studio-navigation";
 import {
   createAgentSessionFixture,
   createBeadsCheckFixture,
@@ -16,6 +17,7 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
+import { parsePersistedTaskTabs } from "../agents/agents-page-session-tabs";
 import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
 
 enableReactActEnvironment();
@@ -143,6 +145,7 @@ const createBaseArgs = (): HookArgs => ({
     { name: "origin/release/2026.04", isCurrent: false, isRemote: true },
   ],
   repoSettings: null,
+  openAgentStudioTabOnBackgroundSessionStart: true,
   tasks: [createTaskCardFixture({ id: "TASK-1", status: "human_review" })],
   sessions: [
     createAgentSessionFixture({
@@ -211,6 +214,27 @@ describe("resolveBuildContinuationLaunchAction", () => {
 });
 
 describe("useKanbanSessionStartFlow", () => {
+  test("rejects session starts while settings are unavailable", async () => {
+    const args = createBaseArgs();
+    args.openAgentStudioTabOnBackgroundSessionStart = null;
+
+    const harness = createHookHarness(args);
+    await harness.mount();
+
+    await expect(
+      harness.getLatest().startSessionIntent({
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        postStartAction: "kickoff",
+      }),
+    ).rejects.toThrow("Cannot start Kanban session because settings have not loaded.");
+
+    expect(harness.getLatest().sessionStartModal).toBeNull();
+
+    await harness.unmount();
+  });
+
   test("opens the shared session start modal for QA review", async () => {
     const args = createBaseArgs();
     args.tasks = [createTaskCardFixture({ id: "TASK-1", status: "ai_review" })];
@@ -459,6 +483,100 @@ describe("useKanbanSessionStartFlow", () => {
     expect(callOrder).toEqual(["target-branch", "start-session"]);
 
     await harness.unmount();
+  });
+
+  test("background start adds one Agent Studio task tab when setting is enabled", async () => {
+    const originalToastSuccess = toast.success;
+    const toastSuccess = mock(() => "toast-id");
+    (toast as { success: typeof toast.success }).success =
+      toastSuccess as unknown as typeof toast.success;
+    const storageKey = toTabsStorageKey("workspace-1");
+    globalThis.localStorage.removeItem(storageKey);
+    const navigate = mock(() => {});
+    const args = createBaseArgs();
+    args.navigate = navigate;
+    args.repoSettings = createDefaultRepoSettings();
+    args.tasks = [createTaskCardFixture({ id: "TASK-1", status: "ready_for_dev" })];
+
+    const harness = createHookHarness(args);
+    try {
+      await harness.mount();
+
+      await harness.run((state) => {
+        state.onDelegate("TASK-1");
+      });
+      await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
+
+      await harness.run(async (state) => {
+        state.sessionStartModal?.onConfirm({
+          runInBackground: true,
+          startMode: "fresh",
+          sourceExternalSessionId: null,
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(parsePersistedTaskTabs(globalThis.localStorage.getItem(storageKey))).toEqual({
+        tabs: ["TASK-1"],
+        activeTaskId: null,
+      });
+      expect(navigate).not.toHaveBeenCalled();
+      expect(toastSuccess).toHaveBeenCalled();
+
+      await harness.run((state) => {
+        state.onDelegate("TASK-1");
+      });
+      await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
+      await harness.run(async (state) => {
+        state.sessionStartModal?.onConfirm({
+          runInBackground: true,
+          startMode: "fresh",
+          sourceExternalSessionId: null,
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(parsePersistedTaskTabs(globalThis.localStorage.getItem(storageKey)).tabs).toEqual([
+        "TASK-1",
+      ]);
+    } finally {
+      globalThis.localStorage.removeItem(storageKey);
+      (toast as { success: typeof toast.success }).success = originalToastSuccess;
+      await harness.unmount();
+    }
+  });
+
+  test("background start does not add Agent Studio task tab when setting is disabled", async () => {
+    const storageKey = toTabsStorageKey("workspace-1");
+    globalThis.localStorage.removeItem(storageKey);
+    const args = createBaseArgs();
+    args.repoSettings = createDefaultRepoSettings();
+    args.openAgentStudioTabOnBackgroundSessionStart = false;
+    args.tasks = [createTaskCardFixture({ id: "TASK-1", status: "ready_for_dev" })];
+
+    const harness = createHookHarness(args);
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.onDelegate("TASK-1");
+      });
+      await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
+      await harness.run(async (state) => {
+        state.sessionStartModal?.onConfirm({
+          runInBackground: true,
+          startMode: "fresh",
+          sourceExternalSessionId: null,
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(globalThis.localStorage.getItem(storageKey)).toBeNull();
+    } finally {
+      globalThis.localStorage.removeItem(storageKey);
+      await harness.unmount();
+    }
   });
 
   test("pull request generation resolves with undefined when the shared start modal is cancelled", async () => {

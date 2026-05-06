@@ -34,6 +34,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   git: {
     defaultMergeMethod: "merge_commit",
   },
+  general: { openAgentStudioTabOnBackgroundSessionStart: true },
   workspaces: {},
   chat: { showThinkingMessages: false },
   reusablePrompts: [],

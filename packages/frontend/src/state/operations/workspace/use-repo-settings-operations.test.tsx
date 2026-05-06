@@ -70,6 +70,9 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   git: {
     defaultMergeMethod: "merge_commit",
   },
+  general: {
+    openAgentStudioTabOnBackgroundSessionStart: true,
+  },
   chat: {
     showThinkingMessages: false,
   },
@@ -680,6 +683,9 @@ describe("use-repo-settings-operations", () => {
       theme: "light" as const,
       git: {
         defaultMergeMethod: "merge_commit" as const,
+      },
+      general: {
+        openAgentStudioTabOnBackgroundSessionStart: true,
       },
       chat: {
         showThinkingMessages: false,

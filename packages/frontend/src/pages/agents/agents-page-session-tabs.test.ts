@@ -3,6 +3,7 @@ import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-te
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
+  addTaskToPersistedTaskTabs,
   buildLatestSessionByRoleMap,
   buildLatestSessionByTaskMap,
   buildRoleEnabledMapForTask,
@@ -206,6 +207,51 @@ describe("agents-page-session-tabs", () => {
       tabs: ["task-1"],
       activeTaskId: null,
     });
+  });
+
+  test("adds task to persisted tabs without changing active task", () => {
+    const serialized = addTaskToPersistedTaskTabs({
+      raw: JSON.stringify({ tabs: ["task-1"], activeTaskId: "task-1" }),
+      taskId: "task-2",
+      tasks: [buildTask({ id: "task-1" }), buildTask({ id: "task-2" })],
+    });
+
+    expect(parsePersistedTaskTabs(serialized)).toEqual({
+      tabs: ["task-1", "task-2"],
+      activeTaskId: "task-1",
+    });
+  });
+
+  test("does not duplicate an existing persisted task tab", () => {
+    const serialized = addTaskToPersistedTaskTabs({
+      raw: JSON.stringify({ tabs: ["task-1", "task-2"], activeTaskId: "task-2" }),
+      taskId: "task-2",
+      tasks: [buildTask({ id: "task-1" }), buildTask({ id: "task-2" })],
+    });
+
+    expect(parsePersistedTaskTabs(serialized)).toEqual({
+      tabs: ["task-1", "task-2"],
+      activeTaskId: "task-2",
+    });
+  });
+
+  test("skips missing and closed tasks when adding persisted task tabs", () => {
+    const raw = JSON.stringify({ tabs: ["task-1"], activeTaskId: "task-1" });
+
+    expect(
+      addTaskToPersistedTaskTabs({
+        raw,
+        taskId: "task-missing",
+        tasks: [buildTask({ id: "task-1" })],
+      }),
+    ).toBeNull();
+    expect(
+      addTaskToPersistedTaskTabs({
+        raw,
+        taskId: "task-2",
+        tasks: [buildTask({ id: "task-1" }), buildTask({ id: "task-2", status: "closed" })],
+      }),
+    ).toBeNull();
   });
 
   test("prefers persisted active tab for fallback selection", () => {

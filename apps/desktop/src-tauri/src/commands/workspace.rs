@@ -365,6 +365,7 @@ pub async fn workspace_get_settings_snapshot(
     Ok(SettingsSnapshotPayload {
         theme: snapshot.theme,
         git: snapshot.git,
+        general: snapshot.general,
         chat: snapshot.chat,
         reusable_prompts: snapshot.reusable_prompts,
         kanban: snapshot.kanban,
@@ -397,6 +398,7 @@ pub async fn workspace_save_settings_snapshot(
     let SettingsSnapshotPayload {
         theme,
         git,
+        general,
         chat,
         reusable_prompts,
         kanban,
@@ -415,6 +417,7 @@ pub async fn workspace_save_settings_snapshot(
             service.workspace_save_settings_snapshot(WorkspaceSettingsSnapshot {
                 theme,
                 git,
+                general,
                 chat,
                 reusable_prompts,
                 kanban,
@@ -1016,6 +1019,7 @@ mod tests {
             SettingsSnapshotPayload {
                 theme: snapshot.theme,
                 git: snapshot.git,
+                general: snapshot.general,
                 chat: snapshot.chat,
                 reusable_prompts: snapshot.reusable_prompts,
                 kanban: snapshot.kanban,
@@ -1051,6 +1055,7 @@ mod tests {
         let mut snapshot = SettingsSnapshotPayload {
             theme: snapshot.theme,
             git: snapshot.git,
+            general: snapshot.general,
             chat: snapshot.chat,
             reusable_prompts: snapshot.reusable_prompts,
             kanban: snapshot.kanban,
@@ -1102,6 +1107,7 @@ mod tests {
             "snapshot": {
                 "theme": snapshot.theme,
                 "git": snapshot.git,
+                "general": snapshot.general,
                 "chat": snapshot.chat,
                 "reusablePrompts": snapshot.reusable_prompts,
                 "kanban": snapshot.kanban,
@@ -1193,6 +1199,7 @@ mod tests {
             "snapshot": {
                 "theme": snapshot.theme.clone(),
                 "git": snapshot.git.clone(),
+                "general": snapshot.general.clone(),
                 "reusablePrompts": snapshot.reusable_prompts.clone(),
                 "kanban": snapshot.kanban.clone(),
                 "autopilot": snapshot.autopilot.clone(),
@@ -1211,6 +1218,7 @@ mod tests {
             "snapshot": {
                 "theme": snapshot.theme,
                 "git": snapshot.git,
+                "general": snapshot.general,
                 "chat": {
                     "showThinkingMessages": true
                 },

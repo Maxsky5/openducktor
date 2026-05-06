@@ -61,6 +61,9 @@ describe("app-state-context-values", () => {
         git: {
           defaultMergeMethod: "merge_commit",
         },
+        general: {
+          openAgentStudioTabOnBackgroundSessionStart: true,
+        },
         chat: {
           showThinkingMessages: false,
         },

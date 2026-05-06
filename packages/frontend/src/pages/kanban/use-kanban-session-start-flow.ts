@@ -41,6 +41,7 @@ type UseKanbanSessionStartFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
+  openAgentStudioTabOnBackgroundSessionStart: boolean | null;
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
   navigate: NavigateFunction;
@@ -143,6 +144,7 @@ export function useKanbanSessionStartFlow({
   activeWorkspace,
   branches = [],
   repoSettings,
+  openAgentStudioTabOnBackgroundSessionStart,
   tasks,
   sessions,
   navigate,
@@ -203,6 +205,10 @@ export function useKanbanSessionStartFlow({
 
   const startSessionIntent = useCallback(
     async (intent: KanbanSessionStartIntent): Promise<string | undefined> => {
+      if (openAgentStudioTabOnBackgroundSessionStart === null) {
+        throw new Error("Cannot start Kanban session because settings have not loaded.");
+      }
+
       const selectedTask = tasksRef.current.find((task) => task.id === intent.taskId) ?? null;
       const taskSessions = sessionsRef.current.filter(
         (session) => session.taskId === intent.taskId,
@@ -221,6 +227,7 @@ export function useKanbanSessionStartFlow({
             request: intent,
             decision,
             startInBackground: runInBackground,
+            openAgentStudioTabOnBackgroundSessionStart,
             tasks: tasksRef.current,
             roleLabels: ROLE_LABELS,
             queryClient,
@@ -237,6 +244,7 @@ export function useKanbanSessionStartFlow({
     [
       activeWorkspace,
       humanRequestChangesTask,
+      openAgentStudioTabOnBackgroundSessionStart,
       openSessionInAgentStudio,
       queryClient,
       runSessionStartRequest,

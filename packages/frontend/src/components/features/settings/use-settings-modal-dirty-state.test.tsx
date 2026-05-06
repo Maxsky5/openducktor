@@ -18,6 +18,9 @@ const createSnapshot = (): SettingsSnapshot => ({
   git: {
     defaultMergeMethod: "merge_commit",
   },
+  general: {
+    openAgentStudioTabOnBackgroundSessionStart: true,
+  },
   chat: {
     showThinkingMessages: false,
   },
@@ -49,6 +52,7 @@ describe("useSettingsModalDirtyState", () => {
     });
 
     expect(harness.getLatest().dirtySections).toEqual({
+      general: false,
       chat: true,
       reusablePrompts: false,
       globalGit: false,
@@ -64,6 +68,7 @@ describe("useSettingsModalDirtyState", () => {
     });
 
     expect(harness.getLatest().dirtySections).toEqual({
+      general: false,
       chat: false,
       reusablePrompts: false,
       globalGit: false,

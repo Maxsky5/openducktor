@@ -52,6 +52,9 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   git: {
     defaultMergeMethod: "merge_commit" as const,
   },
+  general: {
+    openAgentStudioTabOnBackgroundSessionStart: true,
+  },
   chat: {
     showThinkingMessages: false,
   },
@@ -603,6 +606,9 @@ describe("KanbanPage session start modal flow", () => {
       theme: "light" as const,
       git: {
         defaultMergeMethod: "merge_commit" as const,
+      },
+      general: {
+        openAgentStudioTabOnBackgroundSessionStart: true,
       },
       chat: {
         showThinkingMessages: false,

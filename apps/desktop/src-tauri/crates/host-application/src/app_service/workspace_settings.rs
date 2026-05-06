@@ -128,6 +128,7 @@ impl AppService {
         Ok(WorkspaceSettingsSnapshot {
             theme: config.theme,
             git: config.git,
+            general: config.general,
             chat: config.chat,
             reusable_prompts: config.reusable_prompts,
             kanban: config.kanban,
@@ -152,6 +153,7 @@ impl AppService {
 
         config.theme = snapshot.theme;
         config.git = snapshot.git;
+        config.general = snapshot.general;
         config.chat = snapshot.chat;
         config.reusable_prompts = snapshot.reusable_prompts;
         config.kanban = KanbanSettings {
@@ -187,7 +189,7 @@ mod tests {
     use super::super::test_support::{
         build_service_with_state, init_git_repo, unique_temp_path, workspace_select_by_repo_path,
     };
-    use host_infra_system::ChatSettings;
+    use host_infra_system::{ChatSettings, GeneralSettings};
     use std::fs;
 
     #[test]
@@ -199,11 +201,41 @@ mod tests {
             .expect("settings snapshot should load");
 
         assert_eq!(snapshot.chat, ChatSettings::default());
+        assert_eq!(snapshot.general, GeneralSettings::default());
+        assert!(
+            snapshot
+                .general
+                .open_agent_studio_tab_on_background_session_start
+        );
         assert!(snapshot.reusable_prompts.is_empty());
         assert!(!snapshot.chat.show_thinking_messages);
         assert_eq!(snapshot.kanban.done_visible_days, 1);
         assert!(snapshot.workspaces.is_empty());
         assert!(snapshot.global_prompt_overrides.is_empty());
+    }
+
+    #[test]
+    fn workspace_save_settings_snapshot_preserves_disabled_general_setting() {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let mut snapshot = service
+            .workspace_get_settings_snapshot()
+            .expect("settings snapshot should load");
+        snapshot
+            .general
+            .open_agent_studio_tab_on_background_session_start = false;
+
+        service
+            .workspace_save_settings_snapshot(snapshot)
+            .expect("settings snapshot should save");
+
+        let snapshot = service
+            .workspace_get_settings_snapshot()
+            .expect("settings snapshot should reload");
+        assert!(
+            !snapshot
+                .general
+                .open_agent_studio_tab_on_background_session_start
+        );
     }
 
     #[test]

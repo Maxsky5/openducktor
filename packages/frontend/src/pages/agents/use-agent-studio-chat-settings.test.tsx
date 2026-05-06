@@ -16,6 +16,9 @@ const hostMock = {
       git: {
         defaultMergeMethod: "merge_commit",
       },
+      general: {
+        openAgentStudioTabOnBackgroundSessionStart: true,
+      },
       chat: {
         showThinkingMessages: false,
       },
@@ -77,6 +80,9 @@ const createSettingsSnapshot = (
     theme: "light",
     git: {
       defaultMergeMethod: "merge_commit",
+    },
+    general: {
+      openAgentStudioTabOnBackgroundSessionStart: true,
     },
     kanban: {
       doneVisibleDays: 1,

@@ -24,6 +24,9 @@ const createSnapshot = (): SettingsSnapshot => ({
   chat: {
     showThinkingMessages: false,
   },
+  general: {
+    openAgentStudioTabOnBackgroundSessionStart: true,
+  },
   reusablePrompts: [],
   kanban: {
     doneVisibleDays: 1,
@@ -92,15 +95,22 @@ describe("useSettingsModalDirtyDraftActions", () => {
         ...chat,
         showThinkingMessages: true,
       }));
+      state.updateGlobalGeneralSettings((general) => ({
+        ...general,
+        openAgentStudioTabOnBackgroundSessionStart: false,
+      }));
       state.updateSelectedRepoConfig((repoConfig) => ({
         ...repoConfig,
         branchPrefix: "feature/",
       }));
     });
 
-    expect(harness.getLatest().clearSaveError).toHaveBeenCalledTimes(2);
-    expect(harness.getLatest().dirtyCalls).toEqual(["chat", "repoSettings"]);
+    expect(harness.getLatest().clearSaveError).toHaveBeenCalledTimes(3);
+    expect(harness.getLatest().dirtyCalls).toEqual(["chat", "general", "repoSettings"]);
     expect(harness.getLatest().snapshotDraft?.chat.showThinkingMessages).toBe(true);
+    expect(
+      harness.getLatest().snapshotDraft?.general.openAgentStudioTabOnBackgroundSessionStart,
+    ).toBe(false);
     expect(harness.getLatest().snapshotDraft?.workspaces.repo?.branchPrefix).toBe("feature/");
 
     await harness.unmount();

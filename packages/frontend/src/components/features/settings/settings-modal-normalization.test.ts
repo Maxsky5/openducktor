@@ -322,6 +322,9 @@ describe("settings-modal-normalization", () => {
       git: {
         defaultMergeMethod: "merge_commit",
       },
+      general: {
+        openAgentStudioTabOnBackgroundSessionStart: true,
+      },
       chat: {
         showThinkingMessages: true,
       },
@@ -386,6 +389,9 @@ describe("settings-modal-normalization", () => {
       git: {
         defaultMergeMethod: "merge_commit" as const,
       },
+      general: {
+        openAgentStudioTabOnBackgroundSessionStart: true,
+      },
       chat: {
         showThinkingMessages: false,
       },
@@ -416,6 +422,9 @@ describe("settings-modal-normalization", () => {
           theme: "light" as const,
           git: {
             defaultMergeMethod: "merge_commit" as const,
+          },
+          general: {
+            openAgentStudioTabOnBackgroundSessionStart: true,
           },
           chat: {
             showThinkingMessages: false,

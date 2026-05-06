@@ -7,6 +7,7 @@ import { SettingsModalContent } from "./settings-modal-content";
 const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot => ({
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
+  general: { openAgentStudioTabOnBackgroundSessionStart: true },
   chat: { showThinkingMessages: false },
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
@@ -75,6 +76,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   detectSelectedRepoGithubRepository: async () => null,
   updateSelectedRepoConfig: () => {},
   updateGlobalGitConfig: () => {},
+  updateGlobalGeneralSettings: () => {},
   updateGlobalChatSettings: () => {},
   updateReusablePrompts: () => {},
   updateGlobalKanbanSettings: () => {},
@@ -87,6 +89,29 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
 });
 
 describe("settings modal content", () => {
+  test("renders general section with automatic Agent Studio tab setting", () => {
+    const controller = createMockController(createMockSnapshot());
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsModalContent, {
+        section: "general",
+        repositorySection: "configuration",
+        globalPromptRoleTab: "shared",
+        repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
+        isInteractionDisabled: false,
+        controller,
+        onRepositorySectionChange: () => {},
+        onGlobalPromptRoleTabChange: () => {},
+        onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
+      }),
+    );
+
+    expect(html).toContain("Open Agent Studio tab for background sessions");
+    expect(html).toContain('aria-checked="true"');
+  });
+
   test("renders chat section with SettingsChatSection when section is chat", () => {
     const snapshot = createMockSnapshot({
       chat: { showThinkingMessages: true },

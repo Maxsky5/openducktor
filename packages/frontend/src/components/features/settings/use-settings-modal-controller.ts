@@ -83,6 +83,9 @@ export type SettingsModalController = {
   updateGlobalChatSettings: (
     updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"],
   ) => void;
+  updateGlobalGeneralSettings: (
+    updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
+  ) => void;
   updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
@@ -207,6 +210,7 @@ export const useSettingsModalController = ({
     updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
     updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
+    updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
     updateReusablePrompts: applyReusablePromptsUpdate,
     updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
     updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
@@ -271,6 +275,7 @@ export const useSettingsModalController = ({
       updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
       updateGlobalGitConfig: applyGlobalGitConfigUpdate,
       updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
+      updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
       updateReusablePrompts: applyReusablePromptsUpdate,
       updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
       updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
@@ -283,6 +288,7 @@ export const useSettingsModalController = ({
       applySelectedRepoConfigUpdate,
       applyGlobalGitConfigUpdate,
       applyGlobalChatSettingsUpdate,
+      applyGlobalGeneralSettingsUpdate,
       applyReusablePromptsUpdate,
       applyGlobalKanbanSettingsUpdate,
       applyGlobalAutopilotSettingsUpdate,
@@ -296,6 +302,7 @@ export const useSettingsModalController = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateGlobalGeneralSettings,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
@@ -365,6 +372,7 @@ export const useSettingsModalController = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateGlobalGeneralSettings,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
