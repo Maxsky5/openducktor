@@ -71,9 +71,9 @@ const resolvePostStartMessage = async ({
 };
 
 const resolveInitialStatusRelease = (
-  postStartMessage: string | null,
+  postStartAction: SessionStartPostAction,
 ): InitialSessionStatusReleasePolicy => {
-  if (postStartMessage === null) {
+  if (postStartAction === "none") {
     return "after_listener_attach";
   }
 
@@ -285,13 +285,7 @@ export const startSessionWorkflow = async ({
     ...(humanRequestChangesTask ? { humanRequestChangesTask } : {}),
   });
 
-  const postStartMessage = await resolvePostStartMessage({
-    activeWorkspace,
-    queryClient,
-    intent,
-    task,
-  });
-  const initialStatusRelease = resolveInitialStatusRelease(postStartMessage);
+  const initialStatusRelease = resolveInitialStatusRelease(intent.postStartAction);
 
   const externalSessionId = await startSessionFromIntent({
     intent,
@@ -300,7 +294,7 @@ export const startSessionWorkflow = async ({
     startAgentSession,
   });
 
-  if (postStartMessage === null) {
+  if (intent.postStartAction === "none") {
     return {
       externalSessionId,
       postStartActionError: null,
@@ -310,6 +304,15 @@ export const startSessionWorkflow = async ({
   const postStartMessageSender = requirePostStartMessageSender(sendAgentMessage);
   const runPostStartAction = async (): Promise<Error | null> => {
     try {
+      const postStartMessage = await resolvePostStartMessage({
+        activeWorkspace,
+        queryClient,
+        intent,
+        task,
+      });
+      if (postStartMessage === null) {
+        return null;
+      }
       await postStartMessageSender(externalSessionId, [
         {
           kind: "text",

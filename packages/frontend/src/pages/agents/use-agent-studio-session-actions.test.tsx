@@ -515,6 +515,7 @@ describe("useAgentStudioSessionActions", () => {
         profileId: "spec",
       },
       startMode: "fresh" as const,
+      initialStatusRelease: "after_listener_attach",
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-new", [
       { kind: "text", text: "  hello world  " },

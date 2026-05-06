@@ -281,8 +281,10 @@ describe("session-start-orchestration", () => {
       externalSessionId: "session-new",
       postStartActionError: null,
     });
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
     await Promise.resolve();
+    await Promise.resolve();
+    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(onPostStartActionError).toHaveBeenCalledWith(
       "kickoff",
       expect.objectContaining({ message: "kickoff failed" }),
