@@ -330,7 +330,6 @@ async fn serve_browser_backend_stops_pull_request_sync_loop_when_server_returns(
     let notify_shutdown = shutdown_signal.clone();
 
     tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         notify_shutdown.notify_one();
     });
 
@@ -790,7 +789,7 @@ async fn invoke_handler_lists_workspaces_through_odt_get_workspaces() {
         .expect("response body should collect");
     let payload: Value = serde_json::from_slice(&bytes).expect("response body should deserialize");
     let expected_repo_path = std::fs::canonicalize(&repo_path)
-        .unwrap_or(repo_path.clone())
+        .expect("repo path should exist and be canonicalizable")
         .to_string_lossy()
         .to_string();
 
@@ -845,7 +844,7 @@ async fn invoke_handler_creates_task_through_flat_odt_mcp_bridge_payload() {
     let task_event: Value =
         serde_json::from_str(&replayed[0].payload).expect("task event should deserialize");
     let expected_repo_path = std::fs::canonicalize(&repo_path)
-        .unwrap_or(repo_path.clone())
+        .expect("repo path should exist and be canonicalizable")
         .to_string_lossy()
         .to_string();
     assert_eq!(task_event["kind"], json!("external_task_created"));
