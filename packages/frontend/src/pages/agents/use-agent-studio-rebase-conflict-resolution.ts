@@ -1,7 +1,10 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { useCallback } from "react";
 import type { GitConflict } from "@/features/agent-studio-git";
-import { useGitConflictResolution } from "@/features/git-conflict-resolution";
+import {
+  type StartGitConflictResolutionSessionInput,
+  useGitConflictResolution,
+} from "@/features/git-conflict-resolution";
 import type {
   SessionStartExistingSessionOption,
   SessionStartLaunchRequest,
@@ -56,9 +59,8 @@ export function useAgentStudioRebaseConflictResolution({
   startSessionRequest,
   loadPromptOverrides = loadEffectivePromptOverrides,
 }: UseAgentStudioRebaseConflictResolutionArgs): UseAgentStudioRebaseConflictResolutionResult {
-  const { handleResolveGitConflict } = useGitConflictResolution({
-    activeWorkspace,
-    startConflictResolutionSession: async (request) =>
+  const startConflictResolutionSession = useCallback(
+    async (request: StartGitConflictResolutionSessionInput) =>
       startSessionRequest({
         taskId: request.taskId,
         role: request.role,
@@ -74,59 +76,83 @@ export function useAgentStudioRebaseConflictResolution({
           ? { initialSourceExternalSessionId: request.initialSourceExternalSessionId }
           : {}),
       }),
+    [startSessionRequest],
+  );
+
+  const { handleResolveGitConflict } = useGitConflictResolution({
+    activeWorkspace,
+    startConflictResolutionSession,
     loadPromptOverrides,
   });
+  const {
+    viewTaskId,
+    viewSelectedTask,
+    viewActiveSession,
+    activeSession,
+    selectedSessionById,
+    viewSessionsForTask,
+    sessionsForTask,
+  } = selection;
 
   const handleResolveRebaseConflict = useCallback(
     async (conflict: GitConflict): Promise<boolean> => {
-      if (!selection.viewTaskId) {
+      if (!viewTaskId) {
         throw new Error("Cannot resolve a git conflict because no task is selected.");
       }
 
       const builderSessions = resolveAgentStudioBuilderSessionsForTask({
-        taskId: selection.viewTaskId,
-        viewActiveSession: selection.viewActiveSession,
-        activeSession: selection.activeSession,
-        selectedSessionById: selection.selectedSessionById,
-        viewSessionsForTask: selection.viewSessionsForTask,
-        sessionsForTask: selection.sessionsForTask,
+        taskId: viewTaskId,
+        viewActiveSession,
+        activeSession,
+        selectedSessionById,
+        viewSessionsForTask,
+        sessionsForTask,
       });
       const defaultBuilderSession = resolveAgentStudioBuilderSessionForTask({
-        taskId: selection.viewTaskId,
-        viewActiveSession: selection.viewActiveSession,
-        activeSession: selection.activeSession,
-        selectedSessionById: selection.selectedSessionById,
-        viewSessionsForTask: selection.viewSessionsForTask,
-        sessionsForTask: selection.sessionsForTask,
+        taskId: viewTaskId,
+        viewActiveSession,
+        activeSession,
+        selectedSessionById,
+        viewSessionsForTask,
+        sessionsForTask,
       });
 
       return handleResolveGitConflict(conflict, {
-        taskId: selection.viewTaskId,
-        task: selection.viewSelectedTask,
+        taskId: viewTaskId,
+        task: viewSelectedTask,
         builderSessions,
         currentViewSessionId:
-          selection.viewActiveSession?.role === "build"
-            ? selection.viewActiveSession.externalSessionId
-            : null,
+          viewActiveSession?.role === "build" ? viewActiveSession.externalSessionId : null,
         onOpenSession: (externalSessionId) => {
           const session = builderSessions.find(
             (entry) => entry.externalSessionId === externalSessionId,
           );
           if (
-            selection.viewActiveSession?.externalSessionId !== externalSessionId ||
-            selection.viewActiveSession?.role !== "build"
+            viewActiveSession?.externalSessionId !== externalSessionId ||
+            viewActiveSession?.role !== "build"
           ) {
             onContextSwitchIntent();
           }
           scheduleQueryUpdate({
-            task: selection.viewTaskId,
+            task: viewTaskId,
             session: externalSessionId,
             agent: session?.role ?? defaultBuilderSession?.role ?? "build",
           });
         },
       });
     },
-    [handleResolveGitConflict, onContextSwitchIntent, scheduleQueryUpdate, selection],
+    [
+      activeSession,
+      handleResolveGitConflict,
+      onContextSwitchIntent,
+      scheduleQueryUpdate,
+      selectedSessionById,
+      sessionsForTask,
+      viewActiveSession,
+      viewSelectedTask,
+      viewSessionsForTask,
+      viewTaskId,
+    ],
   );
 
   return {

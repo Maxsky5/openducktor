@@ -264,4 +264,26 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       await harness.unmount();
     }
   });
+
+  test("keeps the resolve callback stable when hydration rebuilds the selection wrapper", async () => {
+    const args = createBaseArgs();
+    const harness = createHookHarness(args);
+
+    try {
+      await harness.mount();
+
+      const initialResolve = harness.getLatest().handleResolveRebaseConflict;
+
+      await harness.update({
+        ...args,
+        selection: {
+          ...args.selection,
+        },
+      });
+
+      expect(harness.getLatest().handleResolveRebaseConflict).toBe(initialResolve);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

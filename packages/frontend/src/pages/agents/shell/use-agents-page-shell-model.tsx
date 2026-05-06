@@ -47,6 +47,7 @@ import {
   type AgentStudioSelectionIntent,
   isSelectionIntentResolved,
 } from "./agent-studio-selection-intent";
+import { gitConflictQuickActionContextsEqual } from "./git-conflict-quick-action-context";
 import {
   useForwardedWorktreeRefresh,
   type WorktreeRefreshRef,
@@ -182,6 +183,9 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     useState<AgentStudioSelectionIntent | null>(null);
   const [gitConflictQuickActionContext, setGitConflictQuickActionContext] =
     useState<AgentStudioGitConflictQuickActionContext | null>(null);
+  const gitConflictQuickActionContextRef = useRef<AgentStudioGitConflictQuickActionContext | null>(
+    null,
+  );
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
   const {
@@ -219,7 +223,10 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   );
   const handleGitConflictQuickActionContextChange = useCallback(
     (context: AgentStudioGitConflictQuickActionContext | null): void => {
-      setGitConflictQuickActionContext(context);
+      gitConflictQuickActionContextRef.current = context;
+      setGitConflictQuickActionContext((current) =>
+        gitConflictQuickActionContextsEqual(current, context) ? current : context,
+      );
     },
     [],
   );
@@ -446,16 +453,20 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   });
 
   const { startSessionRequest } = orchestration;
-  const activeSessionSummary =
-    selection.activeSessionSummary ??
-    (selection.activeSession ? toAgentSessionSummary(selection.activeSession) : null);
-  const viewActiveSessionSummary =
-    selection.viewActiveSessionSummary ??
-    (selection.viewActiveSession ? toAgentSessionSummary(selection.viewActiveSession) : null);
-
-  const { handleResolveRebaseConflict } = useAgentStudioRebaseConflictResolution({
-    activeWorkspace,
-    selection: {
+  const activeSessionSummary = useMemo(
+    () =>
+      selection.activeSessionSummary ??
+      (selection.activeSession ? toAgentSessionSummary(selection.activeSession) : null),
+    [selection.activeSession, selection.activeSessionSummary],
+  );
+  const viewActiveSessionSummary = useMemo(
+    () =>
+      selection.viewActiveSessionSummary ??
+      (selection.viewActiveSession ? toAgentSessionSummary(selection.viewActiveSession) : null),
+    [selection.viewActiveSession, selection.viewActiveSessionSummary],
+  );
+  const rebaseConflictSelection = useMemo(
+    () => ({
       viewTaskId: selection.viewTaskId,
       viewSelectedTask: selection.viewSelectedTask,
       viewActiveSession: viewActiveSessionSummary,
@@ -463,7 +474,21 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       selectedSessionById: selection.selectedSessionById,
       viewSessionsForTask: selection.viewSessionsForTask,
       sessionsForTask: selection.sessionsForTask,
-    },
+    }),
+    [
+      activeSessionSummary,
+      selection.selectedSessionById,
+      selection.sessionsForTask,
+      selection.viewSelectedTask,
+      selection.viewSessionsForTask,
+      selection.viewTaskId,
+      viewActiveSessionSummary,
+    ],
+  );
+
+  const { handleResolveRebaseConflict } = useAgentStudioRebaseConflictResolution({
+    activeWorkspace,
+    selection: rebaseConflictSelection,
     scheduleQueryUpdate,
     onContextSwitchIntent: signalContextSwitchIntent,
     startSessionRequest,
@@ -529,7 +554,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       ...orchestration.agentStudioHeaderModel,
       onResolveGitConflictQuickAction: gitConflictQuickActionContext
         ? () => {
-            void gitConflictQuickActionContext.resolveWithBuilder();
+            void gitConflictQuickActionContextRef.current?.resolveWithBuilder();
           }
         : null,
     }),
