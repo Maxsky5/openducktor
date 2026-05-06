@@ -23,12 +23,21 @@ import {
   createDeferred,
   createTaskCardFixture,
 } from "../test-utils";
-import { createLoadAgentSessions } from "./load-sessions";
+import { createLoadAgentSessions as createLoadAgentSessionsBase } from "./load-sessions";
 import type { SessionLifecycleAdapter } from "./load-sessions-stages";
 import { agentSessionPresenceLookupKey } from "./session-presence-cache";
 import { AgentSessionPresenceStore } from "./session-presence-store";
 
 type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
+
+const createLoadAgentSessions = (
+  args: Omit<Parameters<typeof createLoadAgentSessionsBase>[0], "queryClient"> & {
+    queryClient?: Parameters<typeof createLoadAgentSessionsBase>[0]["queryClient"];
+  },
+) => {
+  const { queryClient = appQueryClient, ...rest } = args;
+  return createLoadAgentSessionsBase({ ...rest, queryClient });
+};
 
 type LegacyRunSummary = { runId: string; worktreePath: string };
 

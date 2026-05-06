@@ -7,6 +7,7 @@ import {
   type TaskCard,
 } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
+import { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -18,6 +19,9 @@ import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operati
 
 type ListSessionPresenceInput = Parameters<NonNullable<AgentEnginePort["listSessionPresence"]>>[0];
 type ReadSessionPresenceInput = Parameters<NonNullable<AgentEnginePort["readSessionPresence"]>>[0];
+type OrchestratorDependencies = NonNullable<
+  Parameters<typeof useAgentOrchestratorOperations>[0]["dependencies"]
+>;
 type OpencodeSdkAdapterPrototype = Pick<
   OpencodeSdkAdapter,
   "listSessionPresence" | "readSessionPresence"
@@ -192,12 +196,50 @@ const createDeferred = <T,>() => {
   };
 };
 
+const createTestDependencies = (
+  overrides: Partial<OrchestratorDependencies["hostPort"]> = {},
+): OrchestratorDependencies => ({
+  queryClient: new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  }),
+  hostPort: {
+    buildStart: async (_repoPath, _taskId, runtimeKind) => ({
+      runtimeKind,
+      runtimeId: "runtime-1",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+      workingDirectory: "/tmp/repo/worktree",
+    }),
+    runtimeEnsure: async (repoPath, runtimeKind) => ({
+      kind: runtimeKind,
+      runtimeId: "runtime-1",
+      repoPath,
+      taskId: null,
+      role: "workspace",
+      workingDirectory: repoPath,
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
+      startedAt: "2026-02-22T08:00:00.000Z",
+      descriptor: { ...OPENCODE_RUNTIME_DESCRIPTOR, kind: runtimeKind },
+    }),
+    agentSessionUpsert: async () => undefined,
+    agentSessionStop: async () => undefined,
+    taskWorktreeGet: async () => ({
+      workingDirectory: "/tmp/repo/worktree",
+      source: "active_build_run",
+    }),
+    ...overrides,
+  },
+});
+
 const createHookHarness = (args: {
   activeRepo: string | null;
   activeWorkspace?: import("@openducktor/contracts").WorkspaceRecord | null;
   tasks: TaskCard[];
   refreshTaskData: (repoPath: string) => Promise<void>;
   agentEngine?: OpencodeSdkAdapter;
+  dependencies?: OrchestratorDependencies;
 }) => {
   const createDefaultActiveWorkspace = (activeRepo: string | null) =>
     activeRepo === null
@@ -258,6 +300,7 @@ const createHookHarness = (args: {
       tasks: TaskCard[];
       refreshTaskData: (repoPath: string) => Promise<void>;
       agentEngine: OpencodeSdkAdapter;
+      dependencies: OrchestratorDependencies;
     }>,
   ) => {
     currentArgs = {
@@ -2366,11 +2409,9 @@ describe("use-agent-orchestrator-operations", () => {
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
     const originalDetachSession = OpencodeSdkAdapter.prototype.detachSession;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const attachSessionCalls: Parameters<OpencodeSdkAdapter["attachSession"]>[0][] = [];
     let loadSessionHistoryCalls = 0;
 
-    host.agentSessionUpsert = async () => {};
     OpencodeSdkAdapter.prototype.hasSession = () => false;
     OpencodeSdkAdapter.prototype.attachSession = async (input) => {
       attachSessionCalls.push(input);
@@ -2414,6 +2455,7 @@ describe("use-agent-orchestrator-operations", () => {
       activeRepo: "/tmp/repo",
       tasks: [],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies(),
     });
 
     try {
@@ -2452,7 +2494,6 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
       OpencodeSdkAdapter.prototype.detachSession = originalDetachSession;
-      host.agentSessionUpsert = originalAgentSessionUpsert;
     }
   });
 
@@ -2462,7 +2503,6 @@ describe("use-agent-orchestrator-operations", () => {
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
     const originalDetachSession = OpencodeSdkAdapter.prototype.detachSession;
-    const originalAgentSessionUpsert = host.agentSessionUpsert;
     const attachSessionCalls: Parameters<OpencodeSdkAdapter["attachSession"]>[0][] = [];
     const subscribeExternalSessionIds: string[] = [];
     const operationOrder: string[] = [];
@@ -2472,7 +2512,6 @@ describe("use-agent-orchestrator-operations", () => {
     let attachedSessionId: string | null = null;
     const listeners: Array<Parameters<OpencodeSdkAdapter["subscribeEvents"]>[1]> = [];
 
-    host.agentSessionUpsert = agentSessionUpsert;
     OpencodeSdkAdapter.prototype.hasSession = (externalSessionId) =>
       externalSessionId === attachedSessionId;
     OpencodeSdkAdapter.prototype.attachSession = async (input) => {
@@ -2515,6 +2554,9 @@ describe("use-agent-orchestrator-operations", () => {
       activeRepo: "/tmp/repo",
       tasks: [],
       refreshTaskData: async () => {},
+      dependencies: createTestDependencies({
+        agentSessionUpsert,
+      }),
     });
 
     try {
@@ -2622,7 +2664,6 @@ describe("use-agent-orchestrator-operations", () => {
       expect(agentSessionUpsert).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
-      host.agentSessionUpsert = originalAgentSessionUpsert;
       OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;

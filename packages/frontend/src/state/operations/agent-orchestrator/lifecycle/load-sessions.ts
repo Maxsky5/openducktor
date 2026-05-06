@@ -1,7 +1,6 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { appQueryClient } from "@/lib/query-client";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -50,7 +49,7 @@ export const createLoadAgentSessions = ({
   loadRepoPromptOverrides,
   loadTaskDocuments: _loadTaskDocuments,
   agentSessionPresenceStore,
-  queryClient = appQueryClient,
+  queryClient,
 }: CreateLoadAgentSessionsArgs): ((
   taskId: string,
   options?: AgentSessionLoadOptions,
@@ -176,10 +175,15 @@ export const createLoadAgentSessions = ({
           sessionsRef,
           setSessionsById,
           isStaleRepoOperation,
-          loadPersistedRecords: async () =>
-            options?.persistedRecords
-              ? Promise.resolve(options.persistedRecords)
-              : loadAgentSessionListFromQuery(queryClient, repoPath, taskId),
+          loadPersistedRecords: async () => {
+            if (options?.persistedRecords) {
+              return options.persistedRecords;
+            }
+            if (!queryClient) {
+              throw new Error("Agent session query client is unavailable.");
+            }
+            return loadAgentSessionListFromQuery(queryClient, repoPath, taskId);
+          },
           loadRepoPromptOverrides,
         });
       if (isStaleRepoOperation()) {
