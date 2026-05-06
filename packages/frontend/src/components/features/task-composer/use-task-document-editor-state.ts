@@ -104,6 +104,11 @@ export function useTaskDocumentEditorState({
     spec: false,
     plan: false,
   });
+  const nextLoadRequestId = useRef(0);
+  const activeLoadRequestIds = useRef<Record<TaskDocumentSection, number | null>>({
+    spec: null,
+    plan: null,
+  });
 
   documentsRef.current = documents;
 
@@ -142,6 +147,10 @@ export function useTaskDocumentEditorState({
       spec: false,
       plan: false,
     };
+    activeLoadRequestIds.current = {
+      spec: null,
+      plan: null,
+    };
   }, [open, taskId]);
 
   const loadSection = useCallback(
@@ -156,11 +165,23 @@ export function useTaskDocumentEditorState({
       }
 
       inFlightSections.current[section] = true;
+      nextLoadRequestId.current += 1;
+      const requestId = nextLoadRequestId.current;
+      activeLoadRequestIds.current[section] = requestId;
       transitionDocumentSection(section, (currentSection) => ({
         ...currentSection,
         isLoading: true,
         error: null,
       }));
+
+      const isCurrentRequest = (): boolean => activeLoadRequestIds.current[section] === requestId;
+      const clearCurrentRequest = (): void => {
+        if (!isCurrentRequest()) {
+          return;
+        }
+        activeLoadRequestIds.current[section] = null;
+        inFlightSections.current[section] = false;
+      };
 
       const sequence = loadSequence.current;
       try {
@@ -169,15 +190,14 @@ export function useTaskDocumentEditorState({
           loadTimeoutMs,
         );
         if (sequence !== loadSequence.current) {
-          inFlightSections.current[section] = false;
-          transitionDocumentSection(section, (currentSection) => ({
-            ...currentSection,
-            isLoading: false,
-          }));
+          clearCurrentRequest();
           return;
         }
 
-        inFlightSections.current[section] = false;
+        if (!isCurrentRequest()) {
+          return;
+        }
+        clearCurrentRequest();
         transitionDocumentSection(section, () => ({
           serverMarkdown: payload.markdown,
           draftMarkdown: payload.markdown,
@@ -188,15 +208,14 @@ export function useTaskDocumentEditorState({
         }));
       } catch (reason) {
         if (sequence !== loadSequence.current) {
-          inFlightSections.current[section] = false;
-          transitionDocumentSection(section, (currentSection) => ({
-            ...currentSection,
-            isLoading: false,
-          }));
+          clearCurrentRequest();
           return;
         }
 
-        inFlightSections.current[section] = false;
+        if (!isCurrentRequest()) {
+          return;
+        }
+        clearCurrentRequest();
         transitionDocumentSection(section, (currentSection) => ({
           ...currentSection,
           isLoading: false,
