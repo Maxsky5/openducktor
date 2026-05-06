@@ -496,6 +496,27 @@ describe("tasks query cache helpers", () => {
     ).toBe("joined");
   });
 
+  test("non-forced repo task view refresh reuses cached task data", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS), {
+      tasks: [{ ...taskFixture, id: "cached" }],
+    });
+    const tasksList = mock(async (): Promise<TaskCard[]> => [{ ...taskFixture, id: "fresh" }]);
+    host.tasksList = tasksList;
+
+    await refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      taskDocumentStrategy: "none",
+    });
+
+    expect(tasksList).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(
+        taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
+      )?.tasks[0]?.id,
+    ).toBe("cached");
+  });
+
   test("forced repo task view refresh updates cached done-visible variants", async () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);

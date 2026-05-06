@@ -5,6 +5,7 @@ import {
   invalidateRepoTaskQueries,
   loadRepoTaskDataFromQuery,
   refreshCachedKanbanQueries,
+  repoTaskDataQueryOptions,
   taskQueryKeys,
 } from "./tasks";
 import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "./workspace";
@@ -52,6 +53,22 @@ export const refreshRepoTaskViewsFromQuery = async (
           staleTime: 0,
         });
   const doneVisibleDays = settings.kanban.doneVisibleDays;
+
+  if (
+    options?.forceFreshTaskList !== true &&
+    (options?.taskDocumentStrategy === undefined || options.taskDocumentStrategy === "none")
+  ) {
+    const taskDataQueryState = queryClient.getQueryState(
+      taskQueryKeys.repoData(repoPath, doneVisibleDays),
+    );
+
+    if (taskDataQueryState?.status === "success") {
+      return;
+    }
+
+    await queryClient.fetchQuery(repoTaskDataQueryOptions(repoPath, doneVisibleDays));
+    return;
+  }
 
   const taskDocumentRefresh =
     options?.taskDocumentStrategy === "refresh"
