@@ -7,6 +7,7 @@ import {
   type ResolvedSessionStartDecision,
 } from "@/features/session-start";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
+import { addTaskToPersistedAgentStudioTabs } from "../agents/agents-page-session-tabs";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { renderSessionStartedToastAction } from "./session-started-toast-action";
 
@@ -15,6 +16,7 @@ type StartKanbanSessionFlowInput = {
   request: KanbanSessionStartIntent;
   decision: ResolvedSessionStartDecision;
   startInBackground: boolean;
+  openAgentStudioTabOnBackgroundSessionStart: boolean;
   tasks: TaskCard[];
   roleLabels: Record<AgentRole, string>;
   queryClient: QueryClient;
@@ -30,6 +32,7 @@ export const startKanbanSessionFlow = async ({
   request,
   decision,
   startInBackground,
+  openAgentStudioTabOnBackgroundSessionStart,
   tasks,
   roleLabels,
   queryClient,
@@ -67,6 +70,20 @@ export const startKanbanSessionFlow = async ({
   });
 
   if (startInBackground) {
+    if (openAgentStudioTabOnBackgroundSessionStart) {
+      const workspaceId = activeWorkspace?.workspaceId;
+      if (!workspaceId) {
+        throw new Error(
+          "Cannot add Agent Studio task tab because no active workspace is selected.",
+        );
+      }
+      addTaskToPersistedAgentStudioTabs({
+        workspaceId,
+        taskId: request.taskId,
+        tasks,
+      });
+    }
+
     const roleLabel = roleLabels[request.role] ?? request.role.toUpperCase();
     toast.success(`Started ${roleLabel} session in background for ${request.taskId}.`, {
       duration: 10000,

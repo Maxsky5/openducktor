@@ -3,8 +3,8 @@ use anyhow::{anyhow, Result};
 use host_domain::WorkspaceRecord;
 use host_infra_system::{
     normalize_hook_set, normalize_repo_dev_servers, AgentDefaults, AutopilotSettings, ChatSettings,
-    GitTargetBranch, HookSet, KanbanSettings, PromptOverrides, RepoConfig, RepoDevServerScript,
-    RepoGitConfig, ReusablePrompt,
+    GeneralSettings, GitTargetBranch, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
+    RepoDevServerScript, RepoGitConfig, ReusablePrompt,
 };
 use std::collections::HashMap;
 
@@ -39,6 +39,7 @@ pub struct RepoSettingsUpdate {
 pub struct WorkspaceSettingsSnapshot {
     pub theme: String,
     pub git: host_infra_system::GlobalGitConfig,
+    pub general: GeneralSettings,
     pub chat: ChatSettings,
     pub reusable_prompts: Vec<ReusablePrompt>,
     pub kanban: KanbanSettings,

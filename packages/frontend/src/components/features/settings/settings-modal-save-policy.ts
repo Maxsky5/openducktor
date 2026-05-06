@@ -4,6 +4,7 @@ import type { DirtySections } from "./use-settings-modal-dirty-state";
 
 export const hasAnyDirtySections = (dirtySections: DirtySections): boolean =>
   dirtySections.chat ||
+  dirtySections.general ||
   dirtySections.reusablePrompts ||
   dirtySections.globalGit ||
   dirtySections.kanban ||
@@ -13,6 +14,7 @@ export const hasAnyDirtySections = (dirtySections: DirtySections): boolean =>
 
 export const isGlobalGitOnlySave = (dirtySections: DirtySections): boolean =>
   dirtySections.globalGit &&
+  !dirtySections.general &&
   !dirtySections.chat &&
   !dirtySections.reusablePrompts &&
   !dirtySections.kanban &&

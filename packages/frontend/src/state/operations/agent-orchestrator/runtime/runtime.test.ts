@@ -65,6 +65,7 @@ const createPromptOverrideSettingsSnapshot = (
 ): SettingsSnapshot => ({
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
+  general: { openAgentStudioTabOnBackgroundSessionStart: true },
   chat: { showThinkingMessages: false },
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },

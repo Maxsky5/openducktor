@@ -20,6 +20,9 @@ export type SettingsModalDraftActions = {
   updateGlobalChatSettings: (
     updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"],
   ) => void;
+  updateGlobalGeneralSettings: (
+    updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
+  ) => void;
   updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
@@ -111,6 +114,22 @@ export const useSettingsModalDraftActions = ({
         return {
           ...current,
           chat: updater(current.chat),
+        };
+      });
+    },
+    [setSnapshotDraft],
+  );
+
+  const updateGlobalGeneralSettings = useCallback(
+    (updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"]): void => {
+      setSnapshotDraft((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          general: updater(current.general),
         };
       });
     },
@@ -220,6 +239,7 @@ export const useSettingsModalDraftActions = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateGlobalGeneralSettings,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,

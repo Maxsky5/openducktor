@@ -77,6 +77,7 @@ export function SettingsModalContent({
     retrySelectedRepoBranchesLoad,
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
+    updateGlobalGeneralSettings,
     updateGlobalChatSettings,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
@@ -104,7 +105,13 @@ export function SettingsModalContent({
   }
 
   if (section === "general") {
-    return <GeneralSettingsSection />;
+    return (
+      <GeneralSettingsSection
+        general={snapshotDraft.general}
+        disabled={isInteractionDisabled}
+        onUpdateGeneral={updateGlobalGeneralSettings}
+      />
+    );
   }
 
   if (section === "prompts") {

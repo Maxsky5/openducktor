@@ -57,6 +57,15 @@ export const useSettingsModalDirtyDraftActions = ({
     [draftActions, runDirtyAction],
   );
 
+  const updateGlobalGeneralSettings = useCallback(
+    (updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"]): void => {
+      runDirtyAction("general", () => {
+        draftActions.updateGlobalGeneralSettings(updater);
+      });
+    },
+    [draftActions, runDirtyAction],
+  );
+
   const updateReusablePrompts = useCallback(
     (updater: (current: ReusablePrompt[]) => ReusablePrompt[]): void => {
       runDirtyAction("reusablePrompts", () => {
@@ -128,6 +137,7 @@ export const useSettingsModalDirtyDraftActions = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateGlobalGeneralSettings,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,

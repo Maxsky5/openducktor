@@ -10,6 +10,7 @@ import {
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
 } from "@/lib/agent-session-options";
+import { errorMessage } from "@/lib/errors";
 import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -18,6 +19,7 @@ import type {
   AgentWorkflowStepLiveSession,
   AgentWorkflowStepState,
 } from "@/types/agent-workflow";
+import { toTabsStorageKey } from "./agent-studio-navigation";
 
 type PersistedTaskTabsPayload = {
   tabs: string[];
@@ -273,6 +275,67 @@ export const toPersistedTaskTabs = (state: PersistedTaskTabsState): string => {
     tabs: normalizeTaskTabs(state.tabs),
     activeTaskId,
   } satisfies PersistedTaskTabsPayload);
+};
+
+export const addTaskToPersistedTaskTabs = (params: {
+  raw: string | null;
+  taskId: string;
+  tasks: TaskCard[];
+}): string | null => {
+  const taskId = params.taskId.trim();
+  if (!taskId) {
+    return null;
+  }
+
+  const task = params.tasks.find((entry) => entry.id === taskId) ?? null;
+  if (!task || task.status === "closed") {
+    return null;
+  }
+
+  const persisted = parsePersistedTaskTabs(params.raw);
+  if (persisted.tabs.includes(taskId)) {
+    return toPersistedTaskTabs(persisted);
+  }
+
+  return toPersistedTaskTabs({
+    tabs: [...persisted.tabs, taskId],
+    activeTaskId: persisted.activeTaskId,
+  });
+};
+
+export const addTaskToPersistedAgentStudioTabs = (params: {
+  workspaceId: string;
+  taskId: string;
+  tasks: TaskCard[];
+}): void => {
+  const storageKey = toTabsStorageKey(params.workspaceId);
+  let raw: string | null;
+  try {
+    raw = globalThis.localStorage.getItem(storageKey);
+  } catch (cause) {
+    throw new Error(
+      `Failed to read agent studio task tabs storage key "${storageKey}": ${errorMessage(cause)}`,
+      { cause },
+    );
+  }
+
+  const next = addTaskToPersistedTaskTabs({
+    raw,
+    taskId: params.taskId,
+    tasks: params.tasks,
+  });
+  if (next === null || next === raw) {
+    return;
+  }
+
+  try {
+    globalThis.localStorage.setItem(storageKey, next);
+  } catch (cause) {
+    throw new Error(
+      `Failed to persist agent studio task tabs storage key "${storageKey}": ${errorMessage(cause)}`,
+      { cause },
+    );
+  }
 };
 
 export const resolveFallbackTaskId = (params: {

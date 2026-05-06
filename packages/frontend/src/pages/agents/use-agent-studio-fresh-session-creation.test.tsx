@@ -104,6 +104,9 @@ beforeEach(() => {
     git: {
       defaultMergeMethod: "merge_commit",
     },
+    general: {
+      openAgentStudioTabOnBackgroundSessionStart: true,
+    },
     chat: {
       showThinkingMessages: false,
     },

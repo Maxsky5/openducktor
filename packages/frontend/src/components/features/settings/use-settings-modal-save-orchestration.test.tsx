@@ -23,6 +23,9 @@ const createSnapshot = (): SettingsSnapshot => ({
   chat: {
     showThinkingMessages: false,
   },
+  general: {
+    openAgentStudioTabOnBackgroundSessionStart: true,
+  },
   reusablePrompts: [],
   kanban: {
     doneVisibleDays: 1,

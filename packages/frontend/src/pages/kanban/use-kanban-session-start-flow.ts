@@ -41,6 +41,7 @@ type UseKanbanSessionStartFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
+  openAgentStudioTabOnBackgroundSessionStart: boolean;
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
   navigate: NavigateFunction;
@@ -143,6 +144,7 @@ export function useKanbanSessionStartFlow({
   activeWorkspace,
   branches = [],
   repoSettings,
+  openAgentStudioTabOnBackgroundSessionStart,
   tasks,
   sessions,
   navigate,
@@ -221,6 +223,7 @@ export function useKanbanSessionStartFlow({
             request: intent,
             decision,
             startInBackground: runInBackground,
+            openAgentStudioTabOnBackgroundSessionStart,
             tasks: tasksRef.current,
             roleLabels: ROLE_LABELS,
             queryClient,
@@ -237,6 +240,7 @@ export function useKanbanSessionStartFlow({
     [
       activeWorkspace,
       humanRequestChangesTask,
+      openAgentStudioTabOnBackgroundSessionStart,
       openSessionInAgentStudio,
       queryClient,
       runSessionStartRequest,

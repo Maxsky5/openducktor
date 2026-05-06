@@ -103,6 +103,7 @@ pub(crate) struct RepoSettingsPayload {
 pub(crate) struct SettingsSnapshotPayload {
     pub(crate) theme: String,
     pub(crate) git: host_infra_system::GlobalGitConfig,
+    pub(crate) general: host_infra_system::GeneralSettings,
     pub(crate) chat: host_infra_system::ChatSettings,
     pub(crate) reusable_prompts: Vec<host_infra_system::ReusablePrompt>,
     pub(crate) kanban: host_infra_system::KanbanSettings,

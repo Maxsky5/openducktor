@@ -298,6 +298,7 @@ fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResul
     serialize_value(SettingsSnapshotPayload {
         theme: snapshot.theme,
         git: snapshot.git,
+        general: snapshot.general,
         chat: snapshot.chat,
         reusable_prompts: snapshot.reusable_prompts,
         kanban: snapshot.kanban,
@@ -363,6 +364,7 @@ async fn handle_workspace_save_settings_snapshot(
     let SettingsSnapshotPayload {
         theme,
         git,
+        general,
         chat,
         reusable_prompts,
         kanban,
@@ -378,6 +380,7 @@ async fn handle_workspace_save_settings_snapshot(
         service.workspace_save_settings_snapshot(WorkspaceSettingsSnapshot {
             theme,
             git,
+            general,
             chat,
             reusable_prompts,
             kanban,

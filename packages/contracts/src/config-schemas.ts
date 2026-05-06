@@ -15,6 +15,9 @@ const DEFAULT_SOFT_GUARDRAILS = {
 const DEFAULT_CHAT_SETTINGS = {
   showThinkingMessages: false,
 } as const;
+export const DEFAULT_GENERAL_SETTINGS = {
+  openAgentStudioTabOnBackgroundSessionStart: true,
+} as const;
 export const DEFAULT_REUSABLE_PROMPTS = [] as const;
 export const DEFAULT_KANBAN_SETTINGS = {
   doneVisibleDays: 1,
@@ -206,6 +209,13 @@ export const chatSettingsSchema = z.object({
 });
 export type ChatSettings = z.infer<typeof chatSettingsSchema>;
 
+export const generalSettingsSchema = z.object({
+  openAgentStudioTabOnBackgroundSessionStart: z
+    .boolean()
+    .default(DEFAULT_GENERAL_SETTINGS.openAgentStudioTabOnBackgroundSessionStart),
+});
+export type GeneralSettings = z.infer<typeof generalSettingsSchema>;
+
 export const kanbanSettingsSchema = z.object({
   doneVisibleDays: z.number().int().min(0).default(DEFAULT_KANBAN_SETTINGS.doneVisibleDays),
   emptyColumnDisplay: z
@@ -269,6 +279,7 @@ export const globalConfigSchema = z.object({
   activeWorkspace: workspaceIdSchema.optional(),
   theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
+  general: generalSettingsSchema.default(DEFAULT_GENERAL_SETTINGS),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
@@ -283,6 +294,7 @@ export type GlobalConfig = z.infer<typeof globalConfigSchema>;
 export const settingsSnapshotSchema = z.object({
   theme: themeValueSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
+  general: generalSettingsSchema.default(DEFAULT_GENERAL_SETTINGS),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),

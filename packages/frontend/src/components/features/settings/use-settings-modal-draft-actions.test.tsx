@@ -22,6 +22,9 @@ const createInitialSnapshot = (): SettingsSnapshot => ({
   chat: {
     showThinkingMessages: false,
   },
+  general: {
+    openAgentStudioTabOnBackgroundSessionStart: true,
+  },
   reusablePrompts: [],
   kanban: {
     doneVisibleDays: 1,
@@ -106,6 +109,27 @@ describe("useSettingsModalDraftActions", () => {
     expect(snapshot?.globalPromptOverrides["system.role.spec.base"]?.template).toBe(
       "global custom",
     );
+
+    await harness.unmount();
+  });
+
+  test("updates global general settings", async () => {
+    const harness = createHookHarness({
+      selectedWorkspaceId: "repo-a",
+      initialSnapshot: createInitialSnapshot(),
+    });
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.updateGlobalGeneralSettings((general) => ({
+        ...general,
+        openAgentStudioTabOnBackgroundSessionStart: false,
+      }));
+    });
+
+    expect(harness.getLatest().snapshotDraft?.general).toEqual({
+      openAgentStudioTabOnBackgroundSessionStart: false,
+    });
 
     await harness.unmount();
   });

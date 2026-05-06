@@ -106,6 +106,29 @@ describe("config-schemas", () => {
     expect(parsed.reusablePrompts).toEqual([]);
   });
 
+  test("defaults general background Agent Studio tab setting for existing snapshots", () => {
+    const parsed = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(parsed.general.openAgentStudioTabOnBackgroundSessionStart).toBe(true);
+  });
+
+  test("roundtrips explicit disabled background Agent Studio tab setting", () => {
+    const parsed = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      general: { openAgentStudioTabOnBackgroundSessionStart: false },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(parsed.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
+  });
+
   test("keeps chat settings scoped to chat display", () => {
     const parsed = chatSettingsSchema.parse({ showThinkingMessages: true });
 
