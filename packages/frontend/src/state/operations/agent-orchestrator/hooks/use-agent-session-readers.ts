@@ -1,6 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 export const useAgentSessionReaders = (agentEngine: AgentEnginePort) => {
   const readSessionModelCatalog = useCallback(
@@ -43,11 +43,20 @@ export const useAgentSessionReaders = (agentEngine: AgentEnginePort) => {
       agentEngine.searchFiles({ repoPath, runtimeKind, workingDirectory, query }),
     [agentEngine],
   );
-  return {
-    readSessionModelCatalog,
-    readSessionTodos,
-    readSessionHistory,
-    readSessionSlashCommands,
-    readSessionFileSearch,
-  };
+  return useMemo(
+    () => ({
+      readSessionModelCatalog,
+      readSessionTodos,
+      readSessionHistory,
+      readSessionSlashCommands,
+      readSessionFileSearch,
+    }),
+    [
+      readSessionFileSearch,
+      readSessionHistory,
+      readSessionModelCatalog,
+      readSessionSlashCommands,
+      readSessionTodos,
+    ],
+  );
 };

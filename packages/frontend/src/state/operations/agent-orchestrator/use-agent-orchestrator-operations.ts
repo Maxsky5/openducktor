@@ -159,12 +159,13 @@ export function useAgentOrchestratorOperations({
     () =>
       createEnsureRuntime({
         refreshTaskData,
+        queryClient,
         hostClient: {
           ...runtimeHostPort,
           taskWorktreeGet: hostPort.taskWorktreeGet,
         },
       }),
-    [refreshTaskData, runtimeHostPort, hostPort.taskWorktreeGet],
+    [refreshTaskData, queryClient, runtimeHostPort, hostPort.taskWorktreeGet],
   );
   const sessionActions = useMemo(
     () =>

@@ -456,6 +456,26 @@ describe("use-agent-orchestrator-operations", () => {
     };
   });
 
+  test("keeps public operations stable across unchanged renders", async () => {
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixture],
+      refreshTaskData: async () => {},
+      dependencies: createTestDependencies(),
+    });
+
+    await harness.mount();
+    try {
+      const firstOperations = harness.getLatest().operations;
+
+      await harness.updateArgs({});
+
+      expect(harness.getLatest().operations).toBe(firstOperations);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
