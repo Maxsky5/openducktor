@@ -157,7 +157,9 @@ export function useTaskOperations({
       await refreshRepoTaskViewsFromQuery(
         queryClient,
         repoPath,
-        taskIds ? { taskDocumentStrategy: "refresh", taskIds } : undefined,
+        taskIds
+          ? { forceFreshTaskList: true, taskDocumentStrategy: "refresh", taskIds }
+          : undefined,
       );
     },
     [queryClient],
@@ -204,6 +206,7 @@ export function useTaskOperations({
     async (repoPath: string, strategy: TaskMutationRefreshStrategy): Promise<void> => {
       if (strategy.kind === "task") {
         await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
+          forceFreshTaskList: true,
           taskDocumentStrategy: "refresh",
           taskIds: [strategy.taskId],
         });
@@ -212,13 +215,14 @@ export function useTaskOperations({
 
       if (strategy.kind === "remove-task") {
         await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
+          forceFreshTaskList: true,
           taskDocumentStrategy: "remove",
           taskIds: strategy.taskIds,
         });
         return;
       }
 
-      await refreshRepoTaskViewsFromQuery(queryClient, repoPath);
+      await refreshRepoTaskViewsFromQuery(queryClient, repoPath, { forceFreshTaskList: true });
     },
     [queryClient],
   );

@@ -2,12 +2,14 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
+import { refreshRepoTaskViewsFromQuery } from "./task-view-sync";
 import {
   invalidateRepoTaskQueries,
   kanbanTaskListQueryOptions,
   loadRepoTaskDataFromQuery,
   refetchActiveKanbanQueries,
   refreshCachedKanbanQueries,
+  repoTaskDataQueryOptions,
   repoVisibleTasksQueryOptions,
   taskQueryKeys,
   upsertAgentSessionInRepoTaskData,
@@ -49,6 +51,16 @@ const sessionFixture: AgentSessionRecord = {
   workingDirectory: "/tmp/repo/worktree",
   startedAt: "2026-03-22T12:00:00.000Z",
   selectedModel: null,
+};
+
+const createDeferred = <T>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
 };
 
 describe("tasks query cache helpers", () => {
@@ -138,6 +150,23 @@ describe("tasks query cache helpers", () => {
     expect(tasksList).toHaveBeenCalledWith("/repo");
   });
 
+  test("repo visible task reads share the canonical repo task-data query", async () => {
+    const queryClient = new QueryClient();
+    const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
+
+    host.tasksList = tasksList;
+
+    const [repoTaskData, visibleTasks] = await Promise.all([
+      queryClient.fetchQuery(repoTaskDataQueryOptions("/repo")),
+      queryClient.fetchQuery(repoVisibleTasksQueryOptions("/repo")),
+    ]);
+
+    expect(repoTaskData.tasks).toEqual([taskFixture]);
+    expect(visibleTasks).toEqual([taskFixture]);
+    expect(tasksList).toHaveBeenCalledTimes(1);
+    expect(tasksList).toHaveBeenCalledWith("/repo");
+  });
+
   test("loadRepoTaskDataFromQuery prepopulates visible tasks cache", async () => {
     const queryClient = new QueryClient();
     const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
@@ -147,6 +176,23 @@ describe("tasks query cache helpers", () => {
     const repoTaskData = await loadRepoTaskDataFromQuery(queryClient, "/repo");
 
     expect(repoTaskData.tasks).toEqual([taskFixture]);
+    expect(queryClient.getQueryData<TaskCard[]>(taskQueryKeys.visibleTasks("/repo"))).toEqual([
+      taskFixture,
+    ]);
+  });
+
+  test("loadRepoTaskDataFromQuery syncs visible tasks when it joins an in-flight repo-data read", async () => {
+    const queryClient = new QueryClient();
+    const tasksList = mock(async (): Promise<TaskCard[]> => [taskFixture]);
+
+    host.tasksList = tasksList;
+
+    await Promise.all([
+      queryClient.fetchQuery(repoTaskDataQueryOptions("/repo")),
+      loadRepoTaskDataFromQuery(queryClient, "/repo"),
+    ]);
+
+    expect(tasksList).toHaveBeenCalledTimes(1);
     expect(queryClient.getQueryData<TaskCard[]>(taskQueryKeys.visibleTasks("/repo"))).toEqual([
       taskFixture,
     ]);
@@ -295,5 +341,145 @@ describe("tasks query cache helpers", () => {
     expect(
       queryClient.getQueryData<TaskCard[]>(taskQueryKeys.kanbanData("/other", 1))?.[0]?.status,
     ).toBe("open");
+  });
+
+  test("concurrent repo task view refreshes queue one trailing task-list refresh", async () => {
+    const queryClient = new QueryClient();
+    let repoRefreshCount = 0;
+    let kanbanRefreshCount = 0;
+    const tasksList = mock(
+      async (repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => {
+        if (repoPath !== "/repo") {
+          throw new Error(`Unexpected repo path: ${repoPath}`);
+        }
+
+        if (doneVisibleDays === undefined) {
+          repoRefreshCount += 1;
+        } else {
+          kanbanRefreshCount += 1;
+        }
+
+        return [
+          {
+            ...taskFixture,
+            id:
+              doneVisibleDays === undefined
+                ? `repo-data-${repoRefreshCount}`
+                : `kanban-${kanbanRefreshCount}`,
+          },
+        ];
+      },
+    );
+    host.tasksList = tasksList;
+    queryClient.setQueryData(taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS), [taskFixture]);
+
+    await Promise.all([
+      refreshRepoTaskViewsFromQuery(queryClient, "/repo"),
+      refreshRepoTaskViewsFromQuery(queryClient, "/repo"),
+    ]);
+
+    expect(tasksList).toHaveBeenCalledTimes(4);
+    expect(tasksList).toHaveBeenCalledWith("/repo");
+    expect(tasksList).toHaveBeenCalledWith("/repo", DONE_VISIBLE_DAYS);
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
+        ?.id,
+    ).toBe("repo-data-2");
+    expect(
+      queryClient.getQueryData<TaskCard[]>(
+        taskQueryKeys.kanbanData("/repo", DONE_VISIBLE_DAYS),
+      )?.[0]?.id,
+    ).toBe("kanban-2");
+  });
+
+  test("startup task queries and lifecycle refresh share in-flight task-list reads", async () => {
+    const queryClient = new QueryClient();
+    const tasksList = mock(
+      async (repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => {
+        if (repoPath !== "/repo") {
+          throw new Error(`Unexpected repo path: ${repoPath}`);
+        }
+
+        return [
+          {
+            ...taskFixture,
+            id: doneVisibleDays === undefined ? "repo-data" : `kanban-${doneVisibleDays}`,
+          },
+        ];
+      },
+    );
+    host.tasksList = tasksList;
+
+    await Promise.all([
+      queryClient.fetchQuery(repoTaskDataQueryOptions("/repo")),
+      queryClient.fetchQuery(kanbanTaskListQueryOptions("/repo", DONE_VISIBLE_DAYS)),
+      refreshRepoTaskViewsFromQuery(queryClient, "/repo"),
+    ]);
+
+    expect(tasksList).toHaveBeenCalledTimes(2);
+    expect(tasksList).toHaveBeenCalledWith("/repo");
+    expect(tasksList).toHaveBeenCalledWith("/repo", DONE_VISIBLE_DAYS);
+  });
+
+  test("force-fresh task refresh does not join a stale pre-existing repo-data fetch", async () => {
+    const queryClient = new QueryClient();
+    const staleList = createDeferred<TaskCard[]>();
+    let callCount = 0;
+    const tasksList = mock(async (): Promise<TaskCard[]> => {
+      callCount += 1;
+      if (callCount === 1) {
+        return staleList.promise;
+      }
+
+      return [{ ...taskFixture, id: "fresh" }];
+    });
+    host.tasksList = tasksList;
+
+    const staleFetch = queryClient.fetchQuery(repoTaskDataQueryOptions("/repo")).catch(() => {
+      // The force-fresh refresh cancels the pre-existing read so it cannot publish stale data.
+    });
+    await Promise.resolve();
+
+    const refresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      forceFreshTaskList: true,
+    });
+    staleList.resolve([{ ...taskFixture, id: "stale" }]);
+    await Promise.all([staleFetch, refresh]);
+
+    expect(tasksList).toHaveBeenCalledTimes(2);
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
+        ?.id,
+    ).toBe("fresh");
+  });
+
+  test("force-fresh task refresh cancels a stale coalesced refresh before publishing", async () => {
+    const queryClient = new QueryClient();
+    const staleList = createDeferred<TaskCard[]>();
+    let callCount = 0;
+    const tasksList = mock(async (): Promise<TaskCard[]> => {
+      callCount += 1;
+      if (callCount === 1) {
+        return staleList.promise;
+      }
+
+      return [{ ...taskFixture, id: "fresh" }];
+    });
+    host.tasksList = tasksList;
+
+    const staleRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo");
+    await Promise.resolve();
+
+    const forceFreshRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      forceFreshTaskList: true,
+    });
+    staleList.resolve([{ ...taskFixture, id: "stale" }]);
+    await Promise.all([staleRefresh, forceFreshRefresh]);
+
+    expect(tasksList).toHaveBeenCalledTimes(2);
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
+        ?.id,
+    ).toBe("fresh");
   });
 });

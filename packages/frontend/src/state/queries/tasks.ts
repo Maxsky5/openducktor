@@ -32,9 +32,9 @@ export const repoTaskDataQueryOptions = (repoPath: string) =>
 export const repoVisibleTasksQueryOptions = (repoPath: string) =>
   queryOptions({
     queryKey: taskQueryKeys.visibleTasks(repoPath),
-    queryFn: async (): Promise<TaskCard[]> => {
-      const taskList = await host.tasksList(repoPath);
-      return toVisibleTasks(taskList);
+    queryFn: async ({ client }): Promise<TaskCard[]> => {
+      const repoTaskData = await client.fetchQuery(repoTaskDataQueryOptions(repoPath));
+      return repoTaskData.tasks;
     },
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
@@ -52,17 +52,22 @@ export const kanbanTaskListQueryOptions = (repoPath: string, doneVisibleDays: nu
 export const loadRepoTaskDataFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
-): Promise<RepoTaskData> =>
-  queryClient.fetchQuery({
+): Promise<RepoTaskData> => {
+  const taskDataPromise = queryClient.fetchQuery({
     ...repoTaskDataQueryOptions(repoPath),
     queryFn: async (): Promise<RepoTaskData> => {
       const repoTaskData = {
         tasks: toVisibleTasks(await host.tasksList(repoPath)),
       };
-      queryClient.setQueryData(taskQueryKeys.visibleTasks(repoPath), repoTaskData.tasks);
       return repoTaskData;
     },
   });
+
+  return taskDataPromise.then((repoTaskData) => {
+    queryClient.setQueryData(taskQueryKeys.visibleTasks(repoPath), repoTaskData.tasks);
+    return repoTaskData;
+  });
+};
 
 export const invalidateRepoTaskDataQueries = (
   queryClient: QueryClient,
@@ -124,13 +129,15 @@ const cachedKanbanQueryKeysForRepo = (
 export const refreshCachedKanbanQueries = async (
   queryClient: QueryClient,
   repoPath: string,
+  options?: { force?: boolean },
 ): Promise<void> => {
   const cachedQueryKeys = cachedKanbanQueryKeysForRepo(queryClient, repoPath);
+  const force = options?.force ?? true;
   await Promise.all(
     cachedQueryKeys.map(([, , , doneVisibleDays]) =>
       queryClient.fetchQuery({
         ...kanbanTaskListQueryOptions(repoPath, doneVisibleDays),
-        staleTime: 0,
+        ...(force ? { staleTime: 0 } : {}),
       }),
     ),
   );
