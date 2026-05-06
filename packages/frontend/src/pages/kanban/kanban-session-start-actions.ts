@@ -73,15 +73,22 @@ export const startKanbanSessionFlow = async ({
     if (openAgentStudioTabOnBackgroundSessionStart) {
       const workspaceId = activeWorkspace?.workspaceId;
       if (!workspaceId) {
-        throw new Error(
-          "Cannot add Agent Studio task tab because no active workspace is selected.",
-        );
+        toast.warning("Session started, but Agent Studio tab could not be saved.", {
+          description: "No active workspace is selected.",
+        });
+      } else {
+        try {
+          addTaskToPersistedAgentStudioTabs({
+            workspaceId,
+            taskId: request.taskId,
+            tasks,
+          });
+        } catch (error) {
+          toast.warning("Session started, but Agent Studio tab could not be saved.", {
+            description: error instanceof Error ? error.message : "Unable to update tab storage.",
+          });
+        }
       }
-      addTaskToPersistedAgentStudioTabs({
-        workspaceId,
-        taskId: request.taskId,
-        tasks,
-      });
     }
 
     const roleLabel = roleLabels[request.role] ?? request.role.toUpperCase();
@@ -95,10 +102,6 @@ export const startKanbanSessionFlow = async ({
     });
   } else {
     openSessionInAgentStudio(request, workflow.externalSessionId);
-  }
-
-  if (effectivePostStartAction === "none") {
-    return workflow.externalSessionId;
   }
 
   return workflow.externalSessionId;

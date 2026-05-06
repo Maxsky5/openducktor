@@ -331,6 +331,9 @@ describe("useSettingsModalSaveOrchestration", () => {
         chat: {
           showThinkingMessages: true,
         },
+        general: {
+          openAgentStudioTabOnBackgroundSessionStart: true,
+        },
         reusablePrompts: [],
       }),
     );
