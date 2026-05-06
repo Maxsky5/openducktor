@@ -50,10 +50,10 @@ const createOrReuseSession = async ({
 
 const toSessionCreationInput = ({
   input,
-  targetWorkingDirectory,
+  targetWorkingDirectoryOverride,
 }: {
   input: StartAgentSessionInput;
-  targetWorkingDirectory?: string | null;
+  targetWorkingDirectoryOverride?: { value: string | null };
 }): StartSessionCreationInput => {
   if (input.startMode === "reuse") {
     return {
@@ -70,15 +70,48 @@ const toSessionCreationInput = ({
     };
   }
 
-  return {
+  const freshInput: StartSessionCreationInput = {
     startMode: "fresh",
     selectedModel: input.selectedModel,
-    ...(targetWorkingDirectory !== undefined
-      ? { targetWorkingDirectory }
-      : input.targetWorkingDirectory !== undefined
-        ? { targetWorkingDirectory: input.targetWorkingDirectory }
-        : {}),
   };
+
+  if (targetWorkingDirectoryOverride) {
+    freshInput.targetWorkingDirectory = targetWorkingDirectoryOverride.value;
+    return freshInput;
+  }
+
+  if ("targetWorkingDirectory" in input) {
+    freshInput.targetWorkingDirectory = input.targetWorkingDirectory;
+  }
+
+  return freshInput;
+};
+
+const resolveFreshStartTarget = async ({
+  input,
+  ctx,
+  runtime,
+}: {
+  input: StartAgentSessionInput;
+  ctx: StartSessionContext;
+  runtime: RuntimeDependencies;
+}) => {
+  if (input.startMode !== "fresh") {
+    return null;
+  }
+
+  if (!("targetWorkingDirectory" in input)) {
+    return resolveFreshStartTargetWorkingDirectoryForStart({
+      ctx,
+      runtime,
+    });
+  }
+
+  return resolveFreshStartTargetWorkingDirectoryForStart({
+    ctx,
+    runtime,
+    targetWorkingDirectory: input.targetWorkingDirectory,
+  });
 };
 
 const attachSessionListenerAndGuard = async ({
@@ -161,16 +194,11 @@ export const createStartAgentSession = ({
 
     const normalizedSourceSessionId =
       input.startMode === "fresh" ? "" : input.sourceExternalSessionId.trim();
-    const freshStartTarget =
-      input.startMode === "fresh"
-        ? await resolveFreshStartTargetWorkingDirectoryForStart({
-            ctx: startCtx,
-            runtime,
-            ...(input.targetWorkingDirectory !== undefined
-              ? { targetWorkingDirectory: input.targetWorkingDirectory }
-              : {}),
-          })
-        : null;
+    const freshStartTarget = await resolveFreshStartTarget({
+      input,
+      ctx: startCtx,
+      runtime,
+    });
     const normalizedTargetWorkingDirectory =
       freshStartTarget?.normalizedTargetWorkingDirectory ?? "";
     const selectedModelKey =
@@ -191,14 +219,19 @@ export const createStartAgentSession = ({
     }
 
     const startPromise = Promise.resolve().then(async (): Promise<string> => {
+      let creationInput = toSessionCreationInput({ input });
+      const resolvedWorkingDirectory = freshStartTarget?.targetWorkingDirectory;
+      if (typeof resolvedWorkingDirectory === "string" || resolvedWorkingDirectory === null) {
+        creationInput = toSessionCreationInput({
+          input,
+          targetWorkingDirectoryOverride: {
+            value: resolvedWorkingDirectory,
+          },
+        });
+      }
       const startResult = await createOrReuseSession({
         ctx: startCtx,
-        input: toSessionCreationInput({
-          input,
-          ...(freshStartTarget?.targetWorkingDirectory !== undefined
-            ? { targetWorkingDirectory: freshStartTarget.targetWorkingDirectory }
-            : {}),
-        }),
+        input: creationInput,
         deps: {
           session,
           runtime,
