@@ -454,6 +454,7 @@ export const handleAssistantMessage = (
     });
     return {
       ...current,
+      pendingUserMessageStartedAt: undefined,
       draftAssistantText: "",
       draftAssistantMessageId: null,
       draftReasoningText: "",

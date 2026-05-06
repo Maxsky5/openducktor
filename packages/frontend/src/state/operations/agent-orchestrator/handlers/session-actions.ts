@@ -263,6 +263,7 @@ export const createAgentSessionActions = ({
         (current) => ({
           ...current,
           status: "running",
+          pendingUserMessageStartedAt: turnUserAnchorAtBySessionRef.current[externalSessionId],
           draftAssistantText: "",
           draftAssistantMessageId: null,
           draftReasoningText: "",
@@ -284,6 +285,7 @@ export const createAgentSessionActions = ({
         (current) => ({
           ...current,
           status: isBusyQueuedSend ? current.status : "error",
+          pendingUserMessageStartedAt: undefined,
           ...(isBusyQueuedSend
             ? {}
             : {

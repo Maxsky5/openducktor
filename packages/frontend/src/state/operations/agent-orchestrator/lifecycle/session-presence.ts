@@ -86,12 +86,13 @@ export const applyAgentSessionPresenceSnapshotToSession = (
   const promptOverridesPatch = promptOverrides ? { promptOverrides } : {};
   if (snapshot.presence === "runtime") {
     let status: AgentSessionState["status"] = snapshot.agentSessionStatus;
-    if (
-      options.preserveStartingStatusForIdlePresence === true &&
-      current.status === "starting" &&
-      snapshot.agentSessionStatus === "idle"
-    ) {
-      status = "starting";
+    if (snapshot.agentSessionStatus === "idle") {
+      if (options.preserveStartingStatusForIdlePresence === true && current.status === "starting") {
+        status = "starting";
+      }
+      if (current.pendingUserMessageStartedAt !== undefined && current.status === "running") {
+        status = "running";
+      }
     }
 
     return {
@@ -114,11 +115,35 @@ export const applyAgentSessionPresenceSnapshotToSession = (
       options.missingSessionRuntimeId !== undefined
         ? options.missingSessionRuntimeId
         : snapshot.runtimeId;
+    if (current.pendingUserMessageStartedAt !== undefined && current.status === "running") {
+      return {
+        ...current,
+        runtimeRecoveryState: "recovering_runtime",
+        runtimeKind: snapshot.ref.runtimeKind,
+        runtimeId,
+        workingDirectory: snapshot.ref.workingDirectory,
+        ...promptOverridesPatch,
+        selectedModel,
+      };
+    }
     return {
       ...current,
       status: current.status === "running" ? "idle" : current.status,
       runtimeKind: snapshot.ref.runtimeKind,
       runtimeId,
+      workingDirectory: snapshot.ref.workingDirectory,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      ...promptOverridesPatch,
+      selectedModel,
+    };
+  }
+
+  if (current.pendingUserMessageStartedAt !== undefined && current.status === "running") {
+    return {
+      ...current,
+      runtimeKind: snapshot.ref.runtimeKind,
+      runtimeId: null,
       workingDirectory: snapshot.ref.workingDirectory,
       pendingApprovals: [],
       pendingQuestions: [],

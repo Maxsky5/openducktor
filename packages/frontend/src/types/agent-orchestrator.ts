@@ -194,6 +194,7 @@ export type AgentSessionState = {
   selectedModel: AgentModelSelection | null;
   isLoadingModelCatalog: boolean;
   promptOverrides?: RepoPromptOverrides;
+  pendingUserMessageStartedAt?: number | undefined;
   stopRequestedAt?: string | null;
 };
 

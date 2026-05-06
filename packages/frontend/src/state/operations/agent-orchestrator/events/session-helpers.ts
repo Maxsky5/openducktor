@@ -134,6 +134,15 @@ export const settleDraftToIdle = (
     if (current.status === "starting") {
       return current;
     }
+    if (
+      current.pendingUserMessageStartedAt !== undefined &&
+      current.draftAssistantText.trim().length === 0 &&
+      current.draftReasoningText.trim().length === 0 &&
+      current.pendingApprovals.length === 0 &&
+      current.pendingQuestions.length === 0
+    ) {
+      return current;
+    }
 
     const finalized = finalizeDraftAssistantMessage(
       current,
