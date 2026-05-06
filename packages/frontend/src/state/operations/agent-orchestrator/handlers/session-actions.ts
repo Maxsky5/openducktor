@@ -94,6 +94,26 @@ const markTurnUserAnchorIfMissing = (
   }
 };
 
+const settleStartingSession = (
+  externalSessionId: string,
+  status: Extract<AgentSessionState["status"], "idle" | "error">,
+  sessionsRef: { current: Record<string, AgentSessionState> },
+  updateSession: SessionActionsDependencies["updateSession"],
+): void => {
+  if (sessionsRef.current[externalSessionId]?.status !== "starting") {
+    return;
+  }
+
+  updateSession(
+    externalSessionId,
+    (current) => ({
+      ...current,
+      status,
+    }),
+    { persist: false },
+  );
+};
+
 const applyQuestionAnswerToSession = (
   session: AgentSessionState,
   requestId: string,
@@ -188,16 +208,7 @@ export const createAgentSessionActions = ({
         throw new Error(unavailableRoleErrorMessage(task, currentSession.role));
       }
       if (isAgentSessionWaitingInput(currentSession)) {
-        if (currentSession.status === "starting") {
-          updateSession(
-            externalSessionId,
-            (current) => ({
-              ...current,
-              status: "idle",
-            }),
-            { persist: false },
-          );
-        }
+        settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
         return;
       }
     }
@@ -205,29 +216,13 @@ export const createAgentSessionActions = ({
     try {
       await ensureSessionReady(externalSessionId);
     } catch (error) {
-      updateSession(
-        externalSessionId,
-        (current) => ({
-          ...current,
-          status: current.status === "starting" ? "error" : current.status,
-        }),
-        { persist: false },
-      );
+      settleStartingSession(externalSessionId, "error", sessionsRef, updateSession);
       throw error;
     }
 
     const readySession = sessionsRef.current[externalSessionId];
     if (!readySession || isAgentSessionWaitingInput(readySession)) {
-      if (readySession?.status === "starting") {
-        updateSession(
-          externalSessionId,
-          (current) => ({
-            ...current,
-            status: "idle",
-          }),
-          { persist: false },
-        );
-      }
+      settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
       return;
     }
 

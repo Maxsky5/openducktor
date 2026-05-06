@@ -1,3 +1,4 @@
+import type { InitialSessionStatusRelease } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { requireSelectedModelRuntimeKindForStart } from "../support/session-runtime-metadata";
@@ -22,7 +23,10 @@ import {
   serializeSelectedModelKey,
 } from "./start-session-runtime";
 
-export type { StartAgentSessionInput, StartSessionDependencies } from "./start-session.types";
+export type {
+  StartAgentSessionInput,
+  StartSessionDependencies,
+} from "./start-session.types";
 
 const createOrReuseSession = async ({
   ctx,
@@ -48,17 +52,17 @@ const attachSessionListenerAndGuard = async ({
   startedCtx,
   session,
   runtime,
-  holdStartingStatusUntilFirstMessage,
+  initialStatusRelease,
 }: {
   startedCtx: StartedSessionContext;
   session: SessionDependencies;
   runtime: RuntimeDependencies;
-  holdStartingStatusUntilFirstMessage: boolean;
+  initialStatusRelease: InitialSessionStatusRelease | undefined;
 }): Promise<void> => {
   session.attachSessionListener(startedCtx.repoPath, startedCtx.summary.externalSessionId);
 
   if (!startedCtx.isStaleRepoOperation()) {
-    if (holdStartingStatusUntilFirstMessage) {
+    if (initialStatusRelease === "after_first_send_attempt") {
       return;
     }
 
@@ -181,8 +185,7 @@ export const createStartAgentSession = ({
         startedCtx: startResult.ctx,
         session,
         runtime,
-        holdStartingStatusUntilFirstMessage:
-          input.startMode !== "reuse" && input.holdStartingStatusUntilFirstMessage === true,
+        initialStatusRelease: input.startMode === "reuse" ? undefined : input.initialStatusRelease,
       });
 
       return startResult.ctx.summary.externalSessionId;

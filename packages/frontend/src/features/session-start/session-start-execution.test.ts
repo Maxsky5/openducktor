@@ -75,13 +75,13 @@ describe("session-start-execution", () => {
     );
   });
 
-  test("prepareSessionStartInput can hold fresh sessions in starting state before kickoff", async () => {
+  test("prepareSessionStartInput can defer initial status release until the first send attempt", async () => {
     const result = await prepareSessionStartInput({
       taskId: "TASK-1",
       role: "build",
       startMode: "fresh",
       selectedModel: BUILD_SELECTION,
-      holdStartingStatusUntilFirstMessage: true,
+      initialStatusRelease: "after_first_send_attempt",
     });
 
     expect(result).toEqual({
@@ -89,7 +89,7 @@ describe("session-start-execution", () => {
       role: "build",
       selectedModel: BUILD_SELECTION,
       startMode: "fresh",
-      holdStartingStatusUntilFirstMessage: true,
+      initialStatusRelease: "after_first_send_attempt",
     });
   });
 });

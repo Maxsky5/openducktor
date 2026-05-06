@@ -208,7 +208,7 @@ describe("session-start-workflow", () => {
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         startMode: "fresh",
-        holdStartingStatusUntilFirstMessage: true,
+        initialStatusRelease: "after_first_send_attempt",
       }),
     );
   });

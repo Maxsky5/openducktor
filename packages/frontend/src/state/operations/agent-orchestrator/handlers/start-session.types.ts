@@ -10,7 +10,11 @@ import type {
   AgentRole,
   AgentUserMessagePart,
 } from "@openducktor/core";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionLoadOptions,
+  AgentSessionState,
+  InitialSessionStatusRelease,
+} from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 
@@ -28,7 +32,7 @@ export type StartAgentSessionInput =
       selectedModel: AgentModelSelection;
       startMode: "fresh";
       targetWorkingDirectory?: string | null;
-      holdStartingStatusUntilFirstMessage?: boolean;
+      initialStatusRelease?: InitialSessionStatusRelease;
     }
   | {
       taskId: string;
@@ -36,7 +40,7 @@ export type StartAgentSessionInput =
       selectedModel: AgentModelSelection;
       startMode: "fork";
       sourceExternalSessionId: string;
-      holdStartingStatusUntilFirstMessage?: boolean;
+      initialStatusRelease?: InitialSessionStatusRelease;
     };
 
 export type SessionStateById = Record<string, AgentSessionState>;
@@ -135,13 +139,13 @@ export type StartSessionCreationInput =
       startMode: "fresh";
       selectedModel: AgentModelSelection;
       targetWorkingDirectory?: string | null;
-      holdStartingStatusUntilFirstMessage?: boolean;
+      initialStatusRelease?: InitialSessionStatusRelease;
     }
   | {
       startMode: "fork";
       selectedModel: AgentModelSelection;
       sourceExternalSessionId: string;
-      holdStartingStatusUntilFirstMessage?: boolean;
+      initialStatusRelease?: InitialSessionStatusRelease;
     };
 
 export type ResolvedRuntimeAndModel = {

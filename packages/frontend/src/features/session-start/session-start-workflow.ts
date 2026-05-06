@@ -225,7 +225,9 @@ export const startSessionWorkflow = async ({
             startMode: "fork",
             selectedModel: requireSelectedModel(selection, "fork"),
             sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "fork"),
-            holdStartingStatusUntilFirstMessage: postStartMessage !== null,
+            ...(postStartMessage !== null
+              ? { initialStatusRelease: "after_first_send_attempt" }
+              : {}),
             startAgentSession,
           })
         : await executeSessionStart({
@@ -236,7 +238,9 @@ export const startSessionWorkflow = async ({
             ...(intent.targetWorkingDirectory !== undefined
               ? { targetWorkingDirectory: intent.targetWorkingDirectory }
               : {}),
-            holdStartingStatusUntilFirstMessage: postStartMessage !== null,
+            ...(postStartMessage !== null
+              ? { initialStatusRelease: "after_first_send_attempt" }
+              : {}),
             startAgentSession,
           });
 

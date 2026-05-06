@@ -384,6 +384,120 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("releases fresh sessions to idle after listener attach when requested", async () => {
+    let sessionsById: Record<string, AgentSessionState> = {};
+    const sessionsRef = { current: sessionsById };
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async () => ({
+      runtimeKind: "opencode",
+      externalSessionId: "planner-external",
+      startedAt: "2026-02-22T08:00:10.000Z",
+      role: "planner",
+      status: "idle",
+    });
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
+        sessionsRef.current = sessionsById;
+      },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "planner",
+          startMode: "fresh",
+          selectedModel: PLANNER_SELECTION,
+          initialStatusRelease: "after_listener_attach",
+        }),
+      ).resolves.toBe("planner-external");
+
+      expect(sessionsById["planner-external"]?.status).toBe("idle");
+    } finally {
+      adapter.startSession = originalStartSession;
+    }
+  });
+
+  test("keeps fresh sessions starting until first send attempt when requested", async () => {
+    let sessionsById: Record<string, AgentSessionState> = {};
+    const sessionsRef = { current: sessionsById };
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async () => ({
+      runtimeKind: "opencode",
+      externalSessionId: "planner-external",
+      startedAt: "2026-02-22T08:00:10.000Z",
+      role: "planner",
+      status: "idle",
+    });
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
+        sessionsRef.current = sessionsById;
+      },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "planner",
+          startMode: "fresh",
+          selectedModel: PLANNER_SELECTION,
+          initialStatusRelease: "after_first_send_attempt",
+        }),
+      ).resolves.toBe("planner-external");
+
+      expect(sessionsById["planner-external"]?.status).toBe("starting");
+    } finally {
+      adapter.startSession = originalStartSession;
+    }
+  });
+
   test("persists only durable session record fields during start", async () => {
     let persistedTaskId: string | null = null;
     let persistedRecord: AgentSessionRecord | null = null;

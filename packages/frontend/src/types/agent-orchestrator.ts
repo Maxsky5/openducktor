@@ -17,6 +17,8 @@ import type {
   AgentUserMessageState,
 } from "@openducktor/core";
 
+export type InitialSessionStatusRelease = "after_listener_attach" | "after_first_send_attempt";
+
 export type AgentChatMessageMeta =
   | {
       kind: "reasoning";
