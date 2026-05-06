@@ -114,7 +114,6 @@ export const useAgentSessionHydration = ({
       taskId: string;
       externalSessionId: string;
       repoReadinessState: SessionRepoReadinessState;
-      recoveryDedupKey?: string | null;
       historyPreludeMode?: AgentSessionHistoryPreludeMode;
       allowLiveSessionResume?: boolean;
       persistedRecords?: AgentSessionRecord[];

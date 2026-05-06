@@ -30,8 +30,7 @@ import { AgentSessionPresenceStore } from "./session-presence-store";
 
 type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
 
-const createLoadAgentSessions = (args: Parameters<typeof createLoadAgentSessionsBase>[0]) =>
-  createLoadAgentSessionsBase(args);
+const createLoadAgentSessions = createLoadAgentSessionsBase;
 
 type LegacyRunSummary = { runId: string; worktreePath: string };
 

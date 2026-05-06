@@ -30,6 +30,11 @@ type UseAgentOrchestratorOperationsArgs = {
   tasks: TaskCard[];
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   agentEngine: AgentEnginePort;
+  /**
+   * Optional dependency seam for tests and specialized callers.
+   * Pass a stable reference, such as a module-level object or a `useMemo` result;
+   * an inline object recreates downstream session hydration callbacks on every render.
+   */
   dependencies?: AgentOrchestratorDependencies;
 };
 
