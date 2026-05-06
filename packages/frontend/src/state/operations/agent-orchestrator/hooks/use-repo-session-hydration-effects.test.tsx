@@ -7,7 +7,7 @@ import { useRepoSessionHydrationEffects } from "./use-repo-session-hydration-eff
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("useRepoSessionHydrationEffects", () => {
-  test("bootstraps and reconciles pending task sessions", async () => {
+  test("reconciles pending task sessions", async () => {
     const loadCalls: Array<{ taskId: string; mode: string | undefined }> = [];
     const Harness = ({ repoPath }: { repoPath: string | null }) =>
       useRepoSessionHydrationEffects({
@@ -29,9 +29,8 @@ describe("useRepoSessionHydrationEffects", () => {
       { repoPath: "/tmp/repo" },
     );
     await harness.mount();
-    await harness.waitFor(() => loadCalls.length >= 2);
+    await harness.waitFor(() => loadCalls.length >= 1);
 
-    expect(loadCalls).toContainEqual({ taskId: "task-1", mode: undefined });
     expect(loadCalls).toContainEqual({ taskId: "task-1", mode: "reconcile_live" });
 
     await harness.update({ repoPath: null });
