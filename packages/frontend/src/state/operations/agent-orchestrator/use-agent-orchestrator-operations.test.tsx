@@ -2081,7 +2081,7 @@ describe("use-agent-orchestrator-operations", () => {
     });
   });
 
-  test("does not scan or resume idle live agent sessions on repo bootstrap", async () => {
+  test("scans but does not resume idle live agent sessions on repo bootstrap", async () => {
     await withSuppressedRendererWarning(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
       const originalAgentSessionUpsert = host.agentSessionUpsert;
@@ -2154,7 +2154,7 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.waitFor((state) =>
           state.sessions.some((session) => session.externalSessionId === "external-1"),
         );
-        expect(liveSnapshotScans).toBe(0);
+        expect(liveSnapshotScans).toBe(1);
         expect(resumeCalls).toBe(0);
       } finally {
         await harness.unmount();
@@ -3264,7 +3264,7 @@ describe("use-agent-orchestrator-operations", () => {
     });
   });
 
-  test("bootstraps task sessions from task metadata without startup live-session or todo reads", async () => {
+  test("bootstraps task sessions from task metadata with one batched startup presence scan", async () => {
     await withSuppressedRendererWarning(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
       const originalRuntimeList = host.runtimeList;
@@ -3284,6 +3284,11 @@ describe("use-agent-orchestrator-operations", () => {
       let modelCatalogCalls = 0;
       let todoCalls = 0;
       let historyCalls = 0;
+      const listPresenceInputs: Array<{
+        repoPath: string;
+        runtimeKind: "opencode";
+        directories?: string[];
+      }> = [];
       host.agentSessionsList = async () => {
         persistedListCalls += 1;
         return [];
@@ -3292,9 +3297,48 @@ describe("use-agent-orchestrator-operations", () => {
         runtimeListCalls += 1;
         return [createWorktreeRuntimeFixture()];
       };
-      opencodeSdkAdapterPrototype.listSessionPresence = async () => {
+      opencodeSdkAdapterPrototype.listSessionPresence = async (input) => {
         listPresenceCalls += 1;
-        return [];
+        listPresenceInputs.push(input);
+        return [
+          createAgentSessionPresenceSnapshotFixture({
+            ref: {
+              repoPath: "/tmp/repo",
+              runtimeKind: "opencode",
+              workingDirectory: "/tmp/repo/worktree",
+              externalSessionId: "external-2",
+            },
+            snapshot: {
+              status: { type: "busy" },
+              pendingApprovals: [
+                {
+                  requestId: "perm-2",
+                  requestType: "permission_grant" as const,
+                  title: "Approve permission: edit",
+                  summary: "Approval request for edit.",
+                  affectedPaths: ["src/file.ts"],
+                  action: { name: "edit" },
+                  mutation: "mutating" as const,
+                  supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+                },
+              ],
+              pendingQuestions: [
+                {
+                  requestId: "question-2",
+                  questions: [
+                    {
+                      header: "Confirm",
+                      question: "Continue?",
+                      options: [],
+                      multiple: false,
+                      custom: false,
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+        ];
       };
       opencodeSdkAdapterPrototype.readSessionPresence = async (input: ReadSessionPresenceInput) => {
         readPresenceCalls += 1;
@@ -3352,13 +3396,25 @@ describe("use-agent-orchestrator-operations", () => {
           "external-1",
           "external-2",
         ]);
+        const recoveredSession = resolved.sessions.find(
+          (session) => session.externalSessionId === "external-2",
+        );
+        expect(recoveredSession?.pendingApprovals).toHaveLength(1);
+        expect(recoveredSession?.pendingQuestions).toHaveLength(1);
         expect(persistedListCalls).toBe(0);
         expect(runtimeListCalls).toBe(0);
-        expect(listPresenceCalls).toBe(0);
+        expect(listPresenceCalls).toBe(1);
+        expect(listPresenceInputs).toEqual([
+          {
+            repoPath: "/tmp/repo",
+            runtimeKind: "opencode",
+            directories: ["/tmp/repo/worktree"],
+          },
+        ]);
         expect(readPresenceCalls).toBe(0);
-        expect(resumeCalls).toBe(0);
+        expect(resumeCalls).toBe(1);
         expect(attachCalls).toBe(0);
-        expect(subscribeCalls).toBe(0);
+        expect(subscribeCalls).toBe(1);
         expect(modelCatalogCalls).toBe(0);
         expect(todoCalls).toBe(0);
         expect(historyCalls).toBe(0);

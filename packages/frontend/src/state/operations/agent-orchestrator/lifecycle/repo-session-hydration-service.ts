@@ -1,23 +1,44 @@
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { RepoSessionPresencePreloads } from "./repo-session-presence-preloads";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
 import type { AgentSessionPresenceStore } from "./session-presence-store";
 
-type HydrationScope = "bootstrap";
+type HydrationScope = "bootstrap" | "reconcile";
 
 const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500 * 2 ** attempt);
 
 const getTaskRecords = (task: TaskCard): AgentSessionRecord[] => task.agentSessions ?? [];
 
+const toTaskRecordKey = (taskId: string, records: AgentSessionRecord[]): string => {
+  const recordKeys = records
+    .map(
+      (record) =>
+        `${record.externalSessionId}::${record.runtimeKind}::${record.workingDirectory}::${record.startedAt}`,
+    )
+    .sort();
+  return `${taskId}::${recordKeys.join("|")}`;
+};
+
 export const createRepoSessionHydrationService = ({
   sessionHydration,
   agentSessionPresenceStore,
+  prepareRepoSessionPresencePreloads,
   onRetryRequested,
 }: {
-  sessionHydration: Pick<SessionHydrationOperations, "bootstrapTaskSessions">;
+  sessionHydration: Pick<
+    SessionHydrationOperations,
+    "bootstrapTaskSessions" | "reconcileLiveTaskSessions"
+  >;
   agentSessionPresenceStore: AgentSessionPresenceStore;
+  prepareRepoSessionPresencePreloads?: (input: {
+    repoPath: string;
+    records: AgentSessionRecord[];
+  }) => Promise<RepoSessionPresencePreloads>;
   onRetryRequested: () => void;
 }) => {
   const bootstrappedTasksByRepo: Record<string, Set<string>> = {};
+  const reconciledRecordKeysByRepo: Record<string, Set<string>> = {};
+  const inFlightReconcileTasksByRepo: Record<string, Set<string>> = {};
   const retryAttemptsByKey: Record<string, number> = {};
   const retryTimeoutsByKey: Record<string, ReturnType<typeof setTimeout>> = {};
   const getOrCreateRepoSet = (
@@ -70,6 +91,8 @@ export const createRepoSessionHydrationService = ({
     resetRepo(repoPath: string): void {
       agentSessionPresenceStore.clearRepo(repoPath);
       getOrCreateRepoSet(bootstrappedTasksByRepo, repoPath).clear();
+      getOrCreateRepoSet(reconciledRecordKeysByRepo, repoPath).clear();
+      getOrCreateRepoSet(inFlightReconcileTasksByRepo, repoPath).clear();
     },
 
     dispose(): void {
@@ -123,6 +146,92 @@ export const createRepoSessionHydrationService = ({
         }
         bootstrappedTasks.delete(taskId);
         scheduleRetry("bootstrap", repoPath, taskId, result.reason);
+      }
+    },
+
+    async reconcilePendingTasks({
+      repoPath,
+      tasks,
+      isCancelled,
+      isCurrentRepo,
+    }: {
+      repoPath: string;
+      tasks: TaskCard[];
+      isCancelled: () => boolean;
+      isCurrentRepo: (repoPath: string) => boolean;
+    }): Promise<void> {
+      const inFlight = getOrCreateRepoSet(inFlightReconcileTasksByRepo, repoPath);
+      const reconciledRecordKeys = getOrCreateRepoSet(reconciledRecordKeysByRepo, repoPath);
+      const pendingTaskEntries = tasks.flatMap((task) => {
+        const records = getTaskRecords(task);
+        const recordKey = toTaskRecordKey(task.id, records);
+        if (records.length === 0 || inFlight.has(task.id) || reconciledRecordKeys.has(recordKey)) {
+          return [];
+        }
+        return [{ task, records, recordKey }];
+      });
+      for (const entry of pendingTaskEntries) {
+        inFlight.add(entry.task.id);
+      }
+      try {
+        if (pendingTaskEntries.length === 0) {
+          return;
+        }
+        let preloads: RepoSessionPresencePreloads | null = null;
+        if (prepareRepoSessionPresencePreloads) {
+          try {
+            preloads = await prepareRepoSessionPresencePreloads({
+              repoPath,
+              records: pendingTaskEntries.flatMap((entry) => entry.records),
+            });
+          } catch (error) {
+            if (!isCancelled() && isCurrentRepo(repoPath)) {
+              for (const entry of pendingTaskEntries) {
+                scheduleRetry("reconcile", repoPath, entry.task.id, error);
+              }
+            }
+            return;
+          }
+          if (isCancelled() || !isCurrentRepo(repoPath)) {
+            return;
+          }
+          agentSessionPresenceStore.replaceRepoPresence(
+            repoPath,
+            preloads.preloadedSessionPresenceByKey,
+          );
+        }
+
+        const results = await Promise.allSettled(
+          pendingTaskEntries.map(async ({ task, records, recordKey }) => {
+            await sessionHydration.reconcileLiveTaskSessions({
+              taskId: task.id,
+              persistedRecords: records,
+              ...(preloads
+                ? { preloadedSessionPresenceByKey: preloads.preloadedSessionPresenceByKey }
+                : {}),
+            });
+            return { taskId: task.id, recordKey };
+          }),
+        );
+        if (isCancelled() || !isCurrentRepo(repoPath)) {
+          return;
+        }
+        for (const [index, result] of results.entries()) {
+          const entry = pendingTaskEntries[index];
+          if (!entry) {
+            continue;
+          }
+          if (result.status === "fulfilled") {
+            reconciledRecordKeys.add(result.value.recordKey);
+            clearRetry("reconcile", repoPath, result.value.taskId);
+            continue;
+          }
+          scheduleRetry("reconcile", repoPath, entry.task.id, result.reason);
+        }
+      } finally {
+        for (const entry of pendingTaskEntries) {
+          inFlight.delete(entry.task.id);
+        }
       }
     },
   };

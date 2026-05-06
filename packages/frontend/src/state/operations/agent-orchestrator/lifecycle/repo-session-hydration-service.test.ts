@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionPresenceSnapshot } from "@openducktor/core";
+import { createAgentSessionPresenceSnapshotFixture } from "../test-utils";
 import { createRepoSessionHydrationService } from "./repo-session-hydration-service";
+import { agentSessionPresenceLookupKey } from "./session-presence-cache";
 import { AgentSessionPresenceStore } from "./session-presence-store";
 
 const createDeferred = <T>() => {
@@ -70,6 +73,7 @@ describe("repo-session-hydration-service", () => {
           bootstrapCalls += 1;
           await deferred.promise;
         },
+        reconcileLiveTaskSessions: async () => {},
       },
       agentSessionPresenceStore,
       onRetryRequested: () => {
@@ -111,6 +115,7 @@ describe("repo-session-hydration-service", () => {
         bootstrapTaskSessions: async (taskId, records) => {
           bootstrapCalls.push({ taskId, records: records ?? [] });
         },
+        reconcileLiveTaskSessions: async () => {},
       },
       agentSessionPresenceStore,
       onRetryRequested: () => {},
@@ -132,6 +137,114 @@ describe("repo-session-hydration-service", () => {
     expect(bootstrapCalls).toEqual([
       { taskId: "task-1", records: taskWithLaterSession.agentSessions ?? [] },
     ]);
+    service.dispose();
+  });
+
+  test("reconciles pending tasks with a shared preloaded presence map", async () => {
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
+    const presenceSnapshot = createAgentSessionPresenceSnapshotFixture({
+      ref: { repoPath, runtimeKind: "opencode", workingDirectory: worktreePath },
+    });
+    const preloadedSessionPresenceByKey = new Map<string, AgentSessionPresenceSnapshot[]>([
+      [agentSessionPresenceLookupKey(repoPath, "opencode", worktreePath), [presenceSnapshot]],
+    ]);
+    const reconcileCalls: Array<{
+      taskId: string;
+      persistedRecords: AgentSessionRecord[];
+      preloaded: unknown;
+    }> = [];
+    const prepareRepoSessionPresencePreloads = mock(async ({ records }) => ({
+      preloadedSessionPresenceByKey,
+      recordCount: records.length,
+    }));
+
+    const taskOne = taskWithSession("task-1", "external-1");
+    const taskTwo = taskWithSession("task-2", "external-2");
+    const taskOneRecords = taskOne.agentSessions ?? [];
+    const taskTwoRecords = taskTwo.agentSessions ?? [];
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({
+          taskId,
+          persistedRecords,
+          preloadedSessionPresenceByKey,
+        }) => {
+          if (!persistedRecords) {
+            throw new Error("Expected persisted records for reconciliation");
+          }
+          reconcileCalls.push({
+            taskId,
+            persistedRecords,
+            preloaded: preloadedSessionPresenceByKey,
+          });
+        },
+      },
+      agentSessionPresenceStore,
+      prepareRepoSessionPresencePreloads,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [taskOne, taskTwo],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(prepareRepoSessionPresencePreloads).toHaveBeenCalledTimes(1);
+    expect(prepareRepoSessionPresencePreloads.mock.calls[0]?.[0].records).toEqual([
+      ...taskOneRecords,
+      ...taskTwoRecords,
+    ]);
+    expect(agentSessionPresenceStore.readPresence(presenceSnapshot.ref)).toEqual(presenceSnapshot);
+    expect(reconcileCalls).toEqual([
+      {
+        taskId: "task-1",
+        persistedRecords: taskOneRecords,
+        preloaded: preloadedSessionPresenceByKey,
+      },
+      {
+        taskId: "task-2",
+        persistedRecords: taskTwoRecords,
+        preloaded: preloadedSessionPresenceByKey,
+      },
+    ]);
+    service.dispose();
+  });
+
+  test("does not reconcile unchanged task records twice", async () => {
+    const agentSessionPresenceStore = new AgentSessionPresenceStore();
+    const reconcileLiveTaskSessions = mock(async () => {});
+    const prepareRepoSessionPresencePreloads = mock(async () => ({
+      preloadedSessionPresenceByKey: new Map(),
+    }));
+    const task = taskWithSession("task-1", "external-1");
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions,
+      },
+      agentSessionPresenceStore,
+      prepareRepoSessionPresencePreloads,
+      onRetryRequested: () => {},
+    });
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(prepareRepoSessionPresencePreloads).toHaveBeenCalledTimes(1);
+    expect(reconcileLiveTaskSessions).toHaveBeenCalledTimes(1);
     service.dispose();
   });
 });
