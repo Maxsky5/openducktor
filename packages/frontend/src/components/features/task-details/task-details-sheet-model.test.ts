@@ -38,6 +38,23 @@ const makeTask = (id: string, overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
+type WorkflowCallbacks = Parameters<typeof runTaskWorkflowAction>[2];
+
+const makeWorkflowCallbacks = (overrides: Partial<WorkflowCallbacks> = {}): WorkflowCallbacks => ({
+  onPlan: undefined,
+  onQaStart: undefined,
+  onQaOpen: undefined,
+  onBuild: undefined,
+  onOpenSession: undefined,
+  onDelegate: undefined,
+  onDefer: undefined,
+  onResumeDeferred: undefined,
+  onHumanApprove: undefined,
+  onHumanRequestChanges: undefined,
+  onResetImplementation: undefined,
+  ...overrides,
+});
+
 describe("task-details-sheet-model", () => {
   test("derives subtasks only for existing ids", () => {
     const subtask = makeTask("T-2");
@@ -208,6 +225,26 @@ describe("task-details-sheet-model", () => {
     expect(shouldLoadDocumentSection(true)).toBe(true);
     expect(shouldLoadDocumentSection(false)).toBe(false);
     expect(shouldLoadDocumentSection(undefined)).toBe(false);
+  });
+
+  test("falls back to opening QA when no shared session opener exists", () => {
+    const onQaOpen = mock(() => {});
+    const onBuild = mock(() => {});
+
+    runTaskWorkflowAction("open_qa", "T-1", makeWorkflowCallbacks({ onQaOpen, onBuild }));
+
+    expect(onQaOpen).toHaveBeenCalledWith("T-1");
+    expect(onBuild).not.toHaveBeenCalled();
+  });
+
+  test("falls back to starting builder when no shared session opener exists", () => {
+    const onQaOpen = mock(() => {});
+    const onBuild = mock(() => {});
+
+    runTaskWorkflowAction("open_builder", "T-1", makeWorkflowCallbacks({ onQaOpen, onBuild }));
+
+    expect(onBuild).toHaveBeenCalledWith("T-1");
+    expect(onQaOpen).not.toHaveBeenCalled();
   });
 
   test("forwards role-specific session options to onOpenSession", () => {

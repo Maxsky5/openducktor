@@ -27,6 +27,49 @@ type TaskWorkflowActionContext = {
     | undefined;
 };
 
+type OpenSessionWorkflowAction = Extract<
+  TaskWorkflowAction,
+  "open_spec" | "open_planner" | "open_qa" | "open_builder"
+>;
+
+type RoleSessionActionConfig = {
+  role: AgentRole;
+  fallback?: (callbacks: TaskWorkflowCallbacks, taskId: string) => void;
+};
+
+const roleSessionActions: Record<OpenSessionWorkflowAction, RoleSessionActionConfig> = {
+  open_spec: { role: "spec" },
+  open_planner: { role: "planner" },
+  open_qa: {
+    role: "qa",
+    fallback: (callbacks, taskId) => callbacks.onQaOpen?.(taskId),
+  },
+  open_builder: {
+    role: "build",
+    fallback: (callbacks, taskId) => callbacks.onBuild?.(taskId),
+  },
+};
+
+const openRoleSession = (
+  action: OpenSessionWorkflowAction,
+  taskId: string,
+  callbacks: TaskWorkflowCallbacks,
+  context: TaskWorkflowActionContext | undefined,
+): void => {
+  const actionConfig = roleSessionActions[action];
+
+  if (callbacks.onOpenSession) {
+    callbacks.onOpenSession(
+      taskId,
+      actionConfig.role,
+      context?.resolveSessionOptions?.(actionConfig.role),
+    );
+    return;
+  }
+
+  actionConfig.fallback?.(callbacks, taskId);
+};
+
 export const toTaskLabels = toDisplayTaskLabels;
 
 export const toSubtasks = (task: TaskCard | null, taskById: Map<string, TaskCard>): TaskCard[] => {
@@ -95,8 +138,6 @@ export const runTaskWorkflowAction = (
 
   switch (action) {
     case "set_spec":
-      callbacks.onPlan?.(taskId, action);
-      return;
     case "set_plan":
       callbacks.onPlan?.(taskId, action);
       return;
@@ -104,24 +145,10 @@ export const runTaskWorkflowAction = (
       callbacks.onQaStart?.(taskId);
       return;
     case "open_spec":
-      callbacks.onOpenSession?.(taskId, "spec", context?.resolveSessionOptions?.("spec"));
-      return;
     case "open_planner":
-      callbacks.onOpenSession?.(taskId, "planner", context?.resolveSessionOptions?.("planner"));
-      return;
     case "open_qa":
-      if (callbacks.onOpenSession) {
-        callbacks.onOpenSession(taskId, "qa", context?.resolveSessionOptions?.("qa"));
-      } else {
-        callbacks.onQaOpen?.(taskId);
-      }
-      return;
     case "open_builder":
-      if (callbacks.onOpenSession) {
-        callbacks.onOpenSession(taskId, "build", context?.resolveSessionOptions?.("build"));
-      } else {
-        callbacks.onBuild?.(taskId);
-      }
+      openRoleSession(action, taskId, callbacks, context);
       return;
     case "build_start":
       callbacks.onDelegate?.(taskId);
