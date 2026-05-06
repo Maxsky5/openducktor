@@ -154,9 +154,9 @@ export function useAgentOrchestratorOperations({
       prepareRepoSessionPresencePreloads({
         repoPath,
         records,
-        listSessionPresence: agentEngine.listSessionPresence,
+        listSessionPresence: (input) => agentEngine.listSessionPresence(input),
       }),
-    [agentEngine.listSessionPresence],
+    [agentEngine],
   );
   useRepoSessionHydrationEffects({
     workspaceRepoPath,

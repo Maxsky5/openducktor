@@ -581,8 +581,10 @@ describe("use-task-operations", () => {
       await harness.mount();
       await harness.waitFor(() => toastError.mock.calls.length > 0);
 
-      expect(getLatest().tasks).toEqual([]);
+      await harness.waitFor(() => getLatest().tasks[0]?.id === "cached");
+
       expect(tasksList).not.toHaveBeenCalled();
+      expect(getLatest().tasks[0]?.id).toBe("cached");
       expect(toastError).toHaveBeenCalledWith("Failed to load tasks", {
         description: "Task store unavailable. settings unavailable",
       });

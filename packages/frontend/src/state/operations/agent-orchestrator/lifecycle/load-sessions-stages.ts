@@ -195,20 +195,30 @@ type HydratedSubagentPendingInputOverlay = {
   scannedChildExternalSessionIds: string[];
   pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId;
   pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId;
+  hydrationError: SubagentPendingInputHydrationError | null;
 };
+
+class SubagentPendingInputHydrationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SubagentPendingInputHydrationError";
+  }
+}
 
 const EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY = Object.freeze({
   scannedChildExternalSessionIds: [],
   pendingApprovalsByChildExternalSessionId: EMPTY_SUBAGENT_PENDING_APPROVALS_BY_EXTERNAL_SESSION_ID,
   pendingQuestionsByChildExternalSessionId: EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
+  hydrationError: null,
 }) satisfies HydratedSubagentPendingInputOverlay;
 
 const toHydratedSubagentPendingInputOverlay = (
   scannedChildExternalSessionIds: string[],
   pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId,
   pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId,
+  hydrationError: SubagentPendingInputHydrationError | null = null,
 ): HydratedSubagentPendingInputOverlay => {
-  if (scannedChildExternalSessionIds.length === 0) {
+  if (scannedChildExternalSessionIds.length === 0 && hydrationError === null) {
     return EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY;
   }
 
@@ -222,6 +232,7 @@ const toHydratedSubagentPendingInputOverlay = (
       Object.keys(pendingQuestionsByChildExternalSessionId).length > 0
         ? pendingQuestionsByChildExternalSessionId
         : EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
+    hydrationError,
   };
 };
 
@@ -260,18 +271,25 @@ const loadHydratedSubagentPendingInputOverlay = async ({
             snapshot.pendingQuestions;
         }
       } catch (error) {
+        scannedChildExternalSessionIds.push(childExternalSessionId);
+        pendingApprovalsByChildExternalSessionId[childExternalSessionId] = [];
+        pendingQuestionsByChildExternalSessionId[childExternalSessionId] = [];
         failures.push(`subagent session '${childExternalSessionId}': ${errorMessage(error)}`);
       }
     }),
   );
-  if (failures.length > 0) {
-    throw new Error(`Failed to hydrate subagent pending input: ${failures.join("; ")}`);
-  }
+  const hydrationError =
+    failures.length > 0
+      ? new SubagentPendingInputHydrationError(
+          `Failed to hydrate subagent pending input: ${failures.join("; ")}`,
+        )
+      : null;
 
   return toHydratedSubagentPendingInputOverlay(
     scannedChildExternalSessionIds,
     pendingApprovalsByChildExternalSessionId,
     pendingQuestionsByChildExternalSessionId,
+    hydrationError,
   );
 };
 
@@ -698,14 +716,19 @@ type HydratedRecordHistoryState = {
 const markHistoryHydrationFailed = (
   externalSessionId: string,
   updateSession: UpdateSession,
+  options?: { preserveSubagentPendingInput?: boolean },
 ): void => {
   updateSession(
     externalSessionId,
     (current) => ({
       ...current,
       historyHydrationState: "failed",
-      subagentPendingApprovalsByExternalSessionId: undefined,
-      subagentPendingQuestionsByExternalSessionId: undefined,
+      subagentPendingApprovalsByExternalSessionId: options?.preserveSubagentPendingInput
+        ? current.subagentPendingApprovalsByExternalSessionId
+        : undefined,
+      subagentPendingQuestionsByExternalSessionId: options?.preserveSubagentPendingInput
+        ? current.subagentPendingQuestionsByExternalSessionId
+        : undefined,
     }),
     { persist: false },
   );
@@ -949,6 +972,10 @@ const hydrateRecordHistory = async ({
       }),
     { persist: false },
   );
+
+  if (hydratedSubagentPendingInputByExternalSessionId.hydrationError) {
+    throw hydratedSubagentPendingInputByExternalSessionId.hydrationError;
+  }
 };
 
 const hydrateSessionRecord = async ({
@@ -1057,7 +1084,9 @@ export const hydrateSessionRecordsStage = async ({
           livePresenceMode,
         }).catch((error) => {
           if (historyHydrationSessionIds.has(record.externalSessionId)) {
-            markHistoryHydrationFailed(record.externalSessionId, updateSession);
+            markHistoryHydrationFailed(record.externalSessionId, updateSession, {
+              preserveSubagentPendingInput: error instanceof SubagentPendingInputHydrationError,
+            });
           }
           throw error;
         }),

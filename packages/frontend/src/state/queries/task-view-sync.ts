@@ -1,5 +1,5 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import type { QueryClient } from "@tanstack/react-query";
+import { isCancelledError, type QueryClient } from "@tanstack/react-query";
 import { refreshCachedTaskDocumentQueries, removeCachedTaskDocumentQueries } from "./documents";
 import {
   invalidateRepoTaskQueries,
@@ -14,10 +14,7 @@ type BaseRepoTaskViewRefreshOptions = {
   forceFreshTaskList?: boolean;
 };
 
-const isCancelledQueryError = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  ("revert" in error || error.constructor.name === "CancelledError");
+const isCancelledQueryError = (error: unknown): boolean => isCancelledError(error);
 
 export type RepoTaskViewRefreshOptions = BaseRepoTaskViewRefreshOptions &
   (

@@ -1877,7 +1877,7 @@ describe("load-sessions-stages", () => {
     });
   });
 
-  test("fails parent hydration when child pending input cannot be hydrated", async () => {
+  test("keeps successful child pending input when another child hydration fails", async () => {
     const stalePermission = {
       requestId: "stale-perm",
       requestType: "permission_grant" as const,
@@ -1891,6 +1891,11 @@ describe("load-sessions-stages", () => {
         "approve_session" as const,
         "reject" as const,
       ],
+    };
+    const livePermission = {
+      ...stalePermission,
+      requestId: "live-perm",
+      affectedPaths: ["live/**"],
     };
     const stateHarness = createStateHarness({
       "external-1": createSession({
@@ -1922,6 +1927,16 @@ describe("load-sessions-stages", () => {
                   agent: "explorer",
                   description: "Inspect session state",
                   externalSessionId: "external-child-session",
+                },
+                {
+                  kind: "subagent",
+                  messageId: "assistant-parent",
+                  partId: "subtask-2",
+                  correlationKey: "part:assistant-parent:subtask-2",
+                  status: "running",
+                  agent: "explorer",
+                  description: "Inspect second session state",
+                  externalSessionId: "external-success-child-session",
                 },
               ],
             },
@@ -1959,6 +1974,19 @@ describe("load-sessions-stages", () => {
             if (externalSessionId === "external-child-session") {
               throw new Error("child snapshot unavailable");
             }
+            if (externalSessionId === "external-success-child-session") {
+              return createSessionPresenceSnapshot(
+                "external-success-child-session",
+                "/tmp/repo/worktree",
+                {
+                  title: "Child",
+                  startedAt: "2026-03-01T09:00:01.000Z",
+                  status: { type: "busy" },
+                  pendingApprovals: [livePermission],
+                  pendingQuestions: [],
+                },
+              );
+            }
             return createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
               title: "Parent",
               startedAt: "2026-03-01T09:00:00.000Z",
@@ -1981,7 +2009,9 @@ describe("load-sessions-stages", () => {
     expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("failed");
     expect(
       stateHarness.getState()["external-1"]?.subagentPendingApprovalsByExternalSessionId,
-    ).toBeUndefined();
+    ).toEqual({
+      "external-success-child-session": [livePermission],
+    });
     expect(
       stateHarness.getState()["external-1"]?.subagentPendingQuestionsByExternalSessionId,
     ).toBeUndefined();

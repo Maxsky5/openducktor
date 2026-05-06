@@ -412,6 +412,73 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
+  test("loads distinct runtime data when selected and view sessions differ", async () => {
+    const readSessionTodos = mock(
+      async (
+        _repoPath: string,
+        _runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
+        _workingDirectory: string,
+        externalSessionId: string,
+      ) => [
+        {
+          id: `todo-${externalSessionId}`,
+          content: `Todo for ${externalSessionId}`,
+          status: "pending" as const,
+          priority: "medium" as const,
+        },
+      ],
+    );
+    const activeSession = createSession("task-1", "session-build", {
+      role: "build",
+      runtimeKind: "opencode",
+      runtimeId: "runtime-1",
+      workingDirectory: "/repo/task-1",
+      status: "running",
+      todos: [],
+    });
+    const viewSession = createSession("task-2", "session-qa", {
+      role: "qa",
+      runtimeKind: "opencode",
+      runtimeId: "runtime-1",
+      workingDirectory: "/repo/task-2",
+      status: "running",
+      todos: [],
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        sessions: [activeSession, viewSession],
+        taskIdParam: "task-1",
+        sessionParam: "session-build",
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+        readSessionTodos,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleSelectTab("task-2");
+      });
+      await harness.waitFor(
+        (latest) =>
+          latest.activeSession?.todos[0]?.id === "todo-session-build" &&
+          latest.viewActiveSession?.todos[0]?.id === "todo-session-qa",
+      );
+
+      expect(readSessionTodos).toHaveBeenCalledTimes(2);
+      expect(readSessionTodos.mock.calls.map((call) => call[3]).sort()).toEqual([
+        "session-build",
+        "session-qa",
+      ]);
+      expect(harness.getLatest().activeSession?.todos).not.toEqual(
+        harness.getLatest().viewActiveSession?.todos,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("suppresses stale query task and session selection while repo boundary reset is pending", async () => {
     const readSessionModelCatalog = mock(async () => emptyCatalog);
     const readSessionTodos = mock(async () => []);

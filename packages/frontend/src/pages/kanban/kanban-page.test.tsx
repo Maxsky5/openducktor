@@ -701,14 +701,12 @@ describe("KanbanPage session start modal flow", () => {
     });
     expect(tasksListMock).not.toHaveBeenCalled();
     await waitFor(() => {
-      expect(
-        latestKanbanColumnPropsList.at(-1)
-          ? (() => {
-              const column = latestKanbanColumnPropsList.at(-1)?.column as { tasks: unknown[] };
-              return column.tasks.length;
-            })()
-          : 0,
-      ).toBe(0);
+      expect(latestKanbanColumnPropsList.length).toBeGreaterThan(0);
+      const totalTaskCount = latestKanbanColumnPropsList.reduce((count, props) => {
+        const column = props.column as { tasks: unknown[] };
+        return count + column.tasks.length;
+      }, 0);
+      expect(totalTaskCount).toBe(1);
     });
 
     await act(async () => {

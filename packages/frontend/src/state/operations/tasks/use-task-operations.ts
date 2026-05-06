@@ -137,9 +137,7 @@ export function useTaskOperations({
   } | null>(null);
   const currentWorkspaceRepoPathRef = useRef(activeRepoPath);
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
-  const settingsSnapshot = settingsSnapshotQuery.isError
-    ? null
-    : (settingsSnapshotQuery.data ?? null);
+  const settingsSnapshot = settingsSnapshotQuery.data ?? null;
   const doneVisibleDays = settingsSnapshot?.kanban.doneVisibleDays ?? null;
   const repoTaskDataQuery = useQuery({
     ...repoTaskDataQueryOptions(activeRepoPath ?? "__disabled__", doneVisibleDays ?? -1),

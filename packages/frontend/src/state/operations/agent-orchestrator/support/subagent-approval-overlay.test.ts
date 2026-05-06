@@ -72,6 +72,38 @@ describe("subagent-approval-overlay", () => {
     });
   });
 
+  test("clears scanned child approvals when hydration explicitly returns no entries", () => {
+    const liveApproval = {
+      requestId: "perm-live",
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"write"}`,
+      summary: `Approval request for ${"write"}.`,
+      affectedPaths: ["src/**"],
+      action: { name: "write" },
+      mutation: "mutating" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
+    };
+
+    const merged = mergeSubagentPendingApprovalOverlay({
+      current: {
+        "child-live": [liveApproval],
+        "child-cleared": [liveApproval],
+      },
+      scannedChildExternalSessionIds: ["child-cleared"],
+      pendingApprovalsByChildExternalSessionId: {
+        "child-cleared": [],
+      },
+    });
+
+    expect(merged).toEqual({
+      "child-live": [liveApproval],
+    });
+  });
+
   test("merges hydrated questions without dropping live child entries", () => {
     const liveQuestion = {
       requestId: "question-live",
