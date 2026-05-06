@@ -8,13 +8,10 @@ const stringArraysEqual = (left: string[], right: string[]): boolean => {
     return false;
   }
 
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) {
-      return false;
-    }
-  }
+  const sortedLeft = [...left].sort();
+  const sortedRight = [...right].sort();
 
-  return true;
+  return sortedLeft.every((filePath, index) => filePath === sortedRight[index]);
 };
 
 export const gitConflictQuickActionContextsEqual = (
