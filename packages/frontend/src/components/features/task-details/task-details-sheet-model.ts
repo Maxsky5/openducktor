@@ -48,7 +48,7 @@ const roleSessionActions: Record<OpenSessionWorkflowAction, RoleSessionActionCon
     role: "build",
     fallback: (callbacks, taskId) => callbacks.onBuild?.(taskId),
   },
-} satisfies Record<OpenSessionWorkflowAction, RoleSessionActionConfig>;
+};
 
 const openRoleSession = (
   action: OpenSessionWorkflowAction,
