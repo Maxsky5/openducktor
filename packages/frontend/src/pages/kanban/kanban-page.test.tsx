@@ -708,6 +708,7 @@ describe("KanbanPage session start modal flow", () => {
       }, 0);
       expect(totalTaskCount).toBe(1);
     });
+    expect(tasksListMock).not.toHaveBeenCalled();
 
     await act(async () => {
       renderer.unmount();

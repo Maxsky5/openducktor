@@ -29,7 +29,11 @@ import { createSessionCacheEffects } from "./support/session-cache-effects";
 type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  refreshTaskData: (
+    repoPath: string,
+    taskIdOrIds?: string | string[],
+    options?: { forceFreshTaskList?: boolean },
+  ) => Promise<void>;
   agentEngine: AgentEnginePort;
   /**
    * Optional dependency seam for tests and specialized callers.

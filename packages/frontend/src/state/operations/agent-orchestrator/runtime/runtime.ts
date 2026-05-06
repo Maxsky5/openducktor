@@ -30,7 +30,11 @@ export type TaskDocuments = {
 };
 
 type EnsureRuntimeDependencies = {
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  refreshTaskData: (
+    repoPath: string,
+    taskIdOrIds?: string | string[],
+    options?: { forceFreshTaskList?: boolean },
+  ) => Promise<void>;
   hostClient?: Pick<typeof host, "buildStart" | "runtimeEnsure" | "taskWorktreeGet">;
   queryClient?: Pick<QueryClient, "invalidateQueries">;
   repoConfigLoader?: RepoConfigLoader;
