@@ -32,6 +32,7 @@ export type TaskDocuments = {
 type EnsureRuntimeDependencies = {
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   hostClient?: Pick<typeof host, "buildStart" | "runtimeEnsure" | "taskWorktreeGet">;
+  queryClient?: Pick<QueryClient, "invalidateQueries">;
   repoConfigLoader?: RepoConfigLoader;
 };
 
@@ -150,6 +151,7 @@ export const requireConfiguredRuntimeKind = (
 export const createEnsureRuntime = ({
   refreshTaskData,
   hostClient = host,
+  queryClient = appQueryClient,
   repoConfigLoader = defaultRepoConfigLoader,
 }: EnsureRuntimeDependencies) => {
   return async (
@@ -191,6 +193,7 @@ export const createEnsureRuntime = ({
         const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
           repoPath,
           runtimeKind,
+          queryClient,
           ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
             hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
         });
@@ -230,6 +233,7 @@ export const createEnsureRuntime = ({
       const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
         repoPath,
         runtimeKind,
+        queryClient,
         ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
           hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
       });
@@ -242,6 +246,7 @@ export const createEnsureRuntime = ({
     const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
       repoPath,
       runtimeKind,
+      queryClient,
       ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
         hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
     });

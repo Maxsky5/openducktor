@@ -1,6 +1,6 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { QueryClient } from "@tanstack/react-query";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { appQueryClient } from "@/lib/query-client";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -32,6 +32,7 @@ type CreateLoadAgentSessionsArgs = {
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadTaskDocuments?: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   agentSessionPresenceStore?: AgentSessionPresenceStore;
+  queryClient: QueryClient;
 };
 
 export const createLoadAgentSessions = ({
@@ -48,6 +49,7 @@ export const createLoadAgentSessions = ({
   loadRepoPromptOverrides,
   loadTaskDocuments: _loadTaskDocuments,
   agentSessionPresenceStore,
+  queryClient,
 }: CreateLoadAgentSessionsArgs): ((
   taskId: string,
   options?: AgentSessionLoadOptions,
@@ -173,10 +175,12 @@ export const createLoadAgentSessions = ({
           sessionsRef,
           setSessionsById,
           isStaleRepoOperation,
-          loadPersistedRecords: async () =>
-            options?.persistedRecords
-              ? Promise.resolve(options.persistedRecords)
-              : loadAgentSessionListFromQuery(appQueryClient, repoPath, taskId),
+          loadPersistedRecords: async () => {
+            if (options?.persistedRecords) {
+              return options.persistedRecords;
+            }
+            return loadAgentSessionListFromQuery(queryClient, repoPath, taskId);
+          },
           loadRepoPromptOverrides,
         });
       if (isStaleRepoOperation()) {

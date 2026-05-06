@@ -1,0 +1,81 @@
+import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentEnginePort } from "@openducktor/core";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+
+export const createTaskFixture = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+  id: "task-1",
+  title: "Task",
+  description: "",
+  notes: "",
+  status: "open",
+  priority: 2,
+  issueType: "task",
+  aiReviewEnabled: true,
+  availableActions: [],
+  labels: [],
+  subtaskIds: [],
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: true, completed: false },
+    planner: { required: false, canSkip: true, available: true, completed: false },
+    builder: { required: true, canSkip: false, available: true, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
+  },
+  updatedAt: "2026-03-01T09:00:00.000Z",
+  createdAt: "2026-03-01T09:00:00.000Z",
+  ...overrides,
+});
+
+export const createSessionRecord = (
+  overrides: Partial<AgentSessionRecord> = {},
+): AgentSessionRecord => ({
+  runtimeKind: "opencode",
+  externalSessionId: "external-1",
+  role: "build",
+  startedAt: "2026-03-01T09:00:00.000Z",
+  workingDirectory: "/tmp/repo/worktree",
+  selectedModel: null,
+  ...overrides,
+});
+
+export const createTaskWithSession = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+  ...createTaskFixture(),
+  agentSessions: [createSessionRecord()],
+  ...overrides,
+});
+
+export const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
+  runtimeKind: "opencode",
+  externalSessionId: "external-1",
+  taskId: "task-1",
+  repoPath: "/tmp/repo",
+  role: "build",
+  status: "idle",
+  startedAt: "2026-03-01T09:00:00.000Z",
+  runtimeId: "runtime-1",
+  workingDirectory: "/tmp/repo/worktree",
+  messages: [],
+  draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
+  pendingApprovals: [],
+  pendingQuestions: [],
+  todos: [],
+  modelCatalog: null,
+  selectedModel: null,
+  isLoadingModelCatalog: false,
+  ...overrides,
+});
+
+export const createNoopEngine = (overrides: Partial<AgentEnginePort> = {}): AgentEnginePort =>
+  ({
+    hasSession: () => false,
+    detachSession: async () => undefined,
+    listRuntimeDefinitions: () => [],
+    ...overrides,
+  }) as AgentEnginePort;

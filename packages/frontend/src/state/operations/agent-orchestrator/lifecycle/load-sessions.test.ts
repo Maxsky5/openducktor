@@ -23,12 +23,14 @@ import {
   createDeferred,
   createTaskCardFixture,
 } from "../test-utils";
-import { createLoadAgentSessions } from "./load-sessions";
+import { createLoadAgentSessions as createLoadAgentSessionsBase } from "./load-sessions";
 import type { SessionLifecycleAdapter } from "./load-sessions-stages";
 import { agentSessionPresenceLookupKey } from "./session-presence-cache";
 import { AgentSessionPresenceStore } from "./session-presence-store";
 
 type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
+
+const createLoadAgentSessions = createLoadAgentSessionsBase;
 
 type LegacyRunSummary = { runId: string; worktreePath: string };
 
@@ -253,6 +255,7 @@ describe("agent-orchestrator-load-sessions", () => {
   test("no-ops when active repo is missing", async () => {
     let setCalled = false;
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: null,
       adapter: createAdapter(),
       repoEpochRef: { current: 0 },
@@ -274,6 +277,7 @@ describe("agent-orchestrator-load-sessions", () => {
   test("no-ops for blank task ids", async () => {
     let setCalled = false;
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -324,6 +328,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -458,6 +463,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -633,6 +639,7 @@ describe("agent-orchestrator-load-sessions", () => {
     ]);
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -775,6 +782,7 @@ describe("agent-orchestrator-load-sessions", () => {
     ]);
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -924,6 +932,7 @@ describe("agent-orchestrator-load-sessions", () => {
       externalSessionId: string;
     } | null = null;
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -1070,6 +1079,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -1202,6 +1212,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -1316,6 +1327,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const observedSnapshotDirectories: string[][] = [];
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -1429,6 +1441,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -1575,6 +1588,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -1853,6 +1867,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -2000,6 +2015,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -2131,6 +2147,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -2290,6 +2307,7 @@ describe("agent-orchestrator-load-sessions", () => {
     );
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -2379,6 +2397,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
     let historyLoads = 0;
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -2476,6 +2495,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -2624,6 +2644,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -2720,6 +2741,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -2857,6 +2879,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -2942,6 +2965,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -3083,6 +3107,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -3158,6 +3183,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
     };
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -3277,6 +3303,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     let historyLoads = 0;
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -3447,6 +3474,7 @@ describe("agent-orchestrator-load-sessions", () => {
     });
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -3559,6 +3587,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -3635,6 +3664,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -3729,6 +3759,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -3851,6 +3882,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -3952,6 +3984,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -4068,6 +4101,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -4170,6 +4204,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -4319,6 +4354,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -4431,6 +4467,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -4539,6 +4576,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -4651,6 +4689,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -4775,6 +4814,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -4861,6 +4901,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -4995,6 +5036,7 @@ describe("agent-orchestrator-load-sessions", () => {
       createDeferred<Awaited<ReturnType<ReturnType<typeof createAdapter>["loadSessionHistory"]>>>();
     let historyCalls = 0;
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -5114,6 +5156,7 @@ describe("agent-orchestrator-load-sessions", () => {
       createDeferred<Awaited<ReturnType<ReturnType<typeof createAdapter>["loadSessionHistory"]>>>();
     let historyCalls = 0;
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -5279,6 +5322,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
+      queryClient: appQueryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
