@@ -3,21 +3,17 @@ import {
   normalizeUserMessageDisplayParts,
   type readMessageModelSelection,
   readTextFromMessageInfo,
-} from "../message-normalizers";
-import { getKnownMessageParts } from "./message-event-helpers";
-import type { EventStreamRuntime } from "./shared";
-import { buildVisibleUserMessage } from "./user-message-display";
-import {
-  emitKnownUserMessage,
-  emitUserMessage,
-  persistUserMessageMetadata,
-} from "./user-message-emitter";
+} from "../../message-normalizers";
+import type { EventStreamRuntime } from "../shared";
+import { getKnownMessageParts } from "./helpers";
+import { buildVisibleUserMessage } from "./user-display";
+import { emitKnownUserMessage, emitUserMessage, persistUserMessageMetadata } from "./user-emitter";
 import {
   readExplicitUserMessageState,
   resolveLiveUserMessageState,
   resolveUserMessageStateFromPendingAssistant,
   takeQueuedUserSendMatch,
-} from "./user-message-state";
+} from "./user-state";
 
 export const reconcileUserMessageQueuedStates = (runtime: EventStreamRuntime): void => {
   const session = runtime.getSession(runtime.externalSessionId);

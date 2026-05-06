@@ -1,12 +1,12 @@
 import type { AgentUserMessageDisplayPart, AgentUserMessageState } from "@openducktor/core";
-import { readStringProp } from "../guards";
-import type { readMessageModelSelection } from "../message-normalizers";
-import type { QueuedUserMessageSend } from "../types";
+import { readStringProp } from "../../guards";
+import type { readMessageModelSelection } from "../../message-normalizers";
+import type { QueuedUserMessageSend } from "../../types";
 import {
   buildQueuedDisplayAttachmentIdentitySignature,
   buildQueuedDisplaySignature,
-} from "../user-message-signatures";
-import type { EventStreamRuntime } from "./shared";
+} from "../../user-message-signatures";
+import type { EventStreamRuntime } from "../shared";
 
 export const readExplicitUserMessageState = (
   ...sources: Array<unknown>

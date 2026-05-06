@@ -4,10 +4,10 @@ import {
   mergePreservedAttachmentDisplayParts,
   normalizeUserMessageDisplayParts,
   readVisibleUserTextFromDisplayParts,
-} from "../message-normalizers";
-import type { QueuedUserMessageSend, SessionMessageMetadata } from "../types";
-import { getKnownMessageParts } from "./message-event-helpers";
-import type { EventStreamRuntime } from "./shared";
+} from "../../message-normalizers";
+import type { QueuedUserMessageSend, SessionMessageMetadata } from "../../types";
+import type { EventStreamRuntime } from "../shared";
+import { getKnownMessageParts } from "./helpers";
 
 type AttachmentDisplayPart = Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>;
 

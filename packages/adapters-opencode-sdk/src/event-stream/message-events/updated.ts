@@ -1,13 +1,15 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
-import { asUnknownRecord, readRecordProp, readStringProp } from "../guards";
-import { readMessageModelSelection } from "../message-normalizers";
-import { toIsoFromEpoch } from "../session-runtime-utils";
+import { asUnknownRecord, readRecordProp, readStringProp } from "../../guards";
+import { readMessageModelSelection } from "../../message-normalizers";
+import { toIsoFromEpoch } from "../../session-runtime-utils";
+import { readEventInfo, readEventProperties, readMessageCompletedAt } from "../schemas";
+import type { EventStreamRuntime } from "../shared";
 import {
   emitAssistantPart,
   emitKnownAssistantPartsForMessage,
   maybeEmitCompletedAssistantMessage,
   updateAssistantMessageCompletionState,
-} from "./assistant-message-events";
+} from "./assistant";
 import {
   applyPendingDeltas,
   getKnownMessageParts,
@@ -17,10 +19,8 @@ import {
   normalizeMessagePart,
   readRawMessageParts,
   updateMessageMetadata,
-} from "./message-event-helpers";
-import { readEventInfo, readEventProperties, readMessageCompletedAt } from "./schemas";
-import type { EventStreamRuntime } from "./shared";
-import { handleUserMessageUpdated } from "./user-message-events";
+} from "./helpers";
+import { handleUserMessageUpdated } from "./user";
 
 export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   if (event.type !== "message.updated") {

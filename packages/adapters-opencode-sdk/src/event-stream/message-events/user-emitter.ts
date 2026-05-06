@@ -1,8 +1,8 @@
 import type { AgentUserMessageDisplayPart, AgentUserMessageState } from "@openducktor/core";
-import type { readMessageModelSelection } from "../message-normalizers";
-import type { SessionMessageMetadata } from "../types";
-import type { EventStreamRuntime } from "./shared";
-import { buildKnownUserMessageContent } from "./user-message-display";
+import type { readMessageModelSelection } from "../../message-normalizers";
+import type { SessionMessageMetadata } from "../../types";
+import type { EventStreamRuntime } from "../shared";
+import { buildKnownUserMessageContent } from "./user-display";
 
 export const persistUserMessageMetadata = (input: {
   session: ReturnType<EventStreamRuntime["getSession"]>;

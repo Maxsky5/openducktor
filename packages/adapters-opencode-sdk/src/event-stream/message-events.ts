@@ -3,12 +3,12 @@ import {
   handleMessagePartDeltaEvent,
   handleMessagePartRemovedEvent,
   handleMessagePartUpdatedEvent,
-} from "./message-part-events";
-import { handleMessageUpdatedEvent } from "./message-updated-events";
+} from "./message-events/parts";
+import { handleMessageUpdatedEvent } from "./message-events/updated";
 import type { EventStreamRuntime } from "./shared";
 
-export { flushPendingSubagentPartEmissionsForSession } from "./assistant-message-events";
-export { reconcileUserMessageQueuedStates } from "./user-message-events";
+export { flushPendingSubagentPartEmissionsForSession } from "./message-events/assistant";
+export { reconcileUserMessageQueuedStates } from "./message-events/user";
 
 export const handleMessageEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   return (

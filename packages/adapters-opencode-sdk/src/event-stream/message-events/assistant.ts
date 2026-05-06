@@ -4,18 +4,18 @@ import {
   readMessageModelSelection,
   readTextFromParts,
   sanitizeAssistantMessage,
-} from "../message-normalizers";
-import { mapPartToAgentStreamPart } from "../stream-part-mapper";
+} from "../../message-normalizers";
+import { mapPartToAgentStreamPart } from "../../stream-part-mapper";
+import type { EventStreamRuntime } from "../shared";
+import { emitSessionIdle, markSessionActive } from "../shared";
 import {
   getKnownMessageParts,
   hasTerminalStopSignalInParts,
   isAssistantMessage,
   updateMessageMetadata,
-} from "./message-event-helpers";
-import type { EventStreamRuntime } from "./shared";
-import { emitSessionIdle, markSessionActive } from "./shared";
-import { normalizeLiveSubagentCorrelation } from "./subagent-message-events";
-import { reconcileUserMessageQueuedStates } from "./user-message-events";
+} from "./helpers";
+import { normalizeLiveSubagentCorrelation } from "./subagent";
+import { reconcileUserMessageQueuedStates } from "./user";
 
 export const shouldSuppressAssistantStreamingAfterIdle = (
   runtime: EventStreamRuntime,

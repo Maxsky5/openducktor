@@ -1,16 +1,16 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
-import { readStringProp, readUnknownProp } from "../guards";
+import { readStringProp, readUnknownProp } from "../../guards";
+import { readEventPart, readEventProperties } from "../schemas";
+import type { EventStreamRuntime } from "../shared";
+import { applyDeltaToPart, isReasoningDeltaField, markSessionActive } from "../shared";
 import {
   emitAssistantPart,
   maybeEmitCompletedAssistantMessage,
   shouldSuppressAssistantStreamingAfterIdle,
-} from "./assistant-message-events";
-import { applyPendingDeltas } from "./message-event-helpers";
-import { readEventPart, readEventProperties } from "./schemas";
-import type { EventStreamRuntime } from "./shared";
-import { applyDeltaToPart, isReasoningDeltaField, markSessionActive } from "./shared";
-import { removeSubagentCorrelationForPart } from "./subagent-message-events";
-import { handleUserPartUpdated } from "./user-message-events";
+} from "./assistant";
+import { applyPendingDeltas } from "./helpers";
+import { removeSubagentCorrelationForPart } from "./subagent";
+import { handleUserPartUpdated } from "./user";
 
 export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   if (event.type !== "message.part.delta") {

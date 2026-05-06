@@ -1,10 +1,10 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import type { MappedSubagentPart } from "./message-event-helpers";
-import type { EventStreamRuntime } from "./shared";
+import type { EventStreamRuntime } from "../shared";
 import {
   flushPendingSubagentInputEventsForSession,
   removePendingSubagentCorrelationKey,
-} from "./shared";
+} from "../shared";
+import type { MappedSubagentPart } from "./helpers";
 
 const buildSubagentSignature = (part: MappedSubagentPart): string | undefined => {
   const agent = part.agent?.trim() ?? "";

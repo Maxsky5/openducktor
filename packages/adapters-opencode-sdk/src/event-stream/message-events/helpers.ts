@@ -1,10 +1,10 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
-import { asUnknownRecord, readArrayProp, readStringProp, type UnknownRecord } from "../guards";
-import type { readMessageModelSelection } from "../message-normalizers";
-import type { mapPartToAgentStreamPart } from "../stream-part-mapper";
-import type { SessionMessageMetadata } from "../types";
-import type { EventStreamRuntime } from "./shared";
-import { applyDeltaToPart } from "./shared";
+import { asUnknownRecord, readArrayProp, readStringProp, type UnknownRecord } from "../../guards";
+import type { readMessageModelSelection } from "../../message-normalizers";
+import type { mapPartToAgentStreamPart } from "../../stream-part-mapper";
+import type { SessionMessageMetadata } from "../../types";
+import type { EventStreamRuntime } from "../shared";
+import { applyDeltaToPart } from "../shared";
 
 export type MappedAssistantPart = NonNullable<ReturnType<typeof mapPartToAgentStreamPart>>;
 export type MappedSubagentPart = Extract<MappedAssistantPart, { kind: "subagent" }>;
