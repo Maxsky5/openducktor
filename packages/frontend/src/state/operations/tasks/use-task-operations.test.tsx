@@ -480,7 +480,7 @@ describe("use-task-operations", () => {
     let taskLoadCount = 0;
     const tasksList = mock(async () => {
       taskLoadCount += 1;
-      return [makeTask("A", taskLoadCount >= 2 ? "ready_for_dev" : "open")];
+      return [makeTask("A", taskLoadCount >= 3 ? "ready_for_dev" : "open")];
     });
     const runsList = mock(async (): Promise<RunSummary[]> => []);
 
@@ -509,6 +509,9 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((value) => value.tasks[0]?.status === "open");
+      expect(harness.getLatest().tasks[0]?.status).toBe("open");
+
       await harness.run(async (value) => {
         await value.refreshTaskData("/repo");
       });
@@ -520,7 +523,7 @@ describe("use-task-operations", () => {
       });
       await harness.waitFor((value) => value.tasks[0]?.status === "ready_for_dev");
 
-      expect(tasksList).toHaveBeenCalledTimes(2);
+      expect(tasksList).toHaveBeenCalledTimes(3);
       expect(harness.getLatest().tasks[0]?.status).toBe("ready_for_dev");
     } finally {
       await harness.unmount();
