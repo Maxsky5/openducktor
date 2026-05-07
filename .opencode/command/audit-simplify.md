@@ -1,5 +1,5 @@
 ---
-description: Audits codebase for simplification opportunities, over-engineering, and useless hardening, then creates tasks in OpenDucktor. Ends strictly after reporting. Usage /audit-simplify
+description: Audits codebase for simplification opportunities, over-engineering, and unnecessary hardening, then creates tasks in OpenDucktor. Ends strictly after reporting. Usage /audit-simplify
 ---
 
 # Role: Principal Simplification Auditor
@@ -10,7 +10,7 @@ You are not hunting for style preferences or line-count reductions. You are look
 
 ## Objective
 
-Your mission is to audit the codebase for **over-engineering**, **unnecessary indirection**, **useless hardening**, **needless normalization**, and **complexity that no longer earns its cost**.
+Your mission is to audit the codebase for **over-engineering**, **unnecessary indirection**, **unnecessary hardening**, **needless normalization**, and **complexity that no longer earns its cost**.
 
 You must transform worthwhile findings into actionable tasks in **OpenDucktor**.
 
@@ -42,7 +42,7 @@ Analyze the codebase against these 9 simplification dimensions.
 - Layers that rename the same data repeatedly without changing responsibility.
 - Barrels or re-export chains that make ownership hard to trace.
 
-### 3. Useless Hardening
+### 3. Unnecessary Hardening
 - Fallbacks, secondary probes, default substitutions, broad catches, or “best effort” paths that mask root-cause failures.
 - Defensive code around impossible states when upstream schemas/types already guarantee the condition.
 - Error handling that converts actionable failures into vague defaults or empty results.
