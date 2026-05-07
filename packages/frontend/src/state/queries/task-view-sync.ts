@@ -138,6 +138,9 @@ export const refreshRepoTaskViewsFromQuery = async (
     await loadRepoTaskDataFromQuery(queryClient, repoPath, doneVisibleDays);
   } catch (error) {
     if (ignorePrimaryCancellation && isCancelledQueryError(error)) {
+      if (options?.taskDocumentStrategy === "invalidate") {
+        await runAncillaryRefresh([taskDocumentRefresh()], ancillaryFailureMode);
+      }
       return;
     }
     throw error;
