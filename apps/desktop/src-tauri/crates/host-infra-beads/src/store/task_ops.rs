@@ -298,8 +298,16 @@ impl BeadsTaskStore {
         }
 
         if let Some(labels) = patch.labels {
-            args.push("--set-labels".to_string());
-            args.push(normalize_labels(labels).join(","));
+            let labels = normalize_labels(labels);
+            if labels.is_empty() {
+                for label in self.show_task(repo_path, task_id)?.labels {
+                    args.push("--remove-label".to_string());
+                    args.push(label);
+                }
+            } else {
+                args.push("--set-labels".to_string());
+                args.push(labels.join(","));
+            }
         }
 
         if args.len() > 1 {
