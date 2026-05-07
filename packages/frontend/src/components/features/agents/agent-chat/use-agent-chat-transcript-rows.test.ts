@@ -203,10 +203,11 @@ describe("useAgentChatTranscriptRows", () => {
     await harness.unmount();
   });
 
-  test("detects same-count raw message array replacement", async () => {
+  test("detects same-array same-count raw message mutation on session object replacement", async () => {
+    const messages = [buildMessage("assistant", "Before", { id: "assistant-1" })];
     const session = buildSession({
       externalSessionId: "session-raw-replacement",
-      messages: [buildMessage("assistant", "Before", { id: "assistant-1" })],
+      messages,
     });
     const harness = await mountHarness({
       session,
@@ -215,10 +216,12 @@ describe("useAgentChatTranscriptRows", () => {
     });
     expect(harness.getLatest().transcriptState.rows[1]?.kind).toBe("message");
 
+    messages[0] = buildMessage("assistant", "After", { id: "assistant-1" });
+
     await harness.update({
       session: buildSession({
         ...session,
-        messages: [buildMessage("assistant", "After", { id: "assistant-1" })],
+        messages,
       }),
       showThinkingMessages: true,
       shouldPauseDerivation: false,

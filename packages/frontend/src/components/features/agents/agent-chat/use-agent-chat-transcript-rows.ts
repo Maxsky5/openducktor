@@ -24,11 +24,11 @@ type TranscriptRowsRevision = {
   version: number | null;
   count: number | null;
   rawMessages: AgentSessionState["messages"] | null;
-  rawMessagesToken: number | null;
+  rawSessionToken: number | null;
 };
 
-const rawMessagesTokenByArray = new WeakMap<object, number>();
-let nextRawMessagesToken = 1;
+const rawSessionTokenBySession = new WeakMap<AgentSessionState, number>();
+let nextRawSessionToken = 1;
 
 export type TranscriptRowsState = {
   revision: TranscriptRowsRevision;
@@ -48,7 +48,7 @@ const EMPTY_TRANSCRIPT_ROWS_REVISION: TranscriptRowsRevision = Object.freeze({
   version: null,
   count: null,
   rawMessages: null,
-  rawMessagesToken: null,
+  rawSessionToken: null,
 });
 
 export const EMPTY_TRANSCRIPT_ROWS_STATE: TranscriptRowsState = Object.freeze({
@@ -89,23 +89,23 @@ const buildTranscriptRowsRevision = (
       version: session.messages.version,
       count: session.messages.count,
       rawMessages: null,
-      rawMessagesToken: null,
+      rawSessionToken: null,
     };
   }
 
-  const rawMessagesToken = (() => {
+  const rawSessionToken = (() => {
     if (!Array.isArray(session.messages)) {
       return null;
     }
 
-    const cachedToken = rawMessagesTokenByArray.get(session.messages);
+    const cachedToken = rawSessionTokenBySession.get(session);
     if (typeof cachedToken === "number") {
       return cachedToken;
     }
 
-    const nextToken = nextRawMessagesToken;
-    nextRawMessagesToken += 1;
-    rawMessagesTokenByArray.set(session.messages, nextToken);
+    const nextToken = nextRawSessionToken;
+    nextRawSessionToken += 1;
+    rawSessionTokenBySession.set(session, nextToken);
     return nextToken;
   })();
 
@@ -118,7 +118,7 @@ const buildTranscriptRowsRevision = (
     version: null,
     count: getSessionMessageCount(session),
     rawMessages: session.messages,
-    rawMessagesToken,
+    rawSessionToken,
   };
 };
 
@@ -165,7 +165,7 @@ const areTranscriptRowsRevisionsEqual = (
     left.version === right.version &&
     left.count === right.count &&
     left.rawMessages === right.rawMessages &&
-    left.rawMessagesToken === right.rawMessagesToken
+    left.rawSessionToken === right.rawSessionToken
   );
 };
 
@@ -178,7 +178,7 @@ const toTranscriptRowsRevisionKey = (revision: TranscriptRowsRevision): string =
     revision.messagesExternalSessionId ?? "",
     revision.version ?? "",
     revision.count ?? "",
-    revision.rawMessagesToken ?? "",
+    revision.rawSessionToken ?? "",
   ].join("\u001f");
 };
 
