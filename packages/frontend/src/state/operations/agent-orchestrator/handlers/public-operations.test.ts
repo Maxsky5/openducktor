@@ -15,6 +15,7 @@ type SessionActions = Parameters<typeof createOrchestratorPublicOperations>[0]["
 const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionActions => {
   return {
     startAgentSession: async () => "session-started",
+    settleStartedAgentSession: () => {},
     sendAgentMessage: async () => {},
     stopAgentSession: async () => {},
     updateAgentSessionModel: () => {},

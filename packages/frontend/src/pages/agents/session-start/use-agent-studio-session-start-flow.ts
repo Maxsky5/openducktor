@@ -51,6 +51,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   selectionForNewSession: AgentModelSelection | null;
   repoSettings: RepoSettingsInput | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
+  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
@@ -75,6 +76,7 @@ export function useAgentStudioSessionStartFlow({
   selectionForNewSession,
   repoSettings,
   startAgentSession,
+  settleStartedAgentSession,
   sendAgentMessage,
   humanRequestChangesTask,
   setTaskTargetBranch,
@@ -164,6 +166,7 @@ export function useAgentStudioSessionStartFlow({
     agentStudioReady,
     isActiveTaskHydrated,
     startAgentSession,
+    settleStartedAgentSession,
     sendAgentMessage,
     ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
     setStartingActivityCountByContext,
@@ -192,6 +195,7 @@ export function useAgentStudioSessionStartFlow({
           task: request.taskId === taskId ? selectedTask : null,
           ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
           startAgentSession,
+          settleStartedAgentSession,
           sendAgentMessage,
           humanRequestChangesTask,
           onPostStartActionError: (action, error) => {
@@ -219,6 +223,7 @@ export function useAgentStudioSessionStartFlow({
       queryClient,
       selectedTask,
       sendAgentMessage,
+      settleStartedAgentSession,
       setTaskTargetBranch,
       startAgentSession,
       humanRequestChangesTask,
@@ -277,6 +282,7 @@ export function useAgentStudioSessionStartFlow({
     isActiveTaskHydrated,
     isSessionWorking,
     startAgentSession,
+    settleStartedAgentSession,
     sendAgentMessage,
     updateQuery,
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),

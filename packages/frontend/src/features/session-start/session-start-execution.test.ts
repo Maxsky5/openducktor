@@ -32,6 +32,7 @@ describe("session-start-execution", () => {
       role: "qa",
       startMode: "fresh",
       selectedModel: BUILD_SELECTION,
+      initialStatusRelease: "after_listener_attach",
     });
 
     expect(result).toEqual({
@@ -39,6 +40,7 @@ describe("session-start-execution", () => {
       role: "qa",
       selectedModel: BUILD_SELECTION,
       startMode: "fresh",
+      initialStatusRelease: "after_listener_attach",
     });
   });
 
@@ -50,6 +52,7 @@ describe("session-start-execution", () => {
       role: "spec",
       startMode: "fresh",
       selectedModel: BUILD_SELECTION,
+      initialStatusRelease: "after_listener_attach",
       startAgentSession,
     });
 
@@ -73,5 +76,23 @@ describe("session-start-execution", () => {
         sourceExternalSessionId: "session-build-1",
       }),
     );
+  });
+
+  test("prepareSessionStartInput can defer initial status release until the first send attempt", async () => {
+    const result = await prepareSessionStartInput({
+      taskId: "TASK-1",
+      role: "build",
+      startMode: "fresh",
+      selectedModel: BUILD_SELECTION,
+      initialStatusRelease: "after_first_send_attempt",
+    });
+
+    expect(result).toEqual({
+      taskId: "TASK-1",
+      role: "build",
+      selectedModel: BUILD_SELECTION,
+      startMode: "fresh",
+      initialStatusRelease: "after_first_send_attempt",
+    });
   });
 });

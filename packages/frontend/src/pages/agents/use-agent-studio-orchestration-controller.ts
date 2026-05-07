@@ -50,6 +50,7 @@ type AgentStudioOrchestrationActionsContext = {
   }) => void;
   openTaskDetails: () => void;
   startAgentSession: AgentStateContextValue["startAgentSession"];
+  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   stopAgentSession: AgentStateContextValue["stopAgentSession"];
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
@@ -287,6 +288,7 @@ export function useAgentStudioOrchestrationController({
     updateQuery,
     onContextSwitchIntent,
     startAgentSession,
+    settleStartedAgentSession,
     sendAgentMessage,
     stopAgentSession,
     updateAgentSessionModel,
@@ -385,6 +387,7 @@ export function useAgentStudioOrchestrationController({
     reusablePrompts,
     repoSettings,
     startAgentSession,
+    settleStartedAgentSession,
     sendAgentMessage,
     bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,

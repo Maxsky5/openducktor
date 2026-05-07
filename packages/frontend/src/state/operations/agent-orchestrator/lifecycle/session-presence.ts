@@ -6,6 +6,7 @@ import {
   toPersistedOnlyAgentSessionPresenceSnapshot,
 } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { hasPendingOutboundSend } from "../support/pending-outbound-send";
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 
 export type { AgentSessionPresence, AgentSessionPresenceSnapshot } from "@openducktor/core";
@@ -78,19 +79,30 @@ export const applyAgentSessionPresenceSnapshotToSession = (
     promptOverrides?: RepoPromptOverrides;
     selectedModel?: AgentSessionState["selectedModel"];
     missingSessionRuntimeId?: string | null;
+    preserveStartingStatusForIdlePresence?: boolean;
   } = {},
 ): AgentSessionState => {
   const promptOverrides = options.promptOverrides ?? current.promptOverrides;
   const selectedModel = options.selectedModel ?? current.selectedModel;
   const promptOverridesPatch = promptOverrides ? { promptOverrides } : {};
   if (snapshot.presence === "runtime") {
+    let status: AgentSessionState["status"] = snapshot.agentSessionStatus;
+    if (snapshot.agentSessionStatus === "idle") {
+      if (options.preserveStartingStatusForIdlePresence === true && current.status === "starting") {
+        status = "starting";
+      }
+      if (hasPendingOutboundSend(current)) {
+        status = "running";
+      }
+    }
+
     return {
       ...current,
       runtimeKind: snapshot.ref.runtimeKind,
       runtimeId: snapshot.runtimeId,
       workingDirectory: snapshot.ref.workingDirectory,
       runtimeRecoveryState: "idle",
-      status: snapshot.agentSessionStatus,
+      status,
       title: snapshot.title,
       pendingApprovals: snapshot.pendingApprovals,
       pendingQuestions: snapshot.pendingQuestions,
@@ -104,11 +116,36 @@ export const applyAgentSessionPresenceSnapshotToSession = (
       options.missingSessionRuntimeId !== undefined
         ? options.missingSessionRuntimeId
         : snapshot.runtimeId;
+    if (hasPendingOutboundSend(current)) {
+      return {
+        ...current,
+        runtimeRecoveryState: "recovering_runtime",
+        runtimeKind: snapshot.ref.runtimeKind,
+        runtimeId,
+        workingDirectory: snapshot.ref.workingDirectory,
+        ...promptOverridesPatch,
+        selectedModel,
+      };
+    }
     return {
       ...current,
       status: current.status === "running" ? "idle" : current.status,
       runtimeKind: snapshot.ref.runtimeKind,
       runtimeId,
+      workingDirectory: snapshot.ref.workingDirectory,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      ...promptOverridesPatch,
+      selectedModel,
+    };
+  }
+
+  if (hasPendingOutboundSend(current)) {
+    return {
+      ...current,
+      runtimeRecoveryState: "recovering_runtime",
+      runtimeKind: snapshot.ref.runtimeKind,
+      runtimeId: null,
       workingDirectory: snapshot.ref.workingDirectory,
       pendingApprovals: [],
       pendingQuestions: [],

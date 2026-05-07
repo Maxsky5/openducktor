@@ -1581,6 +1581,223 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
+  test("releases held starting sessions to running when sending starts", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+    const committedStatuses: AgentSessionState["status"][] = [];
+
+    adapter.hasSession = () => true;
+    mockAgentSessionPresenceSnapshot(
+      adapter,
+      createAgentSessionPresenceSnapshotFixture({
+        snapshot: { status: { type: "idle" } },
+      }),
+    );
+    adapter.sendUserMessage = async () => {
+      sendCalls += 1;
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "starting" }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
+        if (!current) {
+          return;
+        }
+        const next = updater(current);
+        if (current.status === "starting") {
+          expect(next.status).not.toBe("idle");
+        }
+        committedStatuses.push(next.status);
+        sessionsRef.current[externalSessionId] = next;
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+    });
+
+    try {
+      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
+
+      expect(sendCalls).toBe(1);
+      expect(committedStatuses).not.toContain("idle");
+      expect(sessionsRef.current["session-1"]?.status).toBe("running");
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("releases held starting sessions to idle when pending input prevents sending", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+
+    adapter.hasSession = () => true;
+    adapter.sendUserMessage = async () => {
+      sendCalls += 1;
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          status: "starting",
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [{ header: "Confirm", question: "Confirm", options: [] }],
+            },
+          ],
+        }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[externalSessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+    });
+
+    try {
+      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
+
+      expect(sendCalls).toBe(0);
+      expect(sessionsRef.current["session-1"]?.status).toBe("idle");
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("releases held starting sessions to error when ensure-ready fails", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+
+    adapter.hasSession = () => false;
+    adapter.sendUserMessage = async () => {
+      sendCalls += 1;
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "starting" }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (externalSessionId, updater) => {
+        const current = sessionsRef.current[externalSessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[externalSessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoPromptOverrides: async () => ({}),
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionRecord: async () => {},
+    });
+
+    try {
+      await expect(
+        actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+      ).rejects.toThrow("Task not found: task-1");
+
+      expect(sendCalls).toBe(0);
+      expect(sessionsRef.current["session-1"]?.status).toBe("error");
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
   test("does not hydrate requested history before sending to an attached session", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;

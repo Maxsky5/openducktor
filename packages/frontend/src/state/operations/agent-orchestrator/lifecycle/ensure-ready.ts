@@ -71,9 +71,12 @@ export const createEnsureSessionReady = ({
     externalSessionId: string,
     options?: {
       allowPendingInput?: boolean;
+      preserveStartingStatusForIdlePresence?: boolean;
     },
   ): Promise<void> => {
     const allowPendingInput = options?.allowPendingInput === true;
+    const preserveStartingStatusForIdlePresence =
+      options?.preserveStartingStatusForIdlePresence === true;
     const repoPath = requireActiveRepo(activeWorkspace?.repoPath ?? null);
     const workspaceId = activeWorkspace?.workspaceId;
     if (!workspaceId) {
@@ -166,12 +169,14 @@ export const createEnsureSessionReady = ({
         persistFalse?: boolean;
       },
     ): void => {
+      const applyOptions = { preserveStartingStatusForIdlePresence };
+      if (promptOverrides) {
+        Object.assign(applyOptions, { promptOverrides });
+      }
+
       updateSession(
         externalSessionId,
-        (current) =>
-          applyAgentSessionPresenceSnapshotToSession(current, snapshot, {
-            ...(promptOverrides ? { promptOverrides } : {}),
-          }),
+        (current) => applyAgentSessionPresenceSnapshotToSession(current, snapshot, applyOptions),
         persistFalse ? { persist: false } : undefined,
       );
       if (shouldAttachListener) {

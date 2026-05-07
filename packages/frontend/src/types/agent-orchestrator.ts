@@ -17,6 +17,17 @@ import type {
   AgentUserMessageState,
 } from "@openducktor/core";
 
+/**
+ * Defines when a newly-created local session may leave its initial `starting` state.
+ *
+ * - `after_listener_attach`: mark the session idle as soon as the runtime listener is attached.
+ * - `after_first_send_attempt`: keep the session visibly starting until the kickoff/send path
+ *   either marks it running or settles it back to idle/error.
+ */
+export type InitialSessionStatusReleasePolicy =
+  | "after_listener_attach"
+  | "after_first_send_attempt";
+
 export type AgentChatMessageMeta =
   | {
       kind: "reasoning";
@@ -183,6 +194,7 @@ export type AgentSessionState = {
   selectedModel: AgentModelSelection | null;
   isLoadingModelCatalog: boolean;
   promptOverrides?: RepoPromptOverrides;
+  pendingUserMessageStartedAt?: number | undefined;
   stopRequestedAt?: string | null;
 };
 

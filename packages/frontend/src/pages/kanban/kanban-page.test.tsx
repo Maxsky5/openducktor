@@ -375,13 +375,13 @@ const confirmSessionStartModal = async (input?: {
   }
 
   await act(async () => {
-    (
+    await (
       latestSessionStartModalModel?.onConfirm as
         | ((value: {
             runInBackground?: boolean;
             startMode?: "fresh" | "reuse" | "fork";
             sourceExternalSessionId?: string | null;
-          }) => void)
+          }) => Promise<void> | void)
         | undefined
     )?.({
       runInBackground: input?.runInBackground ?? false,
@@ -479,6 +479,7 @@ describe("KanbanPage session start modal flow", () => {
         loadAgentSessions: loadAgentSessionsMock,
         removeAgentSessions: removeAgentSessionsMock,
         startAgentSession: startAgentSessionMock,
+        settleStartedAgentSession: () => {},
         sendAgentMessage: sendAgentMessageMock,
       }),
       useTasksState: () => ({

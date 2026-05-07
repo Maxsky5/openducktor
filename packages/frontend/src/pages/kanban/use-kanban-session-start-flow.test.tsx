@@ -185,6 +185,7 @@ const createBaseArgs = (): HookArgs => ({
   humanRequestChangesTask: async () => {},
   setTaskTargetBranch: async () => {},
   startAgentSession: async () => "session-new",
+  settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
 });
 
@@ -405,7 +406,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     await harness.run(async (state) => {
-      state.sessionStartModal?.onConfirm({
+      await state.sessionStartModal?.onConfirm({
         runInBackground: false,
         startMode: "reuse",
         sourceExternalSessionId: "builder-session-2",
@@ -466,7 +467,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
 
     await harness.run(async (state) => {
-      state.sessionStartModal?.onConfirm({
+      await state.sessionStartModal?.onConfirm({
         runInBackground: false,
         startMode: "fresh",
         sourceExternalSessionId: null,
@@ -508,7 +509,7 @@ describe("useKanbanSessionStartFlow", () => {
       await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
 
       await harness.run(async (state) => {
-        state.sessionStartModal?.onConfirm({
+        await state.sessionStartModal?.onConfirm({
           runInBackground: true,
           startMode: "fresh",
           sourceExternalSessionId: null,

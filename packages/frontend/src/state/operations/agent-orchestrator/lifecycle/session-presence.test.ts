@@ -99,6 +99,61 @@ describe("session-presence", () => {
     expect(applied.pendingQuestions).toEqual([]);
   });
 
+  test("keeps pending outbound sends running when stale presence arrives", () => {
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
+      ref: sessionRefFixture,
+      runtimeId: "runtime-1",
+      snapshot: null,
+    });
+
+    const applied = applyAgentSessionPresenceSnapshotToSession(
+      createSessionState({ pendingUserMessageStartedAt: 123 }),
+      snapshot,
+    );
+
+    expect(applied.status).toBe("running");
+    expect(applied.runtimeRecoveryState).toBe("recovering_runtime");
+  });
+
+  test("keeps pending outbound sends running when idle presence arrives", () => {
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
+      ref: sessionRefFixture,
+      runtimeId: "runtime-1",
+      snapshot: {
+        externalSessionId: "external-1",
+        title: " Builder Session ",
+        startedAt: "2026-03-01T09:00:00.000Z",
+        status: { type: "idle" },
+        pendingApprovals: [],
+        pendingQuestions: [],
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    });
+
+    const applied = applyAgentSessionPresenceSnapshotToSession(
+      createSessionState({ pendingUserMessageStartedAt: 123 }),
+      snapshot,
+    );
+
+    expect(applied.status).toBe("running");
+  });
+
+  test("marks persisted-only pending outbound sends as recovering runtime", () => {
+    const snapshot = toPersistedOnlyAgentSessionPresenceSnapshot({
+      ref: sessionRefFixture,
+      reason: "No live repo runtime found.",
+    });
+
+    const applied = applyAgentSessionPresenceSnapshotToSession(
+      createSessionState({ pendingUserMessageStartedAt: 123 }),
+      snapshot,
+    );
+
+    expect(applied.status).toBe("running");
+    expect(applied.runtimeRecoveryState).toBe("recovering_runtime");
+    expect(applied.runtimeId).toBeNull();
+  });
+
   test("uses live pending input instead of persisted recovery hints", () => {
     const liveApproval = {
       requestId: "live-approval",

@@ -454,6 +454,7 @@ export const handleAssistantMessage = (
     });
     return {
       ...current,
+      pendingUserMessageStartedAt: undefined,
       draftAssistantText: "",
       draftAssistantMessageId: null,
       draftReasoningText: "",
@@ -754,6 +755,7 @@ export const handleSessionError = (
         Boolean(current.stopRequestedAt) && isStopAbortSessionErrorMessage(sessionErrorMessage);
       return {
         ...finalized,
+        pendingUserMessageStartedAt: undefined,
         status: appendUserStoppedNotice ? "stopped" : "error",
         stopRequestedAt: null,
         pendingApprovals: [],
@@ -815,6 +817,7 @@ export const handleSessionFinished = (
       const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
       return {
         ...finalized,
+        pendingUserMessageStartedAt: undefined,
         messages: settleTerminalMessages(finalized, event.timestamp, {
           ...(appendUserStoppedNotice
             ? {

@@ -11,6 +11,8 @@ const BUILD_SELECTION = {
   profileId: "build-agent",
 };
 
+const settleStartedAgentSession = () => undefined;
+
 describe("session-start-workflow", () => {
   test("aborts before session creation when the before-start action fails", async () => {
     const startAgentSession = mock(async () => "session-new");
@@ -40,6 +42,7 @@ describe("session-start-workflow", () => {
         selection: BUILD_SELECTION,
         task: null,
         startAgentSession,
+        settleStartedAgentSession,
         humanRequestChangesTask,
       }),
     ).rejects.toThrow("cannot request changes");
@@ -68,6 +71,7 @@ describe("session-start-workflow", () => {
       selection: BUILD_SELECTION,
       task: null,
       startAgentSession,
+      settleStartedAgentSession,
     });
 
     expect(result).toEqual({
@@ -114,6 +118,7 @@ describe("session-start-workflow", () => {
         },
       }),
       startAgentSession,
+      settleStartedAgentSession,
       sendAgentMessage,
     });
 
@@ -162,6 +167,7 @@ describe("session-start-workflow", () => {
         priority: 1,
       }),
       startAgentSession,
+      settleStartedAgentSession,
       sendAgentMessage,
       humanRequestChangesTask: mock(async () => undefined),
     });
@@ -177,5 +183,76 @@ describe("session-start-workflow", () => {
     expect(sentText).toContain("Requested changes from human review:");
     expect(sentText).toContain("Update the acceptance criteria and rerun the desktop tests.");
     expect(sentText).toContain("Use taskId TASK-3 for every odt_* tool call.");
+  });
+
+  test("holds fresh kickoff sessions in starting state until the kickoff message runs", async () => {
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => "session-build-new");
+
+    await startSessionWorkflow({
+      activeWorkspace: null,
+      queryClient: new QueryClient(),
+      intent: {
+        taskId: "TASK-4",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        startMode: "fresh",
+        postStartAction: "kickoff",
+      },
+      selection: BUILD_SELECTION,
+      task: createTaskCardFixture({
+        id: "TASK-4",
+        title: "Start implementation",
+        description: "desc",
+        status: "ready_for_dev",
+        priority: 1,
+      }),
+      startAgentSession,
+      settleStartedAgentSession,
+      sendAgentMessage,
+    });
+
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startMode: "fresh",
+        initialStatusRelease: "after_first_send_attempt",
+      }),
+    );
+  });
+
+  test("settles started sessions when kickoff message construction fails", async () => {
+    const settleStartedAgentSession = mock(() => undefined);
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => "session-build-new");
+
+    const result = await startSessionWorkflow({
+      activeWorkspace: null,
+      queryClient: new QueryClient(),
+      intent: {
+        taskId: "TASK-5",
+        role: "build",
+        launchActionId: "build_after_human_request_changes",
+        startMode: "fresh",
+        postStartAction: "kickoff",
+      },
+      selection: BUILD_SELECTION,
+      task: createTaskCardFixture({
+        id: "TASK-5",
+        title: "Start implementation",
+        description: "desc",
+        status: "human_review",
+        priority: 1,
+      }),
+      startAgentSession,
+      settleStartedAgentSession,
+      sendAgentMessage,
+    });
+
+    expect(result.externalSessionId).toBe("session-build-new");
+    expect(result.postStartActionError?.message).toBe(
+      "Feedback message is required before sending.",
+    );
+    expect(settleStartedAgentSession).toHaveBeenCalledWith("session-build-new");
+    expect(sendAgentMessage).not.toHaveBeenCalled();
   });
 });

@@ -131,6 +131,7 @@ const createExecuteArgs = (task: TaskCard) => ({
   startAgentSession: mock(async () => {
     throw new Error("startAgentSession should not be called in this test");
   }),
+  settleStartedAgentSession: mock(() => undefined),
   sendAgentMessage: mock(async () => {
     throw new Error("sendAgentMessage should not be called in this test");
   }),

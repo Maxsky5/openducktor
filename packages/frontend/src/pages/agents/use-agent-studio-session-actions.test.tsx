@@ -242,6 +242,7 @@ const createBaseArgs = (): HookArgs => {
     reusablePrompts: [],
     repoSettings: null,
     startAgentSession: async () => "session-new",
+    settleStartedAgentSession: () => {},
     sendAgentMessage: async () => {},
     bootstrapTaskSessions: async () => {},
     hydrateRequestedTaskSessionHistory: async () => {},
@@ -515,6 +516,7 @@ describe("useAgentStudioSessionActions", () => {
         profileId: "spec",
       },
       startMode: "fresh" as const,
+      initialStatusRelease: "after_listener_attach",
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-new", [
       { kind: "text", text: "  hello world  " },

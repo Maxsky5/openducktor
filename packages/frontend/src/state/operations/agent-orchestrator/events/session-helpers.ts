@@ -2,6 +2,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { isTodoToolName, settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { finalizeDraftAssistantMessage } from "../support/assistant-meta";
 import { sanitizeStreamingText } from "../support/core";
+import { shouldKeepPendingOutboundSendActiveOnIdle } from "../support/pending-outbound-send";
 import type {
   DraftChannel,
   DraftChannelValueMap,
@@ -131,6 +132,13 @@ export const settleDraftToIdle = (
 ): boolean => {
   let shouldClear = false;
   context.store.updateSession(context.store.externalSessionId, (current) => {
+    if (current.status === "starting") {
+      return current;
+    }
+    if (shouldKeepPendingOutboundSendActiveOnIdle(current)) {
+      return current;
+    }
+
     const finalized = finalizeDraftAssistantMessage(
       current,
       timestamp,

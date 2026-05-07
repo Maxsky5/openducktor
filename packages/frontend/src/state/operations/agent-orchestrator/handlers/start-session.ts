@@ -1,3 +1,4 @@
+import type { InitialSessionStatusReleasePolicy } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { requireSelectedModelRuntimeKindForStart } from "../support/session-runtime-metadata";
@@ -22,7 +23,10 @@ import {
   serializeSelectedModelKey,
 } from "./start-session-runtime";
 
-export type { StartAgentSessionInput, StartSessionDependencies } from "./start-session.types";
+export type {
+  StartAgentSessionInput,
+  StartSessionDependencies,
+} from "./start-session.types";
 
 const createOrReuseSession = async ({
   ctx,
@@ -44,18 +48,90 @@ const createOrReuseSession = async ({
   return executeFreshStart({ ctx, input, deps });
 };
 
+const toSessionCreationInput = ({
+  input,
+  targetWorkingDirectoryOverride,
+}: {
+  input: StartAgentSessionInput;
+  targetWorkingDirectoryOverride?: { value: string | null };
+}): StartSessionCreationInput => {
+  if (input.startMode === "reuse") {
+    return {
+      startMode: "reuse",
+      sourceExternalSessionId: input.sourceExternalSessionId,
+    };
+  }
+
+  if (input.startMode === "fork") {
+    return {
+      startMode: "fork",
+      selectedModel: input.selectedModel,
+      sourceExternalSessionId: input.sourceExternalSessionId,
+    };
+  }
+
+  const freshInput: StartSessionCreationInput = {
+    startMode: "fresh",
+    selectedModel: input.selectedModel,
+  };
+
+  if (targetWorkingDirectoryOverride) {
+    freshInput.targetWorkingDirectory = targetWorkingDirectoryOverride.value;
+    return freshInput;
+  }
+
+  if ("targetWorkingDirectory" in input) {
+    freshInput.targetWorkingDirectory = input.targetWorkingDirectory;
+  }
+
+  return freshInput;
+};
+
+const resolveFreshStartTarget = async ({
+  input,
+  ctx,
+  runtime,
+}: {
+  input: StartAgentSessionInput;
+  ctx: StartSessionContext;
+  runtime: RuntimeDependencies;
+}) => {
+  if (input.startMode !== "fresh") {
+    return null;
+  }
+
+  if (!("targetWorkingDirectory" in input)) {
+    return resolveFreshStartTargetWorkingDirectoryForStart({
+      ctx,
+      runtime,
+    });
+  }
+
+  return resolveFreshStartTargetWorkingDirectoryForStart({
+    ctx,
+    runtime,
+    targetWorkingDirectory: input.targetWorkingDirectory,
+  });
+};
+
 const attachSessionListenerAndGuard = async ({
   startedCtx,
   session,
   runtime,
+  initialStatusRelease,
 }: {
   startedCtx: StartedSessionContext;
   session: SessionDependencies;
   runtime: RuntimeDependencies;
+  initialStatusRelease: InitialSessionStatusReleasePolicy;
 }): Promise<void> => {
   session.attachSessionListener(startedCtx.repoPath, startedCtx.summary.externalSessionId);
 
   if (!startedCtx.isStaleRepoOperation()) {
+    if (initialStatusRelease === "after_first_send_attempt") {
+      return;
+    }
+
     session.setSessionsById((current) => {
       const currentSession = current[startedCtx.summary.externalSessionId];
       if (!currentSession || currentSession.status !== "starting") {
@@ -77,6 +153,20 @@ const attachSessionListenerAndGuard = async ({
     runtime,
     startedCtx,
   });
+};
+
+const getInitialStatusRelease = (
+  input: StartAgentSessionInput,
+): InitialSessionStatusReleasePolicy => {
+  if (input.startMode === "reuse") {
+    return "after_listener_attach";
+  }
+
+  if (!input.initialStatusRelease) {
+    return "after_listener_attach";
+  }
+
+  return input.initialStatusRelease;
 };
 
 export const createStartAgentSession = ({
@@ -118,20 +208,16 @@ export const createStartAgentSession = ({
 
     const normalizedSourceSessionId =
       input.startMode === "fresh" ? "" : input.sourceExternalSessionId.trim();
-    const freshStartTarget =
-      input.startMode === "fresh"
-        ? await resolveFreshStartTargetWorkingDirectoryForStart({
-            ctx: startCtx,
-            runtime,
-            ...(input.targetWorkingDirectory !== undefined
-              ? { targetWorkingDirectory: input.targetWorkingDirectory }
-              : {}),
-          })
-        : null;
+    const freshStartTarget = await resolveFreshStartTarget({
+      input,
+      ctx: startCtx,
+      runtime,
+    });
     const normalizedTargetWorkingDirectory =
       freshStartTarget?.normalizedTargetWorkingDirectory ?? "";
     const selectedModelKey =
       input.startMode === "reuse" ? "" : serializeSelectedModelKey(input.selectedModel);
+    const initialStatusRelease = getInitialStatusRelease(input);
     const inFlightKeyParts = [
       repoPath,
       taskId,
@@ -140,6 +226,7 @@ export const createStartAgentSession = ({
       normalizedSourceSessionId,
       normalizedTargetWorkingDirectory,
       selectedModelKey,
+      initialStatusRelease,
     ];
     const inFlightKey = inFlightKeyParts.join("::");
     const existingInFlight = session.inFlightStartsByWorkspaceTaskRef.current.get(inFlightKey);
@@ -148,18 +235,19 @@ export const createStartAgentSession = ({
     }
 
     const startPromise = Promise.resolve().then(async (): Promise<string> => {
+      let creationInput = toSessionCreationInput({ input });
+      const resolvedWorkingDirectory = freshStartTarget?.targetWorkingDirectory;
+      if (typeof resolvedWorkingDirectory === "string" || resolvedWorkingDirectory === null) {
+        creationInput = toSessionCreationInput({
+          input,
+          targetWorkingDirectoryOverride: {
+            value: resolvedWorkingDirectory,
+          },
+        });
+      }
       const startResult = await createOrReuseSession({
         ctx: startCtx,
-        input: {
-          ...(input.startMode === "fresh"
-            ? {
-                ...input,
-                ...(freshStartTarget?.targetWorkingDirectory !== undefined
-                  ? { targetWorkingDirectory: freshStartTarget.targetWorkingDirectory }
-                  : {}),
-              }
-            : input),
-        },
+        input: creationInput,
         deps: {
           session,
           runtime,
@@ -175,6 +263,7 @@ export const createStartAgentSession = ({
         startedCtx: startResult.ctx,
         session,
         runtime,
+        initialStatusRelease,
       });
 
       return startResult.ctx.summary.externalSessionId;

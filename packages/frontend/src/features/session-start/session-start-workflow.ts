@@ -4,6 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
+import type { InitialSessionStatusReleasePolicy } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { executeSessionStart } from "./session-start-execution";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
@@ -43,10 +44,96 @@ type StartSessionWorkflowArgs = {
   task: TaskCard | null;
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
+  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage?: AgentStateContextValue["sendAgentMessage"];
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
   postStartExecution?: "await" | "detached";
   onDetachedPostStartError?: ((error: Error) => void) | undefined;
+};
+
+const requirePostStartMessage = async ({
+  activeWorkspace,
+  queryClient,
+  intent,
+  task,
+}: Pick<StartSessionWorkflowArgs, "activeWorkspace" | "queryClient" | "task"> & {
+  intent: SessionStartWorkflowIntent;
+}): Promise<string> => {
+  return buildPostStartMessage({
+    activeWorkspace,
+    queryClient,
+    intent,
+    task,
+  });
+};
+
+const resolveInitialStatusRelease = (
+  postStartAction: SessionStartPostAction,
+): InitialSessionStatusReleasePolicy => {
+  if (postStartAction === "none") {
+    return "after_listener_attach";
+  }
+
+  return "after_first_send_attempt";
+};
+
+const requirePostStartMessageSender = (
+  sendAgentMessage: StartSessionWorkflowArgs["sendAgentMessage"],
+): NonNullable<StartSessionWorkflowArgs["sendAgentMessage"]> => {
+  if (!sendAgentMessage) {
+    throw new Error("Post-start messaging is unavailable.");
+  }
+
+  return sendAgentMessage;
+};
+
+const startSessionFromIntent = ({
+  intent,
+  selection,
+  initialStatusRelease,
+  startAgentSession,
+}: Pick<StartSessionWorkflowArgs, "intent" | "selection" | "startAgentSession"> & {
+  initialStatusRelease: InitialSessionStatusReleasePolicy;
+}): Promise<string> => {
+  if (intent.startMode === "reuse") {
+    return executeSessionStart({
+      taskId: intent.taskId,
+      role: intent.role,
+      startMode: "reuse",
+      sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "reuse"),
+      startAgentSession,
+    });
+  }
+
+  if (intent.startMode === "fork") {
+    return executeSessionStart({
+      taskId: intent.taskId,
+      role: intent.role,
+      startMode: "fork",
+      selectedModel: requireSelectedModel(selection, "fork"),
+      sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "fork"),
+      initialStatusRelease,
+      startAgentSession,
+    });
+  }
+
+  const freshRequest = {
+    taskId: intent.taskId,
+    role: intent.role,
+    startMode: "fresh" as const,
+    selectedModel: requireSelectedModel(selection, "fresh"),
+    initialStatusRelease,
+    startAgentSession,
+  };
+
+  if (intent.targetWorkingDirectory !== undefined) {
+    return executeSessionStart({
+      ...freshRequest,
+      targetWorkingDirectory: intent.targetWorkingDirectory,
+    });
+  }
+
+  return executeSessionStart(freshRequest);
 };
 
 const requireSelectedModel = (
@@ -184,6 +271,7 @@ export const startSessionWorkflow = async ({
   task,
   persistTaskTargetBranch,
   startAgentSession,
+  settleStartedAgentSession,
   sendAgentMessage,
   humanRequestChangesTask,
   postStartExecution = "await",
@@ -195,34 +283,16 @@ export const startSessionWorkflow = async ({
     ...(humanRequestChangesTask ? { humanRequestChangesTask } : {}),
   });
 
-  const externalSessionId =
-    intent.startMode === "reuse"
-      ? await executeSessionStart({
-          taskId: intent.taskId,
-          role: intent.role,
-          startMode: "reuse",
-          sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "reuse"),
-          startAgentSession,
-        })
-      : intent.startMode === "fork"
-        ? await executeSessionStart({
-            taskId: intent.taskId,
-            role: intent.role,
-            startMode: "fork",
-            selectedModel: requireSelectedModel(selection, "fork"),
-            sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "fork"),
-            startAgentSession,
-          })
-        : await executeSessionStart({
-            taskId: intent.taskId,
-            role: intent.role,
-            startMode: "fresh",
-            selectedModel: requireSelectedModel(selection, "fresh"),
-            ...(intent.targetWorkingDirectory !== undefined
-              ? { targetWorkingDirectory: intent.targetWorkingDirectory }
-              : {}),
-            startAgentSession,
-          });
+  const initialStatusRelease = resolveInitialStatusRelease(intent.postStartAction);
+  const postStartMessageSender =
+    intent.postStartAction === "none" ? null : requirePostStartMessageSender(sendAgentMessage);
+
+  const externalSessionId = await startSessionFromIntent({
+    intent,
+    selection,
+    initialStatusRelease,
+    startAgentSession,
+  });
 
   if (intent.postStartAction === "none") {
     return {
@@ -230,21 +300,31 @@ export const startSessionWorkflow = async ({
       postStartActionError: null,
     };
   }
-  if (!sendAgentMessage) {
+
+  if (!postStartMessageSender) {
     throw new Error("Post-start messaging is unavailable.");
   }
 
+  const confirmedPostStartMessageSender = postStartMessageSender;
   const runPostStartAction = async (): Promise<Error | null> => {
+    let postStartMessage: string;
     try {
-      await sendAgentMessage(externalSessionId, [
+      postStartMessage = await requirePostStartMessage({
+        activeWorkspace,
+        queryClient,
+        intent,
+        task,
+      });
+    } catch (error) {
+      settleStartedAgentSession(externalSessionId);
+      return toError(error);
+    }
+
+    try {
+      await confirmedPostStartMessageSender(externalSessionId, [
         {
           kind: "text",
-          text: await buildPostStartMessage({
-            activeWorkspace,
-            queryClient,
-            intent,
-            task,
-          }),
+          text: postStartMessage,
         },
       ]);
       return null;

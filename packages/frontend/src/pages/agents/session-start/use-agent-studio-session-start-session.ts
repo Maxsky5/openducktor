@@ -32,6 +32,7 @@ type UseAgentStudioSessionStartSessionArgs = {
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
+  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
@@ -53,6 +54,7 @@ export function useAgentStudioSessionStartSession({
   agentStudioReady,
   isActiveTaskHydrated,
   startAgentSession,
+  settleStartedAgentSession,
   sendAgentMessage,
   setTaskTargetBranch,
   setStartingActivityCountByContext,
@@ -97,6 +99,7 @@ export function useAgentStudioSessionStartSession({
             task: selectedTask,
             ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
             startAgentSession,
+            settleStartedAgentSession,
             sendAgentMessage,
             onPostStartActionError,
           });
@@ -133,6 +136,7 @@ export function useAgentStudioSessionStartSession({
       queryClient,
       setStartingActivityCountByContext,
       sendAgentMessage,
+      settleStartedAgentSession,
       startAgentSession,
       selectedTask,
       updateQuery,

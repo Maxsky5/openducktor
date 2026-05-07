@@ -94,6 +94,50 @@ const markTurnUserAnchorIfMissing = (
   }
 };
 
+const settleStartingSession = (
+  externalSessionId: string,
+  status: Extract<AgentSessionState["status"], "idle" | "error">,
+  sessionsRef: { current: Record<string, AgentSessionState> },
+  updateSession: SessionActionsDependencies["updateSession"],
+): void => {
+  if (sessionsRef.current[externalSessionId]?.status !== "starting") {
+    return;
+  }
+
+  updateSession(
+    externalSessionId,
+    (current) => ({
+      ...current,
+      status,
+    }),
+    { persist: false },
+  );
+};
+
+const ensureSessionReadyForSend = async ({
+  externalSessionId,
+  ensureSessionReady,
+  sessionsRef,
+  updateSession,
+}: {
+  externalSessionId: string;
+  ensureSessionReady: (
+    externalSessionId: string,
+    options?: { preserveStartingStatusForIdlePresence?: boolean },
+  ) => Promise<void>;
+  sessionsRef: { current: Record<string, AgentSessionState> };
+  updateSession: SessionActionsDependencies["updateSession"];
+}): Promise<void> => {
+  try {
+    await ensureSessionReady(externalSessionId, {
+      preserveStartingStatusForIdlePresence: true,
+    });
+  } catch (error) {
+    settleStartingSession(externalSessionId, "error", sessionsRef, updateSession);
+    throw error;
+  }
+};
+
 const applyQuestionAnswerToSession = (
   session: AgentSessionState,
   requestId: string,
@@ -188,14 +232,21 @@ export const createAgentSessionActions = ({
         throw new Error(unavailableRoleErrorMessage(task, currentSession.role));
       }
       if (isAgentSessionWaitingInput(currentSession)) {
+        settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
         return;
       }
     }
 
-    await ensureSessionReady(externalSessionId);
+    await ensureSessionReadyForSend({
+      externalSessionId,
+      ensureSessionReady,
+      sessionsRef,
+      updateSession,
+    });
 
     const readySession = sessionsRef.current[externalSessionId];
     if (!readySession || isAgentSessionWaitingInput(readySession)) {
+      settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
       return;
     }
 
@@ -212,6 +263,7 @@ export const createAgentSessionActions = ({
         (current) => ({
           ...current,
           status: "running",
+          pendingUserMessageStartedAt: turnUserAnchorAtBySessionRef.current[externalSessionId],
           draftAssistantText: "",
           draftAssistantMessageId: null,
           draftReasoningText: "",
@@ -233,6 +285,7 @@ export const createAgentSessionActions = ({
         (current) => ({
           ...current,
           status: isBusyQueuedSend ? current.status : "error",
+          pendingUserMessageStartedAt: undefined,
           ...(isBusyQueuedSend
             ? {}
             : {
@@ -520,6 +573,9 @@ export const createAgentSessionActions = ({
     ensureSessionReady,
     sendAgentMessage,
     startAgentSession,
+    settleStartedAgentSession: (externalSessionId: string): void => {
+      settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
+    },
     stopAgentSession,
     updateAgentSessionModel,
     replyAgentApproval,

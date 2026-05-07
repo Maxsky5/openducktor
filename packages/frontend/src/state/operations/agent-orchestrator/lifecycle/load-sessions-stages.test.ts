@@ -1370,6 +1370,78 @@ describe("load-sessions-stages", () => {
     expect(updateCalls).toBe(0);
   });
 
+  test("keeps starting sessions active when reconcile sees idle runtime presence", async () => {
+    const stateHarness = createStateHarness({
+      "external-1": createSession({ status: "starting" }),
+    });
+
+    await hydrateSessionRecordsStage({
+      loadMode: "reconcile_live",
+      repoPath: "/tmp/repo",
+      adapter: createLifecycleAdapter(),
+      setSessionsById: stateHarness.setSessionsById,
+      updateSession: stateHarness.updateSession,
+      isStaleRepoOperation: () => false,
+      recordsToHydrate: [createRecord()],
+      historyHydrationSessionIds: new Set(),
+      runtimePlanner: {
+        repoPath: "/tmp/repo",
+        resolveHydrationRuntime: async () => ({
+          ok: true,
+          runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
+          workingDirectory: "/tmp/repo/worktree",
+        }),
+        readSessionPresence: async () =>
+          createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
+            status: { type: "idle" },
+          }),
+      },
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(stateHarness.getState()["external-1"]?.status).toBe("starting");
+  });
+
+  test("keeps pending outbound sends active when reconcile sees idle runtime presence", async () => {
+    const stateHarness = createStateHarness({
+      "external-1": createSession({ status: "running", pendingUserMessageStartedAt: 123 }),
+    });
+
+    await hydrateSessionRecordsStage({
+      loadMode: "reconcile_live",
+      repoPath: "/tmp/repo",
+      adapter: createLifecycleAdapter(),
+      setSessionsById: stateHarness.setSessionsById,
+      updateSession: stateHarness.updateSession,
+      isStaleRepoOperation: () => false,
+      recordsToHydrate: [createRecord()],
+      historyHydrationSessionIds: new Set(),
+      runtimePlanner: {
+        repoPath: "/tmp/repo",
+        resolveHydrationRuntime: async () => ({
+          ok: true,
+          runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
+          workingDirectory: "/tmp/repo/worktree",
+        }),
+        readSessionPresence: async () =>
+          createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
+            status: { type: "idle" },
+          }),
+      },
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(stateHarness.getState()["external-1"]?.status).toBe("running");
+  });
+
   test("loads requested-history hydration through the adapter for stdio OpenCode runtimes", async () => {
     const stateHarness = createStateHarness({ "external-1": createSession() });
     let historyLoads = 0;

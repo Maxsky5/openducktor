@@ -704,6 +704,7 @@ type HydrateSessionRecordInput = {
 };
 
 type HydratedRecordHistoryState = {
+  loadMode: AgentSessionLoadMode;
   promptOverrides: RepoPromptOverrides;
   history: Awaited<ReturnType<SessionLifecycleAdapter["loadSessionHistory"]>>;
   runtimeResolution: SuccessfulHydrationRuntime;
@@ -712,6 +713,9 @@ type HydratedRecordHistoryState = {
   hydratedSubagentPendingInputByExternalSessionId: HydratedSubagentPendingInputOverlay;
   selectedModel: ReturnType<typeof normalizePersistedSelection>;
 };
+
+const shouldPreserveStartingStatusFromIdlePresence = (loadMode: AgentSessionLoadMode): boolean =>
+  loadMode === "reconcile_live" || loadMode === "recover_runtime_attachment";
 
 const markHistoryHydrationFailed = (
   externalSessionId: string,
@@ -816,12 +820,15 @@ const hydrateRuntimeOnlyRecord = async ({
     return;
   }
   if (sessionPresence) {
+    const preserveStartingStatusForIdlePresence =
+      shouldPreserveStartingStatusFromIdlePresence(loadMode);
     updateSession(
       record.externalSessionId,
       (current) =>
         applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
           promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
           missingSessionRuntimeId: null,
+          preserveStartingStatusForIdlePresence,
         }),
       { persist: false },
     );
@@ -851,18 +858,22 @@ const applyHydratedRecordHistory = (
     hydratedMessages,
     hydratedSubagentPendingInputByExternalSessionId,
     selectedModel,
+    loadMode,
   }: HydratedRecordHistoryState,
 ): AgentSessionState => {
+  const preserveStartingStatusForIdlePresence =
+    shouldPreserveStartingStatusFromIdlePresence(loadMode);
   const sessionWithLivePresence = sessionPresence
-    ? applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, { promptOverrides })
+    ? applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
+        promptOverrides,
+        preserveStartingStatusForIdlePresence,
+      })
     : current;
-  const liveSessionStatus =
-    sessionPresence?.presence === "runtime" ? sessionPresence.agentSessionStatus : null;
   const liveSessionTitle =
     sessionPresence?.presence === "runtime" ? sessionPresence.title : undefined;
   const nextSession: AgentSessionState = {
     ...sessionWithLivePresence,
-    status: liveSessionStatus ?? sessionWithLivePresence.status,
+    status: sessionWithLivePresence.status,
     runtimeKind: runtimeResolution.runtimeRef.runtimeKind,
     workingDirectory: runtimeResolution.workingDirectory,
     promptOverrides,
@@ -897,6 +908,7 @@ const applyHydratedRecordHistory = (
 };
 
 const hydrateRecordHistory = async ({
+  loadMode,
   repoPath,
   adapter,
   updateSession,
@@ -908,6 +920,7 @@ const hydrateRecordHistory = async ({
   getRepoPromptOverrides,
   livePresenceMode,
 }: {
+  loadMode: AgentSessionLoadMode;
   repoPath: string;
   adapter: SessionLifecycleAdapter;
   updateSession: UpdateSession;
@@ -969,6 +982,7 @@ const hydrateRecordHistory = async ({
         hydratedMessages,
         hydratedSubagentPendingInputByExternalSessionId,
         selectedModel,
+        loadMode,
       }),
     { persist: false },
   );
@@ -1024,6 +1038,7 @@ const hydrateSessionRecord = async ({
   }
 
   await hydrateRecordHistory({
+    loadMode,
     repoPath,
     adapter,
     updateSession,

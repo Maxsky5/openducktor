@@ -27,6 +27,7 @@ import type { StartAgentSessionInput } from "./start-session";
 
 type SessionActions = {
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
+  settleStartedAgentSession: (externalSessionId: string) => void;
   sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
   stopAgentSession: (externalSessionId: string) => Promise<void>;
   updateAgentSessionModel: (
@@ -156,6 +157,7 @@ export const createOrchestratorPublicOperations = ({
   removeAgentSessions: (input) => removeAgentSessions(input),
   startAgentSession: (input: StartAgentSessionInput): Promise<string> =>
     sessionActions.startAgentSession(input),
+  settleStartedAgentSession: sessionActions.settleStartedAgentSession,
   sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]): Promise<void> =>
     withErrorToast("Failed to send message", () =>
       sessionActions.sendAgentMessage(externalSessionId, parts),

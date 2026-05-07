@@ -17,6 +17,8 @@ const BUILD_SELECTION = {
   profileId: "build-agent",
 };
 
+const settleStartedAgentSession = () => undefined;
+
 describe("session-start-orchestration", () => {
   test("prefers the active reusable session and task defaults when building a modal request", () => {
     const latestSession = createAgentSessionFixture({
@@ -204,6 +206,7 @@ describe("session-start-orchestration", () => {
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
+      settleStartedAgentSession,
     });
 
     expect(result).toEqual({
@@ -240,6 +243,7 @@ describe("session-start-orchestration", () => {
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
+      settleStartedAgentSession,
     });
 
     expect(startAgentSession).toHaveBeenCalledWith(
@@ -273,6 +277,7 @@ describe("session-start-orchestration", () => {
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
+      settleStartedAgentSession,
       sendAgentMessage,
       onPostStartActionError,
     });
@@ -281,8 +286,10 @@ describe("session-start-orchestration", () => {
       externalSessionId: "session-new",
       postStartActionError: null,
     });
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
     await Promise.resolve();
+    await Promise.resolve();
+    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(onPostStartActionError).toHaveBeenCalledWith(
       "kickoff",
       expect.objectContaining({ message: "kickoff failed" }),
