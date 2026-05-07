@@ -1,6 +1,6 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
 
-export const pickInitialWorkspaceId = (
+export const chooseInitialSettingsWorkspaceId = (
   snapshot: SettingsSnapshot,
   workspaceRepoPath: string | null,
 ): string | null => {

@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { PromptRoleTabId } from "./settings-modal-constants";
 import { PROMPT_ROLE_TABS } from "./settings-modal-constants";
-import type { PromptInheritedPreview } from "./settings-modal-normalization";
+import type { PromptInheritedPreview } from "./settings-prompt-inheritance";
 
 type PromptRoleTabsProps = {
   value: PromptRoleTabId;

@@ -1,5 +1,5 @@
 import type { GlobalGitConfig } from "@openducktor/contracts";
 
-export const normalizeGlobalGitConfigForSave = (git: GlobalGitConfig): GlobalGitConfig => ({
+export const prepareGlobalGitSettingsForSave = (git: GlobalGitConfig): GlobalGitConfig => ({
   defaultMergeMethod: git.defaultMergeMethod,
 });

@@ -3,14 +3,14 @@ import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { normalizeRepoScripts } from "@/components/features/settings/settings-model";
 import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
-import { normalizePromptOverridesForSave } from "./prompt-overrides";
+import { preparePromptOverridesForSave } from "./prompt-overrides";
 
-const trimNonEmpty = (value: string): string | null => {
+const trimmedNonEmpty = (value: string): string | null => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 };
 
-export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
+export const prepareRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
   const spec = normalizeRepoAgentDefaultForSave("spec", repo.agentDefaults.spec);
   const planner = normalizeRepoAgentDefaultForSave("planner", repo.agentDefaults.planner);
   const build = normalizeRepoAgentDefaultForSave("build", repo.agentDefaults.build);
@@ -25,14 +25,14 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
     workspaceName: repo.workspaceName.trim(),
     repoPath: repo.repoPath.trim(),
     defaultRuntimeKind: repo.defaultRuntimeKind,
-    worktreeBasePath: trimNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,
-    branchPrefix: trimNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
+    worktreeBasePath: trimmedNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,
+    branchPrefix: trimmedNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),
     git: repo.git,
     hooks,
     devServers,
     worktreeCopyPaths: repo.worktreeCopyPaths.map((entry) => entry.trim()).filter(Boolean),
-    promptOverrides: normalizePromptOverridesForSave(repo.promptOverrides),
+    promptOverrides: preparePromptOverridesForSave(repo.promptOverrides),
     agentDefaults: {
       ...(spec ? { spec } : {}),
       ...(planner ? { planner } : {}),

@@ -5,7 +5,7 @@ import type {
 } from "@openducktor/contracts";
 import { AUTOPILOT_EVENT_IDS, createDefaultAutopilotSettings } from "@openducktor/contracts";
 
-export const normalizeAutopilotSettingsForSave = (
+export const prepareAutopilotSettingsForSave = (
   autopilot: AutopilotSettings,
 ): AutopilotSettings => {
   const defaultSettings = createDefaultAutopilotSettings();

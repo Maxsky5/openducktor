@@ -1,5 +1,5 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import { normalizeGlobalGitConfigForSave } from "./settings-modal-normalization";
+import { prepareGlobalGitSettingsForSave } from "./settings-save/global-git-settings";
 import type { DirtySections } from "./use-settings-modal-dirty-state";
 
 export const hasAnyDirtySections = (dirtySections: DirtySections): boolean =>
@@ -22,13 +22,13 @@ export const isGlobalGitOnlySave = (dirtySections: DirtySections): boolean =>
   !dirtySections.globalPromptOverrides &&
   !dirtySections.repoSettings;
 
-export const hasSameNormalizedGlobalGitConfig = (
+export const hasSameSaveReadyGlobalGitConfig = (
   loadedSnapshot: SettingsSnapshot | null,
-  normalizedGit: SettingsSnapshot["git"],
+  saveReadyGit: SettingsSnapshot["git"],
 ): boolean =>
   loadedSnapshot !== null &&
-  normalizeGlobalGitConfigForSave(loadedSnapshot.git).defaultMergeMethod ===
-    normalizedGit.defaultMergeMethod;
+  prepareGlobalGitSettingsForSave(loadedSnapshot.git).defaultMergeMethod ===
+    saveReadyGit.defaultMergeMethod;
 
 export const buildPromptValidationSaveError = (totalErrorCount: number): string => {
   const suffix = totalErrorCount > 1 ? "s" : "";

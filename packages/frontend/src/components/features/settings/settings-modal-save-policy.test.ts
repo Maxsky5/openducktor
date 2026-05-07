@@ -5,7 +5,7 @@ import {
   buildRepoScriptValidationSaveError,
   buildReusablePromptValidationSaveError,
   hasAnyDirtySections,
-  hasSameNormalizedGlobalGitConfig,
+  hasSameSaveReadyGlobalGitConfig,
   isGlobalGitOnlySave,
 } from "./settings-modal-save-policy";
 import { EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
@@ -53,19 +53,19 @@ describe("settings-modal-save-policy", () => {
     ).toBe(false);
   });
 
-  test("compares normalized global git configs by persisted fields", () => {
+  test("compares save-ready global git configs by persisted fields", () => {
     expect(
-      hasSameNormalizedGlobalGitConfig(createSnapshot(), {
+      hasSameSaveReadyGlobalGitConfig(createSnapshot(), {
         defaultMergeMethod: "merge_commit",
       }),
     ).toBe(true);
     expect(
-      hasSameNormalizedGlobalGitConfig(createSnapshot(), {
+      hasSameSaveReadyGlobalGitConfig(createSnapshot(), {
         defaultMergeMethod: "squash",
       }),
     ).toBe(false);
     expect(
-      hasSameNormalizedGlobalGitConfig(null, {
+      hasSameSaveReadyGlobalGitConfig(null, {
         defaultMergeMethod: "merge_commit",
       }),
     ).toBe(false);
