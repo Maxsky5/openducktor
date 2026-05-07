@@ -203,6 +203,45 @@ describe("useAgentChatTranscriptRows", () => {
     await harness.unmount();
   });
 
+  test("reuses cached rows when switching back to an equivalent SessionMessagesState", async () => {
+    const messages = Array.from({ length: 160 }, (_, index) =>
+      buildMessage(index % 2 === 0 ? "user" : "assistant", `Message ${index + 1}`, {
+        id: `message-${index + 1}`,
+      }),
+    );
+    const firstSession = buildSession({
+      externalSessionId: "session-cache-reuse",
+      messages: createSessionMessagesState("session-cache-reuse", messages, 1),
+    });
+    const secondSession = createLargeSession("session-cache-reuse-other");
+    const harness = await mountHarness({
+      session: firstSession,
+      showThinkingMessages: true,
+      shouldPauseDerivation: false,
+    });
+    await flushTranscriptDerivation();
+    const cachedRows = harness.getLatest().transcriptState.rows;
+
+    await harness.update({
+      session: secondSession,
+      showThinkingMessages: true,
+      shouldPauseDerivation: false,
+    });
+    await flushTranscriptDerivation();
+    await harness.update({
+      session: buildSession({
+        ...firstSession,
+        messages: createSessionMessagesState("session-cache-reuse", messages, 1),
+      }),
+      showThinkingMessages: true,
+      shouldPauseDerivation: false,
+    });
+
+    expect(harness.getLatest().transcriptState.rows).toBe(cachedRows);
+    expect(harness.getLatest().hasCurrentRowsForActiveSession).toBe(true);
+    await harness.unmount();
+  });
+
   test("detects same-array same-count raw message mutation on session object replacement", async () => {
     const messages = [buildMessage("assistant", "Before", { id: "assistant-1" })];
     const session = buildSession({
@@ -226,6 +265,7 @@ describe("useAgentChatTranscriptRows", () => {
       showThinkingMessages: true,
       shouldPauseDerivation: false,
     });
+    await flushTranscriptDerivation();
 
     const messageRow = harness
       .getLatest()

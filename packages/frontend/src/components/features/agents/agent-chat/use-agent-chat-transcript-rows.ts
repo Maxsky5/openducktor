@@ -23,7 +23,6 @@ type TranscriptRowsRevision = {
   messagesExternalSessionId: string | null;
   version: number | null;
   count: number | null;
-  rawMessages: AgentSessionState["messages"] | null;
   rawSessionToken: number | null;
 };
 
@@ -47,7 +46,6 @@ const EMPTY_TRANSCRIPT_ROWS_REVISION: TranscriptRowsRevision = Object.freeze({
   messagesExternalSessionId: null,
   version: null,
   count: null,
-  rawMessages: null,
   rawSessionToken: null,
 });
 
@@ -88,7 +86,6 @@ const buildTranscriptRowsRevision = (
       messagesExternalSessionId: session.messages.externalSessionId,
       version: session.messages.version,
       count: session.messages.count,
-      rawMessages: null,
       rawSessionToken: null,
     };
   }
@@ -117,8 +114,34 @@ const buildTranscriptRowsRevision = (
     messagesExternalSessionId: null,
     version: null,
     count: getSessionMessageCount(session),
-    rawMessages: session.messages,
     rawSessionToken,
+  };
+};
+
+const toTranscriptRowsState = ({
+  session,
+  revision,
+  rowsState,
+}: {
+  session: AgentSessionState;
+  revision: TranscriptRowsRevision;
+  rowsState: Pick<
+    TranscriptRowsState,
+    | "rows"
+    | "turns"
+    | "hasAttachmentMessages"
+    | "lastUserMessageId"
+    | "activeStreamingAssistantMessageId"
+  >;
+}): TranscriptRowsState => {
+  return {
+    revision,
+    rows: rowsState.rows,
+    turns: rowsState.turns,
+    hasAttachmentMessages: rowsState.hasAttachmentMessages,
+    lastUserMessageId: rowsState.lastUserMessageId,
+    activeStreamingAssistantMessageId:
+      session.status === "running" ? rowsState.activeStreamingAssistantMessageId : null,
   };
 };
 
@@ -141,15 +164,11 @@ const buildImmediateTranscriptRowsState = ({
     cache,
   });
 
-  return {
+  return toTranscriptRowsState({
+    session,
     revision: buildTranscriptRowsRevision(session, showThinkingMessages),
-    rows: rowsState.rows,
-    turns: rowsState.turns,
-    hasAttachmentMessages: rowsState.hasAttachmentMessages,
-    lastUserMessageId: rowsState.lastUserMessageId,
-    activeStreamingAssistantMessageId:
-      session.status === "running" ? rowsState.activeStreamingAssistantMessageId : null,
-  };
+    rowsState,
+  });
 };
 
 const areTranscriptRowsRevisionsEqual = (
@@ -164,7 +183,6 @@ const areTranscriptRowsRevisionsEqual = (
     left.messagesExternalSessionId === right.messagesExternalSessionId &&
     left.version === right.version &&
     left.count === right.count &&
-    left.rawMessages === right.rawMessages &&
     left.rawSessionToken === right.rawSessionToken
   );
 };
@@ -310,29 +328,10 @@ export const useAgentChatTranscriptRows = ({
       cache: rowsCacheRef.current,
     });
     if (reusableRowsState) {
-      const nextTranscriptState: TranscriptRowsState = {
-        revision: currentRevision,
-        ...reusableRowsState,
-      };
-      startTransition(() => {
-        if (derivationTokenRef.current === derivationToken) {
-          setResolvedTranscriptState(nextTranscriptState);
-        }
-      });
-      return;
-    }
-
-    const messageCount = getSessionMessageCount(currentSession);
-
-    if (
-      resolvedTranscriptStateRef.current.revision.externalSessionId ===
-        currentSession.externalSessionId &&
-      messageCount <= TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT
-    ) {
-      const nextTranscriptState = buildImmediateTranscriptRowsState({
+      const nextTranscriptState = toTranscriptRowsState({
         session: currentSession,
-        showThinkingMessages,
-        cache: rowsCacheRef.current,
+        revision: currentRevision,
+        rowsState: reusableRowsState,
       });
       startTransition(() => {
         if (derivationTokenRef.current === derivationToken) {
@@ -340,39 +339,6 @@ export const useAgentChatTranscriptRows = ({
         }
       });
       return;
-    }
-
-    if (messageCount <= TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT) {
-      let cancelled = false;
-      const publishRows = (): void => {
-        if (cancelled || derivationTokenRef.current !== derivationToken) {
-          return;
-        }
-        const nextTranscriptState = buildImmediateTranscriptRowsState({
-          session: currentSession,
-          showThinkingMessages,
-          cache: rowsCacheRef.current,
-        });
-        startTransition(() => {
-          if (!cancelled && derivationTokenRef.current === derivationToken) {
-            setResolvedTranscriptState(nextTranscriptState);
-          }
-        });
-      };
-
-      if (typeof globalThis.requestAnimationFrame === "function") {
-        const frameId = globalThis.requestAnimationFrame(publishRows);
-        return () => {
-          cancelled = true;
-          globalThis.cancelAnimationFrame(frameId);
-        };
-      }
-
-      const timeoutId = globalThis.setTimeout(publishRows, 0);
-      return () => {
-        cancelled = true;
-        globalThis.clearTimeout(timeoutId);
-      };
     }
 
     const builder = createAgentChatWindowRowsStateBuilder(currentSession, { showThinkingMessages });
@@ -410,17 +376,11 @@ export const useAgentChatTranscriptRows = ({
           rowsState,
           cache: rowsCacheRef.current,
         });
-        const nextTranscriptState: TranscriptRowsState = {
+        const nextTranscriptState = toTranscriptRowsState({
+          session: currentSession,
           revision: currentRevision,
-          rows: rowsState.rows,
-          turns: rowsState.turns,
-          hasAttachmentMessages: rowsState.hasAttachmentMessages,
-          lastUserMessageId: rowsState.lastUserMessageId,
-          activeStreamingAssistantMessageId:
-            currentSession.status === "running"
-              ? rowsState.activeStreamingAssistantMessageId
-              : null,
-        };
+          rowsState,
+        });
         startTransition(() => {
           if (derivationTokenRef.current === derivationToken) {
             setResolvedTranscriptState(nextTranscriptState);
