@@ -1,12 +1,16 @@
 import { describe, expect, test } from "bun:test";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { buildMessage, buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
 import {
   buildAgentChatWindowRows,
+  buildAgentChatWindowRowsState,
   buildAgentChatWindowTurns,
   CHAT_TURN_WINDOW_BATCH,
   CHAT_TURN_WINDOW_INIT,
+  createAgentChatWindowRowsStateBuilder,
   getAgentChatWindowRowsKey,
+  peekReusableAgentChatWindowRowsState,
   resolveAgentChatWindowRowsState,
 } from "./agent-chat-thread-windowing";
 
@@ -136,6 +140,107 @@ describe("agent-chat-thread windowing helpers", () => {
 
     expect(revisitedState.rows).toBe(firstState.rows);
     expect(revisitedState.turns).toBe(firstState.turns);
+  });
+
+  test("peekReusableAgentChatWindowRowsState reuses equivalent SessionMessagesState without scanning raw messages", () => {
+    const messages = [
+      buildMessage("assistant", "Prelude", { id: "assistant-0" }),
+      buildMessage("user", "Question", { id: "user-1" }),
+      buildMessage("assistant", "Answer", { id: "assistant-1" }),
+    ];
+    const initialSession = buildSession({
+      externalSessionId: "session-state-cache",
+      messages: createSessionMessagesState("session-state-cache", messages, 3),
+    });
+    const equivalentSession = buildSession({
+      ...initialSession,
+      status: "idle",
+      messages: createSessionMessagesState("session-state-cache", messages, 3),
+    });
+    const cache = new Map();
+
+    const initialRowsState = resolveAgentChatWindowRowsState({
+      session: initialSession,
+      showThinkingMessages: true,
+      cache,
+    });
+    const reusedRowsState = peekReusableAgentChatWindowRowsState({
+      session: equivalentSession,
+      showThinkingMessages: true,
+      cache,
+    });
+
+    expect(reusedRowsState?.rows).toBe(initialRowsState.rows);
+    expect(reusedRowsState?.turns).toBe(initialRowsState.turns);
+  });
+
+  test("peekReusableAgentChatWindowRowsState does not trust raw arrays for cheap reuse", () => {
+    const session = buildSession({
+      externalSessionId: "session-raw-cache",
+      messages: [buildMessage("assistant", "Message", { id: "assistant-1" })],
+    });
+    const cache = new Map();
+
+    resolveAgentChatWindowRowsState({
+      session,
+      showThinkingMessages: true,
+      cache,
+    });
+
+    expect(
+      peekReusableAgentChatWindowRowsState({
+        session,
+        showThinkingMessages: true,
+        cache,
+      }),
+    ).toBeNull();
+  });
+
+  test("createAgentChatWindowRowsStateBuilder matches synchronous row state after chunking", () => {
+    const session = buildSession({
+      externalSessionId: "session-builder-equivalence",
+      status: "running",
+      messages: [
+        buildMessage("assistant", "Prelude", { id: "assistant-0" }),
+        buildMessage("user", "Question", {
+          id: "user-1",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "attachment",
+                attachment: {
+                  id: "attachment-1",
+                  path: "/tmp/spec.md",
+                  name: "spec.md",
+                  kind: "pdf",
+                },
+              },
+            ],
+          },
+        }),
+        buildMessage("thinking", "Reasoning", { id: "thinking-1" }),
+        buildMessage("assistant", "Working", {
+          id: "assistant-live",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: false,
+            profileId: "Hephaestus (Deep Agent)",
+          },
+        }),
+      ],
+    });
+    const expectedState = buildAgentChatWindowRowsState(session, { showThinkingMessages: false });
+    const builder = createAgentChatWindowRowsStateBuilder(session, { showThinkingMessages: false });
+
+    expect(builder.step(1)).toBe(1);
+    expect(builder.isDone()).toBe(false);
+    expect(builder.step(2)).toBe(2);
+    expect(builder.isDone()).toBe(false);
+    expect(builder.complete()).toEqual(expectedState);
+    expect(builder.isDone()).toBe(true);
   });
 
   test("resolveAgentChatWindowRowsState invalidates cached rows when a raw message array is mutated in place", () => {

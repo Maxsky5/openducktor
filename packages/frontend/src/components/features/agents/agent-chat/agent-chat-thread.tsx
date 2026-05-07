@@ -3,13 +3,11 @@ import {
   memo,
   type ReactElement,
   type RefObject,
-  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,12 +16,7 @@ import { resolveAgentAccentColor } from "../agent-accent-color";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import { getAgentChatThreadState } from "./agent-chat-thread-state";
-import {
-  type AgentChatWindowRow,
-  type AgentChatWindowRowsCacheEntry,
-  type AgentChatWindowTurn,
-  resolveAgentChatWindowRowsState,
-} from "./agent-chat-thread-windowing";
+import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import {
@@ -37,6 +30,7 @@ import { useAgentChatDeferredTranscript } from "./use-agent-chat-deferred-transc
 import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 import { useAgentChatRowStaging } from "./use-agent-chat-row-staging";
+import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
 import { useAgentChatTurnStaging } from "./use-agent-chat-turn-staging";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
@@ -53,56 +47,6 @@ type AgentChatThreadMotionRowProps = {
   subagentPendingQuestions: AgentSessionState["pendingQuestions"];
   subagentPendingQuestionCount: number;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
-};
-
-const EMPTY_ROWS: AgentChatWindowRow[] = [];
-
-type TranscriptRowsState = {
-  externalSessionId: string | null;
-  sessionStatus: AgentSessionState["status"] | null;
-  messages: AgentSessionState["messages"] | null;
-  showThinkingMessages: boolean;
-  rows: AgentChatWindowRow[];
-  turns: AgentChatWindowTurn[];
-  hasAttachmentMessages: boolean;
-  lastUserMessageId: string | null;
-  activeStreamingAssistantMessageId: string | null;
-};
-
-const EMPTY_TRANSCRIPT_ROWS_STATE: TranscriptRowsState = Object.freeze({
-  externalSessionId: null,
-  sessionStatus: null,
-  messages: null,
-  showThinkingMessages: false,
-  rows: EMPTY_ROWS,
-  turns: [] as AgentChatWindowTurn[],
-  hasAttachmentMessages: false,
-  lastUserMessageId: null,
-  activeStreamingAssistantMessageId: null,
-});
-
-const buildTranscriptRowsState = ({
-  session,
-  showThinkingMessages,
-  cache,
-}: {
-  session: AgentSessionState;
-  showThinkingMessages: boolean;
-  cache: Map<string, AgentChatWindowRowsCacheEntry>;
-}): TranscriptRowsState => {
-  const rowsState = resolveAgentChatWindowRowsState({
-    session,
-    showThinkingMessages,
-    cache,
-  });
-
-  return {
-    externalSessionId: session.externalSessionId,
-    sessionStatus: session.status,
-    messages: session.messages,
-    showThinkingMessages,
-    ...rowsState,
-  };
 };
 
 type AgentChatTranscriptProps = {
@@ -613,34 +557,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     activeExternalSessionId,
     shouldDefer: isSessionViewLoading,
   });
-  const rowsCacheRef = useRef<Map<string, AgentChatWindowRowsCacheEntry>>(new Map());
-  const [resolvedTranscriptState, setResolvedTranscriptState] = useState<TranscriptRowsState>(
-    () => {
-      if (!session) {
-        return EMPTY_TRANSCRIPT_ROWS_STATE;
-      }
-
-      return buildTranscriptRowsState({
-        session,
-        showThinkingMessages,
-        cache: rowsCacheRef.current,
-      });
-    },
-  );
-  const hasRowsForActiveSession =
-    Boolean(session) &&
-    resolvedTranscriptState.externalSessionId === activeExternalSessionId &&
-    resolvedTranscriptState.showThinkingMessages === showThinkingMessages;
-  const hasCurrentRowsForActiveSession =
-    hasRowsForActiveSession &&
-    resolvedTranscriptState.messages === session?.messages &&
-    resolvedTranscriptState.sessionStatus === (session?.status ?? null);
-  const isTranscriptRowsMissing = Boolean(
-    session && !isTranscriptRenderDeferred && !hasRowsForActiveSession,
-  );
-  const isTranscriptRowsPending = Boolean(
-    session && !isTranscriptRenderDeferred && !hasCurrentRowsForActiveSession,
-  );
+  const { transcriptState, isTranscriptRowsMissing } = useAgentChatTranscriptRows({
+    session,
+    showThinkingMessages,
+    shouldPauseDerivation: isTranscriptRenderDeferred,
+  });
   const { hideTranscriptWhileDeferred, statusOverlay, showRuntimeBlockedCard } =
     getAgentChatThreadState({
       isSessionViewLoading,
@@ -652,38 +573,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       isTranscriptRowsMissing,
     });
 
-  useEffect(() => {
-    if (!session || hideTranscriptWhileDeferred || !isTranscriptRowsPending) {
-      return;
-    }
-
-    let cancelled = false;
-    const frameId = globalThis.requestAnimationFrame(() => {
-      const nextTranscriptState = buildTranscriptRowsState({
-        session,
-        showThinkingMessages,
-        cache: rowsCacheRef.current,
-      });
-      if (cancelled) {
-        return;
-      }
-
-      startTransition(() => {
-        if (!cancelled) {
-          setResolvedTranscriptState(nextTranscriptState);
-        }
-      });
-    });
-
-    return () => {
-      cancelled = true;
-      globalThis.cancelAnimationFrame(frameId);
-    };
-  }, [hideTranscriptWhileDeferred, isTranscriptRowsPending, session, showThinkingMessages]);
-
-  const transcriptState = hasRowsForActiveSession
-    ? resolvedTranscriptState
-    : EMPTY_TRANSCRIPT_ROWS_STATE;
   const shouldResetTranscriptWindowForLoading =
     isSessionViewLoading ||
     isSessionHistoryLoading ||

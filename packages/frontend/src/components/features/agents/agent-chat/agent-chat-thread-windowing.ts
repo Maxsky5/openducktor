@@ -2,6 +2,7 @@ import {
   findFirstChangedSessionMessageIndex,
   forEachSessionMessage,
   getSessionMessageAt,
+  getSessionMessageCount,
   getSessionMessagesSlice,
   isFinalAssistantChatMessage,
 } from "@/state/operations/agent-orchestrator/support/messages";
@@ -102,6 +103,12 @@ const touchAgentChatWindowRowsCacheEntry = (
 
 type BuildAgentChatWindowRowsOptions = {
   showThinkingMessages: boolean;
+};
+
+export type AgentChatWindowRowsStateBuilder = {
+  step: (maxMessages?: number) => number;
+  isDone: () => boolean;
+  complete: () => AgentChatWindowRowsState;
 };
 
 const isSessionMessagesState = (
@@ -315,10 +322,56 @@ const createWindowRowsCacheEntry = (
   };
 };
 
-export function buildAgentChatWindowRowsState(
+export const writeAgentChatWindowRowsCacheEntry = ({
+  session,
+  showThinkingMessages,
+  rowsState,
+  cache,
+}: {
+  session: AgentSessionState;
+  showThinkingMessages: boolean;
+  rowsState: AgentChatWindowRowsState;
+  cache: Map<string, AgentChatWindowRowsCacheEntry>;
+}): AgentChatWindowRowsCacheEntry => {
+  const cacheKey = toAgentChatWindowRowsCacheKey(session.externalSessionId, showThinkingMessages);
+  const cacheEntry = createWindowRowsCacheEntry(session.messages, rowsState);
+  touchAgentChatWindowRowsCacheEntry(cache, cacheKey, cacheEntry);
+  return cacheEntry;
+};
+
+export const peekReusableAgentChatWindowRowsState = ({
+  session,
+  showThinkingMessages,
+  cache,
+}: {
+  session: AgentSessionState;
+  showThinkingMessages: boolean;
+  cache: Map<string, AgentChatWindowRowsCacheEntry>;
+}): Pick<AgentChatWindowRowsState, keyof AgentChatWindowResolvedState> | null => {
+  const cacheKey = toAgentChatWindowRowsCacheKey(session.externalSessionId, showThinkingMessages);
+  const cacheEntry = cache.get(cacheKey);
+  if (!cacheEntry) {
+    return null;
+  }
+
+  if (
+    !areSessionMessageContainersEquivalent(
+      cacheEntry.messages,
+      session.messages,
+      session.externalSessionId,
+    )
+  ) {
+    return null;
+  }
+
+  touchAgentChatWindowRowsCacheEntry(cache, cacheKey, cacheEntry);
+  return toResolvedWindowRowsState(cacheEntry, session.status);
+};
+
+export function createAgentChatWindowRowsStateBuilder(
   session: AgentSessionState,
   { showThinkingMessages }: BuildAgentChatWindowRowsOptions,
-): AgentChatWindowRowsState {
+): AgentChatWindowRowsStateBuilder {
   const rows: AgentChatWindowRow[] = [];
   const rowStartByMessageIndex: number[] = [];
   const rebuildStartByMessageIndex: number[] = [];
@@ -326,13 +379,15 @@ export function buildAgentChatWindowRowsState(
   const lastUserMessageIdByMessageIndex: Array<string | null> = [];
   const activeStreamingAssistantMessageIdByMessageIndex: Array<string | null> = [];
   const turnRowStartIndexes: number[] = [];
+  const messageCount = getSessionMessageCount(session);
   let currentVisibleTurnStartMessageIndex = 0;
   let hasEnteredVisibleTranscript = false;
   let hasAttachmentMessages = false;
   let lastUserMessageId: string | null = null;
   let activeStreamingAssistantMessageId: string | null = null;
+  let nextMessageIndex = 0;
 
-  forEachSessionMessage(session, (message, messageIndex) => {
+  const processMessage = (message: AgentChatMessage, messageIndex: number): void => {
     const isVisibleMessage = !(message.role === "thinking" && !showThinkingMessages);
 
     if (
@@ -394,25 +449,55 @@ export function buildAgentChatWindowRowsState(
       messageIndex,
       showThinkingMessages,
     );
-  });
+  };
 
   return {
-    rows,
-    rowStartByMessageIndex,
-    rebuildStartByMessageIndex,
-    hasAttachmentMessagesByMessageIndex,
-    lastUserMessageIdByMessageIndex,
-    activeStreamingAssistantMessageIdByMessageIndex,
-    latestRebuildStartMessageIndex: currentVisibleTurnStartMessageIndex,
-    turns: turnRowStartIndexes.map((start, index) => ({
-      key: rows[start]?.key ?? `turn-${index}`,
-      start,
-      end: (turnRowStartIndexes[index + 1] ?? rows.length) - 1,
-    })),
-    hasAttachmentMessages,
-    lastUserMessageId,
-    activeStreamingAssistantMessageId,
+    step(maxMessages = Number.POSITIVE_INFINITY): number {
+      let processedCount = 0;
+      while (processedCount < maxMessages && nextMessageIndex < messageCount) {
+        const message = getSessionMessageAt(session, nextMessageIndex);
+        if (message) {
+          processMessage(message, nextMessageIndex);
+        }
+        nextMessageIndex += 1;
+        processedCount += 1;
+      }
+      return processedCount;
+    },
+    isDone(): boolean {
+      return nextMessageIndex >= messageCount;
+    },
+    complete(): AgentChatWindowRowsState {
+      if (nextMessageIndex < messageCount) {
+        this.step();
+      }
+
+      return {
+        rows,
+        rowStartByMessageIndex,
+        rebuildStartByMessageIndex,
+        hasAttachmentMessagesByMessageIndex,
+        lastUserMessageIdByMessageIndex,
+        activeStreamingAssistantMessageIdByMessageIndex,
+        latestRebuildStartMessageIndex: currentVisibleTurnStartMessageIndex,
+        turns: turnRowStartIndexes.map((start, index) => ({
+          key: rows[start]?.key ?? `turn-${index}`,
+          start,
+          end: (turnRowStartIndexes[index + 1] ?? rows.length) - 1,
+        })),
+        hasAttachmentMessages,
+        lastUserMessageId,
+        activeStreamingAssistantMessageId,
+      };
+    },
   };
+}
+
+export function buildAgentChatWindowRowsState(
+  session: AgentSessionState,
+  { showThinkingMessages }: BuildAgentChatWindowRowsOptions,
+): AgentChatWindowRowsState {
+  return createAgentChatWindowRowsStateBuilder(session, { showThinkingMessages }).complete();
 }
 
 export function resolveAgentChatWindowRowsState({
@@ -548,8 +633,12 @@ export function resolveAgentChatWindowRowsState({
   }
 
   const rebuiltRowsState = buildAgentChatWindowRowsState(session, { showThinkingMessages });
-  const nextCacheEntry = createWindowRowsCacheEntry(session.messages, rebuiltRowsState);
-  touchAgentChatWindowRowsCacheEntry(cache, cacheKey, nextCacheEntry);
+  const nextCacheEntry = writeAgentChatWindowRowsCacheEntry({
+    session,
+    showThinkingMessages,
+    rowsState: rebuiltRowsState,
+    cache,
+  });
   return toResolvedWindowRowsState(nextCacheEntry, session.status);
 }
 
