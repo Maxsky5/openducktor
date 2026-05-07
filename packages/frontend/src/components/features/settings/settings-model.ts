@@ -107,7 +107,7 @@ export const countReusablePromptValidationErrors = (
     0,
   );
 
-export const normalizeReusablePromptsForSave = (prompts: ReusablePrompt[]): ReusablePrompt[] => {
+export const prepareReusablePromptsForSave = (prompts: ReusablePrompt[]): ReusablePrompt[] => {
   const errors = buildReusablePromptValidationErrors(prompts);
   if (countReusablePromptValidationErrors(errors) > 0) {
     throw new Error("Reusable prompts contain invalid fields.");

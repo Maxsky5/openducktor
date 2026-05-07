@@ -14,8 +14,8 @@ import {
   PROMPT_TEMPLATE_DESCRIPTIONS,
   PROMPT_TEMPLATE_LABELS,
 } from "./settings-modal-constants";
-import type { PromptInheritedPreview } from "./settings-modal-normalization";
 import { PromptOverrideCard, PromptRoleTabs } from "./settings-modal-prompt-components";
+import type { PromptInheritedPreview } from "./settings-prompt-inheritance";
 
 type PromptOverridesSectionProps = {
   title: string;

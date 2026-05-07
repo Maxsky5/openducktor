@@ -300,7 +300,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     await changedHarness.unmount();
   });
 
-  test("saves the normalized snapshot when non-git sections are dirty", async () => {
+  test("saves the prepared snapshot when non-git sections are dirty", async () => {
     const saveSettingsSnapshot = mock(async () => {});
     const snapshotDraft = createSnapshot();
     snapshotDraft.chat.showThinkingMessages = true;
@@ -341,7 +341,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
-  test("surfaces normalization errors before persistence", async () => {
+  test("surfaces save-preparation errors before persistence", async () => {
     const saveSettingsSnapshot = mock(async () => {});
     const snapshotDraft = createSnapshot();
     const repoConfig = snapshotDraft.workspaces.repo;

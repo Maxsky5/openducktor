@@ -4,17 +4,15 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import {
-  normalizeGlobalGitConfigForSave,
-  normalizeSnapshotForSave,
-} from "./settings-modal-normalization";
-import {
   buildPromptValidationSaveError,
   buildRepoScriptValidationSaveError,
   buildReusablePromptValidationSaveError,
   hasAnyDirtySections,
-  hasSameNormalizedGlobalGitConfig,
+  hasSameSaveReadyGlobalGitConfig,
   isGlobalGitOnlySave,
 } from "./settings-modal-save-policy";
+import { prepareGlobalGitSettingsForSave } from "./settings-save/global-git-settings";
+import { prepareSettingsSnapshotForSave } from "./settings-save/settings-snapshot";
 import type { DirtySections } from "./use-settings-modal-dirty-state";
 
 type UseSettingsModalSaveOrchestrationArgs = {
@@ -136,10 +134,10 @@ export const useSettingsModalSaveOrchestration = ({
       return true;
     }
 
-    const normalizedGit = isGlobalGitOnlySave(dirtySections)
-      ? normalizeGlobalGitConfigForSave(snapshotDraft.git)
+    const saveReadyGit = isGlobalGitOnlySave(dirtySections)
+      ? prepareGlobalGitSettingsForSave(snapshotDraft.git)
       : null;
-    if (normalizedGit && hasSameNormalizedGlobalGitConfig(loadedSnapshot, normalizedGit)) {
+    if (saveReadyGit && hasSameSaveReadyGlobalGitConfig(loadedSnapshot, saveReadyGit)) {
       return true;
     }
 
@@ -147,11 +145,11 @@ export const useSettingsModalSaveOrchestration = ({
     setIsSaving(true);
 
     try {
-      if (normalizedGit) {
-        await saveGlobalGitConfig(normalizedGit);
+      if (saveReadyGit) {
+        await saveGlobalGitConfig(saveReadyGit);
       } else {
-        const normalizedSnapshot = normalizeSnapshotForSave(snapshotDraft);
-        await saveSettingsSnapshot(normalizedSnapshot);
+        const saveReadySnapshot = prepareSettingsSnapshotForSave(snapshotDraft);
+        await saveSettingsSnapshot(saveReadySnapshot);
       }
 
       return true;

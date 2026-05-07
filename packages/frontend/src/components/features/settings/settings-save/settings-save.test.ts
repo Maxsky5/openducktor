@@ -5,14 +5,10 @@ import {
   type RepoConfig,
   type RepoPromptOverrides,
 } from "@openducktor/contracts";
-import {
-  normalizeAutopilotSettingsForSave,
-  normalizePromptOverridesForSave,
-  normalizeRepoConfigForSave,
-  normalizeSnapshotForSave,
-  pickInitialWorkspaceId,
-  resolveInheritedPromptPreview,
-} from "./settings-modal-normalization";
+import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
+import { preparePromptOverridesForSave } from "./prompt-overrides";
+import { prepareRepoConfigForSave } from "./repo-config";
+import { prepareSettingsSnapshotForSave } from "./settings-snapshot";
 
 const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo-a",
@@ -70,9 +66,9 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   ...overrides,
 });
 
-describe("settings-modal-normalization", () => {
-  test("normalizes prompt overrides for save", () => {
-    const normalized = normalizePromptOverridesForSave({
+describe("settings save transforms", () => {
+  test("prepares prompt overrides for save", () => {
+    const saveReady = preparePromptOverridesForSave({
       "kickoff.spec_initial": {
         template: "  spec  ",
         baseVersion: 0,
@@ -85,7 +81,7 @@ describe("settings-modal-normalization", () => {
       },
     });
 
-    expect(normalized).toEqual({
+    expect(saveReady).toEqual({
       "kickoff.spec_initial": {
         template: "spec",
         baseVersion: 1,
@@ -99,8 +95,8 @@ describe("settings-modal-normalization", () => {
     });
   });
 
-  test("preserves shared prompt override entries when normalizing for save", () => {
-    const normalized = normalizePromptOverridesForSave({
+  test("preserves shared prompt override entries when preparing save payloads", () => {
+    const saveReady = preparePromptOverridesForSave({
       "system.shared.workflow_guards": {
         template: "  guards override  ",
         baseVersion: 2,
@@ -113,7 +109,7 @@ describe("settings-modal-normalization", () => {
       },
     });
 
-    expect(normalized).toEqual({
+    expect(saveReady).toEqual({
       "system.shared.workflow_guards": {
         template: "guards override",
         baseVersion: 2,
@@ -127,7 +123,7 @@ describe("settings-modal-normalization", () => {
     });
   });
 
-  test("preserves every known prompt override key across normalization", () => {
+  test("preserves every known prompt override key when preparing save payloads", () => {
     const source = Object.fromEntries(
       agentPromptTemplateIdValues.map((templateId, index) => [
         templateId,
@@ -139,12 +135,12 @@ describe("settings-modal-normalization", () => {
       ]),
     ) as RepoPromptOverrides;
 
-    const normalized = normalizePromptOverridesForSave(source);
-    const normalizedKeys = Object.keys(normalized).sort();
-    expect(normalizedKeys).toEqual([...agentPromptTemplateIdValues].sort());
+    const saveReady = preparePromptOverridesForSave(source);
+    const saveReadyKeys = Object.keys(saveReady).sort();
+    expect(saveReadyKeys).toEqual([...agentPromptTemplateIdValues].sort());
 
     for (const [index, templateId] of agentPromptTemplateIdValues.entries()) {
-      const entry = normalized[templateId as AgentPromptTemplateId];
+      const entry = saveReady[templateId as AgentPromptTemplateId];
       expect(entry).toEqual({
         template: `${templateId} template`,
         baseVersion: index + 1,
@@ -153,26 +149,26 @@ describe("settings-modal-normalization", () => {
     }
   });
 
-  test("normalizes repo config and removes incomplete agent defaults", () => {
-    const normalized = normalizeRepoConfigForSave(createRepoConfig());
+  test("prepares repo config and removes incomplete agent defaults", () => {
+    const saveReady = prepareRepoConfigForSave(createRepoConfig());
 
-    expect(normalized.defaultRuntimeKind).toBe("opencode");
-    expect(normalized.branchPrefix).toBe("odt");
-    expect(normalized.defaultTargetBranch).toEqual({ remote: "origin", branch: "main" });
-    expect(normalized.worktreeBasePath).toBe("/tmp/worktrees");
-    expect(normalized.hooks).toEqual({
+    expect(saveReady.defaultRuntimeKind).toBe("opencode");
+    expect(saveReady.branchPrefix).toBe("odt");
+    expect(saveReady.defaultTargetBranch).toEqual({ remote: "origin", branch: "main" });
+    expect(saveReady.worktreeBasePath).toBe("/tmp/worktrees");
+    expect(saveReady.hooks).toEqual({
       preStart: ["npm ci"],
       postComplete: ["npm test"],
     });
-    expect(normalized.devServers).toEqual([
+    expect(saveReady.devServers).toEqual([
       {
         id: "frontend",
         name: "Frontend",
         command: "bun run dev",
       },
     ]);
-    expect(normalized.worktreeCopyPaths).toEqual([".env"]);
-    expect(normalized.promptOverrides).toEqual({
+    expect(saveReady.worktreeCopyPaths).toEqual([".env"]);
+    expect(saveReady.promptOverrides).toEqual({
       "kickoff.spec_initial": {
         template: "custom kickoff",
         baseVersion: 1,
@@ -184,7 +180,7 @@ describe("settings-modal-normalization", () => {
         enabled: true,
       },
     });
-    expect(normalized.agentDefaults).toEqual({
+    expect(saveReady.agentDefaults).toEqual({
       spec: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -197,7 +193,7 @@ describe("settings-modal-normalization", () => {
 
   test("rejects configured agent defaults without runtime kind", () => {
     expect(() =>
-      normalizeRepoConfigForSave({
+      prepareRepoConfigForSave({
         ...createRepoConfig(),
         agentDefaults: {
           ...createRepoConfig().agentDefaults,
@@ -214,8 +210,8 @@ describe("settings-modal-normalization", () => {
     );
   });
 
-  test("normalizes autopilot settings into canonical event order", () => {
-    const normalized = normalizeAutopilotSettingsForSave({
+  test("prepares autopilot settings in canonical event order", () => {
+    const saveReady = prepareAutopilotSettingsForSave({
       rules: [
         {
           eventId: "taskProgressedToHumanReview",
@@ -228,7 +224,7 @@ describe("settings-modal-normalization", () => {
       ],
     });
 
-    expect(normalized.rules).toEqual([
+    expect(saveReady.rules).toEqual([
       { eventId: "taskProgressedToSpecReady", actionIds: ["startPlanner"] },
       { eventId: "taskProgressedToReadyForDev", actionIds: [] },
       { eventId: "taskProgressedToAiReview", actionIds: [] },
@@ -238,7 +234,7 @@ describe("settings-modal-normalization", () => {
   });
 
   test("preserves explicit empty autopilot actions for a configured event", () => {
-    const normalized = normalizeAutopilotSettingsForSave({
+    const saveReady = prepareAutopilotSettingsForSave({
       rules: [
         {
           eventId: "taskProgressedToSpecReady",
@@ -247,14 +243,14 @@ describe("settings-modal-normalization", () => {
       ],
     });
 
-    expect(normalized.rules[0]).toEqual({
+    expect(saveReady.rules[0]).toEqual({
       eventId: "taskProgressedToSpecReady",
       actionIds: [],
     });
   });
 
   test("normalizes empty hook commands to empty arrays", () => {
-    const normalized = normalizeRepoConfigForSave({
+    const saveReady = prepareRepoConfigForSave({
       ...createRepoConfig(),
       hooks: {
         preStart: ["   "],
@@ -263,14 +259,14 @@ describe("settings-modal-normalization", () => {
       devServers: [],
     });
 
-    expect(normalized.hooks).toEqual({
+    expect(saveReady.hooks).toEqual({
       preStart: [],
       postComplete: [],
     });
   });
 
   test("normalizes empty dev server rows away", () => {
-    const normalized = normalizeRepoConfigForSave({
+    const saveReady = prepareRepoConfigForSave({
       ...createRepoConfig(),
       hooks: {
         preStart: [],
@@ -279,12 +275,12 @@ describe("settings-modal-normalization", () => {
       devServers: [{ id: "frontend", name: "Frontend", command: "   " }],
     });
 
-    expect(normalized.devServers).toEqual([]);
+    expect(saveReady.devServers).toEqual([]);
   });
 
   test("rejects blank dev server names when commands remain configured", () => {
     expect(() =>
-      normalizeRepoConfigForSave({
+      prepareRepoConfigForSave({
         ...createRepoConfig(),
         devServers: [{ id: "frontend", name: "   ", command: "bun run dev" }],
       }),
@@ -293,7 +289,7 @@ describe("settings-modal-normalization", () => {
 
   test("rejects blank dev server ids when commands remain configured", () => {
     expect(() =>
-      normalizeRepoConfigForSave({
+      prepareRepoConfigForSave({
         ...createRepoConfig(),
         devServers: [{ id: "   ", name: "Frontend", command: "bun run dev" }],
       }),
@@ -301,7 +297,7 @@ describe("settings-modal-normalization", () => {
   });
 
   test("normalizes hook commands when configured", () => {
-    const normalized = normalizeRepoConfigForSave({
+    const saveReady = prepareRepoConfigForSave({
       ...createRepoConfig(),
       hooks: {
         preStart: [" bun install "],
@@ -310,14 +306,14 @@ describe("settings-modal-normalization", () => {
       devServers: [],
     });
 
-    expect(normalized.hooks).toEqual({
+    expect(saveReady.hooks).toEqual({
       preStart: ["bun install"],
       postComplete: [],
     });
   });
 
   test("normalizes snapshot workspace map and global prompt overrides", () => {
-    const snapshot = normalizeSnapshotForSave({
+    const snapshot = prepareSettingsSnapshotForSave({
       theme: "light",
       git: {
         defaultMergeMethod: "merge_commit",
@@ -381,117 +377,5 @@ describe("settings-modal-normalization", () => {
       },
     });
     expect(snapshot.theme).toBe("light");
-  });
-
-  test("selects initial repo using active repo when available", () => {
-    const snapshot = {
-      theme: "light" as const,
-      git: {
-        defaultMergeMethod: "merge_commit" as const,
-      },
-      general: {
-        openAgentStudioTabOnBackgroundSessionStart: true,
-      },
-      chat: {
-        showThinkingMessages: false,
-      },
-      reusablePrompts: [],
-      kanban: {
-        doneVisibleDays: 1,
-        emptyColumnDisplay: "show" as const,
-      },
-      autopilot: {
-        rules: [],
-      },
-      workspaces: {
-        "repo-b": createRepoConfig({
-          workspaceId: "repo-b",
-          workspaceName: "Repo B",
-          repoPath: "/repo-b",
-        }),
-        "repo-a": createRepoConfig(),
-      },
-      globalPromptOverrides: {},
-    };
-
-    expect(pickInitialWorkspaceId(snapshot, "/repo-b")).toBe("repo-b");
-    expect(pickInitialWorkspaceId(snapshot, "/missing")).toBe("repo-a");
-    expect(
-      pickInitialWorkspaceId(
-        {
-          theme: "light" as const,
-          git: {
-            defaultMergeMethod: "merge_commit" as const,
-          },
-          general: {
-            openAgentStudioTabOnBackgroundSessionStart: true,
-          },
-          chat: {
-            showThinkingMessages: false,
-          },
-          reusablePrompts: [],
-          kanban: {
-            doneVisibleDays: 1,
-            emptyColumnDisplay: "show" as const,
-          },
-          autopilot: {
-            rules: [],
-          },
-          workspaces: {},
-          globalPromptOverrides: {},
-        },
-        null,
-      ),
-    ).toBeNull();
-  });
-
-  test("resolves inherited preview from global override and builtin", () => {
-    const fromGlobal = resolveInheritedPromptPreview(
-      "kickoff.spec_initial",
-      {
-        template: "repo override",
-        baseVersion: 2,
-        enabled: false,
-      },
-      {
-        "kickoff.spec_initial": {
-          template: "global override",
-          baseVersion: 1,
-          enabled: true,
-        },
-      },
-      "builtin",
-    );
-    expect(fromGlobal).toEqual({
-      sourceLabel: "Global override",
-      template: "global override",
-    });
-
-    const fromBuiltin = resolveInheritedPromptPreview(
-      "kickoff.spec_initial",
-      {
-        template: "repo override",
-        baseVersion: 2,
-        enabled: false,
-      },
-      {},
-      "builtin prompt",
-    );
-    expect(fromBuiltin).toEqual({
-      sourceLabel: "Builtin prompt",
-      template: "builtin prompt",
-    });
-
-    const hiddenWhenRepoEnabled = resolveInheritedPromptPreview(
-      "kickoff.spec_initial",
-      {
-        template: "repo override",
-        baseVersion: 2,
-        enabled: true,
-      },
-      {},
-      "builtin prompt",
-    );
-    expect(hiddenWhenRepoEnabled).toBeUndefined();
   });
 });

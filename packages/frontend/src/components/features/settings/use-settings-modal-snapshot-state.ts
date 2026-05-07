@@ -2,7 +2,7 @@ import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
-import { pickInitialWorkspaceId } from "./settings-modal-normalization";
+import { chooseInitialSettingsWorkspaceId } from "./settings-workspace-selection";
 
 type UseSettingsModalSnapshotStateArgs = {
   open: boolean;
@@ -66,7 +66,7 @@ export const useSettingsModalSnapshotState = ({
 
         setLoadedSnapshot(snapshot);
         setSnapshotDraft(snapshot);
-        setSelectedWorkspaceId(pickInitialWorkspaceId(snapshot, workspaceRepoPath));
+        setSelectedWorkspaceId(chooseInitialSettingsWorkspaceId(snapshot, workspaceRepoPath));
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -98,7 +98,7 @@ export const useSettingsModalSnapshotState = ({
       return;
     }
 
-    const fallbackWorkspaceId = pickInitialWorkspaceId(snapshotDraft, workspaceRepoPath);
+    const fallbackWorkspaceId = chooseInitialSettingsWorkspaceId(snapshotDraft, workspaceRepoPath);
     if (fallbackWorkspaceId !== selectedWorkspaceId) {
       setSelectedWorkspaceId(fallbackWorkspaceId);
     }

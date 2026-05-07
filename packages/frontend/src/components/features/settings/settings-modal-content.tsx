@@ -9,8 +9,8 @@ import type {
   RepositorySectionId,
   SettingsSectionId,
 } from "./settings-modal-constants";
-import { resolveInheritedPromptPreview } from "./settings-modal-normalization";
 import { RepositorySidebar } from "./settings-modal-sidebars";
+import { buildInheritedPromptPreview } from "./settings-prompt-inheritance";
 import { PromptOverridesSection } from "./settings-prompt-overrides-section";
 import { RepositoryAgentsSection } from "./settings-repository-agents-section";
 import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
@@ -270,7 +270,7 @@ export function SettingsModalContent({
               onTabChange={onRepoPromptRoleTabChange}
               onUpdateOverrides={updateRepoPromptOverrides}
               resolveInheritedPreview={(templateId, builtinTemplate, repoOverride) =>
-                resolveInheritedPromptPreview(
+                buildInheritedPromptPreview(
                   templateId,
                   repoOverride,
                   snapshotDraft.globalPromptOverrides,
