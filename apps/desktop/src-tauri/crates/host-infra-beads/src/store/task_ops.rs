@@ -249,6 +249,28 @@ impl BeadsTaskStore {
         Ok(task)
     }
 
+    fn append_label_update_args(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        labels: Vec<String>,
+        args: &mut Vec<String>,
+    ) -> Result<()> {
+        let labels = normalize_labels(labels);
+        if labels.is_empty() {
+            let current_task = self.show_task(repo_path, task_id)?;
+            for label in current_task.labels {
+                args.push("--remove-label".to_string());
+                args.push(label);
+            }
+            return Ok(());
+        }
+
+        args.push("--set-labels".to_string());
+        args.push(labels.join(","));
+        Ok(())
+    }
+
     pub(super) fn update_task_impl(
         &self,
         repo_path: &Path,
@@ -298,16 +320,7 @@ impl BeadsTaskStore {
         }
 
         if let Some(labels) = patch.labels {
-            let labels = normalize_labels(labels);
-            if labels.is_empty() {
-                for label in self.show_task(repo_path, task_id)?.labels {
-                    args.push("--remove-label".to_string());
-                    args.push(label);
-                }
-            } else {
-                args.push("--set-labels".to_string());
-                args.push(labels.join(","));
-            }
+            self.append_label_update_args(repo_path, task_id, labels, &mut args)?;
         }
 
         if args.len() > 1 {
