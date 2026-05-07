@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { buildMessage, buildQuestionRequest, buildSession } from "./agent-chat-test-fixtures";
-import { getAgentChatWindowRowsKey } from "./agent-chat-thread-windowing";
+import {
+  buildAgentChatWindowRowsState,
+  createAgentChatWindowRowsStateBuilder,
+  getAgentChatWindowRowsKey,
+} from "./agent-chat-thread-windowing";
 
 const createMessageIdentityResolver = (): ((message: AgentChatMessage) => number) => {
   const tokenByMessage = new WeakMap<AgentChatMessage, number>();
@@ -40,5 +44,31 @@ describe("agent-chat-thread transcript keys", () => {
     );
 
     expect(updatedSignature).toBe(baselineSignature);
+  });
+
+  test("large transcript row derivation can be advanced across multiple bounded chunks", () => {
+    const messages = Array.from({ length: 240 }, (_, index) => {
+      const turnIndex = Math.floor(index / 2);
+      if (index % 2 === 0) {
+        return buildMessage("user", `Question ${turnIndex}`, { id: `user-${turnIndex}` });
+      }
+
+      return buildMessage("assistant", `Answer ${turnIndex}`, { id: `assistant-${turnIndex}` });
+    });
+    const session = buildSession({
+      externalSessionId: "session-large-transcript",
+      messages,
+    });
+    const expectedState = buildAgentChatWindowRowsState(session, { showThinkingMessages: true });
+    const builder = createAgentChatWindowRowsStateBuilder(session, { showThinkingMessages: true });
+    let chunkCount = 0;
+
+    while (!builder.isDone()) {
+      chunkCount += 1;
+      expect(builder.step(25)).toBeLessThanOrEqual(25);
+    }
+
+    expect(chunkCount).toBeGreaterThan(1);
+    expect(builder.complete()).toEqual(expectedState);
   });
 });

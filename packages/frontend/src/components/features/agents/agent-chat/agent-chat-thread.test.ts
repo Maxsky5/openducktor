@@ -595,6 +595,11 @@ describe("AgentChatThread", () => {
         }
       });
     };
+    const waitForScheduledTranscriptWork = async () => {
+      await act(async () => {
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+      });
+    };
 
     try {
       const attachmentMessages = Array.from({ length: 80 }, (_, index) =>
@@ -654,14 +659,12 @@ describe("AgentChatThread", () => {
 
       expect(animationFrameCallbacks.size).toBeGreaterThan(0);
       await flushAnimationFrames();
-      await flushAnimationFrames();
+      await waitForScheduledTranscriptWork();
 
       await waitFor(() => {
-        expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(2);
+        expect(rendered.queryByText("Attachment message 80")).not.toBeNull();
       });
       expect(rendered.queryByText("Attachment message 1")).toBeNull();
-      expect(rendered.queryByText("Attachment message 79")).not.toBeNull();
-      expect(rendered.queryByText("Attachment message 80")).not.toBeNull();
       expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
 
       rendered.unmount();

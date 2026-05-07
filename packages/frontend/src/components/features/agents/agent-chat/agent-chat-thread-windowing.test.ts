@@ -1,13 +1,17 @@
 import { describe, expect, test } from "bun:test";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { buildMessage, buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
 import {
   buildAgentChatWindowRows,
+  buildAgentChatWindowRowsState,
   buildAgentChatWindowTurns,
   CHAT_TURN_WINDOW_BATCH,
   CHAT_TURN_WINDOW_INIT,
+  createAgentChatWindowRowsStateBuilder,
   getAgentChatWindowRowsKey,
-  resolveAgentChatWindowRowsState,
+  peekReusableAgentChatWindowRowsState,
+  writeAgentChatWindowRowsCacheEntry,
 } from "./agent-chat-thread-windowing";
 
 const createMessageIdentityResolver = (): ((message: AgentChatMessage) => number) => {
@@ -95,76 +99,110 @@ describe("agent-chat-thread windowing helpers", () => {
     ]);
   });
 
-  test("resolveAgentChatWindowRowsState reuses cached rows when switching back to a previously built session", () => {
-    const firstSession = buildSession({
-      externalSessionId: "session-a",
-      messages: [
-        buildMessage("assistant", "Prelude", { id: "assistant-a-0" }),
-        buildMessage("user", "Question A", { id: "user-a-1" }),
-        buildMessage("assistant", "Answer A", { id: "assistant-a-1" }),
-      ],
-      pendingQuestions: [],
+  test("peekReusableAgentChatWindowRowsState reuses equivalent SessionMessagesState without scanning raw messages", () => {
+    const messages = [
+      buildMessage("assistant", "Prelude", { id: "assistant-0" }),
+      buildMessage("user", "Question", { id: "user-1" }),
+      buildMessage("assistant", "Answer", { id: "assistant-1" }),
+    ];
+    const initialSession = buildSession({
+      externalSessionId: "session-state-cache",
+      messages: createSessionMessagesState("session-state-cache", messages, 3),
     });
-    const secondSession = buildSession({
-      externalSessionId: "session-b",
-      messages: [
-        buildMessage("assistant", "Prelude", { id: "assistant-b-0" }),
-        buildMessage("user", "Question B", { id: "user-b-1" }),
-        buildMessage("assistant", "Answer B", { id: "assistant-b-1" }),
-      ],
-      pendingQuestions: [],
+    const equivalentSession = buildSession({
+      ...initialSession,
+      status: "idle",
+      messages: createSessionMessagesState("session-state-cache", messages, 3),
     });
     const cache = new Map();
 
-    const firstState = resolveAgentChatWindowRowsState({
-      session: firstSession,
+    const initialRowsState = buildAgentChatWindowRowsState(initialSession, {
+      showThinkingMessages: true,
+    });
+    writeAgentChatWindowRowsCacheEntry({
+      session: initialSession,
+      showThinkingMessages: true,
+      rowsState: initialRowsState,
+      cache,
+    });
+    const reusedRowsState = peekReusableAgentChatWindowRowsState({
+      session: equivalentSession,
       showThinkingMessages: true,
       cache,
     });
 
-    resolveAgentChatWindowRowsState({
-      session: secondSession,
-      showThinkingMessages: true,
-      cache,
-    });
-
-    const revisitedState = resolveAgentChatWindowRowsState({
-      session: firstSession,
-      showThinkingMessages: true,
-      cache,
-    });
-
-    expect(revisitedState.rows).toBe(firstState.rows);
-    expect(revisitedState.turns).toBe(firstState.turns);
+    expect(reusedRowsState?.rows).toBe(initialRowsState.rows);
+    expect(reusedRowsState?.turns).toBe(initialRowsState.turns);
   });
 
-  test("resolveAgentChatWindowRowsState invalidates cached rows when a raw message array is mutated in place", () => {
-    const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
+  test("peekReusableAgentChatWindowRowsState does not trust raw arrays for cheap reuse", () => {
     const session = buildSession({
-      externalSessionId: "session-mutable-array",
-      messages,
+      externalSessionId: "session-raw-cache",
+      messages: [buildMessage("assistant", "Message", { id: "assistant-1" })],
     });
     const cache = new Map();
 
-    const firstState = resolveAgentChatWindowRowsState({
+    writeAgentChatWindowRowsCacheEntry({
       session,
       showThinkingMessages: true,
+      rowsState: buildAgentChatWindowRowsState(session, { showThinkingMessages: true }),
       cache,
     });
 
-    messages[0] = buildMessage("assistant", "Message 1 updated", { id: "message-1" });
+    expect(
+      peekReusableAgentChatWindowRowsState({
+        session,
+        showThinkingMessages: true,
+        cache,
+      }),
+    ).toBeNull();
+  });
 
-    const nextState = resolveAgentChatWindowRowsState({
-      session,
-      showThinkingMessages: true,
-      cache,
+  test("createAgentChatWindowRowsStateBuilder matches synchronous row state after chunking", () => {
+    const session = buildSession({
+      externalSessionId: "session-builder-equivalence",
+      status: "running",
+      messages: [
+        buildMessage("assistant", "Prelude", { id: "assistant-0" }),
+        buildMessage("user", "Question", {
+          id: "user-1",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "attachment",
+                attachment: {
+                  id: "attachment-1",
+                  path: "/tmp/spec.md",
+                  name: "spec.md",
+                  kind: "pdf",
+                },
+              },
+            ],
+          },
+        }),
+        buildMessage("thinking", "Reasoning", { id: "thinking-1" }),
+        buildMessage("assistant", "Working", {
+          id: "assistant-live",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: false,
+            profileId: "Hephaestus (Deep Agent)",
+          },
+        }),
+      ],
     });
+    const expectedState = buildAgentChatWindowRowsState(session, { showThinkingMessages: false });
+    const builder = createAgentChatWindowRowsStateBuilder(session, { showThinkingMessages: false });
 
-    expect(nextState.rows).not.toBe(firstState.rows);
-    expect(nextState.rows.some((row) => row.kind === "message")).toBe(true);
-    expect(nextState.rows.find((row) => row.kind === "message")?.message.content).toBe(
-      "Message 1 updated",
-    );
+    expect(builder.step(1)).toBe(1);
+    expect(builder.isDone()).toBe(false);
+    expect(builder.step(2)).toBe(2);
+    expect(builder.isDone()).toBe(false);
+    expect(builder.complete()).toEqual(expectedState);
+    expect(builder.isDone()).toBe(true);
   });
 
   test("buildAgentChatWindowRows keeps row keys distinct across sessions with repeated message ids", () => {
@@ -352,7 +390,7 @@ describe("agent-chat-thread windowing helpers", () => {
     expect(rows[0]?.key).toBe("ext-1:assistant-live");
   });
 
-  test("resolveAgentChatWindowRowsState clears cached streaming state when only session status changes", () => {
+  test("peekReusableAgentChatWindowRowsState clears cached streaming state when only session status changes", () => {
     const sharedMessages = [
       buildMessage("assistant", "Working", {
         id: "assistant-live",
@@ -368,54 +406,42 @@ describe("agent-chat-thread windowing helpers", () => {
       externalSessionId: "session-status",
       role: "build",
       status: "running",
-      messages: sharedMessages,
+      messages: createSessionMessagesState("session-status", sharedMessages, 1),
     });
     const idleSession = buildSession({
       ...runningSession,
       status: "idle",
-      messages: [...sharedMessages],
+      messages: createSessionMessagesState("session-status", sharedMessages, 1),
     });
     const cache = new Map();
 
-    const runningState = resolveAgentChatWindowRowsState({
+    const runningRowsState = buildAgentChatWindowRowsState(runningSession, {
+      showThinkingMessages: true,
+    });
+    writeAgentChatWindowRowsCacheEntry({
+      session: runningSession,
+      showThinkingMessages: true,
+      rowsState: runningRowsState,
+      cache,
+    });
+    const runningState = peekReusableAgentChatWindowRowsState({
       session: runningSession,
       showThinkingMessages: true,
       cache,
     });
-    const idleState = resolveAgentChatWindowRowsState({
+    const idleState = peekReusableAgentChatWindowRowsState({
       session: idleSession,
       showThinkingMessages: true,
       cache,
     });
 
-    expect(runningState.activeStreamingAssistantMessageId).toBe("assistant-live");
-    expect(idleState.activeStreamingAssistantMessageId).toBeNull();
-    expect(idleState.rows).toBe(runningState.rows);
+    expect(runningState?.activeStreamingAssistantMessageId).toBe("assistant-live");
+    expect(idleState?.activeStreamingAssistantMessageId).toBeNull();
+    expect(idleState?.rows).toBe(runningState?.rows);
   });
 
-  test("resolveAgentChatWindowRowsState does not retain suffix metadata during incremental rebuilds", () => {
-    const baseMessages = [
-      buildMessage("assistant", "Prelude", { id: "assistant-0" }),
-      buildMessage("user", "Question 1", { id: "user-1" }),
-      buildMessage("assistant", "Answer 1", { id: "assistant-1" }),
-      buildMessage("user", "Question 2", {
-        id: "user-2",
-        meta: {
-          kind: "user",
-          state: "read",
-          parts: [
-            {
-              kind: "attachment",
-              attachment: {
-                id: "attachment-1",
-                path: "/tmp/spec.md",
-                name: "spec.md",
-                kind: "pdf",
-              },
-            },
-          ],
-        },
-      }),
+  test("peekReusableAgentChatWindowRowsState restores streaming state when idle cached rows resume", () => {
+    const sharedMessages = [
       buildMessage("assistant", "Working", {
         id: "assistant-live",
         meta: {
@@ -426,117 +452,36 @@ describe("agent-chat-thread windowing helpers", () => {
         },
       }),
     ];
-    const [assistantPrelude, firstUser, firstAnswer] = baseMessages;
-    if (!assistantPrelude || !firstUser || !firstAnswer) {
-      throw new Error("Expected prefix messages to exist");
-    }
-    const initialSession = buildSession({
-      externalSessionId: "session-incremental",
+    const idleSession = buildSession({
+      externalSessionId: "session-resume",
       role: "build",
-      status: "running",
-      messages: baseMessages,
-    });
-    const updatedSession = buildSession({
-      ...initialSession,
       status: "idle",
-      messages: [
-        assistantPrelude,
-        firstUser,
-        firstAnswer,
-        buildMessage("assistant", "Answer 2", {
-          id: "user-2",
-          meta: {
-            kind: "assistant",
-            agentRole: "build",
-            isFinal: true,
-            profileId: "Hephaestus (Deep Agent)",
-          },
-        }),
-        buildMessage("assistant", "Done", {
-          id: "assistant-live",
-          meta: {
-            kind: "assistant",
-            agentRole: "build",
-            isFinal: true,
-            profileId: "Hephaestus (Deep Agent)",
-          },
-        }),
-      ],
+      messages: createSessionMessagesState("session-resume", sharedMessages, 1),
     });
-    const cache = new Map();
-
-    resolveAgentChatWindowRowsState({
-      session: initialSession,
-      showThinkingMessages: true,
-      cache,
-    });
-    const nextState = resolveAgentChatWindowRowsState({
-      session: updatedSession,
-      showThinkingMessages: true,
-      cache,
-    });
-
-    expect(nextState.hasAttachmentMessages).toBe(false);
-    expect(nextState.lastUserMessageId).toBe("user-1");
-    expect(nextState.activeStreamingAssistantMessageId).toBeNull();
-  });
-
-  test("resolveAgentChatWindowRowsState rebases cached suffix metadata arrays with prefix state", () => {
-    const initialSession = buildSession({
-      externalSessionId: "session-rebased-metadata",
-      role: "build",
+    const resumedSession = buildSession({
+      ...idleSession,
       status: "running",
-      messages: [
-        buildMessage("assistant", "Prelude", { id: "assistant-0" }),
-        buildMessage("user", "Question 1", {
-          id: "user-1",
-          meta: {
-            kind: "user",
-            state: "read",
-            parts: [
-              {
-                kind: "attachment",
-                attachment: {
-                  id: "attachment-1",
-                  path: "/tmp/spec.md",
-                  name: "spec.md",
-                  kind: "pdf",
-                },
-              },
-            ],
-          },
-        }),
-        buildMessage("assistant", "Answer 1", { id: "assistant-1" }),
-        buildMessage("user", "Question 2", { id: "user-2" }),
-        buildMessage("assistant", "Answer 2", { id: "assistant-2" }),
-      ],
-    });
-    const updatedSession = buildSession({
-      ...initialSession,
-      messages: [
-        ...(Array.isArray(initialSession.messages) ? initialSession.messages.slice(0, 4) : []),
-        buildMessage("assistant", "Answer 2 updated", { id: "assistant-2" }),
-      ],
+      messages: createSessionMessagesState("session-resume", sharedMessages, 1),
     });
     const cache = new Map();
 
-    resolveAgentChatWindowRowsState({
-      session: initialSession,
+    const idleRowsState = buildAgentChatWindowRowsState(idleSession, {
       showThinkingMessages: true,
+    });
+    writeAgentChatWindowRowsCacheEntry({
+      session: idleSession,
+      showThinkingMessages: true,
+      rowsState: idleRowsState,
       cache,
     });
-    resolveAgentChatWindowRowsState({
-      session: updatedSession,
+    const resumedState = peekReusableAgentChatWindowRowsState({
+      session: resumedSession,
       showThinkingMessages: true,
       cache,
     });
 
-    const cacheEntry = Array.from(cache.values())[0];
-    if (!cacheEntry) {
-      throw new Error("Expected cached transcript state");
-    }
-
-    expect(cacheEntry.hasAttachmentMessagesByMessageIndex[3]).toBe(true);
-    expect(cacheEntry.lastUserMessageIdByMessageIndex[3]).toBe("user-2");
+    expect(idleRowsState.activeStreamingAssistantMessageId).toBeNull();
+    expect(resumedState?.activeStreamingAssistantMessageId).toBe("assistant-live");
+    expect(resumedState?.rows).toBe(idleRowsState.rows);
   });
 });
