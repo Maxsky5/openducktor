@@ -304,6 +304,7 @@ export const useAgentChatTranscriptRows = ({
   );
 
   useEffect(() => {
+    // activeRevisionKey intentionally triggers this effect; async work reads refs below.
     void activeRevisionKey;
     derivationTokenRef.current += 1;
     const derivationToken = derivationTokenRef.current;
@@ -405,6 +406,10 @@ export const useAgentChatTranscriptRows = ({
     }
 
     if (session?.status === "running") {
+      return resolvedTranscriptState;
+    }
+
+    if (resolvedTranscriptState.activeStreamingAssistantMessageId === null) {
       return resolvedTranscriptState;
     }
 
