@@ -1,8 +1,8 @@
 import type { RepoConfig } from "@openducktor/contracts";
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
-import { normalizeRepoScripts } from "@/components/features/settings/settings-model";
 import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
+import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
 import { preparePromptOverridesForSave } from "./prompt-overrides";
 
 const trimmedNonEmpty = (value: string): string | null => {

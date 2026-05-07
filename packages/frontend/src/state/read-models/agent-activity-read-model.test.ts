@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
-import { summarizeAgentActivity } from "./agent-activity-model";
+import { summarizeAgentActivity } from "./agent-activity-read-model";
 
 const buildSession = (
   overrides: {

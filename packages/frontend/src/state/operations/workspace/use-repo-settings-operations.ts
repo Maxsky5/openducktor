@@ -6,9 +6,9 @@ import type {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { normalizeRepoScripts } from "@/components/features/settings/settings-model";
 import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
+import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import {
   loadRepoConfigFromQuery,

@@ -1,10 +1,10 @@
 import { useMemo } from "react";
+import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
 import {
   type AgentActivitySummary,
   type AgentActivityTaskTitleLookup,
   summarizeAgentActivity,
-} from "@/components/layout/sidebar/agent-activity-model";
-import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
+} from "@/state/read-models/agent-activity-read-model";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentActivitySessions, useTasksState } from "../app-state-provider";
 

@@ -2,11 +2,11 @@
 
 ## Responsibility
 
-Settings modal, repository runtime/prompt defaults, reusable prompts, configuration sections, runtime catalog defaults, kanban/autopilot settings, and validation helpers.
+Settings modal, repository runtime/prompt defaults, reusable prompts, configuration sections, runtime catalog defaults, and kanban/autopilot settings.
 
 ## Design/Patterns
 
-Form sections are broken into focused models and normalization helpers so the modal can edit durable repo settings without mutating host state directly.
+Form sections compose focused modal models with shared settings read-model helpers so the modal can edit durable repo settings without mutating host state directly.
 
 ## Flow
 
@@ -14,4 +14,4 @@ Settings snapshots and repo config are loaded through state queries, converted i
 
 ## Integration
 
-`settings-modal.tsx`, `settings-model.ts`, `settings-modal-model.ts`, `AppShell`, and repo/workspace state operations.
+`settings-modal.tsx`, `settings-modal-model.ts`, `state/read-models/settings-read-model`, `AppShell`, and repo/workspace state operations.

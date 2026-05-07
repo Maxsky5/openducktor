@@ -1,5 +1,3 @@
-export { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
-
 import type { RepoDevServerScript, ReusablePrompt } from "@openducktor/contracts";
 import { REUSABLE_PROMPT_TRIGGER_PATTERN } from "@openducktor/contracts";
 

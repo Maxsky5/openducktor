@@ -4,7 +4,7 @@ import {
   buildReusablePromptValidationErrors,
   countReusablePromptValidationErrors,
   type ReusablePromptValidationMap,
-} from "./settings-model";
+} from "@/state/read-models/settings-read-model";
 
 export type ReusablePromptValidationState = {
   errorsById: ReusablePromptValidationMap;

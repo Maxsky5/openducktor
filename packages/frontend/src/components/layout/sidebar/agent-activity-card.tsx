@@ -1,7 +1,7 @@
 import { Activity, ChevronRight, CircleAlert } from "lucide-react";
 import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
-import type { AgentActivitySessionItem } from "./agent-activity-model";
+import type { AgentActivitySessionItem } from "@/state/read-models/agent-activity-read-model";
 
 type AgentActivityCardProps = {
   activeSessionCount: number;

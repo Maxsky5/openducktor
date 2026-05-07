@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import {
   buildDevServerDraftValidationMap,
   countDevServerDraftValidationErrors,
-} from "./settings-model";
+} from "@/state/read-models/settings-read-model";
 
 type UseSettingsModalRepoScriptValidationArgs = {
   snapshotDraft: SettingsSnapshot | null;
