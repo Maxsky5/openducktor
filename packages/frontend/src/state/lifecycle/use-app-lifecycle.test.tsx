@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import type { BeadsCheck } from "@openducktor/contracts";
+import { CancelledError } from "@tanstack/react-query";
 import { act } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -892,6 +893,46 @@ describe("useAppLifecycle", () => {
       expect(
         toastError.mock.calls.filter(([title]) => title === "Failed to sync task updates"),
       ).toHaveLength(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not show repository tasks unavailable when startup task load is cancelled", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+
+    const baseArgs = {
+      activeRepo: "/repo",
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => {}),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () =>
+        makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+      ),
+      refreshTaskData: mock(async () => {
+        throw new CancelledError();
+      }),
+      clearBranchData: mock(() => {}),
+    } satisfies HookArgs;
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(toastError).not.toHaveBeenCalledWith("Repository tasks unavailable", {
+        description: "CancelledError",
+      });
     } finally {
       await harness.unmount();
     }

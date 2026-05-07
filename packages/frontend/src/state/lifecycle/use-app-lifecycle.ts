@@ -3,6 +3,7 @@ import {
   externalTaskSyncEventSchema,
   type RepoStoreHealth,
 } from "@openducktor/contracts";
+import { isCancelledError } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import { BROWSER_LIVE_STREAM_WARNING_EVENT_KIND } from "@/lib/browser-live/constants";
@@ -302,7 +303,7 @@ export function useAppLifecycle({
           return;
         }
 
-        if (tasksResult.status === "rejected") {
+        if (tasksResult.status === "rejected" && !isCancelledError(tasksResult.reason)) {
           toast.error("Repository tasks unavailable", {
             description: summarizeTaskLoadError({
               error: tasksResult.reason,
