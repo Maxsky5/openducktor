@@ -896,6 +896,110 @@ fn update_task_updates_cli_fields_and_qa_metadata() -> Result<()> {
 }
 
 #[test]
+fn update_task_removes_existing_labels_when_patch_labels_is_empty() -> Result<()> {
+    let repo = RepoFixture::new("update-task-clear-labels");
+    let mut current = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({"openducktor": {}})),
+    );
+    current["labels"] = json!(["backend", "api"]);
+    let mut updated = current.clone();
+    updated["labels"] = json!([]);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([current]).to_string())),
+        MockStep::WithEnv(Ok("{}".to_string())),
+        MockStep::WithEnv(Ok(json!([updated]).to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let task = store.update_task(
+        repo.path(),
+        "task-1",
+        UpdateTaskPatch {
+            title: None,
+            description: None,
+            notes: None,
+            status: None,
+            priority: None,
+            issue_type: None,
+            ai_review_enabled: None,
+            labels: Some(Vec::new()),
+            assignee: None,
+            parent_id: None,
+            target_branch: None,
+        },
+    )?;
+
+    assert!(task.labels.is_empty());
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(calls[0].args[0], "show");
+    assert_eq!(
+        calls[1].args,
+        vec![
+            "update",
+            "--remove-label",
+            "api",
+            "--remove-label",
+            "backend",
+            "--json",
+            "--",
+            "task-1"
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>()
+    );
+    assert_eq!(calls[2].args[0], "show");
+    Ok(())
+}
+
+#[test]
+fn update_task_skips_write_and_second_read_when_empty_labels_are_already_clear() -> Result<()> {
+    let repo = RepoFixture::new("update-task-clear-empty-labels");
+    let mut current = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({"openducktor": {}})),
+    );
+    current["labels"] = json!([]);
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([current]).to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let task = store.update_task(
+        repo.path(),
+        "task-1",
+        UpdateTaskPatch {
+            title: None,
+            description: None,
+            notes: None,
+            status: None,
+            priority: None,
+            issue_type: None,
+            ai_review_enabled: None,
+            labels: Some(Vec::new()),
+            assignee: None,
+            parent_id: None,
+            target_branch: None,
+        },
+    )?;
+
+    assert!(task.labels.is_empty());
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].args[0], "show");
+    Ok(())
+}
+
+#[test]
 fn update_task_can_update_only_ai_review_metadata() -> Result<()> {
     let repo = RepoFixture::new("update-task-metadata");
     let current = issue_value(

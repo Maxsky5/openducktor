@@ -249,6 +249,31 @@ impl BeadsTaskStore {
         Ok(task)
     }
 
+    fn append_label_update_args(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        labels: Vec<String>,
+        args: &mut Vec<String>,
+    ) -> Result<Option<TaskCard>> {
+        let labels = normalize_labels(labels);
+        if labels.is_empty() {
+            let current_task = self.show_task(repo_path, task_id)?;
+            if current_task.labels.is_empty() {
+                return Ok(Some(current_task));
+            }
+            for label in current_task.labels {
+                args.push("--remove-label".to_string());
+                args.push(label);
+            }
+            return Ok(None);
+        }
+
+        args.push("--set-labels".to_string());
+        args.push(labels.join(","));
+        Ok(None)
+    }
+
     pub(super) fn update_task_impl(
         &self,
         repo_path: &Path,
@@ -256,6 +281,8 @@ impl BeadsTaskStore {
         patch: UpdateTaskPatch,
     ) -> Result<TaskCard> {
         let mut args = vec!["update".to_string()];
+        let updates_metadata = patch.ai_review_enabled.is_some() || patch.target_branch.is_some();
+        let mut current_task_after_noop_label_update = None;
 
         if let Some(title) = patch.title {
             args.push("--title".to_string());
@@ -298,8 +325,8 @@ impl BeadsTaskStore {
         }
 
         if let Some(labels) = patch.labels {
-            args.push("--set-labels".to_string());
-            args.push(normalize_labels(labels).join(","));
+            current_task_after_noop_label_update =
+                self.append_label_update_args(repo_path, task_id, labels, &mut args)?;
         }
 
         if args.len() > 1 {
@@ -310,7 +337,7 @@ impl BeadsTaskStore {
             self.invalidate_task_list_cache(repo_path)?;
         }
 
-        if patch.ai_review_enabled.is_some() || patch.target_branch.is_some() {
+        if updates_metadata {
             let (mut root, namespace_key, mut namespace_map) =
                 self.load_namespace(repo_path, task_id)?;
             if let Some(ai_review_enabled) = patch.ai_review_enabled {
@@ -323,6 +350,13 @@ impl BeadsTaskStore {
                 );
             }
             self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
+        }
+
+        if let Some(task) = current_task_after_noop_label_update {
+            if args.len() == 1 && !updates_metadata {
+                self.refresh_cached_pull_request_sync_candidate(repo_path, task.clone())?;
+                return Ok(task);
+            }
         }
 
         let task = self.show_task(repo_path, task_id)?;
