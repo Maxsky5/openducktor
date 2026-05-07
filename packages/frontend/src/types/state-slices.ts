@@ -256,6 +256,7 @@ export type AgentStateContextValue = {
           initialStatusRelease?: InitialSessionStatusReleasePolicy;
         },
   ) => Promise<string>;
+  settleStartedAgentSession: (externalSessionId: string) => void;
   sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
   stopAgentSession: (externalSessionId: string) => Promise<void>;
   updateAgentSessionModel: (

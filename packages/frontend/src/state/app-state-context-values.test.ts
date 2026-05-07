@@ -156,6 +156,7 @@ describe("app-state-context-values", () => {
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       startAgentSession: async () => "session",
+      settleStartedAgentSession: () => {},
       sendAgentMessage: async () => {},
       stopAgentSession: async () => {},
       updateAgentSessionModel: () => {},

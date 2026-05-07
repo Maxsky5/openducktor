@@ -185,6 +185,7 @@ const createBaseArgs = (): HookArgs => ({
   humanRequestChangesTask: async () => {},
   setTaskTargetBranch: async () => {},
   startAgentSession: async () => "session-new",
+  settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
 });
 

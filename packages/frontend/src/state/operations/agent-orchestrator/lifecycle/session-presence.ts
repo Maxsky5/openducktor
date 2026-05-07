@@ -143,6 +143,7 @@ export const applyAgentSessionPresenceSnapshotToSession = (
   if (hasPendingOutboundSend(current)) {
     return {
       ...current,
+      runtimeRecoveryState: "recovering_runtime",
       runtimeKind: snapshot.ref.runtimeKind,
       runtimeId: null,
       workingDirectory: snapshot.ref.workingDirectory,

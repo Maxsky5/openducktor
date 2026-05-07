@@ -44,24 +44,21 @@ type StartSessionWorkflowArgs = {
   task: TaskCard | null;
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
+  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage?: AgentStateContextValue["sendAgentMessage"];
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
   postStartExecution?: "await" | "detached";
   onDetachedPostStartError?: ((error: Error) => void) | undefined;
 };
 
-const resolvePostStartMessage = async ({
+const requirePostStartMessage = async ({
   activeWorkspace,
   queryClient,
   intent,
   task,
 }: Pick<StartSessionWorkflowArgs, "activeWorkspace" | "queryClient" | "task"> & {
   intent: SessionStartWorkflowIntent;
-}): Promise<string | null> => {
-  if (intent.postStartAction === "none") {
-    return null;
-  }
-
+}): Promise<string> => {
   return buildPostStartMessage({
     activeWorkspace,
     queryClient,
@@ -274,6 +271,7 @@ export const startSessionWorkflow = async ({
   task,
   persistTaskTargetBranch,
   startAgentSession,
+  settleStartedAgentSession,
   sendAgentMessage,
   humanRequestChangesTask,
   postStartExecution = "await",
@@ -286,6 +284,8 @@ export const startSessionWorkflow = async ({
   });
 
   const initialStatusRelease = resolveInitialStatusRelease(intent.postStartAction);
+  const postStartMessageSender =
+    intent.postStartAction === "none" ? null : requirePostStartMessageSender(sendAgentMessage);
 
   const externalSessionId = await startSessionFromIntent({
     intent,
@@ -301,19 +301,27 @@ export const startSessionWorkflow = async ({
     };
   }
 
-  const postStartMessageSender = requirePostStartMessageSender(sendAgentMessage);
+  if (!postStartMessageSender) {
+    throw new Error("Post-start messaging is unavailable.");
+  }
+
+  const confirmedPostStartMessageSender = postStartMessageSender;
   const runPostStartAction = async (): Promise<Error | null> => {
+    let postStartMessage: string;
     try {
-      const postStartMessage = await resolvePostStartMessage({
+      postStartMessage = await requirePostStartMessage({
         activeWorkspace,
         queryClient,
         intent,
         task,
       });
-      if (postStartMessage === null) {
-        return null;
-      }
-      await postStartMessageSender(externalSessionId, [
+    } catch (error) {
+      settleStartedAgentSession(externalSessionId);
+      return toError(error);
+    }
+
+    try {
+      await confirmedPostStartMessageSender(externalSessionId, [
         {
           kind: "text",
           text: postStartMessage,

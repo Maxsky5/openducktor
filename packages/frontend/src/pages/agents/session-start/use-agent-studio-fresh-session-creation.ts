@@ -34,6 +34,7 @@ type UseAgentStudioFreshSessionCreationArgs = {
   isActiveTaskHydrated: boolean;
   isSessionWorking: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
+  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
@@ -56,6 +57,7 @@ export function useAgentStudioFreshSessionCreation({
   isActiveTaskHydrated,
   isSessionWorking,
   startAgentSession,
+  settleStartedAgentSession,
   sendAgentMessage,
   updateQuery,
   onContextSwitchIntent,
@@ -122,6 +124,7 @@ export function useAgentStudioFreshSessionCreation({
               decision,
               task: selectedTask,
               startAgentSession,
+              settleStartedAgentSession,
               sendAgentMessage,
               postStartExecution: "detached",
               onPostStartActionError: (_action, error) => {
@@ -185,6 +188,7 @@ export function useAgentStudioFreshSessionCreation({
       role,
       selectedTask,
       sendAgentMessage,
+      settleStartedAgentSession,
       setStartingActivityCountByContext,
       startAgentSession,
       taskId,

@@ -54,6 +54,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isActiveTaskHydrated: true,
   isSessionWorking: false,
   startAgentSession: async () => "session-new",
+  settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
   updateQuery: () => {},
   setStartingActivityCountByContext: createSetStartingActivityCountByContext(),

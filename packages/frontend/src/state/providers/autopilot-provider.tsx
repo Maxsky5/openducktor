@@ -67,6 +67,7 @@ type ExecuteAutopilotActionArgs = {
   } | null>;
   startSessionWorkflow: StartSessionWorkflowFn;
   startAgentSession: AgentStateContextValue["startAgentSession"];
+  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
 };
 
@@ -274,6 +275,7 @@ export const executeAutopilotAction = async ({
   resolveTaskWorktree,
   startSessionWorkflow,
   startAgentSession,
+  settleStartedAgentSession,
   sendAgentMessage,
 }: ExecuteAutopilotActionArgs): Promise<AutopilotActionOutcome> => {
   const action = AUTOPILOT_ACTION_DEFINITIONS[actionId];
@@ -324,6 +326,7 @@ export const executeAutopilotAction = async ({
             }),
       task,
       startAgentSession,
+      settleStartedAgentSession,
       sendAgentMessage,
       postStartExecution: "detached",
       onDetachedPostStartError: (error) => {
@@ -354,7 +357,8 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { tasks } = useTaskDataContext();
   const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
-  const { startAgentSession, sendAgentMessage } = useAgentOperationsContext();
+  const { startAgentSession, settleStartedAgentSession, sendAgentMessage } =
+    useAgentOperationsContext();
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const previousRepoRef = useRef<string | null>(null);
   const previousTasksByIdRef = useRef<Map<string, TaskCard>>(new Map());
@@ -401,6 +405,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
               resolveTaskWorktree: loadTaskWorktree,
               startSessionWorkflow,
               startAgentSession,
+              settleStartedAgentSession,
               sendAgentMessage,
             });
 
@@ -425,6 +430,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     loadRepoRuntimeCatalog,
     queryClient,
     sendAgentMessage,
+    settleStartedAgentSession,
     startAgentSession,
     settingsSnapshotQuery.data?.autopilot,
     tasks,

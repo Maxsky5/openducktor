@@ -479,6 +479,7 @@ describe("KanbanPage session start modal flow", () => {
         loadAgentSessions: loadAgentSessionsMock,
         removeAgentSessions: removeAgentSessionsMock,
         startAgentSession: startAgentSessionMock,
+        settleStartedAgentSession: () => {},
         sendAgentMessage: sendAgentMessageMock,
       }),
       useTasksState: () => ({

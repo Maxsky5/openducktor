@@ -133,6 +133,7 @@ const createBaseArgs = (): HookArgs => ({
   reusablePrompts: [],
   repoSettings: null,
   startAgentSession: async () => "session-new",
+  settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
   bootstrapTaskSessions: async () => {},
   hydrateRequestedTaskSessionHistory: async () => {},

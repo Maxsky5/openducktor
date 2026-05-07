@@ -138,6 +138,22 @@ describe("session-presence", () => {
     expect(applied.status).toBe("running");
   });
 
+  test("marks persisted-only pending outbound sends as recovering runtime", () => {
+    const snapshot = toPersistedOnlyAgentSessionPresenceSnapshot({
+      ref: sessionRefFixture,
+      reason: "No live repo runtime found.",
+    });
+
+    const applied = applyAgentSessionPresenceSnapshotToSession(
+      createSessionState({ pendingUserMessageStartedAt: 123 }),
+      snapshot,
+    );
+
+    expect(applied.status).toBe("running");
+    expect(applied.runtimeRecoveryState).toBe("recovering_runtime");
+    expect(applied.runtimeId).toBeNull();
+  });
+
   test("uses live pending input instead of persisted recovery hints", () => {
     const liveApproval = {
       requestId: "live-approval",

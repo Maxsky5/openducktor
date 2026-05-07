@@ -217,6 +217,7 @@ export const createStartAgentSession = ({
       freshStartTarget?.normalizedTargetWorkingDirectory ?? "";
     const selectedModelKey =
       input.startMode === "reuse" ? "" : serializeSelectedModelKey(input.selectedModel);
+    const initialStatusRelease = getInitialStatusRelease(input);
     const inFlightKeyParts = [
       repoPath,
       taskId,
@@ -225,6 +226,7 @@ export const createStartAgentSession = ({
       normalizedSourceSessionId,
       normalizedTargetWorkingDirectory,
       selectedModelKey,
+      initialStatusRelease,
     ];
     const inFlightKey = inFlightKeyParts.join("::");
     const existingInFlight = session.inFlightStartsByWorkspaceTaskRef.current.get(inFlightKey);
@@ -261,7 +263,7 @@ export const createStartAgentSession = ({
         startedCtx: startResult.ctx,
         session,
         runtime,
-        initialStatusRelease: getInitialStatusRelease(input),
+        initialStatusRelease,
       });
 
       return startResult.ctx.summary.externalSessionId;

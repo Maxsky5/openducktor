@@ -80,6 +80,7 @@ type UseAgentStudioSessionActionsArgs = {
   reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
+  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
@@ -112,6 +113,7 @@ export function useAgentStudioSessionActions({
   reusablePrompts,
   repoSettings,
   startAgentSession,
+  settleStartedAgentSession,
   sendAgentMessage,
   bootstrapTaskSessions: _bootstrapTaskSessions,
   hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
@@ -220,6 +222,7 @@ export function useAgentStudioSessionActions({
     selectionForNewSession,
     repoSettings,
     startAgentSession,
+    settleStartedAgentSession,
     sendAgentMessage,
     humanRequestChangesTask,
     ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),

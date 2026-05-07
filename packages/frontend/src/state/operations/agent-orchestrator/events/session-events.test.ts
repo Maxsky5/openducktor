@@ -5414,6 +5414,7 @@ describe("agent-orchestrator-session-events", () => {
     });
 
     expect(sessionsRef.current["session-1"]?.status).toBe("running");
+    expect(sessionsRef.current["session-1"]?.pendingUserMessageStartedAt).toBe(123);
   });
 
   test("flushes buffered text drafts before terminal idle settlement", () => {

@@ -52,6 +52,7 @@ type UseKanbanSessionStartFlowArgs = {
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
+  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
 };
 
@@ -155,6 +156,7 @@ export function useKanbanSessionStartFlow({
   humanRequestChangesTask,
   setTaskTargetBranch,
   startAgentSession,
+  settleStartedAgentSession,
   sendAgentMessage,
 }: UseKanbanSessionStartFlowArgs): UseKanbanSessionStartFlowResult {
   const queryClient = useQueryClient();
@@ -232,6 +234,7 @@ export function useKanbanSessionStartFlow({
             roleLabels: ROLE_LABELS,
             queryClient,
             startAgentSession,
+            settleStartedAgentSession,
             humanRequestChangesTask,
             ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
             openSessionInAgentStudio,
@@ -249,6 +252,7 @@ export function useKanbanSessionStartFlow({
       queryClient,
       runSessionStartRequest,
       sendAgentMessage,
+      settleStartedAgentSession,
       setTaskTargetBranch,
       startAgentSession,
     ],

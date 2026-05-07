@@ -53,6 +53,7 @@ type ExecuteSessionStartFromDecisionArgs = {
   task: TaskCard | null;
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
+  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage?: AgentStateContextValue["sendAgentMessage"];
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
   postStartExecution?: "await" | "detached";
@@ -154,6 +155,7 @@ export const executeSessionStartFromDecision = async ({
   task,
   persistTaskTargetBranch,
   startAgentSession,
+  settleStartedAgentSession,
   sendAgentMessage,
   humanRequestChangesTask,
   postStartExecution,
@@ -185,6 +187,7 @@ export const executeSessionStartFromDecision = async ({
     task,
     ...(persistTaskTargetBranch ? { persistTaskTargetBranch } : {}),
     startAgentSession,
+    settleStartedAgentSession,
     ...(sendAgentMessage ? { sendAgentMessage } : {}),
     ...(humanRequestChangesTask ? { humanRequestChangesTask } : {}),
     postStartExecution: resolvedPostStartExecution,

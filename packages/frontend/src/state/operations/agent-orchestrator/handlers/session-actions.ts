@@ -573,6 +573,9 @@ export const createAgentSessionActions = ({
     ensureSessionReady,
     sendAgentMessage,
     startAgentSession,
+    settleStartedAgentSession: (externalSessionId: string): void => {
+      settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
+    },
     stopAgentSession,
     updateAgentSessionModel,
     replyAgentApproval,

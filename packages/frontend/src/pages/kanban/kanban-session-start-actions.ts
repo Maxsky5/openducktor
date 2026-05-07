@@ -21,6 +21,7 @@ type StartKanbanSessionFlowInput = {
   roleLabels: Record<AgentRole, string>;
   queryClient: QueryClient;
   startAgentSession: AgentStateContextValue["startAgentSession"];
+  settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   openSessionInAgentStudio: (intent: KanbanSessionStartIntent, externalSessionId: string) => void;
@@ -37,6 +38,7 @@ export const startKanbanSessionFlow = async ({
   roleLabels,
   queryClient,
   startAgentSession,
+  settleStartedAgentSession,
   humanRequestChangesTask,
   setTaskTargetBranch,
   openSessionInAgentStudio,
@@ -56,6 +58,7 @@ export const startKanbanSessionFlow = async ({
     task,
     ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
     startAgentSession,
+    settleStartedAgentSession,
     sendAgentMessage,
     humanRequestChangesTask,
     onPostStartActionError: (action, error) => {

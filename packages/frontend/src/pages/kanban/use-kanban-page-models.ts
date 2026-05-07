@@ -53,6 +53,7 @@ export function useKanbanPageModels({
     loadAgentSessions,
     removeAgentSessions,
     startAgentSession,
+    settleStartedAgentSession,
     sendAgentMessage,
   } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
@@ -127,6 +128,7 @@ export function useKanbanPageModels({
     humanRequestChangesTask,
     setTaskTargetBranch,
     startAgentSession,
+    settleStartedAgentSession,
     sendAgentMessage,
   });
   const {
