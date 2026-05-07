@@ -592,6 +592,50 @@ describe("tasks query cache helpers", () => {
     ).rejects.toThrow("current board failed");
   });
 
+  test("external repo task view refresh treats overlapping primary cancellation as non-fatal", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    const firstRead = createDeferred<TaskCard[]>();
+    const tasksList = mock(async (): Promise<TaskCard[]> => {
+      if (tasksList.mock.calls.length === 1) {
+        return firstRead.promise;
+      }
+      return [{ ...taskFixture, id: "fresh" }];
+    });
+    host.tasksList = tasksList;
+
+    const firstRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      forceFreshTaskList: true,
+      ancillaryFailureMode: "best-effort",
+      ignorePrimaryCancellation: true,
+      refreshInactiveViews: false,
+      taskDocumentStrategy: "none",
+    });
+    for (let attempts = 0; tasksList.mock.calls.length === 0 && attempts < 10; attempts += 1) {
+      await Promise.resolve();
+    }
+    expect(tasksList).toHaveBeenCalledTimes(1);
+
+    const secondRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      forceFreshTaskList: true,
+      ancillaryFailureMode: "best-effort",
+      ignorePrimaryCancellation: true,
+      refreshInactiveViews: false,
+      taskDocumentStrategy: "none",
+    });
+
+    await expect(firstRefresh).resolves.toBeUndefined();
+    await expect(secondRefresh).resolves.toBeUndefined();
+    firstRead.resolve([{ ...taskFixture, id: "stale" }]);
+
+    expect(tasksList).toHaveBeenCalledTimes(2);
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(
+        taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
+      )?.tasks[0]?.id,
+    ).toBe("fresh");
+  });
+
   test("external repo task view refresh skips inactive done-visible variants", async () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);

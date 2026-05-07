@@ -205,6 +205,7 @@ export function useTaskOperations({
         await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
           forceFreshTaskList: true,
           ancillaryFailureMode: "best-effort",
+          ignorePrimaryCancellation: true,
           refreshInactiveViews: false,
           ...(taskIds
             ? { taskDocumentStrategy: "invalidate", taskIds }

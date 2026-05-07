@@ -17,6 +17,7 @@ import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "./workspace";
 type BaseRepoTaskViewRefreshOptions = {
   forceFreshTaskList?: boolean;
   ancillaryFailureMode?: "reject" | "best-effort";
+  ignorePrimaryCancellation?: boolean;
   refreshInactiveViews?: boolean;
 };
 
@@ -78,6 +79,7 @@ export const refreshRepoTaskViewsFromQuery = async (
         });
   const doneVisibleDays = settings.kanban.doneVisibleDays;
   const ancillaryFailureMode = options?.ancillaryFailureMode ?? "reject";
+  const ignorePrimaryCancellation = options?.ignorePrimaryCancellation ?? false;
   const refreshInactiveViews = options?.refreshInactiveViews ?? true;
 
   if (
@@ -132,7 +134,14 @@ export const refreshRepoTaskViewsFromQuery = async (
     }
   }
   await invalidateRepoTaskQueries(queryClient, repoPath);
-  await loadRepoTaskDataFromQuery(queryClient, repoPath, doneVisibleDays);
+  try {
+    await loadRepoTaskDataFromQuery(queryClient, repoPath, doneVisibleDays);
+  } catch (error) {
+    if (ignorePrimaryCancellation && isCancelledQueryError(error)) {
+      return;
+    }
+    throw error;
+  }
 
   const ancillaryRefreshes: Promise<unknown>[] = [taskDocumentRefresh()];
   if (refreshInactiveViews) {
