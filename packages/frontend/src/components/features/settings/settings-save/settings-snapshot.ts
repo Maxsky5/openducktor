@@ -1,5 +1,5 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import { normalizeReusablePromptsForSave as prepareReusablePromptsForSave } from "@/components/features/settings/settings-model";
+import { prepareReusablePromptsForSave } from "@/components/features/settings/settings-model";
 import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
 import { prepareGlobalGitSettingsForSave } from "./global-git-settings";
 import { preparePromptOverridesForSave } from "./prompt-overrides";

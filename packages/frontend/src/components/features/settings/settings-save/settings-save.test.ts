@@ -5,8 +5,6 @@ import {
   type RepoConfig,
   type RepoPromptOverrides,
 } from "@openducktor/contracts";
-import { buildInheritedPromptPreview } from "../settings-prompt-inheritance";
-import { chooseInitialSettingsWorkspaceId } from "../settings-workspace-selection";
 import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
 import { preparePromptOverridesForSave } from "./prompt-overrides";
 import { prepareRepoConfigForSave } from "./repo-config";
@@ -97,7 +95,7 @@ describe("settings save transforms", () => {
     });
   });
 
-  test("preserves shared prompt override entries when normalizing for save", () => {
+  test("preserves shared prompt override entries when preparing save payloads", () => {
     const saveReady = preparePromptOverridesForSave({
       "system.shared.workflow_guards": {
         template: "  guards override  ",
@@ -379,117 +377,5 @@ describe("settings save transforms", () => {
       },
     });
     expect(snapshot.theme).toBe("light");
-  });
-
-  test("selects initial repo using active repo when available", () => {
-    const snapshot = {
-      theme: "light" as const,
-      git: {
-        defaultMergeMethod: "merge_commit" as const,
-      },
-      general: {
-        openAgentStudioTabOnBackgroundSessionStart: true,
-      },
-      chat: {
-        showThinkingMessages: false,
-      },
-      reusablePrompts: [],
-      kanban: {
-        doneVisibleDays: 1,
-        emptyColumnDisplay: "show" as const,
-      },
-      autopilot: {
-        rules: [],
-      },
-      workspaces: {
-        "repo-b": createRepoConfig({
-          workspaceId: "repo-b",
-          workspaceName: "Repo B",
-          repoPath: "/repo-b",
-        }),
-        "repo-a": createRepoConfig(),
-      },
-      globalPromptOverrides: {},
-    };
-
-    expect(chooseInitialSettingsWorkspaceId(snapshot, "/repo-b")).toBe("repo-b");
-    expect(chooseInitialSettingsWorkspaceId(snapshot, "/missing")).toBe("repo-a");
-    expect(
-      chooseInitialSettingsWorkspaceId(
-        {
-          theme: "light" as const,
-          git: {
-            defaultMergeMethod: "merge_commit" as const,
-          },
-          general: {
-            openAgentStudioTabOnBackgroundSessionStart: true,
-          },
-          chat: {
-            showThinkingMessages: false,
-          },
-          reusablePrompts: [],
-          kanban: {
-            doneVisibleDays: 1,
-            emptyColumnDisplay: "show" as const,
-          },
-          autopilot: {
-            rules: [],
-          },
-          workspaces: {},
-          globalPromptOverrides: {},
-        },
-        null,
-      ),
-    ).toBeNull();
-  });
-
-  test("resolves inherited preview from global override and builtin", () => {
-    const fromGlobal = buildInheritedPromptPreview(
-      "kickoff.spec_initial",
-      {
-        template: "repo override",
-        baseVersion: 2,
-        enabled: false,
-      },
-      {
-        "kickoff.spec_initial": {
-          template: "global override",
-          baseVersion: 1,
-          enabled: true,
-        },
-      },
-      "builtin",
-    );
-    expect(fromGlobal).toEqual({
-      sourceLabel: "Global override",
-      template: "global override",
-    });
-
-    const fromBuiltin = buildInheritedPromptPreview(
-      "kickoff.spec_initial",
-      {
-        template: "repo override",
-        baseVersion: 2,
-        enabled: false,
-      },
-      {},
-      "builtin prompt",
-    );
-    expect(fromBuiltin).toEqual({
-      sourceLabel: "Builtin prompt",
-      template: "builtin prompt",
-    });
-
-    const hiddenWhenRepoEnabled = buildInheritedPromptPreview(
-      "kickoff.spec_initial",
-      {
-        template: "repo override",
-        baseVersion: 2,
-        enabled: true,
-      },
-      {},
-      "builtin prompt",
-    );
-    expect(hiddenWhenRepoEnabled).toBeUndefined();
   });
 });
