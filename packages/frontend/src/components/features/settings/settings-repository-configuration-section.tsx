@@ -9,7 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
-import { buildDevServerDraftValidationMap, parseHookLines } from "./settings-model";
+import {
+  buildDevServerDraftValidationMap,
+  parseHookLines,
+} from "@/state/read-models/settings-read-model";
 
 type RepositoryConfigurationSectionProps = {
   selectedRepoConfig: RepoConfig | null;

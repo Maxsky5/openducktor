@@ -14,7 +14,3 @@ export {
   toRoleVariantOptions,
   updatePromptOverrideTemplate,
 } from "./settings-modal-model";
-export {
-  buildDevServerDraftValidationMap,
-  countDevServerDraftValidationErrors,
-} from "./settings-model";

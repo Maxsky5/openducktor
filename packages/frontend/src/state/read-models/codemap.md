@@ -1,13 +1,13 @@
 # packages/frontend/src/state/read-models/
 
 ## Responsibility
-Derived read-model transforms for state data that should stay separate from direct host DTOs.
+Derived read-model transforms for state data and shared frontend settings drafts that should stay separate from direct host DTOs and presentation folders.
 
 ## Design Patterns
 Tiny pure selectors normalize backend payloads before the data reaches page models or components.
 
 ## Data & Control Flow
-Raw task and workspace data is filtered or shaped into user-facing read models, such as visible Kanban tasks.
+Raw task, workspace, session, and settings draft data is filtered or shaped into user-facing read models, such as visible Kanban tasks, shell agent activity summaries, and normalized repo settings save payloads.
 
 ## Integration Points
-`task-read-model.ts` and any state/query modules that need canonical visibility rules.
+`task-read-model.ts`, `agent-activity-read-model.ts`, `settings-read-model.ts`, and state/query or component modules that need canonical frontend read-model rules.
