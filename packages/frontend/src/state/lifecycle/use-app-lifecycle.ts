@@ -74,6 +74,11 @@ export function useAppLifecycle({
   } | null>(null);
 
   useLayoutEffect(() => {
+    const previousRepoPath = activeWorkspaceRef.current?.repoPath ?? null;
+    const nextRepoPath = activeWorkspace?.repoPath ?? null;
+    if (previousRepoPath !== nextRepoPath) {
+      lastExternalTaskSyncFailureToastRef.current = null;
+    }
     activeWorkspaceRef.current = activeWorkspace;
     refreshTaskDataRef.current = refreshTaskData;
   }, [activeWorkspace, refreshTaskData]);

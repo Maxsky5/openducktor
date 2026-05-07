@@ -8,6 +8,7 @@ import {
   TASK_DOCUMENT_STALE_TIME_MS,
 } from "@/state/queries/documents";
 import type { TaskDocumentPayload } from "@/types/task-documents";
+import { ensureTaskDocumentQueryData } from "./task-document-query-data";
 
 export type DocumentSectionKey = "spec" | "plan" | "qa";
 
@@ -203,7 +204,9 @@ export function useTaskDocuments(
         return false;
       }
 
-      void queryClient.ensureQueryData(queryOptionsBySection[section]).catch(() => undefined);
+      void ensureTaskDocumentQueryData(queryClient, queryOptionsBySection[section]).catch(
+        () => undefined,
+      );
       return true;
     },
     [enabled, queryClient, queryOptionsBySection],

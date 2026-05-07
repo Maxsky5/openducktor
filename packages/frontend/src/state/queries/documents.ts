@@ -158,30 +158,20 @@ export const invalidateCachedTaskDocumentQueries = async (
   taskIds: string[],
 ): Promise<void> => {
   const taskIdSet = new Set(taskIds);
-  const matchingQueries = queryClient.getQueryCache().findAll({
+  await queryClient.invalidateQueries({
     queryKey: documentQueryKeys.all,
     exact: false,
-  });
-
-  await Promise.all(
-    matchingQueries.map((query) => {
+    predicate: (query) => {
       const [scope, _section, cachedRepoPath, cachedTaskId] = query.queryKey;
-      if (
-        scope !== documentQueryKeys.all[0] ||
-        cachedRepoPath !== repoPath ||
-        typeof cachedTaskId !== "string" ||
-        !taskIdSet.has(cachedTaskId)
-      ) {
-        return Promise.resolve();
-      }
-
-      return queryClient.invalidateQueries({
-        queryKey: query.queryKey,
-        exact: true,
-        refetchType: "none",
-      });
-    }),
-  );
+      return (
+        scope === documentQueryKeys.all[0] &&
+        cachedRepoPath === repoPath &&
+        typeof cachedTaskId === "string" &&
+        taskIdSet.has(cachedTaskId)
+      );
+    },
+    refetchType: "none",
+  });
 };
 
 export const refreshCachedTaskDocumentQueries = async (

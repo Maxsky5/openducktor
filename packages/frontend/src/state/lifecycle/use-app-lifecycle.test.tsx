@@ -828,6 +828,75 @@ describe("useAppLifecycle", () => {
     }
   });
 
+  test("resets external task sync failure dedupe when the active repo changes", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+
+    const refreshTaskData = mock(async () => {
+      throw new Error("sync failed");
+    });
+
+    const baseArgs = {
+      activeRepo: "/repo-a",
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => {}),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () =>
+        makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+      ),
+      refreshTaskData,
+      clearBranchData: mock(() => {}),
+    } satisfies HookArgs;
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+    await harness.mount();
+    try {
+      if (!subscribedTaskListener) {
+        throw new Error("Expected task event listener to be registered");
+      }
+
+      await harness.run(async () => {
+        subscribedTaskListener?.({
+          eventId: "event-5",
+          kind: "tasks_updated",
+          repoPath: "/repo-a",
+          taskIds: ["task-1"],
+          emittedAt: "2026-04-10T13:10:00.000Z",
+        });
+        await Promise.resolve();
+      });
+      expect(
+        toastError.mock.calls.filter(([title]) => title === "Failed to sync task updates"),
+      ).toHaveLength(1);
+
+      await harness.update({ args: { ...baseArgs, activeRepo: "/repo-b" } });
+      await harness.update({ args: baseArgs });
+
+      await harness.run(async () => {
+        subscribedTaskListener?.({
+          eventId: "event-6",
+          kind: "tasks_updated",
+          repoPath: "/repo-a",
+          taskIds: ["task-1"],
+          emittedAt: "2026-04-10T13:10:01.000Z",
+        });
+        await Promise.resolve();
+      });
+
+      expect(
+        toastError.mock.calls.filter(([title]) => title === "Failed to sync task updates"),
+      ).toHaveLength(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("does not block repo diagnostics load on branch refresh completion", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;
