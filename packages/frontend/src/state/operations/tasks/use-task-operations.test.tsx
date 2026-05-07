@@ -589,7 +589,7 @@ describe("use-task-operations", () => {
       expect(tasksList).not.toHaveBeenCalled();
       expect(getLatest().tasks[0]?.id).toBe("cached");
       expect(toastError).toHaveBeenCalledWith("Failed to load tasks", {
-        description: "Task store unavailable. settings unavailable",
+        description: "settings unavailable",
       });
     } finally {
       await harness.unmount();
@@ -938,7 +938,7 @@ describe("use-task-operations", () => {
       expect(tasksList).not.toHaveBeenCalled();
       expect(runsList).not.toHaveBeenCalled();
       expect(toastError).toHaveBeenCalledWith("Failed to refresh tasks", {
-        description: "Task store unavailable. gh auth expired",
+        description: "gh auth expired",
       });
     } finally {
       await harness.unmount();
@@ -1128,13 +1128,13 @@ describe("use-task-operations", () => {
 
       expect(toastError).toHaveBeenCalledTimes(1);
       expect(toastError).toHaveBeenCalledWith("Failed to refresh tasks", {
-        description: "Task store unavailable. gh auth expired",
+        description: "gh auth expired",
       });
       expect(consoleWarn).toHaveBeenCalledTimes(1);
       expect(consoleWarn).toHaveBeenCalledWith(TASK_REFRESH_WARNING, {
         repoPath: "/repo",
         trigger: "scheduled",
-        description: "Task store unavailable. gh auth expired",
+        description: "gh auth expired",
         error: "gh auth expired",
       });
     } finally {
@@ -1201,12 +1201,12 @@ describe("use-task-operations", () => {
       });
 
       expect(toastError).toHaveBeenCalledWith("Failed to refresh tasks", {
-        description: "Task store unavailable. gh auth expired",
+        description: "gh auth expired",
       });
       expect(consoleWarn).toHaveBeenCalledWith(TASK_REFRESH_WARNING, {
         repoPath: "/repo",
         trigger: "manual",
-        description: "Task store unavailable. gh auth expired",
+        description: "gh auth expired",
         error: "gh auth expired",
       });
     } finally {
@@ -1419,7 +1419,7 @@ describe("use-task-operations", () => {
 
       expect(toastError).toHaveBeenCalledTimes(1);
       expect(toastError).toHaveBeenCalledWith("Failed to refresh tasks", {
-        description: "Task store unavailable. gh auth expired",
+        description: "gh auth expired",
       });
       expect(consoleWarn).toHaveBeenCalledTimes(2);
 
@@ -1702,6 +1702,71 @@ describe("use-task-operations", () => {
       host.tasksList = original.tasksList;
       legacyHost.runsList = original.runsList;
       host.taskDocumentGet = original.taskDocumentGet;
+      host.taskDocumentGetFresh = original.taskDocumentGetFresh;
+    }
+  });
+
+  test("external refreshTaskData invalidates cached task detail documents without fetching them", async () => {
+    const tasksList = mock(async () => [makeTask("A", "in_progress")]);
+    const taskDocumentGetFresh = mock(async () => {
+      throw new Error("document fetch should not run");
+    });
+
+    const original = {
+      tasksList: host.tasksList,
+      taskDocumentGetFresh: host.taskDocumentGetFresh,
+    };
+    host.tasksList = tasksList;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
+
+    const queryClient = createQueryClient();
+    let latest: ReturnType<typeof useTaskOperations> | null = null;
+    const getLatestOperations = () => {
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+      return latest;
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      latest = useTaskOperations(args);
+      return null;
+    };
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const harness = createSharedHookHarness(
+      Harness,
+      {
+        args: {
+          activeWorkspace: createActiveWorkspace("/repo"),
+          refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
+        },
+      },
+      { wrapper },
+    );
+
+    try {
+      queryClient.setQueryData(documentQueryKeys.plan("/repo", "A"), {
+        markdown: "# Cached plan",
+        updatedAt: null,
+      });
+      await harness.mount();
+
+      await harness.run(async () => {
+        await getLatestOperations().refreshTaskData("/repo", "A", { source: "external-sync" });
+      });
+
+      expect(taskDocumentGetFresh).not.toHaveBeenCalled();
+      expect(queryClient.getQueryState(documentQueryKeys.plan("/repo", "A"))?.isInvalidated).toBe(
+        true,
+      );
+      expect(tasksList).toHaveBeenCalledWith("/repo", 1);
+    } finally {
+      await harness.unmount();
+      host.tasksList = original.tasksList;
       host.taskDocumentGetFresh = original.taskDocumentGetFresh;
     }
   });

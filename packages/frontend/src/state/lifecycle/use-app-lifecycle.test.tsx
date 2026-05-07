@@ -186,7 +186,9 @@ describe("useAppLifecycle", () => {
         });
       });
 
-      expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-1");
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-1", {
+        source: "external-sync",
+      });
     } finally {
       await harness.unmount();
     }
@@ -336,7 +338,9 @@ describe("useAppLifecycle", () => {
       });
 
       expect(refreshTaskData).toHaveBeenCalledTimes(1);
-      expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-1");
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-1", {
+        source: "external-sync",
+      });
     } finally {
       await harness.unmount();
     }
@@ -389,7 +393,7 @@ describe("useAppLifecycle", () => {
       });
 
       expect(toastError).toHaveBeenCalledWith("Failed to sync external task changes", {
-        description: "Task store unavailable. sync failed",
+        description: "sync failed",
       });
     } finally {
       await harness.unmount();
@@ -436,7 +440,9 @@ describe("useAppLifecycle", () => {
         await Promise.resolve();
       });
 
-      expect(refreshTaskData).toHaveBeenCalledWith("/repo");
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo", undefined, {
+        source: "external-sync",
+      });
       expect(toastError).not.toHaveBeenCalledWith("Task sync stream degraded", expect.anything());
     } finally {
       await harness.unmount();
@@ -487,7 +493,9 @@ describe("useAppLifecycle", () => {
       expect(toastError).toHaveBeenCalledWith("Task sync stream degraded", {
         description: "Task stream skipped 2 events; reconnect will replay buffered events.",
       });
-      expect(refreshTaskData).toHaveBeenCalledWith("/repo");
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo", undefined, {
+        source: "external-sync",
+      });
     } finally {
       await harness.unmount();
     }
@@ -640,7 +648,9 @@ describe("useAppLifecycle", () => {
       });
 
       expect(refreshTaskData).toHaveBeenCalledTimes(1);
-      expect(refreshTaskData).toHaveBeenCalledWith("/repo", ["task-1", "task-2"]);
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo", ["task-1", "task-2"], {
+        source: "external-sync",
+      });
     } finally {
       await harness.unmount();
     }
@@ -696,7 +706,9 @@ describe("useAppLifecycle", () => {
       });
 
       expect(refreshTaskData).toHaveBeenCalledTimes(1);
-      expect(refreshTaskData).toHaveBeenCalledWith("/repo", ["task-1", "task-2"]);
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo", ["task-1", "task-2"], {
+        source: "external-sync",
+      });
     } finally {
       await harness.unmount();
     }
@@ -749,8 +761,68 @@ describe("useAppLifecycle", () => {
       });
 
       expect(toastError).toHaveBeenCalledWith("Failed to sync task updates", {
-        description: "Task store unavailable. sync failed",
+        description: "sync failed",
       });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("deduplicates repeated batched task update refresh failures", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+
+    const refreshTaskData = mock(async () => {
+      throw new Error("sync failed");
+    });
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        setEvents: mock((_updater) => {}),
+        setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
+        refreshTaskData,
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+    await harness.mount();
+    try {
+      if (!subscribedTaskListener) {
+        throw new Error("Expected task event listener to be registered");
+      }
+
+      await harness.run(async () => {
+        subscribedTaskListener?.({
+          eventId: "event-3",
+          kind: "tasks_updated",
+          repoPath: "/repo",
+          taskIds: ["task-1"],
+          emittedAt: "2026-04-10T13:10:00.000Z",
+        });
+        subscribedTaskListener?.({
+          eventId: "event-4",
+          kind: "tasks_updated",
+          repoPath: "/repo",
+          taskIds: ["task-1"],
+          emittedAt: "2026-04-10T13:10:01.000Z",
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(
+        toastError.mock.calls.filter(([title]) => title === "Failed to sync task updates"),
+      ).toHaveLength(1);
     } finally {
       await harness.unmount();
     }
@@ -1203,7 +1275,7 @@ describe("useAppLifecycle", () => {
       expect(toastLoading).not.toHaveBeenCalled();
       expect(toastDismiss).not.toHaveBeenCalled();
       expect(toastError).toHaveBeenCalledWith("Repository tasks unavailable", {
-        description: "Task store unavailable. init failed",
+        description: "init failed",
       });
     } finally {
       beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
@@ -1268,7 +1340,7 @@ describe("useAppLifecycle", () => {
       expect(toastDismiss).toHaveBeenCalledWith("toast-id");
       expect(toastSuccess).not.toHaveBeenCalled();
       expect(toastError).toHaveBeenCalledWith("Repository tasks unavailable", {
-        description: "Task store unavailable. store failed",
+        description: "store failed",
       });
     } finally {
       beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
@@ -1409,7 +1481,7 @@ describe("useAppLifecycle", () => {
       expect(toastDismiss).toHaveBeenCalledWith("toast-id");
       expect(toastSuccess).not.toHaveBeenCalled();
       expect(toastError).toHaveBeenCalledWith("Repository tasks unavailable", {
-        description: "Task store unavailable. gh auth expired",
+        description: "gh auth expired",
       });
     } finally {
       beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));

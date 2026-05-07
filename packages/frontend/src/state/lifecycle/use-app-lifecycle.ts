@@ -9,6 +9,7 @@ import { BROWSER_LIVE_STREAM_WARNING_EVENT_KIND } from "@/lib/browser-live/const
 import { isBrowserLiveControlEvent } from "@/lib/browser-live-control-events";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
+import type { TaskDataRefreshOptions } from "@/state/app-state-contexts";
 import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
@@ -45,7 +46,7 @@ type UseAppLifecycleArgs = {
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
-    options?: { forceFreshTaskList?: boolean },
+    options?: TaskDataRefreshOptions,
   ) => Promise<void>;
   clearBranchData: () => void;
   beadsPreparationToastDelayMs?: number;
@@ -66,6 +67,11 @@ export function useAppLifecycle({
   const refreshTaskDataRef = useRef(refreshTaskData);
   const processedTaskEventIdsRef = useRef(new Set<string>());
   const processedTaskEventOrderRef = useRef<string[]>([]);
+  const lastExternalTaskSyncFailureToastRef = useRef<{
+    repoPath: string;
+    title: string;
+    description: string;
+  } | null>(null);
 
   useLayoutEffect(() => {
     activeWorkspaceRef.current = activeWorkspace;
@@ -103,11 +109,13 @@ export function useAppLifecycle({
             });
           }
 
-          void refreshTaskDataRef.current(activeRepoPath).catch((error: unknown) => {
-            toast.error("Failed to resync tasks after task stream reconnect", {
-              description: summarizeTaskLoadError({ error }),
+          void refreshTaskDataRef
+            .current(activeRepoPath, undefined, { source: "external-sync" })
+            .catch((error: unknown) => {
+              toast.error("Failed to resync tasks after task stream reconnect", {
+                description: summarizeTaskLoadError({ error }),
+              });
             });
-          });
           return;
         }
 
@@ -136,15 +144,35 @@ export function useAppLifecycle({
         const taskIds =
           parsed.data.kind === "tasks_updated" ? parsed.data.taskIds : parsed.data.taskId;
 
-        void refreshTaskDataRef.current(parsed.data.repoPath, taskIds).catch((error: unknown) => {
-          const title =
-            parsed.data.kind === "tasks_updated"
-              ? "Failed to sync task updates"
-              : "Failed to sync external task changes";
-          toast.error(title, {
-            description: summarizeTaskLoadError({ error }),
+        void refreshTaskDataRef
+          .current(parsed.data.repoPath, taskIds, { source: "external-sync" })
+          .then(() => {
+            if (lastExternalTaskSyncFailureToastRef.current?.repoPath === parsed.data.repoPath) {
+              lastExternalTaskSyncFailureToastRef.current = null;
+            }
+          })
+          .catch((error: unknown) => {
+            const title =
+              parsed.data.kind === "tasks_updated"
+                ? "Failed to sync task updates"
+                : "Failed to sync external task changes";
+            const description = summarizeTaskLoadError({ error });
+            const lastToast = lastExternalTaskSyncFailureToastRef.current;
+            if (
+              lastToast?.repoPath === parsed.data.repoPath &&
+              lastToast.title === title &&
+              lastToast.description === description
+            ) {
+              return;
+            }
+
+            lastExternalTaskSyncFailureToastRef.current = {
+              repoPath: parsed.data.repoPath,
+              title,
+              description,
+            };
+            toast.error(title, { description });
           });
-        });
       })
       .then((cleanup) => {
         if (disposed) {
