@@ -439,4 +439,49 @@ describe("agent-chat-thread windowing helpers", () => {
     expect(idleState?.activeStreamingAssistantMessageId).toBeNull();
     expect(idleState?.rows).toBe(runningState?.rows);
   });
+
+  test("peekReusableAgentChatWindowRowsState restores streaming state when idle cached rows resume", () => {
+    const sharedMessages = [
+      buildMessage("assistant", "Working", {
+        id: "assistant-live",
+        meta: {
+          kind: "assistant",
+          agentRole: "build",
+          isFinal: false,
+          profileId: "Hephaestus (Deep Agent)",
+        },
+      }),
+    ];
+    const idleSession = buildSession({
+      externalSessionId: "session-resume",
+      role: "build",
+      status: "idle",
+      messages: createSessionMessagesState("session-resume", sharedMessages, 1),
+    });
+    const resumedSession = buildSession({
+      ...idleSession,
+      status: "running",
+      messages: createSessionMessagesState("session-resume", sharedMessages, 1),
+    });
+    const cache = new Map();
+
+    const idleRowsState = buildAgentChatWindowRowsState(idleSession, {
+      showThinkingMessages: true,
+    });
+    writeAgentChatWindowRowsCacheEntry({
+      session: idleSession,
+      showThinkingMessages: true,
+      rowsState: idleRowsState,
+      cache,
+    });
+    const resumedState = peekReusableAgentChatWindowRowsState({
+      session: resumedSession,
+      showThinkingMessages: true,
+      cache,
+    });
+
+    expect(idleRowsState.activeStreamingAssistantMessageId).toBeNull();
+    expect(resumedState?.activeStreamingAssistantMessageId).toBe("assistant-live");
+    expect(resumedState?.rows).toBe(idleRowsState.rows);
+  });
 });

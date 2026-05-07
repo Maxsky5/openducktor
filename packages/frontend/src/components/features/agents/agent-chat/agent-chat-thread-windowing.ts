@@ -161,6 +161,22 @@ const appendMessageRows = (
   });
 };
 
+const findActiveStreamingAssistantMessageId = (rows: AgentChatWindowRow[]): string | null => {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (
+      row?.kind === "message" &&
+      row.message.role === "assistant" &&
+      row.message.meta?.kind === "assistant" &&
+      row.message.meta.isFinal === false
+    ) {
+      return row.message.id;
+    }
+  }
+
+  return null;
+};
+
 const toResolvedWindowRowsState = (
   cacheEntry: AgentChatWindowRowsCacheEntry,
   sessionStatus: AgentSessionState["status"],
@@ -171,7 +187,10 @@ const toResolvedWindowRowsState = (
     hasAttachmentMessages: cacheEntry.hasAttachmentMessages,
     lastUserMessageId: cacheEntry.lastUserMessageId,
     activeStreamingAssistantMessageId:
-      sessionStatus === "running" ? cacheEntry.activeStreamingAssistantMessageId : null,
+      sessionStatus === "running"
+        ? (cacheEntry.activeStreamingAssistantMessageId ??
+          findActiveStreamingAssistantMessageId(cacheEntry.rows))
+        : null,
   };
 };
 

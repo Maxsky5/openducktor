@@ -23,10 +23,12 @@ Captured with `agent-browser profiler` using Chrome trace categories:
 - `renderer.scheduler`
 - `toplevel`
 
-Local trace files captured during validation:
+Compressed trace files captured during validation:
 
-- `/var/folders/j1/bkys10cj7tn4mlqdl0jr6tpc0000gn/T/opencode/openducktor-qujc-agent-switch-trace.json`
-- `/var/folders/j1/bkys10cj7tn4mlqdl0jr6tpc0000gn/T/opencode/openducktor-qujc-agent-switch-warm-trace.json`
+- `docs/assets/traces/openducktor-qujc-agent-switch-trace.json.gz`
+- `docs/assets/traces/openducktor-qujc-agent-switch-warm-trace.json.gz`
+
+Future browser profiler traces should be compressed and stored under `docs/assets/traces/` when the validation notes depend on trace-level evidence.
 
 ## Observations
 
