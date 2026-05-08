@@ -1,5 +1,5 @@
 import type { PullRequest } from "@openducktor/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { host } from "../shared/host";
@@ -11,6 +11,17 @@ type UseTaskPullRequestOperationsArgs = {
   activeRepoPath: string | null;
   refreshTaskData: UseTaskOperationsResult["refreshTaskData"];
   runTaskMutation: TaskMutationRunner["runTaskMutation"];
+};
+
+type PendingMergedPullRequestState = {
+  repoPath: string;
+  taskId: string;
+  pullRequest: PullRequest;
+};
+
+type TaskRepoState = {
+  repoPath: string;
+  taskId: string;
 };
 
 export type TaskPullRequestOperations = {
@@ -30,22 +41,40 @@ export function useTaskPullRequestOperations({
   refreshTaskData,
   runTaskMutation,
 }: UseTaskPullRequestOperationsArgs): TaskPullRequestOperations {
-  const [detectingPullRequestTaskId, setDetectingPullRequestTaskId] = useState<string | null>(null);
+  const [detectingPullRequestState, setDetectingPullRequestState] = useState<TaskRepoState | null>(
+    null,
+  );
   const [linkingMergedPullRequestTaskId, setLinkingMergedPullRequestTaskId] = useState<
     string | null
   >(null);
   const [unlinkingPullRequestTaskId, setUnlinkingPullRequestTaskId] = useState<string | null>(null);
-  const [pendingMergedPullRequest, setPendingMergedPullRequest] = useState<{
-    taskId: string;
-    pullRequest: PullRequest;
-  } | null>(null);
+  const [pendingMergedPullRequestState, setPendingMergedPullRequestState] =
+    useState<PendingMergedPullRequestState | null>(null);
+  const activeRepoPathRef = useRef(activeRepoPath);
   const previousActiveRepoPathRef = useRef(activeRepoPath);
 
+  activeRepoPathRef.current = activeRepoPath;
+
+  const detectingPullRequestTaskId =
+    detectingPullRequestState?.repoPath === activeRepoPath
+      ? detectingPullRequestState.taskId
+      : null;
+  const pendingMergedPullRequest = useMemo(
+    () =>
+      pendingMergedPullRequestState?.repoPath === activeRepoPath
+        ? {
+            taskId: pendingMergedPullRequestState.taskId,
+            pullRequest: pendingMergedPullRequestState.pullRequest,
+          }
+        : null,
+    [activeRepoPath, pendingMergedPullRequestState],
+  );
+
   const clearPullRequestState = useCallback(() => {
-    setDetectingPullRequestTaskId(null);
+    setDetectingPullRequestState(null);
     setLinkingMergedPullRequestTaskId(null);
     setUnlinkingPullRequestTaskId(null);
-    setPendingMergedPullRequest(null);
+    setPendingMergedPullRequestState(null);
   }, []);
 
   useEffect(() => {
@@ -57,17 +86,21 @@ export function useTaskPullRequestOperations({
 
   const syncPullRequests = useCallback(
     async (taskId: string): Promise<void> => {
-      setDetectingPullRequestTaskId(taskId);
+      let repoPath: string | null = null;
       try {
-        const repoPath = requireActiveRepo(activeRepoPath);
+        repoPath = requireActiveRepo(activeRepoPath);
+        setDetectingPullRequestState({ repoPath, taskId });
         const result = await host.taskPullRequestDetect(repoPath, taskId);
+        if (activeRepoPathRef.current !== repoPath) {
+          return;
+        }
         if (result.outcome === "linked") {
           await refreshTaskData(repoPath, taskId);
           toast.success("Pull request linked", { description: `PR #${result.pullRequest.number}` });
           return;
         }
         if (result.outcome === "merged") {
-          setPendingMergedPullRequest({ taskId, pullRequest: result.pullRequest });
+          setPendingMergedPullRequestState({ repoPath, taskId, pullRequest: result.pullRequest });
           return;
         }
         toast.warning("No pull request found", {
@@ -76,8 +109,10 @@ export function useTaskPullRequestOperations({
       } catch (error) {
         toast.error("Failed to detect pull request", { description: errorMessage(error) });
       } finally {
-        setDetectingPullRequestTaskId((currentTaskId) =>
-          currentTaskId === taskId ? null : currentTaskId,
+        setDetectingPullRequestState((current) =>
+          repoPath !== null && current?.repoPath === repoPath && current.taskId === taskId
+            ? null
+            : current,
         );
       }
     },
@@ -88,23 +123,28 @@ export function useTaskPullRequestOperations({
     if (linkingMergedPullRequestTaskId != null) {
       return;
     }
-    setPendingMergedPullRequest(null);
+    setPendingMergedPullRequestState(null);
   }, [linkingMergedPullRequestTaskId]);
 
   const linkMergedPullRequest = useCallback(async (): Promise<void> => {
-    if (!pendingMergedPullRequest) {
+    if (
+      !pendingMergedPullRequestState ||
+      pendingMergedPullRequestState.repoPath !== activeRepoPathRef.current
+    ) {
+      setPendingMergedPullRequestState(null);
       toast.error("Merged pull request state expired", {
         description: "Re-run pull request detection and try again.",
       });
       return;
     }
 
-    const { taskId, pullRequest } = pendingMergedPullRequest;
+    const { repoPath, taskId, pullRequest } = pendingMergedPullRequestState;
     setLinkingMergedPullRequestTaskId(taskId);
     try {
-      const repoPath = requireActiveRepo(activeRepoPath);
       await host.taskPullRequestLinkMerged(repoPath, taskId, pullRequest);
-      setPendingMergedPullRequest((current) => (current?.taskId === taskId ? null : current));
+      setPendingMergedPullRequestState((current) =>
+        current?.repoPath === repoPath && current.taskId === taskId ? null : current,
+      );
       await refreshTaskData(repoPath, taskId);
       toast.success("Merged pull request linked", {
         description: `PR #${pullRequest.number}; task moved to Done.`,
@@ -116,7 +156,7 @@ export function useTaskPullRequestOperations({
         currentTaskId === taskId ? null : currentTaskId,
       );
     }
-  }, [activeRepoPath, pendingMergedPullRequest, refreshTaskData]);
+  }, [pendingMergedPullRequestState, refreshTaskData]);
 
   const unlinkPullRequest = useCallback(
     async (taskId: string): Promise<void> => {
