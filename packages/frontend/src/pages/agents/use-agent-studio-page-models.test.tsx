@@ -1065,7 +1065,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
@@ -1102,7 +1102,7 @@ describe("useAgentStudioPageModels", () => {
     );
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [toAgentSessionSummary(parentSession), childSummary],
@@ -1128,7 +1128,7 @@ describe("useAgentStudioPageModels", () => {
       pendingQuestions: [createPendingQuestion("question-1")],
     });
     const initialProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: parentSession,
         sessionsForTask: [toAgentSessionSummary(parentSession)],
         allSessionSummaries: [
@@ -1146,7 +1146,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
