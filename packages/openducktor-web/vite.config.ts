@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
@@ -7,6 +8,19 @@ import { defineConfig } from "vite";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const frontendSrc = path.resolve(__dirname, "../frontend/src");
+
+function readPackageVersion(packageJsonPath = path.resolve(__dirname, "package.json")): string {
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+  if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
+    throw new Error(`Missing package version in ${packageJsonPath}`);
+  }
+  return packageJson.version;
+}
+
+export function resolveAppVersion(env: NodeJS.ProcessEnv = process.env): string {
+  const versionOverride = env.ODT_APP_VERSION?.trim();
+  return versionOverride || readPackageVersion();
+}
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -25,7 +39,7 @@ export default defineConfig({
     ],
   },
   define: {
-    "import.meta.env.VITE_ODT_APP_VERSION": JSON.stringify(process.env.ODT_APP_VERSION ?? ""),
+    "import.meta.env.VITE_ODT_APP_VERSION": JSON.stringify(resolveAppVersion()),
   },
   clearScreen: false,
   server: {
