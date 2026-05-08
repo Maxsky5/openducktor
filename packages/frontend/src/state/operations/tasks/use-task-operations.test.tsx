@@ -2215,6 +2215,71 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("syncPullRequests ignores merged pull request results after repo switches", async () => {
+    const mergedPullRequest = {
+      providerId: "github" as const,
+      number: 17,
+      url: "https://github.com/openai/openducktor/pull/17",
+      state: "merged" as const,
+      createdAt: "2026-02-20T10:00:00Z",
+      updatedAt: "2026-02-20T10:00:00Z",
+      lastSyncedAt: "2026-02-20T10:00:00Z",
+      mergedAt: "2026-02-20T10:00:00Z",
+      closedAt: "2026-02-20T10:00:00Z",
+    };
+    const detection = createDeferred<{
+      outcome: "merged";
+      pullRequest: typeof mergedPullRequest;
+    }>();
+    const taskPullRequestDetect = mock(async () => detection.promise);
+    const tasksList = mock(async () => [makeTask("A", "human_review")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskPullRequestDetect: host.taskPullRequestDetect,
+      tasksList: host.tasksList,
+      runsList: legacyHost.runsList,
+    };
+    host.taskPullRequestDetect = taskPullRequestDetect;
+    host.tasksList = tasksList;
+    legacyHost.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((value) => value.tasks.length === 1);
+
+      let syncPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        syncPromise = value.syncPullRequests("A");
+      });
+
+      await harness.updateArgs({
+        activeRepo: "/repo-b",
+        refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => makeBeadsCheck(),
+      });
+
+      await harness.run(async () => {
+        detection.resolve({ outcome: "merged", pullRequest: mergedPullRequest });
+        await syncPromise;
+      });
+
+      expect(taskPullRequestDetect).toHaveBeenCalledWith("/repo-a", "A");
+      expect(harness.getLatest().pendingMergedPullRequest).toBeNull();
+      expect(harness.getLatest().detectingPullRequestTaskId).toBeNull();
+    } finally {
+      detection.resolve({ outcome: "merged", pullRequest: mergedPullRequest });
+      await harness.unmount();
+      host.taskPullRequestDetect = original.taskPullRequestDetect;
+      host.tasksList = original.tasksList;
+      legacyHost.runsList = original.runsList;
+    }
+  });
+
   test("linkMergedPullRequest links the merged pull request and refreshes task data", async () => {
     const taskPullRequestDetect = mock(async () => ({
       outcome: "merged" as const,
