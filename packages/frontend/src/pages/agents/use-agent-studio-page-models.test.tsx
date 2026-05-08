@@ -65,6 +65,21 @@ const createSession = (
   });
 };
 
+const createPendingApproval = (
+  requestId = "perm-1",
+  actionName = "shell",
+  affectedPaths = ["bun test"],
+) => ({
+  requestId,
+  requestType: "permission_grant" as const,
+  title: `Approve permission: ${actionName}`,
+  summary: `Approval request for ${actionName}.`,
+  affectedPaths,
+  action: { name: actionName },
+  mutation: "mutating" as const,
+  supportedReplyOutcomes: ["approve_once" as const, "approve_session" as const, "reject" as const],
+});
+
 const createPendingQuestion = (requestId = "question-1") => ({
   requestId,
   questions: [
@@ -835,34 +850,8 @@ describe("useAgentStudioPageModels", () => {
     const childWithApproval = createSession("session-child-1", "external-child-1", {
       taskId: "other-task",
       pendingApprovals: [
-        {
-          requestId: "perm-1",
-          requestType: "permission_grant" as const,
-          title: `Approve permission: ${"shell"}`,
-          summary: `Approval request for ${"shell"}.`,
-          affectedPaths: ["bun test"],
-          action: { name: "shell" },
-          mutation: "mutating" as const,
-          supportedReplyOutcomes: [
-            "approve_once" as const,
-            "approve_session" as const,
-            "reject" as const,
-          ],
-        },
-        {
-          requestId: "perm-2",
-          requestType: "permission_grant" as const,
-          title: `Approve permission: ${"shell"}`,
-          summary: `Approval request for ${"shell"}.`,
-          affectedPaths: ["git status"],
-          action: { name: "shell" },
-          mutation: "mutating" as const,
-          supportedReplyOutcomes: [
-            "approve_once" as const,
-            "approve_session" as const,
-            "reject" as const,
-          ],
-        },
+        createPendingApproval("perm-1"),
+        createPendingApproval("perm-2", "shell", ["git status"]),
       ],
     });
     const childWithoutApproval = createSession("session-child-2", "external-child-2", {
@@ -897,22 +886,7 @@ describe("useAgentStudioPageModels", () => {
     const parentSession = createSession("session-parent", "external-parent");
     const childWithApproval = createSession("session-child-internal", "session-child-runtime", {
       taskId: "other-task",
-      pendingApprovals: [
-        {
-          requestId: "perm-1",
-          requestType: "permission_grant" as const,
-          title: `Approve permission: ${"shell"}`,
-          summary: `Approval request for ${"shell"}.`,
-          affectedPaths: ["bun test"],
-          action: { name: "shell" },
-          mutation: "mutating" as const,
-          supportedReplyOutcomes: [
-            "approve_once" as const,
-            "approve_session" as const,
-            "reject" as const,
-          ],
-        },
-      ],
+      pendingApprovals: [createPendingApproval("perm-1")],
     });
     const harness = createHookHarness(
       createHookArgs({
@@ -941,20 +915,7 @@ describe("useAgentStudioPageModels", () => {
     const parentSession = createSession("session-parent", "external-parent", {
       subagentPendingApprovalsByExternalSessionId: {
         "external-child-session": [
-          {
-            requestId: "perm-1",
-            requestType: "permission_grant" as const,
-            title: `Approve permission: ${"external_directory"}`,
-            summary: `Approval request for ${"external_directory"}.`,
-            affectedPaths: ["/tmp/*"],
-            action: { name: "external_directory" },
-            mutation: "mutating" as const,
-            supportedReplyOutcomes: [
-              "approve_once" as const,
-              "approve_session" as const,
-              "reject" as const,
-            ],
-          },
+          createPendingApproval("perm-1", "external_directory", ["/tmp/*"]),
         ],
       },
     });
@@ -987,22 +948,7 @@ describe("useAgentStudioPageModels", () => {
     const parentSession = createSession("session-parent", "external-parent");
     const childWithApproval = createSession("session-child-1", "external-child-1", {
       taskId: "other-task",
-      pendingApprovals: [
-        {
-          requestId: "perm-1",
-          requestType: "permission_grant" as const,
-          title: `Approve permission: ${"shell"}`,
-          summary: `Approval request for ${"shell"}.`,
-          affectedPaths: ["bun test"],
-          action: { name: "shell" },
-          mutation: "mutating" as const,
-          supportedReplyOutcomes: [
-            "approve_once" as const,
-            "approve_session" as const,
-            "reject" as const,
-          ],
-        },
-      ],
+      pendingApprovals: [createPendingApproval("perm-1")],
     });
     const initialProps = createHookArgs({
       core: {
