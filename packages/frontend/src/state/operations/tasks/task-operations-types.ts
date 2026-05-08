@@ -1,0 +1,56 @@
+import type {
+  BeadsCheck,
+  GitTargetBranch,
+  PullRequest,
+  TaskCard,
+  TaskCreateInput,
+  TaskStatus,
+  TaskUpdatePatch,
+} from "@openducktor/contracts";
+import type { TaskDataRefreshOptions, TaskRefreshOptions } from "@/state/app-state-contexts";
+import type { ActiveWorkspace } from "@/types/state-slices";
+
+export type UseTaskOperationsArgs = {
+  activeWorkspace: ActiveWorkspace | null;
+  refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
+};
+
+export type UseTaskOperationsResult = {
+  tasks: TaskCard[];
+  isForegroundLoadingTasks: boolean;
+  isRefreshingTasksInBackground: boolean;
+  isLoadingTasks: boolean;
+  detectingPullRequestTaskId: string | null;
+  linkingMergedPullRequestTaskId: string | null;
+  unlinkingPullRequestTaskId: string | null;
+  pendingMergedPullRequest: { taskId: string; pullRequest: PullRequest } | null;
+  setIsLoadingTasks: (value: boolean) => void;
+  clearTaskData: () => void;
+  refreshTaskData: (
+    repoPath: string,
+    taskIdOrIds?: string | string[],
+    options?: TaskDataRefreshOptions,
+  ) => Promise<void>;
+  refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
+  refreshTasks: () => Promise<void>;
+  syncPullRequests: (taskId: string) => Promise<void>;
+  linkMergedPullRequest: () => Promise<void>;
+  cancelLinkMergedPullRequest: () => void;
+  unlinkPullRequest: (taskId: string) => Promise<void>;
+  createTask: (input: TaskCreateInput) => Promise<void>;
+  updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
+  setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
+  deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
+  resetTaskImplementation: (taskId: string) => Promise<void>;
+  resetTask: (taskId: string) => Promise<void>;
+  transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
+  deferTask: (taskId: string) => Promise<void>;
+  resumeDeferredTask: (taskId: string) => Promise<void>;
+  humanApproveTask: (taskId: string) => Promise<void>;
+  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
+};
+
+export type TaskMutationRefreshStrategy =
+  | { kind: "repo" }
+  | { kind: "task"; taskId: string }
+  | { kind: "remove-task"; taskIds: string[] };
