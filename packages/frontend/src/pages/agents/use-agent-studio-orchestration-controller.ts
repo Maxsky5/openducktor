@@ -101,7 +101,7 @@ type UseAgentStudioOrchestrationControllerResult = {
 
 type AgentStudioPageModelsViewContext = Pick<
   AgentStudioOrchestrationSelectionContext,
-  "viewTaskId" | "contextSwitchVersion"
+  "viewTaskId"
 >;
 
 type AgentStudioPageModelsTabsContext = Pick<
@@ -156,7 +156,7 @@ type BuildAgentStudioPageModelsArgsInput = {
 
 type BuildSelectedSessionContextFromOrchestrationInput = Omit<
   AgentStudioSelectedSessionContextInput,
-  "contextSessionsLength" | "isTaskHydrating" | "sessionRuntimeDataError"
+  "isTaskHydrating" | "sessionRuntimeDataError"
 > & {
   viewSessionRuntimeDataError?: string | null;
   isActiveTaskHydrated: boolean;
@@ -171,7 +171,6 @@ export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
 }: BuildSelectedSessionContextFromOrchestrationInput): AgentStudioSelectedSessionContext =>
   buildAgentStudioSelectedSessionContext({
     ...input,
-    contextSessionsLength: input.sessionsForTask.length,
     sessionRuntimeDataError: viewSessionRuntimeDataError ?? null,
     isTaskHydrating: Boolean(input.taskId && !isActiveTaskHydrated && !isActiveTaskHydrationFailed),
   });
@@ -203,9 +202,7 @@ export const buildAgentStudioPageModelsArgs = ({
   } = modelSelection;
 
   return {
-    core: {
-      activeTabValue: activeTaskTabId || view.viewTaskId || "__agent_studio_empty__",
-    },
+    activeTabValue: activeTaskTabId || view.viewTaskId || "__agent_studio_empty__",
     selectedSession,
     taskTabs: {
       ...taskTabs,
@@ -250,7 +247,6 @@ export function useAgentStudioOrchestrationController({
     activeTaskTabId,
     taskTabs,
     availableTabTasks,
-    contextSwitchVersion,
     isLoadingTasks,
     isActiveTaskHydrated,
     handleSelectTab,
@@ -459,7 +455,6 @@ export function useAgentStudioOrchestrationController({
   const pageModelsArgs = buildAgentStudioPageModelsArgs({
     view: {
       viewTaskId,
-      contextSwitchVersion,
     },
     selectedSession: selectedSessionContext,
     tabs: {

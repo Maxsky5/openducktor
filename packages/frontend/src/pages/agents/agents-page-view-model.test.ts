@@ -199,7 +199,6 @@ describe("agents-page-view-model", () => {
       primaryQuickAction: null,
       onQuickAction,
       isStarting: true,
-      contextSessionsLength: 2,
     });
 
     expect(model.workflowSteps).toHaveLength(2);
@@ -265,7 +264,6 @@ describe("agents-page-view-model", () => {
       primaryQuickAction: null,
       onQuickAction: mock(() => {}),
       isStarting: false,
-      contextSessionsLength: 0,
     });
 
     expect(model.onOpenTaskDetails).toBeNull();

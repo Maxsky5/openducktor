@@ -75,7 +75,6 @@ const baseDocuments = {
 const baseArgs: BuildArgs = {
   view: {
     viewTaskId: "task-1",
-    contextSwitchVersion: 4,
   },
   selectedSession: buildAgentStudioSelectedSessionContext({
     taskId: "task-1",
@@ -83,7 +82,6 @@ const baseArgs: BuildArgs = {
     selectedTask: task,
     sessionsForTask: [session],
     allSessionSummaries: [session],
-    contextSessionsLength: 1,
     activeSession: session,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     sessionRuntimeDataError: null,
@@ -144,7 +142,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
   test("maps grouped orchestration context into page-model contracts", () => {
     const mapped = buildAgentStudioPageModelsArgs(baseArgs);
 
-    expect(mapped.core.activeTabValue).toBe("task-1");
+    expect(mapped.activeTabValue).toBe("task-1");
     expect(mapped.selectedSession.role).toBe("planner");
     expect(mapped.selectedSession.runtime.runtimeDefinitions).toEqual([
       OPENCODE_RUNTIME_DESCRIPTOR,
@@ -196,9 +194,9 @@ describe("buildAgentStudioPageModelsArgs", () => {
       },
     });
 
-    expect(withActiveTab.core.activeTabValue).toBe("task-tab-2");
-    expect(withTaskFallback.core.activeTabValue).toBe("task-1");
-    expect(withEmptyFallback.core.activeTabValue).toBe("__agent_studio_empty__");
+    expect(withActiveTab.activeTabValue).toBe("task-tab-2");
+    expect(withTaskFallback.activeTabValue).toBe("task-1");
+    expect(withEmptyFallback.activeTabValue).toBe("__agent_studio_empty__");
   });
 });
 
@@ -236,7 +234,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
     });
 
-    expect(context.contextSessionsLength).toBe(1);
     expect(context.runtime.isTaskHydrating).toBe(true);
     expect(context.runtime.sessionRuntimeDataError).toBe("runtime data failed");
     expect(context.runtime.runtimeReadiness.readinessState).toBe("checking");
@@ -269,25 +266,5 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
 
     expect(failed.selectedSession.runtime.isTaskHydrating).toBe(true);
     expect(failed.selectedSession.runtime.isSessionHistoryHydrationFailed).toBe(true);
-  });
-
-  test("derives contextSessionsLength from the sessions context size", () => {
-    const secondSession = createAgentSessionFixture({
-      runtimeKind: "opencode",
-      externalSessionId: "session-2",
-      taskId: "task-1",
-      role: "planner",
-    });
-    const mapped = buildAgentStudioPageModelsArgs({
-      ...baseArgs,
-      selectedSession: {
-        ...baseArgs.selectedSession,
-        allSessionSummaries: [session, secondSession],
-        sessionsForTask: [session, secondSession],
-        contextSessionsLength: 2,
-      },
-    });
-
-    expect(mapped.selectedSession.contextSessionsLength).toBe(2);
   });
 });

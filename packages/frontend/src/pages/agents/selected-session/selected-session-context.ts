@@ -70,7 +70,6 @@ export type SelectedSessionChatContext = {
   activeComposerSession: SelectedSessionComposerActiveSession;
   composerReadOnly: boolean;
   composerReadOnlyReason: string | null;
-  canKickoff: boolean;
 };
 
 export type SelectedSessionRuntimeContext = {
@@ -98,24 +97,12 @@ export type SelectedSessionPendingInputContext = {
   subagentPendingQuestionCountByExternalSessionId: Record<string, number>;
 };
 
-export type SelectedSessionStartAffordanceContext = {
-  canKickoff: boolean;
-  kickoffLabel: string;
-  isKickoffPending: boolean;
-  startLaunchKickoff: () => Promise<void>;
-  sessionCreateOptions: WorkflowModelContext["sessionCreateOptions"];
-  quickActions: WorkflowModelContext["quickActions"];
-  primaryQuickAction: WorkflowModelContext["primaryQuickAction"];
-  createSessionDisabled: boolean;
-};
-
 export type AgentStudioSelectedSessionContext = {
   taskId: string;
   role: AgentRole;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   allSessionSummaries: AgentSessionSummary[];
-  contextSessionsLength: number;
   activeSession: AgentSessionState | null;
   workflow: WorkflowModelContext;
   documents: SelectedSessionDocumentsContext;
@@ -123,7 +110,6 @@ export type AgentStudioSelectedSessionContext = {
   chat: SelectedSessionChatContext;
   runtime: SelectedSessionRuntimeContext;
   pendingInput: SelectedSessionPendingInputContext;
-  sessionStart: SelectedSessionStartAffordanceContext;
 };
 
 export type AgentStudioSelectedSessionContextInput = {
@@ -132,7 +118,6 @@ export type AgentStudioSelectedSessionContextInput = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   allSessionSummaries: AgentSessionSummary[];
-  contextSessionsLength: number;
   activeSession: AgentSessionState | null;
   runtimeDefinitions: RuntimeDescriptor[];
   sessionRuntimeDataError: string | null;
@@ -255,7 +240,6 @@ export const buildAgentStudioSelectedSessionContext = ({
   selectedTask,
   sessionsForTask,
   allSessionSummaries,
-  contextSessionsLength,
   activeSession,
   runtimeDefinitions,
   sessionRuntimeDataError,
@@ -312,7 +296,6 @@ export const buildAgentStudioSelectedSessionContext = ({
     selectedTask,
     sessionsForTask,
     allSessionSummaries,
-    contextSessionsLength,
     activeSession,
     workflow,
     documents: {
@@ -340,7 +323,6 @@ export const buildAgentStudioSelectedSessionContext = ({
         : null,
       composerReadOnly: !workflow.selectedRoleAvailable,
       composerReadOnlyReason: workflow.selectedRoleReadOnlyReason,
-      canKickoff,
     },
     runtime: {
       runtimeDefinitions,
@@ -385,16 +367,6 @@ export const buildAgentStudioSelectedSessionContext = ({
           allSessionSummaries,
           activeSession?.subagentPendingQuestionsByExternalSessionId,
         ),
-    },
-    sessionStart: {
-      canKickoff,
-      kickoffLabel: sessionActions.kickoffLabel,
-      isKickoffPending: sessionActions.isStarting,
-      startLaunchKickoff: sessionActions.startLaunchKickoff,
-      sessionCreateOptions: workflow.sessionCreateOptions,
-      quickActions: workflow.quickActions,
-      primaryQuickAction: workflow.primaryQuickAction,
-      createSessionDisabled: workflow.createSessionDisabled,
     },
   };
 };

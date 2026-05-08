@@ -66,7 +66,6 @@ export const buildAgentStudioHeaderModel = (args: {
   onQuickAction: (option: AgentStudioQuickActionOption) => void;
   onResolveGitConflictQuickAction?: (() => void) | null;
   isStarting: boolean;
-  contextSessionsLength: number;
 }): AgentStudioHeaderModel => ({
   taskTitle: args.selectedTask?.title ?? null,
   taskId: args.selectedTask?.id ?? null,

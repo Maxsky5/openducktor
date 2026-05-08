@@ -41,7 +41,6 @@ const createInput = (
     selectedTask,
     sessionsForTask,
     allSessionSummaries: overrides.allSessionSummaries ?? sessionsForTask,
-    contextSessionsLength: overrides.contextSessionsLength ?? sessionsForTask.length,
     activeSession: null,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     sessionRuntimeDataError: null,
@@ -92,7 +91,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         selectedTask: null,
         sessionsForTask: [],
         allSessionSummaries: [],
-        contextSessionsLength: 0,
         activeSession: null,
         sessionActions: {
           ...createInput().sessionActions,
@@ -158,7 +156,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     expect(context.workflow.selectedRoleAvailable).toBe(false);
     expect(context.chat.composerReadOnly).toBe(true);
     expect(context.chat.composerReadOnlyReason).toContain("Planner is unavailable");
-    expect(context.sessionStart.canKickoff).toBe(false);
     expect(context.chat.emptyState?.actionLabel).toBeUndefined();
   });
 

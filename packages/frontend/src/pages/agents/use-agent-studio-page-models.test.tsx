@@ -41,7 +41,7 @@ type SelectedSessionTestCore = Omit<
 };
 
 type HookArgsOverrides = {
-  core?: Partial<SelectedSessionTestCore>;
+  selectedSessionCore?: Partial<SelectedSessionTestCore>;
   taskTabs?: Partial<HookArgs["taskTabs"]>;
   documents?: Partial<AgentStudioSelectedSessionContextInput["documents"]>;
   readiness?: Partial<AgentStudioSelectedSessionContextInput["readiness"]>;
@@ -121,16 +121,14 @@ const createDocumentState = (markdown: string): TaskDocumentState => ({
 
 const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   const defaultSession = createSession();
-  const sessionsForTask = overrides.core?.sessionsForTask ?? [
+  const sessionsForTask = overrides.selectedSessionCore?.sessionsForTask ?? [
     toAgentSessionSummary(defaultSession),
   ];
-  const allSessionSummaries = overrides.core?.allSessionSummaries ?? sessionsForTask;
+  const allSessionSummaries = overrides.selectedSessionCore?.allSessionSummaries ?? sessionsForTask;
   const activeSession =
-    overrides.core?.activeSession !== undefined ? overrides.core.activeSession : defaultSession;
-  const contextSessionsLength =
-    overrides.core?.contextSessionsLength !== undefined
-      ? overrides.core.contextSessionsLength
-      : sessionsForTask.length;
+    overrides.selectedSessionCore?.activeSession !== undefined
+      ? overrides.selectedSessionCore.activeSession
+      : defaultSession;
 
   const selectedSessionCore: SelectedSessionTestCore = {
     activeTabValue: "task-1",
@@ -146,14 +144,10 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isWaitingForRuntimeReadiness: false,
     isSessionHistoryHydrationFailed: false,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    ...overrides.core,
+    ...overrides.selectedSessionCore,
     allSessionSummaries,
     sessionsForTask,
     activeSession,
-    contextSessionsLength,
-  };
-  const core: HookArgs["core"] = {
-    activeTabValue: selectedSessionCore.activeTabValue,
   };
 
   const taskTabs: HookArgs["taskTabs"] = {
@@ -247,7 +241,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       selectedTask: selectedSessionCore.selectedTask,
       sessionsForTask: selectedSessionCore.sessionsForTask,
       allSessionSummaries: selectedSessionCore.allSessionSummaries,
-      contextSessionsLength: selectedSessionCore.contextSessionsLength,
       activeSession: selectedSessionCore.activeSession,
       runtimeDefinitions: selectedSessionCore.runtimeDefinitions,
       sessionRuntimeDataError: selectedSessionCore.sessionRuntimeDataError,
@@ -271,7 +264,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   };
 
   return {
-    core,
+    activeTabValue: selectedSessionCore.activeTabValue,
     selectedSession,
     taskTabs,
     sessionActions,
@@ -288,13 +281,12 @@ describe("useAgentStudioPageModels", () => {
   test("keeps the interactive composer model available before a task is selected", async () => {
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeTabValue: "",
           taskId: "",
           selectedTask: null,
           sessionsForTask: [],
           activeSession: null,
-          contextSessionsLength: 0,
         },
       }),
     );
@@ -361,7 +353,7 @@ describe("useAgentStudioPageModels", () => {
   test("forwards session runtime data errors into the composer model", async () => {
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           sessionRuntimeDataError: "todos unavailable",
         },
       }),
@@ -428,7 +420,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: cachedSession,
           sessionsForTask: [cachedSession],
           isSessionHistoryHydrating: false,
@@ -458,7 +450,7 @@ describe("useAgentStudioPageModels", () => {
     const specSession = createSession("session-spec", "external-spec", { role: "spec" });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "spec",
           activeSession: specSession,
           sessionsForTask: [specSession],
@@ -481,7 +473,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const plannerHarness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "planner",
           activeSession: plannerSession,
           sessionsForTask: [plannerSession],
@@ -504,7 +496,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const qaHarness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "qa",
           activeSession: qaSession,
           sessionsForTask: [qaSession],
@@ -525,7 +517,7 @@ describe("useAgentStudioPageModels", () => {
     const buildSession = createSession("session-build", "external-build", { role: "build" });
     const buildHarness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "build",
           activeSession: buildSession,
           sessionsForTask: [buildSession],
@@ -548,7 +540,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "spec",
           activeSession: plannerSession,
           sessionsForTask: [plannerSession],
@@ -574,7 +566,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "qa",
           activeSession: buildSession,
           sessionsForTask: [buildSession],
@@ -614,7 +606,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: approvalSession,
           sessionsForTask: [approvalSession],
         },
@@ -631,7 +623,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: approvalSessionWithoutRequests,
           sessionsForTask: [approvalSessionWithoutRequests],
         },
@@ -665,7 +657,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: approvalSession,
           sessionsForTask: [approvalSession],
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -691,9 +683,7 @@ describe("useAgentStudioPageModels", () => {
     const sessionA = createSession("session-a", "external-a");
     const sessionB = createSession("session-b", "external-b");
     const sharedOverrides: HookArgsOverrides = {
-      core: {
-        contextSessionsLength: 2,
-      },
+      selectedSessionCore: {},
       sessionActions: {
         isSessionWorking: false,
       },
@@ -703,8 +693,8 @@ describe("useAgentStudioPageModels", () => {
     const harness = createHookHarness(
       createHookArgs({
         ...sharedOverrides,
-        core: {
-          ...sharedOverrides.core,
+        selectedSessionCore: {
+          ...sharedOverrides.selectedSessionCore,
           sessionsForTask: [sessionA, sessionB],
           activeSession: sessionA,
         },
@@ -722,8 +712,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.update(
       createHookArgs({
         ...sharedOverrides,
-        core: {
-          ...sharedOverrides.core,
+        selectedSessionCore: {
+          ...sharedOverrides.selectedSessionCore,
           sessionsForTask: [sessionA, sessionB],
           activeSession: sessionB,
         },
@@ -739,8 +729,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.update(
       createHookArgs({
         ...sharedOverrides,
-        core: {
-          ...sharedOverrides.core,
+        selectedSessionCore: {
+          ...sharedOverrides.selectedSessionCore,
           sessionsForTask: [sessionA, sessionB],
           activeSession: sessionA,
         },
@@ -754,7 +744,7 @@ describe("useAgentStudioPageModels", () => {
   test("keeps thread model stable for input-only composer updates", async () => {
     const session = createSession("session-1", "external-1");
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: session,
         sessionsForTask: [session],
       },
@@ -788,7 +778,7 @@ describe("useAgentStudioPageModels", () => {
   test("keeps composer model stable for thread-only updates", async () => {
     const session = createSession("session-1", "external-1");
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: session,
         sessionsForTask: [session],
       },
@@ -818,7 +808,7 @@ describe("useAgentStudioPageModels", () => {
   test("updates thread model when showThinkingMessages changes without rebuilding composer", async () => {
     const session = createSession("session-1", "external-1");
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: session,
         sessionsForTask: [session],
       },
@@ -854,7 +844,7 @@ describe("useAgentStudioPageModels", () => {
   test("updates thread model for pending request maps without rebuilding composer", async () => {
     const session = createSession("session-1", "external-1");
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: session,
         sessionsForTask: [session],
       },
@@ -930,7 +920,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
@@ -961,7 +951,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
@@ -997,7 +987,7 @@ describe("useAgentStudioPageModels", () => {
     );
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [toAgentSessionSummary(parentSession), childSummary],
@@ -1022,7 +1012,7 @@ describe("useAgentStudioPageModels", () => {
       pendingApprovals: [createPendingApproval("perm-1")],
     });
     const initialProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: parentSession,
         sessionsForTask: [toAgentSessionSummary(parentSession)],
         allSessionSummaries: [
@@ -1040,7 +1030,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
@@ -1187,7 +1177,7 @@ describe("useAgentStudioPageModels", () => {
       isLoadingModelCatalog: false,
     });
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: initialSession,
         sessionsForTask: [initialSession],
       },
@@ -1211,8 +1201,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.update(
       createHookArgs({
         ...baseProps,
-        core: {
-          ...baseProps.core,
+        selectedSessionCore: {
           activeSession: sameSessionIdNewRef,
           sessionsForTask: [sameSessionIdNewRef],
         },
@@ -1233,7 +1222,7 @@ describe("useAgentStudioPageModels", () => {
       isLoadingModelCatalog: false,
     });
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: initialSession,
         sessionsForTask: [initialSession],
       },
@@ -1271,8 +1260,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.update(
       createHookArgs({
         ...baseProps,
-        core: {
-          ...baseProps.core,
+        selectedSessionCore: {
           activeSession: waitingSession,
           sessionsForTask: [waitingSession],
         },
@@ -1307,7 +1295,7 @@ describe("useAgentStudioPageModels", () => {
 
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "planner",
           selectedTask: unavailablePlannerTask,
           activeSession: null,
@@ -1349,7 +1337,7 @@ describe("useAgentStudioPageModels", () => {
 
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "planner",
           selectedTask: unavailablePlannerTask,
           activeSession: runningPlannerSession,

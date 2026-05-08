@@ -16,10 +16,6 @@ import type { AgentStudioSelectedSessionContext } from "./selected-session/selec
 import { keepStablePendingInputCounts } from "./selected-session/selected-session-context";
 import { useAgentStudioHeaderModel } from "./use-agent-studio-page-submodels";
 
-type AgentStudioCoreContext = {
-  activeTabValue: string;
-};
-
 const useStablePendingInputCounts = (
   nextCounts: Record<string, number>,
 ): Record<string, number> => {
@@ -87,7 +83,7 @@ type AgentStudioChatSettingsContext = {
 };
 
 type UseAgentStudioPageModelsArgs = {
-  core: AgentStudioCoreContext;
+  activeTabValue: string;
   selectedSession: AgentStudioSelectedSessionContext;
   taskTabs: AgentStudioTaskTabsContext;
   sessionActions: AgentStudioSessionActionsContext;
@@ -97,7 +93,7 @@ type UseAgentStudioPageModelsArgs = {
 };
 
 export function useAgentStudioPageModels({
-  core,
+  activeTabValue,
   selectedSession,
   taskTabs,
   sessionActions,
@@ -159,7 +155,6 @@ export function useAgentStudioPageModels({
     onOpenTaskDetails: selectedSession.selectedTask ? sessionActions.openTaskDetails : null,
     activeSession: selectedSession.activeSession,
     sessionsForTaskLength: selectedSession.sessionsForTask.length,
-    contextSessionsLength: selectedSession.contextSessionsLength,
     agentStudioReady: selectedSession.runtime.runtimeReadiness.isReady,
     isStarting: sessionActions.isStarting,
     onWorkflowStepSelect: sessionActions.handleWorkflowStepSelect,
@@ -408,7 +403,7 @@ export function useAgentStudioPageModels({
   );
 
   return {
-    activeTabValue: core.activeTabValue,
+    activeTabValue,
     agentStudioTaskTabsModel,
     agentStudioHeaderModel,
     agentStudioWorkspaceSidebarModel,
