@@ -20,8 +20,8 @@ import { useAgentSessionApprovalActions } from "./use-agent-session-approval-act
 import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
 const DEFAULT_SHOW_THINKING_MESSAGES = false;
-const EMPTY_PENDING_APPROVALS = Object.freeze([]) as unknown as AgentApprovalRequest[];
-const EMPTY_PENDING_QUESTIONS = Object.freeze([]) as unknown as AgentQuestionRequest[];
+const EMPTY_PENDING_APPROVALS: ReadonlyArray<AgentApprovalRequest> = Object.freeze([]);
+const EMPTY_PENDING_QUESTIONS: ReadonlyArray<AgentQuestionRequest> = Object.freeze([]);
 
 type UseReadonlySessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;

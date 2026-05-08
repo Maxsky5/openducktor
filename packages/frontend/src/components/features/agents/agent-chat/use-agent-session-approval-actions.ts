@@ -4,7 +4,7 @@ import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
 
 type UseAgentSessionApprovalActionsParams = {
   activeExternalSessionId: string | null;
-  pendingApprovals: AgentApprovalRequest[];
+  pendingApprovals: ReadonlyArray<AgentApprovalRequest>;
   agentStudioReady: boolean;
   replyAgentApproval: (
     externalSessionId: string,
