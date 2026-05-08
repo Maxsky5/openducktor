@@ -1,6 +1,6 @@
 import type { BeadsCheck, TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { type MutableRefObject, useCallback, useEffect, useRef } from "react";
 import type { TaskDataRefreshOptions, TaskRefreshOptions } from "@/state/app-state-contexts";
 import { refreshRepoTaskViewsFromQuery } from "@/state/queries/task-view-sync";
 import { useTaskQueryReadModel } from "./use-task-query-read-model";
@@ -10,6 +10,8 @@ type UseTaskReadFlowArgs = {
   activeRepoPath: string | null;
   refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
 };
+
+type TaskToastDedupeRef = MutableRefObject<{ repoPath: string; description: string } | null>;
 
 export type UseTaskReadFlowResult = {
   tasks: TaskCard[];
@@ -34,17 +36,11 @@ export function useTaskReadFlow({
   const queryClient = useQueryClient();
   const lastTaskRefreshToastRef = useRef<{ repoPath: string; description: string } | null>(null);
   const lastTaskLoadErrorToastRef = useRef<{ repoPath: string; description: string } | null>(null);
-  const currentWorkspaceRepoPathRef = useRef(activeRepoPath);
-  const manualLoadingRepoPathRef = useRef(activeRepoPath);
-
-  useEffect(() => {
-    const previousActiveRepoPath = currentWorkspaceRepoPathRef.current;
-    currentWorkspaceRepoPathRef.current = activeRepoPath;
-    if (previousActiveRepoPath !== activeRepoPath) {
-      lastTaskRefreshToastRef.current = null;
-      lastTaskLoadErrorToastRef.current = null;
-    }
-  }, [activeRepoPath]);
+  useClearTaskToastDedupeOnRepoSwitch({
+    activeRepoPath,
+    lastTaskRefreshToastRef,
+    lastTaskLoadErrorToastRef,
+  });
 
   const readModel = useTaskQueryReadModel({ activeRepoPath, lastTaskLoadErrorToastRef });
 
@@ -85,13 +81,7 @@ export function useTaskReadFlow({
     lastTaskRefreshToastRef,
   });
 
-  useEffect(() => {
-    const previousActiveRepoPath = manualLoadingRepoPathRef.current;
-    manualLoadingRepoPathRef.current = activeRepoPath;
-    if (previousActiveRepoPath !== activeRepoPath) {
-      refreshFlow.resetManualLoading();
-    }
-  }, [activeRepoPath, refreshFlow.resetManualLoading]);
+  useResetManualTaskLoadingOnRepoSwitch(activeRepoPath, refreshFlow.resetManualLoading);
 
   const clearTaskReadState = useCallback(() => {
     refreshFlow.resetManualLoading();
@@ -126,4 +116,40 @@ const toTaskIds = (taskIdOrIds?: string | string[]): string[] | null => {
     return taskIdOrIds;
   }
   return null;
+};
+
+const useClearTaskToastDedupeOnRepoSwitch = ({
+  activeRepoPath,
+  lastTaskRefreshToastRef,
+  lastTaskLoadErrorToastRef,
+}: {
+  activeRepoPath: string | null;
+  lastTaskRefreshToastRef: TaskToastDedupeRef;
+  lastTaskLoadErrorToastRef: TaskToastDedupeRef;
+}): void => {
+  const currentWorkspaceRepoPathRef = useRef(activeRepoPath);
+
+  useEffect(() => {
+    const previousActiveRepoPath = currentWorkspaceRepoPathRef.current;
+    currentWorkspaceRepoPathRef.current = activeRepoPath;
+    if (previousActiveRepoPath !== activeRepoPath) {
+      lastTaskRefreshToastRef.current = null;
+      lastTaskLoadErrorToastRef.current = null;
+    }
+  }, [activeRepoPath, lastTaskLoadErrorToastRef, lastTaskRefreshToastRef]);
+};
+
+const useResetManualTaskLoadingOnRepoSwitch = (
+  activeRepoPath: string | null,
+  resetManualLoading: () => void,
+): void => {
+  const manualLoadingRepoPathRef = useRef(activeRepoPath);
+
+  useEffect(() => {
+    const previousActiveRepoPath = manualLoadingRepoPathRef.current;
+    manualLoadingRepoPathRef.current = activeRepoPath;
+    if (previousActiveRepoPath !== activeRepoPath) {
+      resetManualLoading();
+    }
+  }, [activeRepoPath, resetManualLoading]);
 };
