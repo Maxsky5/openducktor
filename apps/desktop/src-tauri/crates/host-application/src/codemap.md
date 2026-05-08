@@ -3,11 +3,11 @@
 ## Responsibility
 Crate root for the application service implementation and its internal module tree.
 
-## Design
-The public surface is intentionally narrow: `lib.rs` reexports `app_service` types, while the implementation stays split across focused submodules for runtime, task, git, workspace, and workflow concerns.
+## Design/Patterns
+The public surface is intentionally narrow: `lib.rs` reexports `app_service` types, while the implementation stays split across focused submodules for runtime, task, git, workspace, settings, and workflow concerns.
 
-## Flow
+## Data & Control Flow
 Module wiring happens here; behavior lives in `app_service/*` and is consumed by the desktop host, command services, and tests.
 
-## Integration
+## Integration Points
 Sits between the Tauri entrypoint and the infra crates, exposing the APIs used by commands, headless handlers, and runtime orchestration.

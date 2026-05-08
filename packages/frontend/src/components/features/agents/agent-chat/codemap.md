@@ -6,12 +6,12 @@ Reusable agent chat surface: transcript thread, markdown/code-fence rendering, c
 
 ## Design/Patterns
 
-Model/view split with local `use-*` hooks, staging/windowing helpers, markdown healing utilities, and formatter utilities for messages, tool output, attachments, document previews, and chat message IDs.
+Model/view split with local hooks and extracted helpers for thread windowing, composer state, attachments, markdown rendering, and message formatting.
 
-## Flow
+## Data & Control Flow
 
 Runtime transcript state becomes the `AgentChatModel`; user input, approval replies, and question answers flow back through callback props and transcript actions.
 
-## Integration
+## Integration Points
 
-`features/agent-chat-composer`, `pages/agents`, `ApplicationOverlays`, `TaskDetailsSheet`, runtime attachment helpers, markdown renderer helpers, and agent-session surfaces.
+`use-agent-chat-surface-model`, `agent-chat-thread-windowing`, `agent-chat-composer-*`, `agent-session-question-*`, `agent-chat-attachments*`, `agent-chat-message-card-*`, `agent-chat-markdown-renderer`, `pages/agents`, and `TaskDetailsSheet`.

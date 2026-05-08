@@ -7,11 +7,11 @@ Public local browser runner and browser shell bridge for OpenDucktor. It starts 
 - `src/cli.ts` keeps launcher side effects behind `import.meta.main`.
 - `src/launcher.ts` owns orchestration, readiness polling, Vite startup, runtime-config emission, and shutdown behavior.
 - `src/browser-shell-bridge.ts` owns the frontend bridge surface for browser-specific host capabilities.
-- Package metadata publishes `web` and `openducktor-web` bin aliases from the CLI build.
+- Package metadata publishes `web` and `openducktor-web` bin aliases from the CLI build via `main`, `exports`, and `bin`.
 - `src/artifact-resolver.ts` resolves workspace binaries in development and packaged artifacts for published installs.
 
 ## Data & Control Flow
-`bunx @openducktor/web` or `browser:dev` launches the loopback host, injects browser runtime config, supplies runtime readiness plus `createBrowserShellBridge` to the shared frontend bootstrap, and serves the app on localhost. `src/runtime-config.ts` loads the injected config into browser state; `src/browser-shell-bridge.ts` and `src/local-host-transport.ts` keep browser transport isolated from shared frontend code.
+`bunx @openducktor/web` or `browser:dev` launches the loopback host, injects browser runtime config, supplies runtime readiness plus `createBrowserShellBridge` to the shared frontend bootstrap, and serves the app on localhost. `src/cli.ts` is the package entrypoint, `src/runtime-config.ts` loads the injected config into browser state; `src/browser-shell-bridge.ts` and `src/local-host-transport.ts` keep browser transport isolated from shared frontend code.
 
 ## Integration Points
 - `packages/frontend`

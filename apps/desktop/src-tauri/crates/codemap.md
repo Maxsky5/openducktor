@@ -3,11 +3,11 @@
 ## Responsibility
 Workspace-local Rust crates that implement host-domain models, the application service layer, and infra adapters.
 
-## Design
-Hexagonal boundaries are explicit: `host-domain` defines contracts, `host-application` orchestrates workflows, and infra crates implement ports with CLI/config/filesystem/process/beads integrations. Runtime definitions, routes, and live connections stay separate across those layers.
+## Design/Patterns
+Hexagonal boundaries are explicit: `host-domain` defines contracts, `host-application` orchestrates workflows, and infra crates implement ports with CLI/config/filesystem/process/beads integrations. Runtime definitions, routes, and live connections stay separate across those layers, while workspace policy/settings logic stays in the application service and config persistence stays in infra.
 
-## Flow
+## Data & Control Flow
 Commands, command services, and Tauri startup depend inward on `host-application`; that crate depends on `host-domain`; infra crates implement the task store, git, config, and runtime plumbing behind those contracts without duplicating runtime capability metadata.
 
-## Integration
+## Integration Points
 These crates are the Rust host surface used by `src/lib.rs`, browser-backend handlers, and the desktop command layer.

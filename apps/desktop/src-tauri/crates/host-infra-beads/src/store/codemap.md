@@ -3,11 +3,11 @@
 ## Responsibility
 Concrete `BeadsTaskStore` implementation of the `TaskStore` port.
 
-## Design
-This layer keeps the repo/workspace identity cache, then delegates real work to task/doc/session helper modules and the lifecycle coordinator.
+## Design/Patterns
+This layer keeps the repo/workspace identity cache, then delegates real work to task, document, session, namespace, and cache helper modules plus the lifecycle coordinator.
 
-## Flow
-Each `TaskStore` method resolves the repo identity, ensures Beads readiness when needed, and forwards to the appropriate Beads CLI or metadata/document operation.
+## Data & Control Flow
+Each `TaskStore` method resolves the repo identity, ensures Beads readiness when needed, and forwards to the appropriate Beads CLI or metadata/document/session operation.
 
-## Integration
+## Integration Points
 Acts as the Beads adapter boundary for `host_domain` task models and `host_infra_system::AppConfigStore` workspace lookups.

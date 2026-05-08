@@ -6,12 +6,12 @@ Settings modal, repository runtime/prompt defaults, reusable prompts, configurat
 
 ## Design/Patterns
 
-Form sections compose focused modal models with shared settings read-model helpers so the modal can edit durable repo settings without mutating host state directly.
+Form sections compose focused modal hooks with shared settings read-model and save-prep helpers so the modal edits durable repo settings without mutating host state directly.
 
-## Flow
+## Data & Control Flow
 
-Settings snapshots and repo config are loaded through state queries, converted into draft state, then saved back through workspace operations and query invalidation.
+Settings snapshots and repo config are loaded through state queries, converted into draft state, validated, then saved back through workspace operations and query invalidation.
 
-## Integration
+## Integration Points
 
-`settings-modal.tsx`, `settings-modal-model.ts`, `state/read-models/settings-read-model`, `AppShell`, and repo/workspace state operations.
+`settings-modal.tsx`, `use-settings-modal-controller.ts`, `settings-save/`, `state/read-models/settings-read-model`, `AppShell`, and repo/workspace state operations.

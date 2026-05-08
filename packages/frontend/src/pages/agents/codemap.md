@@ -2,16 +2,16 @@
 
 ## Responsibility
 
-Agent Studio route orchestration: task/session navigation, header model composition, chat surface composition, chat composer page-adapter state, right-panel state, session creation, runtime readiness, active-session runtime hydration, and URL synchronization.
+Agent Studio route orchestration: shell composition, query sync, session/task selection, header/right-panel/page models, session creation, runtime readiness, active-session runtime hydration, and URL synchronization.
 
 ## Design/Patterns
 
-This folder is model-heavy. Shell, query-sync, right-panel, session-start, and chat-composer hooks assemble page models, delegating reusable chat composer mechanics and header submodels to feature/component folders.
+This folder is model-heavy. Shell, session-start, right-panel, task-tabs, chat-settings, repo-settings, and session-action helpers assemble page models, delegating reusable mechanics to feature/component folders.
 
-## Flow
+## Data & Control Flow
 
 Route params and workspace state seed the shell model; session/task changes feed back into query params, session stores, runtime hydration, header quick actions/history/workflow rail, and right-panel refreshes.
 
-## Integration
+## Integration Points
 
-`shell/`, `query-sync/use-agent-studio-query-sync.ts`, `right-panel/use-agent-studio-right-panel.ts`, `session-start/use-agent-studio-session-start-flow.ts`, `chat-composer/use-agent-studio-chat-composer.ts`, `features/agent-chat-composer/`, `use-agent-studio-orchestration-controller.ts`, and `components/features/agents`.
+`shell/`, `session-start/`, `query-sync/`, `right-panel/`, `use-agent-studio-page-models.ts`, `use-agent-studio-page-submodels.ts`, `use-agent-studio-page-model-builders.ts`, `use-agent-studio-session-action-helpers.ts`, and `components/features/agents`.
