@@ -26,10 +26,7 @@ import {
   canStartSessionForRole,
   type QueryUpdate,
 } from "./use-agent-studio-session-action-helpers";
-import {
-  buildBusySendBlockedReason,
-  useAgentStudioSessionActionState,
-} from "./use-agent-studio-session-action-state";
+import { useAgentStudioSessionActionState } from "./use-agent-studio-session-action-state";
 import { useAgentStudioSessionStartFlow } from "./use-agent-studio-session-start-flow";
 
 export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";
@@ -133,13 +130,19 @@ export function useAgentStudioSessionActions({
     selectedModelSelection,
   });
   const startFlowSessionWorking = sessionState.isSessionBusy;
-  const sendBlockedReasonBeforeCurrentSend = buildBusySendBlockedReason({
-    hasActiveSession: sessionState.hasActiveSession,
-    isSessionWorking: startFlowSessionWorking,
-    isWaitingInput: sessionState.isWaitingInput,
-    supportsQueuedUserMessages: sessionState.supportsQueuedUserMessages,
-    activeRuntimeLabel: sessionState.activeRuntimeLabel,
-  });
+  const getBusySendBlockedReason = (isSessionWorking: boolean): string | null => {
+    if (
+      !sessionState.hasActiveSession ||
+      !isSessionWorking ||
+      sessionState.isWaitingInput ||
+      sessionState.supportsQueuedUserMessages
+    ) {
+      return null;
+    }
+
+    return `${sessionState.activeRuntimeLabel} does not support queued messages while the session is working.`;
+  };
+  const sendBlockedReasonBeforeCurrentSend = getBusySendBlockedReason(startFlowSessionWorking);
 
   const {
     isStarting,
@@ -194,13 +197,7 @@ export function useAgentStudioSessionActions({
 
   const isSessionWorking =
     sessionState.hasActiveSession && (sessionState.isSessionBusy || isSending);
-  const busySendBlockedReason = buildBusySendBlockedReason({
-    hasActiveSession: sessionState.hasActiveSession,
-    isSessionWorking,
-    isWaitingInput: sessionState.isWaitingInput,
-    supportsQueuedUserMessages: sessionState.supportsQueuedUserMessages,
-    activeRuntimeLabel: sessionState.activeRuntimeLabel,
-  });
+  const busySendBlockedReason = getBusySendBlockedReason(isSessionWorking);
 
   const handleCreateSession = useCallback(
     (option: SessionCreateOption): void => {

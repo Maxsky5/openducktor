@@ -64,22 +64,3 @@ export function useAgentStudioSessionActionState({
     activeRuntimeLabel,
   };
 }
-
-export const buildBusySendBlockedReason = (params: {
-  hasActiveSession: boolean;
-  isSessionWorking: boolean;
-  isWaitingInput: boolean;
-  supportsQueuedUserMessages: boolean;
-  activeRuntimeLabel: string;
-}): string | null => {
-  if (
-    !params.hasActiveSession ||
-    !params.isSessionWorking ||
-    params.isWaitingInput ||
-    params.supportsQueuedUserMessages
-  ) {
-    return null;
-  }
-
-  return `${params.activeRuntimeLabel} does not support queued messages while the session is working.`;
-};
