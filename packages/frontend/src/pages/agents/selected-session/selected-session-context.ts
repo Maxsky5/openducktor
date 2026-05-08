@@ -289,6 +289,8 @@ export const buildAgentStudioSelectedSessionContext = ({
     kickoffLabel: sessionActions.kickoffLabel,
     startLaunchKickoff: sessionActions.startLaunchKickoff,
   });
+  const hasPendingQuestions = (activeSession?.pendingQuestions ?? []).length > 0;
+  const hasPendingApprovals = (activeSession?.pendingApprovals ?? []).length > 0;
 
   return {
     taskId,
@@ -343,12 +345,12 @@ export const buildAgentStudioSelectedSessionContext = ({
     },
     pendingInput: {
       pendingQuestions: {
-        canSubmit: true,
+        canSubmit: hasPendingQuestions,
         isSubmittingByRequestId: sessionActions.isSubmittingQuestionByRequestId,
         onSubmit: sessionActions.onSubmitQuestionAnswers,
       },
       approvals: {
-        canReply: true,
+        canReply: hasPendingApprovals,
         isSubmittingByRequestId: approvals.isSubmittingApprovalByRequestId,
         errorByRequestId: approvals.approvalReplyErrorByRequestId,
         onReply: approvals.onReplyApproval,
@@ -403,7 +405,6 @@ const buildSelectedSessionChatEmptyState = ({
       onAction: (): void => {
         void startLaunchKickoff();
       },
-      isActionPending: isStarting,
     };
   }
 

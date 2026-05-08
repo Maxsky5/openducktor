@@ -159,6 +159,36 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     expect(context.chat.emptyState?.actionLabel).toBeUndefined();
   });
 
+  test("projects kickoff and starting empty-state affordances without stale pending flags", () => {
+    const startLaunchKickoff = mock(async () => {});
+    const readyContext = buildAgentStudioSelectedSessionContext(
+      createInput({
+        sessionActions: {
+          ...createInput().sessionActions,
+          startLaunchKickoff,
+        },
+      }),
+    );
+
+    expect(readyContext.chat.emptyState).toMatchObject({
+      title: "Send a message to start a new session automatically.",
+      actionLabel: "Start Spec",
+    });
+    expect(readyContext.chat.emptyState?.isActionPending).toBeUndefined();
+
+    const startingContext = buildAgentStudioSelectedSessionContext(
+      createInput({
+        sessionActions: {
+          ...createInput().sessionActions,
+          isStarting: true,
+          startLaunchKickoff,
+        },
+      }),
+    );
+
+    expect(startingContext.chat.emptyState).toEqual({ title: "Initializing session..." });
+  });
+
   test("projects runtime readiness and runtime-data errors without masking", () => {
     const refreshChecks = mock(async () => {});
     const context = buildAgentStudioSelectedSessionContext(
@@ -258,5 +288,26 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       "session-main": 1,
       "session-sub": 1,
     });
+  });
+
+  test("disables pending input actions when the selected session has no pending items", () => {
+    const noActiveSessionContext = buildAgentStudioSelectedSessionContext(
+      createInput({ activeSession: null }),
+    );
+
+    expect(noActiveSessionContext.pendingInput.pendingQuestions.canSubmit).toBe(false);
+    expect(noActiveSessionContext.pendingInput.approvals.canReply).toBe(false);
+
+    const idleSession = createSession({ pendingApprovals: [], pendingQuestions: [] });
+    const idleContext = buildAgentStudioSelectedSessionContext(
+      createInput({
+        activeSession: idleSession,
+        sessionsForTask: [toAgentSessionSummary(idleSession)],
+        allSessionSummaries: [toAgentSessionSummary(idleSession)],
+      }),
+    );
+
+    expect(idleContext.pendingInput.pendingQuestions.canSubmit).toBe(false);
+    expect(idleContext.pendingInput.approvals.canReply).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
@@ -20,11 +20,16 @@ const useStablePendingInputCounts = (
   nextCounts: Record<string, number>,
 ): Record<string, number> => {
   const previousRef = useRef<Record<string, number>>(nextCounts);
-  return useMemo(() => {
-    const stableCounts = keepStablePendingInputCounts(previousRef.current, nextCounts);
+  const stableCounts = useMemo(
+    () => keepStablePendingInputCounts(previousRef.current, nextCounts),
+    [nextCounts],
+  );
+
+  useEffect(() => {
     previousRef.current = stableCounts;
-    return stableCounts;
-  }, [nextCounts]);
+  }, [stableCounts]);
+
+  return stableCounts;
 };
 
 type AgentStudioTaskTabsContext = {
