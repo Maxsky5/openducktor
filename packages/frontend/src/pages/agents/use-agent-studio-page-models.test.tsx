@@ -65,6 +65,17 @@ const createSession = (
   });
 };
 
+const createPendingQuestion = (requestId = "question-1") => ({
+  requestId,
+  questions: [
+    {
+      header: "Question",
+      question: "Need input",
+      options: [{ label: "Reply", description: "Provide input" }],
+    },
+  ],
+});
+
 const createDocumentState = (markdown: string): TaskDocumentState => ({
   markdown,
   updatedAt: null,
@@ -1031,6 +1042,122 @@ describe("useAgentStudioPageModels", () => {
 
     expect(
       harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountByExternalSessionId,
+    ).toBe(initialCounts);
+
+    await harness.unmount();
+  });
+
+  test("derives subagent pending question counts from all live session summaries", async () => {
+    const parentSession = createSession("session-parent", "external-parent");
+    const childWithQuestion = createSession("session-child-1", "external-child-1", {
+      taskId: "other-task",
+      pendingQuestions: [createPendingQuestion("question-1"), createPendingQuestion("question-2")],
+    });
+    const childWithoutQuestion = createSession("session-child-2", "external-child-2", {
+      pendingQuestions: [],
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          activeSession: parentSession,
+          sessionsForTask: [toAgentSessionSummary(parentSession)],
+          allSessionSummaries: [
+            toAgentSessionSummary(parentSession),
+            toAgentSessionSummary(childWithQuestion),
+            toAgentSessionSummary(childWithoutQuestion),
+          ],
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    expect(
+      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountByExternalSessionId,
+    ).toEqual({
+      "external-child-1": 2,
+    });
+
+    await harness.unmount();
+  });
+
+  test("derives subagent pending question counts from parent live event overlay", async () => {
+    const parentSession = createSession("session-parent", "external-parent", {
+      subagentPendingQuestionsByExternalSessionId: {
+        "external-child-session": [createPendingQuestion("question-1")],
+        "external-empty-child-session": [],
+      },
+    });
+    const childSummary = toAgentSessionSummary(
+      createSession("internal-child-session", "external-child-session", {
+        taskId: "other-task",
+      }),
+    );
+    const harness = createHookHarness(
+      createHookArgs({
+        core: {
+          activeSession: parentSession,
+          sessionsForTask: [toAgentSessionSummary(parentSession)],
+          allSessionSummaries: [toAgentSessionSummary(parentSession), childSummary],
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    expect(
+      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountByExternalSessionId,
+    ).toEqual({
+      "external-child-session": 1,
+    });
+
+    await harness.unmount();
+  });
+
+  test("keeps subagent pending question count map stable when counts do not change", async () => {
+    const parentSession = createSession("session-parent", "external-parent");
+    const childWithQuestion = createSession("session-child-1", "external-child-1", {
+      taskId: "other-task",
+      pendingQuestions: [createPendingQuestion("question-1")],
+    });
+    const initialProps = createHookArgs({
+      core: {
+        activeSession: parentSession,
+        sessionsForTask: [toAgentSessionSummary(parentSession)],
+        allSessionSummaries: [
+          toAgentSessionSummary(parentSession),
+          toAgentSessionSummary(childWithQuestion),
+        ],
+      },
+    });
+    const harness = createHookHarness(initialProps);
+
+    await harness.mount();
+
+    const initialCounts =
+      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountByExternalSessionId;
+
+    await harness.update(
+      createHookArgs({
+        core: {
+          activeSession: parentSession,
+          sessionsForTask: [toAgentSessionSummary(parentSession)],
+          allSessionSummaries: [
+            toAgentSessionSummary(parentSession),
+            toAgentSessionSummary(childWithQuestion),
+            toAgentSessionSummary(
+              createSession("session-child-2", "external-child-2", {
+                taskId: "other-task",
+                pendingQuestions: [],
+              }),
+            ),
+          ],
+        },
+      }),
+    );
+
+    expect(
+      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountByExternalSessionId,
     ).toBe(initialCounts);
 
     await harness.unmount();
