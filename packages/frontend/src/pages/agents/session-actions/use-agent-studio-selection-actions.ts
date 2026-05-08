@@ -5,13 +5,13 @@ import {
   type AgentSessionSummary,
   isWorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
-import type { SessionCreateOption } from "./agents-page-session-tabs";
+import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
   applyAgentStudioSelectionQuery,
   canStartSessionForRole,
   type QueryUpdate,
   shouldTriggerContextSwitchIntent,
-} from "./use-agent-studio-session-action-helpers";
+} from "../use-agent-studio-session-action-helpers";
 
 type SelectionIntentScheduler = (intent: {
   taskId: string;

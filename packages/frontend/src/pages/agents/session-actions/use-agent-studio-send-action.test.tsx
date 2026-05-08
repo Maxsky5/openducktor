@@ -11,7 +11,7 @@ import {
   createDeferred,
   createTaskCardFixture,
   enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+} from "../agent-studio-test-utils";
 import { useAgentStudioSendAction } from "./use-agent-studio-send-action";
 
 enableReactActEnvironment();

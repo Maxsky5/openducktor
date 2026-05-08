@@ -6,7 +6,7 @@ Agent Studio route orchestration: shell composition, query sync, session/task se
 
 ## Design/Patterns
 
-This folder is model-heavy. Shell, session-start, right-panel, task-tabs, chat-settings, repo-settings, and session-action helpers assemble page models, delegating reusable mechanics to feature/component folders.
+This folder is model-heavy. Shell, session-start, session-actions, right-panel, task-tabs, chat-settings, repo-settings, and session-action helpers assemble page models, delegating reusable mechanics to feature/component folders.
 
 ## Data & Control Flow
 
@@ -14,4 +14,4 @@ Route params and workspace state seed the shell model; session/task changes feed
 
 ## Integration Points
 
-`shell/`, `session-start/`, `query-sync/`, `right-panel/`, `use-agent-studio-page-models.ts`, `use-agent-studio-page-submodels.ts`, `use-agent-studio-page-model-builders.ts`, `use-agent-studio-session-action-helpers.ts`, and `components/features/agents`.
+`shell/`, `session-start/`, `session-actions/`, `query-sync/`, `right-panel/`, `use-agent-studio-page-models.ts`, `use-agent-studio-page-submodels.ts`, `use-agent-studio-page-model-builders.ts`, `use-agent-studio-session-action-helpers.ts`, and `components/features/agents`.

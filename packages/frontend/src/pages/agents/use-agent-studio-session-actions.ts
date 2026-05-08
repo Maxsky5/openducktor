@@ -19,14 +19,14 @@ import type {
 } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
-import { useAgentStudioQuestionActions } from "./use-agent-studio-question-actions";
-import { useAgentStudioSelectionActions } from "./use-agent-studio-selection-actions";
-import { useAgentStudioSendAction } from "./use-agent-studio-send-action";
+import { useAgentStudioQuestionActions } from "./session-actions/use-agent-studio-question-actions";
+import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
+import { useAgentStudioSendAction } from "./session-actions/use-agent-studio-send-action";
+import { useAgentStudioSessionActionState } from "./session-actions/use-agent-studio-session-action-state";
 import {
   canStartSessionForRole,
   type QueryUpdate,
 } from "./use-agent-studio-session-action-helpers";
-import { useAgentStudioSessionActionState } from "./use-agent-studio-session-action-state";
 import { useAgentStudioSessionStartFlow } from "./use-agent-studio-session-start-flow";
 
 export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";

@@ -20,8 +20,8 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { useAgentStudioQuestionActions } from "./use-agent-studio-question-actions";
-import { useAgentStudioSelectionActions } from "./use-agent-studio-selection-actions";
+import { useAgentStudioQuestionActions } from "./session-actions/use-agent-studio-question-actions";
+import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
 enableReactActEnvironment();

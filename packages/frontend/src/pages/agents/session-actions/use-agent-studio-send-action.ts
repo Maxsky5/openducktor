@@ -17,7 +17,7 @@ import {
   canStartSessionForRole,
   decrementActivityCountRecord,
   incrementActivityCountRecord,
-} from "./use-agent-studio-session-action-helpers";
+} from "../use-agent-studio-session-action-helpers";
 
 type UseAgentStudioSendActionArgs = {
   activeWorkspace: ActiveWorkspace | null;
