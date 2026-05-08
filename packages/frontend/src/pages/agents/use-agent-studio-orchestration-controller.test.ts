@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
+import { ROLE_OPTIONS } from "./agents-page-constants";
+import { buildRoleLabelByRole } from "./agents-page-view-model";
+import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { buildAgentStudioPageModelsArgs } from "./use-agent-studio-orchestration-controller";
 
 type BuildArgs = Parameters<typeof buildAgentStudioPageModelsArgs>[0];
@@ -27,28 +30,74 @@ const onReorderTab = () => {};
 const handleSelectAgentProfile = () => {};
 const handleSelectModel = () => {};
 const handleSelectVariant = () => {};
+const baseReadiness = {
+  agentStudioReadinessState: "ready" as const,
+  agentStudioReady: true,
+  agentStudioBlockedReason: "",
+  isLoadingChecks: false,
+  refreshChecks: async () => {},
+};
+const baseSessionActions = {
+  handleWorkflowStepSelect: () => {},
+  handleSessionSelectionChange: () => {},
+  handleCreateSession: () => {},
+  handlePrepareMessageFirstSession: () => {},
+  handleQuickAction: () => {},
+  openTaskDetails: () => {},
+  isStarting: false,
+  isSending: false,
+  isSessionWorking: false,
+  isWaitingInput: false,
+  busySendBlockedReason: null,
+  canKickoffNewSession: false,
+  kickoffLabel: "Kickoff",
+  canStopSession: false,
+  startLaunchKickoff: async () => {},
+  onSend: async () => true,
+  onSubmitQuestionAnswers: async () => {},
+  isSubmittingQuestionByRequestId: {},
+  stopAgentSession: async () => {},
+};
+const baseApprovals = {
+  isSubmittingApprovalByRequestId: {},
+  approvalReplyErrorByRequestId: {},
+  onReplyApproval: async () => {},
+};
+const baseDocuments = {
+  specDoc: taskDocument,
+  planDoc: taskDocument,
+  qaDoc: taskDocument,
+};
 
 const baseArgs: BuildArgs = {
   view: {
     viewTaskId: "task-1",
-    viewRole: "planner",
-    viewSelectedTask: task,
     contextSwitchVersion: 4,
-    isSessionSelectionResolving: false,
-    isActiveTaskHydrated: true,
-    isActiveTaskHydrationFailed: false,
-    isViewSessionHistoryHydrated: true,
-    isViewSessionHistoryHydrationFailed: false,
-    isViewSessionHistoryHydrating: false,
-    isViewSessionWaitingForRuntimeReadiness: false,
-    hasActiveGitConflict: false,
   },
-  sessions: {
+  selectedSession: buildAgentStudioSelectedSessionContext({
+    taskId: "task-1",
+    role: "planner",
+    selectedTask: task,
+    sessionsForTask: [session],
     allSessionSummaries: [session],
-    viewSessionsForTask: [session],
-    viewActiveSession: session,
-  },
-  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    contextSessionsLength: 1,
+    activeSession: session,
+    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    sessionRuntimeDataError: null,
+    hasActiveGitConflict: false,
+    isTaskHydrating: false,
+    isSessionHistoryHydrated: true,
+    isSessionHistoryHydrating: false,
+    isSessionSelectionResolving: false,
+    isWaitingForRuntimeReadiness: false,
+    isSessionHistoryHydrationFailed: false,
+    activeSessionContextUsage: null,
+    documents: baseDocuments,
+    readiness: baseReadiness,
+    sessionActions: baseSessionActions,
+    approvals: baseApprovals,
+    roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
+  }),
   tabs: {
     activeTaskTabId: "task-1",
     taskTabs: [],
@@ -59,39 +108,7 @@ const baseArgs: BuildArgs = {
     handleCloseTab: onCloseTab,
     handleReorderTab: onReorderTab,
   },
-  documents: {
-    specDoc: taskDocument,
-    planDoc: taskDocument,
-    qaDoc: taskDocument,
-  },
-  readiness: {
-    agentStudioReadinessState: "ready",
-    agentStudioReady: true,
-    agentStudioBlockedReason: "",
-    isLoadingChecks: false,
-    refreshChecks: async () => {},
-  },
-  sessionActions: {
-    handleWorkflowStepSelect: () => {},
-    handleSessionSelectionChange: () => {},
-    handleCreateSession: () => {},
-    handlePrepareMessageFirstSession: () => {},
-    handleQuickAction: () => {},
-    openTaskDetails: () => {},
-    isStarting: false,
-    isSending: false,
-    isSessionWorking: false,
-    isWaitingInput: false,
-    busySendBlockedReason: null,
-    canKickoffNewSession: false,
-    kickoffLabel: "Kickoff",
-    canStopSession: false,
-    startLaunchKickoff: async () => {},
-    onSend: async () => true,
-    onSubmitQuestionAnswers: async () => {},
-    isSubmittingQuestionByRequestId: {},
-    stopAgentSession: async () => {},
-  },
+  sessionActions: baseSessionActions,
   modelSelection: {
     selectedModelSelection: null,
     selectedModelDescriptor: null,
@@ -112,11 +129,6 @@ const baseArgs: BuildArgs = {
     handleSelectVariant,
     agentAccentColorsByProfileId: {},
     activeSessionContextUsage: null,
-  },
-  approvals: {
-    isSubmittingApprovalByRequestId: {},
-    approvalReplyErrorByRequestId: {},
-    onReplyApproval: async () => {},
   },
   chatSettings: {
     showThinkingMessages: true,
@@ -140,8 +152,8 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
     expect(mapped.taskTabs.onReorderTab).toBe(onReorderTab);
-    expect(mapped.documents.planDoc.markdown).toBe("# doc");
-    expect(mapped.readiness.agentStudioReadinessState).toBe("ready");
+    expect(mapped.selectedSession.documents.activeDocument?.document.markdown).toBe("# doc");
+    expect(mapped.selectedSession.runtime.runtimeReadiness.readinessState).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
@@ -166,6 +178,10 @@ describe("buildAgentStudioPageModelsArgs", () => {
     });
     const withEmptyFallback = buildAgentStudioPageModelsArgs({
       ...baseArgs,
+      selectedSession: {
+        ...baseArgs.selectedSession,
+        taskId: "",
+      },
       view: {
         ...baseArgs.view,
         viewTaskId: "",
@@ -184,18 +200,28 @@ describe("buildAgentStudioPageModelsArgs", () => {
   test("derives isTaskHydrating only when a task exists and hydration is incomplete", () => {
     const hydrating = buildAgentStudioPageModelsArgs({
       ...baseArgs,
-      view: {
-        ...baseArgs.view,
-        isActiveTaskHydrated: false,
+      selectedSession: {
+        ...baseArgs.selectedSession,
+        runtime: {
+          ...baseArgs.selectedSession.runtime,
+          isTaskHydrating: true,
+        },
       },
     });
     const hydrated = buildAgentStudioPageModelsArgs(baseArgs);
     const noTaskSelected = buildAgentStudioPageModelsArgs({
       ...baseArgs,
+      selectedSession: {
+        ...baseArgs.selectedSession,
+        taskId: "",
+        runtime: {
+          ...baseArgs.selectedSession.runtime,
+          isTaskHydrating: false,
+        },
+      },
       view: {
         ...baseArgs.view,
         viewTaskId: "",
-        isActiveTaskHydrated: false,
       },
     });
 
@@ -207,10 +233,12 @@ describe("buildAgentStudioPageModelsArgs", () => {
   test("stops reporting task hydration after hydration fails", () => {
     const failed = buildAgentStudioPageModelsArgs({
       ...baseArgs,
-      view: {
-        ...baseArgs.view,
-        isActiveTaskHydrated: false,
-        isActiveTaskHydrationFailed: true,
+      selectedSession: {
+        ...baseArgs.selectedSession,
+        runtime: {
+          ...baseArgs.selectedSession.runtime,
+          isTaskHydrating: false,
+        },
       },
     });
 
@@ -220,9 +248,12 @@ describe("buildAgentStudioPageModelsArgs", () => {
   test("forwards explicit session history hydration failures into page-model core", () => {
     const failed = buildAgentStudioPageModelsArgs({
       ...baseArgs,
-      view: {
-        ...baseArgs.view,
-        isViewSessionHistoryHydrationFailed: true,
+      selectedSession: {
+        ...baseArgs.selectedSession,
+        runtime: {
+          ...baseArgs.selectedSession.runtime,
+          isSessionHistoryHydrationFailed: true,
+        },
       },
     });
 
@@ -238,10 +269,11 @@ describe("buildAgentStudioPageModelsArgs", () => {
     });
     const mapped = buildAgentStudioPageModelsArgs({
       ...baseArgs,
-      sessions: {
-        ...baseArgs.sessions,
+      selectedSession: {
+        ...baseArgs.selectedSession,
         allSessionSummaries: [session, secondSession],
-        viewSessionsForTask: [session, secondSession],
+        sessionsForTask: [session, secondSession],
+        contextSessionsLength: 2,
       },
     });
 

@@ -14,6 +14,12 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import { ROLE_OPTIONS } from "./agents-page-constants";
+import { buildRoleLabelByRole } from "./agents-page-view-model";
+import {
+  type AgentStudioSelectedSessionContextInput,
+  buildAgentStudioSelectedSessionContext,
+} from "./selected-session/selected-session-context";
 
 type UseAgentStudioPageModelsHook =
   typeof import("./use-agent-studio-page-models")["useAgentStudioPageModels"];
@@ -24,12 +30,13 @@ type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0];
 
 type HookArgsOverrides = {
   core?: Partial<HookArgs["core"]>;
+  selectedSession?: Partial<HookArgs["selectedSession"]>;
   taskTabs?: Partial<HookArgs["taskTabs"]>;
-  documents?: Partial<HookArgs["documents"]>;
-  readiness?: Partial<HookArgs["readiness"]>;
+  documents?: Partial<AgentStudioSelectedSessionContextInput["documents"]>;
+  readiness?: Partial<AgentStudioSelectedSessionContextInput["readiness"]>;
   sessionActions?: Partial<HookArgs["sessionActions"]>;
   modelSelection?: Partial<HookArgs["modelSelection"]>;
-  approvals?: Partial<HookArgs["approvals"]>;
+  approvals?: Partial<AgentStudioSelectedSessionContextInput["approvals"]>;
   chatSettings?: Partial<HookArgs["chatSettings"]>;
   composer?: Partial<HookArgs["composer"]>;
 };
@@ -134,89 +141,122 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     contextSessionsLength,
   };
 
+  const taskTabs: HookArgs["taskTabs"] = {
+    taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
+    availableTabTasks: [createTask()],
+    isLoadingTasks: false,
+    onSelectTab: () => {},
+    onCreateTab: () => {},
+    onCloseTab: () => {},
+    onReorderTab: () => {},
+    ...overrides.taskTabs,
+  };
+  const documents = {
+    specDoc: createDocumentState("spec"),
+    planDoc: createDocumentState(""),
+    qaDoc: createDocumentState(""),
+    ...overrides.documents,
+  };
+  const readiness: AgentStudioSelectedSessionContextInput["readiness"] = {
+    agentStudioReadinessState: "ready",
+    agentStudioReady: true,
+    agentStudioBlockedReason: "",
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+    ...overrides.readiness,
+  };
+  const sessionActions: HookArgs["sessionActions"] = {
+    handleWorkflowStepSelect: () => {},
+    handleSessionSelectionChange: () => {},
+    handleCreateSession: () => {},
+    handlePrepareMessageFirstSession: () => {},
+    handleQuickAction: () => {},
+    openTaskDetails: () => {},
+    isStarting: false,
+    isSending: false,
+    isSessionWorking: true,
+    isWaitingInput: false,
+    busySendBlockedReason: null,
+    canKickoffNewSession: false,
+    kickoffLabel: "Start Spec",
+    canStopSession: true,
+    startLaunchKickoff: async () => {},
+    onSend: async () => true,
+    onSubmitQuestionAnswers: async () => {},
+    isSubmittingQuestionByRequestId: {},
+    stopAgentSession: async () => {},
+    ...overrides.sessionActions,
+  };
+  const modelSelection: HookArgs["modelSelection"] = {
+    selectedModelSelection: null,
+    isSelectionCatalogLoading: false,
+    supportsSlashCommands: true,
+    supportsFileSearch: true,
+    slashCommandCatalog: { commands: [] },
+    slashCommands: [],
+    slashCommandsError: null,
+    isSlashCommandsLoading: false,
+    searchFiles: async () => [],
+    agentOptions: [{ value: "spec", label: "Spec" }],
+    modelOptions: [],
+    modelGroups: [],
+    variantOptions: [],
+    onSelectAgent: () => {},
+    onSelectModel: () => {},
+    onSelectVariant: () => {},
+    activeSessionAgentColors: {},
+    activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
+    ...overrides.modelSelection,
+  };
+  const approvals: AgentStudioSelectedSessionContextInput["approvals"] = {
+    isSubmittingApprovalByRequestId: {},
+    approvalReplyErrorByRequestId: {},
+    onReplyApproval: async () => {},
+    ...overrides.approvals,
+  };
+  const chatSettings = {
+    showThinkingMessages: false,
+    ...overrides.chatSettings,
+  };
+  const composer = {
+    draftStateKey: "draft-1",
+    ...overrides.composer,
+  };
+  const selectedSession = {
+    ...buildAgentStudioSelectedSessionContext({
+      taskId: core.taskId,
+      role: core.role,
+      selectedTask: core.selectedTask,
+      sessionsForTask: core.sessionsForTask,
+      allSessionSummaries: core.allSessionSummaries,
+      contextSessionsLength: core.contextSessionsLength,
+      activeSession: core.activeSession,
+      runtimeDefinitions: core.runtimeDefinitions,
+      sessionRuntimeDataError: core.sessionRuntimeDataError,
+      hasActiveGitConflict: core.hasActiveGitConflict,
+      isTaskHydrating: core.isTaskHydrating,
+      isSessionHistoryHydrated: core.isSessionHistoryHydrated,
+      isSessionHistoryHydrating: core.isSessionHistoryHydrating,
+      isSessionSelectionResolving: core.isSessionSelectionResolving,
+      isWaitingForRuntimeReadiness: core.isWaitingForRuntimeReadiness,
+      isSessionHistoryHydrationFailed: core.isSessionHistoryHydrationFailed,
+      activeSessionContextUsage: modelSelection.activeSessionContextUsage,
+      documents,
+      readiness,
+      sessionActions,
+      approvals,
+      roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
+    }),
+  };
+
   return {
     core,
-    taskTabs: {
-      taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
-      availableTabTasks: [createTask()],
-      isLoadingTasks: false,
-      onSelectTab: () => {},
-      onCreateTab: () => {},
-      onCloseTab: () => {},
-      onReorderTab: () => {},
-      ...overrides.taskTabs,
-    },
-    documents: {
-      specDoc: createDocumentState("spec"),
-      planDoc: createDocumentState(""),
-      qaDoc: createDocumentState(""),
-      ...overrides.documents,
-    },
-    readiness: {
-      agentStudioReadinessState: "ready",
-      agentStudioReady: true,
-      agentStudioBlockedReason: "",
-      isLoadingChecks: false,
-      refreshChecks: async () => {},
-      ...overrides.readiness,
-    },
-    sessionActions: {
-      handleWorkflowStepSelect: () => {},
-      handleSessionSelectionChange: () => {},
-      handleCreateSession: () => {},
-      handlePrepareMessageFirstSession: () => {},
-      handleQuickAction: () => {},
-      openTaskDetails: () => {},
-      isStarting: false,
-      isSending: false,
-      isSessionWorking: true,
-      isWaitingInput: false,
-      busySendBlockedReason: null,
-      canKickoffNewSession: false,
-      kickoffLabel: "Start Spec",
-      canStopSession: true,
-      startLaunchKickoff: async () => {},
-      onSend: async () => true,
-      onSubmitQuestionAnswers: async () => {},
-      isSubmittingQuestionByRequestId: {},
-      stopAgentSession: async () => {},
-      ...overrides.sessionActions,
-    },
-    modelSelection: {
-      selectedModelSelection: null,
-      isSelectionCatalogLoading: false,
-      supportsSlashCommands: true,
-      supportsFileSearch: true,
-      slashCommandCatalog: { commands: [] },
-      slashCommands: [],
-      slashCommandsError: null,
-      isSlashCommandsLoading: false,
-      searchFiles: async () => [],
-      agentOptions: [{ value: "spec", label: "Spec" }],
-      modelOptions: [],
-      modelGroups: [],
-      variantOptions: [],
-      onSelectAgent: () => {},
-      onSelectModel: () => {},
-      onSelectVariant: () => {},
-      activeSessionAgentColors: {},
-      activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
-      ...overrides.modelSelection,
-    },
-    approvals: {
-      isSubmittingApprovalByRequestId: {},
-      approvalReplyErrorByRequestId: {},
-      onReplyApproval: async () => {},
-      ...overrides.approvals,
-    },
-    chatSettings: {
-      showThinkingMessages: false,
-      ...overrides.chatSettings,
-    },
-    composer: {
-      draftStateKey: "draft-1",
-      ...overrides.composer,
-    },
+    selectedSession,
+    taskTabs,
+    sessionActions,
+    modelSelection,
+    chatSettings,
+    composer,
   };
 };
 
@@ -812,10 +852,16 @@ describe("useAgentStudioPageModels", () => {
 
     const approvalUpdateProps = {
       ...baseProps,
-      approvals: {
-        ...baseProps.approvals,
-        isSubmittingApprovalByRequestId: {
-          "perm-1": true,
+      selectedSession: {
+        ...baseProps.selectedSession,
+        pendingInput: {
+          ...baseProps.selectedSession.pendingInput,
+          approvals: {
+            ...baseProps.selectedSession.pendingInput.approvals,
+            isSubmittingByRequestId: {
+              "perm-1": true,
+            },
+          },
         },
       },
     };
@@ -829,10 +875,16 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update({
       ...approvalUpdateProps,
-      sessionActions: {
-        ...approvalUpdateProps.sessionActions,
-        isSubmittingQuestionByRequestId: {
-          "q-1": true,
+      selectedSession: {
+        ...approvalUpdateProps.selectedSession,
+        pendingInput: {
+          ...approvalUpdateProps.selectedSession.pendingInput,
+          pendingQuestions: {
+            ...approvalUpdateProps.selectedSession.pendingInput.pendingQuestions,
+            isSubmittingByRequestId: {
+              "q-1": true,
+            },
+          },
         },
       },
     });

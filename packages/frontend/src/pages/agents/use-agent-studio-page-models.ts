@@ -1,8 +1,4 @@
-import type {
-  RuntimeApprovalReplyOutcome,
-  RuntimeDescriptor,
-  TaskCard,
-} from "@openducktor/contracts";
+import type { RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -13,21 +9,14 @@ import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
-import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
-import { ROLE_OPTIONS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
   buildAgentStudioTaskTabsModel,
   buildAgentStudioWorkspaceSidebarModel,
-  buildRoleLabelByRole,
 } from "./agents-page-view-model";
-import {
-  type AgentStudioDocumentsContext,
-  type AgentStudioSessionContextUsage,
-  buildActiveDocumentForRole,
-  buildWorkflowModelContext,
-  toChatContextUsage,
-} from "./use-agent-studio-page-model-builders";
+import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
+import { keepStablePendingInputCounts } from "./selected-session/selected-session-context";
+import type { AgentStudioSessionContextUsage } from "./use-agent-studio-page-model-builders";
 import { useAgentStudioHeaderModel } from "./use-agent-studio-page-submodels";
 
 type AgentStudioCoreContext = {
@@ -51,104 +40,15 @@ type AgentStudioCoreContext = {
   contextSwitchVersion: number;
 };
 
-const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS: Record<string, number> = Object.freeze({});
-const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS: Record<string, number> = Object.freeze({});
-
-type PendingInputOverlayMap = Record<string, readonly unknown[]>;
-
-const arePendingInputCountMapsEqual = (
-  left: Record<string, number>,
-  right: Record<string, number>,
-): boolean => {
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-  if (leftKeys.length !== rightKeys.length) {
-    return false;
-  }
-
-  return leftKeys.every((key) => left[key] === right[key]);
-};
-
-const getSessionPendingApprovalCount = (session: AgentSessionSummary): number =>
-  session.pendingApprovals.length;
-
-const getSessionPendingQuestionCount = (session: AgentSessionSummary): number =>
-  session.pendingQuestions.length;
-
-const useStablePendingInputCounts = ({
-  sessions,
-  subagentPendingInputsByExternalSessionId,
-  getSessionPendingInputCount,
-  emptyCounts,
-}: {
-  sessions: AgentSessionSummary[];
-  subagentPendingInputsByExternalSessionId: PendingInputOverlayMap | undefined;
-  getSessionPendingInputCount: (session: AgentSessionSummary) => number;
-  emptyCounts: Record<string, number>;
-}): Record<string, number> => {
-  const previousRef = useRef<Record<string, number>>(emptyCounts);
+const useStablePendingInputCounts = (
+  nextCounts: Record<string, number>,
+): Record<string, number> => {
+  const previousRef = useRef<Record<string, number>>(nextCounts);
   return useMemo(() => {
-    const next: Record<string, number> = {};
-    for (const session of sessions) {
-      const pendingInputCount = getSessionPendingInputCount(session);
-      if (pendingInputCount > 0) {
-        next[session.externalSessionId] = pendingInputCount;
-      }
-    }
-
-    if (subagentPendingInputsByExternalSessionId) {
-      for (const [externalSessionId, pendingInputs] of Object.entries(
-        subagentPendingInputsByExternalSessionId,
-      )) {
-        const pendingInputCount = pendingInputs.length;
-        if (pendingInputCount > 0) {
-          next[externalSessionId] = pendingInputCount;
-        }
-      }
-    }
-
-    const nextCounts = Object.keys(next).length > 0 ? next : emptyCounts;
-    const previous = previousRef.current;
-    if (arePendingInputCountMapsEqual(previous, nextCounts)) {
-      return previous;
-    }
-
-    previousRef.current = nextCounts;
-    return nextCounts;
-  }, [
-    sessions,
-    subagentPendingInputsByExternalSessionId,
-    getSessionPendingInputCount,
-    emptyCounts,
-  ]);
-};
-
-const useStablePendingApprovalCounts = (
-  sessions: AgentSessionSummary[],
-  subagentPendingApprovalsByExternalSessionId:
-    | AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
-    | undefined,
-): Record<string, number> => {
-  return useStablePendingInputCounts({
-    sessions,
-    subagentPendingInputsByExternalSessionId: subagentPendingApprovalsByExternalSessionId,
-    getSessionPendingInputCount: getSessionPendingApprovalCount,
-    emptyCounts: EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
-  });
-};
-
-const useStablePendingQuestionCounts = (
-  sessions: AgentSessionSummary[],
-  subagentPendingQuestionsByExternalSessionId:
-    | AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
-    | undefined,
-): Record<string, number> => {
-  return useStablePendingInputCounts({
-    sessions,
-    subagentPendingInputsByExternalSessionId: subagentPendingQuestionsByExternalSessionId,
-    getSessionPendingInputCount: getSessionPendingQuestionCount,
-    emptyCounts: EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
-  });
+    const stableCounts = keepStablePendingInputCounts(previousRef.current, nextCounts);
+    previousRef.current = stableCounts;
+    return stableCounts;
+  }, [nextCounts]);
 };
 
 type AgentStudioTaskTabsContext = {
@@ -183,14 +83,6 @@ type AgentStudioSessionActionsContext = {
   stopAgentSession: (externalSessionId: string) => Promise<void>;
 };
 
-type AgentStudioReadinessContext = {
-  agentStudioReadinessState: AgentStudioReadinessState;
-  agentStudioReady: boolean;
-  agentStudioBlockedReason: string | null;
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
-};
-
 type AgentStudioModelSelectionContext = {
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor?: AgentChatModel["composer"]["selectedModelDescriptor"];
@@ -213,12 +105,6 @@ type AgentStudioModelSelectionContext = {
   activeSessionContextUsage: AgentStudioSessionContextUsage;
 };
 
-type AgentStudioApprovalContext = {
-  isSubmittingApprovalByRequestId: Record<string, boolean>;
-  approvalReplyErrorByRequestId: Record<string, string>;
-  onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
-};
-
 type AgentStudioComposerContext = {
   draftStateKey: string;
 };
@@ -229,24 +115,20 @@ type AgentStudioChatSettingsContext = {
 
 type UseAgentStudioPageModelsArgs = {
   core: AgentStudioCoreContext;
+  selectedSession: AgentStudioSelectedSessionContext;
   taskTabs: AgentStudioTaskTabsContext;
-  documents: AgentStudioDocumentsContext;
-  readiness: AgentStudioReadinessContext;
   sessionActions: AgentStudioSessionActionsContext;
   modelSelection: AgentStudioModelSelectionContext;
-  approvals: AgentStudioApprovalContext;
   chatSettings: AgentStudioChatSettingsContext;
   composer: AgentStudioComposerContext;
 };
 
 export function useAgentStudioPageModels({
   core,
+  selectedSession,
   taskTabs,
-  documents,
-  readiness,
   sessionActions,
   modelSelection,
-  approvals,
   chatSettings,
   composer,
 }: UseAgentStudioPageModelsArgs): {
@@ -256,26 +138,11 @@ export function useAgentStudioPageModels({
   agentStudioWorkspaceSidebarModel: ReturnType<typeof buildAgentStudioWorkspaceSidebarModel>;
   agentChatModel: AgentChatModel;
 } {
-  const workflowSessionsForTask = core.sessionsForTask;
-  const subagentPendingApprovalCountByExternalSessionId = useStablePendingApprovalCounts(
-    core.allSessionSummaries,
-    core.activeSession?.subagentPendingApprovalsByExternalSessionId,
+  const subagentPendingApprovalCountByExternalSessionId = useStablePendingInputCounts(
+    selectedSession.pendingInput.subagentPendingApprovalCountByExternalSessionId,
   );
-  const subagentPendingQuestionCountByExternalSessionId = useStablePendingQuestionCounts(
-    core.allSessionSummaries,
-    core.activeSession?.subagentPendingQuestionsByExternalSessionId,
-  );
-  const workflowActiveExternalSessionId = core.activeSession?.externalSessionId ?? null;
-  const workflowActiveSessionRole = core.activeSession?.role ?? null;
-  const workflowActiveSession = useMemo(
-    () =>
-      workflowActiveExternalSessionId && workflowActiveSessionRole
-        ? {
-            externalSessionId: workflowActiveExternalSessionId,
-            role: workflowActiveSessionRole,
-          }
-        : null,
-    [workflowActiveExternalSessionId, workflowActiveSessionRole],
+  const subagentPendingQuestionCountByExternalSessionId = useStablePendingInputCounts(
+    selectedSession.pendingInput.subagentPendingQuestionCountByExternalSessionId,
   );
 
   const agentStudioTaskTabsModel = useMemo(
@@ -288,10 +155,10 @@ export function useAgentStudioPageModels({
         onCreateTab: taskTabs.onCreateTab,
         onCloseTab: taskTabs.onCloseTab,
         onReorderTab: taskTabs.onReorderTab,
-        agentStudioReady: readiness.agentStudioReady,
+        agentStudioReady: selectedSession.runtime.runtimeReadiness.isReady,
       }),
     [
-      readiness.agentStudioReady,
+      selectedSession.runtime.runtimeReadiness.isReady,
       taskTabs.availableTabTasks,
       taskTabs.isLoadingTasks,
       taskTabs.onCloseTab,
@@ -302,28 +169,6 @@ export function useAgentStudioPageModels({
     ],
   );
 
-  const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
-  const workflowModelContext = useMemo(
-    () =>
-      buildWorkflowModelContext({
-        selectedTask: core.selectedTask,
-        sessionsForTask: workflowSessionsForTask,
-        activeSession: workflowActiveSession,
-        role: core.role,
-        isSessionWorking: sessionActions.isSessionWorking,
-        hasActiveGitConflict: core.hasActiveGitConflict,
-        roleLabelByRole,
-      }),
-    [
-      core.hasActiveGitConflict,
-      core.role,
-      core.selectedTask,
-      roleLabelByRole,
-      sessionActions.isSessionWorking,
-      workflowActiveSession,
-      workflowSessionsForTask,
-    ],
-  );
   const {
     workflowSessionByRole,
     workflowStateByRole,
@@ -334,29 +179,15 @@ export function useAgentStudioPageModels({
     quickActions,
     primaryQuickAction,
     selectedInteractionRole,
-    selectedRoleAvailable,
-    selectedRoleReadOnlyReason,
-  } = workflowModelContext;
-
-  const activeDocumentRole = core.activeSession?.role ?? core.role;
-  const activeDocument = useMemo(
-    () =>
-      buildActiveDocumentForRole({
-        activeRole: activeDocumentRole,
-        specDoc: documents.specDoc,
-        planDoc: documents.planDoc,
-        qaDoc: documents.qaDoc,
-      }),
-    [activeDocumentRole, documents.planDoc, documents.qaDoc, documents.specDoc],
-  );
+  } = selectedSession.workflow;
 
   const agentStudioHeaderModel = useAgentStudioHeaderModel({
-    selectedTask: core.selectedTask,
-    onOpenTaskDetails: core.selectedTask ? sessionActions.openTaskDetails : null,
-    activeSession: core.activeSession,
-    sessionsForTaskLength: core.sessionsForTask.length,
-    contextSessionsLength: core.contextSessionsLength,
-    agentStudioReady: readiness.agentStudioReady,
+    selectedTask: selectedSession.selectedTask,
+    onOpenTaskDetails: selectedSession.selectedTask ? sessionActions.openTaskDetails : null,
+    activeSession: selectedSession.activeSession,
+    sessionsForTaskLength: selectedSession.sessionsForTask.length,
+    contextSessionsLength: selectedSession.contextSessionsLength,
+    agentStudioReady: selectedSession.runtime.runtimeReadiness.isReady,
     isStarting: sessionActions.isStarting,
     onWorkflowStepSelect: sessionActions.handleWorkflowStepSelect,
     onSessionSelectionChange: sessionActions.handleSessionSelectionChange,
@@ -379,21 +210,18 @@ export function useAgentStudioPageModels({
   const agentStudioWorkspaceSidebarModel = useMemo(
     () =>
       buildAgentStudioWorkspaceSidebarModel({
-        activeDocument,
+        activeDocument: selectedSession.documents.activeDocument,
       }),
-    [activeDocument],
+    [selectedSession.documents.activeDocument],
   );
 
-  const chatContextUsage = useMemo(
-    () => toChatContextUsage(modelSelection.activeSessionContextUsage),
-    [modelSelection.activeSessionContextUsage],
-  );
-  const canKickoff = sessionActions.canKickoffNewSession && selectedRoleAvailable;
-  const activeComposerExternalSessionId = core.activeSession?.externalSessionId ?? null;
-  const activeComposerSelectedModel = core.activeSession?.selectedModel ?? null;
-  const activeComposerIsLoadingModelCatalog = core.activeSession?.isLoadingModelCatalog ?? false;
-  const activeComposerPendingApprovals = core.activeSession?.pendingApprovals ?? [];
-  const activeComposerPendingQuestions = core.activeSession?.pendingQuestions ?? [];
+  const selectedActiveComposerSession = selectedSession.chat.activeComposerSession;
+  const activeComposerExternalSessionId = selectedActiveComposerSession?.externalSessionId ?? null;
+  const activeComposerSelectedModel = selectedActiveComposerSession?.selectedModel ?? null;
+  const activeComposerIsLoadingModelCatalog =
+    selectedActiveComposerSession?.isLoadingModelCatalog ?? false;
+  const activeComposerPendingApprovals = selectedActiveComposerSession?.pendingApprovals ?? [];
+  const activeComposerPendingQuestions = selectedActiveComposerSession?.pendingQuestions ?? [];
   const activeComposerSession = useMemo(
     () =>
       activeComposerExternalSessionId
@@ -406,100 +234,42 @@ export function useAgentStudioPageModels({
           }
         : null,
     [
+      activeComposerExternalSessionId,
       activeComposerIsLoadingModelCatalog,
       activeComposerPendingApprovals,
       activeComposerPendingQuestions,
       activeComposerSelectedModel,
-      activeComposerExternalSessionId,
     ],
   );
-
-  const chatEmptyState = useMemo(() => {
-    if (!core.taskId) {
-      return {
-        title: "Select a task to begin.",
-      };
-    }
-
-    if (sessionActions.isStarting) {
-      return {
-        title: "Initializing session...",
-      };
-    }
-
-    if (canKickoff) {
-      return {
-        title: "Send a message to start a new session automatically.",
-        actionLabel: sessionActions.kickoffLabel,
-        onAction: (): void => {
-          void sessionActions.startLaunchKickoff();
-        },
-        isActionPending: sessionActions.isStarting,
-      };
-    }
-
-    return {
-      title: "Send a message to start a new session automatically.",
-    };
-  }, [
-    canKickoff,
-    core.taskId,
-    sessionActions.isStarting,
-    sessionActions.kickoffLabel,
-    sessionActions.startLaunchKickoff,
-  ]);
-
-  const runtimeReadiness = useMemo(
-    () => ({
-      readinessState: readiness.agentStudioReadinessState,
-      isReady: readiness.agentStudioReady,
-      blockedReason: readiness.agentStudioBlockedReason,
-      isLoadingChecks: readiness.isLoadingChecks,
-      refreshChecks: readiness.refreshChecks,
-    }),
-    [
-      readiness.agentStudioBlockedReason,
-      readiness.agentStudioReadinessState,
-      readiness.agentStudioReady,
-      readiness.isLoadingChecks,
-      readiness.refreshChecks,
-    ],
-  );
-
-  const pendingQuestions = useMemo(
-    () => ({
-      canSubmit: true,
-      isSubmittingByRequestId: sessionActions.isSubmittingQuestionByRequestId,
-      onSubmit: sessionActions.onSubmitQuestionAnswers,
-    }),
-    [sessionActions.isSubmittingQuestionByRequestId, sessionActions.onSubmitQuestionAnswers],
-  );
-
-  const approvalsModel = useMemo(
-    () => ({
-      canReply: true,
-      isSubmittingByRequestId: approvals.isSubmittingApprovalByRequestId,
-      errorByRequestId: approvals.approvalReplyErrorByRequestId,
-      onReply: approvals.onReplyApproval,
-    }),
-    [
-      approvals.isSubmittingApprovalByRequestId,
-      approvals.onReplyApproval,
-      approvals.approvalReplyErrorByRequestId,
-    ],
+  const selectedChatContextUsage = selectedSession.chat.contextUsage;
+  const contextUsageTotalTokens = selectedChatContextUsage?.totalTokens ?? null;
+  const contextUsageContextWindow = selectedChatContextUsage?.contextWindow ?? null;
+  const contextUsageOutputLimit = selectedChatContextUsage?.outputLimit;
+  const chatContextUsage = useMemo(
+    () =>
+      contextUsageTotalTokens !== null && contextUsageContextWindow !== null
+        ? {
+            totalTokens: contextUsageTotalTokens,
+            contextWindow: contextUsageContextWindow,
+            ...(typeof contextUsageOutputLimit === "number"
+              ? { outputLimit: contextUsageOutputLimit }
+              : {}),
+          }
+        : null,
+    [contextUsageContextWindow, contextUsageOutputLimit, contextUsageTotalTokens],
   );
 
   const composerConfig = useMemo(
     () => ({
-      taskId: core.taskId,
+      taskId: selectedSession.taskId,
       activeSession: activeComposerSession,
       isSessionWorking: sessionActions.isSessionWorking,
       isWaitingInput: sessionActions.isWaitingInput,
       busySendBlockedReason: sessionActions.busySendBlockedReason,
       canStopSession: sessionActions.canStopSession,
       stopAgentSession: sessionActions.stopAgentSession,
-      isReadOnly: !selectedRoleAvailable,
-      readOnlyReason: selectedRoleReadOnlyReason,
+      isReadOnly: selectedSession.chat.composerReadOnly,
+      readOnlyReason: selectedSession.chat.composerReadOnlyReason,
       draftStateKey: composer.draftStateKey,
       onSend: sessionActions.onSend,
       isSending: sessionActions.isSending,
@@ -524,10 +294,7 @@ export function useAgentStudioPageModels({
       onSelectVariant: modelSelection.onSelectVariant,
     }),
     [
-      chatContextUsage,
       composer.draftStateKey,
-      core.taskId,
-      activeComposerSession,
       modelSelection.agentOptions,
       modelSelection.isSelectionCatalogLoading,
       modelSelection.isSlashCommandsLoading,
@@ -545,8 +312,11 @@ export function useAgentStudioPageModels({
       modelSelection.supportsFileSearch,
       modelSelection.supportsSlashCommands,
       modelSelection.variantOptions,
-      selectedRoleAvailable,
-      selectedRoleReadOnlyReason,
+      activeComposerSession,
+      selectedSession.chat.composerReadOnly,
+      selectedSession.chat.composerReadOnlyReason,
+      chatContextUsage,
+      selectedSession.taskId,
       sessionActions.busySendBlockedReason,
       sessionActions.canStopSession,
       sessionActions.isSending,
@@ -560,26 +330,26 @@ export function useAgentStudioPageModels({
 
   const surfaceModel = useAgentChatSurfaceModel({
     mode: "interactive",
-    session: core.activeSession,
-    isTaskHydrating: core.isTaskHydrating,
-    isSessionSelectionResolving: core.isSessionSelectionResolving,
+    session: selectedSession.activeSession,
+    isTaskHydrating: selectedSession.runtime.isTaskHydrating,
+    isSessionSelectionResolving: selectedSession.runtime.isSessionSelectionResolving,
     showThinkingMessages: chatSettings.showThinkingMessages,
     isSessionWorking: sessionActions.isSessionWorking,
-    isSessionHistoryLoading: core.isSessionHistoryHydrating,
-    isWaitingForRuntimeReadiness: core.isWaitingForRuntimeReadiness,
-    runtimeDefinitions: core.runtimeDefinitions,
-    sessionRuntimeDataError: core.sessionRuntimeDataError,
-    runtimeReadiness,
-    emptyState: chatEmptyState,
-    pendingQuestions,
-    approvals: approvalsModel,
+    isSessionHistoryLoading: selectedSession.runtime.isSessionHistoryHydrating,
+    isWaitingForRuntimeReadiness: selectedSession.runtime.isWaitingForRuntimeReadiness,
+    runtimeDefinitions: selectedSession.runtime.runtimeDefinitions,
+    sessionRuntimeDataError: selectedSession.runtime.sessionRuntimeDataError,
+    runtimeReadiness: selectedSession.runtime.runtimeReadiness,
+    emptyState: selectedSession.chat.emptyState,
+    pendingQuestions: selectedSession.pendingInput.pendingQuestions,
+    approvals: selectedSession.pendingInput.approvals,
     composer: composerConfig,
     sessionAgentColors: modelSelection.activeSessionAgentColors,
     subagentPendingApprovalsByExternalSessionId:
-      core.activeSession?.subagentPendingApprovalsByExternalSessionId,
+      selectedSession.pendingInput.subagentPendingApprovalsByExternalSessionId,
     subagentPendingApprovalCountByExternalSessionId,
     subagentPendingQuestionsByExternalSessionId:
-      core.activeSession?.subagentPendingQuestionsByExternalSessionId,
+      selectedSession.pendingInput.subagentPendingQuestionsByExternalSessionId,
     subagentPendingQuestionCountByExternalSessionId,
   });
   const composerModel = surfaceModel.composer;
