@@ -1,14 +1,13 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   AgentSessionPresenceStore,
   type AgentSessionRecord,
   type AgentSessionState,
-  appQueryClient,
-  clearAppQueryClient,
   createAdapter,
   createDeferred,
   createLoadAgentSessions,
   createTaskFixture,
+  createTestQueryClient,
   findSessionMessageForTest,
   getSession,
   type LegacyRunSummary,
@@ -18,6 +17,7 @@ import {
   type RuntimeInstanceSummary,
   type RuntimeKind,
   sessionMessagesToArray,
+  setupDefaultLoadSessionsHost,
   someSessionMessageForTest,
   waitForHistoryCallCount,
 } from "./load-sessions-test-harness";
@@ -25,43 +25,20 @@ import {
 let legacyHost!: { runsList: (repoPath?: string) => Promise<LegacyRunSummary[]> };
 
 describe("agent-orchestrator repo switch and requested hydration concurrency", () => {
+  let restoreDefaultHost: (() => void) | null = null;
+  let queryClient!: ReturnType<typeof createTestQueryClient>;
+
   beforeEach(async () => {
-    await clearAppQueryClient();
-    const hostModule = await import("../../shared/host");
-    legacyHost = hostModule.host as typeof hostModule.host & {
-      runsList: (repoPath?: string) => Promise<LegacyRunSummary[]>;
-    };
-    hostModule.host.runtimeList = async (repoPath = "/tmp/repo", runtimeKind = "opencode") => [
-      {
-        kind: runtimeKind,
-        runtimeId: "runtime-1",
-        repoPath,
-        taskId: null,
-        role: "workspace",
-        workingDirectory: repoPath,
-        runtimeRoute: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4444",
-        },
-        startedAt: "2026-02-22T08:00:00.000Z",
-        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-      },
-    ];
-    legacyHost.runsList = async () => [];
-    hostModule.host.runtimeEnsure = async (repoPath) => ({
-      kind: "opencode",
-      runtimeId: "runtime-1",
-      repoPath,
-      taskId: null,
-      role: "workspace",
-      workingDirectory: repoPath,
-      runtimeRoute: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-      },
-      startedAt: "2026-02-22T08:00:00.000Z",
-      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-    });
+    queryClient = createTestQueryClient();
+    const hostDefaults = await setupDefaultLoadSessionsHost();
+    legacyHost = hostDefaults.legacyHost;
+    restoreDefaultHost = hostDefaults.restore;
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+    restoreDefaultHost?.();
+    restoreDefaultHost = null;
   });
 
   test("resumes live persisted sessions without eagerly hydrating transcript history", async () => {
@@ -96,7 +73,7 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -246,7 +223,7 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -359,7 +336,7 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -468,7 +445,7 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -581,7 +558,7 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -706,7 +683,7 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -793,7 +770,7 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -928,7 +905,7 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
       createDeferred<Awaited<ReturnType<ReturnType<typeof createAdapter>["loadSessionHistory"]>>>();
     let historyCalls = 0;
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -1048,7 +1025,7 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
       createDeferred<Awaited<ReturnType<ReturnType<typeof createAdapter>["loadSessionHistory"]>>>();
     let historyCalls = 0;
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -1214,7 +1191,7 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",

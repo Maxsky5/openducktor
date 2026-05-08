@@ -1,13 +1,12 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   type AgentSessionState,
   type AttachSessionInput,
-  appQueryClient,
-  clearAppQueryClient,
   createAdapter,
   createAgentSessionPresenceSnapshotFixture,
   createLoadAgentSessions,
   createTaskFixture,
+  createTestQueryClient,
   getSession,
   type LegacyRunSummary,
   type ListSessionPresenceInput,
@@ -16,48 +15,26 @@ import {
   type ResumeSessionInput,
   type RuntimeInstanceSummary,
   sessionMessagesToArray,
+  setupDefaultLoadSessionsHost,
 } from "./load-sessions-test-harness";
 
-let legacyHost!: { runsList: (repoPath?: string) => Promise<LegacyRunSummary[]> };
+let _legacyHost!: { runsList: (repoPath?: string) => Promise<LegacyRunSummary[]> };
 
 describe("agent-orchestrator live session reconciliation", () => {
+  let restoreDefaultHost: (() => void) | null = null;
+  let queryClient!: ReturnType<typeof createTestQueryClient>;
+
   beforeEach(async () => {
-    await clearAppQueryClient();
-    const hostModule = await import("../../shared/host");
-    legacyHost = hostModule.host as typeof hostModule.host & {
-      runsList: (repoPath?: string) => Promise<LegacyRunSummary[]>;
-    };
-    hostModule.host.runtimeList = async (repoPath = "/tmp/repo", runtimeKind = "opencode") => [
-      {
-        kind: runtimeKind,
-        runtimeId: "runtime-1",
-        repoPath,
-        taskId: null,
-        role: "workspace",
-        workingDirectory: repoPath,
-        runtimeRoute: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4444",
-        },
-        startedAt: "2026-02-22T08:00:00.000Z",
-        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-      },
-    ];
-    legacyHost.runsList = async () => [];
-    hostModule.host.runtimeEnsure = async (repoPath) => ({
-      kind: "opencode",
-      runtimeId: "runtime-1",
-      repoPath,
-      taskId: null,
-      role: "workspace",
-      workingDirectory: repoPath,
-      runtimeRoute: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-      },
-      startedAt: "2026-02-22T08:00:00.000Z",
-      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-    });
+    queryClient = createTestQueryClient();
+    const hostDefaults = await setupDefaultLoadSessionsHost();
+    _legacyHost = hostDefaults.legacyHost;
+    restoreDefaultHost = hostDefaults.restore;
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+    restoreDefaultHost?.();
+    restoreDefaultHost = null;
   });
 
   test("live reconciliation does not attach stale persisted sessions to the repo runtime", async () => {
@@ -108,7 +85,7 @@ describe("agent-orchestrator live session reconciliation", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -223,7 +200,7 @@ describe("agent-orchestrator live session reconciliation", () => {
     const observedSnapshotDirectories: string[][] = [];
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -337,7 +314,7 @@ describe("agent-orchestrator live session reconciliation", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -484,7 +461,7 @@ describe("agent-orchestrator live session reconciliation", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",

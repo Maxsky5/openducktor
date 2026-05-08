@@ -8,7 +8,7 @@ import {
   type AgentSessionPresenceSnapshot,
   toAgentSessionPresenceSnapshotFromLiveSnapshot,
 } from "@openducktor/core";
-import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
+import { createQueryClient } from "@/lib/query-client";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import {
   findSessionMessageForTest,
@@ -30,6 +30,8 @@ import { AgentSessionPresenceStore } from "./session-presence-store";
 export type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
 
 export const createLoadAgentSessions = createLoadAgentSessionsBase;
+
+export const createTestQueryClient = createQueryClient;
 
 export type LegacyRunSummary = { runId: string; worktreePath: string };
 
@@ -120,8 +122,8 @@ export const persistedSessionRecord = (
 export const createAdapter = (
   overrides: SessionLifecycleAdapterOverrides = {},
 ): SessionLifecycleAdapter => {
-  const loadPresences = async (...args: [ListSessionPresenceInput]) => {
-    const snapshots = (await overrides.listSessionPresence?.(...args)) ?? [];
+  const loadPresences = async (input: ListSessionPresenceInput) => {
+    const snapshots = (await overrides.listSessionPresence?.(input)) ?? [];
     return snapshots.map((entry) => {
       if (entry && typeof entry === "object" && "ref" in entry) {
         return entry as AgentSessionPresenceSnapshot;
@@ -134,8 +136,8 @@ export const createAdapter = (
 
       return toAgentSessionPresenceSnapshotFromLiveSnapshot({
         ref: {
-          repoPath: "/tmp/repo",
-          runtimeKind: "opencode",
+          repoPath: input.repoPath,
+          runtimeKind: input.runtimeKind,
           externalSessionId: snapshot.externalSessionId,
           workingDirectory: snapshot.workingDirectory,
         },
@@ -197,6 +199,61 @@ export const createAdapter = (
   };
 };
 
+export const setupDefaultLoadSessionsHost = async (): Promise<{
+  legacyHost: { runsList: (repoPath?: string) => Promise<LegacyRunSummary[]> };
+  restore: () => void;
+}> => {
+  const hostModule = await import("../../shared/host");
+  const host = hostModule.host;
+  const legacyHost = host as typeof host & {
+    runsList: (repoPath?: string) => Promise<LegacyRunSummary[]>;
+  };
+  const originalRuntimeList = host.runtimeList;
+  const originalRuntimeEnsure = host.runtimeEnsure;
+  const originalRunsList = legacyHost.runsList;
+
+  host.runtimeList = async (repoPath = "/tmp/repo", runtimeKind = "opencode") => [
+    {
+      kind: runtimeKind,
+      runtimeId: "runtime-1",
+      repoPath,
+      taskId: null,
+      role: "workspace",
+      workingDirectory: repoPath,
+      runtimeRoute: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4444",
+      },
+      startedAt: "2026-02-22T08:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    },
+  ];
+  legacyHost.runsList = async () => [];
+  host.runtimeEnsure = async (repoPath) => ({
+    kind: "opencode",
+    runtimeId: "runtime-1",
+    repoPath,
+    taskId: null,
+    role: "workspace",
+    workingDirectory: repoPath,
+    runtimeRoute: {
+      type: "local_http",
+      endpoint: "http://127.0.0.1:4444",
+    },
+    startedAt: "2026-02-22T08:00:00.000Z",
+    descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+  });
+
+  return {
+    legacyHost,
+    restore: () => {
+      host.runtimeList = originalRuntimeList;
+      host.runtimeEnsure = originalRuntimeEnsure;
+      legacyHost.runsList = originalRunsList;
+    },
+  };
+};
+
 export const waitForHistoryCallCount = async (
   getHistoryCalls: () => number,
   expectedCalls: number,
@@ -223,8 +280,6 @@ export type {
 export {
   AgentSessionPresenceStore,
   agentSessionPresenceLookupKey,
-  appQueryClient,
-  clearAppQueryClient,
   createAgentSessionPresenceSnapshotFixture,
   createDeferred,
   findSessionMessageForTest,

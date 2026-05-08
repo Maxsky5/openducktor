@@ -1,65 +1,42 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   type AgentSessionState,
-  appQueryClient,
-  clearAppQueryClient,
   createAdapter,
   createLoadAgentSessions,
   createTaskFixture,
+  createTestQueryClient,
   type LegacyRunSummary,
   OPENCODE_RUNTIME_DESCRIPTOR,
   persistedSessionRecord,
   type RuntimeInstanceSummary,
   runtimeQueryKeys,
   sessionMessagesToArray,
+  setupDefaultLoadSessionsHost,
 } from "./load-sessions-test-harness";
 
-let legacyHost!: { runsList: (repoPath?: string) => Promise<LegacyRunSummary[]> };
+let _legacyHost!: { runsList: (repoPath?: string) => Promise<LegacyRunSummary[]> };
 
 describe("agent-orchestrator load-session guards and persisted records", () => {
+  let restoreDefaultHost: (() => void) | null = null;
+  let queryClient!: ReturnType<typeof createTestQueryClient>;
+
   beforeEach(async () => {
-    await clearAppQueryClient();
-    const hostModule = await import("../../shared/host");
-    legacyHost = hostModule.host as typeof hostModule.host & {
-      runsList: (repoPath?: string) => Promise<LegacyRunSummary[]>;
-    };
-    hostModule.host.runtimeList = async (repoPath = "/tmp/repo", runtimeKind = "opencode") => [
-      {
-        kind: runtimeKind,
-        runtimeId: "runtime-1",
-        repoPath,
-        taskId: null,
-        role: "workspace",
-        workingDirectory: repoPath,
-        runtimeRoute: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4444",
-        },
-        startedAt: "2026-02-22T08:00:00.000Z",
-        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-      },
-    ];
-    legacyHost.runsList = async () => [];
-    hostModule.host.runtimeEnsure = async (repoPath) => ({
-      kind: "opencode",
-      runtimeId: "runtime-1",
-      repoPath,
-      taskId: null,
-      role: "workspace",
-      workingDirectory: repoPath,
-      runtimeRoute: {
-        type: "local_http",
-        endpoint: "http://127.0.0.1:4444",
-      },
-      startedAt: "2026-02-22T08:00:00.000Z",
-      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-    });
+    queryClient = createTestQueryClient();
+    const hostDefaults = await setupDefaultLoadSessionsHost();
+    _legacyHost = hostDefaults.legacyHost;
+    restoreDefaultHost = hostDefaults.restore;
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+    restoreDefaultHost?.();
+    restoreDefaultHost = null;
   });
 
   test("no-ops when active repo is missing", async () => {
     let setCalled = false;
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: null,
       adapter: createAdapter(),
       repoEpochRef: { current: 0 },
@@ -81,7 +58,7 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
   test("no-ops for blank task ids", async () => {
     let setCalled = false;
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -132,7 +109,7 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -267,7 +244,7 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
     };
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
@@ -425,7 +402,7 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
       }),
     ];
 
-    appQueryClient.setQueryData(runtimeQueryKeys.list("opencode", "/tmp/repo"), [
+    queryClient.setQueryData(runtimeQueryKeys.list("opencode", "/tmp/repo"), [
       {
         kind: "opencode",
         runtimeId: "runtime-1",
@@ -443,7 +420,7 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
     ]);
 
     const loadAgentSessions = createLoadAgentSessions({
-      queryClient: appQueryClient,
+      queryClient,
       activeWorkspace: {
         repoPath: "/tmp/repo",
         workspaceId: "workspace-1",
