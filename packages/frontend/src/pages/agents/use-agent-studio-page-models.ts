@@ -54,6 +54,8 @@ type AgentStudioCoreContext = {
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS: Record<string, number> = Object.freeze({});
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS: Record<string, number> = Object.freeze({});
 
+type PendingInputOverlayMap = Record<string, readonly unknown[]>;
+
 const arePendingInputCountMapsEqual = (
   left: Record<string, number>,
   right: Record<string, number>,
@@ -67,34 +69,45 @@ const arePendingInputCountMapsEqual = (
   return leftKeys.every((key) => left[key] === right[key]);
 };
 
-const useStablePendingApprovalCounts = (
-  sessions: AgentSessionSummary[],
-  subagentPendingApprovalsByExternalSessionId:
-    | AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
-    | undefined,
-): Record<string, number> => {
-  const previousRef = useRef<Record<string, number>>(EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS);
+const getSessionPendingApprovalCount = (session: AgentSessionSummary): number =>
+  session.pendingApprovals.length;
+
+const getSessionPendingQuestionCount = (session: AgentSessionSummary): number =>
+  session.pendingQuestions.length;
+
+const useStablePendingInputCounts = ({
+  sessions,
+  subagentPendingInputsByExternalSessionId,
+  getSessionPendingInputCount,
+  emptyCounts,
+}: {
+  sessions: AgentSessionSummary[];
+  subagentPendingInputsByExternalSessionId: PendingInputOverlayMap | undefined;
+  getSessionPendingInputCount: (session: AgentSessionSummary) => number;
+  emptyCounts: Record<string, number>;
+}): Record<string, number> => {
+  const previousRef = useRef<Record<string, number>>(emptyCounts);
   return useMemo(() => {
     const next: Record<string, number> = {};
     for (const session of sessions) {
-      const pendingApprovalCount = session.pendingApprovals.length;
-      if (pendingApprovalCount > 0) {
-        next[session.externalSessionId] = pendingApprovalCount;
+      const pendingInputCount = getSessionPendingInputCount(session);
+      if (pendingInputCount > 0) {
+        next[session.externalSessionId] = pendingInputCount;
       }
     }
 
-    if (subagentPendingApprovalsByExternalSessionId) {
-      for (const [externalSessionId, pendingApprovals] of Object.entries(
-        subagentPendingApprovalsByExternalSessionId,
+    if (subagentPendingInputsByExternalSessionId) {
+      for (const [externalSessionId, pendingInputs] of Object.entries(
+        subagentPendingInputsByExternalSessionId,
       )) {
-        const pendingApprovalCount = pendingApprovals.length;
-        if (pendingApprovalCount > 0) {
-          next[externalSessionId] = pendingApprovalCount;
+        const pendingInputCount = pendingInputs.length;
+        if (pendingInputCount > 0) {
+          next[externalSessionId] = pendingInputCount;
         }
       }
     }
 
-    const nextCounts = Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS;
+    const nextCounts = Object.keys(next).length > 0 ? next : emptyCounts;
     const previous = previousRef.current;
     if (arePendingInputCountMapsEqual(previous, nextCounts)) {
       return previous;
@@ -102,7 +115,26 @@ const useStablePendingApprovalCounts = (
 
     previousRef.current = nextCounts;
     return nextCounts;
-  }, [sessions, subagentPendingApprovalsByExternalSessionId]);
+  }, [
+    sessions,
+    subagentPendingInputsByExternalSessionId,
+    getSessionPendingInputCount,
+    emptyCounts,
+  ]);
+};
+
+const useStablePendingApprovalCounts = (
+  sessions: AgentSessionSummary[],
+  subagentPendingApprovalsByExternalSessionId:
+    | AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
+    | undefined,
+): Record<string, number> => {
+  return useStablePendingInputCounts({
+    sessions,
+    subagentPendingInputsByExternalSessionId: subagentPendingApprovalsByExternalSessionId,
+    getSessionPendingInputCount: getSessionPendingApprovalCount,
+    emptyCounts: EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
+  });
 };
 
 const useStablePendingQuestionCounts = (
@@ -111,36 +143,12 @@ const useStablePendingQuestionCounts = (
     | AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
     | undefined,
 ): Record<string, number> => {
-  const previousRef = useRef<Record<string, number>>(EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS);
-  return useMemo(() => {
-    const next: Record<string, number> = {};
-    for (const session of sessions) {
-      const pendingQuestionCount = session.pendingQuestions.length;
-      if (pendingQuestionCount > 0) {
-        next[session.externalSessionId] = pendingQuestionCount;
-      }
-    }
-
-    if (subagentPendingQuestionsByExternalSessionId) {
-      for (const [externalSessionId, pendingQuestions] of Object.entries(
-        subagentPendingQuestionsByExternalSessionId,
-      )) {
-        const pendingQuestionCount = pendingQuestions.length;
-        if (pendingQuestionCount > 0) {
-          next[externalSessionId] = pendingQuestionCount;
-        }
-      }
-    }
-
-    const nextCounts = Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS;
-    const previous = previousRef.current;
-    if (arePendingInputCountMapsEqual(previous, nextCounts)) {
-      return previous;
-    }
-
-    previousRef.current = nextCounts;
-    return nextCounts;
-  }, [sessions, subagentPendingQuestionsByExternalSessionId]);
+  return useStablePendingInputCounts({
+    sessions,
+    subagentPendingInputsByExternalSessionId: subagentPendingQuestionsByExternalSessionId,
+    getSessionPendingInputCount: getSessionPendingQuestionCount,
+    emptyCounts: EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
+  });
 };
 
 type AgentStudioTaskTabsContext = {
