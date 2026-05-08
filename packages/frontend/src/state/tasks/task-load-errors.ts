@@ -41,5 +41,5 @@ export const summarizeTaskLoadError = ({
     return `Task store unavailable. ${message} ${TASK_STORE_HINT}`;
   }
 
-  return `Task store unavailable. ${message}`;
+  return message;
 };

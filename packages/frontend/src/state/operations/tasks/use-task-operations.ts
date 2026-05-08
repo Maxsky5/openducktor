@@ -12,7 +12,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { TaskRefreshOptions } from "@/state/app-state-contexts";
+import type { TaskDataRefreshOptions, TaskRefreshOptions } from "@/state/app-state-contexts";
 import { documentQueryKeys } from "@/state/queries/documents";
 import { refreshRepoTaskViewsFromQuery } from "@/state/queries/task-view-sync";
 import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
@@ -47,7 +47,7 @@ type UseTaskOperationsResult = {
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
-    options?: { forceFreshTaskList?: boolean },
+    options?: TaskDataRefreshOptions,
   ) => Promise<void>;
   refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   refreshTasks: () => Promise<void>;
@@ -193,7 +193,7 @@ export function useTaskOperations({
     async (
       repoPath: string,
       taskIdOrIds?: string | string[],
-      options?: { forceFreshTaskList?: boolean },
+      options?: TaskDataRefreshOptions,
     ): Promise<void> => {
       const taskIds =
         typeof taskIdOrIds === "string"
@@ -201,6 +201,19 @@ export function useTaskOperations({
           : Array.isArray(taskIdOrIds)
             ? taskIdOrIds
             : null;
+      if (options?.source === "external-sync") {
+        await refreshRepoTaskViewsFromQuery(queryClient, repoPath, {
+          forceFreshTaskList: true,
+          ancillaryFailureMode: "best-effort",
+          ignorePrimaryCancellation: true,
+          refreshInactiveViews: false,
+          ...(taskIds
+            ? { taskDocumentStrategy: "invalidate", taskIds }
+            : { taskDocumentStrategy: "none" }),
+        });
+        return;
+      }
+
       await refreshRepoTaskViewsFromQuery(
         queryClient,
         repoPath,

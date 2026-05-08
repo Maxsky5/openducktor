@@ -85,10 +85,12 @@ const sessionFixture: AgentSessionRecord = {
 describe("tasks query cache helpers", () => {
   const originalTasksList = host.tasksList;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+  const originalTaskDocumentGetFresh = host.taskDocumentGetFresh;
 
   afterEach(() => {
     host.tasksList = originalTasksList;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    host.taskDocumentGetFresh = originalTaskDocumentGetFresh;
   });
 
   test("upsertAgentSessionInRepoTaskData inserts a persisted session into the repo task cache", () => {
@@ -541,5 +543,186 @@ describe("tasks query cache helpers", () => {
       queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo", 7))?.tasks[0]
         ?.id,
     ).toBe("fresh-7");
+  });
+
+  test("external repo task view refresh invalidates cached documents without fetching them", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
+      markdown: "cached spec",
+      updatedAt: null,
+    });
+    const tasksList = mock(async (): Promise<TaskCard[]> => [{ ...taskFixture, id: "fresh" }]);
+    const taskDocumentGetFresh = mock(async () => {
+      throw new Error("document fetch should not run");
+    });
+    host.tasksList = tasksList;
+    host.taskDocumentGetFresh = taskDocumentGetFresh;
+
+    await refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      forceFreshTaskList: true,
+      ancillaryFailureMode: "best-effort",
+      refreshInactiveViews: false,
+      taskDocumentStrategy: "invalidate",
+      taskIds: ["task-1"],
+    });
+
+    expect(tasksList).toHaveBeenCalledTimes(1);
+    expect(tasksList).toHaveBeenCalledWith("/repo", DONE_VISIBLE_DAYS);
+    expect(taskDocumentGetFresh).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryState(documentQueryKeys.spec("/repo", "task-1"))?.isInvalidated,
+    ).toBe(true);
+  });
+
+  test("external repo task view refresh rejects when the primary task list fails", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    host.tasksList = mock(async (): Promise<TaskCard[]> => {
+      throw new Error("current board failed");
+    });
+
+    await expect(
+      refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+        forceFreshTaskList: true,
+        ancillaryFailureMode: "best-effort",
+        refreshInactiveViews: false,
+        taskDocumentStrategy: "none",
+      }),
+    ).rejects.toThrow("current board failed");
+  });
+
+  test("external repo task view refresh treats overlapping primary cancellation as non-fatal", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    const firstRead = createDeferred<TaskCard[]>();
+    const tasksList = mock(async (): Promise<TaskCard[]> => {
+      if (tasksList.mock.calls.length === 1) {
+        return firstRead.promise;
+      }
+      return [{ ...taskFixture, id: "fresh" }];
+    });
+    host.tasksList = tasksList;
+
+    const firstRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      forceFreshTaskList: true,
+      ancillaryFailureMode: "best-effort",
+      ignorePrimaryCancellation: true,
+      refreshInactiveViews: false,
+      taskDocumentStrategy: "none",
+    });
+    for (let attempts = 0; tasksList.mock.calls.length === 0 && attempts < 10; attempts += 1) {
+      await Promise.resolve();
+    }
+    expect(tasksList).toHaveBeenCalledTimes(1);
+
+    const secondRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      forceFreshTaskList: true,
+      ancillaryFailureMode: "best-effort",
+      ignorePrimaryCancellation: true,
+      refreshInactiveViews: false,
+      taskDocumentStrategy: "none",
+    });
+
+    await expect(firstRefresh).resolves.toBeUndefined();
+    await expect(secondRefresh).resolves.toBeUndefined();
+    firstRead.resolve([{ ...taskFixture, id: "stale" }]);
+
+    expect(tasksList).toHaveBeenCalledTimes(2);
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(
+        taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
+      )?.tasks[0]?.id,
+    ).toBe("fresh");
+  });
+
+  test("cancelled external targeted refresh still invalidates affected task documents", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
+      markdown: "task 1 spec",
+      updatedAt: null,
+    });
+    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-2"), {
+      markdown: "task 2 spec",
+      updatedAt: null,
+    });
+    const firstRead = createDeferred<TaskCard[]>();
+    const tasksList = mock(async (): Promise<TaskCard[]> => {
+      if (tasksList.mock.calls.length === 1) {
+        return firstRead.promise;
+      }
+      return [{ ...taskFixture, id: "fresh" }];
+    });
+    host.tasksList = tasksList;
+
+    const firstRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      forceFreshTaskList: true,
+      ancillaryFailureMode: "best-effort",
+      ignorePrimaryCancellation: true,
+      refreshInactiveViews: false,
+      taskDocumentStrategy: "invalidate",
+      taskIds: ["task-1"],
+    });
+    for (let attempts = 0; tasksList.mock.calls.length === 0 && attempts < 10; attempts += 1) {
+      await Promise.resolve();
+    }
+    expect(tasksList).toHaveBeenCalledTimes(1);
+
+    const secondRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      forceFreshTaskList: true,
+      ancillaryFailureMode: "best-effort",
+      ignorePrimaryCancellation: true,
+      refreshInactiveViews: false,
+      taskDocumentStrategy: "invalidate",
+      taskIds: ["task-2"],
+    });
+
+    await expect(firstRefresh).resolves.toBeUndefined();
+    await expect(secondRefresh).resolves.toBeUndefined();
+    firstRead.resolve([{ ...taskFixture, id: "stale" }]);
+
+    expect(
+      queryClient.getQueryState(documentQueryKeys.spec("/repo", "task-1"))?.isInvalidated,
+    ).toBe(true);
+    expect(
+      queryClient.getQueryState(documentQueryKeys.spec("/repo", "task-2"))?.isInvalidated,
+    ).toBe(true);
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(
+        taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
+      )?.tasks[0]?.id,
+    ).toBe("fresh");
+  });
+
+  test("external repo task view refresh skips inactive done-visible variants", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo", 7), {
+      tasks: [{ ...taskFixture, id: "cached-7" }],
+    });
+    const tasksList = mock(
+      async (_repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => {
+        if (doneVisibleDays === 7) {
+          throw new Error("inactive variant should not refresh");
+        }
+        return [{ ...taskFixture, id: `fresh-${doneVisibleDays}` }];
+      },
+    );
+    host.tasksList = tasksList;
+
+    await refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+      forceFreshTaskList: true,
+      ancillaryFailureMode: "best-effort",
+      refreshInactiveViews: false,
+      taskDocumentStrategy: "none",
+    });
+
+    expect(tasksList).toHaveBeenCalledTimes(1);
+    expect(tasksList).toHaveBeenCalledWith("/repo", DONE_VISIBLE_DAYS);
+    expect(
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo", 7))?.tasks[0]
+        ?.id,
+    ).toBe("cached-7");
   });
 });

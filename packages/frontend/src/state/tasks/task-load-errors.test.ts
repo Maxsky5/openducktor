@@ -70,12 +70,19 @@ describe("summarizeTaskLoadError", () => {
       },
     });
 
-    expect(message).toBe("Task store unavailable. gh auth expired");
+    expect(message).toBe("gh auth expired");
   });
 
   test("falls back to raw error text when no structured repo-store context exists", () => {
     const message = summarizeTaskLoadError({ error: new Error("gh auth expired") });
 
-    expect(message).toBe("Task store unavailable. gh auth expired");
+    expect(message).toBe("gh auth expired");
+  });
+
+  test("keeps task-store wording for store failures without structured context", () => {
+    const message = summarizeTaskLoadError({ error: new Error("beads_dir missing") });
+
+    expect(message).toContain("Task store unavailable.");
+    expect(message).toContain("OpenDucktor uses centralized Beads");
   });
 });

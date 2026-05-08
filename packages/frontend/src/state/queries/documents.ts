@@ -152,6 +152,28 @@ export const removeCachedTaskDocumentQueries = (
   }
 };
 
+export const invalidateCachedTaskDocumentQueries = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskIds: string[],
+): Promise<void> => {
+  const taskIdSet = new Set(taskIds);
+  await queryClient.invalidateQueries({
+    queryKey: documentQueryKeys.all,
+    exact: false,
+    predicate: (query) => {
+      const [scope, _section, cachedRepoPath, cachedTaskId] = query.queryKey;
+      return (
+        scope === documentQueryKeys.all[0] &&
+        cachedRepoPath === repoPath &&
+        typeof cachedTaskId === "string" &&
+        taskIdSet.has(cachedTaskId)
+      );
+    },
+    refetchType: "none",
+  });
+};
+
 export const refreshCachedTaskDocumentQueries = async (
   queryClient: QueryClient,
   repoPath: string,
