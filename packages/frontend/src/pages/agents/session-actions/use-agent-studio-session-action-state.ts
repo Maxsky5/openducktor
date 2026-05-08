@@ -9,11 +9,26 @@ type UseAgentStudioSessionActionStateArgs = {
   selectedModelSelection: AgentModelSelection | null;
 };
 
+type UseAgentStudioSessionActionStateResult = {
+  activeExternalSessionId: string | null;
+  activeSessionRole: AgentRole;
+  activeSessionStatus: AgentSessionState["status"] | "stopped";
+  activeSessionSelectedModel: AgentSessionState["selectedModel"] | null;
+  activeSessionIsLoadingModelCatalog: boolean;
+  activeSessionPendingQuestions: AgentSessionState["pendingQuestions"];
+  hasActiveSession: boolean;
+  isSessionBusy: boolean;
+  isWaitingInput: boolean;
+  canQueueBusyFollowups: boolean;
+  supportsQueuedUserMessages: boolean;
+  activeRuntimeLabel: string;
+};
+
 export function useAgentStudioSessionActionState({
   activeSession,
   role,
   selectedModelSelection,
-}: UseAgentStudioSessionActionStateArgs) {
+}: UseAgentStudioSessionActionStateArgs): UseAgentStudioSessionActionStateResult {
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
 
   const activeExternalSessionId = activeSession?.externalSessionId ?? null;

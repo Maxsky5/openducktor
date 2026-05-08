@@ -18,8 +18,8 @@ export function useAgentStudioQuestionActions({
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
 } {
-  const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
-    Record<string, boolean>
+  const [submittingQuestionBySessionId, setSubmittingQuestionBySessionId] = useState<
+    Record<string, Record<string, boolean>>
   >({});
 
   const onSubmitQuestionAnswers = useCallback(
@@ -27,20 +27,31 @@ export function useAgentStudioQuestionActions({
       if (!activeExternalSessionId || !agentStudioReady) {
         return;
       }
+      const sessionId = activeExternalSessionId;
 
-      setIsSubmittingQuestionByRequestId((current) => ({
+      setSubmittingQuestionBySessionId((current) => ({
         ...current,
-        [requestId]: true,
+        [sessionId]: {
+          ...(current[sessionId] ?? {}),
+          [requestId]: true,
+        },
       }));
       try {
-        await answerAgentQuestion(activeExternalSessionId, requestId, answers);
+        await answerAgentQuestion(sessionId, requestId, answers);
       } finally {
-        setIsSubmittingQuestionByRequestId((current) => {
-          if (!current[requestId]) {
+        setSubmittingQuestionBySessionId((current) => {
+          const sessionRequests = current[sessionId];
+          if (!sessionRequests?.[requestId]) {
             return current;
           }
+          const nextSessionRequests = { ...sessionRequests };
+          delete nextSessionRequests[requestId];
           const next = { ...current };
-          delete next[requestId];
+          if (Object.keys(nextSessionRequests).length === 0) {
+            delete next[sessionId];
+          } else {
+            next[sessionId] = nextSessionRequests;
+          }
           return next;
         });
       }
@@ -49,29 +60,41 @@ export function useAgentStudioQuestionActions({
   );
 
   useEffect(() => {
-    setIsSubmittingQuestionByRequestId((current) => {
-      if (activeExternalSessionId === null && Object.keys(current).length === 0) {
+    if (!activeExternalSessionId) {
+      return;
+    }
+    const activeRequestIds = new Set(pendingQuestions.map((entry) => entry.requestId));
+    setSubmittingQuestionBySessionId((current) => {
+      const sessionRequests = current[activeExternalSessionId];
+      if (!sessionRequests) {
         return current;
       }
-      return {};
-    });
-  }, [activeExternalSessionId]);
-
-  useEffect(() => {
-    const activeRequestIds = new Set(pendingQuestions.map((entry) => entry.requestId));
-    setIsSubmittingQuestionByRequestId((current) => {
       let changed = false;
       const next: Record<string, boolean> = {};
-      for (const [requestId, isSubmitting] of Object.entries(current)) {
+      for (const [requestId, isSubmitting] of Object.entries(sessionRequests)) {
         if (!activeRequestIds.has(requestId)) {
           changed = true;
           continue;
         }
         next[requestId] = isSubmitting;
       }
-      return changed ? next : current;
+      if (!changed) {
+        return current;
+      }
+      const nextBySession = { ...current };
+      if (Object.keys(next).length === 0) {
+        delete nextBySession[activeExternalSessionId];
+      } else {
+        nextBySession[activeExternalSessionId] = next;
+      }
+      return nextBySession;
     });
-  }, [pendingQuestions]);
+  }, [activeExternalSessionId, pendingQuestions]);
 
-  return { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers };
+  return {
+    isSubmittingQuestionByRequestId: activeExternalSessionId
+      ? (submittingQuestionBySessionId[activeExternalSessionId] ?? {})
+      : {},
+    onSubmitQuestionAnswers,
+  };
 }

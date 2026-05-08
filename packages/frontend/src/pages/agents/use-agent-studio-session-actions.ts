@@ -152,7 +152,7 @@ export function useAgentStudioSessionActions({
     startSession,
     startLaunchKickoff,
     handleCreateSession: startFlowHandleCreateSession,
-    handleQuickAction,
+    handleQuickAction: startFlowHandleQuickAction,
   } = useAgentStudioSessionStartFlow({
     activeWorkspace,
     branches,
@@ -195,9 +195,18 @@ export function useAgentStudioSessionActions({
     startSession,
   });
 
-  const isSessionWorking =
-    sessionState.hasActiveSession && (sessionState.isSessionBusy || isSending);
-  const busySendBlockedReason = getBusySendBlockedReason(isSessionWorking);
+  const isSessionWorking = sessionState.isSessionBusy || isSending;
+  const busySendBlockedReason = getBusySendBlockedReason(sessionState.isSessionBusy);
+
+  const handleQuickAction = useCallback(
+    (option: AgentStudioQuickActionOption): void => {
+      if (isSessionWorking) {
+        return;
+      }
+      startFlowHandleQuickAction(option);
+    },
+    [isSessionWorking, startFlowHandleQuickAction],
+  );
 
   const handleCreateSession = useCallback(
     (option: SessionCreateOption): void => {

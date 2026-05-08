@@ -31,6 +31,7 @@ import { useAgentStudioHumanReviewFeedbackFlow } from "../use-agent-studio-human
 import {
   applyAgentStudioSelectionQuery,
   buildAgentStudioAsyncActivityContextKey,
+  buildCreateSessionStartKey,
   canStartSessionForRole,
   type QueryUpdate,
 } from "../use-agent-studio-session-action-helpers";
@@ -321,12 +322,24 @@ export function useAgentStudioSessionStartFlow({
       if (option.disabled || !taskId || !agentStudioReady || !isActiveTaskHydrated) {
         return;
       }
+      if (isSessionWorking) {
+        return;
+      }
       if (option.requiresHumanFeedback) {
         openHumanReviewFeedback();
         return;
       }
 
-      void startSessionRequest({
+      const startKey = buildCreateSessionStartKey({
+        taskId,
+        role: option.role,
+        launchActionId: option.launchActionId,
+      });
+      if (startingSessionByTaskRef.current.has(startKey)) {
+        return;
+      }
+
+      const startPromise = startSessionRequest({
         taskId,
         role: option.role,
         launchActionId: option.launchActionId,
@@ -339,8 +352,23 @@ export function useAgentStudioSessionStartFlow({
           ? { initialSourceExternalSessionId: option.initialSourceExternalSessionId }
           : {}),
       });
+      startingSessionByTaskRef.current.set(startKey, startPromise);
+      void startPromise
+        .finally(() => {
+          if (startingSessionByTaskRef.current.get(startKey) === startPromise) {
+            startingSessionByTaskRef.current.delete(startKey);
+          }
+        })
+        .catch(() => {});
     },
-    [agentStudioReady, isActiveTaskHydrated, openHumanReviewFeedback, startSessionRequest, taskId],
+    [
+      agentStudioReady,
+      isActiveTaskHydrated,
+      isSessionWorking,
+      openHumanReviewFeedback,
+      startSessionRequest,
+      taskId,
+    ],
   );
 
   return {
