@@ -3,7 +3,7 @@ import {
   externalTaskSyncEventSchema,
   type RepoStoreHealth,
 } from "@openducktor/contracts";
-import { isCancelledError } from "@tanstack/react-query";
+import { CancelledError } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import { BROWSER_LIVE_STREAM_WARNING_EVENT_KIND } from "@/lib/browser-live/constants";
@@ -260,6 +260,8 @@ export function useAppLifecycle({
         let taskLoadFailed = false;
         let taskLoadError: unknown;
         try {
+          // Initial repo load may use warm task data while Beads finishes preparing; manual
+          // refresh and mutation paths remain strict and force fresh task reads.
           await refreshTaskData(activeRepoPath, undefined, { forceFreshTaskList: false });
         } catch (error) {
           taskLoadFailed = true;
@@ -315,7 +317,7 @@ export function useAppLifecycle({
           return;
         }
 
-        if (tasksResult.status === "rejected" && !isCancelledError(tasksResult.reason)) {
+        if (tasksResult.status === "rejected" && !(tasksResult.reason instanceof CancelledError)) {
           toast.error("Repository tasks unavailable", {
             description: summarizeTaskLoadError({
               error: tasksResult.reason,

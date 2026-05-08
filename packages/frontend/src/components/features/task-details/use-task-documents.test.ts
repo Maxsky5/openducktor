@@ -29,11 +29,13 @@ const waitForCachedPlanMarkdown = async (
   expectedMarkdown: string,
 ): Promise<void> => {
   const startedAt = Date.now();
+  let lastDocument: TaskDocumentPayload | undefined;
 
   while (Date.now() - startedAt < 1000) {
     const document = queryClient.getQueryData<TaskDocumentPayload>(
       documentQueryKeys.plan("/repo", "task-1"),
     );
+    lastDocument = document;
 
     if (document?.markdown === expectedMarkdown) {
       return;
@@ -42,7 +44,8 @@ const waitForCachedPlanMarkdown = async (
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 
-  throw new Error(`Expected cached plan markdown to be ${expectedMarkdown}`);
+  const actual = lastDocument ? lastDocument.markdown : JSON.stringify(lastDocument);
+  throw new Error(`Expected cached plan markdown to be ${expectedMarkdown}, got ${actual}`);
 };
 
 describe("resolveLoadedDocumentState", () => {
@@ -210,6 +213,8 @@ describe("useTaskDocuments", () => {
         },
       });
 
+      // ensureTaskDocumentQueryData returns cached stale data immediately; its
+      // revalidation runs in the background, so waitForCachedPlanMarkdown waits for it to land.
       await ensureTaskDocumentQueryData(queryClient, options);
       await waitForCachedPlanMarkdown(queryClient, "# Fresh plan");
 
