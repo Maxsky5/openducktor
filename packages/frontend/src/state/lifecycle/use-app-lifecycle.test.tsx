@@ -1224,6 +1224,84 @@ describe("useAppLifecycle", () => {
     }
   });
 
+  test("refreshes Beads diagnostics even when startup task loading is cancelled", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+
+    const branchesDeferred = createDeferred<void>();
+    const refreshBeadsCheckForRepo = mock(
+      async (_repoPath: string, force = false): Promise<BeadsCheck> =>
+        force
+          ? makeBeadsCheck({ beadsPath: null })
+          : makeBeadsCheck({
+              beadsOk: false,
+              beadsPath: "/repo/.beads",
+              beadsError: null,
+              repoStoreHealth: {
+                category: "initializing",
+                status: "initializing",
+                isReady: false,
+                detail: "Beads store initialization is in progress.",
+                attachment: {
+                  path: "/repo/.beads",
+                  databaseName: "repo_db",
+                },
+                sharedServer: {
+                  host: "127.0.0.1",
+                  port: 38240,
+                  ownershipState: "owned_by_current_process",
+                },
+              },
+            }),
+    );
+
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo,
+      refreshTaskData: mock(async () => {
+        throw new CancelledError();
+      }),
+      clearBranchData: mock(() => {}),
+      beadsPreparationToastDelayMs: 5,
+    } satisfies HookArgs;
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
+      });
+
+      await harness.run(async () => {
+        branchesDeferred.resolve();
+      });
+
+      expect(refreshBeadsCheckForRepo).toHaveBeenNthCalledWith(1, "/repo", false);
+      expect(refreshBeadsCheckForRepo).toHaveBeenNthCalledWith(2, "/repo", true);
+      expect(toastError).not.toHaveBeenCalledWith(
+        "Repository tasks unavailable",
+        expect.anything(),
+      );
+    } finally {
+      branchesDeferred.resolve();
+      await harness.unmount();
+    }
+  });
+
   test("does not force a second Beads refresh when the first check is already ready", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;

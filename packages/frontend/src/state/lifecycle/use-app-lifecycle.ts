@@ -257,7 +257,15 @@ export function useAppLifecycle({
           }
         }
 
-        await refreshTaskData(activeRepoPath, undefined, { forceFreshTaskList: false });
+        let taskLoadFailed = false;
+        let taskLoadError: unknown;
+        try {
+          await refreshTaskData(activeRepoPath, undefined, { forceFreshTaskList: false });
+        } catch (error) {
+          taskLoadFailed = true;
+          taskLoadError = error;
+        }
+
         if (!beadsCheck.repoStoreHealth.isReady) {
           try {
             const refreshedBeadsCheck = await refreshBeadsCheckForRepo(activeRepoPath, true);
@@ -265,6 +273,10 @@ export function useAppLifecycle({
           } catch {
             // Preserve the main repo-load outcome if the follow-up diagnostics refresh fails.
           }
+        }
+
+        if (taskLoadFailed) {
+          throw taskLoadError;
         }
 
         if (
