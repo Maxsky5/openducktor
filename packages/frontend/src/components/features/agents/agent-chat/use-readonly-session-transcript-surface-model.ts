@@ -20,8 +20,8 @@ import { useAgentSessionApprovalActions } from "./use-agent-session-approval-act
 import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
 const DEFAULT_SHOW_THINKING_MESSAGES = false;
-const EMPTY_PENDING_APPROVALS: ReadonlyArray<AgentApprovalRequest> = Object.freeze([]);
-const EMPTY_PENDING_QUESTIONS: ReadonlyArray<AgentQuestionRequest> = Object.freeze([]);
+const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);
+const EMPTY_PENDING_QUESTIONS: readonly AgentQuestionRequest[] = Object.freeze([]);
 
 type UseReadonlySessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;
@@ -429,10 +429,12 @@ export function useReadonlySessionTranscriptSurfaceModel({
   }, [activeWorkspace, isResolvingTranscript, loadError, externalSessionId]);
   const approvalSession = runtimeData.session;
   const activeApprovalSessionId = approvalSession?.externalSessionId ?? null;
-  const pendingApprovalRequests = approvalSession?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
+  const pendingApprovalRequests: readonly AgentApprovalRequest[] =
+    approvalSession?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
   const questionSession = runtimeData.session;
   const activeQuestionSessionId = questionSession?.externalSessionId ?? null;
-  const pendingQuestionRequests = questionSession?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
+  const pendingQuestionRequests: readonly AgentQuestionRequest[] =
+    questionSession?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
   const replyTranscriptApproval = useCallback(
     async (
       targetExternalSessionId: string,
