@@ -18,7 +18,8 @@ function readPackageVersion(packageJsonPath = path.resolve(__dirname, "package.j
 }
 
 export function resolveAppVersion(env: NodeJS.ProcessEnv = process.env): string {
-  return env.ODT_APP_VERSION ?? readPackageVersion();
+  const versionOverride = env.ODT_APP_VERSION?.trim();
+  return versionOverride || readPackageVersion();
 }
 
 export default defineConfig({

@@ -10,4 +10,12 @@ describe("resolveAppVersion", () => {
   test("uses the web package version when ODT_APP_VERSION is absent", () => {
     expect(resolveAppVersion({})).toBe(packageJson.version);
   });
+
+  test("uses the web package version when ODT_APP_VERSION is empty", () => {
+    expect(resolveAppVersion({ ODT_APP_VERSION: "" })).toBe(packageJson.version);
+  });
+
+  test("uses the web package version when ODT_APP_VERSION is blank", () => {
+    expect(resolveAppVersion({ ODT_APP_VERSION: "   " })).toBe(packageJson.version);
+  });
 });
