@@ -1,216 +1,20 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type {
-  AgentSessionRecord,
-  RuntimeInstanceSummary,
-  RuntimeKind,
-} from "@openducktor/contracts";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
-  type AgentSessionPresenceSnapshot,
-  toAgentSessionPresenceSnapshotFromLiveSnapshot,
-} from "@openducktor/core";
-import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
-import { runtimeQueryKeys } from "@/state/queries/runtime";
-import {
-  findSessionMessageForTest,
-  sessionMessageAt,
+  type AgentSessionState,
+  appQueryClient,
+  clearAppQueryClient,
+  createAdapter,
+  createLoadAgentSessions,
+  createTaskFixture,
+  type LegacyRunSummary,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  persistedSessionRecord,
+  type RuntimeInstanceSummary,
+  runtimeQueryKeys,
   sessionMessagesToArray,
-  someSessionMessageForTest,
-} from "@/test-utils/session-message-test-helpers";
-import type { AgentSessionState as BaseAgentSessionState } from "@/types/agent-orchestrator";
-import {
-  createAgentSessionPresenceSnapshotFixture,
-  createDeferred,
-  createTaskCardFixture,
-} from "../test-utils";
-import { createLoadAgentSessions as createLoadAgentSessionsBase } from "./load-sessions";
-import type { SessionLifecycleAdapter } from "./load-sessions-stages";
-import { agentSessionPresenceLookupKey } from "./session-presence-cache";
-import { AgentSessionPresenceStore } from "./session-presence-store";
-
-type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
-
-const createLoadAgentSessions = createLoadAgentSessionsBase;
-
-type LegacyRunSummary = { runId: string; worktreePath: string };
-
-type LoadSessionHistoryInput = Parameters<
-  NonNullable<SessionLifecycleAdapter["loadSessionHistory"]>
->[0];
-type ResumeSessionInput = Parameters<NonNullable<SessionLifecycleAdapter["resumeSession"]>>[0];
-type AttachSessionInput = Parameters<NonNullable<SessionLifecycleAdapter["attachSession"]>>[0];
-type ListSessionPresenceInput = Parameters<
-  NonNullable<SessionLifecycleAdapter["listSessionPresence"]>
->[0];
-type ReadSessionPresenceInput = Parameters<
-  NonNullable<SessionLifecycleAdapter["readSessionPresence"]>
->[0];
-type AgentSessionPresenceSnapshotFromLiveSnapshotInput = Parameters<
-  typeof toAgentSessionPresenceSnapshotFromLiveSnapshot
->[0];
-
-type SessionLifecycleAdapterOverrides = Partial<
-  Omit<SessionLifecycleAdapter, "listSessionPresence" | "readSessionPresence">
-> & {
-  listSessionPresence?: (input: ListSessionPresenceInput) => Promise<unknown[]>;
-  readSessionPresence?: (input: ReadSessionPresenceInput) => Promise<unknown>;
-};
+} from "./load-sessions-test-harness";
 
 let legacyHost!: { runsList: (repoPath?: string) => Promise<LegacyRunSummary[]> };
-
-const taskFixture = createTaskCardFixture({ title: "Task" });
-
-const createPresence = (
-  externalSessionId: string,
-  workingDirectory: string,
-  overrides: Record<string, unknown> = {},
-) =>
-  createAgentSessionPresenceSnapshotFixture({
-    ref: { externalSessionId, workingDirectory },
-    snapshot: {
-      externalSessionId,
-      workingDirectory,
-      ...overrides,
-    },
-  });
-
-const getSession = (
-  state: Record<string, AgentSessionState>,
-  externalSessionId: string,
-): AgentSessionState => {
-  const session = state[externalSessionId];
-  if (!session) {
-    throw new Error(`Expected session ${externalSessionId}`);
-  }
-  return session;
-};
-
-const persistedSessionRecord = (
-  input: {
-    externalSessionId: string;
-    role: AgentSessionRecord["role"];
-    startedAt: string;
-    workingDirectory: string;
-    runtimeKind?: AgentSessionRecord["runtimeKind"];
-    selectedModel?: AgentSessionRecord["selectedModel"];
-  } & Record<string, unknown>,
-): AgentSessionRecord => {
-  const {
-    runtimeKind,
-    externalSessionId,
-    role,
-    startedAt,
-    workingDirectory,
-    selectedModel,
-    ...rest
-  } = input;
-
-  return {
-    runtimeKind: runtimeKind ?? "opencode",
-    externalSessionId,
-    role,
-    startedAt,
-    workingDirectory,
-    selectedModel: selectedModel ?? null,
-    ...rest,
-  };
-};
-
-const createAdapter = (
-  overrides: SessionLifecycleAdapterOverrides = {},
-): SessionLifecycleAdapter => {
-  const loadPresences = async (...args: [ListSessionPresenceInput]) => {
-    const snapshots = (await overrides.listSessionPresence?.(...args)) ?? [];
-    return snapshots.map((entry) => {
-      if (entry && typeof entry === "object" && "ref" in entry) {
-        return entry as AgentSessionPresenceSnapshot;
-      }
-
-      const snapshot = entry as AgentSessionPresenceSnapshotFromLiveSnapshotInput["snapshot"] & {
-        externalSessionId: string;
-        workingDirectory: string;
-      };
-
-      return toAgentSessionPresenceSnapshotFromLiveSnapshot({
-        ref: {
-          repoPath: "/tmp/repo",
-          runtimeKind: "opencode",
-          externalSessionId: snapshot.externalSessionId,
-          workingDirectory: snapshot.workingDirectory,
-        },
-        runtimeId: "runtime-1",
-        snapshot: snapshot as AgentSessionPresenceSnapshotFromLiveSnapshotInput["snapshot"],
-      });
-    });
-  };
-
-  const readSessionPresence = overrides.readSessionPresence
-    ? async (input: ReadSessionPresenceInput) =>
-        overrides.readSessionPresence?.(input) as Promise<AgentSessionPresenceSnapshot>
-    : async (record: ReadSessionPresenceInput) => {
-        const snapshots = await loadPresences({
-          repoPath: record.repoPath ?? "/tmp/repo",
-          runtimeKind: record.runtimeKind ?? "opencode",
-          directories: [record.workingDirectory ?? "/tmp/repo/worktree"],
-        });
-
-        const match = snapshots.find(
-          (snapshot) => snapshot.ref.externalSessionId === record.externalSessionId,
-        );
-        if (match) {
-          return match;
-        }
-
-        return toAgentSessionPresenceSnapshotFromLiveSnapshot({
-          ref: {
-            repoPath: record.repoPath ?? "/tmp/repo",
-            runtimeKind: record.runtimeKind ?? "opencode",
-            externalSessionId: record.externalSessionId,
-            workingDirectory: record.workingDirectory ?? "/tmp/repo/worktree",
-          },
-          runtimeId: null,
-          snapshot: null,
-        });
-      };
-
-  return {
-    hasSession: () => false,
-    loadSessionHistory: async () => [],
-    resumeSession: async (input: ResumeSessionInput) => ({
-      externalSessionId: input.externalSessionId,
-      role: input.role,
-      startedAt: "2026-02-22T08:00:00.000Z",
-      status: "idle",
-      runtimeKind: input.runtimeKind,
-    }),
-    attachSession: async (input: AttachSessionInput) => ({
-      externalSessionId: input.externalSessionId,
-      role: input.role,
-      startedAt: "2026-02-22T08:00:00.000Z",
-      status: "idle",
-      runtimeKind: input.runtimeKind,
-    }),
-    ...overrides,
-    listSessionPresence: loadPresences,
-    readSessionPresence,
-  };
-};
-
-const waitForHistoryCallCount = async (
-  getHistoryCalls: () => number,
-  expectedCalls: number,
-): Promise<void> => {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (getHistoryCalls() >= expectedCalls) {
-      return;
-    }
-    await Promise.resolve();
-  }
-
-  throw new Error(
-    `Expected at least ${expectedCalls} history calls, received ${getHistoryCalls()}.`,
-  );
-};
 
 describe("agent-orchestrator load-session guards and persisted records", () => {
   beforeEach(async () => {
@@ -264,7 +68,7 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
       setSessionsById: () => {
         setCalled = true;
       },
-      taskRef: { current: [taskFixture] },
+      taskRef: { current: [createTaskFixture()] },
       updateSession: () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
@@ -290,7 +94,7 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
       setSessionsById: () => {
         setCalled = true;
       },
-      taskRef: { current: [taskFixture] },
+      taskRef: { current: [createTaskFixture()] },
       updateSession: () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
@@ -339,7 +143,7 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
-      taskRef: { current: [taskFixture] },
+      taskRef: { current: [createTaskFixture()] },
       updateSession,
       loadRepoPromptOverrides: async () => ({}),
     });
@@ -474,7 +278,7 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
-      taskRef: { current: [taskFixture] },
+      taskRef: { current: [createTaskFixture()] },
       updateSession,
       loadRepoPromptOverrides: async () => ({}),
     });
@@ -664,7 +468,7 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       setSessionsById,
-      taskRef: { current: [taskFixture] },
+      taskRef: { current: [createTaskFixture()] },
       updateSession: (externalSessionId, updater) => {
         const current = state[externalSessionId];
         if (!current) {
