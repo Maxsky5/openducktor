@@ -28,14 +28,27 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0];
 
+type SelectedSessionTestCore = Omit<
+  AgentStudioSelectedSessionContextInput,
+  | "documents"
+  | "readiness"
+  | "sessionActions"
+  | "approvals"
+  | "activeSessionContextUsage"
+  | "roleLabelByRole"
+> & {
+  activeTabValue: string;
+};
+
 type HookArgsOverrides = {
-  core?: Partial<HookArgs["core"]>;
-  selectedSession?: Partial<HookArgs["selectedSession"]>;
+  core?: Partial<SelectedSessionTestCore>;
   taskTabs?: Partial<HookArgs["taskTabs"]>;
   documents?: Partial<AgentStudioSelectedSessionContextInput["documents"]>;
   readiness?: Partial<AgentStudioSelectedSessionContextInput["readiness"]>;
   sessionActions?: Partial<HookArgs["sessionActions"]>;
+  selectedSessionActions?: Partial<AgentStudioSelectedSessionContextInput["sessionActions"]>;
   modelSelection?: Partial<HookArgs["modelSelection"]>;
+  activeSessionContextUsage?: AgentStudioSelectedSessionContextInput["activeSessionContextUsage"];
   approvals?: Partial<AgentStudioSelectedSessionContextInput["approvals"]>;
   chatSettings?: Partial<HookArgs["chatSettings"]>;
   composer?: Partial<HookArgs["composer"]>;
@@ -119,7 +132,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       ? overrides.core.contextSessionsLength
       : sessionsForTask.length;
 
-  const core: HookArgs["core"] = {
+  const selectedSessionCore: SelectedSessionTestCore = {
     activeTabValue: "task-1",
     taskId: "task-1",
     role: "spec",
@@ -132,13 +145,15 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isSessionSelectionResolving: false,
     isWaitingForRuntimeReadiness: false,
     isSessionHistoryHydrationFailed: false,
-    contextSwitchVersion: 0,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     ...overrides.core,
     allSessionSummaries,
     sessionsForTask,
     activeSession,
     contextSessionsLength,
+  };
+  const core: HookArgs["core"] = {
+    activeTabValue: selectedSessionCore.activeTabValue,
   };
 
   const taskTabs: HookArgs["taskTabs"] = {
@@ -168,7 +183,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   const sessionActions: HookArgs["sessionActions"] = {
     handleWorkflowStepSelect: () => {},
     handleSessionSelectionChange: () => {},
-    handleCreateSession: () => {},
     handlePrepareMessageFirstSession: () => {},
     handleQuickAction: () => {},
     openTaskDetails: () => {},
@@ -177,15 +191,20 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isSessionWorking: true,
     isWaitingInput: false,
     busySendBlockedReason: null,
-    canKickoffNewSession: false,
-    kickoffLabel: "Start Spec",
     canStopSession: true,
-    startLaunchKickoff: async () => {},
     onSend: async () => true,
-    onSubmitQuestionAnswers: async () => {},
-    isSubmittingQuestionByRequestId: {},
     stopAgentSession: async () => {},
     ...overrides.sessionActions,
+  };
+  const selectedSessionActions: AgentStudioSelectedSessionContextInput["sessionActions"] = {
+    isStarting: sessionActions.isStarting,
+    isSessionWorking: sessionActions.isSessionWorking,
+    canKickoffNewSession: false,
+    kickoffLabel: "Start Spec",
+    startLaunchKickoff: async () => {},
+    onSubmitQuestionAnswers: async () => {},
+    isSubmittingQuestionByRequestId: {},
+    ...overrides.selectedSessionActions,
   };
   const modelSelection: HookArgs["modelSelection"] = {
     selectedModelSelection: null,
@@ -205,7 +224,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     onSelectModel: () => {},
     onSelectVariant: () => {},
     activeSessionAgentColors: {},
-    activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
     ...overrides.modelSelection,
   };
   const approvals: AgentStudioSelectedSessionContextInput["approvals"] = {
@@ -224,26 +242,29 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   };
   const selectedSession = {
     ...buildAgentStudioSelectedSessionContext({
-      taskId: core.taskId,
-      role: core.role,
-      selectedTask: core.selectedTask,
-      sessionsForTask: core.sessionsForTask,
-      allSessionSummaries: core.allSessionSummaries,
-      contextSessionsLength: core.contextSessionsLength,
-      activeSession: core.activeSession,
-      runtimeDefinitions: core.runtimeDefinitions,
-      sessionRuntimeDataError: core.sessionRuntimeDataError,
-      hasActiveGitConflict: core.hasActiveGitConflict,
-      isTaskHydrating: core.isTaskHydrating,
-      isSessionHistoryHydrated: core.isSessionHistoryHydrated,
-      isSessionHistoryHydrating: core.isSessionHistoryHydrating,
-      isSessionSelectionResolving: core.isSessionSelectionResolving,
-      isWaitingForRuntimeReadiness: core.isWaitingForRuntimeReadiness,
-      isSessionHistoryHydrationFailed: core.isSessionHistoryHydrationFailed,
-      activeSessionContextUsage: modelSelection.activeSessionContextUsage,
+      taskId: selectedSessionCore.taskId,
+      role: selectedSessionCore.role,
+      selectedTask: selectedSessionCore.selectedTask,
+      sessionsForTask: selectedSessionCore.sessionsForTask,
+      allSessionSummaries: selectedSessionCore.allSessionSummaries,
+      contextSessionsLength: selectedSessionCore.contextSessionsLength,
+      activeSession: selectedSessionCore.activeSession,
+      runtimeDefinitions: selectedSessionCore.runtimeDefinitions,
+      sessionRuntimeDataError: selectedSessionCore.sessionRuntimeDataError,
+      hasActiveGitConflict: selectedSessionCore.hasActiveGitConflict,
+      isTaskHydrating: selectedSessionCore.isTaskHydrating,
+      isSessionHistoryHydrated: selectedSessionCore.isSessionHistoryHydrated,
+      isSessionHistoryHydrating: selectedSessionCore.isSessionHistoryHydrating,
+      isSessionSelectionResolving: selectedSessionCore.isSessionSelectionResolving,
+      isWaitingForRuntimeReadiness: selectedSessionCore.isWaitingForRuntimeReadiness,
+      isSessionHistoryHydrationFailed: selectedSessionCore.isSessionHistoryHydrationFailed,
+      activeSessionContextUsage: overrides.activeSessionContextUsage ?? {
+        totalTokens: 12,
+        contextWindow: 100,
+      },
       documents,
       readiness,
-      sessionActions,
+      sessionActions: selectedSessionActions,
       approvals,
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
     }),
@@ -295,9 +316,7 @@ describe("useAgentStudioPageModels", () => {
 
     const harness = createHookHarness(
       createHookArgs({
-        modelSelection: {
-          activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
-        },
+        activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
         composer: {
           draftStateKey: "draft-message",
         },
@@ -306,8 +325,10 @@ describe("useAgentStudioPageModels", () => {
         },
         sessionActions: {
           onSend,
-          startLaunchKickoff: onKickoff,
           stopAgentSession: onStopSession,
+        },
+        selectedSessionActions: {
+          startLaunchKickoff: onKickoff,
         },
       }),
     );
@@ -676,9 +697,7 @@ describe("useAgentStudioPageModels", () => {
       sessionActions: {
         isSessionWorking: false,
       },
-      modelSelection: {
-        activeSessionContextUsage: null,
-      },
+      activeSessionContextUsage: null,
     };
 
     const harness = createHookHarness(
@@ -1294,8 +1313,10 @@ describe("useAgentStudioPageModels", () => {
           activeSession: null,
           sessionsForTask: [],
         },
-        sessionActions: {
+        selectedSessionActions: {
           canKickoffNewSession: true,
+        },
+        sessionActions: {
           isSessionWorking: false,
         },
       }),

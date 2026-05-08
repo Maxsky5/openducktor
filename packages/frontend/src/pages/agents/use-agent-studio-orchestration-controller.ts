@@ -18,7 +18,10 @@ import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-st
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
-import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
+import type {
+  AgentStudioSelectedSessionContext,
+  AgentStudioSelectedSessionContextInput,
+} from "./selected-session/selected-session-context";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
@@ -134,7 +137,6 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "modelGroups"
   | "variantOptions"
   | "agentAccentColorsByProfileId"
-  | "activeSessionContextUsage"
   | "handleSelectAgentProfile"
   | "handleSelectModel"
   | "handleSelectVariant"
@@ -151,6 +153,28 @@ type BuildAgentStudioPageModelsArgsInput = {
   };
   composer: AgentStudioOrchestrationComposerContext;
 };
+
+type BuildSelectedSessionContextFromOrchestrationInput = Omit<
+  AgentStudioSelectedSessionContextInput,
+  "contextSessionsLength" | "isTaskHydrating" | "sessionRuntimeDataError"
+> & {
+  viewSessionRuntimeDataError?: string | null;
+  isActiveTaskHydrated: boolean;
+  isActiveTaskHydrationFailed: boolean;
+};
+
+export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
+  viewSessionRuntimeDataError,
+  isActiveTaskHydrated,
+  isActiveTaskHydrationFailed,
+  ...input
+}: BuildSelectedSessionContextFromOrchestrationInput): AgentStudioSelectedSessionContext =>
+  buildAgentStudioSelectedSessionContext({
+    ...input,
+    contextSessionsLength: input.sessionsForTask.length,
+    sessionRuntimeDataError: viewSessionRuntimeDataError ?? null,
+    isTaskHydrating: Boolean(input.taskId && !isActiveTaskHydrated && !isActiveTaskHydrationFailed),
+  });
 
 export const buildAgentStudioPageModelsArgs = ({
   view,
@@ -181,23 +205,6 @@ export const buildAgentStudioPageModelsArgs = ({
   return {
     core: {
       activeTabValue: activeTaskTabId || view.viewTaskId || "__agent_studio_empty__",
-      taskId: selectedSession.taskId,
-      role: selectedSession.role,
-      selectedTask: selectedSession.selectedTask,
-      sessionsForTask: selectedSession.sessionsForTask,
-      allSessionSummaries: selectedSession.allSessionSummaries,
-      contextSessionsLength: selectedSession.contextSessionsLength,
-      activeSession: selectedSession.activeSession,
-      runtimeDefinitions: selectedSession.runtime.runtimeDefinitions,
-      sessionRuntimeDataError: selectedSession.runtime.sessionRuntimeDataError,
-      hasActiveGitConflict: false,
-      isTaskHydrating: selectedSession.runtime.isTaskHydrating,
-      isSessionHistoryHydrated: selectedSession.runtime.isSessionHistoryHydrated,
-      isSessionHistoryHydrating: selectedSession.runtime.isSessionHistoryHydrating,
-      isSessionSelectionResolving: selectedSession.runtime.isSessionSelectionResolving,
-      isWaitingForRuntimeReadiness: selectedSession.runtime.isWaitingForRuntimeReadiness,
-      isSessionHistoryHydrationFailed: selectedSession.runtime.isSessionHistoryHydrationFailed,
-      contextSwitchVersion: view.contextSwitchVersion,
     },
     selectedSession,
     taskTabs: {
@@ -333,7 +340,6 @@ export function useAgentStudioOrchestrationController({
     onSubmitQuestionAnswers,
     handleWorkflowStepSelect,
     handleSessionSelectionChange,
-    handleCreateSession,
     handlePrepareMessageFirstSession,
     handleQuickAction,
   } = useAgentStudioSessionActions({
@@ -374,20 +380,18 @@ export function useAgentStudioOrchestrationController({
   const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
   const selectedSessionContext = useMemo(
     () =>
-      buildAgentStudioSelectedSessionContext({
+      buildAgentStudioSelectedSessionContextFromOrchestration({
         taskId: viewTaskId,
         role: viewRole,
         selectedTask: viewSelectedTask,
         sessionsForTask: viewSessionsForTask,
         allSessionSummaries: selection.allSessionSummaries,
-        contextSessionsLength: viewSessionsForTask.length,
         activeSession: viewActiveSession,
         runtimeDefinitions,
-        sessionRuntimeDataError: viewSessionRuntimeDataError ?? null,
+        viewSessionRuntimeDataError,
         hasActiveGitConflict,
-        isTaskHydrating: Boolean(
-          viewTaskId && !isActiveTaskHydrated && !selection.isActiveTaskHydrationFailed,
-        ),
+        isActiveTaskHydrated,
+        isActiveTaskHydrationFailed: selection.isActiveTaskHydrationFailed,
         isSessionHistoryHydrated: selection.isViewSessionHistoryHydrated,
         isSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
         isSessionSelectionResolving: selection.isSessionSelectionResolving,
@@ -472,19 +476,13 @@ export function useAgentStudioOrchestrationController({
       openTaskDetails: actions.openTaskDetails,
       isStarting,
       isSending,
-      isSubmittingQuestionByRequestId,
       isSessionWorking,
       isWaitingInput,
       busySendBlockedReason,
-      canKickoffNewSession,
-      kickoffLabel,
       canStopSession,
-      startLaunchKickoff,
       onSend,
-      onSubmitQuestionAnswers,
       handleWorkflowStepSelect,
       handleSessionSelectionChange,
-      handleCreateSession,
       handlePrepareMessageFirstSession,
       handleQuickAction,
       stopAgentSession,
@@ -505,7 +503,6 @@ export function useAgentStudioOrchestrationController({
       modelGroups,
       variantOptions,
       agentAccentColorsByProfileId,
-      activeSessionContextUsage,
       handleSelectAgentProfile,
       handleSelectModel,
       handleSelectVariant,

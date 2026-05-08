@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -6,8 +6,6 @@ import type { AgentChatComposerDraft } from "@/components/features/agents/agent-
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
@@ -16,28 +14,10 @@ import {
 } from "./agents-page-view-model";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { keepStablePendingInputCounts } from "./selected-session/selected-session-context";
-import type { AgentStudioSessionContextUsage } from "./use-agent-studio-page-model-builders";
 import { useAgentStudioHeaderModel } from "./use-agent-studio-page-submodels";
 
 type AgentStudioCoreContext = {
   activeTabValue: string;
-  taskId: string;
-  role: AgentRole;
-  selectedTask: TaskCard | null;
-  allSessionSummaries: AgentSessionSummary[];
-  sessionsForTask: AgentSessionSummary[];
-  contextSessionsLength: number;
-  activeSession: AgentSessionState | null;
-  runtimeDefinitions: RuntimeDescriptor[];
-  sessionRuntimeDataError: string | null;
-  hasActiveGitConflict: boolean;
-  isTaskHydrating: boolean;
-  isSessionHistoryHydrated: boolean;
-  isSessionHistoryHydrating: boolean;
-  isSessionSelectionResolving: boolean;
-  isWaitingForRuntimeReadiness: boolean;
-  isSessionHistoryHydrationFailed: boolean;
-  contextSwitchVersion: number;
 };
 
 const useStablePendingInputCounts = (
@@ -64,7 +44,6 @@ type AgentStudioTaskTabsContext = {
 type AgentStudioSessionActionsContext = {
   handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
-  handleCreateSession: (option: SessionCreateOption) => void;
   handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
   handleQuickAction: (option: AgentStudioQuickActionOption) => void;
   openTaskDetails: () => void;
@@ -73,13 +52,8 @@ type AgentStudioSessionActionsContext = {
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   busySendBlockedReason: string | null;
-  canKickoffNewSession: boolean;
-  kickoffLabel: string;
   canStopSession: boolean;
-  startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
-  onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
-  isSubmittingQuestionByRequestId: Record<string, boolean>;
   stopAgentSession: (externalSessionId: string) => Promise<void>;
 };
 
@@ -102,7 +76,6 @@ type AgentStudioModelSelectionContext = {
   onSelectModel: (model: string) => void;
   onSelectVariant: (variant: string) => void;
   activeSessionAgentColors: Record<string, string>;
-  activeSessionContextUsage: AgentStudioSessionContextUsage;
 };
 
 type AgentStudioComposerContext = {
@@ -258,6 +231,72 @@ export function useAgentStudioPageModels({
         : null,
     [contextUsageContextWindow, contextUsageOutputLimit, contextUsageTotalTokens],
   );
+  const selectedRuntimeReadiness = selectedSession.runtime.runtimeReadiness;
+  const runtimeReadiness = useMemo(
+    () => ({
+      readinessState: selectedRuntimeReadiness.readinessState,
+      isReady: selectedRuntimeReadiness.isReady,
+      blockedReason: selectedRuntimeReadiness.blockedReason,
+      isLoadingChecks: selectedRuntimeReadiness.isLoadingChecks,
+      refreshChecks: selectedRuntimeReadiness.refreshChecks,
+    }),
+    [
+      selectedRuntimeReadiness.blockedReason,
+      selectedRuntimeReadiness.isLoadingChecks,
+      selectedRuntimeReadiness.isReady,
+      selectedRuntimeReadiness.readinessState,
+      selectedRuntimeReadiness.refreshChecks,
+    ],
+  );
+  const selectedPendingQuestions = selectedSession.pendingInput.pendingQuestions;
+  const pendingQuestions = useMemo(
+    () => ({
+      canSubmit: selectedPendingQuestions.canSubmit,
+      isSubmittingByRequestId: selectedPendingQuestions.isSubmittingByRequestId,
+      onSubmit: selectedPendingQuestions.onSubmit,
+    }),
+    [
+      selectedPendingQuestions.canSubmit,
+      selectedPendingQuestions.isSubmittingByRequestId,
+      selectedPendingQuestions.onSubmit,
+    ],
+  );
+  const selectedApprovals = selectedSession.pendingInput.approvals;
+  const approvals = useMemo(
+    () => ({
+      canReply: selectedApprovals.canReply,
+      isSubmittingByRequestId: selectedApprovals.isSubmittingByRequestId,
+      errorByRequestId: selectedApprovals.errorByRequestId,
+      onReply: selectedApprovals.onReply,
+    }),
+    [
+      selectedApprovals.canReply,
+      selectedApprovals.errorByRequestId,
+      selectedApprovals.isSubmittingByRequestId,
+      selectedApprovals.onReply,
+    ],
+  );
+  const selectedEmptyState = selectedSession.chat.emptyState;
+  const emptyStateTitle = selectedEmptyState?.title ?? null;
+  const emptyStateActionLabel = selectedEmptyState?.actionLabel;
+  const emptyStateOnAction = selectedEmptyState?.onAction;
+  const emptyStateIsActionPending = selectedEmptyState?.isActionPending;
+  const emptyState = useMemo(
+    () =>
+      emptyStateTitle
+        ? {
+            title: emptyStateTitle,
+            ...(typeof emptyStateActionLabel === "string"
+              ? { actionLabel: emptyStateActionLabel }
+              : {}),
+            ...(emptyStateOnAction ? { onAction: emptyStateOnAction } : {}),
+            ...(typeof emptyStateIsActionPending === "boolean"
+              ? { isActionPending: emptyStateIsActionPending }
+              : {}),
+          }
+        : null,
+    [emptyStateActionLabel, emptyStateIsActionPending, emptyStateOnAction, emptyStateTitle],
+  );
 
   const composerConfig = useMemo(
     () => ({
@@ -339,10 +378,10 @@ export function useAgentStudioPageModels({
     isWaitingForRuntimeReadiness: selectedSession.runtime.isWaitingForRuntimeReadiness,
     runtimeDefinitions: selectedSession.runtime.runtimeDefinitions,
     sessionRuntimeDataError: selectedSession.runtime.sessionRuntimeDataError,
-    runtimeReadiness: selectedSession.runtime.runtimeReadiness,
-    emptyState: selectedSession.chat.emptyState,
-    pendingQuestions: selectedSession.pendingInput.pendingQuestions,
-    approvals: selectedSession.pendingInput.approvals,
+    runtimeReadiness,
+    emptyState,
+    pendingQuestions,
+    approvals,
     composer: composerConfig,
     sessionAgentColors: modelSelection.activeSessionAgentColors,
     subagentPendingApprovalsByExternalSessionId:
