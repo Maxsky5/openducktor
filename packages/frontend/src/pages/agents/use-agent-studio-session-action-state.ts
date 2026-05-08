@@ -7,14 +7,12 @@ type UseAgentStudioSessionActionStateArgs = {
   activeSession: AgentSessionState | null;
   role: AgentRole;
   selectedModelSelection: AgentModelSelection | null;
-  isSending: boolean;
 };
 
 export function useAgentStudioSessionActionState({
   activeSession,
   role,
   selectedModelSelection,
-  isSending,
 }: UseAgentStudioSessionActionStateArgs) {
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
 
@@ -28,9 +26,8 @@ export function useAgentStudioSessionActionState({
   const activeSessionRuntimeKind = activeSession?.runtimeKind ?? null;
   const activeSessionRuntimeDescriptor = activeSession?.modelCatalog?.runtime ?? null;
   const hasActiveSession = activeSession != null;
-  const isSessionWorking =
-    hasActiveSession &&
-    (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
+  const isSessionBusy =
+    hasActiveSession && (activeSessionStatus === "running" || activeSessionStatus === "starting");
   const isWaitingInput =
     hasActiveSession &&
     isAgentSessionWaitingInput({
@@ -50,10 +47,7 @@ export function useAgentStudioSessionActionState({
     activeRuntimeDescriptor?.capabilities.sessionLifecycle.supportsQueuedUserMessages !== false;
   const canQueueBusyFollowups =
     activeSessionStatus === "running" && !isWaitingInput && supportsQueuedUserMessages;
-  const busySendBlockedReason =
-    hasActiveSession && isSessionWorking && !isWaitingInput && !supportsQueuedUserMessages
-      ? `${activeRuntimeDescriptor?.label ?? "Current runtime"} does not support queued messages while the session is working.`
-      : null;
+  const activeRuntimeLabel = activeRuntimeDescriptor?.label ?? "Current runtime";
 
   return {
     activeExternalSessionId,
@@ -63,9 +57,29 @@ export function useAgentStudioSessionActionState({
     activeSessionIsLoadingModelCatalog,
     activeSessionPendingQuestions,
     hasActiveSession,
-    isSessionWorking,
+    isSessionBusy,
     isWaitingInput,
     canQueueBusyFollowups,
-    busySendBlockedReason,
+    supportsQueuedUserMessages,
+    activeRuntimeLabel,
   };
 }
+
+export const buildBusySendBlockedReason = (params: {
+  hasActiveSession: boolean;
+  isSessionWorking: boolean;
+  isWaitingInput: boolean;
+  supportsQueuedUserMessages: boolean;
+  activeRuntimeLabel: string;
+}): string | null => {
+  if (
+    !params.hasActiveSession ||
+    !params.isSessionWorking ||
+    params.isWaitingInput ||
+    params.supportsQueuedUserMessages
+  ) {
+    return null;
+  }
+
+  return `${params.activeRuntimeLabel} does not support queued messages while the session is working.`;
+};

@@ -26,7 +26,10 @@ import {
   canStartSessionForRole,
   type QueryUpdate,
 } from "./use-agent-studio-session-action-helpers";
-import { useAgentStudioSessionActionState } from "./use-agent-studio-session-action-state";
+import {
+  buildBusySendBlockedReason,
+  useAgentStudioSessionActionState,
+} from "./use-agent-studio-session-action-state";
 import { useAgentStudioSessionStartFlow } from "./use-agent-studio-session-start-flow";
 
 export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";
@@ -124,11 +127,18 @@ export function useAgentStudioSessionActions({
   scheduleSelectionIntent,
   onContextSwitchIntent,
 }: UseAgentStudioSessionActionsArgs): UseAgentStudioSessionActionsResult {
-  const preliminaryState = useAgentStudioSessionActionState({
+  const sessionState = useAgentStudioSessionActionState({
     activeSession,
     role,
     selectedModelSelection,
-    isSending: false,
+  });
+  const startFlowSessionWorking = sessionState.isSessionBusy;
+  const sendBlockedReasonBeforeCurrentSend = buildBusySendBlockedReason({
+    hasActiveSession: sessionState.hasActiveSession,
+    isSessionWorking: startFlowSessionWorking,
+    isWaitingInput: sessionState.isWaitingInput,
+    supportsQueuedUserMessages: sessionState.supportsQueuedUserMessages,
+    activeRuntimeLabel: sessionState.activeRuntimeLabel,
   });
 
   const {
@@ -151,7 +161,7 @@ export function useAgentStudioSessionActions({
     selectedTask,
     agentStudioReady,
     isActiveTaskHydrated,
-    isSessionWorking: preliminaryState.isSessionWorking,
+    isSessionWorking: startFlowSessionWorking,
     selectionForNewSession,
     repoSettings,
     startAgentSession,
@@ -167,36 +177,39 @@ export function useAgentStudioSessionActions({
     activeWorkspace,
     taskId,
     role,
-    activeExternalSessionId: preliminaryState.activeExternalSessionId,
-    activeSessionIsLoadingModelCatalog: preliminaryState.activeSessionIsLoadingModelCatalog,
-    activeSessionSelectedModel: preliminaryState.activeSessionSelectedModel,
+    activeExternalSessionId: sessionState.activeExternalSessionId,
+    activeSessionIsLoadingModelCatalog: sessionState.activeSessionIsLoadingModelCatalog,
+    activeSessionSelectedModel: sessionState.activeSessionSelectedModel,
     agentStudioReady,
-    canQueueBusyFollowups: preliminaryState.canQueueBusyFollowups,
+    canQueueBusyFollowups: sessionState.canQueueBusyFollowups,
     reusablePrompts,
     isStarting,
-    isWaitingInput: preliminaryState.isWaitingInput,
-    busySendBlockedReason: preliminaryState.busySendBlockedReason,
+    isWaitingInput: sessionState.isWaitingInput,
+    busySendBlockedReason: sendBlockedReasonBeforeCurrentSend,
     selectedTask,
     selectedModelDescriptor,
     sendAgentMessage,
     startSession,
   });
 
-  const sessionState = useAgentStudioSessionActionState({
-    activeSession,
-    role,
-    selectedModelSelection,
-    isSending,
+  const isSessionWorking =
+    sessionState.hasActiveSession && (sessionState.isSessionBusy || isSending);
+  const busySendBlockedReason = buildBusySendBlockedReason({
+    hasActiveSession: sessionState.hasActiveSession,
+    isSessionWorking,
+    isWaitingInput: sessionState.isWaitingInput,
+    supportsQueuedUserMessages: sessionState.supportsQueuedUserMessages,
+    activeRuntimeLabel: sessionState.activeRuntimeLabel,
   });
 
   const handleCreateSession = useCallback(
     (option: SessionCreateOption): void => {
-      if (sessionState.hasActiveSession && sessionState.isSessionWorking) {
+      if (sessionState.hasActiveSession && isSessionWorking) {
         return;
       }
       startFlowHandleCreateSession(option);
     },
-    [sessionState.hasActiveSession, sessionState.isSessionWorking, startFlowHandleCreateSession],
+    [sessionState.hasActiveSession, isSessionWorking, startFlowHandleCreateSession],
   );
 
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
@@ -218,7 +231,7 @@ export function useAgentStudioSessionActions({
     activeSessionExists: sessionState.hasActiveSession,
     agentStudioReady,
     isActiveTaskHydrated,
-    isSessionWorking: sessionState.isSessionWorking,
+    isSessionWorking,
     sessionsForTask,
     selectedTask,
     updateQuery,
@@ -236,7 +249,7 @@ export function useAgentStudioSessionActions({
     selectedRoleAvailable &&
     Boolean(selectedLaunchAction.kickoffTemplateId);
   const kickoffLabel = LAUNCH_ACTION_LABELS[launchActionId];
-  const canStopSession = sessionState.hasActiveSession && sessionState.isSessionWorking;
+  const canStopSession = sessionState.hasActiveSession && isSessionWorking;
 
   return {
     isStarting,
@@ -245,9 +258,9 @@ export function useAgentStudioSessionActions({
     startSessionRequest,
     isSending,
     isSubmittingQuestionByRequestId,
-    isSessionWorking: sessionState.isSessionWorking,
+    isSessionWorking,
     isWaitingInput: sessionState.isWaitingInput,
-    busySendBlockedReason: sessionState.busySendBlockedReason,
+    busySendBlockedReason,
     canKickoffNewSession,
     kickoffLabel,
     canStopSession,
