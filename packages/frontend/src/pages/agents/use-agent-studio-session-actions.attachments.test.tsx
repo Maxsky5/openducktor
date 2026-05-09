@@ -69,23 +69,26 @@ const createHookHarness = (initialProps: HookArgs) => {
       createElement(
         QueryProvider,
         { useIsolatedClient: true },
-        createElement(RuntimeDefinitionsContext.Provider, {
-          value: {
-            runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-            isLoadingRuntimeDefinitions: false,
-            runtimeDefinitionsError: null,
-            refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-            loadRepoRuntimeCatalog: async () => ({
-              runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-              models: [],
-              defaultModelsByProvider: {},
-              profiles: [],
-            }),
-            loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-            loadRepoRuntimeFileSearch: async () => [],
+        createElement(
+          RuntimeDefinitionsContext.Provider,
+          {
+            value: {
+              runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+              isLoadingRuntimeDefinitions: false,
+              runtimeDefinitionsError: null,
+              refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+              loadRepoRuntimeCatalog: async () => ({
+                runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+                models: [],
+                defaultModelsByProvider: {},
+                profiles: [],
+              }),
+              loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+              loadRepoRuntimeFileSearch: async () => [],
+            },
           },
           children,
-        }),
+        ),
       ),
     );
 
@@ -135,8 +138,6 @@ const createBaseArgs = (): HookArgs => ({
   startAgentSession: async () => "session-new",
   settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
-  bootstrapTaskSessions: async () => {},
-  hydrateRequestedTaskSessionHistory: async () => {},
   humanRequestChangesTask: async () => {},
   answerAgentQuestion: async () => {},
   updateQuery: () => {},

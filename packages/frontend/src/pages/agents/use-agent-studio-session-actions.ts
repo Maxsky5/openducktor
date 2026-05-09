@@ -1,20 +1,8 @@
 import type { GitBranch, GitTargetBranch, ReusablePrompt, TaskCard } from "@openducktor/contracts";
-import type {
-  AgentModelCatalog,
-  AgentModelSelection,
-  AgentRole,
-  AgentUserMessagePart,
-} from "@openducktor/core";
-import { useCallback, useEffect, useState } from "react";
+import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import { useCallback } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
-import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
-import {
-  type AgentChatComposerDraft,
-  draftHasMeaningfulContent,
-  draftHasSlashCommandSegment,
-  resolveDraftToUserMessageParts,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { resolveReusablePromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
+import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { SessionStartLaunchRequest } from "@/features/session-start";
 import {
@@ -22,13 +10,7 @@ import {
   LAUNCH_ACTION_LABELS,
   type SessionLaunchActionId,
 } from "@/features/session-start";
-import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
-import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
-import {
-  type AgentSessionSummary,
-  isWorkflowAgentSessionSummary,
-} from "@/state/agent-sessions-store";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
@@ -37,14 +19,13 @@ import type {
 } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
+import { useAgentStudioQuestionActions } from "./session-actions/use-agent-studio-question-actions";
+import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
+import { useAgentStudioSendAction } from "./session-actions/use-agent-studio-send-action";
+import { useAgentStudioSessionActionState } from "./session-actions/use-agent-studio-session-action-state";
 import {
-  applyAgentStudioSelectionQuery,
-  buildAgentStudioAsyncActivityContextKey,
   canStartSessionForRole,
-  decrementActivityCountRecord,
-  incrementActivityCountRecord,
   type QueryUpdate,
-  shouldTriggerContextSwitchIntent,
 } from "./use-agent-studio-session-action-helpers";
 import { useAgentStudioSessionStartFlow } from "./use-agent-studio-session-start-flow";
 
@@ -82,8 +63,6 @@ type UseAgentStudioSessionActionsArgs = {
   startAgentSession: AgentStateContextValue["startAgentSession"];
   settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
-  bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
-  hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
@@ -94,6 +73,29 @@ type UseAgentStudioSessionActionsArgs = {
     role: AgentRole;
   }) => void;
   onContextSwitchIntent?: () => void;
+};
+
+export type UseAgentStudioSessionActionsResult = {
+  isStarting: boolean;
+  sessionStartModal: SessionStartModalModel | null;
+  humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
+  startSessionRequest: (request: SessionStartLaunchRequest) => Promise<string | undefined>;
+  isSending: boolean;
+  isSubmittingQuestionByRequestId: Record<string, boolean>;
+  isSessionWorking: boolean;
+  isWaitingInput: boolean;
+  busySendBlockedReason: string | null;
+  canKickoffNewSession: boolean;
+  kickoffLabel: string;
+  canStopSession: boolean;
+  startLaunchKickoff: () => Promise<void>;
+  onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
+  onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
+  handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  handleSessionSelectionChange: (nextValue: string) => void;
+  handleCreateSession: (option: SessionCreateOption) => void;
+  handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
+  handleQuickAction: (option: AgentStudioQuickActionOption) => void;
 };
 
 export function useAgentStudioSessionActions({
@@ -115,88 +117,32 @@ export function useAgentStudioSessionActions({
   startAgentSession,
   settleStartedAgentSession,
   sendAgentMessage,
-  bootstrapTaskSessions: _bootstrapTaskSessions,
-  hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
   humanRequestChangesTask,
   setTaskTargetBranch,
   answerAgentQuestion,
   updateQuery,
   scheduleSelectionIntent,
   onContextSwitchIntent,
-}: UseAgentStudioSessionActionsArgs): {
-  isStarting: boolean;
-  sessionStartModal: SessionStartModalModel | null;
-  humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
-  startSessionRequest: (request: SessionStartLaunchRequest) => Promise<string | undefined>;
-  isSending: boolean;
-  isSubmittingQuestionByRequestId: Record<string, boolean>;
-  isSessionWorking: boolean;
-  isWaitingInput: boolean;
-  busySendBlockedReason: string | null;
-  canKickoffNewSession: boolean;
-  kickoffLabel: string;
-  canStopSession: boolean;
-  startLaunchKickoff: () => Promise<void>;
-  onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
-  onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
-  handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
-  handleSessionSelectionChange: (nextValue: string) => void;
-  handleCreateSession: (option: SessionCreateOption) => void;
-  handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
-  handleQuickAction: (option: AgentStudioQuickActionOption) => void;
-} {
-  const [sendingActivityCountByContext, setSendingActivityCountByContext] = useState<
-    Record<string, number>
-  >({});
-  const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
-    Record<string, boolean>
-  >({});
-  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
-
-  const activeExternalSessionId = activeSession?.externalSessionId ?? null;
-  const activeSessionRole = activeSession?.role ?? role;
-  const activeSessionStatus = activeSession?.status ?? "stopped";
-  const activeSessionSelectedModel = activeSession?.selectedModel ?? null;
-  const activeSessionIsLoadingModelCatalog = activeSession?.isLoadingModelCatalog === true;
-  const activeSessionPendingApprovals = activeSession?.pendingApprovals ?? [];
-  const activeSessionPendingQuestions = activeSession?.pendingQuestions ?? [];
-  const activeSessionRuntimeKind = activeSession?.runtimeKind ?? null;
-  const activeSessionRuntimeDescriptor = activeSession?.modelCatalog?.runtime ?? null;
-  const hasActiveSession = activeSession != null;
-  const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
-    activeWorkspace,
-    taskId,
+}: UseAgentStudioSessionActionsArgs): UseAgentStudioSessionActionsResult {
+  const sessionState = useAgentStudioSessionActionState({
+    activeSession,
     role,
-    externalSessionId: activeExternalSessionId,
+    selectedModelSelection,
   });
-  const isSending = (sendingActivityCountByContext[activeComposerContextKey] ?? 0) > 0;
-  const isSessionWorking =
-    hasActiveSession &&
-    (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
-  const isWaitingInput =
-    hasActiveSession &&
-    isAgentSessionWaitingInput({
-      pendingApprovals: activeSessionPendingApprovals,
-      pendingQuestions: activeSessionPendingQuestions,
-    });
-  const selectedRuntimeKind =
-    selectedModelSelection?.runtimeKind ?? activeSessionSelectedModel?.runtimeKind ?? null;
-  const activeRuntimeDescriptor =
-    (selectedRuntimeKind
-      ? runtimeDefinitions.find((runtime) => runtime.kind === selectedRuntimeKind)
-      : null) ??
-    activeSessionRuntimeDescriptor ??
-    runtimeDefinitions.find((runtime) => runtime.kind === activeSessionRuntimeKind) ??
-    null;
-  const supportsQueuedUserMessages =
-    activeRuntimeDescriptor?.capabilities.sessionLifecycle.supportsQueuedUserMessages !== false;
-  const canQueueBusyFollowups =
-    activeSessionStatus === "running" && !isWaitingInput && supportsQueuedUserMessages;
-  const busySendBlockedReason =
-    hasActiveSession && isSessionWorking && !isWaitingInput && !supportsQueuedUserMessages
-      ? `${activeRuntimeDescriptor?.label ?? "Current runtime"} does not support queued messages while the session is working.`
-      : null;
-  const kickoffLaunchActionId = launchActionId;
+  const startFlowSessionWorking = sessionState.isSessionBusy;
+  const getBusySendBlockedReason = (isSessionWorking: boolean): string | null => {
+    if (
+      !sessionState.hasActiveSession ||
+      !isSessionWorking ||
+      sessionState.isWaitingInput ||
+      sessionState.supportsQueuedUserMessages
+    ) {
+      return null;
+    }
+
+    return `${sessionState.activeRuntimeLabel} does not support queued messages while the session is working.`;
+  };
+  const sendBlockedReasonBeforeCurrentSend = getBusySendBlockedReason(startFlowSessionWorking);
 
   const {
     isStarting,
@@ -205,8 +151,8 @@ export function useAgentStudioSessionActions({
     startSessionRequest,
     startSession,
     startLaunchKickoff,
-    handleCreateSession,
-    handleQuickAction,
+    handleCreateSession: startFlowHandleCreateSession,
+    handleQuickAction: startFlowHandleQuickAction,
   } = useAgentStudioSessionStartFlow({
     activeWorkspace,
     branches,
@@ -218,7 +164,7 @@ export function useAgentStudioSessionActions({
     selectedTask,
     agentStudioReady,
     isActiveTaskHydrated,
-    isSessionWorking,
+    isSessionWorking: startFlowSessionWorking,
     selectionForNewSession,
     repoSettings,
     startAgentSession,
@@ -230,358 +176,86 @@ export function useAgentStudioSessionActions({
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
   });
 
-  const onSend = useCallback(
-    async (draft: AgentChatComposerDraft): Promise<boolean> => {
-      if (
-        (!canQueueBusyFollowups && isSending) ||
-        isStarting ||
-        !agentStudioReady ||
-        isWaitingInput ||
-        busySendBlockedReason
-      ) {
-        return false;
+  const { isSending, onSend } = useAgentStudioSendAction({
+    activeWorkspace,
+    taskId,
+    role,
+    activeExternalSessionId: sessionState.activeExternalSessionId,
+    activeSessionIsLoadingModelCatalog: sessionState.activeSessionIsLoadingModelCatalog,
+    activeSessionSelectedModel: sessionState.activeSessionSelectedModel,
+    agentStudioReady,
+    canQueueBusyFollowups: sessionState.canQueueBusyFollowups,
+    reusablePrompts,
+    isStarting,
+    isWaitingInput: sessionState.isWaitingInput,
+    busySendBlockedReason: sendBlockedReasonBeforeCurrentSend,
+    selectedTask,
+    selectedModelDescriptor,
+    sendAgentMessage,
+    startSession,
+  });
+
+  const isSessionWorking = sessionState.isSessionBusy || isSending;
+  const busySendBlockedReason = getBusySendBlockedReason(sessionState.isSessionBusy);
+
+  const handleQuickAction = useCallback(
+    (option: AgentStudioQuickActionOption): void => {
+      if (isSessionWorking) {
+        return;
       }
-      if (!canStartSessionForRole(selectedTask, role)) {
-        return false;
-      }
-      if (activeSessionIsLoadingModelCatalog && !activeSessionSelectedModel) {
-        return false;
-      }
-
-      let reusablePromptMessageParts: AgentUserMessagePart[] | null;
-      try {
-        reusablePromptMessageParts = resolveReusablePromptDraftToUserMessageParts(
-          draft,
-          reusablePrompts,
-        );
-      } catch {
-        return false;
-      }
-
-      if ((draft.attachments ?? []).length > 0) {
-        if (draftHasSlashCommandSegment(draft)) {
-          return false;
-        }
-
-        const attachmentErrors = validateComposerAttachments(
-          draft.attachments ?? [],
-          selectedModelDescriptor?.attachmentSupport,
-        );
-        if (Object.keys(attachmentErrors).length > 0) {
-          return false;
-        }
-      }
-
-      if (!draftHasMeaningfulContent(draft) || !taskId) {
-        return false;
-      }
-      const sendContextKeys = new Set<string>();
-
-      try {
-        let targetExternalSessionId: string | null | undefined = activeExternalSessionId;
-        if (!targetExternalSessionId) {
-          targetExternalSessionId = await startSession();
-        }
-
-        if (!targetExternalSessionId) {
-          return false;
-        }
-
-        const targetComposerContextKey = buildAgentStudioAsyncActivityContextKey({
-          activeWorkspace,
-          taskId,
-          role,
-          externalSessionId: targetExternalSessionId,
-        });
-        sendContextKeys.add(activeComposerContextKey);
-        sendContextKeys.add(targetComposerContextKey);
-
-        setSendingActivityCountByContext((current) => {
-          let next = current;
-          for (const contextKey of sendContextKeys) {
-            next = incrementActivityCountRecord(next, contextKey);
-          }
-          return next;
-        });
-        await sendAgentMessage(
-          targetExternalSessionId,
-          reusablePromptMessageParts ??
-            (await resolveDraftToUserMessageParts(draft, async (attachment) => {
-              if (attachment.file) {
-                return stageLocalAttachmentFile(attachment.file);
-              }
-              if (attachment.path) {
-                return attachment.path;
-              }
-              throw new Error(`Attachment "${attachment.name}" is missing local file data.`);
-            })),
-        );
-        return true;
-      } finally {
-        if (sendContextKeys.size > 0) {
-          setSendingActivityCountByContext((current) => {
-            let next = current;
-            for (const contextKey of sendContextKeys) {
-              next = decrementActivityCountRecord(next, contextKey);
-            }
-            return next;
-          });
-        }
-      }
+      startFlowHandleQuickAction(option);
     },
-    [
-      activeWorkspace,
-      activeComposerContextKey,
-      activeExternalSessionId,
-      activeSessionIsLoadingModelCatalog,
-      activeSessionSelectedModel,
-      agentStudioReady,
-      canQueueBusyFollowups,
-      reusablePrompts,
-      isSending,
-      isStarting,
-      isWaitingInput,
-      busySendBlockedReason,
-      role,
-      selectedTask,
-      selectedModelDescriptor?.attachmentSupport,
-      sendAgentMessage,
-      startSession,
-      taskId,
-    ],
+    [isSessionWorking, startFlowHandleQuickAction],
   );
 
-  const onSubmitQuestionAnswers = useCallback(
-    async (requestId: string, answers: string[][]): Promise<void> => {
-      if (!activeExternalSessionId || !agentStudioReady) {
-        return;
-      }
-
-      setIsSubmittingQuestionByRequestId((current) => ({
-        ...current,
-        [requestId]: true,
-      }));
-      try {
-        await answerAgentQuestion(activeExternalSessionId, requestId, answers);
-      } finally {
-        setIsSubmittingQuestionByRequestId((current) => {
-          if (!current[requestId]) {
-            return current;
-          }
-          const next = { ...current };
-          delete next[requestId];
-          return next;
-        });
-      }
-    },
-    [activeExternalSessionId, agentStudioReady, answerAgentQuestion],
-  );
-
-  useEffect(() => {
-    setIsSubmittingQuestionByRequestId((current) => {
-      if (activeExternalSessionId === null && Object.keys(current).length === 0) {
-        return current;
-      }
-      return {};
-    });
-  }, [activeExternalSessionId]);
-
-  useEffect(() => {
-    const activeRequestIds = new Set(activeSessionPendingQuestions.map((entry) => entry.requestId));
-    setIsSubmittingQuestionByRequestId((current) => {
-      let changed = false;
-      const next: Record<string, boolean> = {};
-      for (const [requestId, isSubmitting] of Object.entries(current)) {
-        if (!activeRequestIds.has(requestId)) {
-          changed = true;
-          continue;
-        }
-        next[requestId] = isSubmitting;
-      }
-      return changed ? next : current;
-    });
-  }, [activeSessionPendingQuestions]);
-
-  const handleWorkflowStepSelect = useCallback(
-    (nextRole: AgentRole, externalSessionId: string | null): void => {
-      if (!taskId) {
-        return;
-      }
-
-      const currentExternalSessionId = activeExternalSessionId;
-      const currentRole = activeSessionRole;
-
-      if (!externalSessionId) {
-        if (
-          shouldTriggerContextSwitchIntent({
-            currentExternalSessionId,
-            currentRole,
-            nextSessionId: null,
-            nextRole,
-          })
-        ) {
-          onContextSwitchIntent?.();
-        }
-
-        applyAgentStudioSelectionQuery(updateQuery, {
-          taskId,
-          externalSessionId: undefined,
-          role: nextRole,
-        });
-        scheduleSelectionIntent?.({
-          taskId,
-          externalSessionId: null,
-          role: nextRole,
-        });
-        return;
-      }
-
-      const session = sessionsForTask.find(
-        (entry) => entry.externalSessionId === externalSessionId,
-      );
-      if (!isWorkflowAgentSessionSummary(session)) {
-        return;
-      }
-
-      if (
-        shouldTriggerContextSwitchIntent({
-          currentExternalSessionId,
-          currentRole,
-          nextSessionId: session.externalSessionId,
-          nextRole: session.role,
-        })
-      ) {
-        onContextSwitchIntent?.();
-      }
-
-      applyAgentStudioSelectionQuery(updateQuery, {
-        taskId: session.taskId,
-        externalSessionId: session.externalSessionId,
-        role: session.role,
-      });
-      scheduleSelectionIntent?.({
-        taskId: session.taskId,
-        externalSessionId: session.externalSessionId,
-        role: session.role,
-      });
-    },
-    [
-      activeExternalSessionId,
-      activeSessionRole,
-      onContextSwitchIntent,
-      scheduleSelectionIntent,
-      sessionsForTask,
-      taskId,
-      updateQuery,
-    ],
-  );
-
-  const handleSessionSelectionChange = useCallback(
-    (nextValue: string): void => {
-      if (!taskId) {
-        return;
-      }
-
-      const selectedSession = sessionsForTask.find(
-        (entry) => entry.externalSessionId === nextValue,
-      );
-      if (!isWorkflowAgentSessionSummary(selectedSession)) {
-        return;
-      }
-
-      if (
-        shouldTriggerContextSwitchIntent({
-          currentExternalSessionId: activeExternalSessionId,
-          currentRole: activeSessionRole,
-          nextSessionId: selectedSession.externalSessionId,
-          nextRole: selectedSession.role,
-        })
-      ) {
-        onContextSwitchIntent?.();
-      }
-
-      applyAgentStudioSelectionQuery(updateQuery, {
-        taskId: selectedSession.taskId,
-        externalSessionId: selectedSession.externalSessionId,
-        role: selectedSession.role,
-      });
-      scheduleSelectionIntent?.({
-        taskId: selectedSession.taskId,
-        externalSessionId: selectedSession.externalSessionId,
-        role: selectedSession.role,
-      });
-    },
-    [
-      activeExternalSessionId,
-      activeSessionRole,
-      onContextSwitchIntent,
-      scheduleSelectionIntent,
-      sessionsForTask,
-      taskId,
-      updateQuery,
-    ],
-  );
-
-  const handlePrepareMessageFirstSession = useCallback(
+  const handleCreateSession = useCallback(
     (option: SessionCreateOption): void => {
-      if (option.disabled || !taskId || !agentStudioReady || !isActiveTaskHydrated) {
+      if (sessionState.hasActiveSession && isSessionWorking) {
         return;
       }
-      if (activeSession && isSessionWorking) {
-        return;
-      }
-      if (!canStartSessionForRole(selectedTask, option.role)) {
-        return;
-      }
-
-      if (
-        shouldTriggerContextSwitchIntent({
-          currentExternalSessionId: activeExternalSessionId,
-          currentRole: activeSessionRole,
-          nextSessionId: null,
-          nextRole: option.role,
-        })
-      ) {
-        onContextSwitchIntent?.();
-      }
-
-      applyAgentStudioSelectionQuery(updateQuery, {
-        taskId,
-        externalSessionId: undefined,
-        role: option.role,
-      });
-      scheduleSelectionIntent?.({
-        taskId,
-        externalSessionId: null,
-        role: option.role,
-      });
+      startFlowHandleCreateSession(option);
     },
-    [
-      activeExternalSessionId,
-      activeSession,
-      activeSessionRole,
-      agentStudioReady,
-      isActiveTaskHydrated,
-      isSessionWorking,
-      onContextSwitchIntent,
-      scheduleSelectionIntent,
-      selectedTask,
-      taskId,
-      updateQuery,
-    ],
+    [sessionState.hasActiveSession, isSessionWorking, startFlowHandleCreateSession],
   );
+
+  const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
+    useAgentStudioQuestionActions({
+      activeExternalSessionId: sessionState.activeExternalSessionId,
+      agentStudioReady,
+      pendingQuestions: sessionState.activeSessionPendingQuestions,
+      answerAgentQuestion,
+    });
+
+  const {
+    handleWorkflowStepSelect,
+    handleSessionSelectionChange,
+    handlePrepareMessageFirstSession,
+  } = useAgentStudioSelectionActions({
+    taskId,
+    activeExternalSessionId: sessionState.activeExternalSessionId,
+    activeSessionRole: sessionState.activeSessionRole,
+    activeSessionExists: sessionState.hasActiveSession,
+    agentStudioReady,
+    isActiveTaskHydrated,
+    isSessionWorking,
+    sessionsForTask,
+    selectedTask,
+    updateQuery,
+    scheduleSelectionIntent,
+    onContextSwitchIntent,
+  });
 
   const selectedRoleAvailable = selectedTask ? canStartSessionForRole(selectedTask, role) : false;
-  const selectedLaunchAction = getSessionLaunchAction(kickoffLaunchActionId);
+  const selectedLaunchAction = getSessionLaunchAction(launchActionId);
   const canKickoffNewSession =
     agentStudioReady &&
     Boolean(taskId) &&
     isActiveTaskHydrated &&
-    !hasActiveSession &&
+    !sessionState.hasActiveSession &&
     selectedRoleAvailable &&
     Boolean(selectedLaunchAction.kickoffTemplateId);
-  const kickoffLabel = LAUNCH_ACTION_LABELS[kickoffLaunchActionId];
-  const canStopSession = hasActiveSession && isSessionWorking;
+  const kickoffLabel = LAUNCH_ACTION_LABELS[launchActionId];
+  const canStopSession = sessionState.hasActiveSession && isSessionWorking;
 
   return {
     isStarting,
@@ -591,7 +265,7 @@ export function useAgentStudioSessionActions({
     isSending,
     isSubmittingQuestionByRequestId,
     isSessionWorking,
-    isWaitingInput,
+    isWaitingInput: sessionState.isWaitingInput,
     busySendBlockedReason,
     canKickoffNewSession,
     kickoffLabel,

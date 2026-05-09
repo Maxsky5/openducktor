@@ -20,6 +20,8 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import { useAgentStudioQuestionActions } from "./session-actions/use-agent-studio-question-actions";
+import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
 enableReactActEnvironment();
@@ -244,8 +246,6 @@ const createBaseArgs = (): HookArgs => {
     startAgentSession: async () => "session-new",
     settleStartedAgentSession: () => {},
     sendAgentMessage: async () => {},
-    bootstrapTaskSessions: async () => {},
-    hydrateRequestedTaskSessionHistory: async () => {},
     humanRequestChangesTask: async () => {},
     answerAgentQuestion: async () => {},
     updateQuery: () => {},
@@ -1285,6 +1285,49 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
+  test("blocks fresh session creation while an active session send is in flight", async () => {
+    const sendDeferred = createDeferred<void>();
+    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const startAgentSession = mock(async () => "session-new");
+    const activeSession = createSession({
+      externalSessionId: "session-existing",
+      status: "stopped",
+    });
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession,
+      sessionsForTask: [activeSession],
+      sendAgentMessage,
+      startAgentSession,
+    });
+
+    await harness.mount();
+    let sendPromise: Promise<boolean> | undefined;
+    await harness.run((state) => {
+      sendPromise = state.onSend(createComposerDraft("hello world"));
+    });
+    await harness.waitFor((state) => state.isSending);
+
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "spec:spec_initial:fresh",
+        launchActionId: "spec_initial",
+        role: "spec",
+        label: "Spec · Start Spec",
+        description: "Create a new spec session from scratch",
+        disabled: false,
+      });
+    });
+
+    expect(startAgentSession).not.toHaveBeenCalled();
+
+    await harness.run(async () => {
+      sendDeferred.resolve();
+      await sendPromise;
+    });
+    await harness.unmount();
+  });
+
   test("keeps sending state while a newly created session becomes selected", async () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise);
@@ -1504,6 +1547,91 @@ describe("useAgentStudioSessionActions", () => {
     await harness.mount();
 
     expect(harness.getLatest().canKickoffNewSession).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("selection actions ignore invalid session ids without mutating query state", async () => {
+    const updateQuery = mock(() => {});
+    const scheduleSelectionIntent = mock(() => {});
+    const onContextSwitchIntent = mock(() => {});
+    const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
+      taskId: "task-1",
+      activeExternalSessionId: null,
+      activeSessionRole: "spec" as const,
+      activeSessionExists: false,
+      agentStudioReady: true,
+      isActiveTaskHydrated: true,
+      isSessionWorking: false,
+      sessionsForTask: [createSession({ externalSessionId: "session-1" })],
+      selectedTask: createTask(),
+      updateQuery,
+      scheduleSelectionIntent,
+      onContextSwitchIntent,
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleSessionSelectionChange("missing-session");
+    });
+
+    expect(updateQuery).not.toHaveBeenCalled();
+    expect(scheduleSelectionIntent).not.toHaveBeenCalled();
+    expect(onContextSwitchIntent).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("selection actions do not signal context switch for same session and role", async () => {
+    const updateQuery = mock(() => {});
+    const onContextSwitchIntent = mock(() => {});
+    const session = createSession({ externalSessionId: "session-1", role: "spec" });
+    const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
+      taskId: "task-1",
+      activeExternalSessionId: "session-1",
+      activeSessionRole: "spec" as const,
+      activeSessionExists: true,
+      agentStudioReady: true,
+      isActiveTaskHydrated: true,
+      isSessionWorking: false,
+      sessionsForTask: [session],
+      selectedTask: createTask(),
+      updateQuery,
+      scheduleSelectionIntent: undefined,
+      onContextSwitchIntent,
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleSessionSelectionChange("session-1");
+    });
+
+    expect(updateQuery).toHaveBeenCalledWith({
+      task: "task-1",
+      session: "session-1",
+      agent: "spec",
+    });
+    expect(onContextSwitchIntent).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("question actions no-op when there is no active session", async () => {
+    const answerAgentQuestion = mock(async () => {});
+    const harness = createCoreHookHarness(useAgentStudioQuestionActions, {
+      activeExternalSessionId: null,
+      agentStudioReady: true,
+      pendingQuestions: [],
+      answerAgentQuestion,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.onSubmitQuestionAnswers("req-1", [["yes"]]);
+    });
+
+    expect(answerAgentQuestion).not.toHaveBeenCalled();
+    expect(harness.getLatest().isSubmittingQuestionByRequestId).toEqual({});
 
     await harness.unmount();
   });
