@@ -645,6 +645,16 @@ pub fn command_exists(program: &str) -> bool {
     command_path(program).is_some()
 }
 
+pub fn required_command_error(program: &str) -> Option<String> {
+    match resolve_command_path(program) {
+        Ok(Some(_)) => None,
+        Ok(None) => Some(format!(
+            "{program} not found in bundled locations, standard install locations, or PATH"
+        )),
+        Err(error) => Some(error.to_string()),
+    }
+}
+
 pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
     let resolved = resolve_command_path(program).ok().flatten()?;
     run_command(&resolved, args, None).ok().and_then(|output| {
@@ -662,9 +672,10 @@ mod tests {
     use super::{
         bundled_command_path_from_executable, command_env_override_name, command_exists,
         command_path, command_path_from_directories, compose_process_path_entries,
-        explicit_command_override, path_entries_from_value, resolve_command_path, run_command,
-        run_command_allow_failure, run_command_allow_failure_with_env, run_command_with_env,
-        subprocess_path_env, version_command,
+        explicit_command_override, path_entries_from_value, required_command_error,
+        resolve_command_path, run_command, run_command_allow_failure,
+        run_command_allow_failure_with_env, run_command_with_env, subprocess_path_env,
+        version_command,
     };
     use host_test_support::{lock_env, EnvVarGuard};
     use std::{
@@ -1347,8 +1358,27 @@ mod tests {
         assert!(error.to_string().contains("OPENDUCKTOR_BD_PATH"));
         assert!(command_path("bd").is_none());
         assert!(!command_exists("bd"));
+        assert!(required_command_error("bd")
+            .unwrap_or_default()
+            .contains("OPENDUCKTOR_BD_PATH"));
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn required_command_error_reports_plain_missing_command() {
+        let program = format!(
+            "odt-missing-command-{}",
+            unique_temp_path("nonce").display()
+        );
+
+        let error = required_command_error(program.as_str())
+            .expect("missing command should produce an error message");
+
+        assert!(error.contains(program.as_str()));
+        assert!(
+            error.contains("not found in bundled locations, standard install locations, or PATH")
+        );
     }
 
     #[cfg(unix)]

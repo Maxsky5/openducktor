@@ -5,7 +5,7 @@ use host_domain::{
     RuntimeCheck, SystemCheck,
 };
 use host_infra_system::{
-    command_exists, resolve_command_path, run_command_allow_failure_with_env, version_command,
+    required_command_error, run_command_allow_failure_with_env, version_command,
 };
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -121,19 +121,14 @@ impl AppService {
     }
 
     fn probe_runtime_check(&self) -> Result<RuntimeCheck> {
-        let git_ok = command_exists("git");
-        let gh_ok = command_exists("gh");
+        let git_error = required_command_error("git");
+        let gh_error = required_command_error("gh");
+        let git_ok = git_error.is_none();
+        let gh_ok = gh_error.is_none();
         let (gh_auth_ok, gh_auth_login, gh_auth_error) = if gh_ok {
             probe_github_auth_status()
         } else {
-            (
-                false,
-                None,
-                Some(
-                    "gh not found in bundled locations, standard install locations, or PATH"
-                        .to_string(),
-                ),
-            )
+            (false, None, gh_error.clone())
         };
         let runtimes = self
             .runtime_registry
@@ -147,17 +142,11 @@ impl AppService {
             .collect::<Result<Vec<_>>>()?;
 
         let mut errors = Vec::new();
-        if !git_ok {
-            errors.push(
-                "git not found in bundled locations, standard install locations, or PATH"
-                    .to_string(),
-            );
+        if let Some(error) = git_error {
+            errors.push(error);
         }
-        if !gh_ok {
-            errors.push(
-                "gh not found in bundled locations, standard install locations, or PATH"
-                    .to_string(),
-            );
+        if let Some(error) = gh_error {
+            errors.push(error);
         }
         for runtime in &runtimes {
             if let Some(error) = runtime.error.as_ref() {
@@ -204,19 +193,8 @@ impl AppService {
     }
 
     pub fn beads_check(&self, repo_path: &str) -> Result<BeadsCheck> {
-        match resolve_command_path("bd") {
-            Ok(Some(_)) => {}
-            Ok(None) => {
-                return Ok(build_beads_check(missing_bd_repo_store_health(
-                    "bd not found in bundled locations, standard install locations, or PATH"
-                        .to_string(),
-                )));
-            }
-            Err(error) => {
-                return Ok(build_beads_check(missing_bd_repo_store_health(
-                    error.to_string(),
-                )));
-            }
+        if let Some(error) = required_command_error("bd") {
+            return Ok(build_beads_check(missing_bd_repo_store_health(error)));
         }
 
         let repo = Path::new(repo_path);
