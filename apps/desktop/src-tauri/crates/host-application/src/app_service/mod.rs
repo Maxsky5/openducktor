@@ -65,9 +65,9 @@ pub(crate) type OpencodeStartupWaitReport = RuntimeStartupWaitReport;
 #[cfg(test)]
 pub(crate) use opencode_runtime::wait_for_local_server_with_process;
 pub(crate) use opencode_runtime::{
-    opencode_server_parent_pid, process_exists, read_opencode_version,
-    resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
-    wait_for_local_server_with_process as wait_for_runtime_with_process,
+    opencode_binary_not_found_message, opencode_server_parent_pid, process_exists,
+    read_opencode_version, resolve_opencode_binary_path, terminate_child_process,
+    terminate_process_by_pid, wait_for_local_server_with_process as wait_for_runtime_with_process,
     wait_for_process_exit_by_pid, StartupCancelEpoch,
 };
 pub(crate) type RuntimeSessionStatusMap = runtime_session_status::RuntimeSessionStatusMap;

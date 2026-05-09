@@ -7,13 +7,13 @@ use crate::app_service::opencode_runtime::{
     OpenCodeProcessTracker,
 };
 use crate::app_service::{
-    read_opencode_version, require_local_http_endpoint, require_local_http_port,
-    resolve_opencode_binary_path, wait_for_runtime_with_process, AppService, RuntimeProcessGuard,
-    RuntimeRoute, RuntimeSessionStatusMap, RuntimeSessionStatusProbeError,
-    RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTarget,
-    RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshot,
-    RuntimeStartupReadinessPolicy, StartupEventContext, StartupEventCorrelation,
-    StartupEventPayload,
+    opencode_binary_not_found_message, read_opencode_version, require_local_http_endpoint,
+    require_local_http_port, resolve_opencode_binary_path, wait_for_runtime_with_process,
+    AppService, RuntimeProcessGuard, RuntimeRoute, RuntimeSessionStatusMap,
+    RuntimeSessionStatusProbeError, RuntimeSessionStatusProbeOutcome,
+    RuntimeSessionStatusProbeTarget, RuntimeSessionStatusProbeTargetResolution,
+    RuntimeSessionStatusSnapshot, RuntimeStartupReadinessPolicy, StartupEventContext,
+    StartupEventCorrelation, StartupEventPayload,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{AgentRuntimeKind, RuntimeDefinition, RuntimeHealth, RuntimeInstanceSummary};
@@ -606,10 +606,7 @@ impl AppRuntime for OpenCodeRuntime {
                     format!("installed ({binary})")
                 }
             }),
-            error: (!opencode_ok).then(|| {
-                "opencode not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"
-                    .to_string()
-            }),
+            error: (!opencode_ok).then(opencode_binary_not_found_message),
         }
     }
 

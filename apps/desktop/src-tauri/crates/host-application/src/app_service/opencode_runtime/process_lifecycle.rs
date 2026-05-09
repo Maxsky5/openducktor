@@ -47,11 +47,39 @@ pub(crate) fn read_opencode_version(binary: &str) -> Option<String> {
 
 pub(crate) fn resolve_opencode_binary_path() -> Option<String> {
     if let Ok(override_binary) = std::env::var("OPENDUCKTOR_OPENCODE_BINARY") {
+        if override_binary.trim().is_empty() {
+            return resolve_opencode_binary_path_without_override();
+        }
         if let Ok(path) = parse_user_path(override_binary.as_str()) {
-            return Some(path.to_string_lossy().to_string());
+            return (path.is_file() && is_executable_path(path.as_path()))
+                .then(|| path.to_string_lossy().to_string());
+        }
+        return None;
+    }
+
+    resolve_opencode_binary_path_without_override()
+}
+
+pub(crate) fn opencode_binary_not_found_message() -> String {
+    if let Ok(override_binary) = std::env::var("OPENDUCKTOR_OPENCODE_BINARY") {
+        if !override_binary.trim().is_empty() {
+            return match parse_user_path(override_binary.as_str()) {
+                Ok(path) => format!(
+                    "Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY points to a missing or non-executable file: {}",
+                    path.display()
+                ),
+                Err(error) => format!(
+                    "Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY is invalid: {error:#}"
+                ),
+            };
         }
     }
 
+    "opencode not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"
+        .to_string()
+}
+
+fn resolve_opencode_binary_path_without_override() -> Option<String> {
     if let Some(resolved) = bundled_command("opencode") {
         return Some(resolved);
     }
@@ -79,8 +107,8 @@ fn is_executable_path(path: &Path) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_executable_path(_path: &Path) -> bool {
-    true
+fn is_executable_path(path: &Path) -> bool {
+    path.is_file()
 }
 
 #[cfg(unix)]
@@ -257,7 +285,7 @@ pub(super) fn spawn_opencode_server_with_config(
     port: u16,
 ) -> Result<Child> {
     let opencode_binary = resolve_opencode_binary_path()
-        .ok_or_else(|| anyhow!("opencode binary not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"))?;
+        .ok_or_else(|| anyhow!(opencode_binary_not_found_message()))?;
     spawn_opencode_server_with_binary(
         opencode_binary.as_str(),
         working_directory,

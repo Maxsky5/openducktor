@@ -11,9 +11,9 @@ use std::path::Path;
 use std::process::Child;
 
 pub(crate) use process_lifecycle::{
-    opencode_server_parent_pid, process_exists, read_opencode_version,
-    resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
-    wait_for_process_exit_by_pid,
+    opencode_binary_not_found_message, opencode_server_parent_pid, process_exists,
+    read_opencode_version, resolve_opencode_binary_path, terminate_child_process,
+    terminate_process_by_pid, wait_for_process_exit_by_pid,
 };
 pub(crate) use process_registry::{
     opencode_process_registry_path, reconcile_opencode_process_registry_on_startup,

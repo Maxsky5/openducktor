@@ -720,6 +720,28 @@ fn resolve_opencode_binary_path_supports_home_shorthand_override() -> Result<()>
 }
 
 #[test]
+fn resolve_opencode_binary_path_rejects_invalid_override_without_path_fallback() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("opencode-invalid-override");
+    let path_bin = root.join("path-bin");
+    fs::create_dir_all(&path_bin)?;
+    let path_opencode = path_bin.join("opencode");
+    create_fake_opencode(&path_opencode)?;
+
+    let _override_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        root.join("missing-opencode").to_string_lossy().as_ref(),
+    );
+    let _home_guard = remove_env_var("HOME");
+    let _path_guard = prepend_path(&path_bin);
+
+    assert!(resolve_opencode_binary_path().is_none());
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn resolve_opencode_binary_path_uses_home_fallback_when_override_and_path_missing() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("opencode-home-fallback");
