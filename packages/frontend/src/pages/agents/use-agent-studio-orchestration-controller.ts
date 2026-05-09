@@ -5,6 +5,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
+import { useMemo } from "react";
 import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
@@ -14,7 +15,14 @@ import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feed
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
+import { ROLE_OPTIONS } from "./agents-page-constants";
+import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
+import type {
+  AgentStudioSelectedSessionContext,
+  AgentStudioSelectedSessionContextInput,
+} from "./selected-session/selected-session-context";
+import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
@@ -93,27 +101,7 @@ type UseAgentStudioOrchestrationControllerResult = {
 
 type AgentStudioPageModelsViewContext = Pick<
   AgentStudioOrchestrationSelectionContext,
-  | "viewTaskId"
-  | "viewRole"
-  | "viewSelectedTask"
-  | "contextSwitchVersion"
-  | "isSessionSelectionResolving"
-  | "isActiveTaskHydrated"
-  | "isActiveTaskHydrationFailed"
-  | "isViewSessionHistoryHydrated"
-  | "isViewSessionHistoryHydrationFailed"
-  | "isViewSessionHistoryHydrating"
-  | "isViewSessionWaitingForRuntimeReadiness"
-> & {
-  hasActiveGitConflict: boolean;
-};
-
-type AgentStudioPageModelsSessionsContext = Pick<
-  AgentStudioOrchestrationSelectionContext,
-  | "allSessionSummaries"
-  | "viewSessionsForTask"
-  | "viewActiveSession"
-  | "viewSessionRuntimeDataError"
+  "viewTaskId"
 >;
 
 type AgentStudioPageModelsTabsContext = Pick<
@@ -126,11 +114,6 @@ type AgentStudioPageModelsTabsContext = Pick<
   | "handleCreateTab"
   | "handleCloseTab"
   | "handleReorderTab"
->;
-
-type AgentStudioPageModelsDocumentsContext = Pick<
-  ReturnType<typeof useAgentStudioDocuments>,
-  "specDoc" | "planDoc" | "qaDoc"
 >;
 
 type AgentStudioPageModelsSessionActionsContext = Parameters<
@@ -154,7 +137,6 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "modelGroups"
   | "variantOptions"
   | "agentAccentColorsByProfileId"
-  | "activeSessionContextUsage"
   | "handleSelectAgentProfile"
   | "handleSelectModel"
   | "handleSelectVariant"
@@ -162,30 +144,43 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
 
 type BuildAgentStudioPageModelsArgsInput = {
   view: AgentStudioPageModelsViewContext;
-  sessions: AgentStudioPageModelsSessionsContext;
-  runtimeDefinitions: RuntimeDescriptor[];
+  selectedSession: AgentStudioSelectedSessionContext;
   tabs: AgentStudioPageModelsTabsContext;
-  documents: AgentStudioPageModelsDocumentsContext;
-  readiness: AgentStudioOrchestrationReadinessContext;
   sessionActions: AgentStudioPageModelsSessionActionsContext;
   modelSelection: AgentStudioPageModelsModelSelectionContext;
-  approvals: ReturnType<typeof useAgentSessionApprovalActions>;
   chatSettings: {
     showThinkingMessages: boolean;
   };
   composer: AgentStudioOrchestrationComposerContext;
 };
 
+type BuildSelectedSessionContextFromOrchestrationInput = Omit<
+  AgentStudioSelectedSessionContextInput,
+  "isTaskHydrating" | "sessionRuntimeDataError"
+> & {
+  viewSessionRuntimeDataError?: string | null;
+  isActiveTaskHydrated: boolean;
+  isActiveTaskHydrationFailed: boolean;
+};
+
+export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
+  viewSessionRuntimeDataError,
+  isActiveTaskHydrated,
+  isActiveTaskHydrationFailed,
+  ...input
+}: BuildSelectedSessionContextFromOrchestrationInput): AgentStudioSelectedSessionContext =>
+  buildAgentStudioSelectedSessionContext({
+    ...input,
+    sessionRuntimeDataError: viewSessionRuntimeDataError ?? null,
+    isTaskHydrating: Boolean(input.taskId && !isActiveTaskHydrated && !isActiveTaskHydrationFailed),
+  });
+
 export const buildAgentStudioPageModelsArgs = ({
   view,
-  sessions,
-  runtimeDefinitions,
+  selectedSession,
   tabs,
-  documents,
-  readiness,
   sessionActions,
   modelSelection,
-  approvals,
   chatSettings,
   composer,
 }: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => {
@@ -207,28 +202,8 @@ export const buildAgentStudioPageModelsArgs = ({
   } = modelSelection;
 
   return {
-    core: {
-      activeTabValue: activeTaskTabId || view.viewTaskId || "__agent_studio_empty__",
-      taskId: view.viewTaskId,
-      role: view.viewRole,
-      selectedTask: view.viewSelectedTask,
-      sessionsForTask: sessions.viewSessionsForTask,
-      allSessionSummaries: sessions.allSessionSummaries,
-      contextSessionsLength: sessions.viewSessionsForTask.length,
-      activeSession: sessions.viewActiveSession,
-      runtimeDefinitions,
-      sessionRuntimeDataError: sessions.viewSessionRuntimeDataError ?? null,
-      hasActiveGitConflict: view.hasActiveGitConflict,
-      isTaskHydrating: Boolean(
-        view.viewTaskId && !view.isActiveTaskHydrated && !view.isActiveTaskHydrationFailed,
-      ),
-      isSessionHistoryHydrated: view.isViewSessionHistoryHydrated,
-      isSessionHistoryHydrating: view.isViewSessionHistoryHydrating,
-      isSessionSelectionResolving: view.isSessionSelectionResolving,
-      isWaitingForRuntimeReadiness: view.isViewSessionWaitingForRuntimeReadiness,
-      isSessionHistoryHydrationFailed: view.isViewSessionHistoryHydrationFailed,
-      contextSwitchVersion: view.contextSwitchVersion,
-    },
+    activeTabValue: activeTaskTabId || view.viewTaskId || "__agent_studio_empty__",
+    selectedSession,
     taskTabs: {
       ...taskTabs,
       onSelectTab: handleSelectTab,
@@ -236,8 +211,6 @@ export const buildAgentStudioPageModelsArgs = ({
       onCloseTab: handleCloseTab,
       onReorderTab: handleReorderTab,
     },
-    documents,
-    readiness,
     sessionActions,
     chatSettings,
     modelSelection: {
@@ -248,7 +221,6 @@ export const buildAgentStudioPageModelsArgs = ({
       onSelectModel: handleSelectModel,
       onSelectVariant: handleSelectVariant,
     },
-    approvals,
     composer,
   };
 };
@@ -275,7 +247,6 @@ export function useAgentStudioOrchestrationController({
     activeTaskTabId,
     taskTabs,
     availableTabTasks,
-    contextSwitchVersion,
     isLoadingTasks,
     isActiveTaskHydrated,
     handleSelectTab,
@@ -365,7 +336,6 @@ export function useAgentStudioOrchestrationController({
     onSubmitQuestionAnswers,
     handleWorkflowStepSelect,
     handleSessionSelectionChange,
-    handleCreateSession,
     handlePrepareMessageFirstSession,
     handleQuickAction,
   } = useAgentStudioSessionActions({
@@ -403,28 +373,90 @@ export function useAgentStudioOrchestrationController({
       replyAgentApproval,
     });
 
+  const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
+  const selectedSessionContext = useMemo(
+    () =>
+      buildAgentStudioSelectedSessionContextFromOrchestration({
+        taskId: viewTaskId,
+        role: viewRole,
+        selectedTask: viewSelectedTask,
+        sessionsForTask: viewSessionsForTask,
+        allSessionSummaries: selection.allSessionSummaries,
+        activeSession: viewActiveSession,
+        runtimeDefinitions,
+        viewSessionRuntimeDataError,
+        hasActiveGitConflict,
+        isActiveTaskHydrated,
+        isActiveTaskHydrationFailed: selection.isActiveTaskHydrationFailed,
+        isSessionHistoryHydrated: selection.isViewSessionHistoryHydrated,
+        isSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
+        isSessionSelectionResolving: selection.isSessionSelectionResolving,
+        isWaitingForRuntimeReadiness: selection.isViewSessionWaitingForRuntimeReadiness,
+        isSessionHistoryHydrationFailed: selection.isViewSessionHistoryHydrationFailed,
+        activeSessionContextUsage,
+        documents: {
+          specDoc,
+          planDoc,
+          qaDoc,
+        },
+        readiness,
+        sessionActions: {
+          isStarting,
+          isSessionWorking,
+          canKickoffNewSession,
+          kickoffLabel,
+          startLaunchKickoff,
+          onSubmitQuestionAnswers,
+          isSubmittingQuestionByRequestId,
+        },
+        approvals: {
+          isSubmittingApprovalByRequestId,
+          approvalReplyErrorByRequestId,
+          onReplyApproval,
+        },
+        roleLabelByRole,
+      }),
+    [
+      activeSessionContextUsage,
+      approvalReplyErrorByRequestId,
+      canKickoffNewSession,
+      hasActiveGitConflict,
+      isActiveTaskHydrated,
+      isSessionWorking,
+      isStarting,
+      isSubmittingApprovalByRequestId,
+      isSubmittingQuestionByRequestId,
+      kickoffLabel,
+      onReplyApproval,
+      onSubmitQuestionAnswers,
+      planDoc,
+      qaDoc,
+      readiness,
+      roleLabelByRole,
+      runtimeDefinitions,
+      selection.allSessionSummaries,
+      selection.isActiveTaskHydrationFailed,
+      selection.isSessionSelectionResolving,
+      selection.isViewSessionHistoryHydrated,
+      selection.isViewSessionHistoryHydrationFailed,
+      selection.isViewSessionHistoryHydrating,
+      selection.isViewSessionWaitingForRuntimeReadiness,
+      specDoc,
+      startLaunchKickoff,
+      viewActiveSession,
+      viewRole,
+      viewSelectedTask,
+      viewSessionRuntimeDataError,
+      viewSessionsForTask,
+      viewTaskId,
+    ],
+  );
+
   const pageModelsArgs = buildAgentStudioPageModelsArgs({
     view: {
       viewTaskId,
-      viewRole,
-      viewSelectedTask,
-      contextSwitchVersion,
-      isSessionSelectionResolving: selection.isSessionSelectionResolving,
-      isActiveTaskHydrated,
-      isActiveTaskHydrationFailed: selection.isActiveTaskHydrationFailed,
-      isViewSessionHistoryHydrated: selection.isViewSessionHistoryHydrated,
-      isViewSessionHistoryHydrationFailed: selection.isViewSessionHistoryHydrationFailed,
-      isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
-      isViewSessionWaitingForRuntimeReadiness: selection.isViewSessionWaitingForRuntimeReadiness,
-      hasActiveGitConflict,
     },
-    sessions: {
-      allSessionSummaries: selection.allSessionSummaries,
-      viewSessionsForTask,
-      viewActiveSession,
-      viewSessionRuntimeDataError,
-    },
-    runtimeDefinitions,
+    selectedSession: selectedSessionContext,
     tabs: {
       activeTaskTabId,
       taskTabs,
@@ -435,29 +467,17 @@ export function useAgentStudioOrchestrationController({
       handleCloseTab,
       handleReorderTab,
     },
-    documents: {
-      specDoc,
-      planDoc,
-      qaDoc,
-    },
-    readiness,
     sessionActions: {
       openTaskDetails: actions.openTaskDetails,
       isStarting,
       isSending,
-      isSubmittingQuestionByRequestId,
       isSessionWorking,
       isWaitingInput,
       busySendBlockedReason,
-      canKickoffNewSession,
-      kickoffLabel,
       canStopSession,
-      startLaunchKickoff,
       onSend,
-      onSubmitQuestionAnswers,
       handleWorkflowStepSelect,
       handleSessionSelectionChange,
-      handleCreateSession,
       handlePrepareMessageFirstSession,
       handleQuickAction,
       stopAgentSession,
@@ -478,15 +498,9 @@ export function useAgentStudioOrchestrationController({
       modelGroups,
       variantOptions,
       agentAccentColorsByProfileId,
-      activeSessionContextUsage,
       handleSelectAgentProfile,
       handleSelectModel,
       handleSelectVariant,
-    },
-    approvals: {
-      isSubmittingApprovalByRequestId,
-      approvalReplyErrorByRequestId,
-      onReplyApproval,
     },
     chatSettings: {
       showThinkingMessages,
@@ -505,10 +519,10 @@ export function useAgentStudioOrchestrationController({
   } = useAgentStudioPageModels(pageModelsArgs);
 
   const rightPanel = useAgentStudioRightPanel({
-    role: viewRole,
-    hasTaskContext: Boolean(viewTaskId),
-    hasDocumentPanel: Boolean(agentStudioWorkspaceSidebarModel.activeDocument),
-    hasBuildToolsPanel: viewRole === "build",
+    role: selectedSessionContext.rightPanel.role,
+    hasTaskContext: selectedSessionContext.rightPanel.hasTaskContext,
+    hasDocumentPanel: selectedSessionContext.rightPanel.hasDocumentPanel,
+    hasBuildToolsPanel: selectedSessionContext.rightPanel.hasBuildToolsPanel,
   });
 
   return {

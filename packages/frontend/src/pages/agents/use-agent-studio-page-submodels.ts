@@ -15,7 +15,6 @@ type UseAgentStudioHeaderModelArgs = {
   onOpenTaskDetails: (() => void) | null;
   activeSession: Pick<AgentSessionState, "status"> | null;
   sessionsForTaskLength: number;
-  contextSessionsLength: number;
   agentStudioReady: boolean;
   isStarting: boolean;
   onWorkflowStepSelect: AgentStudioWorkflowStepSelect;
@@ -31,7 +30,6 @@ export const useAgentStudioHeaderModel = ({
   onOpenTaskDetails,
   activeSession,
   sessionsForTaskLength,
-  contextSessionsLength,
   agentStudioReady,
   isStarting,
   onWorkflowStepSelect,
@@ -67,12 +65,10 @@ export const useAgentStudioHeaderModel = ({
         onQuickAction,
         onResolveGitConflictQuickAction: onResolveGitConflictQuickAction ?? null,
         isStarting,
-        contextSessionsLength,
       }),
     [
       activeSessionStatus,
       agentStudioReady,
-      contextSessionsLength,
       isStarting,
       onOpenTaskDetails,
       onPrepareMessageFirstSession,

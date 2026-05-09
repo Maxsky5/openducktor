@@ -42,7 +42,6 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   onOpenTaskDetails: mock(() => {}),
   activeSession: { status: "running" },
   sessionsForTaskLength: 1,
-  contextSessionsLength: 1,
   agentStudioReady: true,
   isStarting: false,
   onWorkflowStepSelect: mock(() => {}),

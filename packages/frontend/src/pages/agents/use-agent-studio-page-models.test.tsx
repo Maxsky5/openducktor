@@ -14,6 +14,12 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import { ROLE_OPTIONS } from "./agents-page-constants";
+import { buildRoleLabelByRole } from "./agents-page-view-model";
+import {
+  type AgentStudioSelectedSessionContextInput,
+  buildAgentStudioSelectedSessionContext,
+} from "./selected-session/selected-session-context";
 
 type UseAgentStudioPageModelsHook =
   typeof import("./use-agent-studio-page-models")["useAgentStudioPageModels"];
@@ -22,14 +28,28 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0];
 
+type SelectedSessionTestCore = Omit<
+  AgentStudioSelectedSessionContextInput,
+  | "documents"
+  | "readiness"
+  | "sessionActions"
+  | "approvals"
+  | "activeSessionContextUsage"
+  | "roleLabelByRole"
+> & {
+  activeTabValue: string;
+};
+
 type HookArgsOverrides = {
-  core?: Partial<HookArgs["core"]>;
+  selectedSessionCore?: Partial<SelectedSessionTestCore>;
   taskTabs?: Partial<HookArgs["taskTabs"]>;
-  documents?: Partial<HookArgs["documents"]>;
-  readiness?: Partial<HookArgs["readiness"]>;
+  documents?: Partial<AgentStudioSelectedSessionContextInput["documents"]>;
+  readiness?: Partial<AgentStudioSelectedSessionContextInput["readiness"]>;
   sessionActions?: Partial<HookArgs["sessionActions"]>;
+  selectedSessionActions?: Partial<AgentStudioSelectedSessionContextInput["sessionActions"]>;
   modelSelection?: Partial<HookArgs["modelSelection"]>;
-  approvals?: Partial<HookArgs["approvals"]>;
+  activeSessionContextUsage?: AgentStudioSelectedSessionContextInput["activeSessionContextUsage"];
+  approvals?: Partial<AgentStudioSelectedSessionContextInput["approvals"]>;
   chatSettings?: Partial<HookArgs["chatSettings"]>;
   composer?: Partial<HookArgs["composer"]>;
 };
@@ -101,18 +121,16 @@ const createDocumentState = (markdown: string): TaskDocumentState => ({
 
 const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   const defaultSession = createSession();
-  const sessionsForTask = overrides.core?.sessionsForTask ?? [
+  const sessionsForTask = overrides.selectedSessionCore?.sessionsForTask ?? [
     toAgentSessionSummary(defaultSession),
   ];
-  const allSessionSummaries = overrides.core?.allSessionSummaries ?? sessionsForTask;
+  const allSessionSummaries = overrides.selectedSessionCore?.allSessionSummaries ?? sessionsForTask;
   const activeSession =
-    overrides.core?.activeSession !== undefined ? overrides.core.activeSession : defaultSession;
-  const contextSessionsLength =
-    overrides.core?.contextSessionsLength !== undefined
-      ? overrides.core.contextSessionsLength
-      : sessionsForTask.length;
+    overrides.selectedSessionCore?.activeSession !== undefined
+      ? overrides.selectedSessionCore.activeSession
+      : defaultSession;
 
-  const core: HookArgs["core"] = {
+  const selectedSessionCore: SelectedSessionTestCore = {
     activeTabValue: "task-1",
     taskId: "task-1",
     role: "spec",
@@ -125,98 +143,134 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isSessionSelectionResolving: false,
     isWaitingForRuntimeReadiness: false,
     isSessionHistoryHydrationFailed: false,
-    contextSwitchVersion: 0,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    ...overrides.core,
+    ...overrides.selectedSessionCore,
     allSessionSummaries,
     sessionsForTask,
     activeSession,
-    contextSessionsLength,
+  };
+
+  const taskTabs: HookArgs["taskTabs"] = {
+    taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
+    availableTabTasks: [createTask()],
+    isLoadingTasks: false,
+    onSelectTab: () => {},
+    onCreateTab: () => {},
+    onCloseTab: () => {},
+    onReorderTab: () => {},
+    ...overrides.taskTabs,
+  };
+  const documents = {
+    specDoc: createDocumentState("spec"),
+    planDoc: createDocumentState(""),
+    qaDoc: createDocumentState(""),
+    ...overrides.documents,
+  };
+  const readiness: AgentStudioSelectedSessionContextInput["readiness"] = {
+    agentStudioReadinessState: "ready",
+    agentStudioReady: true,
+    agentStudioBlockedReason: "",
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+    ...overrides.readiness,
+  };
+  const sessionActions: HookArgs["sessionActions"] = {
+    handleWorkflowStepSelect: () => {},
+    handleSessionSelectionChange: () => {},
+    handlePrepareMessageFirstSession: () => {},
+    handleQuickAction: () => {},
+    openTaskDetails: () => {},
+    isStarting: false,
+    isSending: false,
+    isSessionWorking: true,
+    isWaitingInput: false,
+    busySendBlockedReason: null,
+    canStopSession: true,
+    onSend: async () => true,
+    stopAgentSession: async () => {},
+    ...overrides.sessionActions,
+  };
+  const selectedSessionActions: AgentStudioSelectedSessionContextInput["sessionActions"] = {
+    isStarting: sessionActions.isStarting,
+    isSessionWorking: sessionActions.isSessionWorking,
+    canKickoffNewSession: false,
+    kickoffLabel: "Start Spec",
+    startLaunchKickoff: async () => {},
+    onSubmitQuestionAnswers: async () => {},
+    isSubmittingQuestionByRequestId: {},
+    ...overrides.selectedSessionActions,
+  };
+  const modelSelection: HookArgs["modelSelection"] = {
+    selectedModelSelection: null,
+    isSelectionCatalogLoading: false,
+    supportsSlashCommands: true,
+    supportsFileSearch: true,
+    slashCommandCatalog: { commands: [] },
+    slashCommands: [],
+    slashCommandsError: null,
+    isSlashCommandsLoading: false,
+    searchFiles: async () => [],
+    agentOptions: [{ value: "spec", label: "Spec" }],
+    modelOptions: [],
+    modelGroups: [],
+    variantOptions: [],
+    onSelectAgent: () => {},
+    onSelectModel: () => {},
+    onSelectVariant: () => {},
+    activeSessionAgentColors: {},
+    ...overrides.modelSelection,
+  };
+  const approvals: AgentStudioSelectedSessionContextInput["approvals"] = {
+    isSubmittingApprovalByRequestId: {},
+    approvalReplyErrorByRequestId: {},
+    onReplyApproval: async () => {},
+    ...overrides.approvals,
+  };
+  const chatSettings = {
+    showThinkingMessages: false,
+    ...overrides.chatSettings,
+  };
+  const composer = {
+    draftStateKey: "draft-1",
+    ...overrides.composer,
+  };
+  const selectedSession = {
+    ...buildAgentStudioSelectedSessionContext({
+      taskId: selectedSessionCore.taskId,
+      role: selectedSessionCore.role,
+      selectedTask: selectedSessionCore.selectedTask,
+      sessionsForTask: selectedSessionCore.sessionsForTask,
+      allSessionSummaries: selectedSessionCore.allSessionSummaries,
+      activeSession: selectedSessionCore.activeSession,
+      runtimeDefinitions: selectedSessionCore.runtimeDefinitions,
+      sessionRuntimeDataError: selectedSessionCore.sessionRuntimeDataError,
+      hasActiveGitConflict: selectedSessionCore.hasActiveGitConflict,
+      isTaskHydrating: selectedSessionCore.isTaskHydrating,
+      isSessionHistoryHydrated: selectedSessionCore.isSessionHistoryHydrated,
+      isSessionHistoryHydrating: selectedSessionCore.isSessionHistoryHydrating,
+      isSessionSelectionResolving: selectedSessionCore.isSessionSelectionResolving,
+      isWaitingForRuntimeReadiness: selectedSessionCore.isWaitingForRuntimeReadiness,
+      isSessionHistoryHydrationFailed: selectedSessionCore.isSessionHistoryHydrationFailed,
+      activeSessionContextUsage: overrides.activeSessionContextUsage ?? {
+        totalTokens: 12,
+        contextWindow: 100,
+      },
+      documents,
+      readiness,
+      sessionActions: selectedSessionActions,
+      approvals,
+      roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
+    }),
   };
 
   return {
-    core,
-    taskTabs: {
-      taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
-      availableTabTasks: [createTask()],
-      isLoadingTasks: false,
-      onSelectTab: () => {},
-      onCreateTab: () => {},
-      onCloseTab: () => {},
-      onReorderTab: () => {},
-      ...overrides.taskTabs,
-    },
-    documents: {
-      specDoc: createDocumentState("spec"),
-      planDoc: createDocumentState(""),
-      qaDoc: createDocumentState(""),
-      ...overrides.documents,
-    },
-    readiness: {
-      agentStudioReadinessState: "ready",
-      agentStudioReady: true,
-      agentStudioBlockedReason: "",
-      isLoadingChecks: false,
-      refreshChecks: async () => {},
-      ...overrides.readiness,
-    },
-    sessionActions: {
-      handleWorkflowStepSelect: () => {},
-      handleSessionSelectionChange: () => {},
-      handleCreateSession: () => {},
-      handlePrepareMessageFirstSession: () => {},
-      handleQuickAction: () => {},
-      openTaskDetails: () => {},
-      isStarting: false,
-      isSending: false,
-      isSessionWorking: true,
-      isWaitingInput: false,
-      busySendBlockedReason: null,
-      canKickoffNewSession: false,
-      kickoffLabel: "Start Spec",
-      canStopSession: true,
-      startLaunchKickoff: async () => {},
-      onSend: async () => true,
-      onSubmitQuestionAnswers: async () => {},
-      isSubmittingQuestionByRequestId: {},
-      stopAgentSession: async () => {},
-      ...overrides.sessionActions,
-    },
-    modelSelection: {
-      selectedModelSelection: null,
-      isSelectionCatalogLoading: false,
-      supportsSlashCommands: true,
-      supportsFileSearch: true,
-      slashCommandCatalog: { commands: [] },
-      slashCommands: [],
-      slashCommandsError: null,
-      isSlashCommandsLoading: false,
-      searchFiles: async () => [],
-      agentOptions: [{ value: "spec", label: "Spec" }],
-      modelOptions: [],
-      modelGroups: [],
-      variantOptions: [],
-      onSelectAgent: () => {},
-      onSelectModel: () => {},
-      onSelectVariant: () => {},
-      activeSessionAgentColors: {},
-      activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
-      ...overrides.modelSelection,
-    },
-    approvals: {
-      isSubmittingApprovalByRequestId: {},
-      approvalReplyErrorByRequestId: {},
-      onReplyApproval: async () => {},
-      ...overrides.approvals,
-    },
-    chatSettings: {
-      showThinkingMessages: false,
-      ...overrides.chatSettings,
-    },
-    composer: {
-      draftStateKey: "draft-1",
-      ...overrides.composer,
-    },
+    activeTabValue: selectedSessionCore.activeTabValue,
+    selectedSession,
+    taskTabs,
+    sessionActions,
+    modelSelection,
+    chatSettings,
+    composer,
   };
 };
 
@@ -227,13 +281,12 @@ describe("useAgentStudioPageModels", () => {
   test("keeps the interactive composer model available before a task is selected", async () => {
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeTabValue: "",
           taskId: "",
           selectedTask: null,
           sessionsForTask: [],
           activeSession: null,
-          contextSessionsLength: 0,
         },
       }),
     );
@@ -255,9 +308,7 @@ describe("useAgentStudioPageModels", () => {
 
     const harness = createHookHarness(
       createHookArgs({
-        modelSelection: {
-          activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
-        },
+        activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
         composer: {
           draftStateKey: "draft-message",
         },
@@ -266,8 +317,10 @@ describe("useAgentStudioPageModels", () => {
         },
         sessionActions: {
           onSend,
-          startLaunchKickoff: onKickoff,
           stopAgentSession: onStopSession,
+        },
+        selectedSessionActions: {
+          startLaunchKickoff: onKickoff,
         },
       }),
     );
@@ -300,7 +353,7 @@ describe("useAgentStudioPageModels", () => {
   test("forwards session runtime data errors into the composer model", async () => {
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           sessionRuntimeDataError: "todos unavailable",
         },
       }),
@@ -367,7 +420,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: cachedSession,
           sessionsForTask: [cachedSession],
           isSessionHistoryHydrating: false,
@@ -397,7 +450,7 @@ describe("useAgentStudioPageModels", () => {
     const specSession = createSession("session-spec", "external-spec", { role: "spec" });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "spec",
           activeSession: specSession,
           sessionsForTask: [specSession],
@@ -420,7 +473,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const plannerHarness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "planner",
           activeSession: plannerSession,
           sessionsForTask: [plannerSession],
@@ -443,7 +496,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const qaHarness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "qa",
           activeSession: qaSession,
           sessionsForTask: [qaSession],
@@ -464,7 +517,7 @@ describe("useAgentStudioPageModels", () => {
     const buildSession = createSession("session-build", "external-build", { role: "build" });
     const buildHarness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "build",
           activeSession: buildSession,
           sessionsForTask: [buildSession],
@@ -487,7 +540,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "spec",
           activeSession: plannerSession,
           sessionsForTask: [plannerSession],
@@ -513,7 +566,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "qa",
           activeSession: buildSession,
           sessionsForTask: [buildSession],
@@ -553,7 +606,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: approvalSession,
           sessionsForTask: [approvalSession],
         },
@@ -570,7 +623,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: approvalSessionWithoutRequests,
           sessionsForTask: [approvalSessionWithoutRequests],
         },
@@ -604,7 +657,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: approvalSession,
           sessionsForTask: [approvalSession],
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
@@ -630,22 +683,18 @@ describe("useAgentStudioPageModels", () => {
     const sessionA = createSession("session-a", "external-a");
     const sessionB = createSession("session-b", "external-b");
     const sharedOverrides: HookArgsOverrides = {
-      core: {
-        contextSessionsLength: 2,
-      },
+      selectedSessionCore: {},
       sessionActions: {
         isSessionWorking: false,
       },
-      modelSelection: {
-        activeSessionContextUsage: null,
-      },
+      activeSessionContextUsage: null,
     };
 
     const harness = createHookHarness(
       createHookArgs({
         ...sharedOverrides,
-        core: {
-          ...sharedOverrides.core,
+        selectedSessionCore: {
+          ...sharedOverrides.selectedSessionCore,
           sessionsForTask: [sessionA, sessionB],
           activeSession: sessionA,
         },
@@ -663,8 +712,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.update(
       createHookArgs({
         ...sharedOverrides,
-        core: {
-          ...sharedOverrides.core,
+        selectedSessionCore: {
+          ...sharedOverrides.selectedSessionCore,
           sessionsForTask: [sessionA, sessionB],
           activeSession: sessionB,
         },
@@ -680,8 +729,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.update(
       createHookArgs({
         ...sharedOverrides,
-        core: {
-          ...sharedOverrides.core,
+        selectedSessionCore: {
+          ...sharedOverrides.selectedSessionCore,
           sessionsForTask: [sessionA, sessionB],
           activeSession: sessionA,
         },
@@ -695,7 +744,7 @@ describe("useAgentStudioPageModels", () => {
   test("keeps thread model stable for input-only composer updates", async () => {
     const session = createSession("session-1", "external-1");
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: session,
         sessionsForTask: [session],
       },
@@ -729,7 +778,7 @@ describe("useAgentStudioPageModels", () => {
   test("keeps composer model stable for thread-only updates", async () => {
     const session = createSession("session-1", "external-1");
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: session,
         sessionsForTask: [session],
       },
@@ -759,7 +808,7 @@ describe("useAgentStudioPageModels", () => {
   test("updates thread model when showThinkingMessages changes without rebuilding composer", async () => {
     const session = createSession("session-1", "external-1");
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: session,
         sessionsForTask: [session],
       },
@@ -795,7 +844,7 @@ describe("useAgentStudioPageModels", () => {
   test("updates thread model for pending request maps without rebuilding composer", async () => {
     const session = createSession("session-1", "external-1");
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: session,
         sessionsForTask: [session],
       },
@@ -812,10 +861,16 @@ describe("useAgentStudioPageModels", () => {
 
     const approvalUpdateProps = {
       ...baseProps,
-      approvals: {
-        ...baseProps.approvals,
-        isSubmittingApprovalByRequestId: {
-          "perm-1": true,
+      selectedSession: {
+        ...baseProps.selectedSession,
+        pendingInput: {
+          ...baseProps.selectedSession.pendingInput,
+          approvals: {
+            ...baseProps.selectedSession.pendingInput.approvals,
+            isSubmittingByRequestId: {
+              "perm-1": true,
+            },
+          },
         },
       },
     };
@@ -829,10 +884,16 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update({
       ...approvalUpdateProps,
-      sessionActions: {
-        ...approvalUpdateProps.sessionActions,
-        isSubmittingQuestionByRequestId: {
-          "q-1": true,
+      selectedSession: {
+        ...approvalUpdateProps.selectedSession,
+        pendingInput: {
+          ...approvalUpdateProps.selectedSession.pendingInput,
+          pendingQuestions: {
+            ...approvalUpdateProps.selectedSession.pendingInput.pendingQuestions,
+            isSubmittingByRequestId: {
+              "q-1": true,
+            },
+          },
         },
       },
     });
@@ -859,7 +920,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
@@ -890,7 +951,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
@@ -926,7 +987,7 @@ describe("useAgentStudioPageModels", () => {
     );
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [toAgentSessionSummary(parentSession), childSummary],
@@ -951,7 +1012,7 @@ describe("useAgentStudioPageModels", () => {
       pendingApprovals: [createPendingApproval("perm-1")],
     });
     const initialProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: parentSession,
         sessionsForTask: [toAgentSessionSummary(parentSession)],
         allSessionSummaries: [
@@ -969,7 +1030,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
@@ -1004,7 +1065,7 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
@@ -1041,7 +1102,7 @@ describe("useAgentStudioPageModels", () => {
     );
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [toAgentSessionSummary(parentSession), childSummary],
@@ -1067,7 +1128,7 @@ describe("useAgentStudioPageModels", () => {
       pendingQuestions: [createPendingQuestion("question-1")],
     });
     const initialProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: parentSession,
         sessionsForTask: [toAgentSessionSummary(parentSession)],
         allSessionSummaries: [
@@ -1085,7 +1146,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           activeSession: parentSession,
           sessionsForTask: [toAgentSessionSummary(parentSession)],
           allSessionSummaries: [
@@ -1116,7 +1177,7 @@ describe("useAgentStudioPageModels", () => {
       isLoadingModelCatalog: false,
     });
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: initialSession,
         sessionsForTask: [initialSession],
       },
@@ -1140,8 +1201,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.update(
       createHookArgs({
         ...baseProps,
-        core: {
-          ...baseProps.core,
+        selectedSessionCore: {
           activeSession: sameSessionIdNewRef,
           sessionsForTask: [sameSessionIdNewRef],
         },
@@ -1162,7 +1222,7 @@ describe("useAgentStudioPageModels", () => {
       isLoadingModelCatalog: false,
     });
     const baseProps = createHookArgs({
-      core: {
+      selectedSessionCore: {
         activeSession: initialSession,
         sessionsForTask: [initialSession],
       },
@@ -1200,8 +1260,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.update(
       createHookArgs({
         ...baseProps,
-        core: {
-          ...baseProps.core,
+        selectedSessionCore: {
           activeSession: waitingSession,
           sessionsForTask: [waitingSession],
         },
@@ -1236,14 +1295,16 @@ describe("useAgentStudioPageModels", () => {
 
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "planner",
           selectedTask: unavailablePlannerTask,
           activeSession: null,
           sessionsForTask: [],
         },
-        sessionActions: {
+        selectedSessionActions: {
           canKickoffNewSession: true,
+        },
+        sessionActions: {
           isSessionWorking: false,
         },
       }),
@@ -1276,7 +1337,7 @@ describe("useAgentStudioPageModels", () => {
 
     const harness = createHookHarness(
       createHookArgs({
-        core: {
+        selectedSessionCore: {
           role: "planner",
           selectedTask: unavailablePlannerTask,
           activeSession: runningPlannerSession,
