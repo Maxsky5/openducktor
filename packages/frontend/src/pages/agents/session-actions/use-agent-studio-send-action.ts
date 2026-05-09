@@ -1,6 +1,6 @@
 import type { ReusablePrompt, TaskCard } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentUserMessagePart } from "@openducktor/core";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
 import {
   type AgentChatComposerDraft,
@@ -62,6 +62,7 @@ export function useAgentStudioSendAction({
   const [sendingActivityCountByContext, setSendingActivityCountByContext] = useState<
     Record<string, number>
   >({});
+  const sendInFlightRef = useRef(false);
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
     activeWorkspace,
     taskId,
@@ -73,7 +74,7 @@ export function useAgentStudioSendAction({
   const onSend = useCallback(
     async (draft: AgentChatComposerDraft): Promise<boolean> => {
       if (
-        (!canQueueBusyFollowups && isSending) ||
+        (!canQueueBusyFollowups && (isSending || sendInFlightRef.current)) ||
         isStarting ||
         !agentStudioReady ||
         isWaitingInput ||
@@ -115,7 +116,11 @@ export function useAgentStudioSendAction({
       if (!draftHasMeaningfulContent(draft) || !taskId) {
         return false;
       }
-      const sendContextKeys = new Set<string>();
+      sendInFlightRef.current = true;
+      const sendContextKeys = new Set<string>([activeComposerContextKey]);
+      setSendingActivityCountByContext((current) =>
+        incrementActivityCountRecord(current, activeComposerContextKey),
+      );
 
       try {
         let targetExternalSessionId: string | null | undefined = activeExternalSessionId;
@@ -133,16 +138,12 @@ export function useAgentStudioSendAction({
           role,
           externalSessionId: targetExternalSessionId,
         });
-        sendContextKeys.add(activeComposerContextKey);
-        sendContextKeys.add(targetComposerContextKey);
-
-        setSendingActivityCountByContext((current) => {
-          let next = current;
-          for (const contextKey of sendContextKeys) {
-            next = incrementActivityCountRecord(next, contextKey);
-          }
-          return next;
-        });
+        if (!sendContextKeys.has(targetComposerContextKey)) {
+          sendContextKeys.add(targetComposerContextKey);
+          setSendingActivityCountByContext((current) =>
+            incrementActivityCountRecord(current, targetComposerContextKey),
+          );
+        }
         await sendAgentMessage(
           targetExternalSessionId,
           reusablePromptMessageParts ??
@@ -158,15 +159,14 @@ export function useAgentStudioSendAction({
         );
         return true;
       } finally {
-        if (sendContextKeys.size > 0) {
-          setSendingActivityCountByContext((current) => {
-            let next = current;
-            for (const contextKey of sendContextKeys) {
-              next = decrementActivityCountRecord(next, contextKey);
-            }
-            return next;
-          });
-        }
+        sendInFlightRef.current = false;
+        setSendingActivityCountByContext((current) => {
+          let next = current;
+          for (const contextKey of sendContextKeys) {
+            next = decrementActivityCountRecord(next, contextKey);
+          }
+          return next;
+        });
       }
     },
     [

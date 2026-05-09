@@ -17,7 +17,7 @@
     },
     "apps/desktop": {
       "name": "@openducktor/desktop",
-      "version": "0.2.5",
+      "version": "0.3.1",
       "dependencies": {
         "@openducktor/adapters-tauri-host": "workspace:*",
         "@openducktor/frontend": "workspace:*",
@@ -34,7 +34,7 @@
     },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
-      "version": "0.2.5",
+      "version": "0.3.1",
       "dependencies": {
         "@opencode-ai/sdk": "^1.14.28",
         "@openducktor/contracts": "workspace:*",
@@ -43,7 +43,7 @@
     },
     "packages/adapters-tauri-host": {
       "name": "@openducktor/adapters-tauri-host",
-      "version": "0.2.5",
+      "version": "0.3.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -51,21 +51,21 @@
     },
     "packages/contracts": {
       "name": "@openducktor/contracts",
-      "version": "0.2.5",
+      "version": "0.3.1",
       "dependencies": {
         "zod": "^4.3.6",
       },
     },
     "packages/core": {
       "name": "@openducktor/core",
-      "version": "0.2.5",
+      "version": "0.3.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
       },
     },
     "packages/frontend": {
       "name": "@openducktor/frontend",
-      "version": "0.2.5",
+      "version": "0.3.1",
       "dependencies": {
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/modifiers": "^9.0.0",
@@ -118,9 +118,9 @@
     },
     "packages/openducktor-mcp": {
       "name": "@openducktor/mcp",
-      "version": "0.2.5",
+      "version": "0.3.1",
       "bin": {
-        "openducktor-mcp": "./dist/index.js",
+        "openducktor-mcp": "dist/index.js",
       },
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
@@ -132,7 +132,7 @@
     },
     "packages/openducktor-web": {
       "name": "@openducktor/web",
-      "version": "0.2.5",
+      "version": "0.3.1",
       "bin": {
         "web": "dist/cli.js",
         "openducktor-web": "dist/cli.js",
@@ -151,6 +151,7 @@
   "overrides": {
     "@hono/node-server": "^1.19.11",
     "express-rate-limit": "^8.2.2",
+    "fast-uri": "^3.1.2",
     "hono": "^4.12.7",
     "path-to-regexp": "^8.4.0",
     "rollup": "^4.59.0",
@@ -738,7 +739,7 @@
 
     "fast-deep-equal": ["fast-deep-equal@3.1.3", "", {}, "sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q=="],
 
-    "fast-uri": ["fast-uri@3.1.0", "", {}, "sha512-iPeeDKJSWf4IEOasVVrknXpaBV0IApz/gp7S2bb7Z4Lljbl2MGJRqInZiUrQwV16cpzw/D3S5j5Julj/gT52AA=="],
+    "fast-uri": ["fast-uri@3.1.2", "", {}, "sha512-rVjf7ArG3LTk+FS6Yw81V1DLuZl1bRbNrev6Tmd/9RaroeeRRJhAt7jg/6YFxbvAQXUCavSoZhPPj6oOx+5KjQ=="],
 
     "fault": ["fault@1.0.4", "", { "dependencies": { "format": "^0.2.0" } }, "sha512-CJ0HCB5tL5fYTEA7ToAq5+kTwd++Borf1/bifxd9iT70QcXr4MRrO3Llf8Ifs70q+SJcGHFtnIE/Nw6giCtECA=="],
 

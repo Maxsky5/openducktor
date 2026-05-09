@@ -153,6 +153,41 @@ describe("useAgentStudioSendAction", () => {
     await harness.unmount();
   });
 
+  test("blocks concurrent sends before a new session finishes starting", async () => {
+    const startDeferred = createDeferred<string>();
+    const startSession = mock(() => startDeferred.promise);
+    const sendAgentMessage = mock(async () => {});
+    const harness = createHookHarness(useAgentStudioSendAction, {
+      ...createBaseArgs(),
+      activeExternalSessionId: null,
+      startSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    let firstSend: Promise<boolean> | undefined;
+    let secondSend: Promise<boolean> | undefined;
+    await harness.run((state) => {
+      firstSend = state.onSend(createDraft("first"));
+      secondSend = state.onSend(createDraft("second"));
+    });
+
+    await harness.waitFor((state) => state.isSending);
+    await expect(secondSend).resolves.toBe(false);
+
+    await harness.run(async () => {
+      startDeferred.resolve("session-new");
+      await expect(firstSend).resolves.toBe(true);
+    });
+    await harness.waitFor((state) => !state.isSending);
+
+    expect(startSession).toHaveBeenCalledTimes(1);
+    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-new", [{ kind: "text", text: "first" }]);
+
+    await harness.unmount();
+  });
+
   test("attachment staging failures clear in-flight send state", async () => {
     const sendAgentMessage = mock(async () => {});
     hostClient.workspaceStageLocalAttachment = async () => {
