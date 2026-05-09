@@ -202,6 +202,15 @@ jobs:
             $invokeBody = @{ forceRefresh = $false } | ConvertTo-Json -Compress
             $invoke = Invoke-WebRequest -Uri "$backendUrl/invoke/system_list_open_in_tools" -Method Post -Headers @{ "x-openducktor-app-token" = $appToken; "content-type" = "application/json" } -Body $invokeBody -TimeoutSec 10
             if ($invoke.StatusCode -ne 200) { throw "/invoke/system_list_open_in_tools returned $($invoke.StatusCode)" }
+            $invokePayload = $invoke.Content | ConvertFrom-Json -NoEnumerate
+            if ($null -eq $invokePayload -or $invokePayload -isnot [System.Array]) {
+              throw "/invoke/system_list_open_in_tools did not return the expected JSON array success payload"
+            }
+            foreach ($tool in $invokePayload) {
+              if (-not $tool.id -or -not $tool.label) {
+                throw "/invoke/system_list_open_in_tools returned an invalid open-in tool envelope"
+              }
+            }
 
             $client = [System.Net.Http.HttpClient]::new()
             $client.Timeout = [TimeSpan]::FromSeconds(5)
