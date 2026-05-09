@@ -4,7 +4,9 @@ use host_domain::{
     RepoStoreHealthStatus, RepoStoreSharedServerHealth, RepoStoreSharedServerOwnershipState,
     RuntimeCheck, SystemCheck,
 };
-use host_infra_system::{command_exists, run_command_allow_failure_with_env, version_command};
+use host_infra_system::{
+    command_exists, resolve_command_path, run_command_allow_failure_with_env, version_command,
+};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -31,14 +33,12 @@ fn build_beads_check(repo_store_health: RepoStoreHealth) -> BeadsCheck {
     }
 }
 
-fn missing_bd_repo_store_health() -> RepoStoreHealth {
+fn missing_bd_repo_store_health(detail: String) -> RepoStoreHealth {
     RepoStoreHealth {
         category: RepoStoreHealthCategory::AttachmentVerificationFailed,
         status: RepoStoreHealthStatus::Blocking,
         is_ready: false,
-        detail: Some(
-            "bd not found in bundled locations, standard install locations, or PATH".to_string(),
-        ),
+        detail: Some(detail),
         attachment: RepoStoreAttachmentHealth {
             path: None,
             database_name: None,
@@ -204,8 +204,19 @@ impl AppService {
     }
 
     pub fn beads_check(&self, repo_path: &str) -> Result<BeadsCheck> {
-        if !command_exists("bd") {
-            return Ok(build_beads_check(missing_bd_repo_store_health()));
+        match resolve_command_path("bd") {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return Ok(build_beads_check(missing_bd_repo_store_health(
+                    "bd not found in bundled locations, standard install locations, or PATH"
+                        .to_string(),
+                )));
+            }
+            Err(error) => {
+                return Ok(build_beads_check(missing_bd_repo_store_health(
+                    error.to_string(),
+                )));
+            }
         }
 
         let repo = Path::new(repo_path);

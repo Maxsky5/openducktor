@@ -237,8 +237,9 @@ fn beads_check_reports_structured_restore_needed_health() -> Result<()> {
 fn beads_and_system_checks_report_missing_bd_binary() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("beads-missing-binary");
-    let _path_guard = set_env_var("PATH", "/usr/bin:/bin");
-    let _override_guard = set_env_var("OPENDUCKTOR_BD_PATH", "/tmp/odt-missing-bd-binary");
+    let empty_bin = root.join("empty-bin");
+    fs::create_dir_all(&empty_bin)?;
+    let _path_guard = set_env_var("PATH", empty_bin.to_string_lossy().as_ref());
 
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
@@ -273,6 +274,45 @@ fn beads_and_system_checks_report_missing_bd_binary() -> Result<()> {
     assert!(system.errors.iter().any(|entry| entry.contains(
         "beads: bd not found in bundled locations, standard install locations, or PATH"
     )));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn beads_and_system_checks_report_invalid_bd_override() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("beads-invalid-bd-override");
+    let path_bin = root.join("path-bin");
+    fs::create_dir_all(&path_bin)?;
+    create_fake_bd(&path_bin.join("bd"))?;
+    let missing_bd = root.join("missing-bd");
+
+    let _path_guard = prepend_path(&path_bin);
+    let _override_guard = set_env_var("OPENDUCKTOR_BD_PATH", missing_bd.to_string_lossy().as_ref());
+
+    let (service, _task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let beads = service.beads_check("/tmp/does-not-matter")?;
+    let beads_error = beads.beads_error.as_deref().unwrap_or_default();
+    assert!(!beads.beads_ok);
+    assert!(beads_error.contains("OPENDUCKTOR_BD_PATH"));
+    assert!(beads_error.contains("missing or non-executable file"));
+    assert!(beads_error.contains(missing_bd.to_string_lossy().as_ref()));
+
+    let system = service.system_check("/tmp/does-not-matter")?;
+    assert!(system.errors.iter().any(|entry| {
+        entry.contains("beads: Configured command override OPENDUCKTOR_BD_PATH")
+            && entry.contains(missing_bd.to_string_lossy().as_ref())
+    }));
 
     let _ = fs::remove_dir_all(root);
     Ok(())
