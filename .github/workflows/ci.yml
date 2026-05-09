@@ -134,3 +134,92 @@ jobs:
 
       - name: Run Tauri app tests
         run: cargo rust-test-tauri
+
+  windows-web-host:
+    name: Windows Web Host Build and Smoke
+    runs-on: windows-2025
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: |
+            apps/desktop/src-tauri
+          shared-key: windows-web-host
+
+      - name: Build web host on Windows
+        working-directory: apps/desktop/src-tauri
+        run: cargo build -p openducktor-web-host --locked
+
+      - name: Smoke test Windows web host routes
+        shell: pwsh
+        working-directory: apps/desktop/src-tauri
+        run: |
+          $ErrorActionPreference = "Stop"
+          $backendPort = 14327
+          $frontendOrigin = "http://127.0.0.1:1420"
+          $controlToken = "ci-control-token"
+          $appToken = "ci-app-token"
+          $backendUrl = "http://127.0.0.1:$backendPort"
+          $hostPath = Join-Path (Get-Location) "target\debug\openducktor-web-host.exe"
+          if (-not (Test-Path $hostPath)) { throw "Web host binary was not built at $hostPath" }
+
+          $process = Start-Process -FilePath $hostPath -ArgumentList @(
+            "--port", "$backendPort",
+            "--frontend-origin", $frontendOrigin,
+            "--control-token", $controlToken,
+            "--app-token", $appToken
+          ) -PassThru -NoNewWindow
+
+          try {
+            $deadline = (Get-Date).AddSeconds(30)
+            do {
+              if ($process.HasExited) { throw "Web host exited before readiness with code $($process.ExitCode)" }
+              try {
+                $health = Invoke-RestMethod -Uri "$backendUrl/health" -Method Get -TimeoutSec 2
+                if ($health.ok -eq $true) { break }
+              } catch {
+                Start-Sleep -Milliseconds 250
+              }
+            } while ((Get-Date) -lt $deadline)
+            if ((Get-Date) -ge $deadline) { throw "Timed out waiting for /health" }
+
+            $session = Invoke-WebRequest -Uri "$backendUrl/session" -Method Post -Headers @{ "x-openducktor-app-token" = $appToken } -TimeoutSec 5
+            if ($session.StatusCode -ne 200) { throw "/session returned $($session.StatusCode)" }
+            if (-not ($session.Headers["Set-Cookie"] -match "openducktor_web_session=.*HttpOnly")) {
+              throw "/session did not set the expected HttpOnly session cookie"
+            }
+
+            $invokeBody = @{ forceRefresh = $false } | ConvertTo-Json -Compress
+            $invoke = Invoke-WebRequest -Uri "$backendUrl/invoke/system_list_open_in_tools" -Method Post -Headers @{ "x-openducktor-app-token" = $appToken; "content-type" = "application/json" } -Body $invokeBody -TimeoutSec 10
+            if ($invoke.StatusCode -ne 200) { throw "/invoke/system_list_open_in_tools returned $($invoke.StatusCode)" }
+
+            $client = [System.Net.Http.HttpClient]::new()
+            $client.Timeout = [TimeSpan]::FromSeconds(5)
+            $client.DefaultRequestHeaders.Add("x-openducktor-app-token", $appToken)
+            try {
+              foreach ($path in @("events", "task-events")) {
+                $response = $client.GetAsync("$backendUrl/$path", [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+                if (-not $response.IsSuccessStatusCode) { throw "/$path returned $([int]$response.StatusCode)" }
+                if ($response.Content.Headers.ContentType.MediaType -ne "text/event-stream") { throw "/$path did not return text/event-stream" }
+                $response.Dispose()
+              }
+            } finally {
+              $client.Dispose()
+            }
+
+            $shutdown = Invoke-WebRequest -Uri "$backendUrl/shutdown" -Method Post -Headers @{ "x-openducktor-control-token" = $controlToken } -TimeoutSec 5
+            if ($shutdown.StatusCode -ne 202) { throw "/shutdown returned $($shutdown.StatusCode)" }
+            if (-not $process.WaitForExit(10000)) { throw "Web host did not exit after /shutdown" }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }

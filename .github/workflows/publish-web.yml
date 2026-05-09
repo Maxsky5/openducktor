@@ -31,12 +31,24 @@ jobs:
             artifact: openducktor-web-host-darwin-arm64
             mcp_artifact: openducktor-mcp-darwin-arm64
             mcp_arch_marker: arm64
+            binary_name: openducktor-web-host
+            mcp_outfile: openducktor-mcp-darwin-arm64
           - label: macOS Intel
             runner: macos-15-intel
             target: x86_64-apple-darwin
             artifact: openducktor-web-host-darwin-x64
             mcp_artifact: openducktor-mcp-darwin-x64
             mcp_arch_marker: x86_64
+            binary_name: openducktor-web-host
+            mcp_outfile: openducktor-mcp-darwin-x64
+          - label: Windows x64
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            artifact: openducktor-web-host-win32-x64.exe
+            mcp_artifact: openducktor-mcp-win32-x64.exe
+            mcp_arch_marker: PE32+
+            binary_name: openducktor-web-host.exe
+            mcp_outfile: openducktor-mcp-win32-x64.exe
 
     steps:
       - name: Checkout release tag
@@ -66,28 +78,37 @@ jobs:
           shared-key: web-host-release-${{ matrix.target }}
 
       - name: Build web host binary
+        shell: bash
         working-directory: apps/desktop/src-tauri
         env:
           TARGET: ${{ matrix.target }}
-        run: cargo build --release --bin openducktor-web-host --target "$TARGET"
+        run: cargo build --release -p openducktor-web-host --target "$TARGET"
 
       - name: Stage web host artifact and checksum
+        shell: bash
         env:
           TARGET: ${{ matrix.target }}
           ARTIFACT: ${{ matrix.artifact }}
           MCP_ARTIFACT: ${{ matrix.mcp_artifact }}
           MCP_ARCH_MARKER: ${{ matrix.mcp_arch_marker }}
+          BINARY_NAME: ${{ matrix.binary_name }}
+          MCP_OUTFILE: ${{ matrix.mcp_outfile }}
         run: |
           set -euo pipefail
           mkdir -p release-web-host
-          cp "apps/desktop/src-tauri/target/$TARGET/release/openducktor-web-host" "release-web-host/$ARTIFACT"
+          cp "apps/desktop/src-tauri/target/$TARGET/release/$BINARY_NAME" "release-web-host/$ARTIFACT"
           chmod +x "release-web-host/$ARTIFACT"
-          bun build packages/openducktor-mcp/src/index.ts --compile --outfile "release-web-host/$MCP_ARTIFACT"
+          bun build packages/openducktor-mcp/src/index.ts --compile --outfile "release-web-host/$MCP_OUTFILE"
+          if [[ "$MCP_OUTFILE" != "$MCP_ARTIFACT" ]]; then
+            mv "release-web-host/$MCP_OUTFILE" "release-web-host/$MCP_ARTIFACT"
+          fi
           chmod +x "release-web-host/$MCP_ARTIFACT"
-          mcp_file_info="$(file "release-web-host/$MCP_ARTIFACT")"
-          if [[ "$mcp_file_info" != *"$MCP_ARCH_MARKER"* ]]; then
-            echo "Expected $MCP_ARTIFACT to contain architecture marker $MCP_ARCH_MARKER, got: $mcp_file_info" >&2
-            exit 1
+          if command -v file >/dev/null 2>&1; then
+            mcp_file_info="$(file "release-web-host/$MCP_ARTIFACT")"
+            if [[ "$mcp_file_info" != *"$MCP_ARCH_MARKER"* ]]; then
+              echo "Expected $MCP_ARTIFACT to contain architecture marker $MCP_ARCH_MARKER, got: $mcp_file_info" >&2
+              exit 1
+            fi
           fi
           shasum -a 256 "release-web-host/$ARTIFACT" | awk '{print $1}' > "release-web-host/$ARTIFACT.sha256"
           shasum -a 256 "release-web-host/$MCP_ARTIFACT" | awk '{print $1}' > "release-web-host/$MCP_ARTIFACT.sha256"
@@ -154,7 +175,7 @@ jobs:
       - name: Download web host artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: openducktor-web-host-darwin-*
+          pattern: openducktor-web-host-*
           path: packages/openducktor-web/bin
           merge-multiple: true
 
@@ -165,6 +186,8 @@ jobs:
           chmod 755 packages/openducktor-web/bin/openducktor-web-host-darwin-x64
           chmod 755 packages/openducktor-web/bin/openducktor-mcp-darwin-arm64
           chmod 755 packages/openducktor-web/bin/openducktor-mcp-darwin-x64
+          chmod 755 packages/openducktor-web/bin/openducktor-web-host-win32-x64.exe
+          chmod 755 packages/openducktor-web/bin/openducktor-mcp-win32-x64.exe
 
       - name: Verify web package contents
         run: bun run scripts/prepare-web-publish-packages.ts "${{ steps.release_meta.outputs.version }}"
@@ -186,6 +209,6 @@ jobs:
             echo
             echo "- Tag: $TAG"
             echo "- Package: @openducktor/web"
-            echo "- Web host artifacts: openducktor-web-host-darwin-arm64, openducktor-web-host-darwin-x64"
-            echo "- MCP sidecars: openducktor-mcp-darwin-arm64, openducktor-mcp-darwin-x64"
+            echo "- Web host artifacts: openducktor-web-host-darwin-arm64, openducktor-web-host-darwin-x64, openducktor-web-host-win32-x64.exe"
+            echo "- MCP sidecars: openducktor-mcp-darwin-arm64, openducktor-mcp-darwin-x64, openducktor-mcp-win32-x64.exe"
           } >> "$GITHUB_STEP_SUMMARY"
