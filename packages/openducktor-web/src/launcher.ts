@@ -160,6 +160,16 @@ const waitForHostExit = async (
   await Promise.race([child.exited, sleep(durationMs)]);
 };
 
+const waitForGracefulHostExit = async (
+  child: ManagedProcess,
+  sleep: HostTerminationDependencies["sleep"] = Bun.sleep,
+): Promise<boolean> => {
+  return Promise.race([
+    child.exited.then(() => true),
+    sleep(HOST_GRACEFUL_EXIT_TIMEOUT_MS).then(() => false),
+  ]);
+};
+
 const terminateHostProcess = async (
   child: ManagedProcess | null,
   dependencies: HostTerminationDependencies = defaultHostTerminationDependencies,
@@ -310,6 +320,7 @@ export const __launcherTestInternals = {
   terminateHostProcess,
   verifyBackendReadiness,
   waitForBackend,
+  waitForGracefulHostExit,
 };
 
 const startViteServer = async (
@@ -467,9 +478,11 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
         );
       }
 
-      await Promise.race([hostProcess.exited, Bun.sleep(HOST_GRACEFUL_EXIT_TIMEOUT_MS)]);
-      logInfo("Ensuring OpenDucktor host process has exited...");
-      await terminateHostProcess(hostProcess);
+      const hostExited = await waitForGracefulHostExit(hostProcess);
+      if (!hostExited) {
+        logInfo("Ensuring OpenDucktor host process has exited...");
+        await terminateHostProcess(hostProcess);
+      }
       logSuccess("OpenDucktor web stopped.");
     })();
 

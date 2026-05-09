@@ -111,6 +111,24 @@ describe("launcher internals", () => {
     ]);
   });
 
+  test("detects when the host exits during the graceful shutdown wait", async () => {
+    const hostExited = await __launcherTestInternals.waitForGracefulHostExit(
+      createHostProcess(Promise.resolve(0)),
+      async () => new Promise(() => {}),
+    );
+
+    expect(hostExited).toBe(true);
+  });
+
+  test("detects when the host needs force termination after graceful shutdown wait", async () => {
+    const hostExited = await __launcherTestInternals.waitForGracefulHostExit(
+      createHostProcess(new Promise<number>(() => {})),
+      async () => {},
+    );
+
+    expect(hostExited).toBe(false);
+  });
+
   test("uses process-group signals on non-Windows platforms", async () => {
     const { child, killCalls } = createTerminableHostProcess(1234);
     const processKillCalls: Array<{ pid: number; signal: string | number | undefined }> = [];
