@@ -42,7 +42,7 @@ describe("artifact resolver", () => {
     expect(resolved).toEqual({
       kind: "workspace",
       command: "cargo",
-      args: ["run", "--bin", "openducktor-web-host", "--"],
+      args: ["run", "-p", "openducktor-web-host", "--"],
       cwd: path.join("/repo", "apps/desktop/src-tauri"),
     });
   });

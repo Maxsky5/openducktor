@@ -1,0 +1,31 @@
+[package]
+name = "openducktor-web-host"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+mime_guess = "2"
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+ctrlc = "3"
+url = "2"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+axum = { version = "0.8", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "process", "sync", "macros", "time", "fs"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-util = { version = "0.7", features = ["io"] }
+tower-http = { version = "0.6", features = ["cors"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+uuid = { version = "1", features = ["serde", "v4"] }
+host-domain = { path = "../host-domain" }
+host-application = { path = "../host-application" }
+host-infra-beads = { path = "../host-infra-beads" }
+host-infra-system = { path = "../host-infra-system" }
+
+[dev-dependencies]
+host-test-support = { path = "../host-test-support" }

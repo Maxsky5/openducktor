@@ -15,7 +15,8 @@ members = [
   "crates/host-domain",
   "crates/host-infra-beads",
   "crates/host-infra-system",
-  "crates/host-test-support"
+  "crates/host-test-support",
+  "crates/web-host"
 ]
 resolver = "2"
 
@@ -34,10 +35,6 @@ path = "src/main.rs"
 [[bin]]
 name = "openducktor-desktop-helper"
 path = "src/bin/openducktor_desktop_helper.rs"
-
-[[bin]]
-name = "openducktor-web-host"
-path = "src/bin/openducktor_web_host.rs"
 
 [features]
 default = [ "wry" ]
@@ -118,6 +115,9 @@ url = "2"
 
   [dependencies.host-infra-system]
   path = "crates/host-infra-system"
+
+  [dependencies.openducktor-web-host]
+  path = "crates/web-host"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 objc2 = "0.6"

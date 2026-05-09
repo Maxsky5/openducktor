@@ -117,7 +117,7 @@ export const resolveHostBinary = (options: ResolveHostBinaryOptions): ResolvedHo
     return {
       kind: "workspace",
       command: "cargo",
-      args: ["run", "--bin", "openducktor-web-host", "--"],
+      args: ["run", "-p", "openducktor-web-host", "--"],
       cwd: path.join(options.workspaceRoot, "apps/desktop/src-tauri"),
     };
   }

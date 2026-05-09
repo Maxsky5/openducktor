@@ -35,6 +35,7 @@ where
         .map_err(|error| anyhow!("{operation_name} worker join failure: {error}"))?
 }
 
+#[allow(dead_code)]
 pub(crate) async fn run_service_blocking_tokio<T, F>(
     operation_name: &'static str,
     operation: F,

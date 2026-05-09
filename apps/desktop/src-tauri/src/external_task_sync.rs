@@ -51,6 +51,7 @@ pub(crate) struct TaskEventRelayState {
     pub(crate) stop_requested: Arc<AtomicBool>,
 }
 
+#[allow(dead_code)]
 pub(crate) fn build_external_task_created_event(
     repo_path: String,
     task_id: String,
