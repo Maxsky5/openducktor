@@ -1367,10 +1367,11 @@ mod tests {
 
     #[test]
     fn required_command_error_reports_plain_missing_command() {
-        let program = format!(
-            "odt-missing-command-{}",
-            unique_temp_path("nonce").display()
-        );
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let program = format!("odt-missing-command-{nonce}");
 
         let error = required_command_error(program.as_str())
             .expect("missing command should produce an error message");
