@@ -274,6 +274,11 @@ describe("launcher internals", () => {
     expect(__launcherTestInternals.shouldForceExitForRepeatedSignal(1_000, 2_500)).toBe(true);
   });
 
+  test("does not rely on Unix process-group signals on Windows", () => {
+    expect(__launcherTestInternals.shouldSignalProcessGroup("win32")).toBe(false);
+    expect(__launcherTestInternals.shouldSignalProcessGroup("darwin")).toBe(true);
+  });
+
   test("rejects static asset paths that escape the web shell root", () => {
     expect(__launcherTestInternals.resolveStaticAssetPath("/web-shell", "/assets/app.js")).toBe(
       "/web-shell/assets/app.js",

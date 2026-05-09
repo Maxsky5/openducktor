@@ -11,11 +11,13 @@ type PackageManifest = {
 const webHostArtifacts = [
   "openducktor-web-host-darwin-arm64",
   "openducktor-web-host-darwin-x64",
+  "openducktor-web-host-win32-x64.exe",
 ] as const;
 
 const mcpSidecarArtifacts = [
   "openducktor-mcp-darwin-arm64",
   "openducktor-mcp-darwin-x64",
+  "openducktor-mcp-win32-x64.exe",
 ] as const;
 
 const expectedPackageFiles = ["dist/cli.js", "dist/web-shell/index.html"] as const;

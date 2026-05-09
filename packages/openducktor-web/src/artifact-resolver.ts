@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-export type HostArtifactPlatform = "darwin";
+export type HostArtifactPlatform = "darwin" | "win32";
 export type HostArtifactArch = "arm64" | "x64";
 
 export type HostArtifactTarget = {
@@ -37,14 +37,18 @@ export type ResolveHostBinaryOptions = {
   arch?: NodeJS.Architecture;
 };
 
-const SUPPORTED_TARGETS = new Set(["darwin-arm64", "darwin-x64"]);
+const SUPPORTED_TARGETS = new Set(["darwin-arm64", "darwin-x64", "win32-x64"]);
+
+const WINDOWS_EXECUTABLE_EXTENSION = ".exe";
 
 export const getHostArtifactName = (target: HostArtifactTarget): string => {
-  return `openducktor-web-host-${target.platform}-${target.arch}`;
+  const extension = target.platform === "win32" ? WINDOWS_EXECUTABLE_EXTENSION : "";
+  return `openducktor-web-host-${target.platform}-${target.arch}${extension}`;
 };
 
 export const getMcpSidecarArtifactName = (target: HostArtifactTarget): string => {
-  return `openducktor-mcp-${target.platform}-${target.arch}`;
+  const extension = target.platform === "win32" ? WINDOWS_EXECUTABLE_EXTENSION : "";
+  return `openducktor-mcp-${target.platform}-${target.arch}${extension}`;
 };
 
 const normalizeTarget = (
@@ -54,11 +58,11 @@ const normalizeTarget = (
   const key = `${platform}-${arch}`;
   if (!SUPPORTED_TARGETS.has(key)) {
     throw new Error(
-      `@openducktor/web supports macOS arm64 and x64 for this release. Unsupported platform: ${platform}-${arch}.`,
+      `@openducktor/web supports darwin-arm64, darwin-x64, and win32-x64 for this release. Unsupported platform: ${platform}-${arch}.`,
     );
   }
 
-  return { platform: "darwin", arch: arch as HostArtifactArch };
+  return { platform: platform as HostArtifactPlatform, arch: arch as HostArtifactArch };
 };
 
 const assertExecutableFile = ({ label, path: binaryPath }: VerifiedArtifactOptions): void => {

@@ -77,6 +77,29 @@ describe("artifact resolver", () => {
     }
   });
 
+  test("resolves packaged Windows x64 host artifacts with executable suffixes", () => {
+    const packageRoot = createTempPackageRoot();
+    try {
+      const artifactName = getHostArtifactName({ platform: "win32", arch: "x64" });
+      const binaryPath = writeArtifact(packageRoot, artifactName, "host-binary");
+      const mcpArtifactName = getMcpSidecarArtifactName({ platform: "win32", arch: "x64" });
+      const mcpSidecarPath = writeArtifact(packageRoot, mcpArtifactName, "mcp-sidecar");
+
+      expect(artifactName).toBe("openducktor-web-host-win32-x64.exe");
+      expect(mcpArtifactName).toBe("openducktor-mcp-win32-x64.exe");
+      expect(
+        resolveHostBinary({
+          packageRoot,
+          workspaceMode: false,
+          platform: "win32",
+          arch: "x64",
+        }),
+      ).toEqual({ kind: "artifact", path: binaryPath, mcpSidecarPath });
+    } finally {
+      cleanup(packageRoot);
+    }
+  });
+
   test("normalizes explicit host binary paths before spawning with a custom cwd", () => {
     const packageRoot = createTempPackageRoot();
     const previousCwd = process.cwd();
@@ -171,7 +194,16 @@ describe("artifact resolver", () => {
         platform: "linux",
         arch: "x64",
       }),
-    ).toThrow("@openducktor/web supports macOS arm64 and x64");
+    ).toThrow("@openducktor/web supports darwin-arm64, darwin-x64, and win32-x64");
+
+    expect(() =>
+      resolveHostBinary({
+        packageRoot: "/tmp/openducktor-web",
+        workspaceMode: false,
+        platform: "win32",
+        arch: "arm64",
+      }),
+    ).toThrow("Unsupported platform: win32-arm64");
   });
 
   test("rejects packaged host artifacts that are not executable", () => {
