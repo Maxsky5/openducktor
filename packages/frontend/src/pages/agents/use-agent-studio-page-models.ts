@@ -62,6 +62,7 @@ type AgentStudioModelSelectionContext = {
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor?: AgentChatModel["composer"]["selectedModelDescriptor"];
   isSelectionCatalogLoading: boolean;
+  supportsProfiles?: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
@@ -317,6 +318,7 @@ export function useAgentStudioPageModels({
       selectedModelSelection: modelSelection.selectedModelSelection,
       selectedModelDescriptor: modelSelection.selectedModelDescriptor,
       isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
+      supportsProfiles: modelSelection.supportsProfiles ?? true,
       supportsSlashCommands: modelSelection.supportsSlashCommands,
       supportsFileSearch: modelSelection.supportsFileSearch,
       slashCommandCatalog: modelSelection.slashCommandCatalog,
@@ -349,6 +351,7 @@ export function useAgentStudioPageModels({
       modelSelection.slashCommands,
       modelSelection.slashCommandsError,
       modelSelection.supportsFileSearch,
+      modelSelection.supportsProfiles,
       modelSelection.supportsSlashCommands,
       modelSelection.variantOptions,
       activeComposerSession,

@@ -18,6 +18,7 @@ use std::time::Instant;
 
 pub mod build_orchestrator;
 
+mod codex_runtime;
 mod dev_server_manager;
 mod filesystem;
 mod git_operations;
@@ -62,6 +63,8 @@ pub use runtime_startup::{RuntimeStartupFailureReason, RuntimeStartupWaitFailure
 pub(crate) type OpencodeStartupReadinessPolicy = RuntimeStartupReadinessPolicy;
 #[cfg(test)]
 pub(crate) type OpencodeStartupWaitReport = RuntimeStartupWaitReport;
+#[allow(unused_imports)]
+pub(crate) use codex_runtime::{read_codex_version, resolve_codex_binary_path};
 #[cfg(test)]
 pub(crate) use opencode_runtime::resolve_opencode_binary_path;
 #[cfg(test)]
@@ -77,7 +80,7 @@ pub(crate) type RuntimeSessionStatusProbeTarget =
     runtime_session_status::RuntimeSessionStatusProbeTarget;
 pub(crate) use process_registry::RuntimeProcessGuard;
 pub(crate) use runtime_session_status::{
-    RuntimeSessionStatusProbeError, RuntimeSessionStatusProbeOutcome,
+    RuntimeExternalSessionStatus, RuntimeSessionStatusProbeError, RuntimeSessionStatusProbeOutcome,
     RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshot,
 };
 pub(crate) use service_core::{

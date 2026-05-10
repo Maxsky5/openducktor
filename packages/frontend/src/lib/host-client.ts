@@ -61,9 +61,13 @@ export const hostBridge: HostBridge = {
   subscribeRunEvents: (listener) => getShellBridge().subscribeRunEvents(listener),
   subscribeDevServerEvents: (listener) => getShellBridge().subscribeDevServerEvents(listener),
   subscribeTaskEvents: (listener) => getShellBridge().subscribeTaskEvents(listener),
+  subscribeCodexAppServerEvents: (listener) =>
+    getShellBridge().subscribeCodexAppServerEvents?.(listener) ??
+    Promise.reject(new Error("Codex app-server event subscriptions are unavailable.")),
 };
 
 export const hostClient = hostClientProxy;
 
 export const subscribeDevServerEvents = hostBridge.subscribeDevServerEvents;
 export const subscribeTaskEvents = hostBridge.subscribeTaskEvents;
+export const subscribeCodexAppServerEvents = hostBridge.subscribeCodexAppServerEvents;

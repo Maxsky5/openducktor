@@ -19,6 +19,13 @@ const BUILD_SELECTION = {
 
 const settleStartedAgentSession = () => undefined;
 
+const CODEX_BUILD_SELECTION = {
+  ...BUILD_SELECTION,
+  runtimeKind: "codex" as const,
+  providerId: "codex",
+  variant: "medium",
+};
+
 describe("session-start-orchestration", () => {
   test("prefers the active reusable session and task defaults when building a modal request", () => {
     const latestSession = createAgentSessionFixture({
@@ -221,6 +228,57 @@ describe("session-start-orchestration", () => {
     );
     expect(startAgentSession).not.toHaveBeenCalledWith(
       expect.objectContaining({ selectedModel: expect.anything() }),
+    );
+  });
+
+  test("maps Codex reuse decisions to workflow execution with standard kickoff messaging", async () => {
+    const startAgentSession = mock(async () => "codex-session-1");
+    const sendAgentMessage = mock(async () => undefined);
+
+    const result = await executeSessionStartFromDecision({
+      activeWorkspace: null,
+      queryClient: new QueryClient(),
+      request: {
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        postStartAction: "kickoff",
+        existingSessionOptions: [
+          {
+            value: "codex-session-1",
+            label: "Codex session",
+            description: "Existing Codex builder session",
+            runtimeKind: "codex",
+            selectedModel: CODEX_BUILD_SELECTION,
+          },
+        ],
+      },
+      decision: {
+        startMode: "reuse",
+        sourceExternalSessionId: "codex-session-1",
+      },
+      task: createTaskCardFixture({ id: "TASK-1" }),
+      startAgentSession,
+      settleStartedAgentSession,
+      sendAgentMessage,
+      postStartExecution: "await",
+    });
+
+    expect(result).toEqual({
+      externalSessionId: "codex-session-1",
+      postStartActionError: null,
+    });
+    expect(sendAgentMessage).toHaveBeenCalledWith("codex-session-1", [
+      expect.objectContaining({
+        kind: "text",
+        text: expect.stringContaining("taskId TASK-1"),
+      }),
+    ]);
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startMode: "reuse",
+        sourceExternalSessionId: "codex-session-1",
+      }),
     );
   });
 

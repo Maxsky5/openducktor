@@ -133,6 +133,7 @@ impl AppService {
             reusable_prompts: config.reusable_prompts,
             kanban: config.kanban,
             autopilot: config.autopilot,
+            agent_runtimes: config.agent_runtimes,
             workspaces: config.workspaces,
             global_prompt_overrides: config.global_prompt_overrides,
         })
@@ -161,6 +162,7 @@ impl AppService {
             empty_column_display: snapshot.kanban.empty_column_display,
         };
         config.autopilot = snapshot.autopilot;
+        config.agent_runtimes = snapshot.agent_runtimes;
         config.global_prompt_overrides = snapshot.global_prompt_overrides;
         config.workspaces = next_workspaces;
         self.config_store.save(&config)
@@ -189,7 +191,7 @@ mod tests {
     use super::super::test_support::{
         build_service_with_state, init_git_repo, unique_temp_path, workspace_select_by_repo_path,
     };
-    use host_infra_system::{ChatSettings, GeneralSettings};
+    use host_infra_system::{AgentRuntimeConfig, ChatSettings, GeneralSettings};
     use std::fs;
 
     #[test]
@@ -210,8 +212,30 @@ mod tests {
         assert!(snapshot.reusable_prompts.is_empty());
         assert!(!snapshot.chat.show_thinking_messages);
         assert_eq!(snapshot.kanban.done_visible_days, 1);
+        assert!(snapshot.agent_runtimes["opencode"].enabled);
+        assert!(!snapshot.agent_runtimes["codex"].enabled);
         assert!(snapshot.workspaces.is_empty());
         assert!(snapshot.global_prompt_overrides.is_empty());
+    }
+
+    #[test]
+    fn workspace_save_settings_snapshot_preserves_agent_runtime_enablement() {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let mut snapshot = service
+            .workspace_get_settings_snapshot()
+            .expect("settings snapshot should load");
+        snapshot
+            .agent_runtimes
+            .insert("codex".to_string(), AgentRuntimeConfig { enabled: true });
+
+        service
+            .workspace_save_settings_snapshot(snapshot)
+            .expect("settings snapshot should save");
+
+        let snapshot = service
+            .workspace_get_settings_snapshot()
+            .expect("settings snapshot should reload");
+        assert!(snapshot.agent_runtimes["codex"].enabled);
     }
 
     #[test]

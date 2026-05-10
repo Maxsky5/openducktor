@@ -5,7 +5,7 @@ import type {
   RuntimeInstanceSummary,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
   type BeadsCheckFixtureOverrides,
   createBeadsCheckFixture,
@@ -177,6 +177,55 @@ describe("buildDiagnosticsPanelModel", () => {
 
     expect(model.isSummaryChecking).toBe(true);
     expect(model.summaryState.label).toBe("Checking...");
+  });
+
+  test("reports disabled runtimes without leaving diagnostics stuck checking", () => {
+    const disabledRuntimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
+    const model = buildDiagnosticsPanelModel({
+      workspaceRepoPath: "/repo",
+      activeWorkspace: makeWorkspace("/repo"),
+      runtimeDefinitions: disabledRuntimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [
+          { kind: "opencode", ok: true, version: "1.2.9" },
+          { kind: "codex", enabled: false, ok: false, version: null },
+        ],
+        errors: [],
+      },
+      beadsCheck: makeBeadsCheck(),
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({ runtime: { instance: runtimeSummary } }),
+      },
+      isLoadingChecks: false,
+    });
+
+    const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
+    const codexRuntimeSection = model.sections.find((section) => section.key === "runtime:codex");
+
+    expect(model.isSummaryChecking).toBe(false);
+    expect(cliToolsSection?.badge.label).toBe("Available");
+    expect(cliToolsSection?.rows).toContainEqual({
+      label: "Codex",
+      value: "missing (runtime disabled)",
+    });
+    expect(codexRuntimeSection?.badge.label).toBe("Disabled");
+    expect(codexRuntimeSection?.rows).toContainEqual(
+      expect.objectContaining({
+        label: "Detail",
+        value: "Codex runtime is disabled in Agent Runtime settings.",
+      }),
+    );
   });
 
   test("returns setup-needed summary when no effective worktree directory is available", () => {

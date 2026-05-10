@@ -384,6 +384,121 @@ fn task_reset_implementation_ignores_stale_qa_sessions_with_persisted_external_i
 }
 
 #[test]
+fn task_reset_implementation_rejects_active_codex_build_thread() -> Result<()> {
+    assert_task_reset_implementation_with_codex_thread_status(
+        "active",
+        CodexResetImplementationExpectation::Blocked,
+    )
+}
+
+#[test]
+fn task_reset_implementation_allows_stale_codex_build_thread() -> Result<()> {
+    assert_task_reset_implementation_with_codex_thread_status(
+        "stale",
+        CodexResetImplementationExpectation::Allowed,
+    )
+}
+
+enum CodexResetImplementationExpectation {
+    Blocked,
+    Allowed,
+}
+
+fn assert_task_reset_implementation_with_codex_thread_status(
+    codex_status: &str,
+    expectation: CodexResetImplementationExpectation,
+) -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path(format!("reset-implementation-codex-{codex_status}").as_str());
+    fs::create_dir_all(&root)?;
+    let repo_path = root.join("repo");
+    init_git_repo(&repo_path)?;
+    let repo_path_string = repo_path.to_string_lossy().to_string();
+
+    let fake_codex = root.join("codex");
+    create_fake_codex_app_server(fake_codex.as_path())?;
+    let _codex_guard = set_fake_codex_binary(fake_codex.as_path());
+    let fake_bridge = root.join("opencode-bridge");
+    create_fake_opencode(fake_bridge.as_path())?;
+    let _bridge_guards = set_fake_opencode_and_bridge_binaries(fake_bridge.as_path());
+    let _loaded_guard = set_env_var(
+        "OPENDUCKTOR_TEST_CODEX_THREAD_LOADED_LIST_RESULT",
+        json!({ "data": ["codex-build-thread"] })
+            .to_string()
+            .as_str(),
+    );
+    let _list_guard = set_env_var(
+        "OPENDUCKTOR_TEST_CODEX_THREAD_LIST_RESULT",
+        json!({
+            "data": [{
+                "id": "codex-build-thread",
+                "cwd": repo_path_string.clone(),
+                "status": { "type": codex_status }
+            }]
+        })
+        .to_string()
+        .as_str(),
+    );
+
+    let task = make_task("task-1", "task", TaskStatus::InProgress);
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![task],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let _ = service.workspace_add(repo_path_string.as_str())?;
+    workspace_update_repo_config_by_repo_path(
+        &service,
+        repo_path_string.as_str(),
+        host_infra_system::RepoConfig {
+            branch_prefix: "odt".to_string(),
+            ..Default::default()
+        },
+    )?;
+    let mut settings = service.workspace_get_settings_snapshot()?;
+    settings
+        .agent_runtimes
+        .insert("codex".to_string(), AgentRuntimeConfig { enabled: true });
+    service.workspace_save_settings_snapshot(settings)?;
+    let runtime = service.runtime_ensure("codex", repo_path_string.as_str())?;
+    task_state
+        .lock()
+        .expect("task store lock poisoned")
+        .agent_sessions = vec![AgentSessionDocument {
+        external_session_id: "codex-build-thread".to_string(),
+        role: "build".to_string(),
+        started_at: "2026-03-17T11:00:00Z".to_string(),
+        runtime_kind: "codex".to_string(),
+        working_directory: repo_path_string.clone(),
+        selected_model: None,
+    }];
+
+    let reset_result = service.task_reset_implementation(repo_path_string.as_str(), "task-1");
+    assert!(service.runtime_stop(runtime.runtime_id.as_str())?);
+
+    match expectation {
+        CodexResetImplementationExpectation::Blocked => {
+            let error =
+                reset_result.expect_err("active Codex thread should block reset implementation");
+            assert!(error.to_string().contains(
+                "Cannot reset implementation while active build session(s) exist for task task-1"
+            ));
+        }
+        CodexResetImplementationExpectation::Allowed => {
+            let reset = reset_result?;
+            assert_eq!(reset.status, TaskStatus::Open);
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn task_reset_clears_workflow_artifacts_and_sets_status_to_open() -> Result<()> {
     let repo_path = unique_temp_path("reset-task-clears-workflow-artifacts-repo");
     fs::create_dir_all(&repo_path)?;

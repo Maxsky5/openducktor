@@ -1,0 +1,346 @@
+import { describe, expect, test } from "bun:test";
+import {
+  createHarness,
+  makeRuntimeSummary,
+  RecordingTransport,
+} from "./codex-app-server-adapter.test-harness";
+import { CodexAppServerAdapter } from "./index";
+
+describe("CodexAppServerAdapter lifecycle", () => {
+  test("returns the Codex runtime definition", () => {
+    const { adapter } = createHarness();
+
+    expect(adapter.getRuntimeDefinition().kind).toBe("codex");
+    expect(adapter.listRuntimeDefinitions()).toEqual([adapter.getRuntimeDefinition()]);
+  });
+
+  test("starts a session through the ensured runtime id", async () => {
+    const { adapter, transports, ensureRepoRuntime, requireRepoRuntime } = createHarness();
+
+    const summary = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    expect(summary.externalSessionId).toBe("thread/start-runtime-ensure");
+    expect(ensureRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(requireRepoRuntime).not.toHaveBeenCalled();
+    expect(transports.has("runtime-ensure")).toBe(true);
+    expect(transports.get("runtime-ensure")?.calls.map((call) => call.method)).toEqual([
+      "model/list",
+      "thread/start",
+    ]);
+    expect(transports.get("runtime-ensure")?.calls[1]).toEqual({
+      method: "thread/start",
+      params: {
+        cwd: "/repo",
+        developerInstructions: "Use the repo rules.",
+        model: "gpt-5",
+        effort: "medium",
+      },
+    });
+  });
+
+  test("caches Codex model lists per runtime", async () => {
+    const { adapter, transports } = createHarness();
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      runtimeId: "runtime-task-1",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "spec",
+      systemPrompt: "Use repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    await adapter.sendUserMessage({
+      externalSessionId: "thread/start-runtime-task-1",
+      parts: [{ kind: "text", text: "Continue" }],
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const transport = transports.get("runtime-task-1");
+    expect(transport?.calls.filter((call) => call.method === "model/list")).toHaveLength(1);
+  });
+
+  test("lists models through the required live runtime id", async () => {
+    const { adapter, transports, ensureRepoRuntime, requireRepoRuntime } = createHarness();
+
+    const catalog = await adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" });
+
+    expect(catalog.runtime?.kind).toBe("codex");
+    expect(ensureRepoRuntime).not.toHaveBeenCalled();
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(transports.has("runtime-live")).toBe(true);
+    expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
+      "model/list",
+    ]);
+  });
+
+  test("resumes and forks sessions through the live runtime id", async () => {
+    const { adapter, transports, requireRepoRuntime } = createHarness();
+
+    await adapter.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "planner",
+      systemPrompt: "Carry forward the plan.",
+      externalSessionId: "thread-9",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await adapter.forkSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "qa",
+      systemPrompt: "Review the fork.",
+      parentExternalSessionId: "thread-7",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(2);
+    expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
+      "model/list",
+      "thread/resume",
+      "thread/fork",
+    ]);
+    expect(transports.get("runtime-live")?.calls[1]?.params).toEqual({
+      threadId: "thread-9",
+      cwd: "/repo",
+      developerInstructions: "Carry forward the plan.",
+      model: "gpt-5",
+      effort: "medium",
+    });
+    expect(transports.get("runtime-live")?.calls[2]?.params).toEqual({
+      threadId: "thread-7",
+      cwd: "/repo",
+      developerInstructions: "Review the fork.",
+      model: "gpt-5",
+      effort: "medium",
+    });
+  });
+
+  test("sends user parts through turn/start on the ensured runtime id", async () => {
+    const { adapter, transports } = createHarness();
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "spec",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await adapter.sendUserMessage({
+      externalSessionId: "thread/start-runtime-ensure",
+      parts: [{ kind: "text", text: "Hello Codex" }],
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    expect(transports.get("runtime-ensure")?.calls.map((call) => call.method)).toEqual([
+      "model/list",
+      "thread/start",
+      "turn/start",
+    ]);
+    expect(transports.get("runtime-ensure")?.calls[2]).toEqual({
+      method: "turn/start",
+      params: {
+        threadId: "thread/start-runtime-ensure",
+        input: [{ type: "text", text: "Hello Codex" }],
+        model: "gpt-5",
+        effort: "medium",
+      },
+    });
+  });
+
+  test("starts a Codex repo runtime when hydrating a saved session", async () => {
+    const { adapter, ensureRepoRuntime, requireRepoRuntime, transports } = createHarness();
+
+    await expect(
+      adapter.loadSessionHistory({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-saved",
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ messageId: "user-history-1", text: "Hello Codex" }),
+      expect.objectContaining({ messageId: "reason-1" }),
+      expect.objectContaining({ messageId: "cmd-read-1" }),
+      expect.objectContaining({ messageId: "cmd-bash-1" }),
+      expect.objectContaining({ messageId: "file-change-1" }),
+      expect.objectContaining({ messageId: "file-change-failed-1" }),
+      expect.objectContaining({ messageId: "dynamic-tool-1" }),
+      expect.objectContaining({ messageId: "web-search-1" }),
+      expect.objectContaining({ messageId: "tool-1" }),
+      expect.objectContaining({ messageId: "tool-failed-1" }),
+      expect.objectContaining({ messageId: "msg-1", text: "Hello from history" }),
+      expect.objectContaining({ messageId: "msg-commentary-1", text: "Later commentary" }),
+    ]);
+    await expect(
+      adapter.loadSessionDiff({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-saved",
+      }),
+    ).resolves.toEqual([
+      { file: "src/app.ts", type: "modified", additions: 1, deletions: 0, diff: "@@" },
+    ]);
+
+    expect(ensureRepoRuntime).toHaveBeenCalledTimes(2);
+    expect(requireRepoRuntime).not.toHaveBeenCalled();
+    expect(transports.has("runtime-ensure")).toBe(true);
+  });
+
+  test("uses an explicit runtime id when one is supplied", async () => {
+    const { adapter, transports, ensureRepoRuntime, requireRuntimeById } = createHarness();
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      runtimeId: "runtime-task-1",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    expect(ensureRepoRuntime).not.toHaveBeenCalled();
+    expect(requireRuntimeById).toHaveBeenCalledWith(
+      { repoPath: "/repo", runtimeKind: "codex" },
+      "runtime-task-1",
+    );
+    expect(transports.has("runtime-task-1")).toBe(true);
+  });
+
+  test("allows event subscription for a known session", async () => {
+    const { adapter } = createHarness();
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", () => {});
+
+    expect(typeof unsubscribe).toBe("function");
+  });
+
+  test("rejects missing or unsupported model variants", async () => {
+    const missingVariant = createHarness();
+
+    await expect(
+      missingVariant.adapter.startSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        role: "build",
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).rejects.toThrow("requires a reasoning effort variant");
+
+    const unsupportedVariant = createHarness();
+
+    await expect(
+      unsupportedVariant.adapter.startSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        role: "build",
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
+      }),
+    ).rejects.toThrow("does not support reasoning effort 'high'");
+  });
+
+  test("fails clearly when a live runtime is missing", async () => {
+    const adapter = new CodexAppServerAdapter({
+      repoRuntimeResolver: {
+        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
+        requireRepoRuntime: async () => {
+          throw new Error("No live repo runtime found for repo '/repo' and runtime 'codex'.");
+        },
+      },
+      transportFactory: () => new RecordingTransport("runtime-live", false),
+      drainServerRequests: async () => [],
+      respondServerRequest: async () => {},
+    });
+
+    await expect(
+      adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" }),
+    ).rejects.toThrow("No live repo runtime found for repo '/repo' and runtime 'codex'.");
+  });
+
+  test("starts a session in the requested build worktree through the repo runtime", async () => {
+    const transport = new RecordingTransport("runtime-ensure", false);
+    const adapter = new CodexAppServerAdapter({
+      repoRuntimeResolver: {
+        ensureRepoRuntime: async () => ({
+          ...makeRuntimeSummary("runtime-ensure"),
+          workingDirectory: "/repo",
+        }),
+        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
+      },
+      transportFactory: () => transport,
+      drainServerRequests: async () => [],
+      respondServerRequest: async () => {},
+    });
+
+    await expect(
+      adapter.startSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree-task-1",
+        taskId: "task-1",
+        role: "build",
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({ externalSessionId: "thread/start-runtime-ensure" }),
+    );
+
+    expect(transport.calls[1]).toEqual({
+      method: "thread/start",
+      params: {
+        cwd: "/repo/worktree-task-1",
+        developerInstructions: "Use the repo rules.",
+        model: "gpt-5",
+        effort: "medium",
+      },
+    });
+  });
+
+  test("throws unsupported errors for unimplemented surfaces", () => {
+    const { adapter } = createHarness();
+
+    expect(() =>
+      adapter.loadFileStatus({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+      }),
+    ).toThrow("does not support loadFileStatus");
+  });
+});

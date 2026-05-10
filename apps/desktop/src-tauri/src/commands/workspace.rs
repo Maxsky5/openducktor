@@ -370,6 +370,7 @@ pub async fn workspace_get_settings_snapshot(
         reusable_prompts: snapshot.reusable_prompts,
         kanban: snapshot.kanban,
         autopilot: snapshot.autopilot,
+        agent_runtimes: snapshot.agent_runtimes,
         workspaces: snapshot.workspaces,
         global_prompt_overrides: snapshot.global_prompt_overrides,
     })
@@ -403,6 +404,7 @@ pub async fn workspace_save_settings_snapshot(
         reusable_prompts,
         kanban,
         autopilot,
+        agent_runtimes,
         workspaces,
         global_prompt_overrides,
     } = snapshot;
@@ -422,6 +424,7 @@ pub async fn workspace_save_settings_snapshot(
                 reusable_prompts,
                 kanban,
                 autopilot,
+                agent_runtimes,
                 workspaces,
                 global_prompt_overrides,
             })
@@ -1024,6 +1027,7 @@ mod tests {
                 reusable_prompts: snapshot.reusable_prompts,
                 kanban: snapshot.kanban,
                 autopilot: snapshot.autopilot,
+                agent_runtimes: snapshot.agent_runtimes,
                 workspaces: snapshot.workspaces,
                 global_prompt_overrides: snapshot.global_prompt_overrides,
             },
@@ -1060,6 +1064,7 @@ mod tests {
             reusable_prompts: snapshot.reusable_prompts,
             kanban: snapshot.kanban,
             autopilot: snapshot.autopilot,
+            agent_runtimes: snapshot.agent_runtimes,
             workspaces: snapshot.workspaces,
             global_prompt_overrides: snapshot.global_prompt_overrides,
         };
@@ -1112,6 +1117,7 @@ mod tests {
                 "reusablePrompts": snapshot.reusable_prompts,
                 "kanban": snapshot.kanban,
                 "autopilot": snapshot.autopilot,
+                "agentRuntimes": snapshot.agent_runtimes,
                 "workspaces": snapshot.workspaces,
                 "globalPromptOverrides": snapshot.global_prompt_overrides,
             }
@@ -1203,6 +1209,7 @@ mod tests {
                 "reusablePrompts": snapshot.reusable_prompts.clone(),
                 "kanban": snapshot.kanban.clone(),
                 "autopilot": snapshot.autopilot.clone(),
+                "agentRuntimes": snapshot.agent_runtimes.clone(),
                 "workspaces": snapshot.workspaces.clone(),
                 "globalPromptOverrides": snapshot.global_prompt_overrides.clone(),
             }
@@ -1232,6 +1239,7 @@ mod tests {
                 ],
                 "kanban": snapshot.kanban,
                 "autopilot": snapshot.autopilot,
+                "agentRuntimes": snapshot.agent_runtimes,
                 "workspaces": snapshot.workspaces,
                 "globalPromptOverrides": snapshot.global_prompt_overrides,
             }

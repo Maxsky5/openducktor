@@ -7,6 +7,7 @@ export type HostBridge = {
   subscribeRunEvents: (listener: HostEventListener) => Promise<() => void>;
   subscribeDevServerEvents: (listener: HostEventListener) => Promise<() => void>;
   subscribeTaskEvents: (listener: HostEventListener) => Promise<() => void>;
+  subscribeCodexAppServerEvents?: (listener: HostEventListener) => Promise<() => void>;
 };
 
 export type ShellCapabilities = {
@@ -36,6 +37,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   subscribeRunEvents: failUnavailable,
   subscribeDevServerEvents: failUnavailable,
   subscribeTaskEvents: failUnavailable,
+  subscribeCodexAppServerEvents: failUnavailable,
   capabilities: {
     canOpenExternalUrls: false,
     canPreviewLocalAttachments: false,

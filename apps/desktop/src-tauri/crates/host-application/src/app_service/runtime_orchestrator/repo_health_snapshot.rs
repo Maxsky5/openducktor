@@ -9,6 +9,7 @@ const ODT_MCP_SERVER_NAME: &str = "openducktor";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum RuntimeHealthWorkflowStage {
+    Disabled,
     Idle,
     StartupRequested,
     WaitingForRuntime,
@@ -179,6 +180,7 @@ fn summarize_repo_runtime_health_status(
     mcp: Option<&RepoRuntimeHealthMcp>,
 ) -> RepoRuntimeHealthState {
     match runtime.status {
+        RepoRuntimeHealthState::Disabled => return RepoRuntimeHealthState::Disabled,
         RepoRuntimeHealthState::Error => return RepoRuntimeHealthState::Error,
         RepoRuntimeHealthState::Checking => return RepoRuntimeHealthState::Checking,
         RepoRuntimeHealthState::Idle => return RepoRuntimeHealthState::Idle,
@@ -200,6 +202,7 @@ fn summarize_repo_runtime_health_status(
 
 fn summarize_runtime_status(stage: RuntimeHealthWorkflowStage) -> RepoRuntimeHealthState {
     match stage {
+        RuntimeHealthWorkflowStage::Disabled => RepoRuntimeHealthState::Disabled,
         RuntimeHealthWorkflowStage::Idle => RepoRuntimeHealthState::Idle,
         RuntimeHealthWorkflowStage::StartupRequested
         | RuntimeHealthWorkflowStage::WaitingForRuntime
@@ -219,6 +222,7 @@ fn summarize_mcp_status(
 ) -> RepoRuntimeMcpStatus {
     if runtime.status != RepoRuntimeHealthState::Ready {
         return match runtime.status {
+            RepoRuntimeHealthState::Disabled => RepoRuntimeMcpStatus::Unsupported,
             RepoRuntimeHealthState::Idle | RepoRuntimeHealthState::Checking => {
                 RepoRuntimeMcpStatus::WaitingForRuntime
             }
@@ -269,6 +273,7 @@ fn runtime_stage_from_progress(
     }
 
     match stage {
+        RuntimeHealthWorkflowStage::Disabled => RepoRuntimeStartupStage::Idle,
         RuntimeHealthWorkflowStage::Idle => RepoRuntimeStartupStage::Idle,
         RuntimeHealthWorkflowStage::StartupRequested
         | RuntimeHealthWorkflowStage::RestartingRuntime => {

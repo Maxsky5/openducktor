@@ -7,6 +7,7 @@ import {
   agentSessionRecordSchema,
   agentSessionStopTargetSchema,
   buildSessionBootstrapSchema,
+  CODEX_RUNTIME_DESCRIPTOR,
   gitBranchSchema,
   gitCommitAllRequestSchema,
   gitCommitAllResultSchema,
@@ -112,6 +113,19 @@ describe("runtime schemas", () => {
     const parsed = runtimeDescriptorSchema.parse(opencodeRuntimeDescriptorFixture);
 
     expect(parsed).toEqual(OPENCODE_RUNTIME_DESCRIPTOR);
+  });
+
+  test("Codex descriptor parses as a built-in runtime descriptor", () => {
+    const parsed = runtimeDescriptorSchema.parse(CODEX_RUNTIME_DESCRIPTOR);
+
+    expect(parsed).toEqual(CODEX_RUNTIME_DESCRIPTOR);
+  });
+
+  test("Codex descriptor declares live session refresh support", () => {
+    expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle).toMatchObject({
+      supportsAttachLiveSessions: true,
+      supportsListLiveSessions: true,
+    });
   });
 
   test.each(

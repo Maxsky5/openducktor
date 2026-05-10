@@ -41,9 +41,11 @@ describe("useAgentSessionListeners", () => {
     await harness.run(({ state }) => {
       state.commitSessions({ "external-1": createSession() });
       state.refBridges.unsubscribersRef.current.set("external-1", unsubscribe);
-      state.refBridges.draftRawBySessionRef.current["external-1"] = { text: "draft" };
-      state.refBridges.draftSourceBySessionRef.current["external-1"] = { text: "delta" };
-      state.refBridges.draftMessageIdBySessionRef.current["external-1"] = { text: "message-1" };
+      state.refBridges.draftRawBySessionRef.current["external-1"] = { reasoning: "draft" };
+      state.refBridges.draftSourceBySessionRef.current["external-1"] = { reasoning: "delta" };
+      state.refBridges.draftMessageIdBySessionRef.current["external-1"] = {
+        reasoning: "message-1",
+      };
       state.refBridges.assistantTurnTimingBySessionRef.current["external-1"] = {
         activityStartedAtMs: 1,
       };

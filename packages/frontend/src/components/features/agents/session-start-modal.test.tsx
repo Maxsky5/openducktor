@@ -226,6 +226,27 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
+  test("hides agent selector when the runtime manages profiles", () => {
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          supportsProfiles: false,
+          selectedModelSelection: {
+            providerId: "openai",
+            modelId: "gpt-5.4",
+            variant: "default",
+          },
+          agentOptions: [],
+        }),
+      }),
+    );
+
+    expect(screen.queryByTestId("session-start-agent-field")).toBeNull();
+    expect(screen.getByTestId("session-start-model-field")).toBeTruthy();
+
+    unmount();
+  });
+
   test("keeps existing-session selection visible and model controls enabled in fork mode", () => {
     const { container, unmount } = render(
       createElement(SessionStartModal, {

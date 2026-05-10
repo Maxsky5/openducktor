@@ -356,6 +356,21 @@ pub struct PromptOverride {
 
 pub type PromptOverrides = HashMap<String, PromptOverride>;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRuntimeConfig {
+    pub enabled: bool,
+}
+
+pub type AgentRuntimes = BTreeMap<String, AgentRuntimeConfig>;
+
+fn default_agent_runtimes() -> AgentRuntimes {
+    let mut runtimes = AgentRuntimes::new();
+    runtimes.insert("opencode".to_string(), AgentRuntimeConfig { enabled: true });
+    runtimes.insert("codex".to_string(), AgentRuntimeConfig { enabled: false });
+    runtimes
+}
+
 const fn default_prompt_override_enabled() -> bool {
     true
 }
@@ -483,6 +498,8 @@ struct PersistedGlobalConfigV2 {
     pub autopilot: AutopilotSettings,
     #[serde(default)]
     pub global_prompt_overrides: PromptOverrides,
+    #[serde(default = "default_agent_runtimes")]
+    pub agent_runtimes: AgentRuntimes,
     #[serde(default)]
     pub workspaces: HashMap<String, RepoConfig>,
     #[serde(default)]
@@ -531,6 +548,8 @@ pub struct GlobalConfig {
     pub autopilot: AutopilotSettings,
     #[serde(default)]
     pub global_prompt_overrides: PromptOverrides,
+    #[serde(default = "default_agent_runtimes")]
+    pub agent_runtimes: AgentRuntimes,
     #[serde(default)]
     pub workspaces: HashMap<String, RepoConfig>,
     #[serde(default)]
@@ -556,6 +575,7 @@ impl TryFrom<PersistedGlobalConfigV2> for GlobalConfig {
             kanban: config.kanban,
             autopilot: config.autopilot,
             global_prompt_overrides: config.global_prompt_overrides,
+            agent_runtimes: config.agent_runtimes,
             workspaces: config.workspaces,
             workspace_order: config.workspace_order,
             recent_workspaces: config.recent_workspaces,
@@ -576,6 +596,7 @@ impl From<GlobalConfig> for PersistedGlobalConfigV2 {
             kanban: value.kanban,
             autopilot: value.autopilot,
             global_prompt_overrides: value.global_prompt_overrides,
+            agent_runtimes: value.agent_runtimes,
             workspaces: value.workspaces,
             workspace_order: value.workspace_order,
             recent_workspaces: value.recent_workspaces,
@@ -596,6 +617,7 @@ impl Default for GlobalConfig {
             kanban: KanbanSettings::default(),
             autopilot: AutopilotSettings::default(),
             global_prompt_overrides: PromptOverrides::default(),
+            agent_runtimes: default_agent_runtimes(),
             workspaces: HashMap::new(),
             workspace_order: Vec::new(),
             recent_workspaces: Vec::new(),
@@ -738,6 +760,20 @@ mod tests {
                 .general
                 .open_agent_studio_tab_on_background_session_start
         );
+    }
+
+    #[test]
+    fn global_config_defaults_agent_runtime_enablement() {
+        let config = deserialize_global_config(
+            r#"{
+                "version": 2,
+                "theme": "light"
+            }"#,
+        )
+        .expect("config should deserialize");
+
+        assert!(config.agent_runtimes["opencode"].enabled);
+        assert!(!config.agent_runtimes["codex"].enabled);
     }
 
     #[test]

@@ -13,12 +13,13 @@ pub use normalize::{normalize_hook_set, normalize_repo_dev_servers};
 pub use persistence::resolve_openducktor_base_dir;
 pub use store::{AppConfigStore, RuntimeConfigStore};
 pub use types::{
-    AgentDefaults, AgentModelDefault, AutopilotActionId, AutopilotEventId, AutopilotRule,
-    AutopilotSettings, ChatSettings, GeneralSettings, GitMergeMethod, GitProviderConfig,
-    GitProviderRepository, GitTargetBranch, GlobalConfig, GlobalGitConfig, HookSet,
-    KanbanEmptyColumnDisplay, KanbanSettings, OpencodeStartupReadinessConfig, PromptOverride,
-    PromptOverrides, RepoConfig, RepoDevServerScript, RepoGitConfig, ReusablePrompt, RuntimeConfig,
-    SchedulerConfig, SoftGuardrails,
+    AgentDefaults, AgentModelDefault, AgentRuntimeConfig, AgentRuntimes, AutopilotActionId,
+    AutopilotEventId, AutopilotRule, AutopilotSettings, ChatSettings, GeneralSettings,
+    GitMergeMethod, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig,
+    GlobalGitConfig, HookSet, KanbanEmptyColumnDisplay, KanbanSettings,
+    OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides, RepoConfig,
+    RepoDevServerScript, RepoGitConfig, ReusablePrompt, RuntimeConfig, SchedulerConfig,
+    SoftGuardrails,
 };
 
 #[cfg(test)]

@@ -219,6 +219,13 @@ export const subscribeLocalHostTaskEvents = async (
   return subscribeSseChannel("task-events", listener);
 };
 
+export const subscribeLocalHostCodexAppServerEvents = async (
+  listener: (payload: unknown) => void,
+): Promise<() => void> => {
+  await ensureLocalHostSession();
+  return subscribeSseChannel("codex-app-server-events", listener);
+};
+
 export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: string): string => {
   const baseUrl = browserBackendUrl.replace(/\/$/, "");
   const query = new URLSearchParams({ path });

@@ -132,6 +132,7 @@ const assistantMessageMeta = (
   isFinal: boolean,
   durationMs: number | undefined,
   totalTokens: number | undefined,
+  contextWindow: number | undefined,
 ) => {
   const effectiveModel = mergeModelSelection(selectedModel, messageModel);
   return {
@@ -144,6 +145,7 @@ const assistantMessageMeta = (
     ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
     ...(isFinal && typeof durationMs === "number" && durationMs > 0 ? { durationMs } : {}),
     ...(isFinal && typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
+    ...(isFinal && typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : {}),
   } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>;
 };
 
@@ -412,14 +414,15 @@ export const historyToChatMessages = (
           : undefined;
       const assistantDurationMs =
         message.role === "assistant" && isFinalAssistantMessage && !Number.isNaN(completedAtMs)
-          ? resolveAssistantTurnDurationMs({
+          ? (message.durationMs ??
+            resolveAssistantTurnDurationMs({
               completedAtMs,
               ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : {}),
               ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : {}),
               ...(typeof previousAssistantCompletedAtMs === "number"
                 ? { previousAssistantCompletedAtMs }
                 : {}),
-            })
+            }))
           : undefined;
       let meta: AgentChatMessage["meta"] | undefined;
       if (message.role === "assistant") {
@@ -430,6 +433,7 @@ export const historyToChatMessages = (
           isFinalAssistantMessage,
           isFinalAssistantMessage ? assistantDurationMs : undefined,
           isFinalAssistantMessage ? message.totalTokens : undefined,
+          isFinalAssistantMessage ? message.contextWindow : undefined,
         );
       } else if (message.role === "user") {
         meta = userMessageMeta(message.model, message.state, userDisplayParts);
@@ -479,6 +483,9 @@ export const historyToSessionContextUsage = (
     const effectiveModel = mergeModelSelection(selectedModel, message.model);
     return {
       totalTokens: message.totalTokens,
+      ...(typeof message.contextWindow === "number"
+        ? { contextWindow: message.contextWindow }
+        : {}),
       ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
       ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
       ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),

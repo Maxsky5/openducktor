@@ -6,6 +6,7 @@ export type DirtySections = {
   chat: boolean;
   reusablePrompts: boolean;
   globalGit: boolean;
+  agentRuntimes?: boolean;
   kanban: boolean;
   autopilot: boolean;
   globalPromptOverrides: boolean;
@@ -17,6 +18,7 @@ export const EMPTY_DIRTY_SECTIONS: DirtySections = {
   chat: false,
   reusablePrompts: false,
   globalGit: false,
+  agentRuntimes: false,
   kanban: false,
   autopilot: false,
   globalPromptOverrides: false,

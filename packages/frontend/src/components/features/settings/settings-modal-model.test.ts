@@ -119,6 +119,27 @@ describe("settings-modal-model", () => {
     ]);
   });
 
+  test("finds models by provider/model option key when catalog ids differ", () => {
+    expect(
+      findCatalogModel(
+        {
+          ...catalogFixture,
+          models: [
+            {
+              id: "codex-model-o3",
+              providerId: "openai",
+              providerName: "OpenAI",
+              modelId: "o3",
+              modelName: "o3",
+              variants: ["low"],
+            },
+          ],
+        },
+        "openai/o3",
+      )?.modelName,
+    ).toBe("o3");
+  });
+
   test("reports missing required role labels", () => {
     const defaults = {
       ...emptyDefaults,

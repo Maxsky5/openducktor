@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsModalContent } from "./settings-modal-content";
@@ -63,6 +64,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   settingsSectionErrorCountById: {
     general: 0,
     git: 0,
+    runtimes: 0,
     repositories: 0,
     prompts: 0,
     "reusable-prompts": 0,
@@ -171,6 +173,35 @@ describe("settings modal content", () => {
     expect(html).toContain("Reusable prompts");
     expect(html).toContain("review");
     expect(html).toContain("Review files");
+  });
+
+  test("renders OpenCode before Codex in Agent Runtimes", () => {
+    const controller = {
+      ...createMockController(createMockSnapshot()),
+      runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsModalContent, {
+        section: "runtimes",
+        repositorySection: "configuration",
+        globalPromptRoleTab: "shared",
+        repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
+        isInteractionDisabled: false,
+        controller,
+        onRepositorySectionChange: () => {},
+        onGlobalPromptRoleTabChange: () => {},
+        onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
+      }),
+    );
+
+    expect(html.indexOf("OpenCode")).toBeLessThan(html.indexOf("Codex"));
+    expect(html).toContain("Local OpenCode runtime connected through the OpenDucktor MCP bridge.");
+    expect(html).toContain(
+      "Local Codex app-server runtime connected through the OpenDucktor MCP bridge.",
+    );
   });
 
   test("renders kanban section when section is kanban", () => {

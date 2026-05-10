@@ -257,6 +257,34 @@ describe("session-start-modal-selection", () => {
     });
   });
 
+  test("resolveSelectionForModelChange accepts provider/model option keys when catalog ids differ", () => {
+    expect(
+      resolveSelectionForModelChange({
+        catalog: {
+          ...CATALOG,
+          models: [
+            {
+              id: "codex-model-o3",
+              providerId: "openai",
+              providerName: "OpenAI",
+              modelId: "o3",
+              modelName: "o3",
+              variants: ["low", "high"],
+            },
+          ],
+        },
+        currentSelection: null,
+        modelKey: "openai/o3",
+        runtimeKind: "codex",
+      }),
+    ).toEqual({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "o3",
+      variant: "low",
+    });
+  });
+
   test("resolveSelectionForVariantChange is a no-op without a selection", () => {
     expect(
       resolveSelectionForVariantChange({

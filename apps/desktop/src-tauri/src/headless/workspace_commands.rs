@@ -303,6 +303,7 @@ fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResul
         reusable_prompts: snapshot.reusable_prompts,
         kanban: snapshot.kanban,
         autopilot: snapshot.autopilot,
+        agent_runtimes: snapshot.agent_runtimes,
         workspaces: snapshot.workspaces,
         global_prompt_overrides: snapshot.global_prompt_overrides,
     })
@@ -369,6 +370,7 @@ async fn handle_workspace_save_settings_snapshot(
         reusable_prompts,
         kanban,
         autopilot,
+        agent_runtimes,
         workspaces,
         global_prompt_overrides,
     } = snapshot;
@@ -385,6 +387,7 @@ async fn handle_workspace_save_settings_snapshot(
             reusable_prompts,
             kanban,
             autopilot,
+            agent_runtimes,
             workspaces,
             global_prompt_overrides,
         })

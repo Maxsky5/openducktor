@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   createDefaultAutopilotSettings,
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
   type RuntimeKind,
@@ -340,6 +341,7 @@ describe("useSettingsModalController", () => {
         showThinkingMessages: true,
       },
       reusablePrompts: [],
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     });
 
     await harness.unmount();

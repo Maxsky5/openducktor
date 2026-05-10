@@ -89,6 +89,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   modelGroups,
   variantOptions,
   isSelectionCatalogLoading,
+  supportsProfiles,
   selectorDisabled,
   taskId,
   isInteractionEnabled,
@@ -112,6 +113,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   modelGroups: AgentChatComposerModel["modelGroups"];
   variantOptions: AgentChatComposerModel["variantOptions"];
   isSelectionCatalogLoading: boolean;
+  supportsProfiles: boolean;
   selectorDisabled: boolean;
   taskId: string;
   isInteractionEnabled: boolean;
@@ -141,19 +143,21 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
         >
           <Paperclip className="size-3.5" />
         </Button>
-        <div className="relative">
-          <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Combobox
-            value={selectedModelSelection?.profileId ?? ""}
-            options={agentOptions}
-            className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
-            placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
-            searchPlaceholder="Search agent..."
-            triggerClassName="!h-7 !w-auto max-w-[15rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
-            disabled={selectorDisabled}
-            onValueChange={onSelectAgent}
-          />
-        </div>
+        {supportsProfiles ? (
+          <div className="relative">
+            <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Combobox
+              value={selectedModelSelection?.profileId ?? ""}
+              options={agentOptions}
+              className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
+              placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
+              searchPlaceholder="Search agent..."
+              triggerClassName="!h-7 !w-auto max-w-[15rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
+              disabled={selectorDisabled}
+              onValueChange={onSelectAgent}
+            />
+          </div>
+        ) : null}
 
         <div className="relative">
           <Brain className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -270,6 +274,7 @@ export const AgentChatComposer = forwardRef<
     selectedModelSelection,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
+    supportsProfiles,
     supportsSlashCommands,
     supportsFileSearch,
     slashCommands,
@@ -642,6 +647,7 @@ export const AgentChatComposer = forwardRef<
             modelGroups={modelGroups}
             variantOptions={variantOptions}
             isSelectionCatalogLoading={isSelectionCatalogLoading}
+            supportsProfiles={supportsProfiles ?? true}
             selectorDisabled={selectorDisabled}
             taskId={taskId}
             isInteractionEnabled={isInteractionEnabled}

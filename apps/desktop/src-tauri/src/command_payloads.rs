@@ -108,6 +108,7 @@ pub(crate) struct SettingsSnapshotPayload {
     pub(crate) reusable_prompts: Vec<host_infra_system::ReusablePrompt>,
     pub(crate) kanban: host_infra_system::KanbanSettings,
     pub(crate) autopilot: host_infra_system::AutopilotSettings,
+    pub(crate) agent_runtimes: host_infra_system::AgentRuntimes,
     pub(crate) workspaces: HashMap<String, host_infra_system::RepoConfig>,
     pub(crate) global_prompt_overrides: host_infra_system::PromptOverrides,
 }

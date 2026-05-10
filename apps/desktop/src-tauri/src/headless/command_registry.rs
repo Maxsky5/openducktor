@@ -133,6 +133,7 @@ mod tests {
                 events: HeadlessEventBus::new(1),
                 dev_server_events: HeadlessEventBus::new(1),
                 task_events: HeadlessEventBus::new(1),
+                codex_app_server_events: HeadlessEventBus::new(1),
                 pull_request_sync_stop_requested: Arc::new(AtomicBool::new(false)),
                 registry: Arc::new(registry),
                 shutdown_signal: Arc::new(Notify::new()),
@@ -166,6 +167,10 @@ mod tests {
         assert!(registry.contains("task_create"));
         assert!(registry.contains("odt_read_task"));
         assert!(registry.contains("runtime_ensure"));
+        assert!(registry.contains("codex_app_server_request"));
+        assert!(registry.contains("codex_app_server_notifications"));
+        assert!(registry.contains("codex_app_server_requests"));
+        assert!(registry.contains("codex_app_server_respond"));
     }
 
     #[test]

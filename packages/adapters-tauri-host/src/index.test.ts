@@ -267,6 +267,10 @@ describe("TauriHostClient", () => {
       "taskWorktreeGet",
       "runtimeStop",
       "runtimeEnsure",
+      "codexAppServerRequest",
+      "codexAppServerRespond",
+      "codexAppServerNotifications",
+      "codexAppServerRequests",
       "buildStart",
       "buildBlocked",
       "buildResumed",
@@ -1549,6 +1553,55 @@ describe("TauriHostClient", () => {
     });
 
     expect(await client.taskWorktreeGet("/repo", "task-1")).toBe(null);
+  });
+
+  test("codex app-server commands use expected IPC routes", async () => {
+    const { client, calls } = createClient((command) => {
+      switch (command) {
+        case "codex_app_server_request":
+          return { ok: true };
+        case "codex_app_server_respond":
+          return null;
+        case "codex_app_server_notifications":
+          return [{ method: "codex/app-server/ready" }];
+        case "codex_app_server_requests":
+          return [];
+        default:
+          throw new Error(`Unexpected command: ${command}`);
+      }
+    });
+
+    await client.codexAppServerRequest("runtime-1", "model/list", { request: "catalog" });
+    await client.codexAppServerRespond("runtime-1", 7, { ok: true });
+    await client.codexAppServerNotifications("runtime-1");
+    await client.codexAppServerRequests("runtime-1");
+
+    expect(calls).toEqual([
+      {
+        command: "codex_app_server_request",
+        args: {
+          runtimeId: "runtime-1",
+          method: "model/list",
+          params: { request: "catalog" },
+        },
+      },
+      {
+        command: "codex_app_server_respond",
+        args: {
+          runtimeId: "runtime-1",
+          requestId: 7,
+          result: { ok: true },
+        },
+      },
+      {
+        command: "codex_app_server_notifications",
+        args: { runtimeId: "runtime-1" },
+      },
+      {
+        command: "codex_app_server_requests",
+        args: { runtimeId: "runtime-1" },
+      },
+    ]);
   });
 
   test("runtime and session ack commands reject malformed host payloads", async () => {

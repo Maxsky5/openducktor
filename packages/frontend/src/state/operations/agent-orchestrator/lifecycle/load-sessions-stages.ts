@@ -62,6 +62,7 @@ export type SessionLifecycleAdapter = Pick<
   AgentEnginePort,
   "hasSession" | "loadSessionHistory" | "resumeSession" | "attachSession"
 > & {
+  loadSessionTodos?: AgentEnginePort["loadSessionTodos"];
   listSessionPresence?: AgentEnginePort["listSessionPresence"];
   readSessionPresence?: AgentEnginePort["readSessionPresence"];
 };
@@ -707,6 +708,7 @@ type HydratedRecordHistoryState = {
   loadMode: AgentSessionLoadMode;
   promptOverrides: RepoPromptOverrides;
   history: Awaited<ReturnType<SessionLifecycleAdapter["loadSessionHistory"]>>;
+  todos: Awaited<ReturnType<AgentEnginePort["loadSessionTodos"]>>;
   runtimeResolution: SuccessfulHydrationRuntime;
   sessionPresence: AgentSessionPresenceSnapshot | null;
   hydratedMessages: AgentSessionState["messages"];
@@ -853,6 +855,7 @@ const applyHydratedRecordHistory = (
   {
     promptOverrides,
     history,
+    todos,
     runtimeResolution,
     sessionPresence,
     hydratedMessages,
@@ -879,6 +882,7 @@ const applyHydratedRecordHistory = (
     promptOverrides,
     historyHydrationState: "hydrated",
     runtimeRecoveryState: current.runtimeRecoveryState ?? "idle",
+    todos: todos.length > 0 ? todos : sessionWithLivePresence.todos,
     subagentPendingApprovalsByExternalSessionId: mergeSubagentPendingApprovalOverlay({
       current: current.subagentPendingApprovalsByExternalSessionId,
       scannedChildExternalSessionIds:
@@ -946,6 +950,14 @@ const hydrateRecordHistory = async ({
     externalSessionId: record.externalSessionId,
     limit: INITIAL_SESSION_HISTORY_LIMIT,
   });
+  const todos = adapter.loadSessionTodos
+    ? await adapter.loadSessionTodos({
+        repoPath,
+        runtimeKind: runtimeRef.runtimeKind,
+        workingDirectory,
+        externalSessionId: record.externalSessionId,
+      })
+    : [];
   const sessionPresence = shouldApplyLivePresence
     ? await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, record)
     : null;
@@ -977,6 +989,7 @@ const hydrateRecordHistory = async ({
       applyHydratedRecordHistory(current, {
         promptOverrides,
         history,
+        todos,
         runtimeResolution,
         sessionPresence,
         hydratedMessages,

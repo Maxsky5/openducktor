@@ -3286,7 +3286,7 @@ describe("use-agent-orchestrator-operations", () => {
       let historyCalls = 0;
       const listPresenceInputs: Array<{
         repoPath: string;
-        runtimeKind: "opencode";
+        runtimeKind: "opencode" | "codex";
         directories?: string[];
       }> = [];
       host.agentSessionsList = async () => {

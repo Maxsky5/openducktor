@@ -98,6 +98,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.settingsSectionErrorCountById).toEqual({
       general: 0,
       git: 0,
+      runtimes: 0,
       repositories: 0,
       prompts: 0,
       "reusable-prompts": 0,
@@ -127,6 +128,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.settingsSectionErrorCountById).toEqual({
       general: 0,
       git: 0,
+      runtimes: 0,
       repositories: 1,
       prompts: 1,
       "reusable-prompts": 0,

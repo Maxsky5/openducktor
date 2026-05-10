@@ -7,6 +7,7 @@ import {
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { catalogModelOptionValue } from "@/components/features/agents/catalog-select-options";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -99,7 +100,11 @@ export const findCatalogModel = (
   catalog: AgentModelCatalog | null,
   modelKey: string,
 ): AgentModelCatalog["models"][number] | null => {
-  return catalog?.models.find((entry) => entry.id === modelKey) ?? null;
+  return (
+    catalog?.models.find(
+      (entry) => entry.id === modelKey || catalogModelOptionValue(entry) === modelKey,
+    ) ?? null
+  );
 };
 
 export const toRoleVariantOptions = (

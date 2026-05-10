@@ -63,6 +63,13 @@ pub async fn run_browser_backend_with_options(
     let events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let dev_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
     let task_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
+    let codex_app_server_events = HeadlessEventBus::new(EVENT_BUFFER_CAPACITY);
+    service.set_codex_app_server_event_emitter(Some({
+        let codex_app_server_events = codex_app_server_events.clone();
+        Arc::new(move |event: Value| {
+            codex_app_server_events.emit(event.to_string());
+        })
+    }))?;
     let shutdown_signal = Arc::new(Notify::new());
     let shutdown_started = Arc::new(AtomicBool::new(false));
     startup_phase_shutdown_hooks_with_gate(
@@ -101,6 +108,10 @@ pub async fn run_browser_backend_with_options(
         .route("/dev-server-events", get(dev_server_events_handler))
         .route("/task-events", get(task_events_handler))
         .route(
+            "/codex-app-server-events",
+            get(codex_app_server_events_handler),
+        )
+        .route(
             "/local-attachment-preview",
             get(local_attachment_preview_handler),
         )
@@ -111,6 +122,7 @@ pub async fn run_browser_backend_with_options(
             events,
             dev_server_events,
             task_events,
+            codex_app_server_events,
             pull_request_sync_stop_requested: pull_request_sync_stop_requested.clone(),
             registry,
             shutdown_signal: shutdown_signal.clone(),
@@ -376,6 +388,20 @@ async fn task_events_handler(
         state.task_events,
         last_event_id,
         "Browser task event stream",
+    ))
+}
+
+async fn codex_app_server_events_handler(
+    State(state): State<HeadlessState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, HeadlessCommandError> {
+    validate_app_token_cookie_or_header(&headers, state.app_token.as_deref())?;
+    reject_when_shutting_down(&state)?;
+    let last_event_id = parse_last_event_id(&headers)?;
+    Ok(build_sse_response(
+        state.codex_app_server_events,
+        last_event_id,
+        "Browser Codex app-server event stream",
     ))
 }
 

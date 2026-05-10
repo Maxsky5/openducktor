@@ -10,7 +10,7 @@ import { REPOSITORY_SECTIONS, SETTINGS_SECTIONS } from "./settings-modal-constan
 type SettingsSidebarProps = {
   section: SettingsSectionId;
   disabled: boolean;
-  errorCountById: Record<SettingsSectionId, number>;
+  errorCountById: Partial<Record<SettingsSectionId, number>>;
   onChange: (next: SettingsSectionId) => void;
 };
 
@@ -25,7 +25,7 @@ export function SettingsSidebar({
       <div className="space-y-1">
         {SETTINGS_SECTIONS.map((entry) => {
           const Icon = entry.icon;
-          const sectionErrorCount = errorCountById[entry.id];
+          const sectionErrorCount = errorCountById[entry.id] ?? 0;
           return (
             <Button
               key={entry.id}

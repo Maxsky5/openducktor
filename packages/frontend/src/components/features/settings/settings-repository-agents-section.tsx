@@ -1,4 +1,9 @@
-import type { RepoConfig, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type {
+  AgentRuntimes,
+  RepoConfig,
+  RuntimeDescriptor,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ReactElement } from "react";
 import {
@@ -20,6 +25,7 @@ import type { ComboboxGroup } from "@/components/ui/combobox";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import {
+  filterEnabledRuntimeDefinitions,
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
@@ -27,6 +33,7 @@ import {
 
 type RepositoryAgentsSectionProps = {
   selectedRepoConfig: RepoConfig | null;
+  agentRuntimes: AgentRuntimes;
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: boolean;
   isLoadingCatalog: boolean;
@@ -57,6 +64,22 @@ type RepositoryAgentRoleViewModel = {
   modelGroups: ComboboxGroup[];
   roleVariantOptions: ReturnType<typeof toRoleVariantOptions>;
   modelKey: string;
+};
+
+const agentPlaceholderFor = ({
+  isCatalogLoading,
+  supportsProfiles,
+}: {
+  isCatalogLoading: boolean;
+  supportsProfiles: boolean;
+}): string => {
+  if (!supportsProfiles) {
+    return "Runtime does not support agent profiles";
+  }
+  if (isCatalogLoading) {
+    return "Loading agents...";
+  }
+  return "Select agent";
 };
 
 const buildRepositoryAgentRoleViewModel = ({
@@ -102,6 +125,7 @@ const buildRepositoryAgentRoleViewModel = ({
 
 export function RepositoryAgentsSection({
   selectedRepoConfig,
+  agentRuntimes,
   runtimeDefinitions,
   isLoadingRuntimeDefinitions,
   isLoadingCatalog,
@@ -123,35 +147,43 @@ export function RepositoryAgentsSection({
     );
   }
 
-  const runtimeOptions = toAgentRuntimeOptions(runtimeDefinitions);
+  const enabledRuntimeDefinitions = filterEnabledRuntimeDefinitions(
+    runtimeDefinitions,
+    agentRuntimes,
+  );
+  const runtimeOptions = toAgentRuntimeOptions(enabledRuntimeDefinitions);
   const runtimeDropdownClassName = "sm:min-w-[18rem]";
   const agentDropdownClassName = "sm:min-w-[18rem]";
   const modelDropdownClassName = "sm:min-w-[26rem]";
   const variantDropdownClassName = "sm:min-w-[16rem]";
   const selectedDefaultRuntimeKind =
     resolveRuntimeKindSelection({
-      runtimeDefinitions,
+      runtimeDefinitions: enabledRuntimeDefinitions,
       requestedRuntimeKind: selectedRepoConfig.defaultRuntimeKind,
     }) ?? "";
-  const missingRoleLabels = ROLE_DEFAULTS.filter(({ role }) => {
+  const missingRoleLabels: string[] = [];
+  for (const { role, label } of ROLE_DEFAULTS) {
     const value = selectedRepoConfig.agentDefaults[role];
     const runtimeKind = resolveRepoAgentDefaultRuntimeKind({
       selectedRepoConfig,
-      runtimeDefinitions,
+      runtimeDefinitions: enabledRuntimeDefinitions,
       role,
     });
     const runtimeDefinition = runtimeKind
       ? findRuntimeDefinition(runtimeDefinitions, runtimeKind)
       : null;
-    return !(
+    const hasCompleteDefault = Boolean(
       value &&
-      runtimeDefinition &&
-      value.providerId.trim().length > 0 &&
-      value.modelId.trim().length > 0 &&
-      (!runtimeDefinition?.capabilities.optionalSurfaces.supportsProfiles ||
-        (value.profileId?.trim().length ?? 0) > 0)
+        runtimeDefinition &&
+        value.providerId.trim().length > 0 &&
+        value.modelId.trim().length > 0 &&
+        (!runtimeDefinition.capabilities.optionalSurfaces.supportsProfiles ||
+          (value.profileId?.trim().length ?? 0) > 0),
     );
-  }).map(({ label }) => label);
+    if (!hasCompleteDefault) {
+      missingRoleLabels.push(label);
+    }
+  }
 
   return (
     <div className="grid gap-4 p-4">
@@ -205,7 +237,7 @@ export function RepositoryAgentsSection({
           const roleRuntimeOptions = runtimeOptions;
           const roleViewModel = buildRepositoryAgentRoleViewModel({
             selectedRepoConfig,
-            runtimeDefinitions,
+            runtimeDefinitions: enabledRuntimeDefinitions,
             role,
             getCatalogForRuntime,
             getCatalogErrorForRuntime,
@@ -224,6 +256,14 @@ export function RepositoryAgentsSection({
             roleVariantOptions,
             modelKey,
           } = roleViewModel;
+          const supportsProfiles =
+            runtimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles === true;
+          const agentPlaceholder = agentPlaceholderFor({
+            isCatalogLoading: isRoleCatalogLoading,
+            supportsProfiles,
+          });
+          const isAgentSelectDisabled =
+            isRoleCatalogLoading || isSaving || !supportsProfiles || agentOptions.length === 0;
 
           return (
             <div key={role} className="grid gap-2 rounded-md border border-border bg-card p-3">
@@ -270,21 +310,19 @@ export function RepositoryAgentsSection({
                   />
                 </div>
 
-                {runtimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles ? (
-                  <div className="grid min-w-0 gap-1">
-                    <Label className="text-xs">Agent</Label>
-                    <Combobox
-                      value={value.profileId}
-                      options={agentOptions}
-                      placeholder={isRoleCatalogLoading ? "Loading agents..." : "Select agent"}
-                      disabled={isRoleCatalogLoading || isSaving || agentOptions.length === 0}
-                      className={agentDropdownClassName}
-                      onValueChange={(profileId) =>
-                        onUpdateSelectedRepoAgentDefault(role, "profileId", profileId)
-                      }
-                    />
-                  </div>
-                ) : null}
+                <div className="grid min-w-0 gap-1">
+                  <Label className="text-xs">Agent Profile</Label>
+                  <Combobox
+                    value={value.profileId}
+                    options={agentOptions}
+                    placeholder={agentPlaceholder}
+                    disabled={isAgentSelectDisabled}
+                    className={agentDropdownClassName}
+                    onValueChange={(profileId) =>
+                      onUpdateSelectedRepoAgentDefault(role, "profileId", profileId)
+                    }
+                  />
+                </div>
 
                 <div className="grid min-w-0 gap-1">
                   <Label className="text-xs">Model</Label>

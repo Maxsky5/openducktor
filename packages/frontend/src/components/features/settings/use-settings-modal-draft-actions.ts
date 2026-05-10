@@ -1,10 +1,12 @@
 import type {
+  AgentRuntimes,
   GlobalGitConfig,
   RepoConfig,
   RepoPromptOverrides,
   ReusablePrompt,
   SettingsSnapshot,
 } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback } from "react";
 import { ensureDraftAgentDefault } from "@/components/features/settings";
@@ -23,6 +25,7 @@ export type SettingsModalDraftActions = {
   updateGlobalGeneralSettings: (
     updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
   ) => void;
+  updateAgentRuntimes: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
   updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
@@ -136,6 +139,22 @@ export const useSettingsModalDraftActions = ({
     [setSnapshotDraft],
   );
 
+  const updateAgentRuntimes = useCallback(
+    (updater: (current: AgentRuntimes) => AgentRuntimes): void => {
+      setSnapshotDraft((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          agentRuntimes: updater(current.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES),
+        };
+      });
+    },
+    [setSnapshotDraft],
+  );
+
   const updateReusablePrompts = useCallback(
     (updater: (current: ReusablePrompt[]) => ReusablePrompt[]): void => {
       setSnapshotDraft((current) => {
@@ -240,6 +259,7 @@ export const useSettingsModalDraftActions = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalGeneralSettings,
+    updateAgentRuntimes,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,

@@ -598,6 +598,7 @@ impl AppRuntime for OpenCodeRuntime {
         let opencode_ok = opencode_binary.is_ok();
         RuntimeHealth {
             kind: "opencode".to_string(),
+            enabled: true,
             ok: opencode_ok,
             version: opencode_binary.as_ref().ok().map(|binary| {
                 if let Some(version) = read_opencode_version(binary.as_str()) {
@@ -691,6 +692,7 @@ impl AppRuntime for OpenCodeRuntime {
 
     fn probe_session_status(
         &self,
+        _service: &crate::app_service::AppService,
         target: &RuntimeSessionStatusProbeTarget,
     ) -> RuntimeSessionStatusProbeOutcome {
         match Self::load_session_statuses(target.runtime_route(), target.working_directory()) {

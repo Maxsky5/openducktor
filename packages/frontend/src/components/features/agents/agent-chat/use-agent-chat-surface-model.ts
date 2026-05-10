@@ -139,6 +139,7 @@ type AgentChatComposerConfig = {
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null | undefined;
   isSelectionCatalogLoading: boolean;
+  supportsProfiles?: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   slashCommandCatalog: AgentChatComposerModel["slashCommandCatalog"];
@@ -343,6 +344,7 @@ export function useAgentChatSurfaceModel({
   const composerSelectedModelSelection = composer?.selectedModelSelection ?? null;
   const composerSelectedModelDescriptor = composer?.selectedModelDescriptor;
   const composerIsSelectionCatalogLoading = composer?.isSelectionCatalogLoading ?? false;
+  const composerSupportsProfiles = composer?.supportsProfiles ?? true;
   const composerSupportsSlashCommands = composer?.supportsSlashCommands ?? false;
   const composerSupportsFileSearch = composer?.supportsFileSearch ?? false;
   const composerSlashCommandCatalog = composer?.slashCommandCatalog ?? null;
@@ -462,6 +464,7 @@ export function useAgentChatSurfaceModel({
         ? { selectedModelDescriptor: composerSelectedModelDescriptor }
         : {}),
       isSelectionCatalogLoading: composerIsSelectionCatalogLoading,
+      supportsProfiles: composerSupportsProfiles,
       supportsSlashCommands: composerSupportsSlashCommands,
       supportsFileSearch: composerSupportsFileSearch,
       slashCommandCatalog: composerSlashCommandCatalog,
@@ -496,6 +499,7 @@ export function useAgentChatSurfaceModel({
     composerDraftStateKey,
     composerIsReadOnly,
     composerIsSelectionCatalogLoading,
+    composerSupportsProfiles,
     composerIsSending,
     composerIsSessionWorking,
     composerIsSlashCommandsLoading,

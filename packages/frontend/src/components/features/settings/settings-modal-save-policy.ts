@@ -7,6 +7,7 @@ export const hasAnyDirtySections = (dirtySections: DirtySections): boolean =>
   dirtySections.general ||
   dirtySections.reusablePrompts ||
   dirtySections.globalGit ||
+  dirtySections.agentRuntimes ||
   dirtySections.kanban ||
   dirtySections.autopilot ||
   dirtySections.globalPromptOverrides ||
@@ -16,6 +17,7 @@ export const isGlobalGitOnlySave = (dirtySections: DirtySections): boolean =>
   dirtySections.globalGit &&
   !dirtySections.general &&
   !dirtySections.chat &&
+  !dirtySections.agentRuntimes &&
   !dirtySections.reusablePrompts &&
   !dirtySections.kanban &&
   !dirtySections.autopilot &&

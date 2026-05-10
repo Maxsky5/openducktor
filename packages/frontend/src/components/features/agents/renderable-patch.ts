@@ -3,6 +3,31 @@ import { getSingularPatch } from "@pierre/diffs";
 const GIT_DIFF_HEADER = /^diff --git /m;
 const CLASSIC_DIFF_HEADER = /^Index: /m;
 const UNIFIED_MULTI_FILE_HEADER = /^--- .+\n\+\+\+ .+/m;
+const APPLY_PATCH_FILE_HEADER = /^\*\*\* (?:Add|Update|Delete) File: /m;
+
+function applyPatchFileContentDiff(candidate: string, filePath: string): string | null {
+  const lines = candidate.trim().split("\n");
+  const header = lines[0] ?? "";
+  const isAdd = header.startsWith("*** Add File: ");
+  const isDelete = header.startsWith("*** Delete File: ");
+  if (!isAdd && !isDelete) {
+    return null;
+  }
+
+  const prefix = isAdd ? "+" : "-";
+  const body = lines.slice(1).filter((line) => line.startsWith(prefix));
+  const bodyLines = body.map((line) => line.slice(1));
+  const lineCount = Math.max(bodyLines.length, 1);
+  if (isAdd) {
+    return ["--- /dev/null", `+++ b/${filePath}`, `@@ -0,0 +1,${lineCount} @@`, ...body, ""].join(
+      "\n",
+    );
+  }
+
+  return [`--- a/${filePath}`, "+++ /dev/null", `@@ -1,${lineCount} +0,0 @@`, ...body, ""].join(
+    "\n",
+  );
+}
 
 export function normalizePatchCandidate(candidate: string, filePath: string): string {
   const trimmed = candidate.trim();
@@ -10,14 +35,24 @@ export function normalizePatchCandidate(candidate: string, filePath: string): st
     return "";
   }
 
+  const applyPatchDiff = applyPatchFileContentDiff(trimmed, filePath);
+  if (applyPatchDiff) {
+    return applyPatchDiff;
+  }
+
   const lines = trimmed.split("\n");
   const markerIndex = lines.findIndex(
-    (line) => line.startsWith("diff --git ") || line.startsWith("--- ") || line.startsWith("@@ "),
+    (line) => line.startsWith("diff --git ") || line.startsWith("--- ") || line.startsWith("@@"),
   );
-  const relevantLines = markerIndex >= 0 ? lines.slice(markerIndex) : lines;
+  const rawRelevantLines = markerIndex >= 0 ? lines.slice(markerIndex) : lines;
+  const endPatchIndex = rawRelevantLines.findIndex((line, index) =>
+    index > 0 ? line.startsWith("*** End Patch") : false,
+  );
+  const relevantLines =
+    endPatchIndex >= 0 ? rawRelevantLines.slice(0, endPatchIndex) : rawRelevantLines;
   const normalized = relevantLines.join("\n").trim();
 
-  if (normalized.startsWith("@@ ")) {
+  if (normalized.startsWith("@@")) {
     return `--- a/${filePath}\n+++ b/${filePath}\n${normalized}\n`;
   }
 
@@ -51,6 +86,15 @@ export function splitPatchCandidates(rawDiff: string): string[] {
       .filter((chunk) => chunk.length > 0);
   }
 
+  if (APPLY_PATCH_FILE_HEADER.test(trimmed)) {
+    return trimmed
+      .replace(/^\*\*\* Begin Patch\s*\n?/m, "")
+      .replace(/\n?\*\*\* End Patch\s*$/m, "")
+      .split(/(?=^\*\*\* (?:Add|Update|Delete) File: )/m)
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length > 0);
+  }
+
   return [trimmed];
 }
 
@@ -61,7 +105,7 @@ export function patchMatchesFile(candidate: string, filePath: string): boolean {
   const headerLines: string[] = [];
 
   for (const line of candidate.replaceAll("\\", "/").split("\n")) {
-    if (line.startsWith("@@ ")) {
+    if (line.startsWith("@@")) {
       break;
     }
 

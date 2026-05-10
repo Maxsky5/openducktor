@@ -170,7 +170,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
 
 const createTransport = (
   hostUrl: string,
-  options: { workspaceId?: string; forbidWorkspaceIdInput?: boolean } = {},
+  options: { workspaceId?: string; forbidWorkspaceIdInput?: boolean; allowedTools?: string } = {},
 ) => {
   return new StdioClientTransport({
     command: process.execPath,
@@ -181,6 +181,7 @@ const createTransport = (
       ODT_HOST_URL: hostUrl,
       ...(options.workspaceId ? { ODT_WORKSPACE_ID: options.workspaceId } : {}),
       ...(options.forbidWorkspaceIdInput ? { ODT_FORBID_WORKSPACE_ID_INPUT: "true" } : {}),
+      ...(options.allowedTools ? { ODT_ALLOWED_TOOLS: options.allowedTools } : {}),
     },
     stderr: "pipe",
   });
@@ -369,6 +370,29 @@ describe("MCP server tool results", () => {
       const tools = await client.listTools();
 
       expect(readToolInputProperties(tools, "odt_read_task")).toHaveProperty("workspaceId");
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("ODT_ALLOWED_TOOLS limits the advertised tool surface", async () => {
+    const bridge = await startMockBridge();
+    const transport = createTransport(bridge.url, {
+      workspaceId: "repo",
+      allowedTools: "odt_read_task,odt_read_task_documents,odt_build_completed",
+    });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+      const toolNames = tools.tools.map((tool) => tool.name);
+
+      expect(toolNames).toEqual([
+        "odt_read_task",
+        "odt_read_task_documents",
+        "odt_build_completed",
+      ]);
     } finally {
       await client.close();
     }

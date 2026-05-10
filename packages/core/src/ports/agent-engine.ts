@@ -123,7 +123,9 @@ export type AgentSessionHistoryMessage =
       role: "assistant";
       timestamp: string;
       text: string;
+      durationMs?: number;
       totalTokens?: number;
+      contextWindow?: number;
       model?: AgentModelSelection;
       parts: AgentStreamPart[];
     };

@@ -413,11 +413,7 @@ const mergeSameMessageId = (
     };
   }
 
-  if (
-    isFinalAssistantChatMessage(hydratedMessage) &&
-    currentMessage.role === "assistant" &&
-    !isFinalAssistantChatMessage(currentMessage)
-  ) {
+  if (isFinalAssistantChatMessage(hydratedMessage) && currentMessage.role === "assistant") {
     const mergedMeta =
       currentMessage.meta && hydratedMessage.meta
         ? { ...currentMessage.meta, ...hydratedMessage.meta }

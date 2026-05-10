@@ -249,6 +249,56 @@ const repoRuntimeHealthStatus = async (
   return repoRuntimeHealthCheckSchema.parse(payload);
 };
 
+const codexAppServerRequest = async (
+  invokeFn: InvokeFn,
+  runtimeId: string,
+  method: string,
+  params?: unknown,
+): Promise<unknown> => {
+  return invokeFn("codex_app_server_request", {
+    runtimeId,
+    method,
+    ...(params !== undefined ? { params } : {}),
+  });
+};
+
+const codexAppServerRespond = async (
+  invokeFn: InvokeFn,
+  runtimeId: string,
+  requestId: number,
+  result?: unknown,
+  error?: unknown,
+): Promise<void> => {
+  await invokeFn("codex_app_server_respond", {
+    runtimeId,
+    requestId,
+    ...(result !== undefined ? { result } : {}),
+    ...(error !== undefined ? { error } : {}),
+  });
+};
+
+const codexAppServerNotifications = async (
+  invokeFn: InvokeFn,
+  runtimeId: string,
+): Promise<unknown[]> => {
+  const payload = await invokeFn("codex_app_server_notifications", { runtimeId });
+  if (!Array.isArray(payload)) {
+    throw new Error("Expected array payload from host command codex_app_server_notifications");
+  }
+  return payload;
+};
+
+const codexAppServerRequests = async (
+  invokeFn: InvokeFn,
+  runtimeId: string,
+): Promise<unknown[]> => {
+  const payload = await invokeFn("codex_app_server_requests", { runtimeId });
+  if (!Array.isArray(payload)) {
+    throw new Error("Expected array payload from host command codex_app_server_requests");
+  }
+  return payload;
+};
+
 const buildStart = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -521,6 +571,31 @@ export class TauriAgentClient {
     runtimeKind: RuntimeKind,
   ): Promise<RepoRuntimeHealthCheck> {
     return repoRuntimeHealthStatus(this.invokeFn, repoPath, runtimeKind);
+  }
+
+  async codexAppServerRequest(
+    runtimeId: string,
+    method: string,
+    params?: unknown,
+  ): Promise<unknown> {
+    return codexAppServerRequest(this.invokeFn, runtimeId, method, params);
+  }
+
+  async codexAppServerRespond(
+    runtimeId: string,
+    requestId: number,
+    result?: unknown,
+    error?: unknown,
+  ): Promise<void> {
+    return codexAppServerRespond(this.invokeFn, runtimeId, requestId, result, error);
+  }
+
+  async codexAppServerNotifications(runtimeId: string): Promise<unknown[]> {
+    return codexAppServerNotifications(this.invokeFn, runtimeId);
+  }
+
+  async codexAppServerRequests(runtimeId: string): Promise<unknown[]> {
+    return codexAppServerRequests(this.invokeFn, runtimeId);
   }
 
   async buildStart(

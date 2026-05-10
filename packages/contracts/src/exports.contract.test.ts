@@ -4,6 +4,8 @@ import type {
   AgentPromptOverride,
   AgentPromptTemplateId,
   AgentRole,
+  AgentRuntimeConfig,
+  AgentRuntimes,
   AgentSessionModelSelection,
   AgentSessionRecord,
   AgentSessionRole,
@@ -20,6 +22,7 @@ import type {
   BeadsCheck,
   BuildSessionBootstrap,
   ChatSettings,
+  CodexReasoningEffort,
   CommitsAheadBehind,
   DirectoryEntry,
   DirectoryListing,
@@ -143,6 +146,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentRoleSchema",
   "agentRoleValues",
   "agentModelDefaultSchema",
+  "agentRuntimeConfigSchema",
+  "agentRuntimesSchema",
   "agentToolNameSchema",
   "agentToolNameValues",
   "buildSessionBootstrapSchema",
@@ -181,6 +186,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "buildCompletedResultSchema",
   "chatSettingsSchema",
   "DEFAULT_GENERAL_SETTINGS",
+  "DEFAULT_AGENT_RUNTIMES",
   "REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER",
   "REUSABLE_PROMPT_TRIGGER_PATTERN",
   "reusablePromptSchema",
@@ -253,6 +259,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "isOpencodeExposedOdtToolAlias",
   "knownGitProviderIdSchema",
   "knownGitProviderIdValues",
+  "codexReasoningEffortSchema",
+  "codexReasoningEffortValues",
   "knownRuntimeKindSchema",
   "knownRuntimeKindValues",
   "missingSpecSections",
@@ -274,8 +282,11 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "ODT_WORKSPACE_SCOPED_TOOL_NAMES",
   "ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS",
   "OPENCODE_ODT_TOOL_ID_PREFIXES",
+  "CODEX_RUNTIME_CAPABILITIES",
+  "CODEX_RUNTIME_DESCRIPTOR",
   "OPENCODE_RUNTIME_CAPABILITIES",
   "OPENCODE_RUNTIME_DESCRIPTOR",
+  "RUNTIME_DESCRIPTORS_BY_KIND",
   "parseGitProviderRepositoryFromRemoteUrl",
   "publicTaskSchema",
   "publicTaskSummaryTaskSchema",
@@ -425,6 +436,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
 type ExportedTypeContract = {
   AgentRole: AgentRole;
   AgentModelDefault: AgentModelDefault;
+  AgentRuntimeConfig: AgentRuntimeConfig;
+  AgentRuntimes: AgentRuntimes;
   AgentPromptOverride: AgentPromptOverride;
   AgentPromptTemplateId: AgentPromptTemplateId;
   AutopilotActionId: AutopilotActionId;
@@ -445,6 +458,7 @@ type ExportedTypeContract = {
   AgentWorkflows: AgentWorkflows;
   BeadsCheck: BeadsCheck;
   ChatSettings: ChatSettings;
+  CodexReasoningEffort: CodexReasoningEffort;
   CommitsAheadBehind: CommitsAheadBehind;
   DirectoryEntry: DirectoryEntry;
   DirectoryListing: DirectoryListing;

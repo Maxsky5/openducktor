@@ -1,5 +1,6 @@
 import type {
   AgentPromptTemplateId,
+  AgentRuntimes,
   GitBranch,
   GitProviderRepository,
   RepoConfig,
@@ -11,9 +12,11 @@ import type {
   SettingsSnapshot,
   WorkspaceRecord,
 } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useEffect, useMemo } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
+import { filterEnabledRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
   ChecksStateContext,
   useRequiredContext,
@@ -86,6 +89,7 @@ export type SettingsModalController = {
   updateGlobalGeneralSettings: (
     updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
   ) => void;
+  updateAgentRuntimes?: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
   updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
@@ -169,8 +173,17 @@ export const useSettingsModalController = ({
   });
 
   const catalogRuntimeKinds = useMemo(
-    () => getNeededCatalogRuntimeKinds(selectedRepoConfig, runtimeDefinitions),
-    [selectedRepoConfig, runtimeDefinitions],
+    () =>
+      getNeededCatalogRuntimeKinds(
+        selectedRepoConfig,
+        snapshotDraft
+          ? filterEnabledRuntimeDefinitions(
+              runtimeDefinitions,
+              snapshotDraft.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES,
+            )
+          : [],
+      ),
+    [selectedRepoConfig, runtimeDefinitions, snapshotDraft],
   );
 
   const {
@@ -211,6 +224,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
     updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
     updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
+    updateAgentRuntimes: applyAgentRuntimesUpdate,
     updateReusablePrompts: applyReusablePromptsUpdate,
     updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
     updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
@@ -276,6 +290,7 @@ export const useSettingsModalController = ({
       updateGlobalGitConfig: applyGlobalGitConfigUpdate,
       updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
       updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
+      updateAgentRuntimes: applyAgentRuntimesUpdate,
       updateReusablePrompts: applyReusablePromptsUpdate,
       updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
       updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
@@ -289,6 +304,7 @@ export const useSettingsModalController = ({
       applyGlobalGitConfigUpdate,
       applyGlobalChatSettingsUpdate,
       applyGlobalGeneralSettingsUpdate,
+      applyAgentRuntimesUpdate,
       applyReusablePromptsUpdate,
       applyGlobalKanbanSettingsUpdate,
       applyGlobalAutopilotSettingsUpdate,
@@ -303,6 +319,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalGeneralSettings,
+    updateAgentRuntimes,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
@@ -373,6 +390,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalGeneralSettings,
+    updateAgentRuntimes,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,

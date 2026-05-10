@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -51,6 +51,23 @@ const CATALOG: AgentModelCatalog = {
       hidden: false,
     },
   ],
+};
+
+const CODEX_CATALOG: AgentModelCatalog = {
+  runtime: CODEX_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "codex/gpt-5.4-mini",
+      providerId: "codex",
+      providerName: "Codex",
+      modelId: "gpt-5.4-mini",
+      modelName: "GPT-5.4 Mini",
+      variants: ["low", "medium"],
+    },
+  ],
+  defaultModelsByProvider: {
+    codex: "gpt-5.4-mini",
+  },
 };
 
 const ALTERNATE_RUNTIME_DESCRIPTOR = {
@@ -663,6 +680,45 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
+  test("loads the selected runtime catalog instead of reusing the initial catalog", async () => {
+    const loadCatalog = mock(async (_repoPath: string, runtimeKind: RuntimeKind) => {
+      return runtimeKind === "codex" ? CODEX_CATALOG : CATALOG;
+    });
+    const harness = createHookHarness(
+      createBaseProps({
+        loadCatalog,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "agent_studio",
+        taskId: "TASK-RUNTIME-SWITCH",
+        role: "spec",
+        launchActionId: "spec_initial",
+        postStartAction: "none",
+        title: "Start Spec Session",
+      });
+    });
+
+    expect(harness.getLatest().modelOptions.map((option) => option.label)).toContain("GPT-5");
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectRuntime("codex");
+    });
+
+    await harness.waitFor((state) =>
+      state.modelOptions.some((option) => option.label === "GPT-5.4 Mini"),
+    );
+    expect(harness.getLatest().modelOptions.map((option) => option.label)).not.toContain("GPT-5");
+    expect(loadCatalog).toHaveBeenCalledWith("/repo", "codex");
+
+    await harness.unmount();
+  });
+
   test("preserves caller-selected model when opening modal", async () => {
     const harness = createHookHarness(createBaseProps());
 
@@ -1002,8 +1058,14 @@ describe("useSessionStartModalState", () => {
   });
 
   test("filters runtime options by the selected start mode without selecting fallbacks", async () => {
+    const loadCatalog = mock(async (_repoPath: string, runtimeKind: RuntimeKind) => ({
+      ...CATALOG,
+      runtime:
+        runtimeKind === FORK_RUNTIME_KIND ? FORK_RUNTIME_DESCRIPTOR : REUSE_RUNTIME_DESCRIPTOR,
+    }));
     const harness = createHookHarness(
       createBaseProps({
+        loadCatalog,
         repoSettings: createBuildRepoSettingsForRuntime(REUSE_RUNTIME_KIND),
         runtimeDefinitions: [REUSE_RUNTIME_DESCRIPTOR, FORK_RUNTIME_DESCRIPTOR],
       }),

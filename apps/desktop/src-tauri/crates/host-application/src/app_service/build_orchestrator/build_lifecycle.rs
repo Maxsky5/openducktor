@@ -143,6 +143,7 @@ mod tests {
         fn runtime_health(&self) -> RuntimeHealth {
             RuntimeHealth {
                 kind: "test-runtime".to_string(),
+                enabled: true,
                 ok: true,
                 version: Some("1.0.0".to_string()),
                 error: None,

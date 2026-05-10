@@ -51,6 +51,25 @@ const trimmedRequiredString = (field: string) =>
     .transform((value) => value.trim())
     .refine((value) => value.length > 0, `${field} cannot be blank.`);
 
+export const agentRuntimeConfigSchema = z
+  .object({
+    enabled: z.boolean(),
+  })
+  .strict();
+export type AgentRuntimeConfig = z.infer<typeof agentRuntimeConfigSchema>;
+
+const createDefaultAgentRuntimes = (): Record<string, AgentRuntimeConfig> => ({
+  opencode: { enabled: true },
+  codex: { enabled: false },
+});
+
+export const DEFAULT_AGENT_RUNTIMES = createDefaultAgentRuntimes();
+
+export const agentRuntimesSchema = z
+  .record(z.string().min(1), agentRuntimeConfigSchema)
+  .default(() => createDefaultAgentRuntimes());
+export type AgentRuntimes = z.infer<typeof agentRuntimesSchema>;
+
 export const REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER = "$ARGUMENTS";
 export const REUSABLE_PROMPT_TRIGGER_PATTERN = /^[a-zA-Z0-9._:-]+$/;
 
@@ -284,12 +303,16 @@ export const globalConfigSchema = z.object({
   reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
+  agentRuntimes: agentRuntimesSchema,
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   workspaceOrder: z.array(workspaceIdSchema).default([]),
   recentWorkspaces: z.array(workspaceIdSchema).default([]),
 });
-export type GlobalConfig = z.infer<typeof globalConfigSchema>;
+type ParsedGlobalConfig = z.infer<typeof globalConfigSchema>;
+export type GlobalConfig = Omit<ParsedGlobalConfig, "agentRuntimes"> & {
+  agentRuntimes?: AgentRuntimes;
+};
 
 export const settingsSnapshotSchema = z.object({
   theme: themeValueSchema,
@@ -299,7 +322,11 @@ export const settingsSnapshotSchema = z.object({
   reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
+  agentRuntimes: agentRuntimesSchema,
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
 });
-export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
+type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
+export type SettingsSnapshot = Omit<ParsedSettingsSnapshot, "agentRuntimes"> & {
+  agentRuntimes?: AgentRuntimes;
+};

@@ -1,4 +1,5 @@
 import {
+  type AgentRuntimes,
   type AgentSessionStartMode,
   getMissingRequiredRuntimeSupportedScopes,
   mandatoryRuntimeCapabilityKeys,
@@ -29,6 +30,15 @@ export const toAgentRuntimeOptions = (
     icon: createElement(AgentRuntimeIcon, { runtimeKind: definition.kind }),
   }));
 };
+
+export const isRuntimeEnabled = (agentRuntimes: AgentRuntimes, runtimeKind: RuntimeKind): boolean =>
+  agentRuntimes[runtimeKind]?.enabled === true;
+
+export const filterEnabledRuntimeDefinitions = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  agentRuntimes: AgentRuntimes,
+): RuntimeDescriptor[] =>
+  runtimeDefinitions.filter((definition) => isRuntimeEnabled(agentRuntimes, definition.kind));
 
 export const findRuntimeDefinition = (
   runtimeDefinitions: RuntimeDescriptor[],

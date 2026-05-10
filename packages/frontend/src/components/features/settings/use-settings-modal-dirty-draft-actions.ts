@@ -1,4 +1,5 @@
 import type {
+  AgentRuntimes,
   RepoConfig,
   RepoPromptOverrides,
   ReusablePrompt,
@@ -61,6 +62,15 @@ export const useSettingsModalDirtyDraftActions = ({
     (updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"]): void => {
       runDirtyAction("general", () => {
         draftActions.updateGlobalGeneralSettings(updater);
+      });
+    },
+    [draftActions, runDirtyAction],
+  );
+
+  const updateAgentRuntimes = useCallback(
+    (updater: (current: AgentRuntimes) => AgentRuntimes): void => {
+      runDirtyAction("agentRuntimes", () => {
+        draftActions.updateAgentRuntimes(updater);
       });
     },
     [draftActions, runDirtyAction],
@@ -138,6 +148,7 @@ export const useSettingsModalDirtyDraftActions = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalGeneralSettings,
+    updateAgentRuntimes,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,

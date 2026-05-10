@@ -163,6 +163,63 @@ pub async fn repo_runtime_health_status(
     as_error(result)
 }
 
+#[tauri::command]
+pub async fn codex_app_server_request(
+    state: State<'_, AppState>,
+    runtime_id: String,
+    method: String,
+    params: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("codex_app_server_request", move || {
+        service.codex_app_server_request(runtime_id.as_str(), method.as_str(), params)
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
+pub async fn codex_app_server_notifications(
+    state: State<'_, AppState>,
+    runtime_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("codex_app_server_notifications", move || {
+        service.codex_app_server_notifications(runtime_id.as_str())
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
+pub async fn codex_app_server_requests(
+    state: State<'_, AppState>,
+    runtime_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("codex_app_server_requests", move || {
+        service.codex_app_server_requests(runtime_id.as_str())
+    })
+    .await;
+    as_error(result)
+}
+
+#[tauri::command]
+pub async fn codex_app_server_respond(
+    state: State<'_, AppState>,
+    runtime_id: String,
+    request_id: u64,
+    result: Option<serde_json::Value>,
+    error: Option<serde_json::Value>,
+) -> Result<(), String> {
+    let service = state.service.clone();
+    let result = run_service_blocking("codex_app_server_respond", move || {
+        service.codex_app_server_respond(runtime_id.as_str(), request_id, result, error)
+    })
+    .await;
+    as_error(result)
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;

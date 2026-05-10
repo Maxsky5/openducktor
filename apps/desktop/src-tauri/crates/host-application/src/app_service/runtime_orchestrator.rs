@@ -13,6 +13,7 @@ pub(in crate::app_service) use self::startup_status::RuntimeStartupProgress;
 use super::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::{AgentRuntimeKind, RuntimeDescriptor, RuntimeInstanceSummary};
+use host_infra_system::GlobalConfig;
 
 impl AppService {
     pub(super) fn ensure_runtime_supports_all_workflow_scopes(
@@ -63,6 +64,7 @@ impl AppService {
         repo_path: &str,
     ) -> Result<RuntimeInstanceSummary> {
         let runtime_kind = self.resolve_supported_runtime_kind(runtime_kind)?;
+        self.ensure_runtime_enabled(&runtime_kind)?;
         self.ensure_runtime_supports_all_workflow_scopes(runtime_kind.clone())?;
         self.ensure_workspace_runtime(runtime_kind, repo_path)
     }
@@ -76,6 +78,32 @@ impl AppService {
         runtime_kind: &str,
     ) -> Result<AgentRuntimeKind> {
         self.runtime_registry.resolve_kind(runtime_kind)
+    }
+
+    pub(super) fn ensure_runtime_enabled(&self, runtime_kind: &AgentRuntimeKind) -> Result<()> {
+        if self.is_runtime_enabled(runtime_kind)? {
+            return Ok(());
+        }
+
+        Err(anyhow!(
+            "Runtime '{}' is disabled in Agent Runtime settings.",
+            runtime_kind.as_str()
+        ))
+    }
+
+    pub(super) fn is_runtime_enabled(&self, runtime_kind: &AgentRuntimeKind) -> Result<bool> {
+        let config = self.config_store.load()?;
+        Ok(config
+            .agent_runtimes
+            .get(runtime_kind.as_str())
+            .map(|runtime| runtime.enabled)
+            .or_else(|| {
+                GlobalConfig::default()
+                    .agent_runtimes
+                    .get(runtime_kind.as_str())
+                    .map(|runtime| runtime.enabled)
+            })
+            .unwrap_or(false))
     }
 }
 
@@ -93,6 +121,7 @@ mod tests {
         RepoRuntimeHealthRuntime, RepoRuntimeHealthState, RepoRuntimeMcpStatus,
         RepoRuntimeStartupFailureKind, RepoRuntimeStartupStage, RuntimeRoute,
     };
+    use host_infra_system::{AgentRuntimeConfig, GlobalConfig};
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::process::Command;
@@ -189,6 +218,31 @@ mod tests {
                     cleanup_target: None,
                 },
             );
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_enabled_uses_default_when_runtime_config_entry_is_missing() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let mut config = GlobalConfig::default();
+        config.agent_runtimes.remove("codex");
+        service.config_store.save(&config)?;
+
+        assert!(!service.is_runtime_enabled(&AgentRuntimeKind::codex())?);
+        assert!(service.is_runtime_enabled(&AgentRuntimeKind::opencode())?);
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_enabled_preserves_explicit_runtime_config_entry() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let mut config = GlobalConfig::default();
+        config
+            .agent_runtimes
+            .insert("codex".to_string(), AgentRuntimeConfig { enabled: true });
+        service.config_store.save(&config)?;
+
+        assert!(service.is_runtime_enabled(&AgentRuntimeKind::codex())?);
         Ok(())
     }
 

@@ -10,7 +10,8 @@ pub(super) use host_domain::{
     UpdateTaskPatch,
 };
 pub(super) use host_infra_system::{
-    AppConfigStore, OpencodeStartupReadinessConfig, RuntimeConfig, RuntimeConfigStore,
+    AgentRuntimeConfig, AppConfigStore, OpencodeStartupReadinessConfig, RuntimeConfig,
+    RuntimeConfigStore,
 };
 pub(super) use serde_json::json;
 pub(super) use std::collections::BTreeMap;
@@ -25,12 +26,14 @@ pub(super) use crate::app_service::runtime_registry::{
     AppRuntime, AppRuntimeRegistry, ExternalRuntimeStart, HostManagedRuntimeStart,
 };
 pub(super) use crate::app_service::test_support::{
-    build_service_with_git_state, build_service_with_runtime_registry,
+    build_service_with_git_state, build_service_with_runtime_registry, build_service_with_store,
     builtin_opencode_runtime_definition, builtin_opencode_runtime_descriptor,
-    builtin_opencode_runtime_route, init_git_repo, make_task, repo_config_for_workspace,
+    builtin_opencode_runtime_route, create_fake_codex_app_server, create_fake_opencode,
+    init_git_repo, lock_env, make_task, repo_config_for_workspace, set_env_var,
+    set_fake_codex_binary, set_fake_opencode_and_bridge_binaries,
     spawn_opencode_session_status_server, spawn_sleep_process, spawn_sleep_process_group,
     unique_temp_path, wait_for_process_exit, workspace_update_repo_config_by_repo_path,
-    write_private_file, FakeTaskStore, TaskStoreState,
+    write_private_file, EnvVarGuard, FakeTaskStore, TaskStoreState,
 };
 pub(super) use crate::app_service::{
     allows_transition, build_opencode_startup_event_payload, can_set_plan,
@@ -122,6 +125,7 @@ pub(super) struct TestRuntimeAdapter {
 pub(super) fn runtime_health_ok(kind: &str) -> RuntimeHealth {
     RuntimeHealth {
         kind: kind.to_string(),
+        enabled: true,
         ok: true,
         version: None,
         error: None,
@@ -380,6 +384,7 @@ impl AppRuntime for TestRuntimeAdapter {
 
     fn probe_session_status(
         &self,
+        _service: &crate::app_service::AppService,
         _target: &RuntimeSessionStatusProbeTarget,
     ) -> RuntimeSessionStatusProbeOutcome {
         match self.session_probe_behavior {

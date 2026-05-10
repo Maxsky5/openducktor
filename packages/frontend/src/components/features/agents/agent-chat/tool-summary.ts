@@ -215,6 +215,11 @@ export const buildToolSummary = (
     return compactText(meta.error, 220);
   }
 
+  const command = meta.input?.command;
+  if (lowerTool === "bash" && typeof command === "string" && command.trim().length > 0) {
+    return compactText(command, 120);
+  }
+
   if (lifecyclePhase === "completed" && fileEditData.length > 0) {
     return "";
   }
@@ -246,11 +251,6 @@ export const buildToolSummary = (
 
   if (path && lowerTool !== "glob" && lowerTool !== "grep") {
     return compactText(relativizeDisplayPath(path, workingDirectory), 160);
-  }
-
-  const command = meta.input?.command;
-  if (lowerTool === "bash" && typeof command === "string" && command.trim().length > 0) {
-    return compactText(command, 120);
   }
 
   if (!OUTPUT_IGNORED_TOOL_NAMES.has(lowerTool) && hasNonEmptyText(meta.output)) {

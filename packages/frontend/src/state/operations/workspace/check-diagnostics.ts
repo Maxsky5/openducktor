@@ -84,6 +84,7 @@ export const buildRuntimeCheckErrorState = (
   ghAuthError: runtimeCheckError,
   runtimes: runtimeDefinitions.map((definition) => ({
     kind: definition.kind,
+    enabled: true,
     ok: false,
     version: null,
   })),
@@ -117,7 +118,7 @@ export const hasRuntimeCheckFailure = (runtimeCheck: RuntimeCheck | null): boole
     (!runtimeCheck.gitOk ||
       !runtimeCheck.ghOk ||
       !runtimeCheck.ghAuthOk ||
-      runtimeCheck.runtimes.some((entry) => !entry.ok))
+      runtimeCheck.runtimes.some((entry) => entry.enabled !== false && !entry.ok))
   );
 };
 

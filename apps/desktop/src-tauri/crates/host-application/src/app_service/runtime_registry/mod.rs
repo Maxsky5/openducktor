@@ -16,6 +16,7 @@ use std::path::Path;
 use std::process::Child;
 use std::sync::Arc;
 
+pub(crate) use super::codex_runtime::CodexRuntime;
 #[cfg(test)]
 pub(crate) use health_http::RuntimeHealthHttpClient;
 pub(crate) use health_http::{
@@ -165,6 +166,7 @@ pub(crate) trait AppRuntime: Send + Sync {
 
     fn probe_session_status(
         &self,
+        _service: &AppService,
         _target: &RuntimeSessionStatusProbeTarget,
     ) -> RuntimeSessionStatusProbeOutcome {
         RuntimeSessionStatusProbeOutcome::Unsupported
@@ -236,9 +238,12 @@ impl AppRuntimeRegistry {
 
     pub(crate) fn builtin_for_service() -> Self {
         let opencode_runtime = Arc::new(OpenCodeRuntime::default());
-        let registry =
-            AppRuntimeRegistry::new(vec![opencode_runtime.clone()], AgentRuntimeKind::opencode())
-                .expect("builtin app runtime registry should be valid");
+        let codex_runtime = Arc::new(CodexRuntime);
+        let registry = AppRuntimeRegistry::new(
+            vec![opencode_runtime.clone(), codex_runtime.clone()],
+            AgentRuntimeKind::opencode(),
+        )
+        .expect("builtin app runtime registry should be valid");
 
         #[cfg(test)]
         let registry = {
@@ -346,5 +351,16 @@ mod tests {
             !Arc::ptr_eq(&first_runtime, &second_runtime),
             "builtin runtime registries should create per-service runtime instances"
         );
+    }
+
+    #[test]
+    fn builtin_for_service_registers_codex_without_changing_default_runtime() {
+        let registry = AppRuntimeRegistry::builtin_for_service();
+
+        assert_eq!(
+            registry.runtime_definitions().default_kind(),
+            &AgentRuntimeKind::opencode()
+        );
+        assert!(registry.definition(&AgentRuntimeKind::codex()).is_ok());
     }
 }

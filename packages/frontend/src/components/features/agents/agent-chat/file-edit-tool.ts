@@ -41,6 +41,45 @@ const extractRawDiff = (meta: ToolMeta): string | null => {
         : null;
 };
 
+const extractStringField = (value: Record<string, unknown>, keys: string[]): string | null => {
+  for (const key of keys) {
+    const field = value[key];
+    if (typeof field === "string" && field.trim().length > 0) {
+      return field;
+    }
+  }
+  return null;
+};
+
+type MetadataFileChange = {
+  filePath: string;
+  diff: string;
+};
+
+const extractMetadataFileChanges = (meta: ToolMeta): MetadataFileChange[] => {
+  const changes = Array.isArray(meta.metadata?.changes)
+    ? meta.metadata.changes
+    : Array.isArray(meta.metadata?.diffs)
+      ? meta.metadata.diffs
+      : null;
+  if (!Array.isArray(changes)) {
+    return [];
+  }
+
+  return changes.flatMap((change): MetadataFileChange[] => {
+    if (!change || typeof change !== "object" || Array.isArray(change)) {
+      return [];
+    }
+    const record = change as Record<string, unknown>;
+    const filePath = extractStringField(record, ["path", "file"]);
+    const diff = extractStringField(record, ["diff", "patch"]);
+    if (!filePath || !diff) {
+      return [];
+    }
+    return [{ filePath, diff }];
+  });
+};
+
 const countDiffChanges = (diff: string | null): Pick<FileEditData, "additions" | "deletions"> => {
   let additions = 0;
   let deletions = 0;
@@ -139,6 +178,13 @@ const extractPatchFilePath = (candidate: string): string | null => {
     return indexPath;
   }
 
+  const applyPatchPath = normalizePatchPath(
+    /^\*\*\*\s+(?:Update|Add|Delete) File:\s+(.+)$/m.exec(candidate)?.[1],
+  );
+  if (applyPatchPath) {
+    return applyPatchPath;
+  }
+
   return extractDiffGitPaths(candidate)?.nextPath ?? null;
 };
 
@@ -146,6 +192,13 @@ export const extractAllFileEditData = (
   meta: ToolMeta,
   workingDirectory?: string | null,
 ): FileEditData[] => {
+  const metadataFileChanges = extractMetadataFileChanges(meta).map((change) =>
+    buildFileEditData(change.filePath, change.diff, workingDirectory),
+  );
+  if (metadataFileChanges.length > 0) {
+    return metadataFileChanges;
+  }
+
   const rawDiff = extractRawDiff(meta);
   if (rawDiff) {
     const fileEditData: FileEditData[] = [];

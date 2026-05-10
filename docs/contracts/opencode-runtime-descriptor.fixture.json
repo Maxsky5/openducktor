@@ -1,7 +1,7 @@
 {
   "kind": "opencode",
   "label": "OpenCode",
-  "description": "OpenCode local runtime with OpenDucktor MCP integration.",
+  "description": "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
   "readOnlyRoleBlockedTools": [
     "edit",
     "write",

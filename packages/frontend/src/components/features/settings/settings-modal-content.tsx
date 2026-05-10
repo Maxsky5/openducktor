@@ -1,4 +1,6 @@
+import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { ReactElement } from "react";
+import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
 import { SettingsChatSection } from "./settings-chat-section";
 import { GeneralSettingsSection } from "./settings-general-section";
@@ -54,6 +56,7 @@ export function SettingsModalContent({
     runtimeDefinitionsError,
     snapshotDraft,
     runtimeDefinitions,
+    updateAgentRuntimes,
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
     isCatalogLoadingForRuntime,
@@ -145,6 +148,17 @@ export function SettingsModalContent({
         runtimeCheck={controller.runtimeCheck}
         disabled={isInteractionDisabled}
         onUpdateGit={updateGlobalGitConfig}
+      />
+    );
+  }
+
+  if (section === "runtimes") {
+    return (
+      <AgentRuntimesSection
+        agentRuntimes={snapshotDraft.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES}
+        runtimeDefinitions={runtimeDefinitions}
+        disabled={isInteractionDisabled}
+        onUpdateAgentRuntimes={updateAgentRuntimes ?? (() => {})}
       />
     );
   }
@@ -242,6 +256,7 @@ export function SettingsModalContent({
         {repositorySection === "agents" ? (
           <RepositoryAgentsSection
             selectedRepoConfig={selectedRepoConfig}
+            agentRuntimes={snapshotDraft.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES}
             runtimeDefinitions={runtimeDefinitions}
             isLoadingRuntimeDefinitions={isLoadingRuntimeDefinitions}
             isLoadingCatalog={isLoadingCatalog}

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   AUTOPILOT_EVENT_IDS,
   chatSettingsSchema,
+  DEFAULT_AGENT_RUNTIMES,
+  globalConfigSchema,
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
   kanbanSettingsSchema,
   repoConfigSchema,
@@ -115,6 +117,24 @@ describe("config-schemas", () => {
     });
 
     expect(parsed.general.openAgentStudioTabOnBackgroundSessionStart).toBe(true);
+  });
+
+  test("defaults agent runtime enablement for global config and snapshots", () => {
+    const snapshot = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+    const globalConfig = globalConfigSchema.parse({
+      version: 2,
+      theme: "light",
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(snapshot.agentRuntimes).toEqual(DEFAULT_AGENT_RUNTIMES);
+    expect(globalConfig.agentRuntimes).toEqual(DEFAULT_AGENT_RUNTIMES);
   });
 
   test("roundtrips explicit disabled background Agent Studio tab setting", () => {

@@ -10,6 +10,8 @@ const DEV_SERVER_EVENT_SUBSCRIPTIONS_UNAVAILABLE_ERROR =
   "Dev-server event subscriptions require the desktop shell.";
 const TASK_EVENT_SUBSCRIPTIONS_UNAVAILABLE_ERROR =
   "Task-event subscriptions require the desktop shell.";
+const CODEX_EVENT_SUBSCRIPTIONS_UNAVAILABLE_ERROR =
+  "Codex app-server event subscriptions require the desktop shell.";
 const TAURI_EVENT_UNSUBSCRIBE_LOG_PREFIX = "[desktop-shell-bridge] Tauri event unsubscribe failed";
 
 let tauriCoreModulePromise: Promise<typeof import("@tauri-apps/api/core")> | null = null;
@@ -102,6 +104,18 @@ export const createDesktopShellBridge = (): ShellBridge => {
 
       const events = await import("@tauri-apps/api/event");
       const cleanup = await events.listen("openducktor://task-event", (event) => {
+        listener(event.payload);
+      });
+
+      return createSafeCleanup(cleanup);
+    },
+    subscribeCodexAppServerEvents: async (listener) => {
+      if (!isTauriRuntime()) {
+        throw new Error(CODEX_EVENT_SUBSCRIPTIONS_UNAVAILABLE_ERROR);
+      }
+
+      const events = await import("@tauri-apps/api/event");
+      const cleanup = await events.listen("openducktor://codex-app-server-event", (event) => {
         listener(event.payload);
       });
 

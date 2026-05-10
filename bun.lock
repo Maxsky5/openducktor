@@ -32,6 +32,14 @@
         "vite": "^8.0.10",
       },
     },
+    "packages/adapters-codex-app-server": {
+      "name": "@openducktor/adapters-codex-app-server",
+      "version": "0.3.0",
+      "dependencies": {
+        "@openducktor/contracts": "workspace:*",
+        "@openducktor/core": "workspace:*",
+      },
+    },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
       "version": "0.3.1",
@@ -71,6 +79,7 @@
         "@dnd-kit/modifiers": "^9.0.0",
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",
+        "@openducktor/adapters-codex-app-server": "workspace:*",
         "@openducktor/adapters-opencode-sdk": "workspace:*",
         "@openducktor/adapters-tauri-host": "workspace:*",
         "@openducktor/contracts": "workspace:*",
@@ -262,6 +271,8 @@
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.4", "", { "dependencies": { "@tybys/wasm-util": "^0.10.1" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow=="],
 
     "@opencode-ai/sdk": ["@opencode-ai/sdk@1.14.28", "", { "dependencies": { "cross-spawn": "7.0.6" } }, "sha512-qRFJfD+Zdz3jHHSupW4F6Io1ZFrQ6gCRFlG50O6kEU9xRxrBpK0wGvP+Y5VwwvD/gH9WKMHYinlQpDVI9/lgJQ=="],
+
+    "@openducktor/adapters-codex-app-server": ["@openducktor/adapters-codex-app-server@workspace:packages/adapters-codex-app-server"],
 
     "@openducktor/adapters-opencode-sdk": ["@openducktor/adapters-opencode-sdk@workspace:packages/adapters-opencode-sdk"],
 

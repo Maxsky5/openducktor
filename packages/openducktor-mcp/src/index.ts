@@ -3,7 +3,12 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
 import packageJson from "../package.json" with { type: "json" };
-import { ODT_MCP_TOOL_NAMES, ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
+import {
+  ODT_MCP_TOOL_NAMES,
+  ODT_TOOL_SCHEMAS,
+  ODT_WORKFLOW_AGENT_TOOL_NAMES,
+  ODT_WORKSPACE_SCOPED_TOOL_NAMES,
+} from "./lib";
 import { OdtTaskStore } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
 import { OdtToolError, toErrorMessage, toToolError, toToolResult } from "./tool-results";
@@ -93,6 +98,8 @@ type RegisteredToolSpecs = {
 };
 
 const WORKSPACE_SCOPED_TOOL_NAMES = new Set<RegisteredToolName>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
+const KNOWN_TOOL_NAMES = new Set<string>(ODT_MCP_TOOL_NAMES);
+const ALLOWED_TOOLS_ENV = "ODT_ALLOWED_TOOLS";
 // Deliberately allow workflow-scoped calls with workspaceId through schema validation so
 // rejectForbiddenWorkspaceIdInput can return the canonical structured ODT error envelope.
 const FORBIDDEN_WORKSPACE_ID_SCHEMA = z.unknown().optional().describe("Do not provide.");
@@ -105,6 +112,29 @@ const createServerInstructions = (options: { forbidWorkspaceIdInput: boolean }):
     : "Use odt_get_workspaces to discover available workspaces only when no startup workspace is configured. Workspace-scoped tools accept optional top-level workspaceId; when provided, it overrides the startup workspace.";
 
   return `OpenDucktor workflow server. ${workspaceInstruction} ${SHARED_SERVER_INSTRUCTIONS}`;
+};
+
+const parseAllowedToolNames = (): RegisteredToolName[] => {
+  const raw = process.env[ALLOWED_TOOLS_ENV]?.trim();
+  if (!raw) {
+    return [...ODT_MCP_TOOL_NAMES];
+  }
+
+  const toolNames = raw
+    .split(",")
+    .map((toolName) => toolName.trim())
+    .filter((toolName) => toolName.length > 0);
+  if (toolNames.length === 0) {
+    throw new Error(`${ALLOWED_TOOLS_ENV} must list at least one tool when provided.`);
+  }
+
+  for (const toolName of toolNames) {
+    if (!KNOWN_TOOL_NAMES.has(toolName)) {
+      throw new Error(`${ALLOWED_TOOLS_ENV} contains unknown OpenDucktor MCP tool '${toolName}'.`);
+    }
+  }
+
+  return [...new Set(toolNames)] as RegisteredToolName[];
 };
 
 const hasOwnWorkspaceIdInput = (input: unknown): boolean => {
@@ -277,7 +307,7 @@ const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
 const registerTools = (
   server: McpServer,
   store: OdtTaskStore,
-  options: { forbidWorkspaceIdInput: boolean },
+  options: { forbidWorkspaceIdInput: boolean; allowedToolNames: readonly RegisteredToolName[] },
 ): void => {
   const registerOneTool = <Name extends RegisteredToolName>(toolName: Name): void => {
     const spec = ODT_REGISTERED_TOOL_SPECS[toolName];
@@ -289,7 +319,7 @@ const registerTools = (
     registerOdtTool(server, store, tool, options);
   };
 
-  for (const toolName of ODT_MCP_TOOL_NAMES) {
+  for (const toolName of options.allowedToolNames) {
     registerOneTool(toolName);
   }
 };
@@ -310,9 +340,14 @@ const createMcpServer = async (context: OdtStoreContext = {}): Promise<McpServer
     },
   );
 
-  registerTools(server, store, { forbidWorkspaceIdInput });
+  registerTools(server, store, {
+    forbidWorkspaceIdInput,
+    allowedToolNames: parseAllowedToolNames(),
+  });
   return server;
 };
+
+export const ODT_WORKFLOW_AGENT_ALLOWED_TOOLS_ENV_VALUE = ODT_WORKFLOW_AGENT_TOOL_NAMES.join(",");
 
 const startMcp = async (context: OdtStoreContext = {}): Promise<void> => {
   const server = await createMcpServer(context);

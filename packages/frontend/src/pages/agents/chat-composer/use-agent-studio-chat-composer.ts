@@ -28,7 +28,7 @@ import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { resolveActiveSessionChatComposerContext } from "@/features/agent-chat-composer/session-context/active-session-chat-composer-context";
 import { pickDefaultVisibleSelectionForCatalog } from "@/features/session-start";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { DEFAULT_RUNTIME_KIND, findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
@@ -74,6 +74,7 @@ type AgentStudioChatComposerState = {
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
+  supportsProfiles?: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   slashCommandCatalog: AgentSlashCommandCatalog;
@@ -186,6 +187,14 @@ export function useAgentStudioChatComposer({
       }),
     [activeSessionRuntimeQueryInput?.runtimeKind, selectedRuntimeKind, runtimeDefinitions],
   );
+  const supportsProfiles = useMemo(() => {
+    const runtimeKind = hasActiveSession ? activeSessionRuntimeKind : selectedRuntimeKind;
+    if (!runtimeKind) {
+      return true;
+    }
+    const definition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
+    return definition?.capabilities.optionalSurfaces.supportsProfiles ?? false;
+  }, [activeSessionRuntimeKind, hasActiveSession, runtimeDefinitions, selectedRuntimeKind]);
 
   const composerCatalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(
@@ -198,8 +207,21 @@ export function useAgentStudioChatComposer({
       activeExternalSessionId === null &&
       selectedRuntimeKind !== null,
   });
+  const activeSessionCatalogQuery = useQuery({
+    ...repoRuntimeCatalogQueryOptions(
+      activeSessionRuntimeQueryInput?.repoPath ?? "",
+      activeSessionRuntimeQueryInput?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      loadCatalogForRepo,
+    ),
+    enabled:
+      hasActiveSession &&
+      activeSessionModelCatalog === null &&
+      activeSessionRuntimeQueryInput !== null,
+  });
   const composerCatalog = composerCatalogQuery.data ?? null;
-  const isLoadingComposerCatalog = composerCatalogQuery.isLoading;
+  const activeSessionCatalog = activeSessionCatalogQuery.data ?? null;
+  const isLoadingComposerCatalog =
+    composerCatalogQuery.isLoading || activeSessionCatalogQuery.isLoading;
   const {
     supportsSlashCommands,
     slashCommandCatalog,
@@ -248,7 +270,7 @@ export function useAgentStudioChatComposer({
     isAwaitingRepoSettingsForWorkspaceRepoPath,
     roleDefaultSelection,
   ]);
-  const selectionCatalog = activeSessionModelCatalog ?? composerCatalog;
+  const selectionCatalog = activeSessionModelCatalog ?? activeSessionCatalog ?? composerCatalog;
   const searchFiles = useMemo(
     () =>
       createChatComposerFileSearch({
@@ -348,6 +370,7 @@ export function useAgentStudioChatComposer({
     selectedModelSelection,
     selectedModelDescriptor: selectedModelEntry,
     isSelectionCatalogLoading,
+    supportsProfiles,
     supportsSlashCommands,
     supportsFileSearch,
     slashCommandCatalog,

@@ -149,6 +149,16 @@ pub struct AppService {
     pub(super) runtime_config_store: RuntimeConfigStore,
     pub(super) runtime_registry: AppRuntimeRegistry,
     pub(super) agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
+    pub(super) codex_app_server_transports: Arc<
+        Mutex<
+            HashMap<
+                String,
+                Arc<crate::app_service::codex_runtime::transport::CodexAppServerTransport>,
+            >,
+        >,
+    >,
+    pub(super) codex_app_server_event_emitter:
+        Arc<Mutex<Option<crate::app_service::codex_runtime::CodexAppServerEventEmitter>>>,
     pub(super) runtime_ensure_flights: Arc<Mutex<HashMap<String, Arc<RuntimeEnsureFlight>>>>,
     pub(super) repo_runtime_health_flights:
         Arc<Mutex<HashMap<String, Arc<RepoRuntimeHealthFlight>>>>,
@@ -285,6 +295,8 @@ impl AppService {
             runtime_config_store,
             runtime_registry,
             agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
+            codex_app_server_transports: Arc::new(Mutex::new(HashMap::new())),
+            codex_app_server_event_emitter: Arc::new(Mutex::new(None)),
             runtime_ensure_flights: Arc::new(Mutex::new(HashMap::new())),
             repo_runtime_health_flights: Arc::new(Mutex::new(HashMap::new())),
             runtime_startup_status: Arc::new(Mutex::new(HashMap::new())),

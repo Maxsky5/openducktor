@@ -359,4 +359,45 @@ describe("autopilot provider helpers", () => {
       }),
     );
   });
+
+  test("does not resolve a model selection when autopilot reuses a matching session", async () => {
+    const codexSelection = {
+      runtimeKind: "codex" as const,
+      providerId: "codex",
+      modelId: "gpt-5",
+      variant: "medium",
+    };
+    const args = createExecuteArgs(
+      createTask({
+        id: "TASK-CODEX",
+        status: "in_progress",
+        agentSessions: [
+          createBuilderSessionRecord({
+            externalSessionId: "codex-builder-session-1",
+            runtimeKind: "codex",
+            workingDirectory: "/tmp/repo/current-worktree",
+            selectedModel: codexSelection,
+          }),
+        ],
+      }),
+    );
+    args.resolveTaskWorktree.mockResolvedValue({
+      workingDirectory: "/tmp/repo/current-worktree",
+    });
+
+    await executeAutopilotAction({
+      ...args,
+      actionId: "startReviewQaFeedbacks",
+    });
+
+    expect(startSessionWorkflowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({
+          startMode: "reuse",
+          sourceExternalSessionId: "codex-builder-session-1",
+        }),
+        selection: null,
+      }),
+    );
+  });
 });

@@ -37,7 +37,8 @@ pub(super) fn opencode_runtime_definition() -> RuntimeDefinition {
         RuntimeDescriptor {
             kind,
             label: "OpenCode".to_string(),
-            description: "OpenCode local runtime with OpenDucktor MCP integration.".to_string(),
+            description: "Local OpenCode runtime connected through the OpenDucktor MCP bridge."
+                .to_string(),
             read_only_role_blocked_tools: vec![
                 "edit".to_string(),
                 "write".to_string(),
