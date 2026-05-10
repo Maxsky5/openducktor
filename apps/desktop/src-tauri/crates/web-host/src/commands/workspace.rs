@@ -122,12 +122,15 @@ fn format_attachment_lookup_display_name(token: &str) -> String {
             }
         })
         .collect::<String>();
-    if sanitized.len() <= MAX_ATTACHMENT_LOOKUP_DISPLAY_LEN {
+    if sanitized.chars().count() <= MAX_ATTACHMENT_LOOKUP_DISPLAY_LEN {
         return sanitized;
     }
 
-    let end = MAX_ATTACHMENT_LOOKUP_DISPLAY_LEN.saturating_sub(3);
-    format!("{}...", &sanitized[..end])
+    let truncated = sanitized
+        .chars()
+        .take(MAX_ATTACHMENT_LOOKUP_DISPLAY_LEN.saturating_sub(3))
+        .collect::<String>();
+    format!("{truncated}...")
 }
 
 fn read_staged_attachment_original_name(path: &Path) -> Option<String> {
@@ -168,8 +171,16 @@ pub(crate) fn resolve_staged_local_attachment_path(path_or_name: &str) -> Result
 
     let candidate_path = PathBuf::from(trimmed);
     if candidate_path.is_absolute() {
-        if is_staged_local_attachment_path(&candidate_path)? {
-            return Ok(candidate_path);
+        let stage_dir = local_attachment_stage_dir();
+        if stage_dir.exists() {
+            let canonical_stage_dir = std::fs::canonicalize(&stage_dir).map_err(|error| {
+                format!("Failed to resolve staged attachment directory: {error}")
+            })?;
+            if let Some(path) =
+                canonical_staged_local_attachment_path(&candidate_path, &canonical_stage_dir)?
+            {
+                return Ok(path);
+            }
         }
         return Err("Attachment path is not a staged attachment file.".to_string());
     }
@@ -224,5 +235,80 @@ mod tests {
     #[test]
     fn sanitize_attachment_filename_keeps_empty_names_writable() {
         assert_eq!(sanitize_attachment_filename(" .. "), "attachment.bin");
+    }
+
+    #[test]
+    fn resolve_staged_local_attachment_path_returns_canonical_absolute_path() {
+        let file_name = unique_attachment_name("absolute.txt");
+        let path = create_staged_attachment(file_name.as_str(), b"content");
+        let canonical_path = std::fs::canonicalize(&path).expect("staged path should canonicalize");
+
+        let resolved = resolve_staged_local_attachment_path(path.to_string_lossy().as_ref())
+            .expect("absolute staged path should resolve");
+
+        assert_eq!(resolved, canonical_path);
+        remove_file(path);
+    }
+
+    #[test]
+    fn resolve_staged_local_attachment_path_finds_direct_token() {
+        let file_name = unique_attachment_name("token.txt");
+        let path = create_staged_attachment(file_name.as_str(), b"content");
+        let canonical_path = std::fs::canonicalize(&path).expect("staged path should canonicalize");
+
+        let resolved = resolve_staged_local_attachment_path(file_name.as_str())
+            .expect("direct staged token should resolve");
+
+        assert_eq!(resolved, canonical_path);
+        remove_file(path);
+    }
+
+    #[test]
+    fn resolve_staged_local_attachment_path_handles_long_utf8_display_name() {
+        let token = "é".repeat(MAX_ATTACHMENT_LOOKUP_DISPLAY_LEN + 20);
+
+        let error = resolve_staged_local_attachment_path(&token)
+            .expect_err("missing long UTF-8 token should return not-found error");
+
+        assert!(error.starts_with("Staged attachment not found: "));
+        assert!(error.ends_with("..."));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_staged_local_attachment_path_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let file_name = unique_attachment_name("escape.txt");
+        let outside_path = std::env::temp_dir().join(unique_attachment_name("outside.txt"));
+        std::fs::write(&outside_path, b"outside").expect("outside file should be written");
+        let symlink_path = local_attachment_stage_dir().join(&file_name);
+        std::fs::create_dir_all(local_attachment_stage_dir())
+            .expect("attachment staging directory should be created");
+        symlink(&outside_path, &symlink_path).expect("symlink should be created");
+
+        let error = resolve_staged_local_attachment_path(file_name.as_str())
+            .expect_err("symlink escape should not resolve");
+
+        assert!(error.starts_with("Staged attachment not found: "));
+        remove_file(symlink_path);
+        remove_file(outside_path);
+    }
+
+    fn unique_attachment_name(suffix: &str) -> String {
+        format!("{}-{suffix}", Uuid::new_v4())
+    }
+
+    fn create_staged_attachment(file_name: &str, bytes: &[u8]) -> PathBuf {
+        let stage_dir = local_attachment_stage_dir();
+        std::fs::create_dir_all(&stage_dir)
+            .expect("attachment staging directory should be created");
+        let path = stage_dir.join(file_name);
+        std::fs::write(&path, bytes).expect("staged attachment should be written");
+        path
+    }
+
+    fn remove_file(path: PathBuf) {
+        let _ = std::fs::remove_file(path);
     }
 }
