@@ -83,7 +83,7 @@ export function useAgentStudioSendAction({
       ) {
         return false;
       }
-      if (!canStartSessionForRole(selectedTask, role)) {
+      if (!activeExternalSessionId && !canStartSessionForRole(selectedTask, role)) {
         return false;
       }
       if (activeSessionIsLoadingModelCatalog && !activeSessionSelectedModel) {

@@ -114,6 +114,54 @@ describe("useAgentStudioSendAction", () => {
     await harness.unmount();
   });
 
+  test("blocks unavailable roles only when a new session would be started", async () => {
+    const startSession = mock(async () => "session-new");
+    const sendAgentMessage = mock(async () => {});
+    const unavailableQaTask = createTaskCardFixture({
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: true },
+        qa: { required: true, canSkip: false, available: false, completed: false },
+      },
+    });
+    const harness = createHookHarness(useAgentStudioSendAction, {
+      ...createBaseArgs(),
+      role: "qa",
+      activeExternalSessionId: null,
+      selectedTask: unavailableQaTask,
+      startSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(createDraft("start qa"))).resolves.toBe(false);
+    });
+
+    expect(startSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+
+    await harness.update({
+      ...createBaseArgs(),
+      role: "qa",
+      activeExternalSessionId: "session-existing",
+      selectedTask: unavailableQaTask,
+      startSession,
+      sendAgentMessage,
+    });
+    await harness.run(async (state) => {
+      await expect(state.onSend(createDraft("follow up"))).resolves.toBe(true);
+    });
+
+    expect(startSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "follow up" },
+    ]);
+
+    await harness.unmount();
+  });
+
   test("tracks a new-session send across draft and target session contexts", async () => {
     const sendDeferred = createDeferred<void>();
     const startSession = mock(async () => "session-new");
