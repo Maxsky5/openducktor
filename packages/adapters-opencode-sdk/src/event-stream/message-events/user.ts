@@ -22,7 +22,6 @@ const resolveUserMessageDisplay = (input: {
   normalizedDisplayParts: AgentUserMessageDisplayPart[];
   metadata?: SessionMessageMetadata;
   runtime: EventStreamRuntime;
-  messageId: string;
   model?: ReturnType<typeof readMessageModelSelection>;
 }): {
   displayParts: AgentUserMessageDisplayPart[];
@@ -99,7 +98,6 @@ export const handleUserMessageUpdated = (
     fallbackText,
     normalizedDisplayParts,
     runtime,
-    messageId: input.messageId,
     ...(currentMetadata ? { metadata: currentMetadata } : {}),
     ...(input.messageModel ? { model: input.messageModel } : {}),
   });
@@ -143,7 +141,6 @@ export const handleUserPartUpdated = (runtime: EventStreamRuntime, messageId: st
     fallbackText,
     normalizedDisplayParts,
     runtime,
-    messageId,
     ...(metadata ? { metadata } : {}),
     ...(metadata?.model ? { model: metadata.model } : {}),
   });
