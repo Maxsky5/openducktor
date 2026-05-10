@@ -62,94 +62,95 @@ impl AppService {
             #[cfg(not(unix))]
             {
                 let _ = command;
-                return Err(anyhow!(
+                Err(anyhow!(
                     "Builder dev servers require PTY-backed terminal capture and are only supported on Unix hosts in this build."
-                ));
+                ))
             }
 
             #[cfg(unix)]
-            let terminal_reader: Box<dyn Read + Send> = {
-                let (terminal_reader, terminal_writer) = open_pty_pair()?;
-                let stdout_writer = terminal_writer
-                    .try_clone()
-                    .context("Failed duplicating pseudo terminal handle for dev server stdout")?;
-                command.stdout(Stdio::from(stdout_writer));
-                command.stderr(Stdio::from(terminal_writer));
-                Box::new(terminal_reader)
-            };
-
-            let mut child = command.spawn().with_context(|| {
-                format!(
-                    "Failed to start dev server {} in {} using command `{}`",
-                    script_display_name, worktree_path, script.command
-                )
-            })?;
-
-            let pid = child.id();
-            spawned_pid = Some(pid);
-
-            #[cfg(unix)]
-            if let Err(error) = spawn_dev_server_parent_death_watcher(std::process::id(), pid) {
-                eprintln!(
-                    "OpenDucktor warning: failed to attach dev server parent-death watcher for pid {}: {error:#}",
-                    pid
-                );
-            }
-
-            let started_at = now_rfc3339();
-
-            spawn_terminal_forwarder(
-                self.dev_server_groups.clone(),
-                group_key.to_string(),
-                repo_path.to_string(),
-                task_id.to_string(),
-                script.id.clone(),
-                terminal_reader,
-            );
-
-            self.update_script_state(group_key, script.id.as_str(), |state| {
-                state.status = DevServerScriptStatus::Starting;
-                state.pid = Some(pid);
-                state.started_at = Some(started_at.clone());
-                state.exit_code = None;
-                state.last_error = None;
-            })?;
-
-            if let Some(status) =
-                wait_for_immediate_dev_server_exit(&mut child, DEV_SERVER_START_GRACE_PERIOD)?
             {
-                let message = dev_server_exit_message(status.code());
-                self.mark_dev_server_start_exit_failed(
-                    group_key,
-                    repo_path,
-                    task_id,
-                    script.id.as_str(),
-                    status.code(),
-                    message.as_str(),
+                let terminal_reader: Box<dyn Read + Send> = {
+                    let (terminal_reader, terminal_writer) = open_pty_pair()?;
+                    let stdout_writer = terminal_writer.try_clone().context(
+                        "Failed duplicating pseudo terminal handle for dev server stdout",
+                    )?;
+                    command.stdout(Stdio::from(stdout_writer));
+                    command.stderr(Stdio::from(terminal_writer));
+                    Box::new(terminal_reader)
+                };
+
+                let mut child = command.spawn().with_context(|| {
+                    format!(
+                        "Failed to start dev server {} in {} using command `{}`",
+                        script_display_name, worktree_path, script.command
+                    )
+                })?;
+
+                let pid = child.id();
+                spawned_pid = Some(pid);
+
+                if let Err(error) = spawn_dev_server_parent_death_watcher(std::process::id(), pid) {
+                    eprintln!(
+                        "OpenDucktor warning: failed to attach dev server parent-death watcher for pid {}: {error:#}",
+                        pid
+                    );
+                }
+
+                let started_at = now_rfc3339();
+
+                spawn_terminal_forwarder(
+                    self.dev_server_groups.clone(),
+                    group_key.to_string(),
+                    repo_path.to_string(),
+                    task_id.to_string(),
+                    script.id.clone(),
+                    terminal_reader,
                 );
-                spawned_pid = None;
-                start_failure_already_recorded = true;
-                return Err(anyhow!(message));
+
+                self.update_script_state(group_key, script.id.as_str(), |state| {
+                    state.status = DevServerScriptStatus::Starting;
+                    state.pid = Some(pid);
+                    state.started_at = Some(started_at.clone());
+                    state.exit_code = None;
+                    state.last_error = None;
+                })?;
+
+                if let Some(status) =
+                    wait_for_immediate_dev_server_exit(&mut child, DEV_SERVER_START_GRACE_PERIOD)?
+                {
+                    let message = dev_server_exit_message(status.code());
+                    self.mark_dev_server_start_exit_failed(
+                        group_key,
+                        repo_path,
+                        task_id,
+                        script.id.as_str(),
+                        status.code(),
+                        message.as_str(),
+                    );
+                    spawned_pid = None;
+                    start_failure_already_recorded = true;
+                    return Err(anyhow!(message));
+                }
+
+                self.update_script_state(group_key, script.id.as_str(), |state| {
+                    state.status = DevServerScriptStatus::Running;
+                    state.pid = Some(pid);
+                    state.started_at = Some(started_at.clone());
+                    state.exit_code = None;
+                    state.last_error = None;
+                })?;
+
+                spawn_waiter(
+                    self.dev_server_groups.clone(),
+                    group_key.to_string(),
+                    repo_path.to_string(),
+                    task_id.to_string(),
+                    script.id.clone(),
+                    pid,
+                    child,
+                );
+                Ok(pid)
             }
-
-            self.update_script_state(group_key, script.id.as_str(), |state| {
-                state.status = DevServerScriptStatus::Running;
-                state.pid = Some(pid);
-                state.started_at = Some(started_at.clone());
-                state.exit_code = None;
-                state.last_error = None;
-            })?;
-
-            spawn_waiter(
-                self.dev_server_groups.clone(),
-                group_key.to_string(),
-                repo_path.to_string(),
-                task_id.to_string(),
-                script.id.clone(),
-                pid,
-                child,
-            );
-            Ok(pid)
         })();
 
         if let Err(error) = start_result {
