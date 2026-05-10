@@ -24,6 +24,7 @@ type BackendReadinessDependencies = {
 type HostTerminationDependencies = {
   platform: NodeJS.Platform;
   killProcess: typeof process.kill;
+  terminateWindowsProcessTree: (pid: number) => Promise<void>;
   sleep: (durationMs: number) => Promise<unknown>;
 };
 type FrontendServer = {
@@ -37,6 +38,8 @@ const VITE_CLOSE_TIMEOUT_MS = 3_000;
 const HOST_GRACEFUL_EXIT_TIMEOUT_MS = 2_000;
 const FORCE_EXIT_SIGNAL_GRACE_MS = 1_500;
 const MCP_SIDECAR_PATH_ENV = "OPENDUCKTOR_OPENDUCKTOR_MCP_PATH";
+const HOST_FORCE_TERMINATION_GRACE_MS = 3_000;
+const HOST_FORCE_KILL_WAIT_MS = 1_000;
 
 const buildFrontendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
 const buildBackendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
@@ -149,6 +152,14 @@ const verifyBackendReadiness = async (
 const defaultHostTerminationDependencies: HostTerminationDependencies = {
   platform: process.platform,
   killProcess: process.kill,
+  terminateWindowsProcessTree: async (pid: number) => {
+    const taskkill = Bun.spawn({
+      cmd: ["taskkill", "/PID", String(pid), "/T", "/F"],
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    await Promise.race([taskkill.exited, Bun.sleep(HOST_FORCE_TERMINATION_GRACE_MS)]);
+  },
   sleep: Bun.sleep,
 };
 
@@ -182,11 +193,14 @@ const terminateHostProcess = async (
   const hasProcessGroupPid = typeof pid === "number" && pid > 0;
 
   if (dependencies.platform === "win32") {
-    child.kill();
-    await waitForHostExit(child, 3_000, dependencies.sleep);
-
-    child.kill(9);
-    await waitForHostExit(child, 1_000, dependencies.sleep);
+    if (hasProcessGroupPid) {
+      try {
+        await dependencies.terminateWindowsProcessTree(pid);
+      } catch {}
+    } else {
+      child.kill();
+    }
+    await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
     return;
   }
 
@@ -197,7 +211,7 @@ const terminateHostProcess = async (
   }
 
   child.kill();
-  await waitForHostExit(child, 3_000, dependencies.sleep);
+  await dependencies.sleep(HOST_FORCE_TERMINATION_GRACE_MS);
 
   if (hasProcessGroupPid) {
     try {
@@ -209,7 +223,7 @@ const terminateHostProcess = async (
   }
 
   child.kill(9);
-  await waitForHostExit(child, 1_000, dependencies.sleep);
+  await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
 };
 
 const closeFrontendServer = async (server: FrontendServer | null): Promise<void> => {
