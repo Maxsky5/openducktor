@@ -62,40 +62,65 @@ const mockAgentSessionPresenceSnapshot = (
   return snapshot;
 };
 
+type SessionActionDependencies = Parameters<typeof createAgentSessionActions>[0];
+
+const createDefaultActiveWorkspace = () => ({
+  repoPath: "/tmp/repo",
+  workspaceId: "workspace-1",
+  workspaceName: "Active Workspace",
+});
+
+const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}) => {
+  const adapter = overrides.adapter ?? new OpencodeSdkAdapter();
+  const sessionsRef = overrides.sessionsRef ?? { current: {} };
+
+  const dependencies: SessionActionDependencies = {
+    activeWorkspace: createDefaultActiveWorkspace(),
+    adapter,
+    setSessionsById: () => {},
+    sessionsRef,
+    taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
+    repoEpochRef: { current: 1 },
+    currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+    inFlightStartsByWorkspaceTaskRef: { current: new Map() },
+    unsubscribersRef: { current: new Map() },
+    turnStartedAtBySessionRef: { current: {} },
+    updateSession: (externalSessionId, updater) => {
+      const current = sessionsRef.current[externalSessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current[externalSessionId] = updater(current);
+    },
+    attachSessionListener: () => {},
+    resolveTaskWorktree: async () => null,
+    ensureRuntime: async () => ({
+      kind: "opencode",
+      runtimeKind: "opencode",
+      runtimeId: null,
+      workingDirectory: "/tmp/repo",
+    }),
+    loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+    loadRepoPromptOverrides: async () => ({}),
+    loadAgentSessions: async () => {},
+    clearTurnDuration: () => {},
+    refreshTaskData: async () => {},
+    persistSessionRecord: async () => {},
+    stopAuthoritativeSession: async () => {},
+    invalidateSessionStopQueries: async () => {},
+  };
+
+  return createAgentSessionActions({
+    ...dependencies,
+    ...overrides,
+    adapter,
+    sessionsRef,
+  });
+};
+
 describe("agent-orchestrator/handlers/session-actions", () => {
   test("returns action handlers", () => {
-    const adapter = new OpencodeSdkAdapter();
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
-      adapter,
-      setSessionsById: () => {},
-      sessionsRef: { current: {} },
-      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      unsubscribersRef: { current: new Map() },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: () => {},
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      stopAuthoritativeSession: async () => {},
-    });
+    const actions = createSessionActions({ updateSession: () => {} });
 
     expect(typeof actions.ensureSessionReady).toBe("function");
     expect(typeof actions.sendAgentMessage).toBe("function");
@@ -106,36 +131,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("uses live workspace refs for session start stale checks", async () => {
     const adapter = new OpencodeSdkAdapter();
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
-      sessionsRef: { current: {} },
-      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
-      repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef,
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      unsubscribersRef: { current: new Map() },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession: () => {},
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      stopAuthoritativeSession: async () => {},
     });
 
     currentWorkspaceRepoPathRef.current = "/tmp/other";
@@ -201,41 +200,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         }),
       },
     };
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
-      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      unsubscribersRef: { current: new Map() },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
       stopAuthoritativeSession: async (target) => {
         stopTargets.push(target);
       },
@@ -313,19 +280,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       throw new Error("build stop failed");
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: {
         current: new Map([
           [
@@ -336,29 +294,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
           ],
         ]),
       },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
       clearTurnDuration: () => {
         clearCalls += 1;
       },
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
       stopAuthoritativeSession,
     });
 
@@ -393,41 +331,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         }),
       },
     };
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      unsubscribersRef: { current: new Map() },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
       stopAuthoritativeSession: async () => {
         await stopDeferred.promise;
       },
@@ -539,36 +446,13 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       });
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", unsubscribe]]) },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       attachSessionListener: () => unsubscribe,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      stopAuthoritativeSession: async () => {},
     });
 
     try {
@@ -633,43 +517,14 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef,
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
       clearTurnDuration: () => {
         clearCalls += 1;
       },
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
       stopAuthoritativeSession: async () => {
         callOrder.push("host-stop");
       },
@@ -712,41 +567,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
-      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      unsubscribersRef: { current: new Map() },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
       stopAuthoritativeSession: async (target) => {
         buildStopCalls += 1;
         expect(target).toEqual({
@@ -815,41 +638,13 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      unsubscribersRef: { current: new Map() },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {
         callOrder.push("load-agent-sessions");
       },
-      clearTurnDuration: () => {},
       refreshTaskData: async () => {
         callOrder.push("refresh-task-data");
       },
@@ -910,46 +705,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      unsubscribersRef: { current: new Map() },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
       },
-      clearTurnDuration: () => {},
       refreshTaskData: async () => {
         refreshTaskDataCalls += 1;
       },
-      persistSessionRecord: async () => {},
-      stopAuthoritativeSession: async () => {},
       invalidateSessionStopQueries: async (input) => {
         invalidationCalls.push(input);
       },
@@ -992,40 +757,23 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
+    const actions = createSessionActions({
       activeWorkspace: null,
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: fallbackRepoPath },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      unsubscribersRef: { current: new Map() },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: fallbackRepoPath,
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
       },
-      clearTurnDuration: () => {},
       refreshTaskData: async (repoPath) => {
         refreshTaskDataCalls.push(repoPath);
       },
-      persistSessionRecord: async () => {},
       stopAuthoritativeSession: async (target) => {
         stopTargets.push(target);
       },
@@ -1096,21 +844,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
     const updateSessionOptions: unknown[] = [];
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
-      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      unsubscribersRef: { current: new Map() },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession: (externalSessionId, updater, options) => {
         const current = sessionsRef.current[externalSessionId];
         if (!current) {
@@ -1119,18 +855,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         updateSessionOptions.push(options);
         sessionsRef.current[externalSessionId] = updater(current);
       },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1234,41 +963,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
-      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1332,21 +1030,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     };
     const updateSessionOptions: unknown[] = [];
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
-      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      unsubscribersRef: { current: new Map() },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession: (externalSessionId, updater, options) => {
         const current = sessionsRef.current[externalSessionId];
         if (!current) {
@@ -1355,19 +1041,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         updateSessionOptions.push(options);
         sessionsRef.current[externalSessionId] = updater(current);
       },
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1456,41 +1129,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
-      taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      unsubscribersRef: { current: new Map() },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: null,
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1533,40 +1174,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1606,21 +1223,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession: (externalSessionId, updater) => {
         const current = sessionsRef.current[externalSessionId];
         if (!current) {
@@ -1633,18 +1240,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         committedStatuses.push(next.status);
         sessionsRef.current[externalSessionId] = next;
       },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1685,40 +1285,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1749,40 +1325,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1821,42 +1373,19 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {
         callOrder.push("hydrate");
       },
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1914,40 +1443,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -1990,40 +1495,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -2054,14 +1535,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: {
         current: [
@@ -2077,30 +1552,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
           }),
         ],
       },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -2127,14 +1584,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: {
         current: [
@@ -2150,30 +1601,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
           }),
         ],
       },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
       stopAuthoritativeSession: async () => {
         stopCalls += 1;
       },
@@ -2207,42 +1640,19 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
       clearTurnDuration: () => {
         clearCalls += 1;
       },
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -2312,43 +1722,21 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       } as Record<string, AgentSessionState["selectedModel"]>,
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef,
       turnModelBySessionRef,
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
       clearTurnDuration: () => {
         throw new Error("busy queued send should not clear turn timing");
       },
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {
@@ -2408,43 +1796,21 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       } as Record<string, AgentSessionState["selectedModel"]>,
     };
 
-    const actions = createAgentSessionActions({
-      activeWorkspace: {
-        repoPath: "/tmp/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+    const actions = createSessionActions({
       adapter,
-      setSessionsById: () => {},
       sessionsRef,
       taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       turnStartedAtBySessionRef,
       turnModelBySessionRef,
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current[externalSessionId] = updater(current);
-      },
-      attachSessionListener: () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeId: null,
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
       clearTurnDuration: () => {
         clearCalls += 1;
       },
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
     });
 
     try {

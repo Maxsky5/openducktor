@@ -57,7 +57,7 @@ type SessionActionsDependencies = {
     options?: { persist?: boolean },
   ) => void;
   attachSessionListener: (repoPath: string, externalSessionId: string) => void;
-  resolveTaskWorktree?: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
+  resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -69,8 +69,8 @@ type SessionActionsDependencies = {
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  stopAuthoritativeSession?: (target: AgentSessionStopTarget) => Promise<void>;
-  invalidateSessionStopQueries?: (input: {
+  stopAuthoritativeSession: (target: AgentSessionStopTarget) => Promise<void>;
+  invalidateSessionStopQueries: (input: {
     repoPath: string;
     taskId: string;
     runtimeKind?: RuntimeKind;
@@ -192,9 +192,7 @@ export const createAgentSessionActions = ({
   clearTurnDuration,
   refreshTaskData,
   persistSessionRecord,
-  stopAuthoritativeSession = async () => {
-    throw new Error("Agent session stop operation is unavailable.");
-  },
+  stopAuthoritativeSession,
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
@@ -342,11 +340,7 @@ export const createAgentSessionActions = ({
     },
     runtime: {
       adapter,
-      resolveTaskWorktree:
-        resolveTaskWorktree ??
-        (async () => {
-          throw new Error("Build continuation target resolution is unavailable.");
-        }),
+      resolveTaskWorktree,
       ensureRuntime,
     },
     task: {
@@ -459,7 +453,7 @@ export const createAgentSessionActions = ({
 
     if (stopRepoPath) {
       await Promise.all([
-        invalidateSessionStopQueries?.({
+        invalidateSessionStopQueries({
           repoPath: stopRepoPath,
           taskId: session.taskId,
           ...(session.runtimeKind ? { runtimeKind: session.runtimeKind } : {}),
