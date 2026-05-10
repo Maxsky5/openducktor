@@ -39,14 +39,19 @@ const resolveUserMessageDisplay = (input: {
     initialVisibleUserMessage.displayParts,
     input.model,
   );
-  const { displayParts, visible } = buildVisibleUserMessage({
+
+  if (!matchedQueuedSend) {
+    return { ...initialVisibleUserMessage, matchedQueuedSend: null };
+  }
+
+  const finalVisibleUserMessage = buildVisibleUserMessage({
     fallbackText: input.fallbackText,
     normalizedDisplayParts: input.normalizedDisplayParts,
     ...(input.metadata ? { metadata: input.metadata } : {}),
-    ...(matchedQueuedSend ? { matchedQueuedSend } : {}),
+    matchedQueuedSend,
   });
 
-  return { displayParts, matchedQueuedSend, visible };
+  return { ...finalVisibleUserMessage, matchedQueuedSend };
 };
 
 export const reconcileUserMessageQueuedStates = (runtime: EventStreamRuntime): void => {
