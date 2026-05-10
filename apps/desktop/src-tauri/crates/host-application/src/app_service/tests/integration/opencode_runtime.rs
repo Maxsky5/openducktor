@@ -1,7 +1,11 @@
 use anyhow::Result;
 use host_domain::{AgentRuntimeKind, GitCurrentBranch, RuntimeInstanceSummary, RuntimeRole};
 use host_infra_system::AppConfigStore;
+#[cfg(unix)]
+use host_test_support::EnvVarGuard;
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
@@ -12,10 +16,13 @@ use crate::app_service::opencode_runtime::test_support::{
 use crate::app_service::test_support::{
     add_workspace_with_repo_config, build_service_with_store, builtin_opencode_runtime_descriptor,
     builtin_opencode_runtime_route, create_fake_opencode, init_git_repo, install_fake_dolt,
-    lock_env, make_session, make_task, set_env_var, set_fake_opencode_and_bridge_binaries,
-    unique_temp_path, wait_for_path_exists, wait_for_process_exit,
+    lock_env, make_session, make_task, prepend_path, remove_env_var, set_env_var,
+    set_fake_opencode_and_bridge_binaries, unique_temp_path, wait_for_path_exists,
+    wait_for_process_exit,
 };
-use crate::app_service::AgentRuntimeProcess;
+use crate::app_service::{
+    resolve_opencode_binary, resolve_opencode_binary_path, AgentRuntimeProcess,
+};
 
 fn runtime_summary_fixture(
     runtime_id: &str,
@@ -36,6 +43,104 @@ fn runtime_summary_fixture(
         started_at: "2026-02-20T12:00:00Z".to_string(),
         descriptor: builtin_opencode_runtime_descriptor(),
     }
+}
+
+#[test]
+fn resolve_opencode_binary_path_supports_home_shorthand_override() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("opencode-tilde-override");
+    let home = root.join("home");
+    let override_dir = home.join("custom-bin");
+    fs::create_dir_all(&override_dir)?;
+    let override_binary = override_dir.join("opencode");
+    create_fake_opencode(&override_binary)?;
+
+    let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+    let _override_guard = set_env_var("OPENDUCKTOR_OPENCODE_BINARY", "~/custom-bin/opencode");
+
+    let resolved = resolve_opencode_binary_path();
+    assert_eq!(
+        resolved.as_deref(),
+        Some(override_binary.to_string_lossy().as_ref())
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn resolve_opencode_binary_path_rejects_invalid_override_without_path_fallback() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("opencode-invalid-override");
+    let path_bin = root.join("path-bin");
+    fs::create_dir_all(&path_bin)?;
+    let path_opencode = path_bin.join("opencode");
+    create_fake_opencode(&path_opencode)?;
+
+    let _override_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        root.join("missing-opencode").to_string_lossy().as_ref(),
+    );
+    let _home_guard = remove_env_var("HOME");
+    let _path_guard = prepend_path(&path_bin);
+
+    assert!(resolve_opencode_binary_path().is_none());
+    let error = resolve_opencode_binary().expect_err("invalid override should fail fast");
+    assert!(error.contains("OPENDUCKTOR_OPENCODE_BINARY"));
+    assert!(error.contains("missing or non-executable file"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn resolve_opencode_binary_path_rejects_empty_override_without_fallback() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("opencode-empty-override");
+    let home_bin = root.join(".opencode").join("bin");
+    fs::create_dir_all(&home_bin)?;
+    create_fake_opencode(&home_bin.join("opencode"))?;
+    let empty_bin = root.join("empty-bin");
+    fs::create_dir_all(&empty_bin)?;
+    let fallback_path = format!("{}:/usr/bin:/bin", empty_bin.to_string_lossy());
+
+    let _override_guard = set_env_var("OPENDUCKTOR_OPENCODE_BINARY", "   ");
+    let _home_guard = set_env_var("HOME", root.to_string_lossy().as_ref());
+    let _path_guard = set_env_var("PATH", fallback_path.as_str());
+
+    assert!(resolve_opencode_binary_path().is_none());
+    let error = resolve_opencode_binary().expect_err("empty override should fail fast");
+    assert!(error.contains("OPENDUCKTOR_OPENCODE_BINARY is empty"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn resolve_opencode_binary_path_rejects_non_utf8_override_without_fallback() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("opencode-non-utf8-override");
+    let path_bin = root.join("path-bin");
+    fs::create_dir_all(&path_bin)?;
+    create_fake_opencode(&path_bin.join("opencode"))?;
+
+    let mut override_bytes = root.join("missing-opencode").into_os_string().into_vec();
+    override_bytes.push(0xff);
+    let _override_guard = EnvVarGuard::set_os(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        std::ffi::OsString::from_vec(override_bytes),
+    );
+    let _home_guard = remove_env_var("HOME");
+    let _path_guard = prepend_path(&path_bin);
+
+    assert!(resolve_opencode_binary_path().is_none());
+    let error = resolve_opencode_binary().expect_err("non-utf8 override should fail fast");
+    assert!(error.contains("OPENDUCKTOR_OPENCODE_BINARY"));
+    assert!(error.contains("missing or non-executable file"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
 }
 
 #[test]

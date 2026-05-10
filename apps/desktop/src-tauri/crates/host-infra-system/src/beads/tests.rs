@@ -28,6 +28,7 @@ fn temp_config_root(label: &str) -> PathBuf {
 }
 
 fn skip_if_dolt_unavailable() -> bool {
+    let _env_lock = lock_env();
     crate::resolve_command_path("dolt")
         .expect("dolt resolution should not fail")
         .is_none()
@@ -133,6 +134,29 @@ fn shared_beads_helpers_use_expected_layouts() {
             .join("shared-server")
             .join("server.lock")
     ));
+}
+
+#[test]
+fn shared_dolt_server_reports_invalid_dolt_override() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = temp_config_root("invalid-dolt-override");
+    let empty_bin = root.join("empty-bin");
+    fs::create_dir_all(&empty_bin)?;
+    let _config_guard = EnvVarGuard::set("OPENDUCKTOR_CONFIG_DIR", root.to_string_lossy().as_ref());
+    let _path_guard = EnvVarGuard::set("PATH", empty_bin.to_string_lossy().as_ref());
+    let _dolt_guard = EnvVarGuard::set(
+        "OPENDUCKTOR_DOLT_PATH",
+        root.join("missing-dolt").to_string_lossy().as_ref(),
+    );
+
+    let error = ensure_shared_dolt_server_running(4242)
+        .expect_err("invalid dolt override should prevent shared server startup");
+    let message = error.to_string();
+    assert!(message.contains("OPENDUCKTOR_DOLT_PATH"));
+    assert!(message.contains("missing or non-executable file"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
 }
 
 #[test]

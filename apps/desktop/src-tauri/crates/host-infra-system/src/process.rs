@@ -64,12 +64,12 @@ fn explicit_command_override(program: &str) -> Result<Option<String>> {
     let explicit_path = parse_user_path_os(&raw_path)
         .with_context(|| format!("Invalid {override_name} path override"))?;
 
-    if explicit_path.is_file() {
+    if is_executable_file(explicit_path.as_path()) {
         return Ok(Some(explicit_path.to_string_lossy().to_string()));
     }
 
     Err(anyhow!(
-        "Configured command override {override_name} points to a missing file: {}",
+        "Configured command override {override_name} points to a missing or non-executable file: {}",
         explicit_path.display()
     ))
 }
@@ -148,14 +148,14 @@ fn existing_file_path(path: PathBuf) -> Option<String> {
 }
 
 #[cfg(unix)]
-fn is_executable_file(path: &Path) -> bool {
+pub fn is_executable_file(path: &Path) -> bool {
     path.metadata()
         .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
 }
 
 #[cfg(not(unix))]
-fn is_executable_file(path: &Path) -> bool {
+pub fn is_executable_file(path: &Path) -> bool {
     path.is_file()
 }
 
@@ -240,7 +240,7 @@ fn explicit_command_override_directories() -> Vec<PathBuf> {
             }
 
             let path = parse_user_path_os(&value).ok()?;
-            if !path.is_file() {
+            if !is_executable_file(path.as_path()) {
                 return None;
             }
 
@@ -645,6 +645,16 @@ pub fn command_exists(program: &str) -> bool {
     command_path(program).is_some()
 }
 
+pub fn required_command_error(program: &str) -> Option<String> {
+    match resolve_command_path(program) {
+        Ok(Some(_)) => None,
+        Ok(None) => Some(format!(
+            "{program} not found in bundled locations, standard install locations, or PATH"
+        )),
+        Err(error) => Some(error.to_string()),
+    }
+}
+
 pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
     let resolved = resolve_command_path(program).ok().flatten()?;
     run_command(&resolved, args, None).ok().and_then(|output| {
@@ -657,12 +667,15 @@ pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
+    use super::command_file_names;
     use super::{
         bundled_command_path_from_executable, command_env_override_name, command_exists,
         command_path, command_path_from_directories, compose_process_path_entries,
-        explicit_command_override, path_entries_from_value, resolve_command_path, run_command,
-        run_command_allow_failure, run_command_allow_failure_with_env, run_command_with_env,
-        subprocess_path_env, version_command,
+        explicit_command_override, path_entries_from_value, required_command_error,
+        resolve_command_path, run_command, run_command_allow_failure,
+        run_command_allow_failure_with_env, run_command_with_env, subprocess_path_env,
+        version_command,
     };
     use host_test_support::{lock_env, EnvVarGuard};
     use std::{
@@ -689,6 +702,18 @@ mod tests {
             .permissions();
         permissions.set_mode(0o755);
         fs::set_permissions(path, permissions).expect("script should be executable");
+    }
+
+    #[cfg(not(unix))]
+    fn write_executable(path: &Path, body: &str) {
+        fs::write(path, body).expect("command file should be writable");
+    }
+
+    fn path_list(entries: &[PathBuf]) -> String {
+        env::join_paths(entries)
+            .expect("test PATH should be joinable")
+            .to_string_lossy()
+            .to_string()
     }
 
     #[cfg(unix)]
@@ -768,6 +793,107 @@ mod tests {
     fn command_path_treats_metacharacters_as_literal_program_name() {
         let payload = "definitely_not_real_$(echo injected)`uname`;touch /tmp/odt";
         assert!(command_path(payload).is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_command_lookup_resolves_exe_from_extensionless_name() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-windows-exe-lookup");
+        let bin = root.join("bin");
+        fs::create_dir_all(&bin).expect("bin dir should be created");
+        let fake_bd = bin.join("bd.exe");
+        fs::write(&fake_bd, "").expect("fake exe should be writable");
+
+        let _path_guard = EnvVarGuard::set("PATH", path_list(&[bin.clone()]).as_str());
+        let _pathext_guard = EnvVarGuard::set("PATHEXT", ".EXE;.CMD");
+
+        assert!(command_exists("bd"));
+        assert_eq!(
+            command_path("bd").as_deref(),
+            Some(fake_bd.to_string_lossy().as_ref())
+        );
+        assert_eq!(
+            resolve_command_path("bd")
+                .expect("resolution should succeed")
+                .as_deref(),
+            Some(fake_bd.to_string_lossy().as_ref())
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_command_lookup_honors_pathext_and_version_command() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-windows-cmd-lookup");
+        let bin = root.join("bin");
+        fs::create_dir_all(&bin).expect("bin dir should be created");
+        let fake_bd = bin.join("bd.cmd");
+        fs::write(&fake_bd, "@echo off\r\necho bd-fake 1.2.3\r\n")
+            .expect("fake cmd should be writable");
+
+        let _path_guard = EnvVarGuard::set("PATH", path_list(&[bin.clone()]).as_str());
+        let _pathext_guard = EnvVarGuard::set("PATHEXT", ".CMD");
+
+        assert_eq!(
+            command_path("bd").as_deref(),
+            Some(fake_bd.to_string_lossy().as_ref())
+        );
+        assert_eq!(
+            version_command("bd", &["--version"]).as_deref(),
+            Some("bd-fake 1.2.3")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_command_file_names_normalize_pathext_and_default_when_empty() {
+        let _env_lock = lock_env();
+        let _pathext_guard = EnvVarGuard::set("PATHEXT", "EXE;.Cmd;; ");
+        let names = command_file_names("bd");
+        assert_eq!(
+            names,
+            vec![
+                std::ffi::OsString::from("bd"),
+                std::ffi::OsString::from("bd.exe"),
+                std::ffi::OsString::from("bd.cmd"),
+            ]
+        );
+
+        drop(_pathext_guard);
+        let _empty_pathext_guard = EnvVarGuard::set("PATHEXT", " ");
+        let default_names = command_file_names("bd");
+        assert!(default_names.contains(&std::ffi::OsString::from("bd.exe")));
+        assert!(default_names.contains(&std::ffi::OsString::from("bd.cmd")));
+        assert!(default_names.contains(&std::ffi::OsString::from("bd.bat")));
+        assert!(default_names.contains(&std::ffi::OsString::from("bd.com")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_command_lookup_resolves_explicit_extension_literally() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-windows-literal-extension");
+        let bin = root.join("bin");
+        fs::create_dir_all(&bin).expect("bin dir should be created");
+        let fake_cmd = bin.join("bd.cmd");
+        let fake_exe = bin.join("bd.cmd.exe");
+        fs::write(&fake_cmd, "").expect("fake cmd should be writable");
+        fs::write(&fake_exe, "").expect("fake exe should be writable");
+
+        let _path_guard = EnvVarGuard::set("PATH", path_list(&[bin.clone()]).as_str());
+        let _pathext_guard = EnvVarGuard::set("PATHEXT", ".EXE");
+
+        assert_eq!(
+            command_path("bd.cmd").as_deref(),
+            Some(fake_cmd.to_string_lossy().as_ref())
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -1140,7 +1266,7 @@ mod tests {
         let override_dir = root.join("override-bin");
         let override_path = override_dir.join("custom-bun");
         fs::create_dir_all(&override_dir).expect("override dir should exist");
-        fs::write(&override_path, "").expect("override file should exist");
+        write_executable(&override_path, "#!/bin/sh\nprintf 'override'\n");
 
         let _shell_guard = EnvVarGuard::set("SHELL", "/tmp/odt-missing-shell");
         let _path_guard = EnvVarGuard::set("PATH", "/usr/bin:/bin");
@@ -1162,6 +1288,37 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn subprocess_path_env_excludes_non_executable_override_directories() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-subprocess-path-non-executable-override");
+        let override_dir = root.join("override-bin");
+        let override_path = override_dir.join("custom-bun");
+        fs::create_dir_all(&override_dir).expect("override dir should exist");
+        fs::write(&override_path, "#!/bin/sh\nprintf 'override'\n")
+            .expect("override file should exist");
+
+        let _shell_guard = EnvVarGuard::set("SHELL", "/tmp/odt-missing-shell");
+        let _path_guard = EnvVarGuard::set("PATH", "/usr/bin:/bin");
+        let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+        let _user_guard = EnvVarGuard::set("USER", "odt-test");
+        let _logname_guard = EnvVarGuard::set("LOGNAME", "odt-test");
+        let _override_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_BUN_PATH",
+            override_path.to_string_lossy().as_ref(),
+        );
+
+        let entries = path_entries_from_value(subprocess_path_env());
+
+        assert!(
+            !entries.iter().any(|entry| entry == &override_dir),
+            "non-executable override directory should not be included in subprocess PATH"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
     #[test]
     fn explicit_command_override_reports_invalid_path() {
         let _env_lock = lock_env();
@@ -1173,6 +1330,107 @@ mod tests {
             explicit_command_override(program.as_str()).expect_err("invalid override should fail");
 
         assert!(error.to_string().contains("Configured command override"));
+    }
+
+    #[test]
+    fn valid_bd_and_dolt_overrides_win_over_path_lookup() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-tool-overrides-win");
+        let override_dir = root.join("override-bin");
+        let path_dir = root.join("path-bin");
+        fs::create_dir_all(&override_dir).expect("override dir should exist");
+        fs::create_dir_all(&path_dir).expect("path dir should exist");
+
+        let bd_override = override_dir.join("custom-bd");
+        let dolt_override = override_dir.join("custom-dolt");
+        write_executable(&bd_override, "#!/bin/sh\nprintf 'bd-override'\n");
+        write_executable(&dolt_override, "#!/bin/sh\nprintf 'dolt-override'\n");
+        write_executable(&path_dir.join("bd"), "#!/bin/sh\nprintf 'bd-path'\n");
+        write_executable(&path_dir.join("dolt"), "#!/bin/sh\nprintf 'dolt-path'\n");
+
+        let _path_guard = EnvVarGuard::set("PATH", path_list(&[path_dir]).as_str());
+        let _bd_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_BD_PATH",
+            bd_override.to_string_lossy().as_ref(),
+        );
+        let _dolt_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_DOLT_PATH",
+            dolt_override.to_string_lossy().as_ref(),
+        );
+
+        assert_eq!(
+            command_path("bd").as_deref(),
+            Some(bd_override.to_string_lossy().as_ref())
+        );
+        assert_eq!(
+            command_path("dolt").as_deref(),
+            Some(dolt_override.to_string_lossy().as_ref())
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn invalid_generic_override_is_not_bypassed_by_path_lookup() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-invalid-override-no-bypass");
+        let path_dir = root.join("path-bin");
+        fs::create_dir_all(&path_dir).expect("path dir should exist");
+        write_executable(&path_dir.join("bd"), "#!/bin/sh\nprintf 'bd-path'\n");
+
+        let missing_override = root.join("missing-bd");
+        let _path_guard = EnvVarGuard::set("PATH", path_list(&[path_dir]).as_str());
+        let _bd_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_BD_PATH",
+            missing_override.to_string_lossy().as_ref(),
+        );
+
+        let error = resolve_command_path("bd").expect_err("invalid override should error");
+        assert!(error.to_string().contains("OPENDUCKTOR_BD_PATH"));
+        assert!(command_path("bd").is_none());
+        assert!(!command_exists("bd"));
+        assert!(required_command_error("bd")
+            .unwrap_or_default()
+            .contains("OPENDUCKTOR_BD_PATH"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn required_command_error_reports_plain_missing_command() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let program = format!("odt-missing-command-{nonce}");
+
+        let error = required_command_error(program.as_str())
+            .expect("missing command should produce an error message");
+
+        assert!(error.contains(program.as_str()));
+        assert!(
+            error.contains("not found in bundled locations, standard install locations, or PATH")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_executable_generic_override_is_rejected() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-non-executable-override");
+        fs::create_dir_all(&root).expect("temp dir should exist");
+        let override_path = root.join("bd");
+        fs::write(&override_path, "#!/bin/sh\nprintf 'bd'\n").expect("override file should exist");
+
+        let _bd_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_BD_PATH",
+            override_path.to_string_lossy().as_ref(),
+        );
+
+        let error = resolve_command_path("bd").expect_err("non-executable override should error");
+        assert!(error.to_string().contains("non-executable file"));
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

@@ -35,9 +35,9 @@ pub use filesystem::{list_directory, FilesystemListDirectoryError};
 pub use git::GitCliPort;
 pub use open_in::{discover_open_in_tools, open_directory_in_tool};
 pub use process::{
-    bundled_command, command_exists, command_path, resolve_command_path, run_command,
-    run_command_allow_failure, run_command_allow_failure_with_env, run_command_with_env,
-    subprocess_path_env, version_command,
+    bundled_command, command_exists, command_path, is_executable_file, required_command_error,
+    resolve_command_path, run_command, run_command_allow_failure,
+    run_command_allow_failure_with_env, run_command_with_env, subprocess_path_env, version_command,
 };
 pub use user_paths::{normalize_user_path, parse_user_path, parse_user_path_os};
 pub use worktree::{
