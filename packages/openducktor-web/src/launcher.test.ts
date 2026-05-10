@@ -5,6 +5,22 @@ const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
   return { exited } as Bun.Subprocess;
 };
 
+const createTerminableHostProcess = (pid?: number, exited = new Promise<number>(() => {})) => {
+  const killCalls: Array<number | NodeJS.Signals | undefined> = [];
+  const child = {
+    pid,
+    exited,
+    kill(signal?: number | NodeJS.Signals) {
+      killCalls.push(signal);
+      return true;
+    },
+  } as unknown as Bun.Subprocess;
+
+  return { child, killCalls };
+};
+
+const noopWindowsProcessTreeTerminator = async () => {};
+
 describe("launcher internals", () => {
   test("waits for the fake host health and token-authenticated session endpoints", async () => {
     const requests: Array<{ url: string; method: string | undefined; token: string | null }> = [];
@@ -95,6 +111,139 @@ describe("launcher internals", () => {
         token: "control-token",
       },
     ]);
+  });
+
+  test("detects when the host exits during the graceful shutdown wait", async () => {
+    const hostExited = await __launcherTestInternals.waitForGracefulHostExit(
+      createHostProcess(Promise.resolve(0)),
+      async () => new Promise(() => {}),
+    );
+
+    expect(hostExited).toBe(true);
+  });
+
+  test("detects when the host needs force termination after graceful shutdown wait", async () => {
+    const hostExited = await __launcherTestInternals.waitForGracefulHostExit(
+      createHostProcess(new Promise<number>(() => {})),
+      async () => {},
+    );
+
+    expect(hostExited).toBe(false);
+  });
+
+  test("uses process-group signals on non-Windows platforms", async () => {
+    const { child, killCalls } = createTerminableHostProcess(1234);
+    const processKillCalls: Array<{ pid: number; signal: string | number | undefined }> = [];
+
+    await __launcherTestInternals.terminateHostProcess(child, {
+      platform: "linux",
+      killProcess(pid, signal) {
+        processKillCalls.push({ pid, signal });
+        return true;
+      },
+      terminateWindowsProcessTree: noopWindowsProcessTreeTerminator,
+      sleep: async () => {},
+    });
+
+    expect(processKillCalls).toEqual([
+      { pid: -1234, signal: "SIGTERM" },
+      { pid: -1234, signal: 0 },
+      { pid: -1234, signal: "SIGKILL" },
+    ]);
+    expect(killCalls).toEqual([undefined, 9]);
+  });
+
+  test("waits the full process-group grace window before Unix escalation", async () => {
+    const { child } = createTerminableHostProcess(1234, Promise.resolve(0));
+    const calls: string[] = [];
+
+    await __launcherTestInternals.terminateHostProcess(child, {
+      platform: "linux",
+      killProcess(_pid, signal) {
+        calls.push(`process:${signal}`);
+        return true;
+      },
+      terminateWindowsProcessTree: noopWindowsProcessTreeTerminator,
+      sleep: async (durationMs) => {
+        calls.push(`sleep:${durationMs}`);
+      },
+    });
+
+    expect(calls).toEqual([
+      "process:SIGTERM",
+      "sleep:3000",
+      "process:0",
+      "process:SIGKILL",
+      "sleep:1000",
+    ]);
+  });
+
+  test("skips Unix SIGKILL when the process group is already gone", async () => {
+    const { child, killCalls } = createTerminableHostProcess(1234);
+    const processKillCalls: Array<{ pid: number; signal: string | number | undefined }> = [];
+
+    await __launcherTestInternals.terminateHostProcess(child, {
+      platform: "linux",
+      killProcess(pid, signal) {
+        processKillCalls.push({ pid, signal });
+        if (signal === 0) {
+          throw new Error("process group is gone");
+        }
+        return true;
+      },
+      terminateWindowsProcessTree: noopWindowsProcessTreeTerminator,
+      sleep: async () => {},
+    });
+
+    expect(processKillCalls).toEqual([
+      { pid: -1234, signal: "SIGTERM" },
+      { pid: -1234, signal: 0 },
+    ]);
+    expect(killCalls).toEqual([undefined, 9]);
+  });
+
+  test("terminates the Windows process tree without negative process-group signals", async () => {
+    const { child, killCalls } = createTerminableHostProcess(1234);
+    const processKillCalls: Array<{ pid: number; signal: string | number | undefined }> = [];
+    const processTreeKills: number[] = [];
+
+    await __launcherTestInternals.terminateHostProcess(child, {
+      platform: "win32",
+      killProcess(pid, signal) {
+        processKillCalls.push({ pid, signal });
+        if (pid < 0) {
+          throw new Error("Windows termination must not use negative PIDs.");
+        }
+        return true;
+      },
+      terminateWindowsProcessTree(pid) {
+        processTreeKills.push(pid);
+        return Promise.resolve();
+      },
+      sleep: async () => {},
+    });
+
+    expect(processKillCalls).toEqual([]);
+    expect(processTreeKills).toEqual([1234]);
+    expect(killCalls).toEqual([]);
+  });
+
+  test("skips process-group signals when the host PID is invalid", async () => {
+    const { child, killCalls } = createTerminableHostProcess(0);
+    const processKillCalls: Array<{ pid: number; signal: string | number | undefined }> = [];
+
+    await __launcherTestInternals.terminateHostProcess(child, {
+      platform: "darwin",
+      killProcess(pid, signal) {
+        processKillCalls.push({ pid, signal });
+        return true;
+      },
+      terminateWindowsProcessTree: noopWindowsProcessTreeTerminator,
+      sleep: async () => {},
+    });
+
+    expect(processKillCalls).toEqual([]);
+    expect(killCalls).toEqual([undefined, 9]);
   });
 
   test("builds runtime config JSON for the browser shell", () => {
