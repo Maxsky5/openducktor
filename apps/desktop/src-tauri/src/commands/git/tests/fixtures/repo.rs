@@ -1,9 +1,8 @@
 use std::{
-    collections::HashSet,
     env, fs,
     path::{Path, PathBuf},
     process::Command,
-    time::{Instant, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use host_domain::{
@@ -11,10 +10,7 @@ use host_domain::{
     GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
 };
 
-use host_command_services::command_services::git::{
-    authorized_worktree_cache, cache_key, invalidate_worktree_resolution_cache_for_repo,
-    read_worktree_state_token, AuthorizedWorktreeCacheEntry,
-};
+use host_command_services::command_services::git::test_support;
 
 pub(crate) fn unique_test_dir(prefix: &str) -> PathBuf {
     let nanos = SystemTime::now()
@@ -55,29 +51,18 @@ pub(crate) fn init_repo(path: &Path) {
 }
 
 pub(crate) fn seed_authorized_worktree_cache_with_subset(repo: &Path, allowed_worktrees: &[&Path]) {
-    let canonical_repo = fs::canonicalize(repo).expect("repo should canonicalize for cache seed");
-    let worktree_state_token = read_worktree_state_token(canonical_repo.as_path())
-        .expect("worktree state token should be readable for cache seed");
-    let seeded_worktrees = allowed_worktrees
-        .iter()
-        .map(|path| fs::canonicalize(path).expect("worktree should canonicalize for cache seed"))
-        .collect::<HashSet<_>>();
-    let mut cache = authorized_worktree_cache()
-        .lock()
-        .expect("authorized worktree cache lock should not be poisoned");
-    cache.insert(
-        cache_key(canonical_repo.as_path()),
-        AuthorizedWorktreeCacheEntry {
-            cached_at: Instant::now(),
-            worktree_state_token,
-            worktrees: seeded_worktrees,
-        },
-    );
+    test_support::seed_authorized_worktree_cache_with_subset(repo, allowed_worktrees)
+        .expect("authorized worktree cache should seed for repository");
 }
 
 pub(crate) fn clear_authorized_worktree_cache_for_repo(repo: &Path) {
-    invalidate_worktree_resolution_cache_for_repo(repo.to_string_lossy().as_ref())
+    test_support::clear_authorized_worktree_cache_for_repo(repo)
         .expect("worktree cache should clear for repository");
+}
+
+pub(crate) fn authorized_worktree_cache_contains(repo: &Path) -> bool {
+    test_support::authorized_worktree_cache_contains(repo)
+        .expect("authorized worktree cache should be readable")
 }
 
 pub(crate) fn sample_worktree_status_data(

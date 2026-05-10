@@ -454,10 +454,7 @@ mod tests {
     use host_command_services::command_payloads::{
         RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
     };
-    use host_command_services::command_services::git::{
-        authorized_worktree_cache, cache_key, read_worktree_state_token, resolve_working_dir,
-        AuthorizedWorktreeCacheEntry,
-    };
+    use host_command_services::command_services::git::{resolve_working_dir, test_support};
     use host_domain::{TaskStore, WorkspaceRecord, TASK_METADATA_NAMESPACE};
     use host_infra_beads::BeadsTaskStore;
     use host_infra_system::{
@@ -465,12 +462,10 @@ mod tests {
     };
     use serde_json::{json, Value};
     use std::{
-        collections::HashSet,
         fs,
         path::{Path, PathBuf},
         process::Command,
         sync::Arc,
-        time::Instant,
         time::{SystemTime, UNIX_EPOCH},
     };
     use tauri::{
@@ -580,34 +575,13 @@ mod tests {
     }
 
     fn seed_authorized_worktree_cache_with_subset(repo: &Path, allowed_worktrees: &[&Path]) {
-        let canonical_repo =
-            fs::canonicalize(repo).expect("repo should canonicalize for cache seed");
-        let worktree_state_token = read_worktree_state_token(canonical_repo.as_path())
-            .expect("worktree state token should be readable for cache seed");
-        let seeded_worktrees = allowed_worktrees
-            .iter()
-            .map(|path| {
-                fs::canonicalize(path).expect("worktree should canonicalize for cache seed")
-            })
-            .collect::<HashSet<_>>();
-        let mut cache = authorized_worktree_cache()
-            .lock()
-            .expect("authorized worktree cache lock should not be poisoned");
-        cache.insert(
-            cache_key(canonical_repo.as_path()),
-            AuthorizedWorktreeCacheEntry {
-                cached_at: Instant::now(),
-                worktree_state_token,
-                worktrees: seeded_worktrees,
-            },
-        );
+        test_support::seed_authorized_worktree_cache_with_subset(repo, allowed_worktrees)
+            .expect("authorized worktree cache should seed for repository");
     }
 
     fn clear_authorized_worktree_cache_for_repo(repo: &Path) {
-        host_command_services::command_services::git::invalidate_worktree_resolution_cache_for_repo(
-            repo.to_string_lossy().as_ref(),
-        )
-        .expect("worktree cache should clear for repository");
+        test_support::clear_authorized_worktree_cache_for_repo(repo)
+            .expect("worktree cache should clear for repository");
     }
 
     fn setup_workspace_command_fixture(prefix: &str, hooks: HookSet) -> WorkspaceCommandFixture {

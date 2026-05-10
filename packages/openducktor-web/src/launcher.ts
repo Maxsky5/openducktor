@@ -181,6 +181,10 @@ const waitForGracefulHostExit = async (
   ]);
 };
 
+const shouldSignalProcessGroup = (platform: NodeJS.Platform = process.platform): boolean => {
+  return platform !== "win32";
+};
+
 const terminateHostProcess = async (
   child: ManagedProcess | null,
   dependencies: HostTerminationDependencies = defaultHostTerminationDependencies,
@@ -191,8 +195,9 @@ const terminateHostProcess = async (
 
   const pid = child.pid;
   const hasProcessGroupPid = typeof pid === "number" && pid > 0;
+  const canSignalProcessGroup = shouldSignalProcessGroup(dependencies.platform);
 
-  if (dependencies.platform === "win32") {
+  if (!canSignalProcessGroup) {
     if (hasProcessGroupPid) {
       try {
         await dependencies.terminateWindowsProcessTree(pid);
@@ -204,7 +209,7 @@ const terminateHostProcess = async (
     return;
   }
 
-  if (hasProcessGroupPid) {
+  if (hasProcessGroupPid && canSignalProcessGroup) {
     try {
       dependencies.killProcess(-pid, "SIGTERM");
     } catch {}
@@ -213,7 +218,7 @@ const terminateHostProcess = async (
   child.kill();
   await dependencies.sleep(HOST_FORCE_TERMINATION_GRACE_MS);
 
-  if (hasProcessGroupPid) {
+  if (hasProcessGroupPid && canSignalProcessGroup) {
     try {
       dependencies.killProcess(-pid, 0);
       try {
@@ -330,6 +335,7 @@ export const __launcherTestInternals = {
   buildArtifactHostEnv,
   resolveStaticAssetPath,
   requestHostShutdown,
+  shouldSignalProcessGroup,
   shouldForceExitForRepeatedSignal,
   terminateHostProcess,
   verifyBackendReadiness,

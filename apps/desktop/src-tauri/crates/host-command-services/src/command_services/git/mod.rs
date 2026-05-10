@@ -1,4 +1,4 @@
-pub mod authorization;
+mod authorization;
 pub mod requests;
 pub mod snapshot;
 
@@ -17,11 +17,60 @@ pub use snapshot::{
     WorktreeSnapshotMetadata, GIT_WORKTREE_HASH_VERSION,
 };
 
-pub use authorization::{
-    authorized_worktree_cache, cache_key, read_git_common_dir, read_worktree_state_token,
-    AuthorizedWorktreeCacheEntry,
-};
 pub use authorization::{invalidate_worktree_resolution_cache_for_repo, resolve_working_dir};
+
+#[doc(hidden)]
+pub mod test_support {
+    use std::{collections::HashSet, fs, path::Path, time::Instant};
+
+    use super::authorization::{
+        authorized_worktree_cache, cache_key, invalidate_worktree_resolution_cache_for_repo,
+        AuthorizedWorktreeCacheEntry,
+    };
+    pub use super::authorization::{read_git_common_dir, read_worktree_state_token};
+
+    pub fn seed_authorized_worktree_cache_with_subset(
+        repo: &Path,
+        allowed_worktrees: &[&Path],
+    ) -> Result<(), String> {
+        let canonical_repo = fs::canonicalize(repo)
+            .map_err(|error| format!("failed to canonicalize repo for cache seed: {error}"))?;
+        let worktree_state_token = read_worktree_state_token(canonical_repo.as_path())?;
+        let seeded_worktrees = allowed_worktrees
+            .iter()
+            .map(|path| {
+                fs::canonicalize(path).map_err(|error| {
+                    format!("failed to canonicalize worktree for cache seed: {error}")
+                })
+            })
+            .collect::<Result<HashSet<_>, _>>()?;
+        let mut cache = authorized_worktree_cache()
+            .lock()
+            .map_err(|_| "authorized worktree cache lock should not be poisoned".to_string())?;
+        cache.insert(
+            cache_key(canonical_repo.as_path()),
+            AuthorizedWorktreeCacheEntry {
+                cached_at: Instant::now(),
+                worktree_state_token,
+                worktrees: seeded_worktrees,
+            },
+        );
+        Ok(())
+    }
+
+    pub fn clear_authorized_worktree_cache_for_repo(repo: &Path) -> Result<(), String> {
+        invalidate_worktree_resolution_cache_for_repo(repo.to_string_lossy().as_ref())
+    }
+
+    pub fn authorized_worktree_cache_contains(repo: &Path) -> Result<bool, String> {
+        let canonical_repo = fs::canonicalize(repo)
+            .map_err(|error| format!("failed to canonicalize repo for cache lookup: {error}"))?;
+        let cache = authorized_worktree_cache()
+            .lock()
+            .map_err(|_| "authorized worktree cache lock should not be poisoned".to_string())?;
+        Ok(cache.contains_key(&cache_key(canonical_repo.as_path())))
+    }
+}
 
 pub struct AuthorizedGitScope {
     pub repo_path: String,

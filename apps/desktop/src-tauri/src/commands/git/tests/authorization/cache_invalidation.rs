@@ -1,15 +1,13 @@
 use super::super::fixtures::{
-    clear_authorized_worktree_cache_for_repo, init_repo, invoke_json, run_git,
-    sample_worktree_status_data, seed_authorized_worktree_cache_with_subset,
+    authorized_worktree_cache_contains, clear_authorized_worktree_cache_for_repo, init_repo,
+    invoke_json, run_git, sample_worktree_status_data, seed_authorized_worktree_cache_with_subset,
     setup_command_git_fixture, setup_command_git_fixture_with_mutations, WorktreeStatusResult,
 };
 use crate::commands::workspace::{
     workspace_save_repo_settings, workspace_select, workspace_update_repo_config,
 };
 use host_command_services::command_payloads::{RepoConfigPayload, RepoSettingsPayload};
-use host_command_services::command_services::git::{
-    authorized_worktree_cache, cache_key, resolve_working_dir,
-};
+use host_command_services::command_services::git::resolve_working_dir;
 use host_domain::GitUpstreamAheadBehind;
 use serde_json::json;
 use std::{fs, path::Path};
@@ -270,29 +268,14 @@ fn workspace_select_invalidates_only_selected_repo_cache_entry() {
     seed_authorized_worktree_cache_with_subset(selected_repo, &[]);
     seed_authorized_worktree_cache_with_subset(&secondary_repo, &[]);
 
-    let selected_repo_key = cache_key(
-        fs::canonicalize(selected_repo)
-            .expect("selected repo should canonicalize")
-            .as_path(),
+    assert!(
+        authorized_worktree_cache_contains(selected_repo),
+        "selected repo cache entry should exist before workspace_select"
     );
-    let secondary_repo_key = cache_key(
-        fs::canonicalize(&secondary_repo)
-            .expect("secondary repo should canonicalize")
-            .as_path(),
+    assert!(
+        authorized_worktree_cache_contains(&secondary_repo),
+        "secondary repo cache entry should exist before workspace_select"
     );
-    {
-        let cache = authorized_worktree_cache()
-            .lock()
-            .expect("authorized worktree cache lock should not be poisoned");
-        assert!(
-            cache.contains_key(&selected_repo_key),
-            "selected repo cache entry should exist before workspace_select"
-        );
-        assert!(
-            cache.contains_key(&secondary_repo_key),
-            "secondary repo cache entry should exist before workspace_select"
-        );
-    }
 
     tauri::async_runtime::block_on(workspace_select(
         fixture.app.state(),
@@ -300,15 +283,12 @@ fn workspace_select_invalidates_only_selected_repo_cache_entry() {
     ))
     .expect("workspace_select should succeed");
 
-    let cache = authorized_worktree_cache()
-        .lock()
-        .expect("authorized worktree cache lock should not be poisoned");
     assert!(
-        !cache.contains_key(&selected_repo_key),
+        !authorized_worktree_cache_contains(selected_repo),
         "workspace_select should invalidate selected repo cache entry"
     );
     assert!(
-        cache.contains_key(&secondary_repo_key),
+        authorized_worktree_cache_contains(&secondary_repo),
         "workspace_select should not invalidate unrelated repo cache entries"
     );
 }

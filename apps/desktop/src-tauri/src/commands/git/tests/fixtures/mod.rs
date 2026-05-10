@@ -12,7 +12,7 @@ pub(super) use git_port::{
     WorktreeStatusResult, WorktreeStatusSummaryCall, WorktreeStatusSummaryResult,
 };
 pub(super) use repo::{
-    clear_authorized_worktree_cache_for_repo, init_repo, run_git, sample_worktree_status_data,
-    sample_worktree_status_summary_data, seed_authorized_worktree_cache_with_subset,
-    unique_test_dir,
+    authorized_worktree_cache_contains, clear_authorized_worktree_cache_for_repo, init_repo,
+    run_git, sample_worktree_status_data, sample_worktree_status_summary_data,
+    seed_authorized_worktree_cache_with_subset, unique_test_dir,
 };
