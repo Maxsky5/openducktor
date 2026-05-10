@@ -159,6 +159,32 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     expect(context.chat.emptyState?.actionLabel).toBeUndefined();
   });
 
+  test("keeps existing session composer writable when selected role is unavailable", () => {
+    const unavailableQaTask = createTaskCardFixture({
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: true },
+        qa: { required: true, canSkip: false, available: false, completed: false },
+      },
+    });
+    const qaSession = createSession({ role: "qa" });
+
+    const context = buildAgentStudioSelectedSessionContext(
+      createInput({
+        role: "qa",
+        selectedTask: unavailableQaTask,
+        activeSession: qaSession,
+        sessionsForTask: [toAgentSessionSummary(qaSession)],
+        allSessionSummaries: [toAgentSessionSummary(qaSession)],
+      }),
+    );
+
+    expect(context.workflow.selectedRoleAvailable).toBe(false);
+    expect(context.chat.composerReadOnly).toBe(false);
+    expect(context.chat.composerReadOnlyReason).toBeNull();
+  });
+
   test("projects kickoff and starting empty-state affordances without stale pending flags", () => {
     const startLaunchKickoff = mock(async () => {});
     const readyContext = buildAgentStudioSelectedSessionContext(
