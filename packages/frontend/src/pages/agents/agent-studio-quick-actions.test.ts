@@ -241,7 +241,7 @@ describe("agent-studio-quick-actions", () => {
         spec: { required: true, canSkip: false, available: false, completed: true },
         planner: { required: true, canSkip: false, available: false, completed: true },
         builder: { required: true, canSkip: false, available: true, completed: true },
-        qa: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: true, canSkip: false, available: true, completed: false },
       },
     });
     const aiReviewWithoutPullRequestOptions = buildAgentStudioQuickActions({
@@ -253,8 +253,8 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
     expect(selectPrimaryAgentStudioQuickAction(aiReviewWithoutPullRequestOptions)).toMatchObject({
-      launchActionId: "build_pull_request_generation",
-      label: "Generate Pull Request",
+      launchActionId: "qa_review",
+      label: "QA Review",
     });
 
     const aiReviewTaskWithPullRequest = buildTask({
@@ -270,8 +270,8 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
     expect(selectPrimaryAgentStudioQuickAction(aiReviewWithPullRequestOptions)).toMatchObject({
-      launchActionId: "build_after_human_request_changes",
-      label: "Request Changes",
+      launchActionId: "qa_review",
+      label: "QA Review",
     });
     expect(
       aiReviewWithPullRequestOptions.find(

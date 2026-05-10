@@ -100,6 +100,13 @@ const quickActionDescriptionForWorkflowAction = (action: TaskWorkflowAction): st
   return "Open the start-session flow for Builder implementation work.";
 };
 
+const quickActionLabelForWorkflowAction = (action: TaskWorkflowAction, task: TaskCard): string => {
+  if (action === "qa_start") {
+    return LAUNCH_ACTION_LABELS.qa_review;
+  }
+  return taskActionLabel(action, task, { surface: "agent_studio" });
+};
+
 const orderQuickActions = (
   task: TaskCard,
   options: AgentStudioQuickActionOption[],
@@ -112,7 +119,7 @@ const orderQuickActions = (
   const launchActionPriority = new Map(
     orderedWorkflowLaunchActions.map((launchActionId, index) => [launchActionId, index]),
   );
-  if (task.status === "ai_review" || task.status === "human_review") {
+  if (task.status === "human_review") {
     const primaryReviewLaunchAction = hasLinkedPullRequest(task)
       ? "build_after_human_request_changes"
       : "build_pull_request_generation";
@@ -166,7 +173,7 @@ export const buildAgentStudioQuickActions = (params: {
       id: `quick:${launchActionId}`,
       role,
       launchActionId,
-      label: taskActionLabel(action, task, { surface: "agent_studio" }),
+      label: quickActionLabelForWorkflowAction(action, task),
       description: quickActionDescriptionForWorkflowAction(action),
       postStartAction: "kickoff",
       disabled: disabledReason !== null,
