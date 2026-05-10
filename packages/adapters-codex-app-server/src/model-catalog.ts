@@ -1,6 +1,7 @@
 import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import type { CodexModelListResponse } from "./types";
+import { CODEX_MODEL_CATALOG_TTL_MS } from "./codex-app-server-shared";
+import type { CodexAppServerClient, CodexModelListResponse } from "./types";
 
 export const requireModelSelection = (
   model: AgentModelSelection | undefined,
@@ -58,3 +59,51 @@ export const toCatalog = (response: CodexModelListResponse): AgentModelCatalog =
       }
     : {},
 });
+
+type CachedCodexModelList = {
+  value?: CodexModelListResponse;
+  fetchedAtMs?: number;
+  pending?: Promise<CodexModelListResponse>;
+};
+
+export class CodexModels {
+  private readonly modelListByRuntimeId = new Map<string, CachedCodexModelList>();
+
+  async list(client: CodexAppServerClient, runtimeId: string): Promise<CodexModelListResponse> {
+    const now = Date.now();
+    const cached = this.modelListByRuntimeId.get(runtimeId);
+    if (
+      cached?.value &&
+      typeof cached.fetchedAtMs === "number" &&
+      now - cached.fetchedAtMs < CODEX_MODEL_CATALOG_TTL_MS
+    ) {
+      return cached.value;
+    }
+    if (cached?.pending) {
+      return cached.pending;
+    }
+    const pending = client.modelList().then(
+      (value) => {
+        this.modelListByRuntimeId.set(runtimeId, { value, fetchedAtMs: Date.now() });
+        return value;
+      },
+      (error) => {
+        this.modelListByRuntimeId.delete(runtimeId);
+        throw error;
+      },
+    );
+    this.modelListByRuntimeId.set(runtimeId, {
+      ...(cached?.value ? { value: cached.value, fetchedAtMs: cached.fetchedAtMs } : {}),
+      pending,
+    });
+    return pending;
+  }
+
+  async validate(
+    client: CodexAppServerClient,
+    runtimeId: string,
+    model: AgentModelSelection,
+  ): Promise<void> {
+    validateModelSelection(await this.list(client, runtimeId), model);
+  }
+}

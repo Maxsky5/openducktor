@@ -1,9 +1,4 @@
-import type {
-  CodexModelListResponse,
-  CodexSessionState,
-  CodexTurnStartResult,
-  CodexUserInput,
-} from "./types";
+import type { CodexSessionState, CodexTurnStartResult, CodexUserInput } from "./types";
 
 export const unsupported = (surface: string): never => {
   throw new Error(`Codex App Server adapter does not support ${surface}.`);
@@ -27,12 +22,6 @@ export type ActiveCodexTurn = {
 
 export type CodexLiveEventPump = {
   unsubscribe: (() => void) | null;
-};
-
-export type CachedCodexModelList = {
-  value?: CodexModelListResponse;
-  fetchedAtMs?: number;
-  pending?: Promise<CodexModelListResponse>;
 };
 
 export const MAX_CODEX_EVENT_BACKLOG_PER_SESSION = 500;

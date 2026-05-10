@@ -49,11 +49,6 @@ export type CodexServerRequestResponder = (
   error?: unknown,
 ) => Promise<void>;
 
-export type CodexAppServerEventBatch = {
-  notifications: unknown[];
-  serverRequests: unknown[];
-};
-
 export type CodexAppServerStreamEvent = {
   runtimeId: string;
   kind: "notification" | "server_request";

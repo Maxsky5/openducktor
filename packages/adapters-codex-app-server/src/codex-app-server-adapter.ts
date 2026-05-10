@@ -49,14 +49,9 @@ import {
 } from "./codex-app-server-requests";
 import {
   type ActiveCodexTurn,
-  arrayFromUnknown,
-  type CachedCodexModelList,
-  CODEX_MODEL_CATALOG_TTL_MS,
   CODEX_USER_INPUT_REQUEST_METHOD,
   type CodexLiveEventPump,
   extractStringField,
-  isCodexThreadNotLoadedError,
-  isCodexUnmaterializedThreadError,
   isPlainObject,
   MAX_CODEX_BUFFERED_THREAD_COUNT,
   MAX_CODEX_EVENT_BACKLOG_PER_SESSION,
@@ -64,10 +59,7 @@ import {
   unsupported,
 } from "./codex-app-server-shared";
 import {
-  type CodexThreadInventory,
   type CodexThreadSnapshot,
-  codexLoadedThreadIds,
-  codexThreadList,
   codexThreadStatusSnapshot,
   extractThreadId,
   threadSnapshotFromReadResponse,
@@ -98,18 +90,18 @@ import {
 } from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
+import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import {
+  CodexModels,
   requireModelSelection,
   toCatalog,
   toTransportModelSelection,
-  validateModelSelection,
 } from "./model-catalog";
 import { resolveCodexRuntimeClientInput } from "./runtime-connection";
 import type {
   CodexAppServerAdapterOptions,
   CodexAppServerClient,
-  CodexModelListResponse,
   CodexNotificationRecord,
   CodexServerRequestRecord,
   CodexSessionState,
@@ -158,12 +150,8 @@ export class CodexAppServerAdapter
   private readonly eventBacklogBySessionId = new Map<string, AgentEvent[]>();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
   private readonly eventMapperPipeline = createCodexEventMapperPipeline();
-  private readonly modelListCacheByRuntimeId = new Map<string, CachedCodexModelList>();
-  private readonly threadInventoryByRuntimeId = new Map<string, CodexThreadInventory>();
-  private readonly pendingThreadInventoryByRuntimeId = new Map<
-    string,
-    Promise<CodexThreadInventory>
-  >();
+  private readonly models = new CodexModels();
+  private readonly threadInventory = new CodexThreadInventoryReader();
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {}
 
@@ -179,60 +167,18 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = await this.resolveRuntimeClient(input, "list available models", {
       requireLive: true,
     });
-    return toCatalog(await this.cachedModelList(client, runtimeId));
-  }
-
-  private async cachedModelList(
-    client: CodexAppServerClient,
-    runtimeId: string,
-  ): Promise<CodexModelListResponse> {
-    const now = Date.now();
-    const cached = this.modelListCacheByRuntimeId.get(runtimeId);
-    if (
-      cached?.value &&
-      typeof cached.fetchedAtMs === "number" &&
-      now - cached.fetchedAtMs < CODEX_MODEL_CATALOG_TTL_MS
-    ) {
-      return cached.value;
-    }
-    if (cached?.pending) {
-      return cached.pending;
-    }
-    const pending = client.modelList().then(
-      (value) => {
-        this.modelListCacheByRuntimeId.set(runtimeId, { value, fetchedAtMs: Date.now() });
-        return value;
-      },
-      (error) => {
-        this.modelListCacheByRuntimeId.delete(runtimeId);
-        throw error;
-      },
-    );
-    this.modelListCacheByRuntimeId.set(runtimeId, {
-      ...(cached?.value ? { value: cached.value, fetchedAtMs: cached.fetchedAtMs } : {}),
-      pending,
-    });
-    return pending;
-  }
-
-  private async validateCachedModelSelection(
-    client: CodexAppServerClient,
-    runtimeId: string,
-    model: AgentModelSelection,
-  ): Promise<void> {
-    validateModelSelection(await this.cachedModelList(client, runtimeId), model);
+    return toCatalog(await this.models.list(client, runtimeId));
   }
 
   private clearThreadInventory(runtimeId: string): void {
-    this.threadInventoryByRuntimeId.delete(runtimeId);
-    this.pendingThreadInventoryByRuntimeId.delete(runtimeId);
+    this.threadInventory.clear(runtimeId);
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.resolveRuntimeClient(input, "start session");
     this.ensureRuntimeEventSubscription(runtimeId);
-    await this.validateCachedModelSelection(client, runtimeId, model);
+    await this.models.validate(client, runtimeId, model);
 
     const response = await client.threadStart({
       cwd: input.workingDirectory,
@@ -271,7 +217,7 @@ export class CodexAppServerAdapter
       requireLive: true,
     });
     this.ensureRuntimeEventSubscription(runtimeId);
-    await this.validateCachedModelSelection(client, runtimeId, model);
+    await this.models.validate(client, runtimeId, model);
 
     const response = await client.threadResume({
       threadId: input.externalSessionId,
@@ -314,7 +260,7 @@ export class CodexAppServerAdapter
       requireLive: true,
     });
     this.ensureRuntimeEventSubscription(runtimeId);
-    await this.validateCachedModelSelection(client, runtimeId, model);
+    await this.models.validate(client, runtimeId, model);
 
     const response = await client.threadFork({
       threadId: input.parentExternalSessionId,
@@ -431,7 +377,7 @@ export class CodexAppServerAdapter
     const model = requireModelSelection(requestedModel ?? session.model);
     const client = this.clientForRuntime(session.runtimeId);
     try {
-      await this.validateCachedModelSelection(client, session.runtimeId, model);
+      await this.models.validate(client, session.runtimeId, model);
     } catch (error) {
       turnSettled = true;
       this.activeTurnsBySessionId.delete(session.threadId);
@@ -523,11 +469,18 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = session
       ? { client: this.clientForRuntime(session.runtimeId), runtimeId: session.runtimeId }
       : await this.resolveRuntimeClient(input, "load Codex session history");
-    const responseWithoutTurns = await this.readLoadedThread(client, runtimeId, input);
+    const responseWithoutTurns = await this.threadInventory.readLoadedThread(
+      client,
+      runtimeId,
+      input,
+    );
     if (!responseWithoutTurns) {
       return [];
     }
-    const response = await this.readThreadWithTurns(client, input.externalSessionId);
+    const response = await this.threadInventory.readThreadWithTurns(
+      client,
+      input.externalSessionId,
+    );
     return codexTurnItemsFromThreadRead(response)
       .flatMap(({ item, timestamp, isFinalAgentMessage, turnTiming }, index) => {
         const canonicalEvents = this.eventMapperPipeline.runThreadItem(
@@ -572,48 +525,6 @@ export class CodexAppServerAdapter
       );
   }
 
-  private async readLoadedThread(
-    client: CodexAppServerClient,
-    runtimeId: string,
-    input: LoadAgentSessionHistoryInput,
-  ): Promise<unknown | null> {
-    const thread = await this.findThread(client, runtimeId, input.externalSessionId);
-    if (!thread || thread.cwd !== input.workingDirectory) {
-      return null;
-    }
-    if (thread.status.status.type === "idle") {
-      try {
-        return await client.threadRead({
-          threadId: input.externalSessionId,
-          includeTurns: false,
-        });
-      } catch (error) {
-        if (!isCodexThreadNotLoadedError(error)) {
-          throw error;
-        }
-      }
-    }
-    await client.threadResume({
-      threadId: input.externalSessionId,
-      cwd: input.workingDirectory,
-    });
-    this.clearThreadInventory(runtimeId);
-    return client.threadRead({
-      threadId: input.externalSessionId,
-      includeTurns: false,
-    });
-  }
-
-  private async findThread(
-    client: CodexAppServerClient,
-    runtimeId: string,
-    externalSessionId: string,
-  ): Promise<CodexThreadSnapshot | null> {
-    return (
-      (await this.readThreadInventory(client, runtimeId)).threadsById.get(externalSessionId) ?? null
-    );
-  }
-
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
     const liveTodos = this.latestTodosBySessionId.get(input.externalSessionId);
     if (liveTodos) {
@@ -623,68 +534,23 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = session
       ? { client: this.clientForRuntime(session.runtimeId), runtimeId: session.runtimeId }
       : await this.resolveRuntimeClient(input, "load Codex session todos");
-    const responseWithoutTurns = await this.readLoadedThread(client, runtimeId, input);
+    const responseWithoutTurns = await this.threadInventory.readLoadedThread(
+      client,
+      runtimeId,
+      input,
+    );
     if (!responseWithoutTurns) {
       return [];
     }
-    const response = await this.readThreadWithTurns(client, input.externalSessionId);
+    const response = await this.threadInventory.readThreadWithTurns(
+      client,
+      input.externalSessionId,
+    );
     const todos = codexTodosFromThreadRead(response);
     if (todos.length > 0) {
       this.latestTodosBySessionId.set(input.externalSessionId, todos);
     }
     return todos;
-  }
-
-  private async readThreadWithTurns(
-    client: CodexAppServerClient,
-    threadId: string,
-  ): Promise<unknown> {
-    let response: unknown;
-    try {
-      response = await client.threadRead({ threadId, includeTurns: true });
-    } catch (error) {
-      if (isCodexUnmaterializedThreadError(error)) {
-        return { thread: { id: threadId, turns: [] } };
-      }
-      throw error;
-    }
-    const pagedTurns = await this.fetchThreadTurns(client, threadId);
-    if (pagedTurns.length === 0) {
-      return response;
-    }
-    if (!isPlainObject(response) || !isPlainObject(response.thread)) {
-      return { thread: { id: threadId, turns: pagedTurns } };
-    }
-    return { ...response, thread: { ...response.thread, turns: pagedTurns } };
-  }
-
-  private async fetchThreadTurns(
-    client: CodexAppServerClient,
-    threadId: string,
-  ): Promise<Record<string, unknown>[]> {
-    const turns: Record<string, unknown>[] = [];
-    let cursor: string | null = null;
-    const seenCursors = new Set<string>();
-    do {
-      if (cursor) {
-        seenCursors.add(cursor);
-      }
-      const response = await client.threadTurnsList({
-        threadId,
-        cursor,
-        limit: 100,
-        sortDirection: "asc",
-        itemsView: "full",
-      });
-      turns.push(...arrayFromUnknown(response).filter(isPlainObject));
-      cursor = isPlainObject(response)
-        ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)
-        : null;
-      if (cursor && seenCursors.has(cursor)) {
-        throw new Error("Codex thread/turns/list returned a repeated pagination cursor.");
-      }
-    } while (cursor);
-    return turns;
   }
 
   updateSessionModel(_: UpdateAgentSessionModelInput): void {
@@ -698,7 +564,7 @@ export class CodexAppServerAdapter
     this.ensureRuntimeEventSubscription(runtimeId);
     const model = "model" in input ? input.model : undefined;
     if (model) {
-      await this.validateCachedModelSelection(client, runtimeId, model);
+      await this.models.validate(client, runtimeId, model);
     }
 
     const response = await client.threadResume({
@@ -743,7 +609,7 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = await this.resolveRuntimeClient(input, "list live sessions", {
       requireLive: true,
     });
-    const inventory = await this.readThreadInventory(client, runtimeId);
+    const inventory = await this.threadInventory.read(client, runtimeId);
     if (inventory.loadedIds.size === 0) {
       return [];
     }
@@ -769,7 +635,7 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = await this.resolveRuntimeClient(input, "list session presence", {
       requireLive: true,
     });
-    const inventory = await this.readThreadInventory(client, runtimeId);
+    const inventory = await this.threadInventory.read(client, runtimeId);
     const directories = new Set(input.directories ?? []);
     const remoteSnapshots = [...inventory.threadsById.values()]
       .filter((thread) => inventory.loadedIds.has(thread.id))
@@ -1370,91 +1236,6 @@ export class CodexAppServerAdapter
     }
   }
 
-  private async readThreadInventory(
-    client: CodexAppServerClient,
-    runtimeId: string,
-  ): Promise<CodexThreadInventory> {
-    const existing = this.threadInventoryByRuntimeId.get(runtimeId);
-    if (existing) {
-      return existing;
-    }
-    const pending = this.pendingThreadInventoryByRuntimeId.get(runtimeId);
-    if (pending) {
-      return pending;
-    }
-    const nextPending = this.fetchThreadInventory(client, runtimeId).then(
-      (inventory) => {
-        this.threadInventoryByRuntimeId.set(runtimeId, inventory);
-        this.pendingThreadInventoryByRuntimeId.delete(runtimeId);
-        return inventory;
-      },
-      (error) => {
-        this.pendingThreadInventoryByRuntimeId.delete(runtimeId);
-        throw error;
-      },
-    );
-    this.pendingThreadInventoryByRuntimeId.set(runtimeId, nextPending);
-    return nextPending;
-  }
-
-  private async fetchThreadInventory(
-    client: CodexAppServerClient,
-    runtimeId: string,
-  ): Promise<CodexThreadInventory> {
-    const [loadedIds, threads] = await Promise.all([
-      this.fetchLoadedThreadIds(client),
-      this.fetchThreads(client),
-    ]);
-    return {
-      runtimeId,
-      loadedIds,
-      threadsById: new Map(threads.map((thread) => [thread.id, thread])),
-    };
-  }
-
-  private async fetchLoadedThreadIds(client: CodexAppServerClient): Promise<Set<string>> {
-    const loadedIds = new Set<string>();
-    let cursor: string | null = null;
-    const seenCursors = new Set<string>();
-    do {
-      if (cursor) {
-        seenCursors.add(cursor);
-      }
-      const response = await client.threadLoadedList({ cursor, limit: 100 });
-      const pageIds = codexLoadedThreadIds(response);
-      for (const threadId of pageIds) {
-        loadedIds.add(threadId);
-      }
-      cursor = isPlainObject(response)
-        ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)
-        : null;
-      if (cursor && seenCursors.has(cursor)) {
-        throw new Error("Codex thread/loaded/list returned a repeated pagination cursor.");
-      }
-    } while (cursor);
-    return loadedIds;
-  }
-
-  private async fetchThreads(client: CodexAppServerClient): Promise<CodexThreadSnapshot[]> {
-    const threads: CodexThreadSnapshot[] = [];
-    let cursor: string | null = null;
-    const seenCursors = new Set<string>();
-    do {
-      if (cursor) {
-        seenCursors.add(cursor);
-      }
-      const response = await client.threadList({ cursor, limit: 100 });
-      threads.push(...codexThreadList(response));
-      cursor = isPlainObject(response)
-        ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)
-        : null;
-      if (cursor && seenCursors.has(cursor)) {
-        throw new Error("Codex thread/list returned a repeated pagination cursor.");
-      }
-    } while (cursor);
-    return threads;
-  }
-
   private emitUserMessage(session: CodexSessionState, parts: AgentUserMessagePart[]): void {
     const message = serializeAgentUserMessagePartsToText(parts);
     if (this.options.subscribeEvents) {
@@ -1776,7 +1557,7 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = await this.resolveRuntimeClient(input, "read session presence", {
       requireLive: true,
     });
-    const inventory = await this.readThreadInventory(client, runtimeId);
+    const inventory = await this.threadInventory.read(client, runtimeId);
     if (!inventory.loadedIds.has(input.externalSessionId)) {
       return this.stalePresence(input, runtimeId);
     }
