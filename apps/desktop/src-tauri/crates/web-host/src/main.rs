@@ -125,8 +125,13 @@ mod tests {
 
     #[test]
     fn parse_web_host_args_requires_frontend_origin() {
-        let error = parse_web_host_args_from(args(&["--control-token", "token", "--app-token", "app-token"]))
-            .expect_err("missing frontend origin should fail");
+        let error = parse_web_host_args_from(args(&[
+            "--control-token",
+            "token",
+            "--app-token",
+            "app-token",
+        ]))
+        .expect_err("missing frontend origin should fail");
         assert!(error.contains("Missing required --frontend-origin"));
     }
 

@@ -2,7 +2,7 @@ use super::command_registry::CommandRegistry;
 use super::command_support::{
     deserialize_args, run_command_service_blocking, serialize_value, CommandResult, HeadlessState,
 };
-use crate::command_services::git::{self as git_service, requests as git_requests};
+use host_command_services::command_services::git::{self as git_service, requests as git_requests};
 use serde_json::{json, Value};
 
 pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), String> {

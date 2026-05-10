@@ -10,10 +10,7 @@ pub(super) fn canonicalize_for_validation(path: &str, field: &str) -> Result<Pat
 /// Resolve the effective path for a git operation. If `working_dir` is
 /// provided, it is validated as a git worktree/repo and used instead of
 /// `repo_path`. The caller must have already authorized `repo_path`.
-pub(crate) fn resolve_working_dir(
-    repo_path: &str,
-    working_dir: Option<&str>,
-) -> Result<String, String> {
+pub fn resolve_working_dir(repo_path: &str, working_dir: Option<&str>) -> Result<String, String> {
     let canonical_repo = canonicalize_for_validation(repo_path, "repo_path")?;
 
     match working_dir {

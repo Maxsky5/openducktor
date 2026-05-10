@@ -1,7 +1,7 @@
 use super::super::fixtures::{
     clear_authorized_worktree_cache_for_repo, init_repo, run_git, unique_test_dir,
 };
-use crate::command_services::git::resolve_working_dir;
+use host_command_services::command_services::git::resolve_working_dir;
 use std::fs;
 
 #[test]

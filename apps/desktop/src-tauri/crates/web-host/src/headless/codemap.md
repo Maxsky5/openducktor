@@ -1,4 +1,4 @@
-# apps/desktop/src-tauri/src/headless/
+# apps/desktop/src-tauri/crates/web-host/src/headless/
 
 ## Responsibility
 Local web-host server path for OpenDucktor when the desktop shell is not driving the UI, including the browser-backend route handlers and test coverage.
@@ -10,4 +10,4 @@ The folder splits command registry/support, per-domain command handlers, SSE/eve
 `run_browser_backend_with_options` starts the server, registers command groups, validates the configured frontend origin/control token, and streams task/runtime/dev-server events back to the browser client. The tests exercise route auth, command dispatch, and browser-event behavior.
 
 ## Integration Points
-Bridges the browser-backend HTTP surface to `AppService`, Tauri event emitters, and the same domain contracts and command-service modules used by the desktop command layer.
+Bridges the browser-backend HTTP surface to `AppService`, the web-host event relay, and the same domain contracts and command-service modules used by the desktop command layer.

@@ -1,7 +1,7 @@
 use super::issue_type::parse_issue_type;
 use crate::app_state::AppState;
 use crate::command_helpers::{as_error, run_service_blocking};
-use crate::command_payloads::{MarkdownPayload, PlanPayload, PlanSubtaskPayload};
+use host_command_services::command_payloads::{MarkdownPayload, PlanPayload, PlanSubtaskPayload};
 use host_domain::{PlanSubtaskInput, SpecDocument, TaskCard, TaskMetadata};
 use tauri::State;
 
@@ -188,7 +188,7 @@ pub async fn qa_rejected(
 #[cfg(test)]
 mod tests {
     use super::map_plan_subtasks;
-    use crate::command_payloads::PlanSubtaskPayload;
+    use host_command_services::command_payloads::PlanSubtaskPayload;
     use host_domain::IssueType;
 
     #[test]

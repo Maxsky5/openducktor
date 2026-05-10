@@ -1,23 +1,23 @@
 use std::fmt;
 
-pub(crate) type CommandServiceResult<T> = Result<T, CommandServiceError>;
+pub type CommandServiceResult<T> = Result<T, CommandServiceError>;
 
 #[derive(Debug)]
-pub(crate) enum CommandServiceError {
+pub enum CommandServiceError {
     InvalidRequest(String),
     Internal(anyhow::Error),
 }
 
 impl CommandServiceError {
-    pub(crate) fn invalid_request(message: impl Into<String>) -> Self {
+    pub fn invalid_request(message: impl Into<String>) -> Self {
         Self::InvalidRequest(message.into())
     }
 
-    pub(crate) fn internal(error: anyhow::Error) -> Self {
+    pub fn internal(error: anyhow::Error) -> Self {
         Self::Internal(error)
     }
 
-    pub(crate) fn to_tauri_error(&self) -> String {
+    pub fn to_tauri_error(&self) -> String {
         match self {
             Self::InvalidRequest(message) => message.clone(),
             Self::Internal(error) => format!("{error:#}"),

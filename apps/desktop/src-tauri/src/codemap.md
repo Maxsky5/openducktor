@@ -1,13 +1,13 @@
 # apps/desktop/src-tauri/src/
 
 ## Responsibility
-Tauri-facing shell for desktop and local web-host execution. It contains app state, command helpers/payloads, logging, startup/shutdown plumbing, command wrappers, headless server glue, and the dedicated web-host binary.
+Tauri-facing shell for desktop execution. It contains app state, command helpers, logging, startup/shutdown plumbing, command wrappers, and desktop re-exports for the dedicated web-host crate.
 
 ## Design/Patterns
-`app_state.rs`, `command_helpers.rs`, `command_payloads.rs`, `logging.rs`, `startup.rs`, and `shutdown.rs` hold cross-cutting host plumbing. Commands are grouped by domain under `commands/`; shared transport-neutral command behavior lives under `command_services/`; local web mode uses `headless/` to register the same operations over HTTP/SSE; and `bin/openducktor_web_host.rs` provides the standalone web-host entrypoint. Workspace settings/config, attachment staging, and browser-backend tests live beside the transport layer they exercise.
+`app_state.rs`, `command_helpers.rs`, `logging.rs`, `startup.rs`, and `shutdown.rs` hold cross-cutting desktop host plumbing. Commands are grouped by domain under `commands/`; shared transport-neutral command payloads and behavior live in `crates/host-command-services`; and local web mode lives in `crates/web-host`.
 
 ## Data & Control Flow
-`main.rs` starts the desktop app and keeps the browser-backend compatibility flag; `lib.rs` builds state, services, emitters, and command registration before delegating to startup/headless. Transport command modules validate and deserialize request data, then hand off to shared command-service modules.
+`main.rs` starts the desktop app; `lib.rs` builds state, services, emitters, command registration, and web-host compatibility re-exports. Transport command modules validate and deserialize request data, then hand off to shared command-service modules from `host-command-services`.
 
 ## Integration Points
-Bridges Tauri, browser-backend HTTP, SSE relays, and the `host-application` service layer. Uses `host-domain` payloads throughout so UI and headless paths stay aligned.
+Bridges Tauri and the `host-application` service layer. Uses `host-domain` payloads and `host-command-services` DTOs so desktop UI commands and web-host routes stay aligned.

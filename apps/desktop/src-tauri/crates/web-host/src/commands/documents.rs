@@ -1,5 +1,5 @@
-use crate::command_payloads::PlanSubtaskPayload;
-use crate::command_services::issue_type::parse_issue_type;
+use host_command_services::command_payloads::PlanSubtaskPayload;
+use host_command_services::command_services::issue_type::parse_issue_type;
 use host_domain::PlanSubtaskInput;
 
 fn map_plan_subtask_payload(

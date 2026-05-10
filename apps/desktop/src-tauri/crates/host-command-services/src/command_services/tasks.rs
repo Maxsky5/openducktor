@@ -8,55 +8,55 @@ use std::sync::Arc;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TasksListRequest {
-    pub(crate) repo_path: String,
-    pub(crate) done_visible_days: Option<i32>,
+pub struct TasksListRequest {
+    pub repo_path: String,
+    pub done_visible_days: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskCreateRequest {
-    pub(crate) repo_path: String,
-    pub(crate) input: TaskCreatePayload,
+pub struct TaskCreateRequest {
+    pub repo_path: String,
+    pub input: TaskCreatePayload,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskUpdateRequest {
-    pub(crate) repo_path: String,
-    pub(crate) task_id: String,
-    pub(crate) patch: TaskUpdatePayload,
+pub struct TaskUpdateRequest {
+    pub repo_path: String,
+    pub task_id: String,
+    pub patch: TaskUpdatePayload,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskDeleteRequest {
-    pub(crate) repo_path: String,
-    pub(crate) task_id: String,
-    pub(crate) delete_subtasks: Option<bool>,
+pub struct TaskDeleteRequest {
+    pub repo_path: String,
+    pub task_id: String,
+    pub delete_subtasks: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskTransitionRequest {
-    pub(crate) repo_path: String,
-    pub(crate) task_id: String,
-    pub(crate) status: TaskStatus,
-    pub(crate) reason: Option<String>,
+pub struct TaskTransitionRequest {
+    pub repo_path: String,
+    pub task_id: String,
+    pub status: TaskStatus,
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskDeferRequest {
-    pub(crate) repo_path: String,
-    pub(crate) task_id: String,
-    pub(crate) reason: Option<String>,
+pub struct TaskDeferRequest {
+    pub repo_path: String,
+    pub task_id: String,
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskDeleteResponse {
-    pub(crate) ok: bool,
+pub struct TaskDeleteResponse {
+    pub ok: bool,
 }
 
 fn request_error(error: impl Into<String>) -> CommandServiceError {
@@ -67,9 +67,7 @@ fn service_error(error: anyhow::Error) -> CommandServiceError {
     CommandServiceError::internal(error)
 }
 
-pub(crate) fn map_task_create_payload(
-    input: TaskCreatePayload,
-) -> CommandServiceResult<CreateTaskInput> {
+pub fn map_task_create_payload(input: TaskCreatePayload) -> CommandServiceResult<CreateTaskInput> {
     Ok(CreateTaskInput {
         title: input.title,
         issue_type: parse_issue_type(&input.issue_type, "issueType")
@@ -82,9 +80,7 @@ pub(crate) fn map_task_create_payload(
     })
 }
 
-pub(crate) fn map_task_update_payload(
-    patch: TaskUpdatePayload,
-) -> CommandServiceResult<UpdateTaskPatch> {
+pub fn map_task_update_payload(patch: TaskUpdatePayload) -> CommandServiceResult<UpdateTaskPatch> {
     let issue_type = match patch.issue_type {
         Some(issue_type) => Some(
             parse_issue_type(&issue_type, "issueType")
@@ -108,7 +104,7 @@ pub(crate) fn map_task_update_payload(
     })
 }
 
-pub(crate) fn list(
+pub fn list(
     service: Arc<AppService>,
     request: TasksListRequest,
 ) -> CommandServiceResult<Vec<TaskCard>> {
@@ -125,7 +121,7 @@ pub(crate) fn list(
     }
 }
 
-pub(crate) fn create(
+pub fn create(
     service: Arc<AppService>,
     request: TaskCreateRequest,
 ) -> CommandServiceResult<TaskCard> {
@@ -135,7 +131,7 @@ pub(crate) fn create(
         .map_err(service_error)
 }
 
-pub(crate) fn update(
+pub fn update(
     service: Arc<AppService>,
     request: TaskUpdateRequest,
 ) -> CommandServiceResult<TaskCard> {
@@ -145,7 +141,7 @@ pub(crate) fn update(
         .map_err(service_error)
 }
 
-pub(crate) fn delete(
+pub fn delete(
     service: Arc<AppService>,
     request: TaskDeleteRequest,
 ) -> CommandServiceResult<TaskDeleteResponse> {
@@ -163,7 +159,7 @@ fn delete_subtasks_or_default(delete_subtasks: Option<bool>) -> bool {
     delete_subtasks.unwrap_or(false)
 }
 
-pub(crate) fn transition(
+pub fn transition(
     service: Arc<AppService>,
     request: TaskTransitionRequest,
 ) -> CommandServiceResult<TaskCard> {
@@ -177,7 +173,7 @@ pub(crate) fn transition(
         .map_err(service_error)
 }
 
-pub(crate) fn defer(
+pub fn defer(
     service: Arc<AppService>,
     request: TaskDeferRequest,
 ) -> CommandServiceResult<TaskCard> {

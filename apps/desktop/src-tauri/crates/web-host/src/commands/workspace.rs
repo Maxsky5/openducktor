@@ -107,7 +107,8 @@ pub(crate) fn stage_local_attachment_to_temp(
         .map_err(|error| format!("Failed to prepare attachment staging directory: {error}"))?;
     let file_name = format!("{}-{}", Uuid::new_v4(), sanitize_attachment_filename(name));
     let path = attachment_dir.join(file_name);
-    std::fs::write(&path, bytes).map_err(|error| format!("Failed to stage local attachment: {error}"))?;
+    std::fs::write(&path, bytes)
+        .map_err(|error| format!("Failed to stage local attachment: {error}"))?;
     Ok(path)
 }
 
@@ -136,9 +137,11 @@ pub(crate) fn resolve_staged_local_attachment_path(path_or_name: &str) -> Result
     let entries = std::fs::read_dir(&stage_dir)
         .map_err(|error| format!("Failed to read staged attachment directory: {error}"))?;
     for entry in entries {
-        let entry = entry.map_err(|error| format!("Failed to read staged attachment entry: {error}"))?;
+        let entry =
+            entry.map_err(|error| format!("Failed to read staged attachment entry: {error}"))?;
         let path = entry.path();
-        if path.is_file() && read_staged_attachment_original_name(&path).as_deref() == Some(&token) {
+        if path.is_file() && read_staged_attachment_original_name(&path).as_deref() == Some(&token)
+        {
             return Ok(path);
         }
     }

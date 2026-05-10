@@ -17,10 +17,10 @@ const AUTHORIZED_WORKTREE_CACHE_TTL: Duration = Duration::from_secs(60);
 const WORKTREE_STATE_STABILIZATION_ATTEMPTS: usize = 3;
 
 #[derive(Clone)]
-pub(crate) struct AuthorizedWorktreeCacheEntry {
-    pub(crate) cached_at: Instant,
-    pub(crate) worktree_state_token: String,
-    pub(crate) worktrees: HashSet<PathBuf>,
+pub struct AuthorizedWorktreeCacheEntry {
+    pub cached_at: Instant,
+    pub worktree_state_token: String,
+    pub worktrees: HashSet<PathBuf>,
 }
 
 static AUTHORIZED_WORKTREE_CACHE: OnceLock<Mutex<HashMap<String, AuthorizedWorktreeCacheEntry>>> =
@@ -28,8 +28,8 @@ static AUTHORIZED_WORKTREE_CACHE: OnceLock<Mutex<HashMap<String, AuthorizedWorkt
 static AUTHORIZED_WORKTREE_MISS_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
     OnceLock::new();
 
-pub(crate) fn authorized_worktree_cache(
-) -> &'static Mutex<HashMap<String, AuthorizedWorktreeCacheEntry>> {
+pub fn authorized_worktree_cache() -> &'static Mutex<HashMap<String, AuthorizedWorktreeCacheEntry>>
+{
     AUTHORIZED_WORKTREE_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -41,7 +41,7 @@ fn cache_lock_error(operation: &str) -> String {
     format!("authorized worktree cache is unavailable while {operation}: lock poisoned")
 }
 
-pub(crate) fn cache_key(canonical_repo: &Path) -> String {
+pub fn cache_key(canonical_repo: &Path) -> String {
     canonical_repo.to_string_lossy().to_string()
 }
 
@@ -142,7 +142,7 @@ pub(super) fn is_authorized_worktree(
     Ok(is_member)
 }
 
-pub(crate) fn invalidate_worktree_resolution_cache_for_repo(repo_path: &str) -> Result<(), String> {
+pub fn invalidate_worktree_resolution_cache_for_repo(repo_path: &str) -> Result<(), String> {
     let canonical_repo = canonicalize_for_validation(repo_path, "repo_path")?;
     let key = cache_key(canonical_repo.as_path());
     let mut cache = authorized_worktree_cache()

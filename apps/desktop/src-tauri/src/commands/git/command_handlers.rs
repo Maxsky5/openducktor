@@ -1,7 +1,7 @@
 use crate::app_state::AppState;
 use crate::command_helpers::run_service_blocking;
-use crate::command_services::error::CommandServiceResult;
-use crate::command_services::git::{self as git_service, requests as git_requests};
+use host_command_services::command_services::error::CommandServiceResult;
+use host_command_services::command_services::git::{self as git_service, requests as git_requests};
 use tauri::State;
 
 async fn run_git_command<T, F>(operation_name: &'static str, operation: F) -> Result<T, String>

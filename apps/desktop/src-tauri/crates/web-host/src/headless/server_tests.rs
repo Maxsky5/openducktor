@@ -738,7 +738,7 @@ struct OriginValidationCase {
 #[test]
 fn validate_web_frontend_origin_matches_shared_cases() {
     let cases: Vec<OriginValidationCase> = serde_json::from_str(include_str!(
-        "../../../../../packages/openducktor-web/src/browser-origin-validation-cases.json"
+        "../../../../../../../packages/openducktor-web/src/browser-origin-validation-cases.json"
     ))
     .expect("shared web origin validation cases should parse");
 

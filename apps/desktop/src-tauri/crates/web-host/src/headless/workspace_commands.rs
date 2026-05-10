@@ -4,13 +4,15 @@ use super::command_support::{
     run_headless_blocking, serialize_value, service_error, CommandResult, HeadlessState,
 };
 use crate::command_helpers::run_service_blocking_tokio;
-use crate::command_payloads::{RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload};
 use crate::commands::workspace::{
     resolve_staged_local_attachment_path, stage_local_attachment_to_temp,
     ResolvedLocalAttachmentPayload, StagedLocalAttachmentPayload,
 };
 use anyhow::anyhow;
 use host_application::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshot};
+use host_command_services::command_payloads::{
+    RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
+};
 use serde::Deserialize;
 use serde_json::Value;
 

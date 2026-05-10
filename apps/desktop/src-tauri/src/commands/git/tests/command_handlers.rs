@@ -5,7 +5,7 @@ use super::fixtures::{
     FetchRemoteCall, ResetWorktreeSelectionCall, ResetWorktreeSelectionResult, WorktreeStatusCall,
     WorktreeStatusResult, WorktreeStatusSummaryCall, WorktreeStatusSummaryResult,
 };
-use crate::command_services::git::{
+use host_command_services::command_services::git::{
     parse_diff_scope, require_target_branch, GIT_WORKTREE_HASH_VERSION,
 };
 use host_domain::{

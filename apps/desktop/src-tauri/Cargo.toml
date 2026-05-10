@@ -12,6 +12,7 @@ helper_name = "openducktor-desktop-helper"
 [workspace]
 members = [
   "crates/host-application",
+  "crates/host-command-services",
   "crates/host-domain",
   "crates/host-infra-beads",
   "crates/host-infra-system",
@@ -109,6 +110,9 @@ url = "2"
 
   [dependencies.host-application]
   path = "crates/host-application"
+
+  [dependencies.host-command-services]
+  path = "crates/host-command-services"
 
   [dependencies.host-infra-beads]
   path = "crates/host-infra-beads"

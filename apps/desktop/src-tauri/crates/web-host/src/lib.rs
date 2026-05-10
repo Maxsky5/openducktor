@@ -1,16 +1,8 @@
 mod command_helpers;
-#[path = "../../../src/command_payloads.rs"]
-mod command_payloads;
-#[allow(dead_code, unused_imports)]
-#[path = "../../../src/command_services/mod.rs"]
-mod command_services;
 mod commands;
 mod external_task_sync;
-#[path = "../../../src/headless/mod.rs"]
 mod headless;
-#[path = "../../../src/logging.rs"]
 mod logging;
-#[path = "../../../src/pull_request_sync.rs"]
 mod pull_request_sync;
 mod shutdown;
 mod startup;

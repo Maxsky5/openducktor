@@ -1,4 +1,4 @@
-# apps/desktop/src-tauri/src/command_services/git/authorization/
+# apps/desktop/src-tauri/crates/host-command-services/src/command_services/git/authorization/
 
 ## Responsibility
 Resolve and cache authorized repo/worktree membership before shared git command services run.

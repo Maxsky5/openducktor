@@ -1,4 +1,4 @@
-use crate::command_services::git::{
+use host_command_services::command_services::git::{
     build_worktree_status_summary_with_snapshot, build_worktree_status_with_snapshot,
     hash_worktree_diff_payload, hash_worktree_diff_summary_payload, hash_worktree_status_payload,
     WorktreeSnapshotMetadata, GIT_WORKTREE_HASH_VERSION,

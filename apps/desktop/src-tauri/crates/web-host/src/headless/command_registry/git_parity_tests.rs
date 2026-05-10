@@ -344,7 +344,7 @@ async fn headless_git_get_worktree_status_keeps_snapshot_metadata_and_upstream_e
     assert_eq!(status.snapshot.diff_scope, GitDiffScope::Uncommitted);
     assert_eq!(
         status.snapshot.hash_version,
-        crate::command_services::git::GIT_WORKTREE_HASH_VERSION
+        host_command_services::command_services::git::GIT_WORKTREE_HASH_VERSION
     );
     assert_eq!(status.snapshot.status_hash.len(), 16);
     assert_eq!(status.snapshot.diff_hash.len(), 16);
@@ -420,7 +420,7 @@ async fn headless_git_reset_worktree_selection_forwards_snapshot_selection_and_w
             "targetBranch": "  origin/main  ",
             "workingDir": worktree_str,
             "snapshot": {
-                "hashVersion": crate::command_services::git::GIT_WORKTREE_HASH_VERSION,
+                "hashVersion": host_command_services::command_services::git::GIT_WORKTREE_HASH_VERSION,
                 "statusHash": "status-hash",
                 "diffHash": "diff-hash",
             },
@@ -449,7 +449,8 @@ async fn headless_git_reset_worktree_selection_forwards_snapshot_selection_and_w
             working_dir: Some(expected_worktree),
             target_branch: "origin/main".to_string(),
             snapshot: GitResetSnapshot {
-                hash_version: crate::command_services::git::GIT_WORKTREE_HASH_VERSION,
+                hash_version:
+                    host_command_services::command_services::git::GIT_WORKTREE_HASH_VERSION,
                 status_hash: "status-hash".to_string(),
                 diff_hash: "diff-hash".to_string(),
             },

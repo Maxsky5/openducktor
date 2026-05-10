@@ -1,4 +1,4 @@
-# apps/desktop/src-tauri/src/command_services/git/
+# apps/desktop/src-tauri/crates/host-command-services/src/command_services/git/
 
 ## Responsibility
 Shared git command behavior for branch, diff, status, worktree, push/pull, rebase, conflict, authorization, and snapshot operations.
@@ -10,4 +10,4 @@ Shared git command behavior for branch, diff, status, worktree, push/pull, rebas
 Git command services authorize the repo/effective working directory, validate required fields and diff scope, call `AppService` or `GitPort`, invalidate worktree caches after successful worktree mutations, and return classified errors.
 
 ## Integration
-Used by `commands/git/command_handlers.rs` for Tauri and `headless/git_commands.rs` for browser-backend HTTP while preserving existing public command names and payload shapes.
+Used by desktop `commands/git/command_handlers.rs` for Tauri and web-host/headless `git_commands.rs` for browser-backend HTTP while preserving existing public command names and payload shapes.

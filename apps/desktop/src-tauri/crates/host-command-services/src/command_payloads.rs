@@ -3,113 +3,113 @@ use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskCreatePayload {
-    pub(crate) title: String,
-    pub(crate) issue_type: String,
-    pub(crate) priority: i32,
-    pub(crate) description: Option<String>,
-    pub(crate) labels: Option<Vec<String>>,
-    pub(crate) ai_review_enabled: Option<bool>,
-    pub(crate) parent_id: Option<String>,
+pub struct TaskCreatePayload {
+    pub title: String,
+    pub issue_type: String,
+    pub priority: i32,
+    pub description: Option<String>,
+    pub labels: Option<Vec<String>>,
+    pub ai_review_enabled: Option<bool>,
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskUpdatePayload {
-    pub(crate) title: Option<String>,
-    pub(crate) description: Option<String>,
-    pub(crate) priority: Option<i32>,
-    pub(crate) issue_type: Option<String>,
-    pub(crate) ai_review_enabled: Option<bool>,
-    pub(crate) labels: Option<Vec<String>>,
-    pub(crate) assignee: Option<String>,
-    pub(crate) parent_id: Option<String>,
-    pub(crate) target_branch: Option<host_domain::GitTargetBranch>,
+pub struct TaskUpdatePayload {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub priority: Option<i32>,
+    pub issue_type: Option<String>,
+    pub ai_review_enabled: Option<bool>,
+    pub labels: Option<Vec<String>>,
+    pub assignee: Option<String>,
+    pub parent_id: Option<String>,
+    pub target_branch: Option<host_domain::GitTargetBranch>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MarkdownPayload {
-    pub(crate) markdown: String,
+pub struct MarkdownPayload {
+    pub markdown: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PlanPayload {
-    pub(crate) markdown: String,
-    pub(crate) subtasks: Option<Vec<PlanSubtaskPayload>>,
+pub struct PlanPayload {
+    pub markdown: String,
+    pub subtasks: Option<Vec<PlanSubtaskPayload>>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PlanSubtaskPayload {
-    pub(crate) title: String,
-    pub(crate) issue_type: Option<String>,
-    pub(crate) priority: Option<i32>,
-    pub(crate) description: Option<String>,
+pub struct PlanSubtaskPayload {
+    pub title: String,
+    pub issue_type: Option<String>,
+    pub priority: Option<i32>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct BuildCompletePayload {
-    pub(crate) summary: Option<String>,
+pub struct BuildCompletePayload {
+    pub summary: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PullRequestContentPayload {
-    pub(crate) title: String,
-    pub(crate) body: String,
+pub struct PullRequestContentPayload {
+    pub title: String,
+    pub body: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskDirectMergePayload {
-    pub(crate) merge_method: host_domain::GitMergeMethod,
-    pub(crate) squash_commit_message: Option<String>,
+pub struct TaskDirectMergePayload {
+    pub merge_method: host_domain::GitMergeMethod,
+    pub squash_commit_message: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RepoConfigPayload {
-    pub(crate) default_runtime_kind: Option<String>,
-    pub(crate) worktree_base_path: Option<String>,
-    pub(crate) branch_prefix: Option<String>,
-    pub(crate) default_target_branch: Option<host_infra_system::GitTargetBranch>,
-    pub(crate) git: Option<host_infra_system::RepoGitConfig>,
-    pub(crate) dev_servers: Option<Vec<host_infra_system::RepoDevServerScript>>,
-    pub(crate) worktree_copy_paths: Option<Vec<String>>,
-    pub(crate) prompt_overrides: Option<host_infra_system::PromptOverrides>,
-    pub(crate) agent_defaults: Option<host_infra_system::AgentDefaults>,
+pub struct RepoConfigPayload {
+    pub default_runtime_kind: Option<String>,
+    pub worktree_base_path: Option<String>,
+    pub branch_prefix: Option<String>,
+    pub default_target_branch: Option<host_infra_system::GitTargetBranch>,
+    pub git: Option<host_infra_system::RepoGitConfig>,
+    pub dev_servers: Option<Vec<host_infra_system::RepoDevServerScript>>,
+    pub worktree_copy_paths: Option<Vec<String>>,
+    pub prompt_overrides: Option<host_infra_system::PromptOverrides>,
+    pub agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RepoSettingsPayload {
-    pub(crate) default_runtime_kind: Option<String>,
-    pub(crate) worktree_base_path: Option<String>,
-    pub(crate) branch_prefix: Option<String>,
-    pub(crate) default_target_branch: Option<host_infra_system::GitTargetBranch>,
-    pub(crate) git: Option<host_infra_system::RepoGitConfig>,
-    pub(crate) hooks: Option<host_infra_system::HookSet>,
-    pub(crate) dev_servers: Option<Vec<host_infra_system::RepoDevServerScript>>,
-    pub(crate) worktree_copy_paths: Option<Vec<String>>,
-    pub(crate) prompt_overrides: Option<host_infra_system::PromptOverrides>,
-    pub(crate) agent_defaults: Option<host_infra_system::AgentDefaults>,
+pub struct RepoSettingsPayload {
+    pub default_runtime_kind: Option<String>,
+    pub worktree_base_path: Option<String>,
+    pub branch_prefix: Option<String>,
+    pub default_target_branch: Option<host_infra_system::GitTargetBranch>,
+    pub git: Option<host_infra_system::RepoGitConfig>,
+    pub hooks: Option<host_infra_system::HookSet>,
+    pub dev_servers: Option<Vec<host_infra_system::RepoDevServerScript>>,
+    pub worktree_copy_paths: Option<Vec<String>>,
+    pub prompt_overrides: Option<host_infra_system::PromptOverrides>,
+    pub agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
 
 #[derive(Debug, Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SettingsSnapshotPayload {
-    pub(crate) theme: String,
-    pub(crate) git: host_infra_system::GlobalGitConfig,
-    pub(crate) general: host_infra_system::GeneralSettings,
-    pub(crate) chat: host_infra_system::ChatSettings,
-    pub(crate) reusable_prompts: Vec<host_infra_system::ReusablePrompt>,
-    pub(crate) kanban: host_infra_system::KanbanSettings,
-    pub(crate) autopilot: host_infra_system::AutopilotSettings,
-    pub(crate) workspaces: HashMap<String, host_infra_system::RepoConfig>,
-    pub(crate) global_prompt_overrides: host_infra_system::PromptOverrides,
+pub struct SettingsSnapshotPayload {
+    pub theme: String,
+    pub git: host_infra_system::GlobalGitConfig,
+    pub general: host_infra_system::GeneralSettings,
+    pub chat: host_infra_system::ChatSettings,
+    pub reusable_prompts: Vec<host_infra_system::ReusablePrompt>,
+    pub kanban: host_infra_system::KanbanSettings,
+    pub autopilot: host_infra_system::AutopilotSettings,
+    pub workspaces: HashMap<String, host_infra_system::RepoConfig>,
+    pub global_prompt_overrides: host_infra_system::PromptOverrides,
 }
 
 #[cfg(test)]

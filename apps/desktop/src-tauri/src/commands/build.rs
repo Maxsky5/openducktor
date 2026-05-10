@@ -1,6 +1,6 @@
 use crate::app_state::AppState;
 use crate::command_helpers::{as_error, dev_server_emitter, run_service_blocking};
-use crate::command_payloads::{
+use host_command_services::command_payloads::{
     BuildCompletePayload, PullRequestContentPayload, TaskDirectMergePayload,
 };
 use host_domain::{

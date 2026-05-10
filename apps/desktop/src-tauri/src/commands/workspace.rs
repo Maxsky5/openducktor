@@ -1,8 +1,10 @@
 use crate::app_state::AppState;
 use crate::command_helpers::{as_error, run_service_blocking};
-use crate::command_payloads::{RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload};
 use base64::Engine;
 use host_application::{RepoConfigUpdate, RepoSettingsUpdate, WorkspaceSettingsSnapshot};
+use host_command_services::command_payloads::{
+    RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
+};
 use host_infra_system::HookSet;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -216,7 +218,7 @@ pub async fn workspace_select(
     workspace_id: String,
 ) -> Result<host_domain::WorkspaceRecord, String> {
     let selected = as_error(state.service.workspace_select(&workspace_id))?;
-    crate::command_services::git::invalidate_worktree_resolution_cache_for_repo(
+    host_command_services::command_services::git::invalidate_worktree_resolution_cache_for_repo(
         &selected.repo_path,
     )?;
     Ok(selected)
@@ -289,7 +291,7 @@ pub async fn workspace_update_repo_config(
             agent_defaults: config.agent_defaults,
         },
     ))?;
-    crate::command_services::git::invalidate_worktree_resolution_cache_for_repo(
+    host_command_services::command_services::git::invalidate_worktree_resolution_cache_for_repo(
         &updated.repo_path,
     )?;
     Ok(updated)
@@ -322,7 +324,7 @@ pub async fn workspace_save_repo_settings(
         })
         .await,
     )?;
-    crate::command_services::git::invalidate_worktree_resolution_cache_for_repo(
+    host_command_services::command_services::git::invalidate_worktree_resolution_cache_for_repo(
         &updated.repo_path,
     )?;
     Ok(updated)
@@ -429,7 +431,7 @@ pub async fn workspace_save_settings_snapshot(
         .await,
     )?;
     for repo_path in &repo_paths_to_invalidate {
-        crate::command_services::git::invalidate_worktree_resolution_cache_for_repo(repo_path)?;
+        host_command_services::command_services::git::invalidate_worktree_resolution_cache_for_repo(repo_path)?;
     }
     Ok(updated)
 }
@@ -448,14 +450,14 @@ mod tests {
         workspace_update_repo_config, HookSet,
     };
     use crate::app_state::AppState;
-    use crate::command_payloads::{
+    use host_application::AppService;
+    use host_command_services::command_payloads::{
         RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
     };
-    use crate::command_services::git::{
+    use host_command_services::command_services::git::{
         authorized_worktree_cache, cache_key, read_worktree_state_token, resolve_working_dir,
         AuthorizedWorktreeCacheEntry,
     };
-    use host_application::AppService;
     use host_domain::{TaskStore, WorkspaceRecord, TASK_METADATA_NAMESPACE};
     use host_infra_beads::BeadsTaskStore;
     use host_infra_system::{
@@ -602,7 +604,7 @@ mod tests {
     }
 
     fn clear_authorized_worktree_cache_for_repo(repo: &Path) {
-        crate::command_services::git::invalidate_worktree_resolution_cache_for_repo(
+        host_command_services::command_services::git::invalidate_worktree_resolution_cache_for_repo(
             repo.to_string_lossy().as_ref(),
         )
         .expect("worktree cache should clear for repository");

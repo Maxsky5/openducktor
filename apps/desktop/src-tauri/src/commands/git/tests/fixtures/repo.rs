@@ -11,7 +11,7 @@ use host_domain::{
     GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
 };
 
-use crate::command_services::git::{
+use host_command_services::command_services::git::{
     authorized_worktree_cache, cache_key, invalidate_worktree_resolution_cache_for_repo,
     read_worktree_state_token, AuthorizedWorktreeCacheEntry,
 };

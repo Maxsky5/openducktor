@@ -1,6 +1,6 @@
-pub(crate) mod authorization;
-pub(crate) mod requests;
-pub(crate) mod snapshot;
+pub mod authorization;
+pub mod requests;
+pub mod snapshot;
 
 use crate::command_services::error::{CommandServiceError, CommandServiceResult};
 use host_application::AppService;
@@ -11,24 +11,21 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub(crate) use snapshot::{
+pub use snapshot::{
     build_worktree_status_summary_with_snapshot, build_worktree_status_with_snapshot,
     hash_worktree_diff_payload, hash_worktree_diff_summary_payload, hash_worktree_status_payload,
     WorktreeSnapshotMetadata, GIT_WORKTREE_HASH_VERSION,
 };
 
-#[cfg(test)]
-pub(crate) use authorization::{
+pub use authorization::{
     authorized_worktree_cache, cache_key, read_git_common_dir, read_worktree_state_token,
     AuthorizedWorktreeCacheEntry,
 };
-pub(crate) use authorization::{
-    invalidate_worktree_resolution_cache_for_repo, resolve_working_dir,
-};
+pub use authorization::{invalidate_worktree_resolution_cache_for_repo, resolve_working_dir};
 
-pub(crate) struct AuthorizedGitScope {
-    pub(crate) repo_path: String,
-    pub(crate) effective_working_dir: String,
+pub struct AuthorizedGitScope {
+    pub repo_path: String,
+    pub effective_working_dir: String,
 }
 
 fn request_error(error: impl std::fmt::Display) -> CommandServiceError {
@@ -39,7 +36,7 @@ fn service_error(error: anyhow::Error) -> CommandServiceError {
     CommandServiceError::internal(error)
 }
 
-pub(crate) fn authorize_git_scope(
+pub fn authorize_git_scope(
     service: &AppService,
     repo_path: &str,
     working_dir: Option<&str>,
@@ -56,7 +53,7 @@ pub(crate) fn authorize_git_scope(
     })
 }
 
-pub(crate) fn parse_diff_scope(
+pub fn parse_diff_scope(
     diff_scope: Option<&str>,
 ) -> CommandServiceResult<host_domain::GitDiffScope> {
     match diff_scope.unwrap_or("target") {
@@ -68,7 +65,7 @@ pub(crate) fn parse_diff_scope(
     }
 }
 
-pub(crate) fn require_target_branch(target_branch: &str) -> CommandServiceResult<&str> {
+pub fn require_target_branch(target_branch: &str) -> CommandServiceResult<&str> {
     let trimmed_target = target_branch.trim();
     if trimmed_target.is_empty() {
         return Err(CommandServiceError::invalid_request(
@@ -78,7 +75,7 @@ pub(crate) fn require_target_branch(target_branch: &str) -> CommandServiceResult
     Ok(trimmed_target)
 }
 
-pub(crate) fn require_commit_message(message: &str) -> CommandServiceResult<&str> {
+pub fn require_commit_message(message: &str) -> CommandServiceResult<&str> {
     let trimmed_message = message.trim();
     if trimmed_message.is_empty() {
         return Err(CommandServiceError::invalid_request("message is required"));
@@ -111,7 +108,7 @@ fn build_worktree_snapshot_metadata(
     }
 }
 
-pub(crate) fn get_branches(
+pub fn get_branches(
     service: Arc<AppService>,
     request: GitRepoRequest,
 ) -> CommandServiceResult<Vec<host_domain::GitBranch>> {
@@ -121,7 +118,7 @@ pub(crate) fn get_branches(
         .map_err(service_error)
 }
 
-pub(crate) fn get_current_branch(
+pub fn get_current_branch(
     service: Arc<AppService>,
     request: GitCurrentBranchRequest,
 ) -> CommandServiceResult<host_domain::GitCurrentBranch> {
@@ -132,7 +129,7 @@ pub(crate) fn get_current_branch(
         .map_err(service_error)
 }
 
-pub(crate) fn switch_branch(
+pub fn switch_branch(
     service: Arc<AppService>,
     request: GitSwitchBranchRequest,
 ) -> CommandServiceResult<host_domain::GitCurrentBranch> {
@@ -146,7 +143,7 @@ pub(crate) fn switch_branch(
         .map_err(service_error)
 }
 
-pub(crate) fn create_worktree(
+pub fn create_worktree(
     service: Arc<AppService>,
     request: GitCreateWorktreeRequest,
 ) -> CommandServiceResult<host_domain::GitWorktreeSummary> {
@@ -164,7 +161,7 @@ pub(crate) fn create_worktree(
     Ok(summary)
 }
 
-pub(crate) fn remove_worktree(
+pub fn remove_worktree(
     service: Arc<AppService>,
     request: GitRemoveWorktreeRequest,
 ) -> CommandServiceResult<bool> {
@@ -181,7 +178,7 @@ pub(crate) fn remove_worktree(
     Ok(removed)
 }
 
-pub(crate) fn push_branch(
+pub fn push_branch(
     service: Arc<AppService>,
     request: GitPushBranchRequest,
 ) -> CommandServiceResult<host_domain::GitPushResult> {
@@ -198,7 +195,7 @@ pub(crate) fn push_branch(
         .map_err(service_error)
 }
 
-pub(crate) fn get_status(
+pub fn get_status(
     service: Arc<AppService>,
     request: GitStatusRequest,
 ) -> CommandServiceResult<Vec<host_domain::GitFileStatus>> {
@@ -209,7 +206,7 @@ pub(crate) fn get_status(
         .map_err(service_error)
 }
 
-pub(crate) fn get_diff(
+pub fn get_diff(
     service: Arc<AppService>,
     request: GitDiffRequest,
 ) -> CommandServiceResult<Vec<host_domain::GitFileDiff>> {
@@ -223,7 +220,7 @@ pub(crate) fn get_diff(
         .map_err(service_error)
 }
 
-pub(crate) fn commits_ahead_behind(
+pub fn commits_ahead_behind(
     service: Arc<AppService>,
     request: GitAheadBehindRequest,
 ) -> CommandServiceResult<host_domain::GitAheadBehind> {
@@ -235,7 +232,7 @@ pub(crate) fn commits_ahead_behind(
         .map_err(service_error)
 }
 
-pub(crate) fn get_worktree_status(
+pub fn get_worktree_status(
     service: Arc<AppService>,
     request: GitWorktreeStatusRequest,
 ) -> CommandServiceResult<host_domain::GitWorktreeStatus> {
@@ -271,7 +268,7 @@ pub(crate) fn get_worktree_status(
     ))
 }
 
-pub(crate) fn get_worktree_status_summary(
+pub fn get_worktree_status_summary(
     service: Arc<AppService>,
     request: GitWorktreeStatusRequest,
 ) -> CommandServiceResult<host_domain::GitWorktreeStatusSummary> {
@@ -316,7 +313,7 @@ pub(crate) fn get_worktree_status_summary(
     ))
 }
 
-pub(crate) fn commit_all(
+pub fn commit_all(
     service: Arc<AppService>,
     request: GitCommitAllCommandRequest,
 ) -> CommandServiceResult<host_domain::GitCommitAllResult> {
@@ -333,7 +330,7 @@ pub(crate) fn commit_all(
         .map_err(service_error)
 }
 
-pub(crate) fn reset_worktree_selection(
+pub fn reset_worktree_selection(
     service: Arc<AppService>,
     request: GitResetWorktreeSelectionCommandRequest,
 ) -> CommandServiceResult<host_domain::GitResetWorktreeSelectionResult> {
@@ -352,7 +349,7 @@ pub(crate) fn reset_worktree_selection(
         .map_err(service_error)
 }
 
-pub(crate) fn fetch_remote(
+pub fn fetch_remote(
     service: Arc<AppService>,
     request: GitFetchRemoteRequest,
 ) -> CommandServiceResult<host_domain::GitFetchResult> {
@@ -369,7 +366,7 @@ pub(crate) fn fetch_remote(
         .map_err(service_error)
 }
 
-pub(crate) fn pull_branch(
+pub fn pull_branch(
     service: Arc<AppService>,
     request: GitPullBranchRequest,
 ) -> CommandServiceResult<host_domain::GitPullResult> {
@@ -384,7 +381,7 @@ pub(crate) fn pull_branch(
         .map_err(service_error)
 }
 
-pub(crate) fn rebase_branch(
+pub fn rebase_branch(
     service: Arc<AppService>,
     request: GitRebaseBranchCommandRequest,
 ) -> CommandServiceResult<host_domain::GitRebaseBranchResult> {
@@ -401,7 +398,7 @@ pub(crate) fn rebase_branch(
         .map_err(service_error)
 }
 
-pub(crate) fn rebase_abort(
+pub fn rebase_abort(
     service: Arc<AppService>,
     request: GitRebaseAbortCommandRequest,
 ) -> CommandServiceResult<host_domain::GitRebaseAbortResult> {
@@ -416,7 +413,7 @@ pub(crate) fn rebase_abort(
         .map_err(service_error)
 }
 
-pub(crate) fn abort_conflict(
+pub fn abort_conflict(
     service: Arc<AppService>,
     request: GitConflictAbortCommandRequest,
 ) -> CommandServiceResult<host_domain::GitConflictAbortResult> {

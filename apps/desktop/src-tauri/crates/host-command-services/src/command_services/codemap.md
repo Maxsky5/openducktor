@@ -1,4 +1,4 @@
-# apps/desktop/src-tauri/src/command_services/
+# apps/desktop/src-tauri/crates/host-command-services/src/command_services/
 
 ## Responsibility
 Transport-agnostic command behavior shared by Tauri IPC wrappers and headless HTTP command wrappers.

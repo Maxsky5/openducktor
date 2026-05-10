@@ -1542,6 +1542,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "host-command-services"
+version = "0.3.1"
+dependencies = [
+ "anyhow",
+ "host-application",
+ "host-domain",
+ "host-infra-beads",
+ "host-infra-system",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
 name = "host-domain"
 version = "0.3.1"
 dependencies = [
@@ -2647,6 +2662,7 @@ dependencies = [
  "chrono",
  "ctrlc",
  "host-application",
+ "host-command-services",
  "host-domain",
  "host-infra-beads",
  "host-infra-system",
@@ -2682,6 +2698,7 @@ dependencies = [
  "chrono",
  "ctrlc",
  "host-application",
+ "host-command-services",
  "host-domain",
  "host-infra-beads",
  "host-infra-system",
