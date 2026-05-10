@@ -28,6 +28,7 @@ fn temp_config_root(label: &str) -> PathBuf {
 }
 
 fn skip_if_dolt_unavailable() -> bool {
+    let _env_lock = lock_env();
     crate::resolve_command_path("dolt")
         .expect("dolt resolution should not fail")
         .is_none()
