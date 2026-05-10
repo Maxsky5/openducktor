@@ -36,10 +36,7 @@ const createQuickActionDisabledReason = (createSessionDisabled: boolean): string
   return createSessionDisabled ? "Wait for the current session to finish." : null;
 };
 
-const PULL_REQUEST_QUICK_ACTION_STATUSES = new Set<TaskCard["status"]>([
-  "ai_review",
-  "human_review",
-]);
+const PULL_REQUEST_QUICK_ACTION_STATUSES = new Set<TaskCard["status"]>(["human_review"]);
 
 const canShowPullRequestQuickAction = (task: TaskCard): boolean => {
   return PULL_REQUEST_QUICK_ACTION_STATUSES.has(task.status);

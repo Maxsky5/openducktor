@@ -256,6 +256,11 @@ describe("agent-studio-quick-actions", () => {
       launchActionId: "qa_review",
       label: "QA Review",
     });
+    expect(
+      aiReviewWithoutPullRequestOptions.some(
+        (option) => option.launchActionId === "build_pull_request_generation",
+      ),
+    ).toBe(false);
 
     const aiReviewTaskWithPullRequest = buildTask({
       ...aiReviewTaskWithoutPullRequest,
@@ -273,6 +278,11 @@ describe("agent-studio-quick-actions", () => {
       launchActionId: "qa_review",
       label: "QA Review",
     });
+    expect(
+      aiReviewWithPullRequestOptions.some(
+        (option) => option.launchActionId === "build_pull_request_generation",
+      ),
+    ).toBe(false);
     expect(
       aiReviewWithPullRequestOptions.find(
         (option) => option.launchActionId === "build_after_human_request_changes",
@@ -378,7 +388,24 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
 
-    expect(aiReviewOptions).toContainEqual(
+    expect(
+      aiReviewOptions.some((option) => option.launchActionId === "build_pull_request_generation"),
+    ).toBe(false);
+
+    const humanReviewTask = buildTask({
+      ...aiReviewTask,
+      status: "human_review",
+    });
+    const humanReviewOptions = buildAgentStudioQuickActions({
+      selectedTask: humanReviewTask,
+      sessionsForTask: [
+        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+      ],
+      roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
+      createSessionDisabled: false,
+    });
+
+    expect(humanReviewOptions).toContainEqual(
       expect.objectContaining({
         launchActionId: "build_pull_request_generation",
         initialSourceExternalSessionId: "builder-1",
