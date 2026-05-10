@@ -54,13 +54,15 @@ export type EventStreamState = {
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
 
+const PARENT_EXTERNAL_SESSION_ID_KEYS = ["parentID", "parentId", "parent_id"] as const;
+
 export const readParentExternalSessionId = (info: unknown): string | undefined => {
   const record = asUnknownRecord(info);
   if (!record) {
     return undefined;
   }
 
-  for (const key of ["parentID", "parentId", "parent_id"] as const) {
+  for (const key of PARENT_EXTERNAL_SESSION_ID_KEYS) {
     const value = record[key];
     if (typeof value === "string" && value.trim().length > 0) {
       return value;
