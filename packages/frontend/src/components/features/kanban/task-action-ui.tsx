@@ -55,7 +55,7 @@ export const taskActionLabel = (
     return options.surface === "agent_studio" ? "Start Implementation" : "Start Builder";
   }
   if (action === "qa_start") {
-    return "Request QA Review";
+    return options.surface === "agent_studio" ? "QA Review" : "Request QA Review";
   }
   if (action === "human_approve") {
     return "Approve Task";

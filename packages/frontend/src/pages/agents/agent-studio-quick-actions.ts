@@ -100,13 +100,6 @@ const quickActionDescriptionForWorkflowAction = (action: TaskWorkflowAction): st
   return "Open the start-session flow for Builder implementation work.";
 };
 
-const quickActionLabelForWorkflowAction = (action: TaskWorkflowAction, task: TaskCard): string => {
-  if (action === "qa_start") {
-    return LAUNCH_ACTION_LABELS.qa_review;
-  }
-  return taskActionLabel(action, task, { surface: "agent_studio" });
-};
-
 const orderQuickActions = (
   task: TaskCard,
   options: AgentStudioQuickActionOption[],
@@ -173,7 +166,7 @@ export const buildAgentStudioQuickActions = (params: {
       id: `quick:${launchActionId}`,
       role,
       launchActionId,
-      label: quickActionLabelForWorkflowAction(action, task),
+      label: taskActionLabel(action, task, { surface: "agent_studio" }),
       description: quickActionDescriptionForWorkflowAction(action),
       postStartAction: "kickoff",
       disabled: disabledReason !== null,

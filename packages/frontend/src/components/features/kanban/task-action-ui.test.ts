@@ -18,7 +18,11 @@ describe("taskActionLabel", () => {
     });
 
     expect(taskActionLabel("build_start", task)).toBe("Start Builder");
+    expect(taskActionLabel("build_start", task, { surface: "agent_studio" })).toBe(
+      "Start Implementation",
+    );
     expect(taskActionLabel("qa_start", task)).toBe("Request QA Review");
+    expect(taskActionLabel("qa_start", task, { surface: "agent_studio" })).toBe("QA Review");
     expect(taskActionLabel("open_builder", task)).toBe("Open Builder");
     expect(taskActionLabel("open_spec", task)).toBe("Open Spec");
     expect(taskActionLabel("open_planner", task)).toBe("Open Planner");
