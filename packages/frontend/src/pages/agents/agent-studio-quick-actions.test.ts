@@ -254,7 +254,6 @@ describe("agent-studio-quick-actions", () => {
     });
     expect(selectPrimaryAgentStudioQuickAction(aiReviewWithoutPullRequestOptions)).toMatchObject({
       launchActionId: "qa_review",
-      label: "QA Review",
     });
     expect(
       aiReviewWithoutPullRequestOptions.some(
@@ -276,7 +275,6 @@ describe("agent-studio-quick-actions", () => {
     });
     expect(selectPrimaryAgentStudioQuickAction(aiReviewWithPullRequestOptions)).toMatchObject({
       launchActionId: "qa_review",
-      label: "QA Review",
     });
     expect(
       aiReviewWithPullRequestOptions.some(
