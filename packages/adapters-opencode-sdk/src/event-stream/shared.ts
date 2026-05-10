@@ -54,6 +54,22 @@ export type EventStreamState = {
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
 
+export const readParentExternalSessionId = (info: unknown): string | undefined => {
+  const record = asUnknownRecord(info);
+  if (!record) {
+    return undefined;
+  }
+
+  for (const key of ["parentID", "parentId", "parent_id"] as const) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
 export const flushPendingSubagentInputEventsForSession = (
   runtime: EventStreamRuntime,
   childExternalSessionId: string,

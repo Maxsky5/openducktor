@@ -3,7 +3,12 @@ import type { AgentEvent } from "@openducktor/core";
 import { handleMessageEvent } from "./event-stream/message-events";
 import { handleSessionEvent } from "./event-stream/session-events";
 import type { SubagentSessionLink } from "./event-stream/shared";
-import { isRelevantEvent, readEventDirectory, readEventSessionId } from "./event-stream/shared";
+import {
+  isRelevantEvent,
+  readEventDirectory,
+  readEventSessionId,
+  readParentExternalSessionId,
+} from "./event-stream/shared";
 import type {
   EventStreamSubscriber,
   OpencodeEventLogger,
@@ -177,19 +182,7 @@ export const isRelevantSubscriberEvent = (
       properties && typeof properties === "object" && properties !== null && "info" in properties
         ? (properties as { info?: unknown }).info
         : undefined;
-    const parentExternalSessionId =
-      info && typeof info === "object" && info !== null
-        ? (["parentID", "parentId", "parent_id"] as const).reduce<string | undefined>(
-            (found, key) => {
-              if (found) {
-                return found;
-              }
-              const value = (info as Record<string, unknown>)[key];
-              return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-            },
-            undefined,
-          )
-        : undefined;
+    const parentExternalSessionId = readParentExternalSessionId(info);
 
     if (event.type === "question.asked" && parentExternalSessionId) {
       return parentExternalSessionId === subscriber.externalSessionId;

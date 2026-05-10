@@ -23,23 +23,9 @@ import {
   markSessionActive,
   markSessionIdle,
   readEventSessionId,
+  readParentExternalSessionId,
   removePendingSubagentCorrelationKey,
 } from "./shared";
-
-const readParentExternalSessionId = (info: unknown): string | undefined => {
-  if (!info || typeof info !== "object") {
-    return undefined;
-  }
-
-  for (const key of ["parentID", "parentId", "parent_id"] as const) {
-    const value = (info as Record<string, unknown>)[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value;
-    }
-  }
-
-  return undefined;
-};
 
 type PendingInputEvent = Extract<AgentEvent, { type: "approval_required" | "question_required" }>;
 

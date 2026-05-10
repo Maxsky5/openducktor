@@ -9,6 +9,7 @@ import {
 import {
   type EventStreamRuntime,
   flushPendingSubagentInputEventsForSession,
+  readParentExternalSessionId,
   type SubagentSessionLink,
 } from "./event-stream/shared";
 import type { SessionInput, SessionRecord } from "./types";
@@ -133,6 +134,19 @@ const runEventStreamWithSession = async (
 const runEventStream = async (events: Event[]): Promise<AgentEvent[]> => {
   return (await runEventStreamWithSession(events)).emitted;
 };
+
+test("readParentExternalSessionId accepts OpenCode parent id spellings", () => {
+  for (const key of ["parentID", "parentId", "parent_id"] as const) {
+    expect(readParentExternalSessionId({ [key]: "external-parent-session" })).toBe(
+      "external-parent-session",
+    );
+  }
+
+  expect(readParentExternalSessionId({ parentID: "" })).toBeUndefined();
+  expect(readParentExternalSessionId({ parentID: "   " })).toBeUndefined();
+  expect(readParentExternalSessionId({ parentID: 123 })).toBeUndefined();
+  expect(readParentExternalSessionId(undefined)).toBeUndefined();
+});
 
 test("flushPendingSubagentInputEventsForSession preserves original timestamps", () => {
   const emitted: AgentEvent[] = [];
