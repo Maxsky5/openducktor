@@ -185,6 +185,42 @@ describe("useAgentStudioSendAction", () => {
     await harness.unmount();
   });
 
+  test("blocks concurrent sends in the same context before a render updates state", async () => {
+    const sendDeferred = createDeferred<void>();
+    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const startSession = mock(async () => "session-new");
+    const harness = createHookHarness(useAgentStudioSendAction, {
+      ...createBaseArgs(),
+      startSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    let firstSend: Promise<boolean> | undefined;
+    let secondSend: Promise<boolean> | undefined;
+    await harness.run((state) => {
+      firstSend = state.onSend(createDraft("first"));
+      secondSend = state.onSend(createDraft("second"));
+    });
+
+    await expect(secondSend).resolves.toBe(false);
+    await harness.waitFor((state) => state.isSending);
+
+    await harness.run(async () => {
+      sendDeferred.resolve();
+      await expect(firstSend).resolves.toBe(true);
+    });
+    await harness.waitFor((state) => !state.isSending);
+
+    expect(startSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "first" },
+    ]);
+
+    await harness.unmount();
+  });
+
   test("allows sending in a different active context while another context is unresolved", async () => {
     const firstSendDeferred = createDeferred<void>();
     const sendAgentMessage = mock((sessionId: string) => {
