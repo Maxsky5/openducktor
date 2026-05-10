@@ -62,7 +62,7 @@ export function useAgentStudioSendAction({
   const [sendingActivityCountByContext, setSendingActivityCountByContext] = useState<
     Record<string, number>
   >({});
-  const sendInFlightRef = useRef(false);
+  const inFlightContextsRef = useRef(new Set<string>());
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
     activeWorkspace,
     taskId,
@@ -74,7 +74,8 @@ export function useAgentStudioSendAction({
   const onSend = useCallback(
     async (draft: AgentChatComposerDraft): Promise<boolean> => {
       if (
-        (!canQueueBusyFollowups && (isSending || sendInFlightRef.current)) ||
+        (!canQueueBusyFollowups &&
+          (isSending || inFlightContextsRef.current.has(activeComposerContextKey))) ||
         isStarting ||
         !agentStudioReady ||
         isWaitingInput ||
@@ -116,8 +117,8 @@ export function useAgentStudioSendAction({
       if (!draftHasMeaningfulContent(draft) || !taskId) {
         return false;
       }
-      sendInFlightRef.current = true;
       const sendContextKeys = new Set<string>([activeComposerContextKey]);
+      inFlightContextsRef.current.add(activeComposerContextKey);
       setSendingActivityCountByContext((current) =>
         incrementActivityCountRecord(current, activeComposerContextKey),
       );
@@ -140,6 +141,7 @@ export function useAgentStudioSendAction({
         });
         if (!sendContextKeys.has(targetComposerContextKey)) {
           sendContextKeys.add(targetComposerContextKey);
+          inFlightContextsRef.current.add(targetComposerContextKey);
           setSendingActivityCountByContext((current) =>
             incrementActivityCountRecord(current, targetComposerContextKey),
           );
@@ -159,7 +161,9 @@ export function useAgentStudioSendAction({
         );
         return true;
       } finally {
-        sendInFlightRef.current = false;
+        for (const contextKey of sendContextKeys) {
+          inFlightContextsRef.current.delete(contextKey);
+        }
         setSendingActivityCountByContext((current) => {
           let next = current;
           for (const contextKey of sendContextKeys) {
