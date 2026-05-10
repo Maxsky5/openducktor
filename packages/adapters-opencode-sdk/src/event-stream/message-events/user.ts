@@ -1,9 +1,11 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
+import type { AgentUserMessageDisplayPart } from "@openducktor/core";
 import {
   normalizeUserMessageDisplayParts,
   type readMessageModelSelection,
   readTextFromMessageInfo,
 } from "../../message-normalizers";
+import type { QueuedUserMessageSend, SessionMessageMetadata } from "../../types";
 import type { EventStreamRuntime } from "../shared";
 import { getKnownMessageParts } from "./helpers";
 import { buildVisibleUserMessage } from "./user-display";
@@ -14,6 +16,43 @@ import {
   resolveUserMessageStateFromPendingAssistant,
   takeQueuedUserSendMatch,
 } from "./user-state";
+
+const resolveUserMessageDisplay = (input: {
+  fallbackText: string;
+  normalizedDisplayParts: AgentUserMessageDisplayPart[];
+  metadata?: SessionMessageMetadata;
+  runtime: EventStreamRuntime;
+  model?: ReturnType<typeof readMessageModelSelection>;
+}): {
+  displayParts: AgentUserMessageDisplayPart[];
+  matchedQueuedSend: QueuedUserMessageSend | null;
+  visible: string;
+} => {
+  const initialVisibleUserMessage = buildVisibleUserMessage({
+    fallbackText: input.fallbackText,
+    normalizedDisplayParts: input.normalizedDisplayParts,
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+  });
+  const matchedQueuedSend = takeQueuedUserSendMatch(
+    input.runtime,
+    initialVisibleUserMessage.visible,
+    initialVisibleUserMessage.displayParts,
+    input.model,
+  );
+
+  if (!matchedQueuedSend) {
+    return { ...initialVisibleUserMessage, matchedQueuedSend: null };
+  }
+
+  const finalVisibleUserMessage = buildVisibleUserMessage({
+    fallbackText: input.fallbackText,
+    normalizedDisplayParts: input.normalizedDisplayParts,
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+    matchedQueuedSend,
+  });
+
+  return { ...finalVisibleUserMessage, matchedQueuedSend };
+};
 
 export const reconcileUserMessageQueuedStates = (runtime: EventStreamRuntime): void => {
   const session = runtime.getSession(runtime.externalSessionId);
@@ -60,22 +99,12 @@ export const handleUserMessageUpdated = (
   const currentMetadata = session?.messageMetadataById.get(input.messageId);
   const normalizedDisplayParts = normalizeUserMessageDisplayParts(userParts);
   const fallbackText = currentMetadata?.text ?? readTextFromMessageInfo(input.infoRecord);
-  const initialVisibleUserMessage = buildVisibleUserMessage({
+  const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay({
     fallbackText,
     normalizedDisplayParts,
-    ...(currentMetadata ? { metadata: currentMetadata } : {}),
-  });
-  const matchedQueuedSend = takeQueuedUserSendMatch(
     runtime,
-    initialVisibleUserMessage.visible,
-    initialVisibleUserMessage.displayParts,
-    input.messageModel,
-  );
-  const { displayParts, visible } = buildVisibleUserMessage({
-    fallbackText,
-    normalizedDisplayParts,
     ...(currentMetadata ? { metadata: currentMetadata } : {}),
-    ...(matchedQueuedSend ? { matchedQueuedSend } : {}),
+    ...(input.messageModel ? { model: input.messageModel } : {}),
   });
   if (visible.trim().length === 0 && displayParts.length === 0) {
     return true;
@@ -113,22 +142,12 @@ export const handleUserPartUpdated = (runtime: EventStreamRuntime, messageId: st
     getKnownMessageParts(runtime, messageId),
   );
   const fallbackText = metadata?.text ?? "";
-  const initialVisibleUserMessage = buildVisibleUserMessage({
+  const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay({
     fallbackText,
     normalizedDisplayParts,
-    ...(metadata ? { metadata } : {}),
-  });
-  const matchedQueuedSend = takeQueuedUserSendMatch(
     runtime,
-    initialVisibleUserMessage.visible,
-    initialVisibleUserMessage.displayParts,
-    metadata?.model,
-  );
-  const { displayParts, visible } = buildVisibleUserMessage({
-    fallbackText,
-    normalizedDisplayParts,
     ...(metadata ? { metadata } : {}),
-    ...(matchedQueuedSend ? { matchedQueuedSend } : {}),
+    ...(metadata?.model ? { model: metadata.model } : {}),
   });
   if (visible.trim().length > 0 || displayParts.length > 0) {
     persistUserMessageMetadata({
