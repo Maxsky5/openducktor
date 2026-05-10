@@ -7,13 +7,13 @@ use crate::app_service::opencode_runtime::{
     OpenCodeProcessTracker,
 };
 use crate::app_service::{
-    opencode_binary_not_found_message, read_opencode_version, require_local_http_endpoint,
-    require_local_http_port, resolve_opencode_binary_path, wait_for_runtime_with_process,
-    AppService, RuntimeProcessGuard, RuntimeRoute, RuntimeSessionStatusMap,
-    RuntimeSessionStatusProbeError, RuntimeSessionStatusProbeOutcome,
-    RuntimeSessionStatusProbeTarget, RuntimeSessionStatusProbeTargetResolution,
-    RuntimeSessionStatusSnapshot, RuntimeStartupReadinessPolicy, StartupEventContext,
-    StartupEventCorrelation, StartupEventPayload,
+    read_opencode_version, require_local_http_endpoint, require_local_http_port,
+    resolve_opencode_binary, wait_for_runtime_with_process, AppService, RuntimeProcessGuard,
+    RuntimeRoute, RuntimeSessionStatusMap, RuntimeSessionStatusProbeError,
+    RuntimeSessionStatusProbeOutcome, RuntimeSessionStatusProbeTarget,
+    RuntimeSessionStatusProbeTargetResolution, RuntimeSessionStatusSnapshot,
+    RuntimeStartupReadinessPolicy, StartupEventContext, StartupEventCorrelation,
+    StartupEventPayload,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{AgentRuntimeKind, RuntimeDefinition, RuntimeHealth, RuntimeInstanceSummary};
@@ -594,19 +594,19 @@ impl AppRuntime for OpenCodeRuntime {
     }
 
     fn runtime_health(&self) -> RuntimeHealth {
-        let opencode_binary = resolve_opencode_binary_path();
-        let opencode_ok = opencode_binary.is_some();
+        let opencode_binary = resolve_opencode_binary();
+        let opencode_ok = opencode_binary.is_ok();
         RuntimeHealth {
             kind: "opencode".to_string(),
             ok: opencode_ok,
-            version: opencode_binary.as_ref().map(|binary| {
+            version: opencode_binary.as_ref().ok().map(|binary| {
                 if let Some(version) = read_opencode_version(binary.as_str()) {
                     format!("{version} ({binary})")
                 } else {
                     format!("installed ({binary})")
                 }
             }),
-            error: (!opencode_ok).then(opencode_binary_not_found_message),
+            error: opencode_binary.err(),
         }
     }
 

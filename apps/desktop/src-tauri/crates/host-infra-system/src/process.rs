@@ -148,14 +148,14 @@ fn existing_file_path(path: PathBuf) -> Option<String> {
 }
 
 #[cfg(unix)]
-fn is_executable_file(path: &Path) -> bool {
+pub fn is_executable_file(path: &Path) -> bool {
     path.metadata()
         .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
 }
 
 #[cfg(not(unix))]
-fn is_executable_file(path: &Path) -> bool {
+pub fn is_executable_file(path: &Path) -> bool {
     path.is_file()
 }
 
@@ -240,7 +240,7 @@ fn explicit_command_override_directories() -> Vec<PathBuf> {
             }
 
             let path = parse_user_path_os(&value).ok()?;
-            if !path.is_file() {
+            if !is_executable_file(path.as_path()) {
                 return None;
             }
 
@@ -1266,7 +1266,7 @@ mod tests {
         let override_dir = root.join("override-bin");
         let override_path = override_dir.join("custom-bun");
         fs::create_dir_all(&override_dir).expect("override dir should exist");
-        fs::write(&override_path, "").expect("override file should exist");
+        write_executable(&override_path, "#!/bin/sh\nprintf 'override'\n");
 
         let _shell_guard = EnvVarGuard::set("SHELL", "/tmp/odt-missing-shell");
         let _path_guard = EnvVarGuard::set("PATH", "/usr/bin:/bin");
@@ -1283,6 +1283,37 @@ mod tests {
         assert!(
             entries.iter().any(|entry| entry == &override_dir),
             "explicit override directory should be included in subprocess PATH"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn subprocess_path_env_excludes_non_executable_override_directories() {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("odt-subprocess-path-non-executable-override");
+        let override_dir = root.join("override-bin");
+        let override_path = override_dir.join("custom-bun");
+        fs::create_dir_all(&override_dir).expect("override dir should exist");
+        fs::write(&override_path, "#!/bin/sh\nprintf 'override'\n")
+            .expect("override file should exist");
+
+        let _shell_guard = EnvVarGuard::set("SHELL", "/tmp/odt-missing-shell");
+        let _path_guard = EnvVarGuard::set("PATH", "/usr/bin:/bin");
+        let _home_guard = EnvVarGuard::set("HOME", root.to_string_lossy().as_ref());
+        let _user_guard = EnvVarGuard::set("USER", "odt-test");
+        let _logname_guard = EnvVarGuard::set("LOGNAME", "odt-test");
+        let _override_guard = EnvVarGuard::set(
+            "OPENDUCKTOR_BUN_PATH",
+            override_path.to_string_lossy().as_ref(),
+        );
+
+        let entries = path_entries_from_value(subprocess_path_env());
+
+        assert!(
+            !entries.iter().any(|entry| entry == &override_dir),
+            "non-executable override directory should not be included in subprocess PATH"
         );
 
         let _ = fs::remove_dir_all(root);

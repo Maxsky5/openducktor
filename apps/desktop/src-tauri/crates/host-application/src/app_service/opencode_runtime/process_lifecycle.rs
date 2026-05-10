@@ -1,6 +1,7 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use host_infra_system::{
-    bundled_command, parse_user_path, resolve_command_path, subprocess_path_env,
+    bundled_command, is_executable_file, parse_user_path_os, resolve_command_path,
+    subprocess_path_env,
 };
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -45,43 +46,39 @@ pub(crate) fn read_opencode_version(binary: &str) -> Option<String> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn resolve_opencode_binary_path() -> Option<String> {
-    if let Ok(override_binary) = std::env::var("OPENDUCKTOR_OPENCODE_BINARY") {
-        if override_binary.trim().is_empty() {
-            return resolve_opencode_binary_path_without_override();
-        }
-        if let Ok(path) = parse_user_path(override_binary.as_str()) {
-            return (path.is_file() && is_executable_path(path.as_path()))
-                .then(|| path.to_string_lossy().to_string());
-        }
-        return None;
-    }
-
-    resolve_opencode_binary_path_without_override()
+    resolve_opencode_binary().ok()
 }
 
-pub(crate) fn opencode_binary_not_found_message() -> String {
-    if let Ok(override_binary) = std::env::var("OPENDUCKTOR_OPENCODE_BINARY") {
-        if !override_binary.trim().is_empty() {
-            return match parse_user_path(override_binary.as_str()) {
-                Ok(path) => format!(
+pub(crate) fn resolve_opencode_binary() -> std::result::Result<String, String> {
+    if let Some(override_binary) = std::env::var_os("OPENDUCKTOR_OPENCODE_BINARY") {
+        if override_binary
+            .to_str()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            return Err(
+                "Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY is empty".to_string(),
+            );
+        }
+        return match parse_user_path_os(override_binary.as_os_str()) {
+            Ok(path) if is_executable_file(path.as_path()) => Ok(path.to_string_lossy().to_string()),
+            Ok(path) => Err(format!(
                     "Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY points to a missing or non-executable file: {}",
                     path.display()
-                ),
-                Err(error) => format!(
+                )),
+            Err(error) => Err(format!(
                     "Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY is invalid: {error:#}"
-                ),
-            };
-        }
+                )),
+        };
     }
 
-    "opencode not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"
-        .to_string()
+    resolve_opencode_binary_without_override()
 }
 
-fn resolve_opencode_binary_path_without_override() -> Option<String> {
+fn resolve_opencode_binary_without_override() -> std::result::Result<String, String> {
     if let Some(resolved) = bundled_command("opencode") {
-        return Some(resolved);
+        return Ok(resolved);
     }
 
     if let Some(home) = std::env::var_os("HOME") {
@@ -89,26 +86,19 @@ fn resolve_opencode_binary_path_without_override() -> Option<String> {
             .join(".opencode")
             .join("bin")
             .join("opencode");
-        if candidate.is_file() && is_executable_path(candidate.as_path()) {
-            return candidate.to_str().map(|value| value.to_string());
+        if is_executable_file(candidate.as_path()) {
+            return Ok(candidate.to_string_lossy().to_string());
         }
     }
 
-    resolve_command_path("opencode").ok().flatten()
-}
-
-#[cfg(unix)]
-fn is_executable_path(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-
-    path.metadata()
-        .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
-}
-
-#[cfg(not(unix))]
-fn is_executable_path(path: &Path) -> bool {
-    path.is_file()
+    match resolve_command_path("opencode") {
+        Ok(Some(path)) => Ok(path),
+        Ok(None) => Err(
+            "opencode not found in bundled locations, standard install locations, PATH, or ~/.opencode/bin"
+                .to_string(),
+        ),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 #[cfg(unix)]
@@ -284,8 +274,7 @@ pub(super) fn spawn_opencode_server_with_config(
     config_content: &str,
     port: u16,
 ) -> Result<Child> {
-    let opencode_binary = resolve_opencode_binary_path()
-        .ok_or_else(|| anyhow!(opencode_binary_not_found_message()))?;
+    let opencode_binary = resolve_opencode_binary().map_err(anyhow::Error::msg)?;
     spawn_opencode_server_with_binary(
         opencode_binary.as_str(),
         working_directory,
