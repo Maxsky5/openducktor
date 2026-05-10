@@ -45,10 +45,58 @@ fn sanitize_attachment_filename(name: &str) -> String {
         })
         .collect::<String>();
     let trimmed = sanitized.trim().trim_matches('.');
-    if trimmed.is_empty() {
-        "attachment.bin".to_string()
+    let candidate = if trimmed.is_empty() {
+        "attachment.bin"
     } else {
-        trimmed.to_string()
+        trimmed
+    };
+    let stem = Path::new(candidate)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(candidate)
+        .to_ascii_uppercase();
+    let is_windows_reserved_name = matches!(
+        stem.as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+    );
+    if is_windows_reserved_name {
+        format!("_{candidate}")
+    } else {
+        candidate.to_string()
+    }
+}
+
+fn canonical_staged_local_attachment_path(
+    path: &Path,
+    canonical_stage_dir: &Path,
+) -> Result<Option<PathBuf>, String> {
+    let canonical_path = std::fs::canonicalize(path)
+        .map_err(|error| format!("Failed to resolve staged attachment path: {error}"))?;
+    if canonical_path.starts_with(canonical_stage_dir) {
+        Ok(Some(canonical_path))
+    } else {
+        Ok(None)
     }
 }
 
@@ -128,23 +176,53 @@ pub(crate) fn resolve_staged_local_attachment_path(path_or_name: &str) -> Result
 
     let token = sanitize_attachment_lookup_token(trimmed)?;
     let stage_dir = local_attachment_stage_dir();
+    let canonical_stage_dir = std::fs::canonicalize(&stage_dir).map_err(|error| {
+        format!(
+            "Failed to access staged attachment directory for {display_name}: {error}",
+            display_name = format_attachment_lookup_display_name(&token)
+        )
+    })?;
     let direct = stage_dir.join(&token);
     if direct.exists() && direct.is_file() {
-        return Ok(direct);
+        if let Some(path) = canonical_staged_local_attachment_path(&direct, &canonical_stage_dir)? {
+            return Ok(path);
+        }
     }
 
     let display_name = format_attachment_lookup_display_name(&token);
-    let entries = std::fs::read_dir(&stage_dir)
-        .map_err(|error| format!("Failed to read staged attachment directory: {error}"))?;
+    let entries = std::fs::read_dir(&stage_dir).map_err(|error| {
+        format!("Failed to access staged attachment directory for {display_name}: {error}")
+    })?;
     for entry in entries {
         let entry =
             entry.map_err(|error| format!("Failed to read staged attachment entry: {error}"))?;
         let path = entry.path();
         if path.is_file() && read_staged_attachment_original_name(&path).as_deref() == Some(&token)
         {
-            return Ok(path);
+            if let Some(path) = canonical_staged_local_attachment_path(&path, &canonical_stage_dir)?
+            {
+                return Ok(path);
+            }
         }
     }
 
     Err(format!("Staged attachment not found: {display_name}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_attachment_filename_replaces_windows_reserved_device_names() {
+        assert_eq!(sanitize_attachment_filename("CON"), "_CON");
+        assert_eq!(sanitize_attachment_filename("con.txt"), "_con.txt");
+        assert_eq!(sanitize_attachment_filename("Lpt9.log"), "_Lpt9.log");
+        assert_eq!(sanitize_attachment_filename("normal.txt"), "normal.txt");
+    }
+
+    #[test]
+    fn sanitize_attachment_filename_keeps_empty_names_writable() {
+        assert_eq!(sanitize_attachment_filename(" .. "), "attachment.bin");
+    }
 }

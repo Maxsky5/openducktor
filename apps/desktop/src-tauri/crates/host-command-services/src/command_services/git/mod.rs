@@ -19,15 +19,25 @@ pub use snapshot::{
 
 pub use authorization::{invalidate_worktree_resolution_cache_for_repo, resolve_working_dir};
 
+#[cfg(feature = "test-support")]
 #[doc(hidden)]
 pub mod test_support {
     use std::{collections::HashSet, fs, path::Path, time::Instant};
 
     use super::authorization::{
         authorized_worktree_cache, cache_key, invalidate_worktree_resolution_cache_for_repo,
+        read_git_common_dir as read_git_common_dir_internal,
+        read_worktree_state_token as read_worktree_state_token_internal,
         AuthorizedWorktreeCacheEntry,
     };
-    pub use super::authorization::{read_git_common_dir, read_worktree_state_token};
+
+    pub fn read_git_common_dir(canonical_repo: &Path) -> Result<std::path::PathBuf, String> {
+        read_git_common_dir_internal(canonical_repo)
+    }
+
+    pub fn read_worktree_state_token(canonical_repo: &Path) -> Result<String, String> {
+        read_worktree_state_token_internal(canonical_repo)
+    }
 
     pub fn seed_authorized_worktree_cache_with_subset(
         repo: &Path,

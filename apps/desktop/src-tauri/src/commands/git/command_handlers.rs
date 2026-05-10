@@ -12,7 +12,7 @@ where
     let result = run_service_blocking(operation_name, move || Ok(operation()))
         .await
         .map_err(|error| format!("{error:#}"))?;
-    result.map_err(|error| error.to_tauri_error())
+    result.map_err(|error| error.to_message())
 }
 
 #[tauri::command]

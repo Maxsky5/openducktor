@@ -167,8 +167,8 @@ const waitForHostExit = async (
   child: ManagedProcess,
   durationMs: number,
   sleep: HostTerminationDependencies["sleep"],
-): Promise<void> => {
-  await Promise.race([child.exited, sleep(durationMs)]);
+): Promise<boolean> => {
+  return Promise.race([child.exited.then(() => true), sleep(durationMs).then(() => false)]);
 };
 
 const waitForGracefulHostExit = async (
@@ -201,15 +201,23 @@ const terminateHostProcess = async (
     if (hasProcessGroupPid) {
       try {
         await dependencies.terminateWindowsProcessTree(pid);
-      } catch {}
+      } catch (error) {
+        console.error("Failed to terminate Windows web host process tree:", error);
+      }
     } else {
       child.kill();
     }
-    await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
+    const exited = await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
+    if (!exited) {
+      child.kill();
+      await dependencies.sleep(HOST_FORCE_TERMINATION_GRACE_MS);
+      child.kill(9);
+      await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
+    }
     return;
   }
 
-  if (hasProcessGroupPid && canSignalProcessGroup) {
+  if (hasProcessGroupPid) {
     try {
       dependencies.killProcess(-pid, "SIGTERM");
     } catch {}
@@ -218,7 +226,7 @@ const terminateHostProcess = async (
   child.kill();
   await dependencies.sleep(HOST_FORCE_TERMINATION_GRACE_MS);
 
-  if (hasProcessGroupPid && canSignalProcessGroup) {
+  if (hasProcessGroupPid) {
     try {
       dependencies.killProcess(-pid, 0);
       try {

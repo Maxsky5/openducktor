@@ -104,7 +104,7 @@ fn read_git_dir_from_dot_git_file(
     })
 }
 
-pub fn read_git_common_dir(canonical_repo: &Path) -> Result<PathBuf, String> {
+pub(crate) fn read_git_common_dir(canonical_repo: &Path) -> Result<PathBuf, String> {
     let dot_git = canonical_repo.join(".git");
     let dot_git_metadata = fs::metadata(&dot_git).map_err(|e| {
         format!(
@@ -176,7 +176,7 @@ fn system_time_to_nanos(value: SystemTime, context: &str) -> Result<u128, String
         .map_err(|e| format!("{context} is before unix epoch: {e}"))
 }
 
-pub fn read_worktree_state_token(canonical_repo: &Path) -> Result<String, String> {
+pub(crate) fn read_worktree_state_token(canonical_repo: &Path) -> Result<String, String> {
     let common_git_dir = read_git_common_dir(canonical_repo)?;
     let worktrees_dir = common_git_dir.join("worktrees");
     let mut hash_state = FNV1A_64_OFFSET_BASIS;

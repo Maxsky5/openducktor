@@ -3,6 +3,9 @@ name = "host-command-services"
 version.workspace = true
 edition.workspace = true
 
+[features]
+test-support = []
+
 [dependencies]
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }

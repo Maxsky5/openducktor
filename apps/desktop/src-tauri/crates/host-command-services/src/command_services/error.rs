@@ -17,7 +17,7 @@ impl CommandServiceError {
         Self::Internal(error)
     }
 
-    pub fn to_tauri_error(&self) -> String {
+    pub fn to_message(&self) -> String {
         match self {
             Self::InvalidRequest(message) => message.clone(),
             Self::Internal(error) => format!("{error:#}"),

@@ -72,3 +72,76 @@ fn resolve_host_owner_pid() -> anyhow::Result<u32> {
         Err(error) => Err(error).context(format!("failed reading {HOST_OWNER_PID_ENV}")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::sync::Mutex;
+
+    const HOST_OWNER_PID_ENV: &str = "OPENDUCKTOR_HOST_OWNER_PID";
+    static HOST_OWNER_PID_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn resolve_host_owner_pid_uses_current_process_when_unset() {
+        with_host_owner_pid_env(None, || {
+            assert_eq!(
+                resolve_host_owner_pid().expect("unset env should use current process"),
+                std::process::id()
+            );
+        });
+    }
+
+    #[test]
+    fn resolve_host_owner_pid_rejects_empty_value() {
+        with_host_owner_pid_env(Some(OsString::from("")), || {
+            assert!(resolve_host_owner_pid().is_err());
+        });
+    }
+
+    #[test]
+    fn resolve_host_owner_pid_rejects_non_numeric_value() {
+        with_host_owner_pid_env(Some(OsString::from("abc")), || {
+            assert!(resolve_host_owner_pid().is_err());
+        });
+    }
+
+    #[test]
+    fn resolve_host_owner_pid_rejects_zero() {
+        with_host_owner_pid_env(Some(OsString::from("0")), || {
+            assert!(resolve_host_owner_pid().is_err());
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_host_owner_pid_rejects_non_utf8_value() {
+        use std::os::unix::ffi::OsStringExt;
+
+        with_host_owner_pid_env(Some(OsString::from_vec(vec![0x66, 0x80, 0x6f])), || {
+            assert!(resolve_host_owner_pid().is_err());
+        });
+    }
+
+    fn with_host_owner_pid_env(value: Option<OsString>, test: impl FnOnce()) {
+        let _guard = HOST_OWNER_PID_ENV_LOCK
+            .lock()
+            .expect("host owner pid env lock should not be poisoned");
+        let original = std::env::var_os(HOST_OWNER_PID_ENV);
+        match value {
+            Some(value) => std::env::set_var(HOST_OWNER_PID_ENV, value),
+            None => std::env::remove_var(HOST_OWNER_PID_ENV),
+        }
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(test));
+
+        match original {
+            Some(value) => std::env::set_var(HOST_OWNER_PID_ENV, value),
+            None => std::env::remove_var(HOST_OWNER_PID_ENV),
+        }
+
+        if let Err(panic) = result {
+            std::panic::resume_unwind(panic);
+        }
+    }
+}

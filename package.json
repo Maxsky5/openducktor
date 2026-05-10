@@ -25,7 +25,7 @@
     "tauri:build:cef": "cd apps/desktop && bun run tauri:build:cef",
     "check:rust": "cd apps/desktop/src-tauri && cargo check",
     "test:rust": "cd apps/desktop/src-tauri && cargo test",
-    "web-host:build": "cd apps/desktop/src-tauri && cargo build --release --bin openducktor-web-host",
+    "web-host:build": "cd apps/desktop/src-tauri && cargo build --release -p openducktor-web-host --bin openducktor-web-host",
     "build": "bun run --workspaces build",
     "typecheck": "bun run --workspaces typecheck",
     "test": "bun run --workspaces test",

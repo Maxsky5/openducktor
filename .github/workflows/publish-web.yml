@@ -109,6 +109,16 @@ jobs:
               echo "Expected $MCP_ARTIFACT to contain architecture marker $MCP_ARCH_MARKER, got: $mcp_file_info" >&2
               exit 1
             fi
+          elif [[ "$MCP_ARTIFACT" == *.exe ]]; then
+            pe_machine="$(powershell.exe -NoProfile -Command "
+              \$bytes = [System.IO.File]::ReadAllBytes('release-web-host/$MCP_ARTIFACT')
+              \$peOffset = [System.BitConverter]::ToInt32(\$bytes, 0x3C)
+              \$machine = [System.BitConverter]::ToUInt16(\$bytes, \$peOffset + 4)
+              '0x{0:X4}' -f \$machine" 2>/dev/null)"
+            if [[ "$pe_machine" != "0x8664" ]]; then
+              echo "Expected $MCP_ARTIFACT to be a PE32+ x64 binary (machine=0x8664), got: $pe_machine" >&2
+              exit 1
+            fi
           fi
           shasum -a 256 "release-web-host/$ARTIFACT" | awk '{print $1}' > "release-web-host/$ARTIFACT.sha256"
           shasum -a 256 "release-web-host/$MCP_ARTIFACT" | awk '{print $1}' > "release-web-host/$MCP_ARTIFACT.sha256"

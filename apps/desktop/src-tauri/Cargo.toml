@@ -139,6 +139,10 @@ features = [ "test" ]
 [dev-dependencies.host-test-support]
 path = "crates/host-test-support"
 
+[dev-dependencies.host-command-services]
+path = "crates/host-command-services"
+features = [ "test-support" ]
+
 [patch.crates-io.tauri]
 git = "https://github.com/tauri-apps/tauri"
 branch = "feat/cef"

@@ -225,7 +225,34 @@ describe("launcher internals", () => {
 
     expect(processKillCalls).toEqual([]);
     expect(processTreeKills).toEqual([1234]);
-    expect(killCalls).toEqual([]);
+    expect(killCalls).toEqual([undefined, 9]);
+  });
+
+  test("falls back to direct Windows process kills when taskkill fails", async () => {
+    const { child, killCalls } = createTerminableHostProcess(1234);
+    const loggedErrors: unknown[][] = [];
+    const originalConsoleError = console.error;
+    console.error = (...args: unknown[]) => {
+      loggedErrors.push(args);
+    };
+
+    try {
+      await __launcherTestInternals.terminateHostProcess(child, {
+        platform: "win32",
+        killProcess() {
+          throw new Error("Windows termination must not use process-group signals.");
+        },
+        async terminateWindowsProcessTree() {
+          throw new Error("taskkill failed");
+        },
+        sleep: async () => {},
+      });
+    } finally {
+      console.error = originalConsoleError;
+    }
+
+    expect(killCalls).toEqual([undefined, 9]);
+    expect(loggedErrors[0]?.[0]).toBe("Failed to terminate Windows web host process tree:");
   });
 
   test("skips process-group signals when the host PID is invalid", async () => {

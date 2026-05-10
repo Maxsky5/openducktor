@@ -172,26 +172,29 @@ jobs:
           $backendUrl = "http://127.0.0.1:$backendPort"
           $hostPath = Join-Path (Get-Location) "target\debug\openducktor-web-host.exe"
           if (-not (Test-Path $hostPath)) { throw "Web host binary was not built at $hostPath" }
+          $stdoutLog = Join-Path $env:RUNNER_TEMP "web-host.stdout.log"
+          $stderrLog = Join-Path $env:RUNNER_TEMP "web-host.stderr.log"
+          $smokeFailed = $true
 
           $process = Start-Process -FilePath $hostPath -ArgumentList @(
             "--port", "$backendPort",
             "--frontend-origin", $frontendOrigin,
             "--control-token", $controlToken,
             "--app-token", $appToken
-          ) -PassThru -NoNewWindow
+          ) -PassThru -NoNewWindow -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
 
           try {
             $deadline = (Get-Date).AddSeconds(30)
+            $ready = $false
             do {
               if ($process.HasExited) { throw "Web host exited before readiness with code $($process.ExitCode)" }
               try {
                 $health = Invoke-RestMethod -Uri "$backendUrl/health" -Method Get -TimeoutSec 2
-                if ($health.ok -eq $true) { break }
-              } catch {
-                Start-Sleep -Milliseconds 250
-              }
+                if ($health.ok -eq $true) { $ready = $true; break }
+              } catch {}
+              Start-Sleep -Milliseconds 250
             } while ((Get-Date) -lt $deadline)
-            if ((Get-Date) -ge $deadline) { throw "Timed out waiting for /health" }
+            if (-not $ready) { throw "Timed out waiting for /health" }
 
             $session = Invoke-WebRequest -Uri "$backendUrl/session" -Method Post -Headers @{ "x-openducktor-app-token" = $appToken } -TimeoutSec 5
             if ($session.StatusCode -ne 200) { throw "/session returned $($session.StatusCode)" }
@@ -229,6 +232,17 @@ jobs:
             $shutdown = Invoke-WebRequest -Uri "$backendUrl/shutdown" -Method Post -Headers @{ "x-openducktor-control-token" = $controlToken } -TimeoutSec 5
             if ($shutdown.StatusCode -ne 202) { throw "/shutdown returned $($shutdown.StatusCode)" }
             if (-not $process.WaitForExit(10000)) { throw "Web host did not exit after /shutdown" }
+            $smokeFailed = $false
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+            if ($smokeFailed) {
+              if (Test-Path $stdoutLog) {
+                Write-Host "--- web-host stdout ---"
+                Get-Content $stdoutLog
+              }
+              if (Test-Path $stderrLog) {
+                Write-Host "--- web-host stderr ---"
+                Get-Content $stderrLog
+              }
+            }
           }
