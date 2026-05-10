@@ -1320,7 +1320,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("keeps stop control enabled for running session even when role is unavailable", async () => {
+  test("keeps existing session composer and stop control enabled when role is unavailable", async () => {
     const unavailablePlannerTask = createTaskCardFixture({
       status: "open",
       agentWorkflows: {
@@ -1353,7 +1353,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const state = harness.getLatest();
-    expect(state.agentChatModel.composer.isReadOnly).toBe(true);
+    expect(state.agentChatModel.composer.isReadOnly).toBe(false);
+    expect(state.agentChatModel.composer.readOnlyReason).toBeNull();
     expect(state.agentChatModel.composer.canStopSession).toBe(true);
 
     await harness.unmount();

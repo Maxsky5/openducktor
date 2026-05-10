@@ -282,6 +282,7 @@ export const buildAgentStudioSelectedSessionContext = ({
       })
     : null;
   const canKickoff = sessionActions.canKickoffNewSession && workflow.selectedRoleAvailable;
+  const composerReadOnly = !activeSession && !workflow.selectedRoleAvailable;
   const emptyState = buildSelectedSessionChatEmptyState({
     taskId,
     isStarting: sessionActions.isStarting,
@@ -323,8 +324,8 @@ export const buildAgentStudioSelectedSessionContext = ({
             pendingQuestions: activeSession.pendingQuestions,
           }
         : null,
-      composerReadOnly: !workflow.selectedRoleAvailable,
-      composerReadOnlyReason: workflow.selectedRoleReadOnlyReason,
+      composerReadOnly,
+      composerReadOnlyReason: composerReadOnly ? workflow.selectedRoleReadOnlyReason : null,
     },
     runtime: {
       runtimeDefinitions,
