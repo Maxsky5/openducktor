@@ -266,6 +266,8 @@ mod tests {
     #[test]
     fn resolve_staged_local_attachment_path_handles_long_utf8_display_name() {
         let token = "é".repeat(MAX_ATTACHMENT_LOOKUP_DISPLAY_LEN + 20);
+        std::fs::create_dir_all(local_attachment_stage_dir())
+            .expect("attachment staging directory should be created");
 
         let error = resolve_staged_local_attachment_path(&token)
             .expect_err("missing long UTF-8 token should return not-found error");
