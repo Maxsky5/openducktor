@@ -8,10 +8,13 @@ use host_infra_system::{subprocess_path_env, RepoDevServerScript};
 use std::collections::HashMap;
 #[cfg(unix)]
 use std::fs::File;
+#[cfg(unix)]
 use std::io::Read;
 #[cfg(unix)]
 use std::os::fd::FromRawFd;
-use std::process::{Command, Stdio};
+use std::process::Command;
+#[cfg(unix)]
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -56,6 +59,14 @@ impl AppService {
             configure_dev_server_command_environment(&mut command, script.name.as_str())?;
             configure_process_group(&mut command);
 
+            #[cfg(not(unix))]
+            {
+                let _ = command;
+                return Err(anyhow!(
+                    "Builder dev servers require PTY-backed terminal capture and are only supported on Unix hosts in this build."
+                ));
+            }
+
             #[cfg(unix)]
             let terminal_reader: Box<dyn Read + Send> = {
                 let (terminal_reader, terminal_writer) = open_pty_pair()?;
@@ -67,12 +78,6 @@ impl AppService {
                 Box::new(terminal_reader)
             };
 
-            #[cfg(not(unix))]
-            return Err(anyhow!(
-                "Builder dev servers require PTY-backed terminal capture and are only supported on Unix hosts in this build."
-            ));
-
-            #[cfg(unix)]
             let mut child = command.spawn().with_context(|| {
                 format!(
                     "Failed to start dev server {} in {} using command `{}`",
@@ -80,13 +85,6 @@ impl AppService {
                 )
             })?;
 
-            #[cfg(not(unix))]
-            let mut child = command.spawn().with_context(|| {
-                format!(
-                    "Failed to start dev server {} in {} using command `{}`",
-                    script_display_name, worktree_path, script.command
-                )
-            })?;
             let pid = child.id();
             spawned_pid = Some(pid);
 
