@@ -1,6 +1,6 @@
 import type { ReusablePrompt, TaskCard } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentUserMessagePart } from "@openducktor/core";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
 import {
   type AgentChatComposerDraft,
@@ -62,7 +62,6 @@ export function useAgentStudioSendAction({
   const [sendingActivityCountByContext, setSendingActivityCountByContext] = useState<
     Record<string, number>
   >({});
-  const sendInFlightRef = useRef(false);
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
     activeWorkspace,
     taskId,
@@ -74,7 +73,7 @@ export function useAgentStudioSendAction({
   const onSend = useCallback(
     async (draft: AgentChatComposerDraft): Promise<boolean> => {
       if (
-        (!canQueueBusyFollowups && (isSending || sendInFlightRef.current)) ||
+        (!canQueueBusyFollowups && isSending) ||
         isStarting ||
         !agentStudioReady ||
         isWaitingInput ||
@@ -116,7 +115,6 @@ export function useAgentStudioSendAction({
       if (!draftHasMeaningfulContent(draft) || !taskId) {
         return false;
       }
-      sendInFlightRef.current = true;
       const sendContextKeys = new Set<string>([activeComposerContextKey]);
       setSendingActivityCountByContext((current) =>
         incrementActivityCountRecord(current, activeComposerContextKey),
@@ -159,7 +157,6 @@ export function useAgentStudioSendAction({
         );
         return true;
       } finally {
-        sendInFlightRef.current = false;
         setSendingActivityCountByContext((current) => {
           let next = current;
           for (const contextKey of sendContextKeys) {

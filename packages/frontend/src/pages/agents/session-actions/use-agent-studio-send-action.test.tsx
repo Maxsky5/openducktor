@@ -153,7 +153,7 @@ describe("useAgentStudioSendAction", () => {
     await harness.unmount();
   });
 
-  test("blocks concurrent sends before a new session finishes starting", async () => {
+  test("tracks a new-session send before session start resolves", async () => {
     const startDeferred = createDeferred<string>();
     const startSession = mock(() => startDeferred.promise);
     const sendAgentMessage = mock(async () => {});
@@ -166,14 +166,11 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.mount();
     let firstSend: Promise<boolean> | undefined;
-    let secondSend: Promise<boolean> | undefined;
     await harness.run((state) => {
       firstSend = state.onSend(createDraft("first"));
-      secondSend = state.onSend(createDraft("second"));
     });
 
     await harness.waitFor((state) => state.isSending);
-    await expect(secondSend).resolves.toBe(false);
 
     await harness.run(async () => {
       startDeferred.resolve("session-new");
@@ -184,6 +181,67 @@ describe("useAgentStudioSendAction", () => {
     expect(startSession).toHaveBeenCalledTimes(1);
     expect(sendAgentMessage).toHaveBeenCalledTimes(1);
     expect(sendAgentMessage).toHaveBeenCalledWith("session-new", [{ kind: "text", text: "first" }]);
+
+    await harness.unmount();
+  });
+
+  test("allows sending in a different active context while another context is unresolved", async () => {
+    const firstSendDeferred = createDeferred<void>();
+    const sendAgentMessage = mock((sessionId: string) => {
+      if (sessionId === "session-existing") {
+        return firstSendDeferred.promise;
+      }
+      return Promise.resolve();
+    });
+    const startSession = mock(async () => "session-new");
+    const harness = createHookHarness(useAgentStudioSendAction, {
+      ...createBaseArgs(),
+      startSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    let firstSend: Promise<boolean> | undefined;
+    await harness.run((state) => {
+      firstSend = state.onSend(createDraft("first"));
+    });
+    await harness.waitFor((state) => state.isSending);
+
+    await harness.update({
+      ...createBaseArgs(),
+      activeExternalSessionId: "session-other",
+      startSession,
+      sendAgentMessage,
+    });
+    await harness.waitFor((state) => !state.isSending);
+
+    await harness.run(async (state) => {
+      await expect(state.onSend(createDraft("second"))).resolves.toBe(true);
+    });
+
+    await harness.update({
+      ...createBaseArgs(),
+      startSession,
+      sendAgentMessage,
+    });
+    await harness.waitFor((state) => state.isSending);
+    await harness.run(async (state) => {
+      await expect(state.onSend(createDraft("third"))).resolves.toBe(false);
+    });
+
+    await harness.run(async () => {
+      firstSendDeferred.resolve();
+      await expect(firstSend).resolves.toBe(true);
+    });
+
+    expect(startSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).toHaveBeenCalledTimes(2);
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+      { kind: "text", text: "first" },
+    ]);
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-other", [
+      { kind: "text", text: "second" },
+    ]);
 
     await harness.unmount();
   });
