@@ -1,0 +1,30 @@
+appId: com.openducktor.app
+productName: OpenDucktor
+asar: true
+
+directories:
+  output: release
+
+files:
+  - dist/**/*
+
+extraMetadata:
+  main: dist/main.js
+  dependencies: {}
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+
+win:
+  target:
+    - nsis
+    - zip
+
+linux:
+  category: Development
+  target:
+    - AppImage
+    - deb

@@ -12,6 +12,7 @@
     "dev": "bun run scripts/dev.ts",
     "dev:electron": "bun run scripts/dev.ts",
     "dev:renderer": "vite --host 127.0.0.1 --port 1430 --strictPort",
+    "package": "bun run build && electron-builder --config electron-builder.yml --publish never",
     "preview": "electron dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests --timeout 1000",
@@ -30,6 +31,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "bun-types": "^1.3.13",
     "electron": "^42.0.1",
+    "electron-builder": "^26.8.1",
     "vite": "^8.0.10"
   }
 }

@@ -11,6 +11,7 @@
     "dev": "bun run --filter @openducktor/desktop dev",
     "electron:dev": "bun run --filter @openducktor/electron dev",
     "electron:build": "bun run --filter @openducktor/electron build",
+    "electron:package": "bun run --filter @openducktor/electron package",
     "browser:dev": "FORCE_COLOR=1 bun packages/openducktor-web/src/cli.ts --workspace",
     "hooks:install": "husky",
     "prepare": "bun run hooks:install",
