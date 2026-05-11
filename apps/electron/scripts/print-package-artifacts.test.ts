@@ -6,7 +6,7 @@ import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const artifactHook = require("./print-package-artifacts.cjs") as {
-  selectPackageArtifacts: (buildResult: { artifactPaths?: string[]; outDir?: string }) => string[];
+  selectPackageArtifacts: (buildResult: { artifactPaths: string[]; outDir: string }) => string[];
   formatPackageArtifacts: (artifactPaths: string[]) => string;
 };
 
@@ -16,17 +16,6 @@ function makeTempReleaseDir(): string {
   const releaseDir = path.join(os.tmpdir(), `openducktor-electron-release-${crypto.randomUUID()}`);
   tempDirs.push(releaseDir);
   mkdirSync(path.join(releaseDir, "mac-arm64", "OpenDucktor.app"), { recursive: true });
-  mkdirSync(
-    path.join(
-      releaseDir,
-      "mac-arm64",
-      "OpenDucktor.app",
-      "Contents",
-      "Frameworks",
-      "Electron Helper.app",
-    ),
-    { recursive: true },
-  );
   return releaseDir;
 }
 

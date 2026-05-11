@@ -1,6 +1,8 @@
+const fs = require("node:fs");
 const path = require("node:path");
 
-const artifactFileExtensions = new Set([
+const displayedArtifactExtensions = new Set([
+  ".app",
   ".appimage",
   ".appx",
   ".deb",
@@ -13,12 +15,7 @@ const artifactFileExtensions = new Set([
 ]);
 
 function collectAppBundles(outDir) {
-  const fs = require("node:fs");
   const appBundles = [];
-
-  if (typeof outDir !== "string" || !fs.existsSync(outDir)) {
-    return appBundles;
-  }
 
   const visit = (entryPath) => {
     const stats = fs.statSync(entryPath);
@@ -27,7 +24,7 @@ function collectAppBundles(outDir) {
       return;
     }
 
-    if (path.extname(entryPath).toLowerCase() === ".app") {
+    if (displayedArtifactExtensions.has(path.extname(entryPath).toLowerCase())) {
       appBundles.push(path.resolve(entryPath));
       return;
     }
@@ -42,9 +39,10 @@ function collectAppBundles(outDir) {
 }
 
 function selectPackageArtifacts(buildResult) {
-  const artifactPaths = buildResult.artifactPaths ?? [];
-  const installableArtifacts = artifactPaths
-    .filter((artifactPath) => artifactFileExtensions.has(path.extname(artifactPath).toLowerCase()))
+  const installableArtifacts = buildResult.artifactPaths
+    .filter((artifactPath) =>
+      displayedArtifactExtensions.has(path.extname(artifactPath).toLowerCase()),
+    )
     .map((artifactPath) => path.resolve(artifactPath));
 
   return [...collectAppBundles(buildResult.outDir), ...installableArtifacts].sort((left, right) =>
@@ -63,9 +61,7 @@ function formatPackageArtifacts(artifacts) {
 async function afterAllArtifactBuild(buildResult) {
   const artifacts = selectPackageArtifacts(buildResult);
 
-  if (artifacts.length > 0) {
-    console.log(formatPackageArtifacts(artifacts));
-  }
+  console.log(formatPackageArtifacts(artifacts));
 
   return [];
 }
