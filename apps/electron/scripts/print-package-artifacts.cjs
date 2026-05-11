@@ -10,14 +10,46 @@ const artifactFileExtensions = new Set([
   ".pacman",
   ".rpm",
   ".snap",
-  ".zip",
 ]);
 
-function selectPackageArtifacts(artifactPaths) {
-  return artifactPaths
+function collectAppBundles(outDir) {
+  const fs = require("node:fs");
+  const appBundles = [];
+
+  if (typeof outDir !== "string" || !fs.existsSync(outDir)) {
+    return appBundles;
+  }
+
+  const visit = (entryPath) => {
+    const stats = fs.statSync(entryPath);
+
+    if (!stats.isDirectory()) {
+      return;
+    }
+
+    if (path.extname(entryPath).toLowerCase() === ".app") {
+      appBundles.push(path.resolve(entryPath));
+      return;
+    }
+
+    for (const child of fs.readdirSync(entryPath)) {
+      visit(path.join(entryPath, child));
+    }
+  };
+
+  visit(outDir);
+  return appBundles;
+}
+
+function selectPackageArtifacts(buildResult) {
+  const artifactPaths = buildResult.artifactPaths ?? [];
+  const installableArtifacts = artifactPaths
     .filter((artifactPath) => artifactFileExtensions.has(path.extname(artifactPath).toLowerCase()))
-    .map((artifactPath) => path.resolve(artifactPath))
-    .sort((left, right) => left.localeCompare(right));
+    .map((artifactPath) => path.resolve(artifactPath));
+
+  return [...collectAppBundles(buildResult.outDir), ...installableArtifacts].sort((left, right) =>
+    left.localeCompare(right),
+  );
 }
 
 function formatPackageArtifacts(artifacts) {
@@ -29,7 +61,7 @@ function formatPackageArtifacts(artifacts) {
 }
 
 async function afterAllArtifactBuild(buildResult) {
-  const artifacts = selectPackageArtifacts(buildResult.artifactPaths ?? []);
+  const artifacts = selectPackageArtifacts(buildResult);
 
   if (artifacts.length > 0) {
     console.log(formatPackageArtifacts(artifacts));
