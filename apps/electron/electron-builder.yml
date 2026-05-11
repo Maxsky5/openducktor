@@ -5,6 +5,8 @@ asar: true
 directories:
   output: release
 
+afterAllArtifactBuild: scripts/print-package-artifacts.cjs
+
 files:
   - dist/**/*
 
