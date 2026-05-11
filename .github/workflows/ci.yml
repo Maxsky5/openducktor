@@ -24,6 +24,9 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -31,16 +34,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Attach PR branch context for React Doctor diff mode
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: git checkout -B "$HEAD_REF"
-
-      - name: Run React Doctor on changed desktop files
-        uses: millionco/react-doctor@40b3f7dcc9f9ffbfd21393026d364f76af19b7e2 # main
+      - name: Run React Doctor
+        uses: millionco/react-doctor@53fa4dffe837e0157fb850fef700fccaaec191ea # main
         with:
-          project: "@openducktor/desktop"
+          project: "@openducktor/frontend"
           diff: ${{ github.base_ref }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   bun-quality:
     name: Bun Quality (lint, typecheck, test, build)
