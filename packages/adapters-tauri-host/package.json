@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@openducktor/contracts": "workspace:*",
-    "@openducktor/core": "workspace:*"
+    "@openducktor/core": "workspace:*",
+    "@openducktor/host": "workspace:*"
   }
 }

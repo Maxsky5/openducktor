@@ -3,12 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
 import packageJson from "../package.json" with { type: "json" };
-import {
-  ODT_MCP_TOOL_NAMES,
-  ODT_TOOL_SCHEMAS,
-  ODT_WORKFLOW_AGENT_TOOL_NAMES,
-  ODT_WORKSPACE_SCOPED_TOOL_NAMES,
-} from "./lib";
+import { ODT_MCP_TOOL_NAMES, ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
 import { OdtTaskStore } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
 import { OdtToolError, toErrorMessage, toToolError, toToolResult } from "./tool-results";
@@ -346,8 +341,6 @@ const createMcpServer = async (context: OdtStoreContext = {}): Promise<McpServer
   });
   return server;
 };
-
-export const ODT_WORKFLOW_AGENT_ALLOWED_TOOLS_ENV_VALUE = ODT_WORKFLOW_AGENT_TOOL_NAMES.join(",");
 
 const startMcp = async (context: OdtStoreContext = {}): Promise<void> => {
   const server = await createMcpServer(context);

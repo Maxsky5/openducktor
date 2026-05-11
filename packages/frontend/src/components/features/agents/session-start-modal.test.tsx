@@ -59,16 +59,36 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   ...overrides,
 });
 
+const getFieldButton = (testId: string): HTMLButtonElement => {
+  const button = screen.getByTestId(testId).querySelector("button");
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Expected ${testId} combobox button`);
+  }
+  return button;
+};
+
 describe("SessionStartModal", () => {
   let SessionStartModal: typeof import("./session-start-modal").SessionStartModal;
+  let actualAgentRuntimeCombobox: typeof import("./agent-runtime-combobox");
+  let actualDialog: typeof import("../../ui/dialog");
+
+  const restoreSessionStartModalMocks = async (): Promise<void> => {
+    await restoreMockedModules([
+      [
+        "@/components/features/agents/agent-runtime-combobox",
+        async () => actualAgentRuntimeCombobox,
+      ],
+      ["@/components/ui/dialog", async () => actualDialog],
+    ]);
+  };
 
   beforeEach(async () => {
+    actualAgentRuntimeCombobox = await import("./agent-runtime-combobox");
+    actualDialog = await import("../../ui/dialog");
+
     mock.module("@/components/features/agents/agent-runtime-combobox", () => ({
       AgentRuntimeCombobox: (props: Record<string, unknown>) =>
         createElement("agent-runtime-combobox", props),
-    }));
-    mock.module("@/components/ui/combobox", () => ({
-      Combobox: (props: Record<string, unknown>) => createElement("mock-combobox", props),
     }));
     mock.module("@/components/ui/dialog", () => ({
       Dialog: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
@@ -92,17 +112,11 @@ describe("SessionStartModal", () => {
         createElement("h2", omitDialogDomProps(props), children),
     }));
     ({ SessionStartModal } = await import("./session-start-modal"));
+    await restoreSessionStartModalMocks();
   });
 
   afterEach(async () => {
-    await restoreMockedModules([
-      [
-        "@/components/features/agents/agent-runtime-combobox",
-        () => import("@/components/features/agents/agent-runtime-combobox"),
-      ],
-      ["@/components/ui/combobox", () => import("@/components/ui/combobox")],
-      ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
-    ]);
+    await restoreSessionStartModalMocks();
   });
 
   test("submits through the form action", () => {
@@ -147,22 +161,10 @@ describe("SessionStartModal", () => {
     }
     expect(runtimeCombobox.hasAttribute("disabled")).toBe(true);
 
-    const sourceCombobox = screen
-      .getByTestId("session-start-source-field")
-      .querySelector("mock-combobox");
-    const agentCombobox = screen
-      .getByTestId("session-start-agent-field")
-      .querySelector("mock-combobox");
-    const modelCombobox = screen
-      .getByTestId("session-start-model-field")
-      .querySelector("mock-combobox");
-    const variantCombobox = screen
-      .getByTestId("session-start-variant-field")
-      .querySelector("mock-combobox");
-
-    if (!sourceCombobox || !agentCombobox || !modelCombobox || !variantCombobox) {
-      throw new Error("Expected existing session + agent/model/variant comboboxes");
-    }
+    const sourceCombobox = getFieldButton("session-start-source-field");
+    const agentCombobox = getFieldButton("session-start-agent-field");
+    const modelCombobox = getFieldButton("session-start-model-field");
+    const variantCombobox = getFieldButton("session-start-variant-field");
 
     expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
     expect(agentCombobox.hasAttribute("disabled")).toBe(true);
@@ -270,22 +272,10 @@ describe("SessionStartModal", () => {
     }
     expect(runtimeCombobox.hasAttribute("disabled")).toBe(false);
 
-    const sourceCombobox = screen
-      .getByTestId("session-start-source-field")
-      .querySelector("mock-combobox");
-    const agentCombobox = screen
-      .getByTestId("session-start-agent-field")
-      .querySelector("mock-combobox");
-    const modelCombobox = screen
-      .getByTestId("session-start-model-field")
-      .querySelector("mock-combobox");
-    const variantCombobox = screen
-      .getByTestId("session-start-variant-field")
-      .querySelector("mock-combobox");
-
-    if (!sourceCombobox || !agentCombobox || !modelCombobox || !variantCombobox) {
-      throw new Error("Expected existing session + agent/model/variant comboboxes");
-    }
+    const sourceCombobox = getFieldButton("session-start-source-field");
+    const agentCombobox = getFieldButton("session-start-agent-field");
+    const modelCombobox = getFieldButton("session-start-model-field");
+    const variantCombobox = getFieldButton("session-start-variant-field");
 
     expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
     expect(agentCombobox.hasAttribute("disabled")).toBe(false);

@@ -1,10 +1,16 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { TauriHostClient } from "@openducktor/adapters-tauri-host";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import {
+  configureShellBridge,
+  createUnavailableShellBridge,
+  type ShellBridge,
+} from "@/lib/shell-bridge";
 import { createAgentRuntimeRegistry, DEFAULT_RUNTIME_KIND } from "./agent-runtime-registry";
 import { host } from "./operations/shared/host";
 
@@ -96,6 +102,19 @@ describe("agent-runtime-registry", () => {
       }
       return { thread: { id: "thread-codex" }, startedAt: "2026-02-22T09:00:00.000Z" };
     }) as typeof host.codexAppServerRequest;
+    configureShellBridge({
+      client: {} as TauriHostClient,
+      subscribeRunEvents: async () => () => {},
+      subscribeDevServerEvents: async () => () => {},
+      subscribeTaskEvents: async () => () => {},
+      subscribeCodexAppServerEvents: async () => () => {},
+      capabilities: {
+        canOpenExternalUrls: true,
+        canPreviewLocalAttachments: true,
+      },
+      openExternalUrl: async () => {},
+      resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
+    } satisfies ShellBridge);
 
     try {
       const registry = createAgentRuntimeRegistry();
@@ -128,6 +147,7 @@ describe("agent-runtime-registry", () => {
       host.runtimeEnsure = originalRuntimeEnsure;
       host.runtimeList = originalRuntimeList;
       host.codexAppServerRequest = originalCodexAppServerRequest;
+      configureShellBridge(createUnavailableShellBridge());
     }
   });
 

@@ -1,4 +1,9 @@
-export type InvokeFn = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+import type { HostCommandName } from "@openducktor/host";
+
+export type InvokeFn = (
+  command: HostCommandName,
+  args?: Record<string, unknown>,
+) => Promise<unknown>;
 
 export type OkResult = { ok: boolean };
 export type UpdatedAtResult = { updatedAt: string };

@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import type { ViteDevServer } from "vite";
-import { type ResolvedHostBinary, resolveHostBinary } from "./artifact-resolver";
 import { logError, logInfo, logSuccess } from "./logger";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
+import { startTypescriptHostBackend, type TypescriptHostBackend } from "./typescript-host-backend";
 
 export type LauncherOptions = {
   packageRoot: string;
@@ -12,11 +12,11 @@ export type LauncherOptions = {
   workspaceMode: boolean;
   frontendPort: number;
   backendPort: number;
-  explicitHostBinary?: string;
   readinessTimeoutMs?: number;
 };
 
 type ManagedProcess = Bun.Subprocess;
+type ManagedHost = Pick<Bun.Subprocess, "exited"> | TypescriptHostBackend;
 type BackendReadinessDependencies = {
   fetch: typeof fetch;
   sleep: (durationMs: number) => Promise<unknown>;
@@ -37,20 +37,11 @@ const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const VITE_CLOSE_TIMEOUT_MS = 3_000;
 const HOST_GRACEFUL_EXIT_TIMEOUT_MS = 2_000;
 const FORCE_EXIT_SIGNAL_GRACE_MS = 1_500;
-const MCP_SIDECAR_PATH_ENV = "OPENDUCKTOR_OPENDUCKTOR_MCP_PATH";
 const HOST_FORCE_TERMINATION_GRACE_MS = 3_000;
 const HOST_FORCE_KILL_WAIT_MS = 1_000;
 
 const buildFrontendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
 const buildBackendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
-
-const buildArtifactHostEnv = (resolved: ResolvedHostBinary): NodeJS.ProcessEnv => {
-  if (resolved.kind !== "artifact" || !resolved.mcpSidecarPath) {
-    return process.env;
-  }
-
-  return { ...process.env, [MCP_SIDECAR_PATH_ENV]: resolved.mcpSidecarPath };
-};
 
 const buildFrontendDisplayUrls = (port: number): string[] => [
   `http://localhost:${port}/`,
@@ -62,45 +53,6 @@ const logFrontendAvailability = (port: number): void => {
   for (const url of buildFrontendDisplayUrls(port)) {
     logSuccess(`  ➜  Local:   ${url}`);
   }
-};
-
-const spawnHost = (
-  resolved: ResolvedHostBinary,
-  backendPort: number,
-  frontendOrigin: string,
-  controlToken: string,
-  appToken: string,
-): ManagedProcess => {
-  const hostArgs = [
-    "--port",
-    String(backendPort),
-    "--frontend-origin",
-    frontendOrigin,
-    "--control-token",
-    controlToken,
-    "--app-token",
-    appToken,
-  ];
-
-  if (resolved.kind === "workspace") {
-    return Bun.spawn({
-      cmd: [resolved.command, ...resolved.args, ...hostArgs],
-      cwd: resolved.cwd,
-      detached: true,
-      stdout: "inherit",
-      stderr: "inherit",
-      env: process.env,
-    });
-  }
-
-  return Bun.spawn({
-    cmd: [resolved.path, ...hostArgs],
-    cwd: path.dirname(resolved.path),
-    detached: true,
-    stdout: "inherit",
-    stderr: "inherit",
-    env: buildArtifactHostEnv(resolved),
-  });
 };
 
 const requestHostShutdown = async (
@@ -172,7 +124,7 @@ const waitForHostExit = async (
 };
 
 const waitForGracefulHostExit = async (
-  child: ManagedProcess,
+  child: ManagedHost,
   sleep: HostTerminationDependencies["sleep"] = Bun.sleep,
 ): Promise<boolean> => {
   return Promise.race([
@@ -238,7 +190,7 @@ const waitForBackend = async (
   backendUrl: string,
   appToken: string,
   timeoutMs: number,
-  hostProcess: ManagedProcess,
+  hostProcess: ManagedHost,
   dependencies: BackendReadinessDependencies = { fetch, sleep: Bun.sleep },
 ): Promise<void> => {
   const startedAt = Date.now();
@@ -327,7 +279,6 @@ const shouldForceExitForRepeatedSignal = (
 export const __launcherTestInternals = {
   buildFrontendDisplayUrls,
   buildBrowserRuntimeConfigJson,
-  buildArtifactHostEnv,
   resolveStaticAssetPath,
   requestHostShutdown,
   shouldForceExitForRepeatedSignal,
@@ -443,23 +394,12 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
   const backendUrl = buildBackendUrl(options.backendPort);
   const controlToken = randomUUID();
   const appToken = randomUUID();
-  const hostOptions = {
-    packageRoot: options.packageRoot,
-    workspaceMode: options.workspaceMode,
-  };
-  const resolvedHost = resolveHostBinary({
-    ...hostOptions,
-    ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
-    ...(options.explicitHostBinary ? { explicitBinaryPath: options.explicitHostBinary } : {}),
-  });
-
-  const hostProcess = spawnHost(
-    resolvedHost,
-    options.backendPort,
-    frontendUrl,
+  const hostBackend = startTypescriptHostBackend({
+    port: options.backendPort,
+    frontendOrigin: frontendUrl,
     controlToken,
     appToken,
-  );
+  });
   let frontendServer: FrontendServer | null = null;
   let stopping = false;
   let stopPromise: Promise<void> | null = null;
@@ -474,7 +414,7 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
 
     stopPromise = (async () => {
       logInfo("Stopping OpenDucktor frontend server...");
-      logInfo("Stopping OpenDucktor Rust host services (OpenCode, MCP bridge, Dolt)...");
+      logInfo("Stopping OpenDucktor TypeScript host services...");
 
       const shutdownResults = await Promise.allSettled([
         requestHostShutdown(backendUrl, controlToken),
@@ -492,10 +432,10 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
         );
       }
 
-      const hostExited = await waitForGracefulHostExit(hostProcess);
+      const hostExited = await waitForGracefulHostExit(hostBackend);
       if (!hostExited) {
-        logInfo("Ensuring OpenDucktor host process has exited...");
-        await terminateHostProcess(hostProcess);
+        logInfo("Ensuring OpenDucktor TypeScript host has stopped...");
+        await hostBackend.stop();
       }
       logSuccess("OpenDucktor web stopped.");
     })();
@@ -532,14 +472,14 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
   process.on("SIGTERM", () => handleShutdownSignal("SIGTERM", 143));
 
   try {
-    logInfo("Starting OpenDucktor Rust host...");
-    logInfo("Waiting for OpenDucktor Rust host readiness...");
-    await waitForBackend(backendUrl, appToken, readinessTimeoutMs, hostProcess);
+    logInfo("Starting OpenDucktor TypeScript host...");
+    logInfo("Waiting for OpenDucktor TypeScript host readiness...");
+    await waitForBackend(backendUrl, appToken, readinessTimeoutMs, hostBackend);
     logInfo("Starting OpenDucktor frontend server...");
     frontendServer = await startFrontendServer(options, backendUrl, appToken);
     logFrontendAvailability(options.frontendPort);
 
-    const exitCode = await hostProcess.exited;
+    const exitCode = await hostBackend.exited;
     if (stopping) {
       await stop();
     } else {
