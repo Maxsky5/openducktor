@@ -2,6 +2,12 @@
   "name": "@openducktor/electron",
   "productName": "OpenDucktor",
   "version": "0.3.1",
+  "description": "OpenDucktor desktop application",
+  "homepage": "https://github.com/Maxsky5/openducktor",
+  "author": {
+    "name": "Maxsky5",
+    "email": "maxsky5@users.noreply.github.com"
+  },
   "private": true,
   "type": "module",
   "main": "dist/main.js",
