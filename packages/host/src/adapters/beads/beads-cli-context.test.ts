@@ -1,8 +1,10 @@
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { ensureSharedDoltServerRunning } from "../../infrastructure/beads/beads-shared-dolt-server";
 import {
   type BeadsCliContext,
+  type BeadsSharedServerPaths,
   createBeadsAttachmentProvisioner,
   type EnsureSharedDoltServer,
   resolveBeadsCliContext,
@@ -152,15 +154,30 @@ describe("resolveBeadsCliContext", () => {
 
   test("serializes concurrent shared Dolt startup for the same config root", async () => {
     const configRoot = await mkdtemp(path.join(tmpdir(), "odt-config-shared-flight-test-"));
-    const firstRepoRoot = await mkdtemp(path.join(tmpdir(), "Repo A-"));
-    const secondRepoRoot = await mkdtemp(path.join(tmpdir(), "Repo B-"));
+    const processEnv = { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot };
+    const sharedServerRoot = path.join(configRoot, "beads", "shared-server");
+    const paths: BeadsSharedServerPaths = {
+      baseDir: configRoot,
+      beadsRoot: path.join(configRoot, "beads"),
+      sharedServerRoot,
+      doltRoot: path.join(sharedServerRoot, "dolt"),
+      cfgDir: path.join(sharedServerRoot, ".doltcfg"),
+      doltConfigFile: path.join(sharedServerRoot, "dolt-config.yaml"),
+      env: processEnv,
+      serverStatePath: path.join(sharedServerRoot, "server.json"),
+    };
     const calls: string[] = [];
+    let markStartupStarted: () => void = () => {};
+    const startupStarted = new Promise<void>((resolve) => {
+      markStartupStarted = resolve;
+    });
     let releaseStartup: () => void = () => {};
     const startupGate = new Promise<void>((resolve) => {
       releaseStartup = resolve;
     });
     const ensureSharedServer: EnsureSharedDoltServer = async (paths) => {
       calls.push(paths.sharedServerRoot);
+      markStartupStarted();
       await startupGate;
       return {
         pid: process.pid,
@@ -175,34 +192,22 @@ describe("resolveBeadsCliContext", () => {
       };
     };
 
-    const firstContextPromise = withEnv("OPENDUCKTOR_CONFIG_DIR", configRoot, () =>
-      resolveBeadsCliContext(firstRepoRoot, {
-        requireSharedServer: true,
-        ensureSharedServer,
-        ensureAttachment: async () => undefined,
-      }),
-    );
-    const secondContextPromise = withEnv("OPENDUCKTOR_CONFIG_DIR", configRoot, () =>
-      resolveBeadsCliContext(secondRepoRoot, {
-        requireSharedServer: true,
-        ensureSharedServer,
-        ensureAttachment: async () => undefined,
-      }),
-    );
+    const firstContextPromise = ensureSharedDoltServerRunning(paths, ensureSharedServer);
+    await startupStarted;
+    const secondContextPromise = ensureSharedDoltServerRunning(paths, ensureSharedServer);
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await Promise.resolve();
+    expect(calls).toEqual([sharedServerRoot]);
     releaseStartup();
 
-    const [firstContext, secondContext] = await Promise.all([
+    const [firstState, secondState] = await Promise.all([
       firstContextPromise,
       secondContextPromise,
     ]);
 
-    expect(calls).toEqual([path.join(configRoot, "beads", "shared-server")]);
-    expect(firstContext.sharedServer?.port).toBe(36004);
-    expect(secondContext.sharedServer?.port).toBe(36004);
-    expect(firstContext.env.BEADS_DOLT_SERVER_PORT).toBe("36004");
-    expect(secondContext.env.BEADS_DOLT_SERVER_PORT).toBe("36004");
+    expect(calls).toEqual([sharedServerRoot]);
+    expect(firstState.port).toBe(36004);
+    expect(secondState.port).toBe(36004);
   });
 });
 
