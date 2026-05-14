@@ -9,6 +9,10 @@ describe("createTaskCommandHandlers", () => {
         calls.push({ command: "agent_session_upsert", input });
         return true;
       },
+      async agentSessionsList(input) {
+        calls.push({ command: "agent_sessions_list", input });
+        return [];
+      },
       async agentSessionsListBulk(input) {
         calls.push({ command: "agent_sessions_list_bulk", input });
         return {};
@@ -97,8 +101,16 @@ describe("createTaskCommandHandlers", () => {
         calls.push({ command: "plan_save_document", input });
         return {} as never;
       },
+      async planGet(input) {
+        calls.push({ command: "plan_get", input });
+        return {} as never;
+      },
       async saveSpecDocument(input) {
         calls.push({ command: "spec_save_document", input });
+        return {} as never;
+      },
+      async specGet(input) {
+        calls.push({ command: "spec_get", input });
         return {} as never;
       },
       async setPlan(input) {
@@ -113,6 +125,10 @@ describe("createTaskCommandHandlers", () => {
         calls.push({ command: "qa_approved", input });
         return {} as never;
       },
+      async qaGetReport(input) {
+        calls.push({ command: "qa_get_report", input });
+        return {} as never;
+      },
       async qaRejected(input) {
         calls.push({ command: "qa_rejected", input });
         return {} as never;
@@ -120,6 +136,10 @@ describe("createTaskCommandHandlers", () => {
       async repoPullRequestSync(input) {
         calls.push({ command: "repo_pull_request_sync", input });
         return { ok: true };
+      },
+      async repoPullRequestSyncDetailed(input) {
+        calls.push({ command: "repo_pull_request_sync_detailed", input });
+        return { ran: true, changedTaskIds: [] };
       },
       async resumeDeferredTask(input) {
         calls.push({ command: "task_resume_deferred", input });
@@ -213,6 +233,15 @@ describe("createTaskCommandHandlers", () => {
         },
       ),
     ).resolves.toEqual({});
+    await expect(
+      handlers.agent_sessions_list?.(
+        { repoPath: "/repo", taskId: "task-1" },
+        {
+          command: "agent_sessions_list",
+          args: { repoPath: "/repo", taskId: "task-1" },
+        },
+      ),
+    ).resolves.toEqual([]);
     await expect(
       handlers.task_approval_context_get?.(
         { repoPath: "/repo", taskId: "task-1" },
@@ -367,6 +396,15 @@ describe("createTaskCommandHandlers", () => {
       ),
     ).resolves.toEqual({});
     await expect(
+      handlers.qa_get_report?.(
+        { repoPath: "/repo", taskId: "task-1" },
+        {
+          command: "qa_get_report",
+          args: { repoPath: "/repo", taskId: "task-1" },
+        },
+      ),
+    ).resolves.toEqual({});
+    await expect(
       handlers.repo_pull_request_sync?.(
         { repoPath: "/repo" },
         {
@@ -412,6 +450,15 @@ describe("createTaskCommandHandlers", () => {
       ),
     ).resolves.toEqual({});
     await expect(
+      handlers.spec_get?.(
+        { repoPath: "/repo", taskId: "task-1" },
+        {
+          command: "spec_get",
+          args: { repoPath: "/repo", taskId: "task-1" },
+        },
+      ),
+    ).resolves.toEqual({});
+    await expect(
       handlers.set_plan?.(
         { repoPath: "/repo", taskId: "task-1", input: { markdown: "# Plan" } },
         {
@@ -426,6 +473,15 @@ describe("createTaskCommandHandlers", () => {
         {
           command: "plan_save_document",
           args: { repoPath: "/repo", taskId: "task-1", markdown: "# Plan" },
+        },
+      ),
+    ).resolves.toEqual({});
+    await expect(
+      handlers.plan_get?.(
+        { repoPath: "/repo", taskId: "task-1" },
+        {
+          command: "plan_get",
+          args: { repoPath: "/repo", taskId: "task-1" },
         },
       ),
     ).resolves.toEqual({});
@@ -455,6 +511,10 @@ describe("createTaskCommandHandlers", () => {
       {
         command: "agent_sessions_list_bulk",
         input: { repoPath: "/repo", taskIds: ["task-1"] },
+      },
+      {
+        command: "agent_sessions_list",
+        input: { repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "task_approval_context_get",
@@ -525,6 +585,10 @@ describe("createTaskCommandHandlers", () => {
         input: { repoPath: "/repo", taskId: "task-1", reportMarkdown: "Needs work" },
       },
       {
+        command: "qa_get_report",
+        input: { repoPath: "/repo", taskId: "task-1" },
+      },
+      {
         command: "repo_pull_request_sync",
         input: { repoPath: "/repo" },
       },
@@ -545,12 +609,20 @@ describe("createTaskCommandHandlers", () => {
         input: { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
       },
       {
+        command: "spec_get",
+        input: { repoPath: "/repo", taskId: "task-1" },
+      },
+      {
         command: "set_plan",
         input: { repoPath: "/repo", taskId: "task-1", input: { markdown: "# Plan" } },
       },
       {
         command: "plan_save_document",
         input: { repoPath: "/repo", taskId: "task-1", markdown: "# Plan" },
+      },
+      {
+        command: "plan_get",
+        input: { repoPath: "/repo", taskId: "task-1" },
       },
     ]);
   });

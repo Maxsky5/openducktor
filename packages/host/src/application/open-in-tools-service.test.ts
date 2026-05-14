@@ -14,6 +14,7 @@ const createFakeOpenInToolsPort = ({
   discoveredTools = [],
 }: FakeOpenInToolsPortInput = {}) => {
   const launches: Array<{ directoryPath: string; toolId: SystemOpenInToolId }> = [];
+  const externalUrls: string[] = [];
   let discoveryCount = 0;
 
   const port: OpenInToolsPort = {
@@ -35,6 +36,9 @@ const createFakeOpenInToolsPort = ({
     async openDirectoryInTool(directoryPath, toolId) {
       launches.push({ directoryPath, toolId });
     },
+    async openExternalUrl(url) {
+      externalUrls.push(url);
+    },
   };
 
   return {
@@ -42,6 +46,7 @@ const createFakeOpenInToolsPort = ({
       return discoveryCount;
     },
     launches,
+    externalUrls,
     port,
   };
 };
@@ -102,5 +107,26 @@ describe("createOpenInToolsService", () => {
       service.openDirectoryInTool({ directoryPath: "/file.txt", toolId: "finder" }),
     ).rejects.toThrow("Path is not a directory: /file.txt");
     expect(fake.launches).toEqual([]);
+  });
+
+  test("opens validated external http URLs", async () => {
+    const fake = createFakeOpenInToolsPort();
+    const service = createOpenInToolsService(fake.port);
+
+    await expect(
+      service.openExternalUrl({ url: " https://example.com/path?q=1 " }),
+    ).resolves.toBeUndefined();
+
+    expect(fake.externalUrls).toEqual(["https://example.com/path?q=1"]);
+  });
+
+  test("rejects non-http external URLs", async () => {
+    const fake = createFakeOpenInToolsPort();
+    const service = createOpenInToolsService(fake.port);
+
+    await expect(service.openExternalUrl({ url: "file:///tmp/report" })).rejects.toThrow(
+      "Only http and https URLs can be opened from OpenDucktor.",
+    );
+    expect(fake.externalUrls).toEqual([]);
   });
 });

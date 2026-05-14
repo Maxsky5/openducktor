@@ -5,4 +5,5 @@ export type OpenInToolsPort = {
   isDirectory(directoryPath: string): Promise<boolean>;
   discoverOpenInTools(): Promise<SystemOpenInToolInfo[]>;
   openDirectoryInTool(directoryPath: string, toolId: SystemOpenInToolId): Promise<void>;
+  openExternalUrl(url: string): Promise<void>;
 };

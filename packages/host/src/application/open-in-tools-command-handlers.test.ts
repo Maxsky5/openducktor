@@ -13,6 +13,9 @@ const createRecordingService = () => {
     async openDirectoryInTool(input) {
       calls.push({ method: "openDirectoryInTool", input });
     },
+    async openExternalUrl(input) {
+      calls.push({ method: "openExternalUrl", input });
+    },
   };
 
   return { calls, service };
@@ -34,6 +37,11 @@ describe("createOpenInToolsCommandHandlers", () => {
         toolId: "finder",
       }),
     ).resolves.toEqual({ ok: true });
+    await expect(
+      router.invoke("open_external_url", {
+        url: "https://example.com",
+      }),
+    ).resolves.toEqual({ ok: true });
 
     expect(calls).toEqual([
       { method: "listOpenInTools", input: { forceRefresh: true } },
@@ -41,6 +49,7 @@ describe("createOpenInToolsCommandHandlers", () => {
         method: "openDirectoryInTool",
         input: { directoryPath: "/repo", toolId: "finder" },
       },
+      { method: "openExternalUrl", input: { url: "https://example.com" } },
     ]);
   });
 });

@@ -149,6 +149,48 @@ describe("createOdtMcpBridgeService", () => {
     ]);
   });
 
+  test("publishes a Tauri-compatible task event after external task creation", async () => {
+    const events: unknown[] = [];
+    const taskService = {
+      async createTask(input: unknown) {
+        expect(input).toEqual({
+          repoPath: "/repo",
+          input: {
+            title: "New task",
+            issueType: "task",
+            priority: 2,
+            description: "Created by MCP",
+            labels: ["mcp"],
+            aiReviewEnabled: true,
+          },
+        });
+        return taskCard({ id: "task-new", title: "New task", description: "Created by MCP" });
+      },
+    } as TaskService;
+    const service = createOdtMcpBridgeService({
+      taskService,
+      taskSyncService: {
+        publishExternalTaskCreated(repoPath, taskId) {
+          events.push({ repoPath, taskId });
+        },
+      },
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    await expect(
+      service.invoke("odt_create_task", {
+        workspaceId: "repo",
+        title: "New task",
+        issueType: "task",
+        priority: 2,
+        description: "Created by MCP",
+        labels: ["mcp"],
+        aiReviewEnabled: true,
+      }),
+    ).resolves.toMatchObject({ task: { id: "task-new", title: "New task" } });
+    expect(events).toEqual([{ repoPath: "/repo", taskId: "task-new" }]);
+  });
+
   test("links pull requests through the task service provider lookup path", async () => {
     let currentTask = taskCard({ status: "human_review" });
     const linkPullRequestCalls: unknown[] = [];

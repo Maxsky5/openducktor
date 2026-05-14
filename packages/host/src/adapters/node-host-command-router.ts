@@ -28,6 +28,7 @@ import { createSystemDiagnosticsCommandHandlers } from "../application/system-di
 import { createSystemDiagnosticsService } from "../application/system-diagnostics-service";
 import { createTaskCommandHandlers } from "../application/task-command-handlers";
 import { createTaskService } from "../application/task-service";
+import { createTaskSyncService } from "../application/task-sync-service";
 import { createTaskWorktreeCommandHandlers } from "../application/task-worktree-command-handlers";
 import { createTaskWorktreeService } from "../application/task-worktree-service";
 import { createWorkspaceSettingsCommandHandlers } from "../application/workspace-settings-command-handlers";
@@ -249,8 +250,17 @@ export const createNodeHostCommandRouter = ({
     runtimeRegistry: effectiveRuntimeRegistry,
     worktreeFiles,
   });
+  const taskSyncService = eventBus
+    ? createTaskSyncService({
+        eventBus,
+        logger: lifecycleLogger,
+        taskService,
+        workspaceSettingsService,
+      })
+    : null;
   const odtMcpBridgeService = createOdtMcpBridgeService({
     taskService,
+    ...(taskSyncService ? { taskSyncService } : {}),
     workspaceSettingsService,
   });
   resolvedMcpHostBridge ??= createNodeMcpHostBridgePort({
@@ -350,11 +360,24 @@ export const createNodeHostCommandRouter = ({
     );
   };
 
+  const pullRequestSyncLoop = taskSyncService?.startPullRequestSyncLoop();
+
+  const stopPullRequestSyncLoop = async (): Promise<void> => {
+    if (!pullRequestSyncLoop) {
+      lifecycleLogger.info("No pull request sync loop is running");
+      return;
+    }
+
+    await pullRequestSyncLoop.stop();
+    lifecycleLogger.info("Pull request sync loop stopped");
+  };
+
   return createHostCommandRouter({
     dispose: async () => {
       lifecycleLogger.info("Shutting down OpenDucktor host services");
       await runShutdownSteps(
         [
+          { label: "pull request sync loop", run: stopPullRequestSyncLoop },
           { label: "dev servers", run: stopDevServers },
           { label: "active agent runtimes", run: stopRegisteredRuntimes },
           { label: "MCP host bridge", run: stopMcpHostBridge },

@@ -825,6 +825,123 @@ describe("createTaskService", () => {
     expect(calls).toEqual([{ repoPath: "/repo", taskId: "task-1" }]);
   });
 
+  test("loads Tauri-compatible document and agent-session read commands from metadata", async () => {
+    const calls: unknown[] = [];
+    const session = createAgentSessionRecord();
+    const taskStore: TaskStorePort = {
+      async getTaskMetadata(input) {
+        calls.push(input);
+        return {
+          spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
+          plan: { markdown: "# Plan", updatedAt: "2026-05-10T11:00:00.000Z", revision: 2 },
+          qaReport: {
+            markdown: "# QA",
+            verdict: "approved",
+            updatedAt: "2026-05-10T12:00:00.000Z",
+            revision: 3,
+          },
+          agentSessions: [session],
+        };
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async getTask() {
+        throw new Error("unexpected get");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+    const service = createTaskService({ taskStore });
+
+    await expect(service.specGet({ repoPath: " /repo ", taskId: " task-1 " })).resolves.toEqual({
+      markdown: "# Spec",
+      updatedAt: "2026-05-10T10:00:00.000Z",
+      revision: 1,
+    });
+    await expect(service.planGet({ repoPath: "/repo", taskId: "task-1" })).resolves.toEqual({
+      markdown: "# Plan",
+      updatedAt: "2026-05-10T11:00:00.000Z",
+      revision: 2,
+    });
+    await expect(service.qaGetReport({ repoPath: "/repo", taskId: "task-1" })).resolves.toEqual({
+      markdown: "# QA",
+      updatedAt: "2026-05-10T12:00:00.000Z",
+      revision: 3,
+    });
+    await expect(
+      service.agentSessionsList({ repoPath: "/repo", taskId: "task-1" }),
+    ).resolves.toEqual([session]);
+    expect(calls).toEqual([
+      { repoPath: "/repo", taskId: "task-1" },
+      { repoPath: "/repo", taskId: "task-1" },
+      { repoPath: "/repo", taskId: "task-1" },
+      { repoPath: "/repo", taskId: "task-1" },
+    ]);
+  });
+
+  test("returns an empty QA document when no report is present", async () => {
+    const taskStore: TaskStorePort = {
+      async getTaskMetadata() {
+        return {
+          spec: { markdown: "" },
+          plan: { markdown: "" },
+          agentSessions: [],
+        };
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async getTask() {
+        throw new Error("unexpected get");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+
+    await expect(
+      createTaskService({ taskStore }).qaGetReport({ repoPath: "/repo", taskId: "task-1" }),
+    ).resolves.toEqual({ markdown: "" });
+  });
+
   test("lists agent sessions in bulk from task cards", async () => {
     const calls: unknown[] = [];
     const session = {

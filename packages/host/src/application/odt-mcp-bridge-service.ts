@@ -26,6 +26,7 @@ import {
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import type { TaskService } from "./task-service";
+import type { TaskSyncService } from "./task-sync-service";
 import type { WorkspaceSettingsService } from "./workspace-settings-service";
 
 type OdtToolInput<Name extends OdtToolName> = ReturnType<(typeof ODT_TOOL_SCHEMAS)[Name]["parse"]>;
@@ -38,6 +39,7 @@ export type OdtMcpBridgeService = {
 
 export type CreateOdtMcpBridgeServiceInput = {
   taskService: TaskService;
+  taskSyncService?: Pick<TaskSyncService, "publishExternalTaskCreated">;
   workspaceSettingsService: WorkspaceSettingsService;
 };
 
@@ -258,6 +260,7 @@ const parseResponse = <Name extends OdtToolName>(toolName: Name, output: unknown
 
 export const createOdtMcpBridgeService = ({
   taskService,
+  taskSyncService,
   workspaceSettingsService,
 }: CreateOdtMcpBridgeServiceInput): OdtMcpBridgeService => {
   const repoPathForWorkspace = async (workspaceId: string): Promise<string> => {
@@ -299,6 +302,7 @@ export const createOdtMcpBridgeService = ({
               aiReviewEnabled: parsed.aiReviewEnabled,
             },
           });
+          taskSyncService?.publishExternalTaskCreated(repoPath, created.id);
           return parseResponse(toolName, mapTaskSummary(created)) as CreateTaskResult;
         }
         case "odt_search_tasks": {

@@ -3,6 +3,7 @@ import type { TaskService } from "./task-service";
 
 export const createTaskCommandHandlers = (taskService: TaskService): HostCommandHandlers => ({
   agent_session_upsert: (args) => taskService.agentSessionUpsert(args),
+  agent_sessions_list: (args) => taskService.agentSessionsList(args),
   agent_sessions_list_bulk: (args) => taskService.agentSessionsListBulk(args),
   build_blocked: (args) => taskService.buildBlocked(args),
   build_completed: (args) => taskService.buildCompleted(args),
@@ -11,6 +12,7 @@ export const createTaskCommandHandlers = (taskService: TaskService): HostCommand
   human_approve: (args) => taskService.humanApprove(args),
   human_request_changes: (args) => taskService.humanRequestChanges(args),
   qa_approved: (args) => taskService.qaApproved(args),
+  qa_get_report: (args) => taskService.qaGetReport(args),
   qa_rejected: (args) => taskService.qaRejected(args),
   repo_pull_request_sync: (args) => taskService.repoPullRequestSync(args),
   task_approval_context_get: (args) => taskService.getApprovalContext(args),
@@ -31,7 +33,9 @@ export const createTaskCommandHandlers = (taskService: TaskService): HostCommand
   task_update: (args) => taskService.updateTask(args),
   set_plan: (args) => taskService.setPlan(args),
   set_spec: (args) => taskService.setSpec(args),
+  plan_get: (args) => taskService.planGet(args),
   plan_save_document: (args) => taskService.savePlanDocument(args),
+  spec_get: (args) => taskService.specGet(args),
   spec_save_document: (args) => taskService.saveSpecDocument(args),
   tasks_list: (args) => taskService.listTasks(args),
 });

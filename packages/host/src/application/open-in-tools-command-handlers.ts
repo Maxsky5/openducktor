@@ -9,4 +9,8 @@ export const createOpenInToolsCommandHandlers = (
     await service.openDirectoryInTool(args);
     return { ok: true };
   },
+  open_external_url: async (args) => {
+    await service.openExternalUrl(args);
+    return { ok: true };
+  },
 });

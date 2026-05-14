@@ -257,6 +257,7 @@ const createOpenInTools = (): OpenInToolsPort => ({
     return [{ toolId: "finder", iconDataUrl: null }];
   },
   async openDirectoryInTool() {},
+  async openExternalUrl() {},
 });
 
 const createLocalAttachments = (): LocalAttachmentPort => ({
@@ -1113,6 +1114,11 @@ describe("createElectronHostCommandRouter", () => {
         toolId: "finder",
       }),
     ).resolves.toEqual({ ok: true });
+    await expect(
+      router.invoke("open_external_url", {
+        url: "https://example.com",
+      }),
+    ).resolves.toEqual({ ok: true });
   });
 
   test("registers migrated GitHub repository detection command", async () => {
@@ -1231,6 +1237,21 @@ describe("createElectronHostCommandRouter", () => {
       plan: { markdown: "# Plan", updatedAt: "2026-01-02T00:00:00Z", revision: 1 },
       agentSessions: [],
     });
+    await expect(
+      router.invoke("spec_get", { repoPath: "/repo", taskId: "task-1" }),
+    ).resolves.toEqual({ markdown: "# Spec", updatedAt: "2026-01-02T00:00:00Z", revision: 1 });
+    await expect(
+      router.invoke("plan_get", { repoPath: "/repo", taskId: "task-1" }),
+    ).resolves.toEqual({ markdown: "# Plan", updatedAt: "2026-01-02T00:00:00Z", revision: 1 });
+    await expect(
+      router.invoke("qa_get_report", { repoPath: "/repo", taskId: "task-1" }),
+    ).resolves.toEqual({ markdown: "" });
+    await expect(
+      router.invoke("agent_sessions_list", {
+        repoPath: "/repo",
+        taskId: "task-1",
+      }),
+    ).resolves.toEqual([]);
     await expect(
       router.invoke("agent_sessions_list_bulk", {
         repoPath: "/repo",

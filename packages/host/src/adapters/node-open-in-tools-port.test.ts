@@ -50,6 +50,26 @@ describe("createNodeOpenInToolsPort", () => {
     });
   });
 
+  test("opens external URLs with the platform browser command", async () => {
+    const { calls, runner } = createRunner();
+    const port = createNodeOpenInToolsPort({
+      platform: "darwin",
+      runner,
+    });
+
+    await port.openExternalUrl("https://example.com");
+
+    expect(calls).toEqual([{ program: "open", args: ["https://example.com"] }]);
+  });
+
+  test("rejects external URL opening on unsupported platforms", async () => {
+    const port = createNodeOpenInToolsPort({ platform: "aix" });
+
+    await expect(port.openExternalUrl("https://example.com")).rejects.toThrow(
+      "Opening external URLs is not supported on aix.",
+    );
+  });
+
   test("rejects open-in discovery on non-macOS platforms", async () => {
     const port = createNodeOpenInToolsPort({ platform: "linux" });
 

@@ -60,6 +60,7 @@ import type { WorkspaceSettingsService } from "./workspace-settings-service";
 export type TaskService = {
   listTasks(input: unknown): Promise<TaskCard[]>;
   getTaskMetadata(input: unknown): Promise<TaskMetadataPayload>;
+  agentSessionsList(input: unknown): Promise<AgentSessionRecord[]>;
   agentSessionsListBulk(input: unknown): Promise<Record<string, AgentSessionRecord[]>>;
   agentSessionUpsert(input: unknown): Promise<boolean>;
   getApprovalContext(input: unknown): Promise<TaskApprovalContextLoadResult>;
@@ -76,10 +77,13 @@ export type TaskService = {
   resetTask(input: unknown): Promise<TaskCard>;
   updateTask(input: unknown): Promise<TaskCard>;
   transitionTask(input: unknown): Promise<TaskCard>;
+  specGet(input: unknown): Promise<TaskMetadataDocument>;
   setSpec(input: unknown): Promise<TaskMetadataDocument>;
   saveSpecDocument(input: unknown): Promise<TaskMetadataDocument>;
+  planGet(input: unknown): Promise<TaskMetadataDocument>;
   setPlan(input: unknown): Promise<TaskMetadataDocument>;
   savePlanDocument(input: unknown): Promise<TaskMetadataDocument>;
+  qaGetReport(input: unknown): Promise<TaskMetadataDocument>;
   buildBlocked(input: unknown): Promise<TaskCard>;
   buildStart(input: unknown): Promise<BuildSessionBootstrap>;
   buildResumed(input: unknown): Promise<TaskCard>;
@@ -89,8 +93,14 @@ export type TaskService = {
   humanRequestChanges(input: unknown): Promise<TaskCard>;
   humanApprove(input: unknown): Promise<TaskCard>;
   repoPullRequestSync(input: unknown): Promise<{ ok: boolean }>;
+  repoPullRequestSyncDetailed(input: unknown): Promise<RepoPullRequestSyncResult>;
   deferTask(input: unknown): Promise<TaskCard>;
   resumeDeferredTask(input: unknown): Promise<TaskCard>;
+};
+
+export type RepoPullRequestSyncResult = {
+  ran: boolean;
+  changedTaskIds: string[];
 };
 
 export type CreateTaskServiceInput = {
@@ -2513,6 +2523,15 @@ export const createTaskService = ({
     return taskStore.getTaskMetadata({ repoPath, taskId });
   },
 
+  async agentSessionsList(input) {
+    const record = requireRecord(input, "agent_sessions_list input");
+    const repoPath = requireString(record.repoPath, "repoPath");
+    const taskId = requireString(record.taskId, "taskId");
+    const metadata = await taskStore.getTaskMetadata({ repoPath, taskId });
+
+    return metadata.agentSessions;
+  },
+
   async agentSessionsListBulk(input) {
     const record = requireRecord(input, "agent_sessions_list_bulk input");
     const repoPath = requireString(record.repoPath, "repoPath");
@@ -3504,6 +3523,15 @@ export const createTaskService = ({
     return enrichTask(updated, nextTasks);
   },
 
+  async specGet(input) {
+    const record = requireRecord(input, "spec_get input");
+    const repoPath = requireString(record.repoPath, "repoPath");
+    const taskId = requireString(record.taskId, "taskId");
+    const metadata = await taskStore.getTaskMetadata({ repoPath, taskId });
+
+    return metadata.spec;
+  },
+
   async setSpec(input) {
     const record = requireRecord(input, "set_spec input");
     const repoPath = requireString(record.repoPath, "repoPath");
@@ -3536,6 +3564,15 @@ export const createTaskService = ({
     await taskStore.getTask({ repoPath, taskId });
 
     return taskStore.setSpecDocument({ repoPath, taskId, markdown });
+  },
+
+  async planGet(input) {
+    const record = requireRecord(input, "plan_get input");
+    const repoPath = requireString(record.repoPath, "repoPath");
+    const taskId = requireString(record.taskId, "taskId");
+    const metadata = await taskStore.getTaskMetadata({ repoPath, taskId });
+
+    return metadata.plan;
   },
 
   async setPlan(input) {
@@ -3597,6 +3634,26 @@ export const createTaskService = ({
     await taskStore.getTask({ repoPath, taskId });
 
     return taskStore.setPlanDocument({ repoPath, taskId, markdown });
+  },
+
+  async qaGetReport(input) {
+    const record = requireRecord(input, "qa_get_report input");
+    const repoPath = requireString(record.repoPath, "repoPath");
+    const taskId = requireString(record.taskId, "taskId");
+    const metadata = await taskStore.getTaskMetadata({ repoPath, taskId });
+
+    if (!metadata.qaReport) {
+      return { markdown: "" };
+    }
+
+    return {
+      markdown: metadata.qaReport.markdown,
+      ...(metadata.qaReport.updatedAt !== undefined
+        ? { updatedAt: metadata.qaReport.updatedAt }
+        : {}),
+      ...(metadata.qaReport.revision !== undefined ? { revision: metadata.qaReport.revision } : {}),
+      ...(metadata.qaReport.error !== undefined ? { error: metadata.qaReport.error } : {}),
+    };
   },
 
   async buildStart(input) {
@@ -3899,6 +3956,11 @@ export const createTaskService = ({
   },
 
   async repoPullRequestSync(input) {
+    const result = await this.repoPullRequestSyncDetailed(input);
+    return { ok: result.ran };
+  },
+
+  async repoPullRequestSyncDetailed(input) {
     const record = requireRecord(input, "repo_pull_request_sync input");
     const repoPath = requireString(record.repoPath, "repoPath");
     const dependencies = requirePullRequestSyncDependencies(
@@ -3917,10 +3979,11 @@ export const createTaskService = ({
     const effectiveRepoPath = repoConfig.repoPath;
     const policy = await githubPullRequestSyncPolicy(dependencies.systemCommands, repoConfig);
     if (!policy.available) {
-      return { ok: false };
+      return { ran: false, changedTaskIds: [] };
     }
 
     const tasks = await taskStore.listPullRequestSyncCandidates({ repoPath: effectiveRepoPath });
+    const changedTaskIds: string[] = [];
     for (const task of tasks) {
       const pullRequest = task.pullRequest;
       if (!pullRequest) {
@@ -3969,16 +4032,18 @@ export const createTaskService = ({
           taskId: task.id,
           status: "closed",
         });
+        changedTaskIds.push(task.id);
       } else if (!pullRequestRecordsMatch(updated.record, pullRequest)) {
         await taskStore.setPullRequest({
           repoPath: effectiveRepoPath,
           taskId: task.id,
           pullRequest: updated.record,
         });
+        changedTaskIds.push(task.id);
       }
     }
 
-    return { ok: true };
+    return { ran: true, changedTaskIds };
   },
 
   async deferTask(input) {

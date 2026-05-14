@@ -139,6 +139,22 @@ const buildLaunchArgs = (
   return ["-a", appPath, directoryPath];
 };
 
+const buildOpenExternalUrlCommand = (
+  platform: NodeJS.Platform,
+  url: string,
+): { program: string; args: string[] } => {
+  switch (platform) {
+    case "darwin":
+      return { program: "open", args: [url] };
+    case "linux":
+      return { program: "xdg-open", args: [url] };
+    case "win32":
+      return { program: "cmd", args: ["/C", "start", "", url] };
+    default:
+      throw new Error(`Opening external URLs is not supported on ${platform}.`);
+  }
+};
+
 export const createNodeOpenInToolsPort = ({
   platform = process.platform,
   runner = defaultRunner,
@@ -226,6 +242,14 @@ export const createNodeOpenInToolsPort = ({
           );
         },
       );
+    },
+    async openExternalUrl(url) {
+      const command = buildOpenExternalUrlCommand(platform, url);
+      await runner(command.program, command.args).catch((error: unknown) => {
+        throw new Error(`Failed to open URL in the system browser: ${String(error)}`, {
+          cause: error,
+        });
+      });
     },
   };
 };
