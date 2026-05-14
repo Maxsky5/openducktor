@@ -106,6 +106,16 @@ pub(super) fn insert_workspace_runtime_for_kind(
     Ok(())
 }
 
+pub(super) fn enable_agent_runtime(service: &AppService, runtime_kind: &str) -> Result<()> {
+    let mut snapshot = service.workspace_get_settings_snapshot()?;
+    snapshot.agent_runtimes.insert(
+        runtime_kind.to_string(),
+        AgentRuntimeConfig { enabled: true },
+    );
+    service.workspace_save_settings_snapshot(snapshot)?;
+    Ok(())
+}
+
 #[derive(Clone)]
 pub(super) enum SessionProbeBehavior {
     Default,
@@ -237,6 +247,7 @@ pub(super) fn build_external_runtime_build_start_harness(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         runtime_registry,
     );
+    enable_agent_runtime(&service, "test-runtime")?;
     let repo_path_string = repo_path.to_string_lossy().to_string();
     service.workspace_add(repo_path_string.as_str())?;
     workspace_update_repo_config_by_repo_path(

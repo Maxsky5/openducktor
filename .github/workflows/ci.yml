@@ -210,6 +210,7 @@ jobs:
     env:
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
+      OPENDUCKTOR_WORKSPACE_ROOT: ${{ github.workspace }}
 
     steps:
       - name: Checkout
@@ -228,6 +229,11 @@ jobs:
           workspaces: |
             apps/desktop/src-tauri
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
       - name: Pre-fetch Rust dependencies
         run: cargo rust-fetch
 
@@ -236,11 +242,6 @@ jobs:
 
       - name: Run host crate unit tests
         run: cargo rust-test-host-unit
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Run host-application integration tests
         run: cargo rust-test-host-integration

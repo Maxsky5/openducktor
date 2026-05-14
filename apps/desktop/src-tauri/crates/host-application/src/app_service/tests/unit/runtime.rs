@@ -60,6 +60,7 @@ fn runtime_ensure_registers_external_runtimes_without_local_child_processes() ->
     )?;
     let (service, _task_state, _git_state) =
         build_service_with_runtime_registry(vec![], runtime_registry);
+    enable_agent_runtime(&service, "test-runtime")?;
     service.workspace_add(repo_path.to_string_lossy().as_ref())?;
 
     let runtime = service.runtime_ensure("test-runtime", repo_path.to_string_lossy().as_ref())?;
@@ -103,6 +104,7 @@ fn runtime_ensure_registers_host_managed_stdio_routes_without_reconstructing_por
     )?;
     let (service, _task_state, _git_state) =
         build_service_with_runtime_registry(vec![], runtime_registry);
+    enable_agent_runtime(&service, "test-runtime")?;
     service.workspace_add(repo_path.to_string_lossy().as_ref())?;
 
     let runtime = service.runtime_ensure("test-runtime", repo_path.to_string_lossy().as_ref())?;

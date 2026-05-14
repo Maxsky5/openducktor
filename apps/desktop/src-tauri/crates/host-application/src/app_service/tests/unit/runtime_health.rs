@@ -23,6 +23,7 @@ fn repo_runtime_health_startup_failure_respects_runtime_mcp_capability() -> Resu
     )?;
     let (service, _task_state, _git_state) =
         build_service_with_runtime_registry(vec![], runtime_registry);
+    enable_agent_runtime(&service, "test-runtime")?;
     let repo_path_string = repo_path.to_string_lossy().to_string();
     service.workspace_add(repo_path_string.as_str())?;
 
