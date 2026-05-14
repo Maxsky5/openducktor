@@ -1,5 +1,7 @@
 import {
   type AgentSessionRecord,
+  type RepoRuntimeStartupStatus,
+  type RuntimeInstanceSummary,
   type RuntimeRoute,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
@@ -10,9 +12,11 @@ import type { RuntimeDefinitionsService } from "./runtime-definitions-service";
 import {
   ACTIVE_MCP_PROBE_ATTEMPTS,
   ACTIVE_MCP_PROBE_RETRY_DELAY_MS,
+  buildFailedStartupStatus,
   buildHealthStatus,
   buildIdleStartupStatus,
   buildReadyStartupStatus,
+  buildWaitingStartupStatus,
   describeRuntimeRoute,
   findWorkspaceRuntime,
   loadTargetSession,
@@ -48,6 +52,10 @@ export const createRuntimeOrchestratorService = ({
   activeMcpProbeRetryDelayMs?: number;
   logger?: RuntimeOrchestratorLogger;
 }): RuntimeOrchestratorService => {
+  const runtimeStartupStatuses = new Map<string, RepoRuntimeStartupStatus>();
+  const startupStatusKey = (runtimeKind: string, repoPath: string): string =>
+    `${runtimeKind}::${repoPath}`;
+
   const resolveSessionStopRoute = async (
     request: Parameters<RuntimeOrchestratorService["agentSessionStop"]>[0],
     repoPath: string,
@@ -137,15 +145,28 @@ export const createRuntimeOrchestratorService = ({
       runtimeKind,
       canonicalRepoPath,
     );
-    return runtime
-      ? buildReadyStartupStatus(runtime)
-      : buildIdleStartupStatus(runtimeKind, canonicalRepoPath);
+    if (runtime) {
+      const readyStatus = buildReadyStartupStatus(runtime);
+      runtimeStartupStatuses.set(startupStatusKey(runtimeKind, canonicalRepoPath), readyStatus);
+      return readyStatus;
+    }
+
+    return (
+      runtimeStartupStatuses.get(startupStatusKey(runtimeKind, canonicalRepoPath)) ??
+      buildIdleStartupStatus(runtimeKind, canonicalRepoPath)
+    );
   };
 
   const runtimeEnsure: RuntimeOrchestratorService["runtimeEnsure"] = async (input) => {
     const { runtimeKind, repoPath } = input;
     const descriptor = resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
     const canonicalRepoPath = await resolveRepoPath(gitPort, repoPath);
+    const statusKey = startupStatusKey(runtimeKind, canonicalRepoPath);
+    const startedAt = new Date().toISOString();
+    runtimeStartupStatuses.set(
+      statusKey,
+      buildWaitingStartupStatus(runtimeKind, canonicalRepoPath, startedAt),
+    );
     logger?.info(`Ensuring ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}`);
     try {
       const runtime = await runtimeRegistry.ensureWorkspaceRuntime({
@@ -160,9 +181,14 @@ export const createRuntimeOrchestratorService = ({
           parsed.runtimeRoute,
         )}`,
       );
+      runtimeStartupStatuses.set(statusKey, buildReadyStartupStatus(parsed));
       return parsed;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      runtimeStartupStatuses.set(
+        statusKey,
+        buildFailedStartupStatus(runtimeKind, canonicalRepoPath, startedAt, "error", message),
+      );
       logger?.error(
         `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,
       );
@@ -195,14 +221,26 @@ export const createRuntimeOrchestratorService = ({
     runtimeList,
     async runtimeStop(input) {
       const { runtimeId } = input;
-      return { ok: await runtimeRegistry.stopRuntime(runtimeId) };
+      const runtime = (await runtimeRegistry.listRuntimes()).find(
+        (entry) => entry.runtimeId === runtimeId,
+      );
+      const ok = await runtimeRegistry.stopRuntime(runtimeId);
+      if (runtime) {
+        runtimeStartupStatuses.delete(startupStatusKey(runtime.kind, runtime.repoPath));
+      }
+      return { ok };
     },
     runtimeStartupStatus,
     async repoRuntimeHealth(input) {
       const { runtimeKind, repoPath } = input;
       const descriptor = resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
       logger?.info(`Checking ${runtimeKind} repo runtime health for repository ${repoPath}`);
-      const runtime = await runtimeEnsure(input);
+      let runtime: RuntimeInstanceSummary;
+      try {
+        runtime = await runtimeEnsure(input);
+      } catch {
+        return buildHealthStatus(descriptor, await runtimeStartupStatus(input), runtimeRegistry);
+      }
       const health = await buildHealthStatus(
         descriptor,
         buildReadyStartupStatus(runtime),

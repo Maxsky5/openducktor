@@ -85,6 +85,7 @@ import {
 } from "../host-lifecycle";
 
 export type CreateNodeHostCommandRouterInput = {
+  clientVersion?: string;
   codexAppServer?: CodexAppServerPort;
   codexAppServerTransportRegistry?: CodexAppServerTransportRegistry;
   devServerProcesses?: DevServerProcessPort;
@@ -113,6 +114,7 @@ const isCodexAppServerTransportRegistry = (
   typeof value.unregisterTransport === "function";
 
 export const createNodeHostCommandRouter = ({
+  clientVersion,
   codexAppServer,
   codexAppServerTransportRegistry,
   devServerProcesses: configuredDevServerProcesses,
@@ -182,6 +184,22 @@ export const createNodeHostCommandRouter = ({
           systemCommands,
           codexAppServer: effectiveCodexTransportRegistry,
           processEnv,
+          ...(clientVersion ? { clientVersion } : {}),
+          ...(eventBus
+            ? {
+                eventEmitter: (event) => {
+                  try {
+                    eventBus.publish("openducktor://codex-app-server-event", event);
+                  } catch (error) {
+                    lifecycleLogger.error(
+                      `Failed to publish Codex app-server event: ${
+                        error instanceof Error ? error.message : String(error)
+                      }`,
+                    );
+                  }
+                },
+              }
+            : {}),
           resolveMcpBridgeConnection: async () => {
             if (!resolvedMcpHostBridge) {
               throw new Error("Codex workspace startup requires an initialized MCP host bridge.");
@@ -207,6 +225,7 @@ export const createNodeHostCommandRouter = ({
     runtimeRegistry ??
     createRuntimeRegistry({
       workspaceStarter,
+      codexAppServer: effectiveCodexAppServer,
     });
   const taskWorktreeService = createTaskWorktreeService({
     settingsConfig,

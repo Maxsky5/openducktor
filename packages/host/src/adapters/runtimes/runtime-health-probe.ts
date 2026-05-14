@@ -1,7 +1,7 @@
 import type { RuntimeHealth, RuntimeKind } from "@openducktor/contracts";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
-import { resolveOpencodeBinary, resolveUserPath } from "./runtime-binaries";
+import { resolveCodexBinary, resolveOpencodeBinary } from "./runtime-binaries";
 
 const OPENCODE_VERSION_ENV = {
   OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}',
@@ -9,19 +9,6 @@ const OPENCODE_VERSION_ENV = {
 
 const parseCommandMissingError = (command: string): string =>
   `Required command \`${command}\` not found.`;
-
-const resolveCodexBinary = async (
-  systemCommands: SystemCommandPort,
-  env: NodeJS.ProcessEnv,
-): Promise<string | null> => {
-  const overrideBinary = env.OPENDUCKTOR_CODEX_BINARY;
-  if (overrideBinary !== undefined) {
-    const trimmed = overrideBinary.trim();
-    return trimmed.length > 0 ? resolveUserPath(trimmed) : null;
-  }
-
-  return (await systemCommands.requiredCommandError("codex")) === null ? "codex" : null;
-};
 
 const runtimeHealthForMissingCommand = (kind: RuntimeKind, detail: string): RuntimeHealth => ({
   kind,
@@ -59,20 +46,24 @@ export const createRuntimeHealthProbe = (
     }
 
     if (kind === "codex") {
-      const binary = await resolveCodexBinary(systemCommands, env);
-      if (binary === null) {
-        return runtimeHealthForMissingCommand(kind, "codex not found in bundled locations or PATH");
+      try {
+        const binary = await resolveCodexBinary(systemCommands, env);
+        const version = await systemCommands.versionCommand(binary, ["--version"], {
+          timeoutMs: 2_000,
+        });
+        return {
+          kind,
+          enabled: true,
+          ok: version !== null,
+          version: version === null ? null : `${version} (${binary})`,
+          error: version === null ? `Failed reading codex --version from ${binary}` : null,
+        };
+      } catch (error) {
+        return runtimeHealthForMissingCommand(
+          kind,
+          error instanceof Error ? error.message : String(error),
+        );
       }
-      const version = await systemCommands.versionCommand(binary, ["--version"], {
-        timeoutMs: 2_000,
-      });
-      return {
-        kind,
-        enabled: true,
-        ok: version !== null,
-        version: version === null ? null : `${version} (${binary})`,
-        error: version === null ? `Failed reading codex --version from ${binary}` : null,
-      };
     }
 
     const missing = parseCommandMissingError(kind);

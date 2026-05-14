@@ -164,6 +164,67 @@ describe("createRuntimeOrchestratorService", () => {
     });
   });
 
+  test("reports waiting startup status while runtime ensure is in flight", async () => {
+    let resolveEnsure: (runtime: RuntimeInstanceSummary) => void = () => {};
+    const ensureStarted = new Promise<RuntimeInstanceSummary>((resolve) => {
+      resolveEnsure = resolve;
+    });
+    const registry = createRegistry([], {
+      async ensureWorkspaceRuntime() {
+        return ensureStarted;
+      },
+    });
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: registry,
+      taskReader: createTaskStore(),
+    });
+
+    const ensure = service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" });
+
+    await expect(
+      service.runtimeStartupStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+    ).resolves.toMatchObject({
+      runtimeKind: "opencode",
+      repoPath: "/canonical/repo",
+      stage: "waiting_for_runtime",
+      runtime: null,
+      attempts: 0,
+    });
+
+    resolveEnsure(createRuntime());
+    await expect(ensure).resolves.toMatchObject({ runtimeId: "runtime-1" });
+  });
+
+  test("records startup failure status when runtime ensure fails", async () => {
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([], {
+        async ensureWorkspaceRuntime() {
+          throw new Error("Codex app-server failed to initialize");
+        },
+      }),
+      taskReader: createTaskStore(),
+    });
+
+    await expect(
+      service.runtimeEnsure({ runtimeKind: "codex", repoPath: "/repo" }),
+    ).rejects.toThrow("Codex app-server failed to initialize");
+    await expect(
+      service.runtimeStartupStatus({ runtimeKind: "codex", repoPath: "/repo" }),
+    ).resolves.toMatchObject({
+      runtimeKind: "codex",
+      repoPath: "/canonical/repo",
+      stage: "startup_failed",
+      runtime: null,
+      failureKind: "error",
+      failureReason: "error",
+      detail: "Codex app-server failed to initialize",
+    });
+  });
+
   test("reports not started runtime health status when no runtime is registered", async () => {
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
@@ -186,6 +247,35 @@ describe("createRuntimeOrchestratorService", () => {
         supported: true,
         status: "waiting_for_runtime",
         serverName: "openducktor",
+      },
+    });
+  });
+
+  test("repo runtime health reports startup failure instead of dropping the status", async () => {
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([], {
+        async ensureWorkspaceRuntime() {
+          throw new Error("Codex app-server failed to initialize");
+        },
+      }),
+      taskReader: createTaskStore(),
+    });
+
+    await expect(
+      service.repoRuntimeHealth({ runtimeKind: "codex", repoPath: "/repo" }),
+    ).resolves.toMatchObject({
+      status: "error",
+      runtime: {
+        status: "error",
+        stage: "startup_failed",
+        detail: "Codex app-server failed to initialize",
+        failureKind: "error",
+        failureReason: "error",
+      },
+      mcp: {
+        status: "waiting_for_runtime",
       },
     });
   });

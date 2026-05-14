@@ -210,6 +210,49 @@ export const buildReadyStartupStatus = (
     detail: null,
   });
 
+export const buildWaitingStartupStatus = (
+  runtimeKind: string,
+  repoPath: string,
+  startedAt: string,
+): RepoRuntimeStartupStatus =>
+  repoRuntimeStartupStatusSchema.parse({
+    runtimeKind,
+    repoPath,
+    stage: "waiting_for_runtime",
+    runtime: null,
+    startedAt,
+    updatedAt: nowIso(),
+    elapsedMs: null,
+    attempts: 0,
+    failureKind: null,
+    failureReason: null,
+    detail: null,
+  });
+
+export const buildFailedStartupStatus = (
+  runtimeKind: string,
+  repoPath: string,
+  startedAt: string,
+  failureReason: string,
+  detail: string,
+): RepoRuntimeStartupStatus => {
+  const startedAtMs = Date.parse(startedAt);
+  const elapsedMs = Number.isNaN(startedAtMs) ? null : Math.max(Date.now() - startedAtMs, 0);
+  return repoRuntimeStartupStatusSchema.parse({
+    runtimeKind,
+    repoPath,
+    stage: "startup_failed",
+    runtime: null,
+    startedAt,
+    updatedAt: nowIso(),
+    elapsedMs,
+    attempts: null,
+    failureKind: "error",
+    failureReason,
+    detail,
+  });
+};
+
 export const buildHealthStatus = (
   descriptor: RuntimeDescriptor,
   startupStatus: RepoRuntimeStartupStatus,
@@ -217,8 +260,17 @@ export const buildHealthStatus = (
   options: BuildHealthStatusOptions = {},
 ): Promise<RepoRuntimeHealthCheck> => {
   const runtimeReady = startupStatus.stage === "runtime_ready";
+  const startupFailed = startupStatus.stage === "startup_failed";
+  const startupInProgress =
+    startupStatus.stage === "startup_requested" || startupStatus.stage === "waiting_for_runtime";
   const checkedAt = nowIso();
-  const runtimeState = runtimeReady ? "ready" : "not_started";
+  const runtimeState = runtimeReady
+    ? "ready"
+    : startupFailed
+      ? "error"
+      : startupInProgress
+        ? "checking"
+        : "not_started";
   const supportsMcp = descriptor.capabilities.optionalSurfaces.supportsMcpStatus;
 
   const runtimeHealth = {
@@ -230,7 +282,14 @@ export const buildHealthStatus = (
     updatedAt: startupStatus.updatedAt,
     elapsedMs: startupStatus.elapsedMs,
     attempts: startupStatus.attempts,
-    detail: runtimeReady ? null : "Runtime has not been started yet.",
+    detail: runtimeReady
+      ? null
+      : (startupStatus.detail ??
+        (startupFailed
+          ? (startupStatus.failureReason ?? "Runtime startup failed.")
+          : startupInProgress
+            ? "Runtime startup is in progress."
+            : "Runtime has not been started yet.")),
     failureKind: startupStatus.failureKind,
     failureReason: startupStatus.failureReason,
   };

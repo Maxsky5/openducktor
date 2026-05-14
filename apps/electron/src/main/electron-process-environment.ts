@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 export const OPENDUCKTOR_MCP_SIDECAR_PATH_ENV = "OPENDUCKTOR_OPENDUCKTOR_MCP_PATH";
+export const OPENDUCKTOR_BUNDLED_BIN_DIR_ENV = "OPENDUCKTOR_BUNDLED_BIN_DIR";
 
 type ConfigureElectronProcessEnvironmentInput = {
   env: NodeJS.ProcessEnv;
@@ -23,6 +24,9 @@ export const configureElectronProcessEnvironment = ({
   isPackaged,
   resourcesPath,
 }: ConfigureElectronProcessEnvironmentInput): void => {
+  if (isPackaged && env[OPENDUCKTOR_BUNDLED_BIN_DIR_ENV] === undefined) {
+    env[OPENDUCKTOR_BUNDLED_BIN_DIR_ENV] = join(resourcesPath, "bin");
+  }
   if (isPackaged && env[OPENDUCKTOR_MCP_SIDECAR_PATH_ENV] === undefined) {
     env[OPENDUCKTOR_MCP_SIDECAR_PATH_ENV] = resolveElectronMcpSidecarPath({
       platform,

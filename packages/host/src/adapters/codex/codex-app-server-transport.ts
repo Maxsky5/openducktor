@@ -18,8 +18,16 @@ type PendingRequest = {
 
 export type CodexAppServerChildTransport = CodexAppServerTransport & {
   notify(method: string, params?: unknown): Promise<void>;
-  close(): void;
+  close(): Promise<void>;
 };
+
+export type CodexAppServerStreamEvent = {
+  runtimeId: string;
+  kind: "notification" | "server_request";
+  message: unknown;
+};
+
+export type CodexAppServerEventEmitter = (event: CodexAppServerStreamEvent) => void;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 
@@ -51,6 +59,7 @@ export const createCodexAppServerTransport = (
   runtimeId: string,
   child: CodexChildProcess,
   requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  eventEmitter?: CodexAppServerEventEmitter,
 ): CodexAppServerChildTransport => {
   let nextRequestId = 1;
   let closed = false;
@@ -58,6 +67,8 @@ export const createCodexAppServerTransport = (
   const pending = new Map<number, PendingRequest>();
   const notifications: unknown[] = [];
   const serverRequests: unknown[] = [];
+  let stdoutClosed = false;
+  let stderrClosed = false;
 
   const failFast = (error: Error): void => {
     if (!fatalError) {
@@ -143,12 +154,20 @@ export const createCodexAppServerTransport = (
     }
 
     if (hasMethod && id === null) {
-      notifications.push(message);
+      if (eventEmitter) {
+        eventEmitter({ runtimeId, kind: "notification", message });
+      } else {
+        notifications.push(message);
+      }
       return;
     }
 
     if (hasMethod && id !== null) {
-      serverRequests.push(message);
+      if (eventEmitter) {
+        eventEmitter({ runtimeId, kind: "server_request", message });
+      } else {
+        serverRequests.push(message);
+      }
       return;
     }
 
@@ -156,6 +175,9 @@ export const createCodexAppServerTransport = (
   };
 
   const lines = createInterface({ input: child.stdout });
+  const waitForStdoutClose = new Promise<void>((resolve) => {
+    lines.once("close", () => resolve());
+  });
   lines.on("line", (line) => {
     const trimmed = line.trim();
     if (!trimmed) {
@@ -172,11 +194,20 @@ export const createCodexAppServerTransport = (
     }
   });
   lines.on("close", () => {
+    stdoutClosed = true;
     if (!closed) {
       failFast(new Error(`Codex app-server stdout closed unexpectedly for runtime ${runtimeId}`));
     }
   });
-  child.stderr.resume();
+  const stderrLines = createInterface({ input: child.stderr });
+  const waitForStderrClose = new Promise<void>((resolve) => {
+    stderrLines.once("close", () => resolve());
+  });
+  stderrLines.on("line", () => {});
+  stderrLines.on("close", () => {
+    stderrClosed = true;
+  });
+  child.stderr.on("error", (error) => failFast(error));
   child.once("error", (error) => failFast(error));
   child.once("close", (exitCode, signal) => {
     if (!closed) {
@@ -244,15 +275,21 @@ export const createCodexAppServerTransport = (
         ...(error !== undefined ? { error } : {}),
       });
     },
-    close() {
+    async close() {
       closed = true;
-      lines.close();
+      if (!stdoutClosed) {
+        lines.close();
+      }
+      if (!stderrClosed) {
+        stderrLines.close();
+      }
       child.stdin.destroy();
       for (const [id, request] of pending) {
         clearTimeout(request.timeout);
         request.reject(new Error(`Codex app-server transport for runtime ${runtimeId} is closed`));
         pending.delete(id);
       }
+      await Promise.all([waitForStdoutClose, waitForStderrClose]);
     },
   };
 };

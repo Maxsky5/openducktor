@@ -1,7 +1,11 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
-import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
+import {
+  ODT_WORKFLOW_AGENT_TOOL_NAMES,
+  type RuntimeInstanceSummary,
+  runtimeInstanceSummarySchema,
+} from "@openducktor/contracts";
 import type {
   RuntimeWorkspaceHandle,
   RuntimeWorkspaceStarterPort,
@@ -9,7 +13,10 @@ import type {
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { resolveCodexBinary } from "../runtimes/runtime-binaries";
-import { createCodexAppServerTransport } from "./codex-app-server-transport";
+import {
+  type CodexAppServerEventEmitter,
+  createCodexAppServerTransport,
+} from "./codex-app-server-transport";
 import type { CodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 
 type CodexChildProcess = ChildProcessByStdio<Writable, Readable, Readable>;
@@ -29,24 +36,13 @@ export type CreateCodexWorkspaceRuntimeStarterInput = {
   processEnv?: NodeJS.ProcessEnv;
   mcpCommand?: string[];
   codexBinary?: string;
+  eventEmitter?: CodexAppServerEventEmitter;
+  clientVersion?: string;
   requestTimeoutMs?: number;
   stopTimeoutMs?: number;
   now?: () => Date;
   runtimeId?: () => string;
 };
-
-const CODEX_ODT_TOOL_IDS = [
-  "odt_read_task",
-  "odt_read_task_documents",
-  "odt_set_spec",
-  "odt_set_plan",
-  "odt_build_blocked",
-  "odt_build_resumed",
-  "odt_build_completed",
-  "odt_set_pull_request",
-  "odt_qa_approved",
-  "odt_qa_rejected",
-];
 
 const CODEX_MCP_ENV_VARS = [
   "ODT_WORKSPACE_ID",
@@ -171,6 +167,8 @@ export const createCodexWorkspaceRuntimeStarter = ({
   processEnv = process.env,
   mcpCommand,
   codexBinary,
+  eventEmitter,
+  clientVersion = processEnv.npm_package_version ?? "0.0.0",
   requestTimeoutMs = DEFAULT_CODEX_REQUEST_TIMEOUT_MS,
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
   now = () => new Date(),
@@ -204,7 +202,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
         ODT_HOST_URL: requireBridgeValue(bridge.hostUrl, "hostUrl"),
         ODT_HOST_TOKEN: requireBridgeValue(bridge.hostToken, "hostToken"),
         ODT_FORBID_WORKSPACE_ID_INPUT: "true",
-        ODT_ALLOWED_TOOLS: CODEX_ODT_TOOL_IDS.join(","),
+        ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
       },
       stdio: ["pipe", "pipe", "pipe"],
     }) as CodexChildProcess;
@@ -218,7 +216,12 @@ export const createCodexWorkspaceRuntimeStarter = ({
       closed = true;
     });
 
-    const transport = createCodexAppServerTransport(nextRuntimeId, child, requestTimeoutMs);
+    const transport = createCodexAppServerTransport(
+      nextRuntimeId,
+      child,
+      requestTimeoutMs,
+      eventEmitter,
+    );
     codexAppServer.registerTransport(nextRuntimeId, transport);
 
     try {
@@ -228,7 +231,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
           clientInfo: {
             name: "openducktor",
             title: "OpenDucktor",
-            version: "0.0.0",
+            version: clientVersion,
           },
           capabilities: {
             experimentalApi: true,
@@ -239,7 +242,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
       await transport.notify("initialized", {});
     } catch (error) {
       codexAppServer.unregisterTransport(nextRuntimeId);
-      transport.close();
+      await transport.close();
       await stopChildProcess(child, pid, () => closed, stopTimeoutMs);
       throw error;
     }
@@ -263,7 +266,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
       runtime,
       async stop() {
         codexAppServer.unregisterTransport(nextRuntimeId);
-        transport.close();
+        await transport.close();
         await stopChildProcess(child, pid, () => closed, stopTimeoutMs);
       },
     };

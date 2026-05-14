@@ -151,6 +151,117 @@ describe("agent-runtime-registry", () => {
     }
   });
 
+  test("codex adapter receives live app-server events from the shell bridge", async () => {
+    const originalRuntimeList = host.runtimeList;
+    const originalCodexAppServerRequest = host.codexAppServerRequest;
+    const codexEventBridge: { listener?: (payload: unknown) => void } = {};
+
+    host.runtimeList = mock(async () => [
+      {
+        kind: "codex",
+        runtimeId: "runtime-codex-live",
+        repoPath: "/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/repo",
+        runtimeRoute: { type: "stdio" as const, identity: "runtime-codex-live" },
+        startedAt: "2026-02-22T09:00:00.000Z",
+        descriptor: CODEX_RUNTIME_DESCRIPTOR,
+      },
+    ]) as typeof host.runtimeList;
+    host.codexAppServerRequest = mock(async (_runtimeId, method) => {
+      if (method === "model/list") {
+        return {
+          data: [
+            {
+              id: "gpt-5",
+              model: "gpt-5",
+              displayName: "GPT-5",
+              supportedReasoningEfforts: [
+                { reasoningEffort: "medium", description: "Balanced reasoning" },
+              ],
+              isDefault: true,
+            },
+          ],
+          nextCursor: null,
+        };
+      }
+      if (method === "thread/resume") {
+        return {
+          thread: {
+            id: "thread-live",
+            cwd: "/repo",
+            createdAt: 1_778_112_000,
+            status: { type: "active", activeFlags: [] },
+          },
+          startedAt: "2026-02-22T09:00:00.000Z",
+        };
+      }
+      throw new Error(`Unexpected Codex request '${method}'.`);
+    }) as typeof host.codexAppServerRequest;
+    configureShellBridge({
+      client: {} as TauriHostClient,
+      subscribeRunEvents: async () => () => {},
+      subscribeDevServerEvents: async () => () => {},
+      subscribeTaskEvents: async () => () => {},
+      subscribeCodexAppServerEvents: async (listener) => {
+        codexEventBridge.listener = listener;
+        return () => {
+          delete codexEventBridge.listener;
+        };
+      },
+      capabilities: {
+        canOpenExternalUrls: true,
+        canPreviewLocalAttachments: true,
+      },
+      openExternalUrl: async () => {},
+      resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
+    } satisfies ShellBridge);
+
+    try {
+      const adapter = createAgentRuntimeRegistry().getAdapter("codex");
+      await adapter.attachSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        role: "build",
+        systemPrompt: "Use the repo rules.",
+        externalSessionId: "thread-live",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      });
+
+      const events: Array<{ type?: string }> = [];
+      const unsubscribe = adapter.subscribeEvents("thread-live", (event) => events.push(event));
+      const emitCodexEvent = codexEventBridge.listener;
+      if (!emitCodexEvent) {
+        throw new Error("Codex app-server event listener was not registered.");
+      }
+      emitCodexEvent({
+        runtimeId: "runtime-codex-live",
+        kind: "notification",
+        message: {
+          method: "turn/completed",
+          params: {
+            threadId: "thread-live",
+            turn: { id: "turn-live", status: "completed" },
+          },
+        },
+      });
+
+      const deadline = Date.now() + 1_000;
+      while (!events.some((event) => event.type === "session_idle") && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(events.some((event) => event.type === "session_idle")).toBe(true);
+      unsubscribe();
+    } finally {
+      host.runtimeList = originalRuntimeList;
+      host.codexAppServerRequest = originalCodexAppServerRequest;
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  });
+
   test("rejects unsupported runtime adapters", () => {
     const registry = createAgentRuntimeRegistry();
 

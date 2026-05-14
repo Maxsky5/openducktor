@@ -38,6 +38,7 @@ configureElectronProcessEnvironment({
 
 const hostEventBus = createHostEventBus();
 const hostCommandRouter = createElectronHostCommandRouter({
+  clientVersion: app.getVersion(),
   eventBus: hostEventBus,
   lifecycleLogger: electronMainLogger,
 });

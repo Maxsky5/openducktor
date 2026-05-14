@@ -1,8 +1,8 @@
 import type { GlobalConfig, RepoConfig } from "@openducktor/contracts";
 import {
   type CodexAppServerPort,
-  createInMemoryRuntimeRegistryPort,
   createRuntimeDefinitionsService,
+  createRuntimeRegistry,
   type DevServerProcessPort,
   type FilesystemPort,
   type GitPort,
@@ -715,7 +715,7 @@ describe("createElectronHostCommandRouter", () => {
         };
       },
     };
-    const runtimeRegistry = createInMemoryRuntimeRegistryPort({ workspaceStarter });
+    const runtimeRegistry = createRuntimeRegistry({ workspaceStarter });
     const router = createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),

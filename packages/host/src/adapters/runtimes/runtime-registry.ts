@@ -1,8 +1,10 @@
 import {
+  ODT_WORKFLOW_AGENT_TOOL_NAMES,
   type RuntimeInstanceSummary,
   type RuntimeRoute,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
+import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 import type {
   RuntimeEnsureWorkspaceInput,
   RuntimeMcpStatusProbeInput,
@@ -13,27 +15,18 @@ import type {
   RuntimeWorkspaceHandle,
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
+import { probeCodexSessionStatus } from "../codex/codex-session-status-probe";
 
 export type CreateRuntimeRegistryInput = {
   runtimes?: RuntimeInstanceSummary[];
   workspaceStarter?: RuntimeWorkspaceStarterPort;
+  codexAppServer?: Pick<CodexAppServerPort, "request">;
 };
 
 const SESSION_REQUEST_TIMEOUT_MS = 2_000;
 const MCP_REQUEST_TIMEOUT_MS = 2_000;
 const MAX_ABORT_ERROR_BODY_BYTES = 64 * 1024;
-const CODEX_ODT_TOOL_IDS = [
-  "odt_read_task",
-  "odt_read_task_documents",
-  "odt_set_spec",
-  "odt_set_plan",
-  "odt_build_blocked",
-  "odt_build_resumed",
-  "odt_build_completed",
-  "odt_set_pull_request",
-  "odt_qa_approved",
-  "odt_qa_rejected",
-];
+const CODEX_ODT_TOOL_IDS = [...ODT_WORKFLOW_AGENT_TOOL_NAMES];
 
 const requireOpenCodeLocalHttpEndpoint = (runtimeRoute: RuntimeRoute, operation: string): URL => {
   if (runtimeRoute.type !== "local_http") {
@@ -331,6 +324,7 @@ const probeCodexMcpStatus = ({
 export const createRuntimeRegistry = ({
   runtimes = [],
   workspaceStarter,
+  codexAppServer,
 }: CreateRuntimeRegistryInput = {}): RuntimeRegistryPort => {
   const entries = new Map(runtimes.map((runtime) => [runtime.runtimeId, runtime]));
   const handles = new Map<string, RuntimeWorkspaceHandle>();
@@ -427,6 +421,12 @@ export const createRuntimeRegistry = ({
     async probeSessionStatus(input) {
       if (input.runtimeKind === "opencode") {
         return probeOpenCodeSessionStatus(input);
+      }
+      if (input.runtimeKind === "codex") {
+        if (!codexAppServer) {
+          throw new Error("Codex session status probing requires the Codex app-server port.");
+        }
+        return probeCodexSessionStatus({ ...input, codexAppServer });
       }
       return { supported: false, hasLiveSession: false };
     },
