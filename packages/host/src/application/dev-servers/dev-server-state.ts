@@ -14,6 +14,8 @@ export type DevServerGroupRuntime = {
 
 export const DEV_SERVER_EVENT_CHANNEL = "openducktor://dev-server-event";
 export const DEV_SERVER_COLORTERM = "truecolor";
+export const DEV_SERVER_CLICOLOR_FORCE = "1";
+export const DEV_SERVER_FORCE_COLOR = "1";
 export const DEV_SERVER_TERM = "xterm-256color";
 
 const TERMINAL_BUFFER_CHUNK_LIMIT = 2_000;
@@ -108,3 +110,6 @@ export const formatTerminalSystemMessage = (message: string): string => {
   const normalized = message.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");
   return normalized.endsWith("\r\n") ? normalized : `${normalized}\r\n`;
 };
+
+export const formatTerminalProcessOutput = (data: string): string =>
+  data.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");

@@ -166,7 +166,7 @@ describe("createDevServerService", () => {
               sequence: 0,
             },
             {
-              data: "ready\n",
+              data: "ready\r\n",
               sequence: 1,
             },
           ],
@@ -178,7 +178,9 @@ describe("createDevServerService", () => {
       command: "bun run dev",
       cwd: "/worktrees/task-1",
       env: {
+        CLICOLOR_FORCE: "1",
         COLORTERM: "truecolor",
+        FORCE_COLOR: "1",
         TERM: "xterm-256color",
       },
     });

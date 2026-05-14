@@ -17,10 +17,13 @@ import type { TaskWorktreeService } from "../tasks/worktrees/task-worktree-servi
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import {
   buildGroupState,
+  DEV_SERVER_CLICOLOR_FORCE,
   DEV_SERVER_COLORTERM,
   DEV_SERVER_EVENT_CHANNEL,
+  DEV_SERVER_FORCE_COLOR,
   DEV_SERVER_TERM,
   type DevServerGroupRuntime,
+  formatTerminalProcessOutput,
   formatTerminalSystemMessage,
   nextTerminalSequence,
   scriptHasLiveProcess,
@@ -259,12 +262,15 @@ export const createDevServerService = ({
         command: scriptConfig.command,
         cwd: worktreePath,
         env: {
+          CLICOLOR_FORCE: DEV_SERVER_CLICOLOR_FORCE,
           COLORTERM: DEV_SERVER_COLORTERM,
+          FORCE_COLOR: DEV_SERVER_FORCE_COLOR,
           TERM: DEV_SERVER_TERM,
         },
         onExit: ({ pid, exitCode, signal, error }) =>
           handleProcessExit(runtime, scriptConfig.id, pid, exitCode, signal, error),
-        onOutput: ({ data }) => pushTerminalChunk(runtime, scriptConfig.id, data),
+        onOutput: ({ data }) =>
+          pushTerminalChunk(runtime, scriptConfig.id, formatTerminalProcessOutput(data)),
       });
       const script = runtime.state.scripts.find(
         (candidate) => candidate.scriptId === scriptConfig.id,
