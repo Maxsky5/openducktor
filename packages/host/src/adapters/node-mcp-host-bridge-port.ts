@@ -15,7 +15,12 @@ export type McpHostBridgeConnectionInput = {
 
 export type McpHostBridgePort = {
   ensureConnection(input: McpHostBridgeConnectionInput): Promise<OpenCodeMcpBridgeConnection>;
-  close(): Promise<void>;
+  close(): Promise<McpHostBridgeCloseResult>;
+};
+
+export type McpHostBridgeCloseResult = {
+  baseUrl: string | null;
+  closed: boolean;
 };
 
 export type CreateNodeMcpHostBridgePortInput = {
@@ -174,11 +179,14 @@ export const createNodeMcpHostBridgePort = ({
     },
     async close() {
       const current = server;
+      const currentBaseUrl = baseUrl;
       server = null;
       baseUrl = null;
       if (current) {
         await closeServer(current);
+        return { baseUrl: currentBaseUrl, closed: true };
       }
+      return { baseUrl: null, closed: false };
     },
   };
 };

@@ -392,6 +392,7 @@ export class OpencodeSdkAdapter
     const runtimeClientInput = await this.resolveRuntimeClientInputWithRuntimeId(
       { ...input, workingDirectory: input.repoPath },
       "list session presence",
+      { requireLive: true },
     );
     const runtimeId = requireSessionPresenceRuntimeId(runtimeClientInput.runtimeId);
     const snapshots = await listOpencodeLiveAgentSessionSnapshots({

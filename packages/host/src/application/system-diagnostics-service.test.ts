@@ -88,9 +88,15 @@ const healthyRepoStoreHealth: RepoStoreHealth = {
   },
 };
 
-const createTaskStore = (health: RepoStoreHealth = healthyRepoStoreHealth): TaskStorePort =>
+const createTaskStore = (
+  health: RepoStoreHealth = healthyRepoStoreHealth,
+  calls: Array<{ repoPath: string; prepare?: boolean }> = [],
+): TaskStorePort =>
   ({
-    diagnoseRepoStore: async () => health,
+    diagnoseRepoStore: async (input) => {
+      calls.push(input);
+      return health;
+    },
   }) as TaskStorePort;
 
 describe("createSystemDiagnosticsService", () => {
@@ -177,7 +183,33 @@ describe("createSystemDiagnosticsService", () => {
     });
   });
 
-  test("beadsCheck delegates repo store diagnostics through the task store", async () => {
+  test("beadsCheck returns structured blocking health when dolt is missing", async () => {
+    const service = createSystemDiagnosticsService({
+      runtimeDefinitionsService: createRuntimeDefinitions(),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort({ missingCommands: ["dolt"] }),
+      taskStore: createTaskStore(),
+    });
+
+    const check = await service.beadsCheck("/repo");
+
+    expect(check).toEqual({
+      beadsOk: false,
+      beadsPath: null,
+      beadsError: "Required command `dolt` not found.",
+      repoStoreHealth: {
+        category: "attachment_verification_failed",
+        status: "blocking",
+        isReady: false,
+        detail: "Required command `dolt` not found.",
+        attachment: { path: null, databaseName: null },
+        sharedServer: { host: null, port: null, ownershipState: "unavailable" },
+      },
+    });
+  });
+
+  test("beadsCheck delegates active repo store readiness through the task store", async () => {
     const restoreNeededHealth: RepoStoreHealth = {
       category: "missing_shared_database",
       status: "restore_needed",
@@ -193,12 +225,13 @@ describe("createSystemDiagnosticsService", () => {
         ownershipState: "owned_by_current_process",
       },
     };
+    const calls: Array<{ repoPath: string; prepare?: boolean }> = [];
     const service = createSystemDiagnosticsService({
       runtimeDefinitionsService: createRuntimeDefinitions(),
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
       systemCommands: createSystemCommandPort(),
-      taskStore: createTaskStore(restoreNeededHealth),
+      taskStore: createTaskStore(restoreNeededHealth, calls),
     });
 
     await expect(service.beadsCheck("/repo")).resolves.toEqual({
@@ -207,5 +240,6 @@ describe("createSystemDiagnosticsService", () => {
       beadsError: "Shared Dolt database odt_repo is missing and restore is required",
       repoStoreHealth: restoreNeededHealth,
     });
+    expect(calls).toEqual([{ repoPath: "/repo", prepare: true }]);
   });
 });

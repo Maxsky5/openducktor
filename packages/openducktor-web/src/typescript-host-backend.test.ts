@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import {
-  __typescriptHostBackendTestInternals,
-  startTypescriptHostBackend,
-} from "./typescript-host-backend";
+
+const nativeResponse = await Bun.fetch("data:,");
+(globalThis as typeof globalThis & { Response: typeof Response }).Response =
+  nativeResponse.constructor as typeof Response;
+
+const { __typescriptHostBackendTestInternals, startTypescriptHostBackend } = await import(
+  "./typescript-host-backend"
+);
 
 const APP_TOKEN = "app-token";
 const CONTROL_TOKEN = "control-token";
@@ -19,18 +23,18 @@ describe("TypeScript web host backend", () => {
     const backendUrl = `http://127.0.0.1:${backend.port}`;
 
     try {
-      const health = await fetch(`${backendUrl}/health`);
+      const health = await Bun.fetch(`${backendUrl}/health`);
       expect(health.status).toBe(200);
       expect(await health.json()).toEqual({ ok: true });
 
-      const session = await fetch(`${backendUrl}/session`, {
+      const session = await Bun.fetch(`${backendUrl}/session`, {
         method: "POST",
         headers: { "x-openducktor-app-token": APP_TOKEN },
       });
       expect(session.status).toBe(200);
       expect(session.headers.get("set-cookie")).toContain("openducktor_web_session=app-token");
 
-      const invoke = await fetch(`${backendUrl}/invoke/runtime_definitions_list`, {
+      const invoke = await Bun.fetch(`${backendUrl}/invoke/runtime_definitions_list`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -41,7 +45,7 @@ describe("TypeScript web host backend", () => {
       expect(invoke.status).toBe(200);
       expect(await invoke.json()).toMatchObject([{ kind: "opencode" }, { kind: "codex" }]);
 
-      const shutdown = await fetch(`${backendUrl}/shutdown`, {
+      const shutdown = await Bun.fetch(`${backendUrl}/shutdown`, {
         method: "POST",
         headers: { "x-openducktor-control-token": CONTROL_TOKEN },
       });

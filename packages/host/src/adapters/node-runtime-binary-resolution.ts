@@ -35,8 +35,11 @@ export const isExecutableFile = async (candidate: string): Promise<boolean> => {
   }
 };
 
-export const resolveOpencodeBinary = async (systemCommands: SystemCommandPort): Promise<string> => {
-  const overrideBinary = process.env.OPENDUCKTOR_OPENCODE_BINARY;
+export const resolveOpencodeBinary = async (
+  systemCommands: SystemCommandPort,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> => {
+  const overrideBinary = env.OPENDUCKTOR_OPENCODE_BINARY;
   if (overrideBinary !== undefined) {
     if (overrideBinary.trim().length === 0) {
       throw new Error("Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY is empty");
@@ -63,8 +66,11 @@ export const resolveOpencodeBinary = async (systemCommands: SystemCommandPort): 
   throw new Error("opencode not found in standard install locations, PATH, or ~/.opencode/bin");
 };
 
-export const resolveCodexBinary = async (systemCommands: SystemCommandPort): Promise<string> => {
-  const overrideBinary = process.env.OPENDUCKTOR_CODEX_BINARY;
+export const resolveCodexBinary = async (
+  systemCommands: SystemCommandPort,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> => {
+  const overrideBinary = env.OPENDUCKTOR_CODEX_BINARY;
   if (overrideBinary !== undefined) {
     if (overrideBinary.trim().length === 0) {
       throw new Error("Configured Codex override OPENDUCKTOR_CODEX_BINARY is empty");

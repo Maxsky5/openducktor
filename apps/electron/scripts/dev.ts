@@ -12,7 +12,7 @@ const workspaceRoot = path.resolve(packageRoot, "../..");
 const RENDERER_DEV_HOST = "127.0.0.1";
 const DEFAULT_RENDERER_DEV_PORT = 1430;
 const ELECTRON_RESTART_DEBOUNCE_MS = 100;
-const ELECTRON_STOP_TIMEOUT_MS = 2_000;
+const ELECTRON_STOP_TIMEOUT_MS = 30_000;
 
 export const ELECTRON_RESTART_WATCH_ROOTS = [
   path.join(packageRoot, "src/main"),
@@ -122,6 +122,7 @@ const resolveRendererDevUrl = (server: ViteDevServer): string => {
 const startElectron = (rendererDevUrl: string): ManagedElectronProcess =>
   Bun.spawn(["electron", "dist/main.js"], {
     cwd: packageRoot,
+    detached: process.platform !== "win32",
     stdout: "inherit",
     stderr: "inherit",
     env: {
@@ -273,5 +274,5 @@ if (import.meta.main) {
     console.error(error);
     return 1;
   });
-  process.exitCode = exitCode;
+  process.exit(exitCode);
 }

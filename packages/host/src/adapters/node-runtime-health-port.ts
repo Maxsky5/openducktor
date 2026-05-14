@@ -10,8 +10,11 @@ const OPENCODE_VERSION_ENV = {
 const parseCommandMissingError = (command: string): string =>
   `Required command \`${command}\` not found.`;
 
-const resolveCodexBinary = async (systemCommands: SystemCommandPort): Promise<string | null> => {
-  const overrideBinary = process.env.OPENDUCKTOR_CODEX_BINARY;
+const resolveCodexBinary = async (
+  systemCommands: SystemCommandPort,
+  env: NodeJS.ProcessEnv,
+): Promise<string | null> => {
+  const overrideBinary = env.OPENDUCKTOR_CODEX_BINARY;
   if (overrideBinary !== undefined) {
     const trimmed = overrideBinary.trim();
     return trimmed.length > 0 ? resolveUserPath(trimmed) : null;
@@ -30,11 +33,12 @@ const runtimeHealthForMissingCommand = (kind: RuntimeKind, detail: string): Runt
 
 export const createNodeRuntimeHealthPort = (
   systemCommands: SystemCommandPort,
+  env: NodeJS.ProcessEnv = process.env,
 ): RuntimeHealthPort => ({
   async getRuntimeHealth(kind) {
     if (kind === "opencode") {
       try {
-        const binary = await resolveOpencodeBinary(systemCommands);
+        const binary = await resolveOpencodeBinary(systemCommands, env);
         const version = await systemCommands.versionCommand(binary, ["--version"], {
           env: OPENCODE_VERSION_ENV,
           timeoutMs: 2_000,
@@ -55,7 +59,7 @@ export const createNodeRuntimeHealthPort = (
     }
 
     if (kind === "codex") {
-      const binary = await resolveCodexBinary(systemCommands);
+      const binary = await resolveCodexBinary(systemCommands, env);
       if (binary === null) {
         return runtimeHealthForMissingCommand(kind, "codex not found in bundled locations or PATH");
       }

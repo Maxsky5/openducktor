@@ -1,6 +1,15 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, mkdir, open, readFile, realpath, rename, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import net from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -16,6 +25,7 @@ const SHARED_DOLT_HEALTH_TIMEOUT_MS = 5_000;
 const SHARED_DOLT_HEALTH_POLL_INTERVAL_MS = 100;
 const SHARED_DOLT_TCP_TIMEOUT_MS = 250;
 const CUSTOM_STATUS_VALUES = "spec_ready,ready_for_dev,ai_review,human_review";
+const MAX_DOLT_STARTUP_LOG_CHARS = 4_000;
 
 export type BeadsSharedServerState = {
   pid: number;
@@ -36,6 +46,7 @@ export type BeadsSharedServerPaths = {
   doltRoot: string;
   cfgDir: string;
   doltConfigFile: string;
+  env: NodeJS.ProcessEnv;
   serverStatePath: string;
 };
 
@@ -68,6 +79,7 @@ export type ResolveBeadsCliContextOptions = {
   requireSharedServer?: boolean;
   ensureSharedServer?: EnsureSharedDoltServer;
   ensureAttachment?: EnsureBeadsAttachment;
+  processEnv?: NodeJS.ProcessEnv;
   workspaceId?: string | null;
 };
 
@@ -79,6 +91,8 @@ type BeadsAttachmentMetadata = {
   dolt_server_user?: unknown;
   dolt_database?: unknown;
 };
+
+const sharedDoltServerFlights = new Map<string, Promise<BeadsSharedServerState>>();
 
 type BeadsWherePayload = {
   path?: unknown;
@@ -142,8 +156,8 @@ const resolveUserPath = (rawPath: string): string => {
   return path.join(resolveHomeDirectory(), unquoted.slice(homeRelativePrefix.length));
 };
 
-const resolveOpenDucktorBaseDir = (): string => {
-  const envDir = process.env[OPENDUCKTOR_CONFIG_DIR_ENV];
+const resolveOpenDucktorBaseDir = (env: NodeJS.ProcessEnv = process.env): string => {
+  const envDir = env[OPENDUCKTOR_CONFIG_DIR_ENV];
   if (envDir !== undefined) {
     if (envDir.length === 0) {
       throw new Error("OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path");
@@ -311,6 +325,60 @@ const processIsAlive = (pid: number): boolean => {
   }
 };
 
+const processGroupId = (pid: number): number => (process.platform === "win32" ? pid : -pid);
+
+const signalProcess = (pid: number, signal: NodeJS.Signals): void => {
+  try {
+    process.kill(processGroupId(pid), signal);
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH") {
+      return;
+    }
+    throw error;
+  }
+};
+
+const waitForProcessExit = async (pid: number, timeoutMs: number): Promise<boolean> => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!processIsAlive(pid)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return !processIsAlive(pid);
+};
+
+export type StopSharedDoltServer = (
+  state: BeadsSharedServerState,
+  serverStatePath: string,
+) => Promise<void>;
+
+export const stopOwnedSharedDoltServer: StopSharedDoltServer = async (state, serverStatePath) => {
+  if (state.ownerPid !== process.pid) {
+    throw new Error(
+      `Refusing to stop shared Dolt server ${state.pid}; it is owned by pid ${state.ownerPid}`,
+    );
+  }
+
+  if (processIsAlive(state.pid)) {
+    signalProcess(state.pid, "SIGTERM");
+    if (!(await waitForProcessExit(state.pid, 2_000))) {
+      signalProcess(state.pid, "SIGKILL");
+      if (!(await waitForProcessExit(state.pid, 2_000))) {
+        throw new Error(`Timed out stopping shared Dolt server process ${state.pid}`);
+      }
+    }
+  }
+
+  await unlink(serverStatePath).catch((error: unknown) => {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  });
+};
+
 const pathExists = async (inputPath: string): Promise<boolean> => {
   try {
     await access(inputPath);
@@ -337,9 +405,10 @@ const tcpProbe = (port: number): Promise<boolean> =>
     socket.once("error", () => finish(false));
   });
 
-const runDoltAllowFailure = async (args: string[]): Promise<boolean> =>
+const runDoltAllowFailure = async (args: string[], env: NodeJS.ProcessEnv): Promise<boolean> =>
   new Promise((resolve) => {
     const child = spawn("dolt", args, {
+      env,
       stdio: ["ignore", "ignore", "ignore"],
     });
     child.once("error", () => resolve(false));
@@ -367,21 +436,24 @@ const runCommandAllowFailure: BeadsCommandRunner = async ({ command, args, cwd, 
     });
   });
 
-const sqlProbe = (port: number): Promise<boolean> =>
-  runDoltAllowFailure([
-    "--host",
-    SHARED_DOLT_SERVER_HOST,
-    "--port",
-    String(port),
-    "--no-tls",
-    "-u",
-    SHARED_DOLT_SERVER_USER,
-    "-p",
-    "",
-    "sql",
-    "-q",
-    "show databases",
-  ]);
+const sqlProbe = (port: number, env: NodeJS.ProcessEnv): Promise<boolean> =>
+  runDoltAllowFailure(
+    [
+      "--host",
+      SHARED_DOLT_SERVER_HOST,
+      "--port",
+      String(port),
+      "--no-tls",
+      "-u",
+      SHARED_DOLT_SERVER_USER,
+      "-p",
+      "",
+      "sql",
+      "-q",
+      "show databases",
+    ],
+    env,
+  );
 
 const serverStateIsHealthy = async (
   state: BeadsSharedServerState,
@@ -393,10 +465,10 @@ const serverStateIsHealthy = async (
   if (state.sharedServerRoot !== paths.sharedServerRoot || state.doltDataDir !== paths.doltRoot) {
     return false;
   }
-  if (!processIsAlive(state.pid)) {
+  if (!(await tcpProbe(state.port)) || !(await sqlProbe(state.port, paths.env))) {
     return false;
   }
-  return (await tcpProbe(state.port)) && (await sqlProbe(state.port));
+  return processIsAlive(state.pid);
 };
 
 const portIsAvailable = async (port: number): Promise<boolean> =>
@@ -448,15 +520,23 @@ const writeDoltConfigFile = async (paths: BeadsSharedServerPaths, port: number):
   await rename(tempFile, paths.doltConfigFile);
 };
 
-const waitForServerReady = async (port: number): Promise<boolean> => {
+const waitForServerReady = async (port: number, env: NodeJS.ProcessEnv): Promise<boolean> => {
   const deadline = Date.now() + SHARED_DOLT_HEALTH_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if ((await tcpProbe(port)) && (await sqlProbe(port))) {
+    if ((await tcpProbe(port)) && (await sqlProbe(port, env))) {
       return true;
     }
     await new Promise((resolve) => setTimeout(resolve, SHARED_DOLT_HEALTH_POLL_INTERVAL_MS));
   }
   return false;
+};
+
+const formatDoltStartupLog = (output: string): string => {
+  const cleaned = output.replaceAll("\0", "").trim();
+  if (cleaned.length <= MAX_DOLT_STARTUP_LOG_CHARS) {
+    return cleaned;
+  }
+  return cleaned.slice(cleaned.length - MAX_DOLT_STARTUP_LOG_CHARS);
 };
 
 const spawnSharedDoltServer = async (
@@ -469,6 +549,7 @@ const spawnSharedDoltServer = async (
   const child = spawn("dolt", ["sql-server", "--config", paths.doltConfigFile], {
     cwd: paths.sharedServerRoot,
     detached: process.platform !== "win32",
+    env: paths.env,
     stdio: ["ignore", stdout.fd, stderr.fd],
   });
 
@@ -483,7 +564,7 @@ const spawnSharedDoltServer = async (
     );
   }
 
-  if (await waitForServerReady(port)) {
+  if (await waitForServerReady(port, paths.env)) {
     if (!child.pid) {
       child.kill();
       throw new Error(`Shared Dolt server on port ${port} started without a process id`);
@@ -504,12 +585,30 @@ const spawnSharedDoltServer = async (
 
   child.kill();
   const stderrOutput = await readFile(stderrLogPath, "utf8").catch(() => "");
-  const detail = stderrOutput.trim();
+  const detail = formatDoltStartupLog(stderrOutput);
   throw new Error(
     detail
       ? `Shared Dolt server on port ${port} failed to become ready: ${detail}`
       : `Shared Dolt server on port ${port} failed to become ready within ${SHARED_DOLT_HEALTH_TIMEOUT_MS}ms`,
   );
+};
+
+const ensureSharedDoltServerRunning = (
+  paths: BeadsSharedServerPaths,
+  ensureSharedServer: EnsureSharedDoltServer,
+): Promise<BeadsSharedServerState> => {
+  const existing = sharedDoltServerFlights.get(paths.sharedServerRoot);
+  if (existing) {
+    return existing;
+  }
+
+  const flight = ensureSharedServer(paths).finally(() => {
+    if (sharedDoltServerFlights.get(paths.sharedServerRoot) === flight) {
+      sharedDoltServerFlights.delete(paths.sharedServerRoot);
+    }
+  });
+  sharedDoltServerFlights.set(paths.sharedServerRoot, flight);
+  return flight;
 };
 
 const writeSharedServerState = async (
@@ -784,6 +883,7 @@ const probeSharedDatabasePresence = async (
       "-q",
       "show databases",
     ],
+    env: context.env,
   });
 
   if (!result.ok) {
@@ -1044,8 +1144,9 @@ export const resolveBeadsCliContext = async (
   repoPath: string,
   options: ResolveBeadsCliContextOptions = {},
 ): Promise<BeadsCliContext> => {
+  const processEnv = options.processEnv ?? process.env;
   const canonicalRepoPath = await canonicalOrAbsolute(repoPath);
-  const baseDir = resolveOpenDucktorBaseDir();
+  const baseDir = resolveOpenDucktorBaseDir(processEnv);
   const beadsRoot = path.join(baseDir, "beads");
   const sharedServerRoot = path.join(beadsRoot, "shared-server");
   const doltRoot = path.join(sharedServerRoot, "dolt");
@@ -1070,19 +1171,21 @@ export const resolveBeadsCliContext = async (
     doltRoot,
     cfgDir,
     doltConfigFile: path.join(sharedServerRoot, "dolt-config.yaml"),
+    env: processEnv,
     serverStatePath,
   };
   let sharedServer = await readSharedServerState(serverStatePath);
 
   if (options.requireSharedServer === true) {
     await mkdir(attachmentRoot, { recursive: true });
-    sharedServer = await (options.ensureSharedServer ?? defaultEnsureSharedDoltServerRunning)(
+    sharedServer = await ensureSharedDoltServerRunning(
       sharedServerPaths,
+      options.ensureSharedServer ?? defaultEnsureSharedDoltServerRunning,
     );
   }
 
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...processEnv,
     BEADS_DIR: beadsDir,
   };
 

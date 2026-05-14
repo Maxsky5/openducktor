@@ -50,7 +50,10 @@ import type { TaskStorePort } from "../ports/task-store-port";
 import type { WorktreeFilePort } from "../ports/worktree-file-port";
 import { createInMemoryCodexAppServerPort } from "./in-memory-codex-app-server-port";
 import { createInMemoryRuntimeRegistryPort } from "./in-memory-runtime-registry-port";
-import { createNodeBeadsTaskStorePort } from "./node-beads-task-store-port";
+import {
+  createNodeBeadsTaskStorePort,
+  type NodeBeadsTaskStorePort,
+} from "./node-beads-task-store-port";
 import {
   type CodexAppServerTransportRegistry,
   createNodeCodexWorkspaceStarterPort,
@@ -62,11 +65,17 @@ import { createNodeLocalAttachmentPort } from "./node-local-attachment-port";
 import { createNodeMcpHostBridgePort, type McpHostBridgePort } from "./node-mcp-host-bridge-port";
 import { createNodeOpenInToolsPort } from "./node-open-in-tools-port";
 import { createNodeOpenCodeWorkspaceStarterPort } from "./node-opencode-workspace-starter-port";
+import { createNodeProcessEnvironment } from "./node-process-environment";
 import { createNodeRuntimeHealthPort } from "./node-runtime-health-port";
 import { createNodeSettingsConfigPort } from "./node-settings-config-port";
 import { createNodeSystemCommandPort } from "./node-system-command-port";
 import { createNodeWorktreeFilePort } from "./node-worktree-file-port";
 import { createRuntimeTaskActivityGuardPort } from "./runtime-task-activity-guard-port";
+
+export type HostLifecycleLogger = {
+  info(message: string): void;
+  error(message: string): void;
+};
 
 export type CreateNodeHostCommandRouterInput = {
   codexAppServer?: CodexAppServerPort;
@@ -76,8 +85,10 @@ export type CreateNodeHostCommandRouterInput = {
   filesystem?: FilesystemPort;
   git?: GitPort;
   localAttachments?: LocalAttachmentPort;
+  lifecycleLogger?: HostLifecycleLogger;
   openInTools?: OpenInToolsPort;
   mcpHostBridge?: McpHostBridgePort;
+  processEnv?: NodeJS.ProcessEnv;
   runtimeHealth?: RuntimeHealthPort;
   runtimeRegistry?: RuntimeRegistryPort;
   settingsConfig?: SettingsConfigPort;
@@ -94,23 +105,53 @@ const isCodexAppServerTransportRegistry = (
   "unregisterTransport" in value &&
   typeof value.unregisterTransport === "function";
 
+const runShutdownSteps = async (
+  steps: Array<{ label: string; run: () => Promise<void> }>,
+  logger: HostLifecycleLogger,
+): Promise<void> => {
+  const errors: string[] = [];
+  for (const step of steps) {
+    try {
+      await step.run();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to stop ${step.label}: ${message}`);
+      errors.push(`${step.label}: ${message}`);
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(errors.join("\n"));
+  }
+};
+
+const formatRuntimeTaskLabel = (taskId: string | null): string => taskId ?? "workspace";
+
 export const createNodeHostCommandRouter = ({
   codexAppServer,
   codexAppServerTransportRegistry,
-  devServerProcesses = createNodeDevServerProcessPort(),
+  devServerProcesses: configuredDevServerProcesses,
   eventBus,
   filesystem = createNodeFilesystemPort(),
-  git = createNodeGitPort(),
+  git: configuredGit,
   localAttachments = createNodeLocalAttachmentPort(),
+  lifecycleLogger = console,
   openInTools = createNodeOpenInToolsPort(),
   mcpHostBridge,
-  systemCommands = createNodeSystemCommandPort(),
-  runtimeHealth = createNodeRuntimeHealthPort(systemCommands),
+  processEnv = createNodeProcessEnvironment(),
+  systemCommands: configuredSystemCommands,
+  runtimeHealth: configuredRuntimeHealth,
   runtimeRegistry,
   settingsConfig = createNodeSettingsConfigPort(),
   worktreeFiles = createNodeWorktreeFilePort(),
   taskStore: configuredTaskStore,
 }: CreateNodeHostCommandRouterInput = {}): HostCommandRouter => {
+  const systemCommands =
+    configuredSystemCommands ?? createNodeSystemCommandPort({ env: processEnv });
+  const runtimeHealth =
+    configuredRuntimeHealth ?? createNodeRuntimeHealthPort(systemCommands, processEnv);
+  const devServerProcesses =
+    configuredDevServerProcesses ?? createNodeDevServerProcessPort({ processEnv });
+  const git = configuredGit ?? createNodeGitPort({ processEnv });
   const defaultCodexAppServer = createInMemoryCodexAppServerPort();
   const effectiveCodexAppServer = codexAppServer ?? defaultCodexAppServer;
   const effectiveCodexTransportRegistry =
@@ -127,14 +168,20 @@ export const createNodeHostCommandRouter = ({
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
-  const taskStore =
+  let ownedTaskStore: NodeBeadsTaskStorePort | null = null;
+  const taskStore: TaskStorePort =
     configuredTaskStore ??
-    createNodeBeadsTaskStorePort({
-      async resolveWorkspaceIdForRepoPath(repoPath) {
-        const repoConfig = await workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-        return repoConfig.workspaceId;
-      },
-    });
+    (() => {
+      ownedTaskStore = createNodeBeadsTaskStorePort({
+        processEnv,
+        systemCommands,
+        async resolveWorkspaceIdForRepoPath(repoPath) {
+          const repoConfig = await workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+          return repoConfig.workspaceId;
+        },
+      });
+      return ownedTaskStore;
+    })();
   const systemDiagnosticsService = createSystemDiagnosticsService({
     runtimeDefinitionsService,
     runtimeHealth,
@@ -149,6 +196,7 @@ export const createNodeHostCommandRouter = ({
         return createNodeCodexWorkspaceStarterPort({
           systemCommands,
           codexAppServer: effectiveCodexTransportRegistry,
+          processEnv,
           resolveMcpBridgeConnection: async () => {
             if (!resolvedMcpHostBridge) {
               throw new Error("Codex workspace startup requires an initialized MCP host bridge.");
@@ -160,6 +208,7 @@ export const createNodeHostCommandRouter = ({
 
       return createNodeOpenCodeWorkspaceStarterPort({
         systemCommands,
+        processEnv,
         resolveMcpBridgeConnection: async (runtimeInput) => {
           if (!resolvedMcpHostBridge) {
             throw new Error("OpenCode workspace startup requires an initialized MCP host bridge.");
@@ -213,9 +262,108 @@ export const createNodeHostCommandRouter = ({
     runtimeDefinitionsService,
     runtimeRegistry: effectiveRuntimeRegistry,
     taskStore,
+    logger: lifecycleLogger,
   });
 
+  const stopDevServers = async (): Promise<void> => {
+    const result = await devServerService.stopAll();
+    if (result.stoppedScripts.length === 0) {
+      lifecycleLogger.info("No dev servers are running");
+      return;
+    }
+
+    for (const script of result.stoppedScripts) {
+      lifecycleLogger.info(
+        `Stopped dev server ${script.name} (${script.scriptId}) for task ${script.taskId} with pid ${script.pid}`,
+      );
+    }
+  };
+
+  const stopRegisteredRuntimes = async (): Promise<void> => {
+    if (effectiveRuntimeRegistry.stopAllRuntimes) {
+      lifecycleLogger.info("Stopping registered agent runtimes");
+      const stoppedRuntimes = await effectiveRuntimeRegistry.stopAllRuntimes();
+      if (stoppedRuntimes.length === 0) {
+        lifecycleLogger.info("No active agent runtimes are registered");
+        return;
+      }
+      for (const runtime of stoppedRuntimes) {
+        lifecycleLogger.info(
+          `Stopped ${runtime.kind} runtime ${runtime.runtimeId} for task ${formatRuntimeTaskLabel(
+            runtime.taskId,
+          )} (${runtime.role})`,
+        );
+      }
+      return;
+    }
+
+    const runtimes = await effectiveRuntimeRegistry.listRuntimes();
+    if (runtimes.length === 0) {
+      lifecycleLogger.info("No active agent runtimes are registered");
+      return;
+    }
+
+    lifecycleLogger.info(`Stopping ${runtimes.length} active agent runtime(s)`);
+    const errors: string[] = [];
+    for (const runtime of runtimes) {
+      try {
+        lifecycleLogger.info(
+          `Stopping ${runtime.kind} runtime ${runtime.runtimeId} for task ${formatRuntimeTaskLabel(
+            runtime.taskId,
+          )} (${runtime.role})`,
+        );
+        await effectiveRuntimeRegistry.stopRuntime(runtime.runtimeId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`Failed stopping runtime ${runtime.runtimeId}: ${message}`);
+      }
+    }
+    if (errors.length > 0) {
+      throw new Error(errors.join("\n"));
+    }
+  };
+
+  const stopSharedDoltServer = async (): Promise<void> => {
+    if (!ownedTaskStore) {
+      lifecycleLogger.info("No shared Dolt server owned by this OpenDucktor process");
+      return;
+    }
+
+    const result = await ownedTaskStore.close();
+    if (result.stoppedSharedDoltServers === 0) {
+      lifecycleLogger.info("No shared Dolt server owned by this OpenDucktor process");
+      return;
+    }
+
+    lifecycleLogger.info("Shared Dolt server stopped");
+  };
+
+  const stopMcpHostBridge = async (): Promise<void> => {
+    const result = await resolvedMcpHostBridge?.close();
+    if (!result?.closed) {
+      lifecycleLogger.info("No MCP host bridge server is running");
+      return;
+    }
+
+    lifecycleLogger.info(
+      result.baseUrl ? `Stopped MCP host bridge at ${result.baseUrl}` : "Stopped MCP host bridge",
+    );
+  };
+
   return createHostCommandRouter({
+    dispose: async () => {
+      lifecycleLogger.info("Shutting down OpenDucktor host services");
+      await runShutdownSteps(
+        [
+          { label: "dev servers", run: stopDevServers },
+          { label: "active agent runtimes", run: stopRegisteredRuntimes },
+          { label: "MCP host bridge", run: stopMcpHostBridge },
+          { label: "shared Dolt server", run: stopSharedDoltServer },
+        ],
+        lifecycleLogger,
+      );
+      lifecycleLogger.info("OpenDucktor host services stopped");
+    },
     handlers: {
       ...createDevServerCommandHandlers(devServerService),
       ...createCodexAppServerCommandHandlers(codexAppServerService),

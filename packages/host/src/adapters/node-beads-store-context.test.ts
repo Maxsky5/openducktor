@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   type BeadsCliContext,
   createBeadsAttachmentProvisioner,
+  type EnsureSharedDoltServer,
   resolveBeadsCliContext,
   sharedServerHealthFromContext,
 } from "./node-beads-store-context";
@@ -148,6 +149,61 @@ describe("resolveBeadsCliContext", () => {
     });
     expect(context.env.BEADS_DOLT_SERVER_PORT).toBe("36002");
   });
+
+  test("serializes concurrent shared Dolt startup for the same config root", async () => {
+    const configRoot = await mkdtemp(path.join(tmpdir(), "odt-config-shared-flight-test-"));
+    const firstRepoRoot = await mkdtemp(path.join(tmpdir(), "Repo A-"));
+    const secondRepoRoot = await mkdtemp(path.join(tmpdir(), "Repo B-"));
+    const calls: string[] = [];
+    let releaseStartup: () => void = () => {};
+    const startupGate = new Promise<void>((resolve) => {
+      releaseStartup = resolve;
+    });
+    const ensureSharedServer: EnsureSharedDoltServer = async (paths) => {
+      calls.push(paths.sharedServerRoot);
+      await startupGate;
+      return {
+        pid: process.pid,
+        ownerPid: process.pid,
+        acquisition: "started_by_owner" as const,
+        host: "127.0.0.1",
+        user: "root",
+        port: 36004,
+        sharedServerRoot: paths.sharedServerRoot,
+        doltDataDir: paths.doltRoot,
+        startedAt: "2026-05-10T00:00:00Z",
+      };
+    };
+
+    const firstContextPromise = withEnv("OPENDUCKTOR_CONFIG_DIR", configRoot, () =>
+      resolveBeadsCliContext(firstRepoRoot, {
+        requireSharedServer: true,
+        ensureSharedServer,
+        ensureAttachment: async () => undefined,
+      }),
+    );
+    const secondContextPromise = withEnv("OPENDUCKTOR_CONFIG_DIR", configRoot, () =>
+      resolveBeadsCliContext(secondRepoRoot, {
+        requireSharedServer: true,
+        ensureSharedServer,
+        ensureAttachment: async () => undefined,
+      }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    releaseStartup();
+
+    const [firstContext, secondContext] = await Promise.all([
+      firstContextPromise,
+      secondContextPromise,
+    ]);
+
+    expect(calls).toEqual([path.join(configRoot, "beads", "shared-server")]);
+    expect(firstContext.sharedServer?.port).toBe(36004);
+    expect(secondContext.sharedServer?.port).toBe(36004);
+    expect(firstContext.env.BEADS_DOLT_SERVER_PORT).toBe("36004");
+    expect(secondContext.env.BEADS_DOLT_SERVER_PORT).toBe("36004");
+  });
 });
 
 describe("createBeadsAttachmentProvisioner", () => {
@@ -249,6 +305,7 @@ describe("createBeadsAttachmentProvisioner", () => {
       },
       {
         command: "dolt",
+        env: context.env,
         args: [
           "--host",
           "127.0.0.1",

@@ -179,6 +179,55 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.summaryState.label).toBe("Checking...");
   });
 
+  test("reports an enabled runtime as not started instead of healthy", () => {
+    const model = buildDiagnosticsPanelModel({
+      workspaceRepoPath: "/repo",
+      activeWorkspace: makeWorkspace("/repo"),
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      beadsCheck: makeBeadsCheck(),
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          status: "not_started",
+          runtime: {
+            status: "not_started",
+            stage: "idle",
+            observation: null,
+            instance: null,
+            detail: "Runtime has not been started yet.",
+          },
+          mcp: {
+            supported: true,
+            status: "waiting_for_runtime",
+            serverName: "openducktor",
+            serverStatus: null,
+            toolIds: [],
+            detail: null,
+            failureKind: null,
+          },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    expect(model.isSummaryChecking).toBe(false);
+    expect(model.summaryState.label).toBe("Runtime not started");
+  });
+
   test("reports disabled runtimes without leaving diagnostics stuck checking", () => {
     const disabledRuntimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
     const model = buildDiagnosticsPanelModel({

@@ -34,6 +34,7 @@ export type CreateNodeCodexWorkspaceStarterPortInput = {
   systemCommands: SystemCommandPort;
   codexAppServer: CodexAppServerTransportRegistry;
   resolveMcpBridgeConnection?: CodexMcpBridgeConnectionResolver;
+  processEnv?: NodeJS.ProcessEnv;
   mcpCommand?: string[];
   codexBinary?: string;
   requestTimeoutMs?: number;
@@ -66,7 +67,10 @@ const CODEX_MCP_ENV_VARS = [
 const DEFAULT_CODEX_REQUEST_TIMEOUT_MS = 120_000;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 
-const resolveConfiguredMcpCommand = (configuredCommand?: string[]): string[] | null => {
+const resolveConfiguredMcpCommand = (
+  env: NodeJS.ProcessEnv,
+  configuredCommand?: string[],
+): string[] | null => {
   if (configuredCommand) {
     const command = configuredCommand.map((entry) => entry.trim());
     if (command.length === 0 || command.some((entry) => entry.length === 0)) {
@@ -75,7 +79,7 @@ const resolveConfiguredMcpCommand = (configuredCommand?: string[]): string[] | n
     return command;
   }
 
-  const rawCommand = process.env.OPENDUCKTOR_MCP_COMMAND_JSON;
+  const rawCommand = env.OPENDUCKTOR_MCP_COMMAND_JSON;
   if (rawCommand !== undefined) {
     return parseMcpCommandJson(rawCommand);
   }
@@ -172,6 +176,7 @@ export const createNodeCodexWorkspaceStarterPort = ({
   systemCommands,
   codexAppServer,
   resolveMcpBridgeConnection,
+  processEnv = process.env,
   mcpCommand,
   codexBinary,
   requestTimeoutMs = DEFAULT_CODEX_REQUEST_TIMEOUT_MS,
@@ -194,15 +199,15 @@ export const createNodeCodexWorkspaceStarterPort = ({
 
     const bridge = await resolveMcpBridgeConnection();
     const resolvedMcpCommand =
-      resolveConfiguredMcpCommand(mcpCommand) ??
-      (await resolveOpenDucktorMcpCommand({ systemCommands }));
-    const binary = codexBinary ?? (await resolveCodexBinary(systemCommands));
+      resolveConfiguredMcpCommand(processEnv, mcpCommand) ??
+      (await resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
+    const binary = codexBinary ?? (await resolveCodexBinary(systemCommands, processEnv));
     const nextRuntimeId = runtimeId();
     const child = spawn(binary, [...buildCodexMcpConfigArgs(resolvedMcpCommand), "app-server"], {
       cwd: input.workingDirectory,
       detached: true,
       env: {
-        ...process.env,
+        ...processEnv,
         ODT_WORKSPACE_ID: requireBridgeValue(bridge.workspaceId, "workspaceId"),
         ODT_HOST_URL: requireBridgeValue(bridge.hostUrl, "hostUrl"),
         ODT_HOST_TOKEN: requireBridgeValue(bridge.hostToken, "hostToken"),

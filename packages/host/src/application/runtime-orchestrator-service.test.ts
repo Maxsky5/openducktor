@@ -164,7 +164,7 @@ describe("createRuntimeOrchestratorService", () => {
     });
   });
 
-  test("reports idle runtime health status when no runtime is registered", async () => {
+  test("reports not started runtime health status when no runtime is registered", async () => {
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
@@ -175,9 +175,9 @@ describe("createRuntimeOrchestratorService", () => {
     await expect(
       service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
     ).resolves.toMatchObject({
-      status: "idle",
+      status: "not_started",
       runtime: {
-        status: "idle",
+        status: "not_started",
         stage: "idle",
         instance: null,
         detail: "Runtime has not been started yet.",

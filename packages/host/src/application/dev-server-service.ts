@@ -24,6 +24,23 @@ export type DevServerService = {
   stop(input: unknown): Promise<DevServerGroupState>;
 };
 
+export type DisposableDevServerService = DevServerService & {
+  stopAll(): Promise<DevServerStopAllResult>;
+};
+
+export type StoppedDevServerScript = {
+  command: string;
+  name: string;
+  pid: number;
+  repoPath: string;
+  scriptId: string;
+  taskId: string;
+};
+
+export type DevServerStopAllResult = {
+  stoppedScripts: StoppedDevServerScript[];
+};
+
 export type CreateDevServerServiceInput = {
   eventBus?: HostEventBusPort;
   processPort?: DevServerProcessPort;
@@ -163,7 +180,7 @@ export const createDevServerService = ({
   processPort,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateDevServerServiceInput): DevServerService => {
+}: CreateDevServerServiceInput): DisposableDevServerService => {
   const groups = new Map<string, DevServerGroupRuntime>();
 
   const publish = (event: DevServerEvent): void => {
@@ -452,6 +469,22 @@ export const createDevServerService = ({
     return errors;
   };
 
+  const listRunningScripts = (runtime: DevServerGroupRuntime): StoppedDevServerScript[] =>
+    runtime.state.scripts.flatMap((script) =>
+      script.pid === null
+        ? []
+        : [
+            {
+              command: script.command,
+              name: script.name,
+              pid: script.pid,
+              repoPath: runtime.state.repoPath,
+              scriptId: script.scriptId,
+              taskId: runtime.state.taskId,
+            },
+          ],
+    );
+
   const service: DevServerService = {
     async getState(input) {
       const { repoPath, taskId } = parseInput(input, "dev_server_get_state input");
@@ -519,5 +552,20 @@ export const createDevServerService = ({
     },
   };
 
-  return service;
+  return {
+    ...service,
+    async stopAll() {
+      const errors: string[] = [];
+      const stoppedScripts: StoppedDevServerScript[] = [];
+      for (const runtime of groups.values()) {
+        stoppedScripts.push(...listRunningScripts(runtime));
+        errors.push(...(await stopRuntime(runtime)));
+        emitSnapshot(runtime);
+      }
+      if (errors.length > 0) {
+        throw new Error(errors.join("\n"));
+      }
+      return { stoppedScripts };
+    },
+  };
 };

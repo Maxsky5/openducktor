@@ -78,8 +78,8 @@ export const getRepoRuntimeBadge = (
       return { label: "Starting", variant: "warning" };
     case "error":
       return { label: "Unavailable", variant: "danger" };
-    case "idle":
-      return { label: "Idle", variant: "secondary" };
+    case "not_started":
+      return { label: "Not started", variant: "secondary" };
     default:
       return { label: "Checking", variant: "secondary" };
   }
@@ -149,7 +149,7 @@ export const describeRepoRuntimeStatus = (
     runtimeHealth.runtime.attempts === null ? "" : ` (${runtimeHealth.runtime.attempts} attempts)`;
   const elapsedSuffix = runtimeElapsed ? ` after ${runtimeElapsed}` : "";
 
-  if (runtimeHealth.runtime.status === "idle") {
+  if (runtimeHealth.runtime.status === "not_started") {
     return runtimeHealth.runtime.detail ?? `${runtimeLabel} runtime has not been started yet.`;
   }
 

@@ -4,6 +4,7 @@ import { createElectronShellBridge } from "./electron-shell-bridge";
 
 bootstrapOpenDucktorShell({
   createShellBridge: createElectronShellBridge,
+  routerMode: "hash",
 }).catch((error: unknown) => {
   console.error("Critical Electron bootstrap failure", error);
 });

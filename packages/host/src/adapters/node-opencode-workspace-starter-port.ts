@@ -29,6 +29,7 @@ export type OpenCodeMcpBridgeConnectionResolver = (
 export type CreateNodeOpenCodeWorkspaceStarterPortInput = {
   systemCommands: SystemCommandPort;
   resolveMcpBridgeConnection?: OpenCodeMcpBridgeConnectionResolver;
+  processEnv?: NodeJS.ProcessEnv;
   mcpCommand?: string[];
   opencodeBinary?: string;
   startupTimeoutMs?: number;
@@ -47,7 +48,10 @@ const MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024;
 
 type OpenCodeChildProcess = ChildProcessByStdio<null, Readable, Readable>;
 
-const resolveConfiguredMcpCommand = (configuredCommand?: string[]): string[] | null => {
+const resolveConfiguredMcpCommand = (
+  env: NodeJS.ProcessEnv,
+  configuredCommand?: string[],
+): string[] | null => {
   if (configuredCommand) {
     const command = configuredCommand.map((entry) => entry.trim());
     if (command.length === 0 || command.some((entry) => entry.length === 0)) {
@@ -56,7 +60,7 @@ const resolveConfiguredMcpCommand = (configuredCommand?: string[]): string[] | n
     return command;
   }
 
-  const rawCommand = process.env.OPENDUCKTOR_MCP_COMMAND_JSON;
+  const rawCommand = env.OPENDUCKTOR_MCP_COMMAND_JSON;
   if (rawCommand !== undefined) {
     return parseMcpCommandJson(rawCommand);
   }
@@ -215,6 +219,7 @@ const stopChildProcess = async (
 export const createNodeOpenCodeWorkspaceStarterPort = ({
   systemCommands,
   resolveMcpBridgeConnection,
+  processEnv = process.env,
   mcpCommand,
   opencodeBinary,
   startupTimeoutMs = DEFAULT_STARTUP_TIMEOUT_MS,
@@ -241,16 +246,16 @@ export const createNodeOpenCodeWorkspaceStarterPort = ({
 
     const bridge = await resolveMcpBridgeConnection(input);
     const resolvedMcpCommand =
-      resolveConfiguredMcpCommand(mcpCommand) ??
-      (await resolveOpenDucktorMcpCommand({ systemCommands }));
+      resolveConfiguredMcpCommand(processEnv, mcpCommand) ??
+      (await resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
     const configContent = buildOpenCodeConfigContent(bridge, resolvedMcpCommand);
-    const binary = opencodeBinary ?? (await resolveOpencodeBinary(systemCommands));
+    const binary = opencodeBinary ?? (await resolveOpencodeBinary(systemCommands, processEnv));
     const port = await pickFreePort();
     const child = spawn(binary, ["serve", "--hostname", "127.0.0.1", "--port", port.toString()], {
       cwd: input.workingDirectory,
       detached: true,
       env: {
-        ...process.env,
+        ...processEnv,
         OPENCODE_CONFIG_CONTENT: configContent,
       },
       stdio: ["ignore", "pipe", "pipe"],

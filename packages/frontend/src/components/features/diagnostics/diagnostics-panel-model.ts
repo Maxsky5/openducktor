@@ -468,6 +468,9 @@ export const buildDiagnosticsPanelModel = (
   const hasCheckingRuntimeHealth = runtimeEntries.some(
     ({ runtimeHealth }) => runtimeHealth?.status === "checking",
   );
+  const hasNotStartedRuntimeHealth = runtimeEntries.some(
+    ({ runtimeHealth }) => runtimeHealth?.status === "not_started",
+  );
 
   const criticalReasons: string[] = [];
   if (workspaceRepoPath) {
@@ -634,6 +637,7 @@ export const buildDiagnosticsPanelModel = (
       hasActiveWorkspace: Boolean(workspaceRepoPath),
       isChecking: isSummaryChecking,
       hasCriticalIssues: criticalReasons.length > 0,
+      hasPendingRuntimeStartup: hasNotStartedRuntimeHealth,
       hasSetupIssues: setupReasons.length > 0,
     }),
     criticalReasons,

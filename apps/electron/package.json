@@ -1,5 +1,6 @@
 {
   "name": "@openducktor/electron",
+  "productName": "OpenDucktor",
   "version": "0.3.1",
   "private": true,
   "type": "module",
@@ -12,7 +13,8 @@
     "dev": "bun run scripts/dev.ts",
     "dev:electron": "bun run scripts/dev.ts",
     "dev:renderer": "vite --host 127.0.0.1 --port 1430 --strictPort",
-    "package": "bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.yml --publish never",
+    "prepare:sidecars": "bun run scripts/prepare-mcp-sidecar.ts",
+    "package": "bun run prepare:sidecars && bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.yml --publish never",
     "preview": "electron dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests --timeout 1000",

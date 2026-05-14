@@ -133,7 +133,7 @@ pub struct RepoRuntimeStartupStatus {
 #[serde(rename_all = "snake_case")]
 pub enum RepoRuntimeHealthState {
     Disabled,
-    Idle,
+    NotStarted,
     Checking,
     Ready,
     Error,

@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "dev": "bun run --filter @openducktor/desktop dev",
-    "electron:dev": "bun run --filter @openducktor/electron dev",
+    "electron:dev": "cd apps/electron && bun run dev",
     "electron:build": "bun run --filter @openducktor/electron build",
     "electron:package": "bun run --filter @openducktor/electron package",
     "browser:dev": "FORCE_COLOR=1 bun packages/openducktor-web/src/cli.ts --workspace",

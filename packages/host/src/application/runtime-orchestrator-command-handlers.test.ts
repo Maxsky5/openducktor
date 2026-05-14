@@ -51,10 +51,10 @@ const createRecordingService = () => {
     async repoRuntimeHealth(input) {
       calls.push({ method: "repoRuntimeHealth", input });
       return {
-        status: "idle",
+        status: "not_started",
         checkedAt: "2026-05-10T10:00:00.000Z",
         runtime: {
-          status: "idle",
+          status: "not_started",
           stage: "idle",
           observation: null,
           instance: null,
@@ -72,10 +72,10 @@ const createRecordingService = () => {
     async repoRuntimeHealthStatus(input) {
       calls.push({ method: "repoRuntimeHealthStatus", input });
       return {
-        status: "idle",
+        status: "not_started",
         checkedAt: "2026-05-10T10:00:00.000Z",
         runtime: {
-          status: "idle",
+          status: "not_started",
           stage: "idle",
           observation: null,
           instance: null,
@@ -133,13 +133,13 @@ describe("createRuntimeOrchestratorCommandHandlers", () => {
         runtimeKind: "opencode",
         repoPath: "/repo",
       }),
-    ).resolves.toMatchObject({ status: "idle" });
+    ).resolves.toMatchObject({ status: "not_started" });
     await expect(
       router.invoke("repo_runtime_health_status", {
         runtimeKind: "opencode",
         repoPath: "/repo",
       }),
-    ).resolves.toMatchObject({ status: "idle" });
+    ).resolves.toMatchObject({ status: "not_started" });
 
     expect(calls).toEqual([
       {

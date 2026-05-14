@@ -179,7 +179,7 @@ export type RepoRuntimeStartupStatus = z.infer<typeof repoRuntimeStartupStatusSc
 
 export const repoRuntimeHealthStateSchema = z.enum([
   "disabled",
-  "idle",
+  "not_started",
   "checking",
   "ready",
   "error",

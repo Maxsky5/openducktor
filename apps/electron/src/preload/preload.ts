@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import electron from "electron";
 import {
   ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_HOST_INVOKE_CHANNEL,
@@ -7,6 +7,8 @@ import {
   type ElectronHostEventEnvelope,
   type OpenDucktorElectronApi,
 } from "../shared/electron-bridge-contract";
+
+const { contextBridge, ipcRenderer } = electron;
 
 const electronApi: OpenDucktorElectronApi = {
   invoke(command, args) {

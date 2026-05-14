@@ -357,7 +357,7 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("live session scans ensure the repo runtime without listing live runtimes", async () => {
+  test("live session scans require an existing repo runtime without starting one", async () => {
     const mockClient = makeMockClient();
     const ensureRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
     const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
@@ -375,8 +375,8 @@ describe("opencode-sdk-adapter", () => {
       runtimeKind: "opencode",
     });
 
-    expect(ensureRepoRuntime).toHaveBeenCalledTimes(1);
-    expect(requireRepoRuntime).not.toHaveBeenCalled();
+    expect(ensureRepoRuntime).not.toHaveBeenCalled();
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
   });
 
   test("startSession registers and stopSession tears down the session", async () => {

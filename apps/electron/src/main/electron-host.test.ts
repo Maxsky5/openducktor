@@ -17,9 +17,17 @@ import {
   type TaskStorePort,
   type WorktreeFilePort,
 } from "@openducktor/host";
-import { createElectronHostCommandRouter } from "./electron-host";
+import { createElectronHostCommandRouter as createProductionElectronHostCommandRouter } from "./electron-host";
 
 type RuntimeRegistryEntry = Awaited<ReturnType<RuntimeRegistryPort["listRuntimes"]>>[number];
+
+const createElectronHostCommandRouter = (
+  input: Parameters<typeof createProductionElectronHostCommandRouter>[0] = {},
+) =>
+  createProductionElectronHostCommandRouter({
+    processEnv: { PATH: "/usr/bin:/bin" },
+    ...input,
+  });
 
 const createFilesystem = (): FilesystemPort => ({
   homeDirectory: () => "/home/dev",
@@ -562,6 +570,62 @@ const createEventBus = () => {
 };
 
 describe("createElectronHostCommandRouter", () => {
+  test("disposes registered runtimes on host shutdown", async () => {
+    const stoppedRuntimes: string[] = [];
+    const lifecycleLogs: string[] = [];
+    const router = createElectronHostCommandRouter({
+      lifecycleLogger: {
+        info(message) {
+          lifecycleLogs.push(message);
+        },
+        error(message) {
+          lifecycleLogs.push(message);
+        },
+      },
+      runtimeRegistry: {
+        async ensureWorkspaceRuntime() {
+          throw new Error("unexpected runtime start");
+        },
+        async listRuntimes() {
+          return [
+            {
+              kind: "opencode",
+              runtimeId: "runtime-1",
+              repoPath: "/repo",
+              taskId: null,
+              role: "workspace",
+              workingDirectory: "/repo",
+              runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:9999" },
+              startedAt: "2026-05-13T00:00:00Z",
+              descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
+            },
+          ];
+        },
+        async stopRuntime(runtimeId) {
+          stoppedRuntimes.push(runtimeId);
+          return true;
+        },
+        async stopSession() {},
+      },
+      settingsConfig: createSettingsConfig(),
+    });
+
+    await expect(router.dispose()).resolves.toBeUndefined();
+
+    expect(stoppedRuntimes).toEqual(["runtime-1"]);
+    expect(lifecycleLogs).toEqual(
+      expect.arrayContaining([
+        "Shutting down OpenDucktor host services",
+        "No dev servers are running",
+        "Stopping 1 active agent runtime(s)",
+        "Stopping opencode runtime runtime-1 for task workspace (workspace)",
+        "No MCP host bridge server is running",
+        "No shared Dolt server owned by this OpenDucktor process",
+        "OpenDucktor host services stopped",
+      ]),
+    );
+  });
+
   test("registers migrated filesystem host commands", async () => {
     const router = createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -695,8 +759,8 @@ describe("createElectronHostCommandRouter", () => {
         repoPath: "/repo",
       }),
     ).resolves.toMatchObject({
-      status: "idle",
-      runtime: { status: "idle", stage: "idle" },
+      status: "not_started",
+      runtime: { status: "not_started", stage: "idle" },
       mcp: { status: "waiting_for_runtime" },
     });
     await expect(

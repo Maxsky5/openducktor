@@ -290,12 +290,30 @@ describe("shell entrypoints", () => {
     expectNoManualShellBootstrapSteps(source);
   });
 
-  test("the production renderer keeps the crash shell and router composition", () => {
+  test("the production renderer keeps the crash shell and shell-selected router composition", () => {
     const source = readRepoFile("packages/frontend/src/shell-bootstrap.tsx");
 
-    expect(source).toContain("<AppCrashShell>");
-    expect(source).toContain("<BrowserRouter>");
+    expect(source).toContain("kanbanLocationForRouter");
+    expect(source).toContain(
+      "<AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>",
+    );
+    expect(source).toContain("BrowserRouter");
+    expect(source).toContain("HashRouter");
+    expect(source).toContain("ROUTERS");
     expect(source).toContain("<App />");
+    expect(source).toContain("routerMode");
+  });
+
+  test("electron delegates shared startup to the frontend bootstrap", () => {
+    const source = readRepoFile("apps/electron/src/renderer/main.tsx");
+
+    expect(source).toMatch(
+      /import\s*\{\s*bootstrapOpenDucktorShell\s*\}\s*from\s*"@openducktor\/frontend"/u,
+    );
+    expect(source).toContain("createShellBridge: createElectronShellBridge");
+    expect(source).toContain('routerMode: "hash"');
+    expect(source).toContain('console.error("Critical Electron bootstrap failure", error);');
+    expectNoManualShellBootstrapSteps(source);
   });
 
   test("the frontend package root does not export bootstrap internals", () => {

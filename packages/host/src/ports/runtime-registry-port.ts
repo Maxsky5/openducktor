@@ -55,6 +55,7 @@ export type RuntimeRegistryPort = {
   ensureWorkspaceRuntime(input: RuntimeEnsureWorkspaceInput): Promise<RuntimeInstanceSummary>;
   listRuntimes(): Promise<RuntimeInstanceSummary[]>;
   stopRuntime(runtimeId: string): Promise<boolean>;
+  stopAllRuntimes?(): Promise<RuntimeInstanceSummary[]>;
   stopSession(input: RuntimeSessionStopInput): Promise<void>;
   probeSessionStatus?(input: RuntimeSessionStatusProbeInput): Promise<{
     supported: boolean;

@@ -32,4 +32,18 @@ describe("createHostCommandRouter", () => {
       "OpenDucktor TypeScript host command is not registered: workspace_list",
     );
   });
+
+  test("runs the configured dispose hook", async () => {
+    let disposed = false;
+    const router = createHostCommandRouter({
+      dispose() {
+        disposed = true;
+      },
+      handlers: {},
+    });
+
+    await router.dispose();
+
+    expect(disposed).toBe(true);
+  });
 });

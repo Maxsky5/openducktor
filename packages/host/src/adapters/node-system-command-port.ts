@@ -6,8 +6,17 @@ import type { SystemCommandPort, SystemCommandRunResult } from "../ports/system-
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 10_000;
 
-const commandFileNames = (command: string): string[] => {
-  if (process.platform !== "win32") {
+export type CreateNodeSystemCommandPortInput = {
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
+};
+
+const commandFileNames = (
+  command: string,
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv,
+): string[] => {
+  if (platform !== "win32") {
     return [command];
   }
 
@@ -16,7 +25,7 @@ const commandFileNames = (command: string): string[] => {
     return [command];
   }
 
-  const pathExt = process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM";
+  const pathExt = env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM";
   return pathExt
     .split(";")
     .map((entry) => entry.trim().toLowerCase())
@@ -33,14 +42,18 @@ const canExecute = async (candidate: string): Promise<boolean> => {
   }
 };
 
-const resolveCommandPath = async (command: string): Promise<string | null> => {
+const resolveCommandPath = async (
+  command: string,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): Promise<string | null> => {
   if (command.includes("/") || command.includes("\\")) {
     return (await canExecute(command)) ? command : null;
   }
 
-  const pathValue = process.env.PATH ?? "";
+  const pathValue = env.PATH ?? "";
   for (const directory of pathValue.split(delimiter).filter(Boolean)) {
-    for (const fileName of commandFileNames(command)) {
+    for (const fileName of commandFileNames(command, platform, env)) {
       const candidate = join(directory, fileName);
       if (await canExecute(candidate)) {
         return candidate;
@@ -57,10 +70,13 @@ const firstNonEmptyLine = (value: string): string | null =>
     .map((line) => line.trim())
     .find(Boolean) ?? null;
 
-export const createNodeSystemCommandPort = (): SystemCommandPort => {
+export const createNodeSystemCommandPort = ({
+  env = process.env,
+  platform = process.platform,
+}: CreateNodeSystemCommandPortInput = {}): SystemCommandPort => {
   const port: SystemCommandPort = {
     async requiredCommandError(command) {
-      const resolved = await resolveCommandPath(command);
+      const resolved = await resolveCommandPath(command, env, platform);
       return resolved === null
         ? `Required command \`${command}\` not found. Install ${command} and ensure it is available on PATH.`
         : null;
@@ -79,7 +95,7 @@ export const createNodeSystemCommandPort = (): SystemCommandPort => {
       return new Promise<SystemCommandRunResult>((resolve, reject) => {
         const child = spawn(command, args, {
           cwd: options.cwd,
-          env: { ...process.env, ...options.env },
+          env: { ...env, ...options.env },
           stdio: ["ignore", "pipe", "pipe"],
         });
         const stdoutChunks: Buffer[] = [];

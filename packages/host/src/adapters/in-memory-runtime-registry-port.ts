@@ -336,6 +336,28 @@ export const createInMemoryRuntimeRegistryPort = ({
   const handles = new Map<string, RuntimeWorkspaceHandle>();
   const ensureFlights = new Map<string, Promise<RuntimeInstanceSummary>>();
 
+  const stopRegisteredRuntime = async (runtimeId: string): Promise<RuntimeInstanceSummary> => {
+    const runtime = entries.get(runtimeId);
+    if (!runtime) {
+      throw new Error(`Runtime not found: ${runtimeId}`);
+    }
+    const handle = handles.get(runtimeId);
+    if (handle) {
+      await handle.stop();
+      handles.delete(runtimeId);
+    }
+    entries.delete(runtimeId);
+    return runtime;
+  };
+
+  const waitForStartingRuntimes = async (): Promise<void> => {
+    const flights = [...ensureFlights.values()];
+    if (flights.length === 0) {
+      return;
+    }
+    await Promise.allSettled(flights);
+  };
+
   return {
     async ensureWorkspaceRuntime(input) {
       const existingRuntime = findWorkspaceRuntime(entries.values(), input);
@@ -373,16 +395,25 @@ export const createInMemoryRuntimeRegistryPort = ({
       return [...entries.values()];
     },
     async stopRuntime(runtimeId) {
-      if (!entries.has(runtimeId)) {
-        throw new Error(`Runtime not found: ${runtimeId}`);
-      }
-      const handle = handles.get(runtimeId);
-      if (handle) {
-        await handle.stop();
-        handles.delete(runtimeId);
-      }
-      entries.delete(runtimeId);
+      await stopRegisteredRuntime(runtimeId);
       return true;
+    },
+    async stopAllRuntimes() {
+      await waitForStartingRuntimes();
+      const stopped: RuntimeInstanceSummary[] = [];
+      const errors: string[] = [];
+      for (const runtime of [...entries.values()]) {
+        try {
+          stopped.push(await stopRegisteredRuntime(runtime.runtimeId));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          errors.push(`Failed stopping runtime ${runtime.runtimeId}: ${message}`);
+        }
+      }
+      if (errors.length > 0) {
+        throw new Error(errors.join("\n"));
+      }
+      return stopped;
     },
     async stopSession(input) {
       if (input.runtimeKind === "opencode") {

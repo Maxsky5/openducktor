@@ -362,4 +362,42 @@ describe("createDevServerService", () => {
     });
     expect(stoppedPids).toEqual([400]);
   });
+
+  test("stops all running task dev server groups during host shutdown", async () => {
+    const { processPort, stoppedPids } = createProcessPort();
+    const service = createDevServerService({
+      processPort,
+      taskWorktreeService: {
+        async getTaskWorktree() {
+          return { workingDirectory: "/worktrees/task" };
+        },
+      },
+      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
+    });
+    await service.start({ repoPath: "/repo", taskId: "task-1" });
+    await service.start({ repoPath: "/repo", taskId: "task-2" });
+
+    await expect(service.stopAll()).resolves.toEqual({
+      stoppedScripts: [
+        {
+          command: "bun run dev",
+          name: "Web",
+          pid: 400,
+          repoPath: "/canonical/repo",
+          scriptId: "web",
+          taskId: "task-1",
+        },
+        {
+          command: "bun run dev",
+          name: "Web",
+          pid: 401,
+          repoPath: "/canonical/repo",
+          scriptId: "web",
+          taskId: "task-2",
+        },
+      ],
+    });
+
+    expect(stoppedPids).toEqual([400, 401]);
+  });
 });

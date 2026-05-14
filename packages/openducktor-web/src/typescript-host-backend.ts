@@ -10,6 +10,7 @@ import {
   type HostEventListener,
   type HostEventUnsubscribe,
 } from "@openducktor/host";
+import { logError, logInfo } from "./logger";
 
 export type TypescriptHostBackendOptions = {
   port: number;
@@ -428,21 +429,37 @@ export const startTypescriptHostBackend = ({
   const localAttachments = createNodeLocalAttachmentPort();
   const hostCommandRouter: HostCommandRouter = createNodeHostCommandRouter({
     eventBus,
+    lifecycleLogger: {
+      error: logError,
+      info: logInfo,
+    },
     localAttachments,
   });
   let shutdownStarted = false;
+  let stopPromise: Promise<void> | null = null;
   let resolveExited: (exitCode: number) => void = () => {};
   const exited = new Promise<number>((resolve) => {
     resolveExited = resolve;
   });
 
   const stop = async (): Promise<void> => {
-    if (shutdownStarted) {
-      return;
+    if (stopPromise) {
+      return stopPromise;
     }
     shutdownStarted = true;
-    server.stop(true);
-    resolveExited(0);
+    stopPromise = (async () => {
+      let exitCode = 0;
+      server.stop(true);
+      try {
+        await hostCommandRouter.dispose();
+      } catch (error) {
+        exitCode = 1;
+        logError(error instanceof Error ? error.message : String(error));
+      } finally {
+        resolveExited(exitCode);
+      }
+    })();
+    return stopPromise;
   };
 
   const server = Bun.serve({

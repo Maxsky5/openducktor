@@ -21,7 +21,7 @@ export type TaskStorePort = {
   listTasks(input: TaskStoreListTasksInput): Promise<TaskCard[]>;
   getTask(input: { repoPath: string; taskId: string }): Promise<TaskCard>;
   getTaskMetadata(input: { repoPath: string; taskId: string }): Promise<TaskMetadataPayload>;
-  diagnoseRepoStore?(input: { repoPath: string }): Promise<RepoStoreHealth>;
+  diagnoseRepoStore?(input: { repoPath: string; prepare?: boolean }): Promise<RepoStoreHealth>;
   setSpecDocument(input: {
     repoPath: string;
     taskId: string;

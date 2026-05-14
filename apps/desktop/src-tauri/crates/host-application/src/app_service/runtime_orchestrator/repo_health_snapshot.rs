@@ -183,7 +183,7 @@ fn summarize_repo_runtime_health_status(
         RepoRuntimeHealthState::Disabled => return RepoRuntimeHealthState::Disabled,
         RepoRuntimeHealthState::Error => return RepoRuntimeHealthState::Error,
         RepoRuntimeHealthState::Checking => return RepoRuntimeHealthState::Checking,
-        RepoRuntimeHealthState::Idle => return RepoRuntimeHealthState::Idle,
+        RepoRuntimeHealthState::NotStarted => return RepoRuntimeHealthState::NotStarted,
         RepoRuntimeHealthState::Ready => {}
     }
 
@@ -203,7 +203,7 @@ fn summarize_repo_runtime_health_status(
 fn summarize_runtime_status(stage: RuntimeHealthWorkflowStage) -> RepoRuntimeHealthState {
     match stage {
         RuntimeHealthWorkflowStage::Disabled => RepoRuntimeHealthState::Disabled,
-        RuntimeHealthWorkflowStage::Idle => RepoRuntimeHealthState::Idle,
+        RuntimeHealthWorkflowStage::Idle => RepoRuntimeHealthState::NotStarted,
         RuntimeHealthWorkflowStage::StartupRequested
         | RuntimeHealthWorkflowStage::WaitingForRuntime
         | RuntimeHealthWorkflowStage::RestartingRuntime => RepoRuntimeHealthState::Checking,
@@ -223,7 +223,7 @@ fn summarize_mcp_status(
     if runtime.status != RepoRuntimeHealthState::Ready {
         return match runtime.status {
             RepoRuntimeHealthState::Disabled => RepoRuntimeMcpStatus::Unsupported,
-            RepoRuntimeHealthState::Idle | RepoRuntimeHealthState::Checking => {
+            RepoRuntimeHealthState::NotStarted | RepoRuntimeHealthState::Checking => {
                 RepoRuntimeMcpStatus::WaitingForRuntime
             }
             RepoRuntimeHealthState::Error => RepoRuntimeMcpStatus::Error,

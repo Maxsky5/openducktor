@@ -112,7 +112,7 @@ const probeGithubAuthStatus = async (
   };
 };
 
-const repoStoreHealthForMissingBd = (detail: string): RepoStoreHealth => ({
+const repoStoreHealthForMissingCommand = (detail: string): RepoStoreHealth => ({
   category: "attachment_verification_failed",
   status: "blocking",
   isReady: false,
@@ -235,14 +235,21 @@ export const createSystemDiagnosticsService = ({
     const validatedRepoPath = requireString(repoPath, "beads_check repoPath");
     const bdError = await systemCommands.requiredCommandError("bd");
     if (bdError !== null) {
-      return buildBeadsCheck(repoStoreHealthForMissingBd(bdError));
+      return buildBeadsCheck(repoStoreHealthForMissingCommand(bdError));
+    }
+    const doltError = await systemCommands.requiredCommandError("dolt");
+    if (doltError !== null) {
+      return buildBeadsCheck(repoStoreHealthForMissingCommand(doltError));
     }
 
     if (!taskStore.diagnoseRepoStore) {
       throw new Error("Beads repository store diagnostics are not configured.");
     }
 
-    const repoStoreHealth = await taskStore.diagnoseRepoStore({ repoPath: validatedRepoPath });
+    const repoStoreHealth = await taskStore.diagnoseRepoStore({
+      repoPath: validatedRepoPath,
+      prepare: true,
+    });
     return buildBeadsCheck(repoStoreHealth);
   };
 

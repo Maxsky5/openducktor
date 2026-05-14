@@ -46,20 +46,21 @@ export type GitCommandRunner = (
   options?: { allowFailure?: boolean; stdin?: string },
 ) => Promise<GitCommandResult & { ok: boolean }>;
 
-const gitEnvironment = {
-  ...process.env,
+const createGitEnvironment = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({
+  ...env,
   GIT_TERMINAL_PROMPT: "0",
-};
+});
 
 const runSpawnedGit = (
   workingDirectory: string,
   args: string[],
   options: { allowFailure?: boolean; stdin: string },
+  env: NodeJS.ProcessEnv,
 ): Promise<GitCommandResult & { ok: boolean }> =>
   new Promise((resolve, reject) => {
     const child = spawn("git", args, {
       cwd: workingDirectory,
-      env: gitEnvironment,
+      env: createGitEnvironment(env),
     });
     let stdout = "";
     let stderr = "";
@@ -88,34 +89,41 @@ const runSpawnedGit = (
     child.stdin.end(options.stdin);
   });
 
-const defaultGitRunner: GitCommandRunner = async (workingDirectory, args, options) => {
-  if (options?.stdin !== undefined) {
-    return runSpawnedGit(workingDirectory, args, {
-      allowFailure: options.allowFailure === true,
-      stdin: options.stdin,
-    });
-  }
-
-  try {
-    const output = await execFileAsync("git", args, {
-      cwd: workingDirectory,
-      env: gitEnvironment,
-      maxBuffer: 16 * 1024 * 1024,
-    });
-    return { ok: true, stdout: output.stdout, stderr: output.stderr };
-  } catch (error) {
-    if (options?.allowFailure) {
-      const failed = error as { stdout?: string; stderr?: string };
-      return {
-        ok: false,
-        stdout: failed.stdout ?? "",
-        stderr: failed.stderr ?? String(error),
-      };
+const createDefaultGitRunner =
+  (env: NodeJS.ProcessEnv): GitCommandRunner =>
+  async (workingDirectory, args, options) => {
+    if (options?.stdin !== undefined) {
+      return runSpawnedGit(
+        workingDirectory,
+        args,
+        {
+          allowFailure: options.allowFailure === true,
+          stdin: options.stdin,
+        },
+        env,
+      );
     }
 
-    throw error;
-  }
-};
+    try {
+      const output = await execFileAsync("git", args, {
+        cwd: workingDirectory,
+        env: createGitEnvironment(env),
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      return { ok: true, stdout: output.stdout, stderr: output.stderr };
+    } catch (error) {
+      if (options?.allowFailure) {
+        const failed = error as { stdout?: string; stderr?: string };
+        return {
+          ok: false,
+          stdout: failed.stdout ?? "",
+          stderr: failed.stderr ?? String(error),
+        };
+      }
+
+      throw error;
+    }
+  };
 
 const upstreamTargetBranch = "@{upstream}";
 const emptyTreeSha1 = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
@@ -2617,11 +2625,13 @@ const buildWorktreeStatusSummaryData = async (
 };
 
 export type CreateNodeGitPortInput = {
+  processEnv?: NodeJS.ProcessEnv;
   runner?: GitCommandRunner;
 };
 
 export const createNodeGitPort = ({
-  runner = defaultGitRunner,
+  processEnv = process.env,
+  runner = createDefaultGitRunner(processEnv),
 }: CreateNodeGitPortInput = {}): GitPort => ({
   canonicalizePath(inputPath) {
     return realpath(inputPath);

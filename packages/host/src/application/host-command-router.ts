@@ -15,16 +15,22 @@ export type HostCommandHandler = (
 export type HostCommandHandlers = Partial<Record<HostCommandName, HostCommandHandler>>;
 
 export type HostCommandRouter = {
+  dispose(): Promise<void>;
   invoke(command: string, args?: Record<string, unknown>): Promise<unknown>;
 };
 
 export type CreateHostCommandRouterInput = {
+  dispose?: () => Promise<void> | void;
   handlers: HostCommandHandlers;
 };
 
 export const createHostCommandRouter = ({
+  dispose,
   handlers,
 }: CreateHostCommandRouterInput): HostCommandRouter => ({
+  async dispose() {
+    await dispose?.();
+  },
   async invoke(command, args) {
     const hostCommand = parseHostCommandName(command);
     const handler = handlers[hostCommand];

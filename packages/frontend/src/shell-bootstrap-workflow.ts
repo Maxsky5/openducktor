@@ -8,6 +8,7 @@ export type OpenDucktorShellBootstrapOptions = {
   prepare?: () => void | Promise<void>;
   rootElement?: HTMLElement | null | undefined;
   rootId?: string;
+  routerMode?: "browser" | "hash";
 };
 
 export type ShellBootstrapDependencies = {

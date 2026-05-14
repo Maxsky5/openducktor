@@ -646,13 +646,13 @@ mod tests {
     }
 
     #[test]
-    fn repo_runtime_health_status_describes_idle_runtime() -> Result<()> {
+    fn repo_runtime_health_status_describes_not_started_runtime() -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
 
         let health = service.repo_runtime_health_status("opencode", "/tmp/repo-health-idle")?;
 
-        assert_eq!(health.status, RepoRuntimeHealthState::Idle);
-        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Idle);
+        assert_eq!(health.status, RepoRuntimeHealthState::NotStarted);
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::NotStarted);
         assert_eq!(
             health.runtime.detail.as_deref(),
             Some("Runtime has not been started yet.")

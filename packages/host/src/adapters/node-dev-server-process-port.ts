@@ -8,6 +8,7 @@ import {
 } from "../ports/dev-server-process-port";
 
 export type CreateNodeDevServerProcessPortInput = {
+  processEnv?: NodeJS.ProcessEnv;
   startGracePeriodMs?: number;
   stopTimeoutMs?: number;
 };
@@ -29,6 +30,7 @@ const signalProcessGroup = (pid: number, signal: NodeJS.Signals): void => {
 };
 
 export const createNodeDevServerProcessPort = ({
+  processEnv = process.env,
   startGracePeriodMs = DEFAULT_START_GRACE_PERIOD_MS,
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
 }: CreateNodeDevServerProcessPortInput = {}): DevServerProcessPort => ({
@@ -44,7 +46,7 @@ export const createNodeDevServerProcessPort = ({
     const child = spawn("/bin/sh", ["-c", command], {
       cwd,
       detached: true,
-      env: { ...process.env, ...env },
+      env: { ...processEnv, ...env },
       stdio: ["ignore", "pipe", "pipe"],
     });
     const pid = child.pid;

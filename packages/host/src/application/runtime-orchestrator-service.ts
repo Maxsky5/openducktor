@@ -30,6 +30,11 @@ export type RuntimeOrchestratorService = {
   repoRuntimeHealthStatus(input: unknown): Promise<RepoRuntimeHealthCheck>;
 };
 
+export type RuntimeOrchestratorLogger = {
+  info(message: string): void;
+  error(message: string): void;
+};
+
 const nowIso = (): string => new Date().toISOString();
 const ACTIVE_MCP_PROBE_ATTEMPTS = 20;
 const ACTIVE_MCP_PROBE_RETRY_DELAY_MS = 250;
@@ -154,6 +159,13 @@ const normalizePathForComparison = (path: string): string => {
 
 const runtimeRouteKey = (runtimeRoute: RuntimeRoute): string => JSON.stringify(runtimeRoute);
 
+const describeRuntimeRoute = (runtimeRoute: RuntimeRoute): string => {
+  if (runtimeRoute.type === "local_http") {
+    return runtimeRoute.endpoint;
+  }
+  return `${runtimeRoute.type}:${runtimeRoute.identity}`;
+};
+
 const uniqueRuntimeRoutes = (runtimeRoutes: RuntimeRoute[]): RuntimeRoute[] => {
   const seen = new Set<string>();
   const unique: RuntimeRoute[] = [];
@@ -259,7 +271,7 @@ const buildHealthStatus = (
 ): Promise<RepoRuntimeHealthCheck> => {
   const runtimeReady = startupStatus.stage === "runtime_ready";
   const checkedAt = nowIso();
-  const runtimeState = runtimeReady ? "ready" : "idle";
+  const runtimeState = runtimeReady ? "ready" : "not_started";
   const supportsMcp = descriptor.capabilities.optionalSurfaces.supportsMcpStatus;
 
   const runtimeHealth = {
@@ -413,12 +425,14 @@ export const createRuntimeOrchestratorService = ({
   runtimeRegistry,
   taskStore,
   activeMcpProbeRetryDelayMs = ACTIVE_MCP_PROBE_RETRY_DELAY_MS,
+  logger,
 }: {
   gitPort: GitPort;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeRegistry: RuntimeRegistryPort;
   taskStore: TaskStorePort;
   activeMcpProbeRetryDelayMs?: number;
+  logger?: RuntimeOrchestratorLogger;
 }): RuntimeOrchestratorService => {
   const resolveSessionStopRoute = async (
     request: ReturnType<typeof parseAgentSessionStopInput>,
@@ -516,13 +530,28 @@ export const createRuntimeOrchestratorService = ({
     const { runtimeKind, repoPath } = parseRuntimeRepoInput(input, "runtime_ensure");
     const descriptor = resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
     const canonicalRepoPath = await resolveRepoPath(gitPort, repoPath);
-    const runtime = await runtimeRegistry.ensureWorkspaceRuntime({
-      runtimeKind,
-      repoPath: canonicalRepoPath,
-      workingDirectory: canonicalRepoPath,
-      descriptor,
-    });
-    return runtimeInstanceSummarySchema.parse(runtime);
+    logger?.info(`Ensuring ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}`);
+    try {
+      const runtime = await runtimeRegistry.ensureWorkspaceRuntime({
+        runtimeKind,
+        repoPath: canonicalRepoPath,
+        workingDirectory: canonicalRepoPath,
+        descriptor,
+      });
+      const parsed = runtimeInstanceSummarySchema.parse(runtime);
+      logger?.info(
+        `${parsed.kind} workspace runtime ${parsed.runtimeId} is ready at ${describeRuntimeRoute(
+          parsed.runtimeRoute,
+        )}`,
+      );
+      return parsed;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger?.error(
+        `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,
+      );
+      throw error;
+    }
   };
 
   return {
@@ -554,13 +583,23 @@ export const createRuntimeOrchestratorService = ({
     },
     runtimeStartupStatus,
     async repoRuntimeHealth(input) {
-      const { runtimeKind } = parseRuntimeRepoInput(input, "repo_runtime_health");
+      const { runtimeKind, repoPath } = parseRuntimeRepoInput(input, "repo_runtime_health");
       const descriptor = resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
+      logger?.info(`Checking ${runtimeKind} repo runtime health for repository ${repoPath}`);
       const runtime = await runtimeEnsure(input);
-      return buildHealthStatus(descriptor, buildReadyStartupStatus(runtime), runtimeRegistry, {
-        mcpProbeAttempts: ACTIVE_MCP_PROBE_ATTEMPTS,
-        mcpProbeRetryDelayMs: activeMcpProbeRetryDelayMs,
-      });
+      const health = await buildHealthStatus(
+        descriptor,
+        buildReadyStartupStatus(runtime),
+        runtimeRegistry,
+        {
+          mcpProbeAttempts: ACTIVE_MCP_PROBE_ATTEMPTS,
+          mcpProbeRetryDelayMs: activeMcpProbeRetryDelayMs,
+        },
+      );
+      logger?.info(
+        `${runtimeKind} repo runtime health is ${health.status} for repository ${runtime.repoPath}`,
+      );
+      return health;
     },
     async repoRuntimeHealthStatus(input) {
       const { runtimeKind } = parseRuntimeRepoInput(input, "repo_runtime_health_status");

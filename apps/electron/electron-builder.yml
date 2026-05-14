@@ -10,6 +10,10 @@ afterAllArtifactBuild: scripts/print-package-artifacts.cjs
 files:
   - dist/**/*
 
+extraResources:
+  - from: build/sidecars
+    to: bin
+
 extraMetadata:
   main: dist/main.js
   dependencies: {}

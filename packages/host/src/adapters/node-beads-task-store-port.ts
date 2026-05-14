@@ -27,12 +27,15 @@ import {
   taskPrioritySchema,
   taskStatusSchema,
 } from "@openducktor/contracts";
+import type { SystemCommandPort } from "../ports/system-command-port";
 import type { TaskStorePort } from "../ports/task-store-port";
 import {
   type BeadsCliContext,
   type ResolveBeadsCliContextOptions,
   resolveBeadsCliContext,
+  type StopSharedDoltServer,
   sharedServerHealthFromContext,
+  stopOwnedSharedDoltServer,
 } from "./node-beads-store-context";
 
 const METADATA_NAMESPACE = "openducktor";
@@ -86,10 +89,21 @@ type RawBdWherePayload = {
 
 export type CreateNodeBeadsTaskStorePortInput = {
   now?: () => Date;
+  processEnv?: NodeJS.ProcessEnv;
   runBd?: RunBd;
   runBdJson?: RunBdJson;
   resolveCliContext?: ResolveBeadsCliContext;
   resolveWorkspaceIdForRepoPath?: ResolveWorkspaceIdForRepoPath;
+  stopSharedDoltServer?: StopSharedDoltServer;
+  systemCommands?: Pick<SystemCommandPort, "requiredCommandError">;
+};
+
+export type NodeBeadsTaskStoreShutdownResult = {
+  stoppedSharedDoltServers: number;
+};
+
+export type NodeBeadsTaskStorePort = TaskStorePort & {
+  close(): Promise<NodeBeadsTaskStoreShutdownResult>;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -399,10 +413,11 @@ const diagnoseRepoStoreWithBd = async (
   runBdJson: RunBdJson,
   repoPath: string,
   resolveCliContext: ResolveBeadsCliContext,
+  prepare: boolean,
 ): Promise<RepoStoreHealth> => {
   let context: BeadsCliContext;
   try {
-    context = await resolveCliContext(repoPath, { requireSharedServer: false });
+    context = await resolveCliContext(repoPath, { requireSharedServer: prepare });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return repoStoreHealth({
@@ -1524,33 +1539,108 @@ const defaultRunBdJson =
 
 export const createNodeBeadsTaskStorePort = ({
   now = () => new Date(),
+  processEnv = process.env,
   runBd,
   runBdJson,
   resolveCliContext = resolveBeadsCliContext,
   resolveWorkspaceIdForRepoPath,
-}: CreateNodeBeadsTaskStorePortInput = {}): TaskStorePort => {
+  stopSharedDoltServer = stopOwnedSharedDoltServer,
+  systemCommands,
+}: CreateNodeBeadsTaskStorePortInput = {}): NodeBeadsTaskStorePort => {
+  const ownedSharedDoltServers = new Map<string, BeadsCliContext["sharedServer"]>();
+  const cliContextFlights = new Set<Promise<BeadsCliContext>>();
+  let closing = false;
+
+  const assertRequiredCommand = async (command: string): Promise<void> => {
+    if (!systemCommands) {
+      return;
+    }
+
+    const error = await systemCommands.requiredCommandError(command);
+    if (error !== null) {
+      throw new Error(error);
+    }
+  };
+
   const resolveEffectiveCliContext: ResolveBeadsCliContext = async (repoPath, options = {}) => {
+    if (closing) {
+      throw new Error("Beads task store is closing.");
+    }
     const configuredWorkspaceId =
       typeof options.workspaceId === "string" && options.workspaceId.trim().length > 0
         ? options.workspaceId.trim()
         : null;
+    const cliOptions = { ...options, processEnv };
+    await assertRequiredCommand("bd");
+    if (cliOptions.requireSharedServer === true) {
+      await assertRequiredCommand("dolt");
+    }
+    if (closing) {
+      throw new Error("Beads task store is closing.");
+    }
+
+    const trackOwnedSharedServer = (context: BeadsCliContext): BeadsCliContext => {
+      if (context.sharedServer?.ownerPid === process.pid) {
+        ownedSharedDoltServers.set(context.serverStatePath, context.sharedServer);
+      }
+      return context;
+    };
+
+    const trackCliContextResolution = (
+      contextPromise: Promise<BeadsCliContext>,
+    ): Promise<BeadsCliContext> => {
+      const flight = contextPromise.then(trackOwnedSharedServer);
+      cliContextFlights.add(flight);
+      return flight.finally(() => {
+        cliContextFlights.delete(flight);
+      });
+    };
+
     if (configuredWorkspaceId || !resolveWorkspaceIdForRepoPath) {
-      return resolveCliContext(repoPath, options);
+      return trackCliContextResolution(resolveCliContext(repoPath, cliOptions));
     }
 
     const workspaceId = await resolveWorkspaceIdForRepoPath(repoPath);
+    if (closing) {
+      throw new Error("Beads task store is closing.");
+    }
     const normalizedWorkspaceId =
       typeof workspaceId === "string" && workspaceId.trim().length > 0 ? workspaceId.trim() : null;
 
-    return resolveCliContext(
-      repoPath,
-      normalizedWorkspaceId ? { ...options, workspaceId: normalizedWorkspaceId } : options,
+    return trackCliContextResolution(
+      resolveCliContext(
+        repoPath,
+        normalizedWorkspaceId ? { ...cliOptions, workspaceId: normalizedWorkspaceId } : cliOptions,
+      ),
     );
   };
   const effectiveRunBd = runBd ?? defaultRunBd(resolveEffectiveCliContext);
   const effectiveRunBdJson = runBdJson ?? defaultRunBdJson(resolveEffectiveCliContext);
 
   return {
+    async close() {
+      closing = true;
+      await Promise.allSettled([...cliContextFlights]);
+      const errors: string[] = [];
+      let stoppedSharedDoltServers = 0;
+      for (const [serverStatePath, sharedServer] of ownedSharedDoltServers) {
+        if (!sharedServer) {
+          continue;
+        }
+        try {
+          await stopSharedDoltServer(sharedServer, serverStatePath);
+          stoppedSharedDoltServers += 1;
+          ownedSharedDoltServers.delete(serverStatePath);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          errors.push(`Failed stopping shared Dolt server ${sharedServer.pid}: ${message}`);
+        }
+      }
+      if (errors.length > 0) {
+        throw new Error(errors.join("\n"));
+      }
+      return { stoppedSharedDoltServers };
+    },
     listTasks({ repoPath, doneVisibleDays }) {
       return listTasksWithBd(effectiveRunBdJson, now, repoPath, doneVisibleDays);
     },
@@ -1560,8 +1650,13 @@ export const createNodeBeadsTaskStorePort = ({
     getTaskMetadata({ repoPath, taskId }) {
       return getTaskMetadataWithBd(effectiveRunBdJson, repoPath, taskId);
     },
-    diagnoseRepoStore({ repoPath }) {
-      return diagnoseRepoStoreWithBd(effectiveRunBdJson, repoPath, resolveEffectiveCliContext);
+    diagnoseRepoStore({ repoPath, prepare = false }) {
+      return diagnoseRepoStoreWithBd(
+        effectiveRunBdJson,
+        repoPath,
+        resolveEffectiveCliContext,
+        prepare,
+      );
     },
     listPullRequestSyncCandidates({ repoPath }) {
       return listPullRequestSyncCandidatesWithBd(effectiveRunBdJson, now, repoPath);

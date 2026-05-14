@@ -43,6 +43,69 @@ const createExistingBeadsCliContext = async (): Promise<BeadsCliContext> => {
 };
 
 describe("createNodeBeadsTaskStorePort", () => {
+  test("stops the owned shared Dolt server on close", async () => {
+    const context = await createExistingBeadsCliContext();
+    const stoppedServers: Array<{ pid: number; serverStatePath: string }> = [];
+    const port = createNodeBeadsTaskStorePort({
+      resolveCliContext: async () => context,
+      async runBdJson() {
+        return { path: context.beadsDir };
+      },
+      async stopSharedDoltServer(sharedServer, serverStatePath) {
+        stoppedServers.push({ pid: sharedServer.pid, serverStatePath });
+      },
+    });
+    await port.diagnoseRepoStore?.({ repoPath: "/repo" });
+
+    await expect(port.close()).resolves.toEqual({ stoppedSharedDoltServers: 1 });
+
+    expect(stoppedServers).toEqual([
+      {
+        pid: process.pid,
+        serverStatePath: "/config/beads/shared-server/server.json",
+      },
+    ]);
+  });
+
+  test("waits for in-flight shared Dolt server context resolution before close", async () => {
+    const context = await createExistingBeadsCliContext();
+    const stoppedServers: Array<{ pid: number; serverStatePath: string }> = [];
+    let resolveContextRequested: () => void = () => {};
+    const contextRequested = new Promise<void>((resolve) => {
+      resolveContextRequested = resolve;
+    });
+    let resolveContext: (context: BeadsCliContext) => void = () => {};
+    const contextResolution = new Promise<BeadsCliContext>((resolve) => {
+      resolveContext = resolve;
+    });
+    const port = createNodeBeadsTaskStorePort({
+      async resolveCliContext() {
+        resolveContextRequested();
+        return contextResolution;
+      },
+      async runBdJson() {
+        return { path: context.beadsDir };
+      },
+      async stopSharedDoltServer(sharedServer, serverStatePath) {
+        stoppedServers.push({ pid: sharedServer.pid, serverStatePath });
+      },
+    });
+
+    const diagnose = port.diagnoseRepoStore?.({ repoPath: "/repo", prepare: true });
+    await contextRequested;
+    const close = port.close();
+    resolveContext(context);
+
+    await expect(diagnose).resolves.toMatchObject({ status: "ready" });
+    await expect(close).resolves.toEqual({ stoppedSharedDoltServers: 1 });
+    expect(stoppedServers).toEqual([
+      {
+        pid: process.pid,
+        serverStatePath: "/config/beads/shared-server/server.json",
+      },
+    ]);
+  });
+
   test("diagnoses a ready Beads repo store from bd where", async () => {
     const context = await createExistingBeadsCliContext();
     const calls: Array<{ repoPath: string; args: string[]; context?: BeadsCliContext }> = [];
@@ -97,6 +160,29 @@ describe("createNodeBeadsTaskStorePort", () => {
     expect(requestedWorkspaceIds).toEqual(["openducktor"]);
   });
 
+  test("prepares the shared Dolt server when diagnostics request preparation", async () => {
+    const context = await createExistingBeadsCliContext();
+    const requestedSharedServerModes: Array<boolean | undefined> = [];
+    const port = createNodeBeadsTaskStorePort({
+      async resolveCliContext(_repoPath, options) {
+        requestedSharedServerModes.push(options?.requireSharedServer);
+        return context;
+      },
+      async runBdJson() {
+        return { path: context.beadsDir };
+      },
+    });
+
+    await expect(
+      port.diagnoseRepoStore?.({ repoPath: "/repo", prepare: true }),
+    ).resolves.toMatchObject({
+      category: "healthy",
+      status: "ready",
+    });
+
+    expect(requestedSharedServerModes).toEqual([true]);
+  });
+
   test("uses configured workspace id for default bd command runner", async () => {
     const context = await createExistingBeadsCliContext();
     const binDir = await mkdtemp(path.join(tmpdir(), "odt-fake-bd-bin-"));
@@ -126,6 +212,22 @@ printf '%s\\n' '[{"id":"task-1","title":"Task","status":"open","priority":0,"iss
     expect(tasks).toHaveLength(1);
     expect(tasks[0]?.id).toBe("task-1");
     expect(requestedWorkspaceIds).toEqual(["openducktor"]);
+  });
+
+  test("preflights Dolt before task commands that require the shared server", async () => {
+    const port = createNodeBeadsTaskStorePort({
+      systemCommands: {
+        requiredCommandError: async (command) =>
+          command === "dolt" ? "Required command `dolt` not found." : null,
+      },
+      async resolveCliContext() {
+        throw new Error("Dolt preflight should run before context resolution.");
+      },
+    });
+
+    await expect(port.listTasks({ repoPath: "/repo" })).rejects.toThrow(
+      "Required command `dolt` not found.",
+    );
   });
 
   test("diagnoses Beads repo store verification errors from bd where", async () => {

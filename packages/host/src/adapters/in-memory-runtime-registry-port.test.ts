@@ -123,6 +123,46 @@ describe("createInMemoryRuntimeRegistryPort", () => {
     expect(starts).toBe(1);
   });
 
+  test("waits for starting runtime handles before stopping all runtimes", async () => {
+    const stops: string[] = [];
+    let resolveStart: (runtime: RuntimeInstanceSummary) => void = () => {};
+    const started = new Promise<RuntimeInstanceSummary>((resolve) => {
+      resolveStart = resolve;
+    });
+    const registry = createInMemoryRuntimeRegistryPort({
+      workspaceStarter: {
+        async startWorkspaceRuntime() {
+          const runtime = await started;
+          return {
+            runtime,
+            async stop() {
+              stops.push(runtime.runtimeId);
+            },
+          };
+        },
+      },
+    });
+    const input = {
+      runtimeKind: "opencode",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+    };
+
+    const ensure = registry.ensureWorkspaceRuntime(input);
+    const stopAll = registry.stopAllRuntimes?.();
+    if (!stopAll) {
+      throw new Error("Expected registry to support stopAllRuntimes");
+    }
+    const runtime = createRuntime();
+    resolveStart(runtime);
+
+    await expect(stopAll).resolves.toEqual([runtime]);
+    await expect(ensure).resolves.toEqual(runtime);
+    await expect(registry.listRuntimes()).resolves.toEqual([]);
+    expect(stops).toEqual(["runtime-1"]);
+  });
+
   test("stops host-started runtime handles before removing them", async () => {
     const stops: string[] = [];
     const runtime = createRuntime();
