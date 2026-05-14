@@ -31,6 +31,8 @@ win:
 
 linux:
   category: Development
+  packageName: openducktor
+  artifactName: OpenDucktor-${version}-${os}-${arch}.${ext}
   target:
     - AppImage
     - deb
