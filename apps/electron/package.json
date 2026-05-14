@@ -6,7 +6,7 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "build": "rm -rf dist && bun run build:main && bun run build:preload && bun run build:renderer",
+    "build": "bun run scripts/build.ts",
     "build:main": "bun build --target=node --external electron --outfile dist/main.js src/main/main.ts",
     "build:preload": "bun build --target=node --format=cjs --external electron --outfile dist/preload.cjs src/preload/preload.ts",
     "build:renderer": "vite build --outDir dist/renderer --emptyOutDir",
