@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createInMemoryHostEventBus, HOST_EVENT_CHANNELS } from "@openducktor/host";
+import { createHostEventBus, HOST_EVENT_CHANNELS } from "@openducktor/host";
 import type { BrowserWindow as ElectronBrowserWindow } from "electron";
 import electron from "electron";
 import {
@@ -36,7 +36,7 @@ configureElectronProcessEnvironment({
   resourcesPath: process.resourcesPath,
 });
 
-const hostEventBus = createInMemoryHostEventBus();
+const hostEventBus = createHostEventBus();
 const hostCommandRouter = createElectronHostCommandRouter({
   eventBus: hostEventBus,
   lifecycleLogger: electronMainLogger,

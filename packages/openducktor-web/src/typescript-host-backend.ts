@@ -2,8 +2,8 @@ import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import {
+  createLocalAttachmentAdapter,
   createNodeHostCommandRouter,
-  createNodeLocalAttachmentPort,
   type HostCommandRouter,
   type HostEventBusPort,
   type HostEventChannel,
@@ -372,7 +372,7 @@ const isWithinDirectory = (directory: string, candidate: string): boolean => {
 
 const localAttachmentPreviewResponse = async (
   request: Request,
-  localAttachmentPort: ReturnType<typeof createNodeLocalAttachmentPort>,
+  localAttachmentPort: ReturnType<typeof createLocalAttachmentAdapter>,
   corsHeaders: HeadersInit,
 ): Promise<Response> => {
   const requestUrl = new URL(request.url);
@@ -426,7 +426,7 @@ export const startTypescriptHostBackend = ({
   const validatedFrontendOrigin = validateWebFrontendOrigin(frontendOrigin);
   const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
   const eventBus = new BufferedHostEventBus();
-  const localAttachments = createNodeLocalAttachmentPort();
+  const localAttachments = createLocalAttachmentAdapter();
   const hostCommandRouter: HostCommandRouter = createNodeHostCommandRouter({
     eventBus,
     lifecycleLogger: {

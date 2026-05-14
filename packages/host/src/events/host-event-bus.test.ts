@@ -1,8 +1,8 @@
-import { createInMemoryHostEventBus } from "./host-event-bus";
+import { createHostEventBus } from "./host-event-bus";
 
-describe("createInMemoryHostEventBus", () => {
+describe("createHostEventBus", () => {
   test("publishes payloads to subscribers for a checked host channel", () => {
-    const bus = createInMemoryHostEventBus();
+    const bus = createHostEventBus();
     const payloads: unknown[] = [];
 
     bus.subscribe("openducktor://task-event", (payload) => {
@@ -15,7 +15,7 @@ describe("createInMemoryHostEventBus", () => {
   });
 
   test("unsubscribes listeners without affecting later publications", () => {
-    const bus = createInMemoryHostEventBus();
+    const bus = createHostEventBus();
     const payloads: unknown[] = [];
     const unsubscribe = bus.subscribe("openducktor://run-event", (payload) => {
       payloads.push(payload);
@@ -28,7 +28,7 @@ describe("createInMemoryHostEventBus", () => {
   });
 
   test("rejects unknown event channels", () => {
-    const bus = createInMemoryHostEventBus();
+    const bus = createHostEventBus();
 
     expect(() => {
       bus.subscribe("openducktor://missing-event", () => {});

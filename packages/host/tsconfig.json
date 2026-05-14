@@ -4,8 +4,8 @@
     "composite": true,
     "declaration": true,
     "emitDeclarationOnly": true,
-    "outDir": "dist"
+    "outDir": "dist",
+    "types": ["node", "bun-types", "bun-types/test-globals"]
   },
-  "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"]
+  "include": ["src"]
 }

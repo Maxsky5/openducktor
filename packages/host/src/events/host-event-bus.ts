@@ -27,7 +27,7 @@ export const parseHostEventChannel = (value: string): HostEventChannel => {
   throw new Error(`Unknown OpenDucktor host event channel: ${value}`);
 };
 
-export const createInMemoryHostEventBus = (): HostEventBusPort => {
+export const createHostEventBus = (): HostEventBusPort => {
   const listenersByChannel = new Map<HostEventChannel, Set<HostEventListener>>();
 
   return {

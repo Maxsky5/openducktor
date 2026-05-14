@@ -7,13 +7,11 @@ import {
   type TaskDataContextValue,
   TasksStateContext,
   useActiveWorkspaceContext,
-  useChecksOperationsContext,
 } from "../app-state-contexts";
 import { useTaskOperations } from "../operations";
 
 export function TasksStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace } = useActiveWorkspaceContext();
-  const { refreshBeadsCheckForRepo } = useChecksOperationsContext();
   const {
     tasks,
     isForegroundLoadingTasks,
@@ -45,7 +43,6 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
     humanRequestChangesTask,
   } = useTaskOperations({
     activeWorkspace,
-    refreshBeadsCheckForRepo,
   });
 
   const tasksStateValue = useMemo(

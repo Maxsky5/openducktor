@@ -1,5 +1,4 @@
 import type {
-  BeadsCheck,
   GitTargetBranch,
   PullRequest,
   TaskCard,
@@ -12,7 +11,6 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 
 export type UseTaskOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
 };
 
 export type UseTaskOperationsResult = {

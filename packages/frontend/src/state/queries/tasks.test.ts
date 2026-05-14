@@ -446,34 +446,27 @@ describe("tasks query cache helpers", () => {
     });
   });
 
-  test("forced repo task view refresh bypasses older in-flight task reads", async () => {
+  test("forced repo task view refresh joins older in-flight task reads without cancelling them", async () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
     const firstTaskRead = createDeferred<TaskCard[]>();
-    const tasksList = mock(async (): Promise<TaskCard[]> => {
-      if (tasksList.mock.calls.length === 1) {
-        return firstTaskRead.promise;
-      }
-      return [{ ...taskFixture, id: "fresh" }];
-    });
+    const tasksList = mock(async (): Promise<TaskCard[]> => firstTaskRead.promise);
     host.tasksList = tasksList;
 
-    const olderRead = queryClient
-      .fetchQuery(repoTaskDataQueryOptions("/repo", DONE_VISIBLE_DAYS))
-      .catch(() => null);
-    await refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
+    const olderRead = queryClient.fetchQuery(repoTaskDataQueryOptions("/repo", DONE_VISIBLE_DAYS));
+    const refresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
       forceFreshTaskList: true,
       taskDocumentStrategy: "none",
     });
     firstTaskRead.resolve([{ ...taskFixture, id: "stale" }]);
-    await olderRead;
+    await Promise.all([olderRead, refresh]);
 
-    expect(tasksList).toHaveBeenCalledTimes(2);
+    expect(tasksList).toHaveBeenCalledTimes(1);
     expect(
       queryClient.getQueryData<{ tasks: TaskCard[] }>(
         taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
       )?.tasks[0]?.id,
-    ).toBe("fresh");
+    ).toBe("stale");
   });
 
   test("non-forced repo task view refresh joins an older in-flight task read", async () => {
@@ -592,16 +585,11 @@ describe("tasks query cache helpers", () => {
     ).rejects.toThrow("current board failed");
   });
 
-  test("external repo task view refresh treats overlapping primary cancellation as non-fatal", async () => {
+  test("external repo task view refresh joins overlapping primary task reads", async () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
     const firstRead = createDeferred<TaskCard[]>();
-    const tasksList = mock(async (): Promise<TaskCard[]> => {
-      if (tasksList.mock.calls.length === 1) {
-        return firstRead.promise;
-      }
-      return [{ ...taskFixture, id: "fresh" }];
-    });
+    const tasksList = mock(async (): Promise<TaskCard[]> => firstRead.promise);
     host.tasksList = tasksList;
 
     const firstRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
@@ -624,19 +612,19 @@ describe("tasks query cache helpers", () => {
       taskDocumentStrategy: "none",
     });
 
+    firstRead.resolve([{ ...taskFixture, id: "stale" }]);
     await expect(firstRefresh).resolves.toBeUndefined();
     await expect(secondRefresh).resolves.toBeUndefined();
-    firstRead.resolve([{ ...taskFixture, id: "stale" }]);
 
-    expect(tasksList).toHaveBeenCalledTimes(2);
+    expect(tasksList).toHaveBeenCalledTimes(1);
     expect(
       queryClient.getQueryData<{ tasks: TaskCard[] }>(
         taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
       )?.tasks[0]?.id,
-    ).toBe("fresh");
+    ).toBe("stale");
   });
 
-  test("cancelled external targeted refresh still invalidates affected task documents", async () => {
+  test("overlapping external targeted refreshes still invalidate affected task documents", async () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settingsSnapshotFixture);
     queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
@@ -648,12 +636,7 @@ describe("tasks query cache helpers", () => {
       updatedAt: null,
     });
     const firstRead = createDeferred<TaskCard[]>();
-    const tasksList = mock(async (): Promise<TaskCard[]> => {
-      if (tasksList.mock.calls.length === 1) {
-        return firstRead.promise;
-      }
-      return [{ ...taskFixture, id: "fresh" }];
-    });
+    const tasksList = mock(async (): Promise<TaskCard[]> => firstRead.promise);
     host.tasksList = tasksList;
 
     const firstRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
@@ -678,9 +661,9 @@ describe("tasks query cache helpers", () => {
       taskIds: ["task-2"],
     });
 
+    firstRead.resolve([{ ...taskFixture, id: "stale" }]);
     await expect(firstRefresh).resolves.toBeUndefined();
     await expect(secondRefresh).resolves.toBeUndefined();
-    firstRead.resolve([{ ...taskFixture, id: "stale" }]);
 
     expect(
       queryClient.getQueryState(documentQueryKeys.spec("/repo", "task-1"))?.isInvalidated,
@@ -692,7 +675,7 @@ describe("tasks query cache helpers", () => {
       queryClient.getQueryData<{ tasks: TaskCard[] }>(
         taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS),
       )?.tasks[0]?.id,
-    ).toBe("fresh");
+    ).toBe("stale");
   });
 
   test("external repo task view refresh skips inactive done-visible variants", async () => {

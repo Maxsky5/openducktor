@@ -1,0 +1,245 @@
+import type {
+  GlobalConfig,
+  RepoStoreHealth,
+  RuntimeDescriptor,
+  RuntimeHealth,
+} from "@openducktor/contracts";
+import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
+import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
+import { createSystemDiagnosticsService } from "./system-diagnostics-service";
+
+const runtimeDefinition = (kind: RuntimeDescriptor["kind"]): RuntimeDescriptor =>
+  ({
+    kind,
+  }) as RuntimeDescriptor;
+
+const runtimeHealth = (
+  kind: RuntimeHealth["kind"],
+  error: string | null = null,
+): RuntimeHealth => ({
+  kind,
+  enabled: true,
+  ok: error === null,
+  version: error === null ? `${kind} 1.0.0` : null,
+  error,
+});
+
+const createSettingsConfig = (config: unknown | null): SettingsConfigPort => ({
+  readConfig: async () => config,
+  writeConfig: async (_nextConfig: GlobalConfig) => undefined,
+  defaultWorktreeBasePath: (workspaceId) => `/tmp/worktrees/${workspaceId}`,
+  defaultRepoWorktreeBasePath: (repoPath) =>
+    `/tmp/worktrees/${repoPath.split("/").at(-1) ?? "repo"}`,
+  resolveConfiguredPath: (rawPath) => rawPath,
+  canonicalizePath: async (rawPath) => rawPath,
+  pathExists: async () => true,
+  join: (...paths) => paths.join("/"),
+});
+
+const createRuntimeDefinitions = (
+  kinds: RuntimeDescriptor["kind"][] = ["opencode", "codex"],
+): RuntimeDefinitionsService => ({
+  listRuntimeDefinitions: () => kinds.map(runtimeDefinition),
+});
+
+const createRuntimeHealthPort = (
+  healthByKind: Partial<Record<RuntimeHealth["kind"], RuntimeHealth>> = {},
+): RuntimeHealthPort => ({
+  getRuntimeHealth: async (kind) => healthByKind[kind] ?? runtimeHealth(kind),
+});
+
+const createSystemCommandPort = ({
+  missingCommands = [],
+  ghAuthResult = { ok: true, stdout: "Logged in to github.com account octocat\n", stderr: "" },
+}: {
+  missingCommands?: string[];
+  ghAuthResult?: SystemCommandRunResult;
+} = {}): SystemCommandPort => {
+  const missing = new Set(missingCommands);
+  return {
+    requiredCommandError: async (command) =>
+      missing.has(command) ? `Required command \`${command}\` not found.` : null,
+    versionCommand: async (command) => (missing.has(command) ? null : `${command} version 1.0.0`),
+    runCommandAllowFailure: async (command) => {
+      if (command === "gh") {
+        return ghAuthResult;
+      }
+      return { ok: true, stdout: "", stderr: "" };
+    },
+  };
+};
+
+const healthyRepoStoreHealth: RepoStoreHealth = {
+  category: "healthy",
+  status: "ready",
+  isReady: true,
+  detail: "Beads attachment is healthy.",
+  attachment: {
+    path: "/repo/.beads",
+    databaseName: null,
+  },
+  sharedServer: {
+    host: null,
+    port: null,
+    ownershipState: "unavailable",
+  },
+};
+
+const createTaskStore = (
+  health: RepoStoreHealth = healthyRepoStoreHealth,
+  calls: Array<{ repoPath: string; prepare?: boolean }> = [],
+): TaskStorePort =>
+  ({
+    diagnoseRepoStore: async (input) => {
+      calls.push(input);
+      return health;
+    },
+  }) as TaskStorePort;
+
+describe("createSystemDiagnosticsService", () => {
+  test("runtimeCheck reports CLI, GitHub auth, runtime health, and config enablement", async () => {
+    const service = createSystemDiagnosticsService({
+      runtimeDefinitionsService: createRuntimeDefinitions(),
+      runtimeHealth: createRuntimeHealthPort({
+        codex: runtimeHealth("codex", "codex not found"),
+      }),
+      settingsConfig: createSettingsConfig({
+        version: 2,
+        agentRuntimes: {
+          opencode: { enabled: true },
+          codex: { enabled: false },
+        },
+      }),
+      systemCommands: createSystemCommandPort(),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await service.runtimeCheck(true);
+
+    expect(check.gitOk).toBe(true);
+    expect(check.ghOk).toBe(true);
+    expect(check.ghAuthOk).toBe(true);
+    expect(check.ghAuthLogin).toBe("octocat");
+    expect(check.runtimes).toEqual([
+      expect.objectContaining({ kind: "opencode", enabled: true, ok: true }),
+      expect.objectContaining({
+        kind: "codex",
+        enabled: false,
+        ok: false,
+        error: "codex not found",
+      }),
+    ]);
+    expect(check.errors).toEqual([]);
+  });
+
+  test("runtimeCheck caches fresh results unless force refresh is requested", async () => {
+    let version = "1.0.0";
+    const systemCommands = createSystemCommandPort();
+    systemCommands.versionCommand = async (command) => `${command} version ${version}`;
+    const service = createSystemDiagnosticsService({
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands,
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const first = await service.runtimeCheck(true);
+    version = "2.0.0";
+    const cached = await service.runtimeCheck(false);
+    const refreshed = await service.runtimeCheck(true);
+
+    expect(first.gitVersion).toBe("git version 1.0.0");
+    expect(cached.gitVersion).toBe("git version 1.0.0");
+    expect(refreshed.gitVersion).toBe("git version 2.0.0");
+  });
+
+  test("beadsCheck returns structured blocking health when bd is missing", async () => {
+    const service = createSystemDiagnosticsService({
+      runtimeDefinitionsService: createRuntimeDefinitions(),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort({ missingCommands: ["bd"] }),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await service.beadsCheck("/repo");
+
+    expect(check).toEqual({
+      beadsOk: false,
+      beadsPath: null,
+      beadsError: "Required command `bd` not found.",
+      repoStoreHealth: {
+        category: "attachment_verification_failed",
+        status: "blocking",
+        isReady: false,
+        detail: "Required command `bd` not found.",
+        attachment: { path: null, databaseName: null },
+        sharedServer: { host: null, port: null, ownershipState: "unavailable" },
+      },
+    });
+  });
+
+  test("beadsCheck returns structured blocking health when dolt is missing", async () => {
+    const service = createSystemDiagnosticsService({
+      runtimeDefinitionsService: createRuntimeDefinitions(),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort({ missingCommands: ["dolt"] }),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await service.beadsCheck("/repo");
+
+    expect(check).toEqual({
+      beadsOk: false,
+      beadsPath: null,
+      beadsError: "Required command `dolt` not found.",
+      repoStoreHealth: {
+        category: "attachment_verification_failed",
+        status: "blocking",
+        isReady: false,
+        detail: "Required command `dolt` not found.",
+        attachment: { path: null, databaseName: null },
+        sharedServer: { host: null, port: null, ownershipState: "unavailable" },
+      },
+    });
+  });
+
+  test("beadsCheck delegates active repo store readiness through the task store", async () => {
+    const restoreNeededHealth: RepoStoreHealth = {
+      category: "missing_shared_database",
+      status: "restore_needed",
+      isReady: false,
+      detail: "Shared Dolt database odt_repo is missing and restore is required",
+      attachment: {
+        path: "/repo/.beads",
+        databaseName: "odt_repo",
+      },
+      sharedServer: {
+        host: "127.0.0.1",
+        port: 36000,
+        ownershipState: "owned_by_current_process",
+      },
+    };
+    const calls: Array<{ repoPath: string; prepare?: boolean }> = [];
+    const service = createSystemDiagnosticsService({
+      runtimeDefinitionsService: createRuntimeDefinitions(),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort(),
+      repoStoreDiagnostics: createTaskStore(restoreNeededHealth, calls),
+    });
+
+    await expect(service.beadsCheck("/repo")).resolves.toEqual({
+      beadsOk: false,
+      beadsPath: "/repo/.beads",
+      beadsError: "Shared Dolt database odt_repo is missing and restore is required",
+      repoStoreHealth: restoreNeededHealth,
+    });
+    expect(calls).toEqual([{ repoPath: "/repo", prepare: true }]);
+  });
+});

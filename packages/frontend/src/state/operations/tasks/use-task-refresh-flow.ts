@@ -1,19 +1,14 @@
-import type { BeadsCheck, RepoStoreHealth } from "@openducktor/contracts";
 import { type MutableRefObject, useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
 import type { TaskRefreshOptions } from "@/state/app-state-contexts";
-import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
-import { host } from "../shared/host";
+import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { UseTaskReadFlowResult } from "./use-task-read-flow";
-
-const TASK_REFRESH_WARNING = "Pull request sync failed during task refresh";
 
 type UseTaskRefreshFlowArgs = {
   activeRepoPath: string | null;
-  refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
   refreshTaskData: UseTaskReadFlowResult["refreshTaskData"];
   lastTaskRefreshToastRef: MutableRefObject<{ repoPath: string; description: string } | null>;
+  lastTaskLoadErrorToastRef: MutableRefObject<{ repoPath: string; description: string } | null>;
 };
 
 export type TaskRefreshFlow = {
@@ -26,32 +21,19 @@ export type TaskRefreshFlow = {
 
 export function useTaskRefreshFlow({
   activeRepoPath,
-  refreshBeadsCheckForRepo,
   refreshTaskData,
   lastTaskRefreshToastRef,
+  lastTaskLoadErrorToastRef,
 }: UseTaskRefreshFlowArgs): TaskRefreshFlow {
   const [isManualLoadingTasks, setIsManualLoadingTasks] = useState(false);
   const manualRefreshTokenRef = useRef(0);
   const inFlightTaskRefreshRef = useRef<{ repoPath: string; promise: Promise<void> } | null>(null);
-  const repoStoreHealthByRepoRef = useRef(new Map<string, RepoStoreHealth | null>());
 
   const runRepoTaskRefresh = useCallback(
     async (repoPath: string): Promise<void> => {
-      const beadsCheck = await refreshBeadsCheckForRepo(repoPath, false);
-      repoStoreHealthByRepoRef.current.set(repoPath, getBlockingRepoStoreHealth(beadsCheck));
-      await host.repoPullRequestSync(repoPath);
       await refreshTaskData(repoPath);
-      try {
-        const refreshedBeadsCheck = await refreshBeadsCheckForRepo(repoPath, true);
-        repoStoreHealthByRepoRef.current.set(
-          repoPath,
-          getBlockingRepoStoreHealth(refreshedBeadsCheck),
-        );
-      } catch {
-        // Keep refresh semantics unchanged when the follow-up diagnostics check fails.
-      }
     },
-    [refreshBeadsCheckForRepo, refreshTaskData],
+    [refreshTaskData],
   );
 
   const getRepoTaskRefreshPromise = useCallback(
@@ -91,18 +73,8 @@ export function useTaskRefreshFlow({
         await promise;
         lastTaskRefreshToastRef.current = null;
       } catch (error) {
-        const description = summarizeTaskLoadError({
-          error,
-          repoStoreHealth: repoStoreHealthByRepoRef.current.get(repoPath) ?? null,
-        });
-        if (!joinedExisting) {
-          console.warn(TASK_REFRESH_WARNING, {
-            repoPath,
-            trigger,
-            description,
-            error: errorMessage(error),
-          });
-        }
+        const description = summarizeTaskLoadError({ error });
+        lastTaskLoadErrorToastRef.current = { repoPath, description };
         maybeToastRefreshError({
           repoPath,
           description,
@@ -119,7 +91,7 @@ export function useTaskRefreshFlow({
         );
       }
     },
-    [activeRepoPath, getRepoTaskRefreshPromise, lastTaskRefreshToastRef],
+    [activeRepoPath, getRepoTaskRefreshPromise, lastTaskLoadErrorToastRef, lastTaskRefreshToastRef],
   );
 
   const refreshTasks = useCallback(async (): Promise<void> => {

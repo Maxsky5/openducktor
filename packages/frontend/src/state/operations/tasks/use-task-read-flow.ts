@@ -1,4 +1,4 @@
-import type { BeadsCheck, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { type MutableRefObject, useCallback, useEffect, useRef } from "react";
 import type { TaskDataRefreshOptions, TaskRefreshOptions } from "@/state/app-state-contexts";
@@ -8,7 +8,6 @@ import { useTaskRefreshFlow } from "./use-task-refresh-flow";
 
 type UseTaskReadFlowArgs = {
   activeRepoPath: string | null;
-  refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
 };
 
 type TaskToastDedupeRef = MutableRefObject<{ repoPath: string; description: string } | null>;
@@ -29,10 +28,7 @@ export type UseTaskReadFlowResult = {
   refreshTasks: () => Promise<void>;
 };
 
-export function useTaskReadFlow({
-  activeRepoPath,
-  refreshBeadsCheckForRepo,
-}: UseTaskReadFlowArgs): UseTaskReadFlowResult {
+export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTaskReadFlowResult {
   const queryClient = useQueryClient();
   const lastTaskRefreshToastRef = useRef<{ repoPath: string; description: string } | null>(null);
   const lastTaskLoadErrorToastRef = useRef<{ repoPath: string; description: string } | null>(null);
@@ -69,9 +65,9 @@ export function useTaskReadFlow({
 
   const refreshFlow = useTaskRefreshFlow({
     activeRepoPath,
-    refreshBeadsCheckForRepo,
     refreshTaskData,
     lastTaskRefreshToastRef,
+    lastTaskLoadErrorToastRef,
   });
 
   useTaskReadFlowRepoSwitchCleanup({

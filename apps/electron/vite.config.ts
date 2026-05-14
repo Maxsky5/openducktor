@@ -2,7 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -85,7 +85,7 @@ export default defineConfig({
   server: {
     port: resolveRendererDevPort(),
     fs: {
-      allow: [__dirname, packagesRoot],
+      allow: [searchForWorkspaceRoot(__dirname)],
     },
     strictPort: true,
   },
