@@ -15,7 +15,6 @@
     "url": "git+https://github.com/Maxsky5/openducktor.git"
   },
   "files": [
-    "bin",
     "dist",
     "README.md"
   ],
