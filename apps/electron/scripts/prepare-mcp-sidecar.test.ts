@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -50,6 +50,7 @@ describe("prepareMcpSidecar", () => {
   test("cleans, compiles, and marks the Unix sidecar executable", async () => {
     const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
     const staleOutput = join(electronPackageDirectory, "build", "sidecars", "stale");
+    const chmodCalls: Array<{ mode: number; path: string }> = [];
     await mkdir(join(electronPackageDirectory, "build", "sidecars"), { recursive: true });
     await writeFile(staleOutput, "stale");
 
@@ -60,28 +61,33 @@ describe("prepareMcpSidecar", () => {
       compile: async ({ outputPath }) => {
         await writeFile(outputPath, "#!/bin/sh\nexit 0\n");
       },
+      chmodFile: async (path, mode) => {
+        chmodCalls.push({ mode, path });
+      },
     });
 
     await expect(stat(staleOutput)).rejects.toThrow();
     const metadata = await stat(plan.outputPath);
     expect(metadata.isFile()).toBe(true);
-    expect(metadata.mode & 0o111).not.toBe(0);
+    expect(chmodCalls).toEqual([{ mode: 0o755, path: plan.outputPath }]);
   });
 
   test("does not chmod Windows sidecars", async () => {
     const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
+    const chmodCalls: Array<{ mode: number; path: string }> = [];
 
-    const plan = await prepareMcpSidecar({
+    await prepareMcpSidecar({
       electronPackageDirectory,
       platform: "win32",
       workspaceRoot,
       compile: async ({ outputPath }) => {
         await writeFile(outputPath, "binary");
-        await chmod(outputPath, 0o644);
+      },
+      chmodFile: async (path, mode) => {
+        chmodCalls.push({ mode, path });
       },
     });
 
-    const metadata = await stat(plan.outputPath);
-    expect(metadata.mode & 0o111).toBe(0);
+    expect(chmodCalls).toEqual([]);
   });
 });

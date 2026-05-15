@@ -17,6 +17,7 @@ type ResolveMcpSidecarBuildPlanInput = {
 };
 
 type PrepareMcpSidecarInput = ResolveMcpSidecarBuildPlanInput & {
+  chmodFile?: (path: string, mode: number) => Promise<void>;
   compile?: (plan: McpSidecarBuildPlan) => Promise<void>;
 };
 
@@ -56,6 +57,7 @@ const compileMcpSidecar = async (plan: McpSidecarBuildPlan): Promise<void> => {
 };
 
 export const prepareMcpSidecar = async ({
+  chmodFile = chmod,
   compile = compileMcpSidecar,
   ...input
 }: PrepareMcpSidecarInput): Promise<McpSidecarBuildPlan> => {
@@ -68,7 +70,7 @@ export const prepareMcpSidecar = async ({
   await assertFileExists(plan.outputPath, "Compiled OpenDucktor MCP sidecar");
 
   if (input.platform !== "win32") {
-    await chmod(plan.outputPath, 0o755);
+    await chmodFile(plan.outputPath, 0o755);
   }
 
   return plan;
