@@ -1,32 +1,10 @@
-import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import { describe, expect, mock, test } from "bun:test";
 import {
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { createRuntimeRegistry } from "./runtime-registry";
-
-const listen = (server: Server): Promise<number> =>
-  new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      server.off("error", reject);
-      const address = server.address() as AddressInfo;
-      resolve(address.port);
-    });
-  });
-
-const close = (server: Server): Promise<void> =>
-  new Promise((resolve, reject) => {
-    server.close((error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve();
-    });
-  });
 
 const createRuntime = (
   overrides: Partial<RuntimeInstanceSummary> = {},
@@ -212,47 +190,31 @@ describe("createRuntimeRegistry", () => {
 
   test("aborts and probes OpenCode sessions through the local runtime endpoint", async () => {
     const requests: Array<{ method: string; pathname: string; directory: string | null }> = [];
-    const responseHeaders = {
-      "access-control-allow-origin": "*",
-      "access-control-allow-methods": "GET,POST,OPTIONS",
-      "content-type": "text/plain",
-    };
-    const server = createServer((request, response) => {
-      if (!request.url) {
-        response.writeHead(400, responseHeaders).end("missing url");
-        return;
-      }
-
-      const url = new URL(request.url, "http://127.0.0.1");
-      if (request.method === "OPTIONS") {
-        response.writeHead(200, responseHeaders).end("ok");
-        return;
-      }
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : null;
+      const url = new URL(request?.url ?? input.toString());
+      const method = init?.method ?? request?.method ?? "GET";
 
       requests.push({
-        method: request.method ?? "",
+        method,
         pathname: url.pathname,
         directory: url.searchParams.get("directory"),
       });
 
-      if (request.method === "POST" && url.pathname === "/session/session-1/abort") {
-        response.writeHead(200, responseHeaders).end("aborted");
-        return;
+      if (method === "POST" && url.pathname === "/session/session-1/abort") {
+        return new Response("aborted", { status: 200 });
       }
-      if (request.method === "GET" && url.pathname === "/session/status") {
-        response
-          .writeHead(200, { ...responseHeaders, "content-type": "application/json" })
-          .end(JSON.stringify({ "session-1": { type: "busy" } }));
-        return;
+      if (method === "GET" && url.pathname === "/session/status") {
+        return Response.json({ "session-1": { type: "busy" } });
       }
 
-      response.writeHead(404, responseHeaders).end("not found");
-    });
-    const port = await listen(server);
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch;
 
     try {
       const registry = createRuntimeRegistry();
-      const endpoint = `http://127.0.0.1:${port}`;
+      const endpoint = "http://127.0.0.1:4096";
 
       await expect(
         registry.stopSession({
@@ -285,56 +247,38 @@ describe("createRuntimeRegistry", () => {
         },
       ]);
     } finally {
-      await close(server);
+      globalThis.fetch = originalFetch;
     }
   });
 
   test("probes OpenCode MCP status and tool ids through the local runtime endpoint", async () => {
     const requests: Array<{ method: string; pathname: string; directory: string | null }> = [];
-    const responseHeaders = {
-      "access-control-allow-origin": "*",
-      "access-control-allow-methods": "GET,POST,OPTIONS",
-      "content-type": "application/json",
-    };
-    const server = createServer((request, response) => {
-      if (!request.url) {
-        response.writeHead(400, responseHeaders).end(JSON.stringify({ error: "missing url" }));
-        return;
-      }
-
-      const url = new URL(request.url, "http://127.0.0.1");
-      if (request.method === "OPTIONS") {
-        response.writeHead(200, responseHeaders).end(JSON.stringify({ ok: true }));
-        return;
-      }
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : null;
+      const url = new URL(request?.url ?? input.toString());
+      const method = init?.method ?? request?.method ?? "GET";
 
       requests.push({
-        method: request.method ?? "",
+        method,
         pathname: url.pathname,
         directory: url.searchParams.get("directory"),
       });
 
-      if (request.method === "GET" && url.pathname === "/mcp") {
-        response
-          .writeHead(200, responseHeaders)
-          .end(JSON.stringify({ openducktor: { status: "connected" } }));
-        return;
+      if (method === "GET" && url.pathname === "/mcp") {
+        return Response.json({ openducktor: { status: "connected" } });
       }
 
-      if (request.method === "GET" && url.pathname === "/experimental/tool/ids") {
-        response
-          .writeHead(200, responseHeaders)
-          .end(JSON.stringify(["odt_read_task", " odt_set_spec ", ""]));
-        return;
+      if (method === "GET" && url.pathname === "/experimental/tool/ids") {
+        return Response.json(["odt_read_task", " odt_set_spec ", ""]);
       }
 
-      response.writeHead(404, responseHeaders).end(JSON.stringify({ error: "not found" }));
-    });
-    const port = await listen(server);
+      return Response.json({ error: "not found" }, { status: 404 });
+    }) as unknown as typeof fetch;
 
     try {
       const registry = createRuntimeRegistry();
-      const endpoint = `http://127.0.0.1:${port}`;
+      const endpoint = "http://127.0.0.1:4096";
 
       await expect(
         registry.probeMcpStatus?.({
@@ -365,7 +309,7 @@ describe("createRuntimeRegistry", () => {
         },
       ]);
     } finally {
-      await close(server);
+      globalThis.fetch = originalFetch;
     }
   });
 
