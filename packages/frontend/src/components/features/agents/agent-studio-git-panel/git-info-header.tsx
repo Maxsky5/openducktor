@@ -161,12 +161,14 @@ function GitInfoHeaderSummaryRow({
 }
 
 type GitBranchContextRowProps = {
-  canEditTargetBranch: boolean;
   currentBranchLabel: string;
-  hasTargetAhead: boolean;
-  isEditingTargetBranch: boolean;
-  isRepositoryMode: boolean;
-  isSavingTargetBranch: boolean;
+  branchState: {
+    canEditTargetBranch: boolean;
+    hasTargetAhead: boolean;
+    isEditingTargetBranch: boolean;
+    isRepositoryMode: boolean;
+    isSavingTargetBranch: boolean;
+  };
   onCancelTargetBranchEdit: () => void;
   onEditTargetBranch: () => void;
   targetAheadCount: number | null;
@@ -177,12 +179,8 @@ type GitBranchContextRowProps = {
 };
 
 function GitBranchContextRow({
-  canEditTargetBranch,
   currentBranchLabel,
-  hasTargetAhead,
-  isEditingTargetBranch,
-  isRepositoryMode,
-  isSavingTargetBranch,
+  branchState,
   onCancelTargetBranchEdit,
   onEditTargetBranch,
   targetAheadCount,
@@ -191,6 +189,13 @@ function GitBranchContextRow({
   targetBranchSelectionValue,
   updateTargetBranchSelection,
 }: GitBranchContextRowProps): ReactElement {
+  const {
+    canEditTargetBranch,
+    hasTargetAhead,
+    isEditingTargetBranch,
+    isRepositoryMode,
+    isSavingTargetBranch,
+  } = branchState;
   return (
     <div
       className={cn(
@@ -311,14 +316,17 @@ function GitBranchContextRow({
 }
 
 type GitActionRowProps = {
-  canPull: boolean;
-  canPush: boolean;
-  canRebase: boolean;
-  canRefresh: boolean;
-  isDetectingPullRequest: boolean;
-  isLoading: boolean;
-  isPushing: boolean;
-  isRepositoryMode: boolean;
+  actionState: {
+    canPull: boolean;
+    canPush: boolean;
+    canRebase: boolean;
+    canRefresh: boolean;
+    isDetectingPullRequest: boolean;
+    isLoading: boolean;
+    isPushing: boolean;
+    isRepositoryMode: boolean;
+    showDetectPullRequest: boolean;
+  };
   onDetectPullRequest?: (() => Promise<void> | void) | null | undefined;
   onRefresh: () => void;
   pullFromUpstream: (() => Promise<void>) | null;
@@ -330,18 +338,10 @@ type GitActionRowProps = {
   rebaseBehindCount: number | null;
   rebaseOntoTarget: (() => Promise<void>) | null;
   rebaseTooltip: string;
-  showDetectPullRequest: boolean;
 };
 
 function GitActionRow({
-  canPull,
-  canPush,
-  canRebase,
-  canRefresh,
-  isDetectingPullRequest,
-  isLoading,
-  isPushing,
-  isRepositoryMode,
+  actionState,
   onDetectPullRequest,
   onRefresh,
   pullFromUpstream,
@@ -353,8 +353,18 @@ function GitActionRow({
   rebaseBehindCount,
   rebaseOntoTarget,
   rebaseTooltip,
-  showDetectPullRequest,
 }: GitActionRowProps): ReactElement {
+  const {
+    canPull,
+    canPush,
+    canRebase,
+    canRefresh,
+    isDetectingPullRequest,
+    isLoading,
+    isPushing,
+    isRepositoryMode,
+    showDetectPullRequest,
+  } = actionState;
   return (
     <div
       className="flex items-center justify-between gap-2 border-y border-border py-1"
@@ -710,12 +720,14 @@ export const GitInfoHeader = memo(function GitInfoHeader({
       />
 
       <GitBranchContextRow
-        canEditTargetBranch={canEditTargetBranch}
         currentBranchLabel={currentBranchLabel}
-        hasTargetAhead={hasTargetAhead}
-        isEditingTargetBranch={isEditingTargetBranch && canEditTargetBranch}
-        isRepositoryMode={isRepositoryMode}
-        isSavingTargetBranch={isSavingTargetBranch}
+        branchState={{
+          canEditTargetBranch,
+          hasTargetAhead,
+          isEditingTargetBranch: isEditingTargetBranch && canEditTargetBranch,
+          isRepositoryMode,
+          isSavingTargetBranch,
+        }}
         onCancelTargetBranchEdit={handleCancelTargetBranchEdit}
         onEditTargetBranch={handleEditTargetBranch}
         targetAheadCount={targetAheadCount}
@@ -726,14 +738,17 @@ export const GitInfoHeader = memo(function GitInfoHeader({
       />
 
       <GitActionRow
-        canPull={canPull}
-        canPush={canPush}
-        canRebase={canRebase}
-        canRefresh={canRefresh}
-        isDetectingPullRequest={Boolean(isDetectingPullRequest)}
-        isLoading={isLoading}
-        isPushing={Boolean(isPushing)}
-        isRepositoryMode={isRepositoryMode}
+        actionState={{
+          canPull,
+          canPush,
+          canRebase,
+          canRefresh,
+          isDetectingPullRequest: Boolean(isDetectingPullRequest),
+          isLoading,
+          isPushing: Boolean(isPushing),
+          isRepositoryMode,
+          showDetectPullRequest,
+        }}
         onDetectPullRequest={onDetectPullRequest}
         onRefresh={onRefresh}
         pullFromUpstream={pullFromUpstream}
@@ -745,7 +760,6 @@ export const GitInfoHeader = memo(function GitInfoHeader({
         rebaseBehindCount={rebaseBehindCount}
         rebaseOntoTarget={rebaseOntoTarget}
         rebaseTooltip={rebaseTooltip}
-        showDetectPullRequest={showDetectPullRequest}
       />
 
       {showLockReasonBanner && isGitActionsLocked && gitActionsLockReason ? (

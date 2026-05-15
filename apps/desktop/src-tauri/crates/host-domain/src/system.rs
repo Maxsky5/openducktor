@@ -4,10 +4,16 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeHealth {
     pub kind: String,
+    #[serde(default = "default_runtime_enabled")]
+    pub enabled: bool,
     pub ok: bool,
     pub version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+const fn default_runtime_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

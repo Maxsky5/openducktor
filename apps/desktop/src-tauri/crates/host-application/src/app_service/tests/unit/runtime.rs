@@ -60,6 +60,7 @@ fn runtime_ensure_registers_external_runtimes_without_local_child_processes() ->
     )?;
     let (service, _task_state, _git_state) =
         build_service_with_runtime_registry(vec![], runtime_registry);
+    enable_agent_runtime(&service, "test-runtime")?;
     service.workspace_add(repo_path.to_string_lossy().as_ref())?;
 
     let runtime = service.runtime_ensure("test-runtime", repo_path.to_string_lossy().as_ref())?;
@@ -103,6 +104,7 @@ fn runtime_ensure_registers_host_managed_stdio_routes_without_reconstructing_por
     )?;
     let (service, _task_state, _git_state) =
         build_service_with_runtime_registry(vec![], runtime_registry);
+    enable_agent_runtime(&service, "test-runtime")?;
     service.workspace_add(repo_path.to_string_lossy().as_ref())?;
 
     let runtime = service.runtime_ensure("test-runtime", repo_path.to_string_lossy().as_ref())?;
@@ -160,6 +162,45 @@ fn runtime_check_lists_all_registered_runtimes_from_the_registry() -> Result<()>
     assert_eq!(runtime_kinds, vec!["opencode", "test-runtime"]);
     assert!(runtime_check.errors.is_empty());
 
+    Ok(())
+}
+
+#[test]
+fn runtime_check_uses_global_defaults_for_missing_runtime_config_entries() -> Result<()> {
+    let root = unique_temp_path("runtime-check-missing-runtime-config-entry");
+    fs::create_dir_all(&root)?;
+    let config_path = root.join("config.json");
+    write_private_file(
+        config_path.as_path(),
+        json!({
+            "version": 2,
+            "agentRuntimes": {
+                "opencode": { "enabled": true }
+            }
+        })
+        .to_string()
+        .as_str(),
+    )?;
+    let config_store = AppConfigStore::from_path(config_path);
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+
+    let runtime_check = service.runtime_check_with_refresh(true)?;
+    let codex = runtime_check
+        .runtimes
+        .iter()
+        .find(|runtime| runtime.kind == "codex")
+        .expect("Codex runtime health should be listed");
+
+    assert!(!codex.enabled);
     Ok(())
 }
 
@@ -233,6 +274,52 @@ fn runtime_apis_fail_fast_for_unsupported_runtime_kinds() {
             "Unsupported agent runtime kind: missing-runtime"
         );
     }
+}
+
+#[test]
+fn disabled_runtime_cannot_be_ensured() {
+    let (service, _task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let error = service.runtime_ensure("codex", "/tmp/repo").unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "Runtime 'codex' is disabled in Agent Runtime settings."
+    );
+}
+
+#[test]
+fn disabled_runtime_health_reports_disabled_without_starting_runtime() {
+    let (service, _task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        Vec::new(),
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let health = service
+        .repo_runtime_health("codex", "/tmp/repo")
+        .expect("disabled runtime health should be reported");
+
+    assert_eq!(health.status, host_domain::RepoRuntimeHealthState::Disabled);
+    assert_eq!(
+        health.runtime.detail.as_deref(),
+        Some("Codex runtime is disabled in Agent Runtime settings.")
+    );
+    assert!(service
+        .runtime_list("codex", Some("/tmp/repo"))
+        .expect("runtime list should be readable")
+        .is_empty());
 }
 
 #[test]

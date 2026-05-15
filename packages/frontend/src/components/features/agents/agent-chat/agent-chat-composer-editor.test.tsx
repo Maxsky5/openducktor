@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { type ReactElement, useRef, useState } from "react";
+import { type ReactElement, useReducer, useRef } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   type AgentChatComposerDraft,
@@ -131,7 +131,10 @@ const EditorHarness = ({
   disabled?: boolean;
   onAddFiles?: (files: File[]) => void;
 }): ReactElement => {
-  const [draft, setDraft] = useState<AgentChatComposerDraft>(initialDraft);
+  const [draft, setDraft] = useReducer(
+    (_current: AgentChatComposerDraft, next: AgentChatComposerDraft) => next,
+    initialDraft,
+  );
   const editorRef = useRef<HTMLDivElement>(null);
 
   return (

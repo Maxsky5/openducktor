@@ -1,5 +1,5 @@
 import type { MutableRefObject, RefObject } from "react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
 type UseAgentChatScrollControllerInput = {
@@ -26,11 +26,20 @@ export function useAgentChatScrollController({
   messagesContentRef,
   isSessionWorking,
 }: UseAgentChatScrollControllerInput): UseAgentChatScrollControllerResult {
-  const [userScrolled, setUserScrolled] = useState(false);
+  const [userScrolled, dispatchUserScrolled] = useReducer(
+    (_current: boolean, next: boolean) => next,
+    false,
+  );
 
   const nearBottomRef = useRef(true);
   const nearTopRef = useRef(true);
-  const [buttonState, setButtonState] = useState({ nearBottom: true, nearTop: true });
+  const [buttonState, dispatchButtonState] = useReducer(
+    (
+      _current: { nearBottom: boolean; nearTop: boolean },
+      next: { nearBottom: boolean; nearTop: boolean },
+    ) => next,
+    { nearBottom: true, nearTop: true },
+  );
 
   const userScrolledRef = useRef(false);
   const userScrollIntentVersionRef = useRef(0);
@@ -43,13 +52,13 @@ export function useAgentChatScrollController({
     nearBottomRef.current = nearBottom;
     nearTopRef.current = nearTop;
     if (changed) {
-      setButtonState({ nearBottom, nearTop });
+      dispatchButtonState({ nearBottom, nearTop });
     }
   }, []);
 
-  const setUserScrolledState = useCallback((nextValue: boolean) => {
+  const applyUserScrolledState = useCallback((nextValue: boolean) => {
     userScrolledRef.current = nextValue;
-    setUserScrolled(nextValue);
+    dispatchUserScrolled(nextValue);
   }, []);
 
   const canScroll = useCallback((element: HTMLDivElement) => {
@@ -71,12 +80,18 @@ export function useAgentChatScrollController({
     const nearTop = container.scrollTop <= CHAT_SCROLL_EDGE_THRESHOLD_PX;
 
     if (nearBottom && userScrolledRef.current) {
-      setUserScrolledState(false);
+      applyUserScrolledState(false);
       container.style.overflowAnchor = "none";
     }
 
     updateNearEdges(nearBottom, nearTop);
-  }, [canScroll, distanceFromBottom, messagesContainerRef, setUserScrolledState, updateNearEdges]);
+  }, [
+    canScroll,
+    distanceFromBottom,
+    messagesContainerRef,
+    applyUserScrolledState,
+    updateNearEdges,
+  ]);
 
   const markAutoScroll = useCallback((element: HTMLDivElement) => {
     autoScrollRef.current = {
@@ -121,14 +136,14 @@ export function useAgentChatScrollController({
       autoScrollTimerRef.current = null;
     }
 
-    setUserScrolledState(false);
+    applyUserScrolledState(false);
     updateNearEdges(true, true);
 
     const container = messagesContainerRef.current;
     if (container) {
       container.style.overflowAnchor = "none";
     }
-  }, [activeExternalSessionId, messagesContainerRef, setUserScrolledState, updateNearEdges]);
+  }, [activeExternalSessionId, messagesContainerRef, applyUserScrolledState, updateNearEdges]);
 
   const scrollToBottomNow = useCallback(
     (force: boolean) => {
@@ -142,7 +157,7 @@ export function useAgentChatScrollController({
       }
 
       if (force && userScrolledRef.current) {
-        setUserScrolledState(false);
+        applyUserScrolledState(false);
       }
 
       const distance = distanceFromBottom(container);
@@ -160,7 +175,7 @@ export function useAgentChatScrollController({
       distanceFromBottom,
       markAutoScroll,
       messagesContainerRef,
-      setUserScrolledState,
+      applyUserScrolledState,
       updateNearEdges,
     ],
   );
@@ -176,8 +191,8 @@ export function useAgentChatScrollController({
     }
 
     userScrollIntentVersionRef.current += 1;
-    setUserScrolledState(true);
-  }, [canScroll, messagesContainerRef, setUserScrolledState]);
+    applyUserScrolledState(true);
+  }, [canScroll, messagesContainerRef, applyUserScrolledState]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -222,7 +237,7 @@ export function useAgentChatScrollController({
 
       if (!canScroll(container)) {
         if (userScrolledRef.current) {
-          setUserScrolledState(false);
+          applyUserScrolledState(false);
           updateOverflowAnchor();
         }
         return;
@@ -230,7 +245,7 @@ export function useAgentChatScrollController({
 
       if (nearBottom) {
         if (userScrolledRef.current) {
-          setUserScrolledState(false);
+          applyUserScrolledState(false);
           updateOverflowAnchor();
         }
         return;
@@ -247,7 +262,7 @@ export function useAgentChatScrollController({
       }
 
       if (!userScrolledRef.current) {
-        setUserScrolledState(true);
+        applyUserScrolledState(true);
         updateOverflowAnchor();
       }
     };
@@ -272,7 +287,7 @@ export function useAgentChatScrollController({
     isAutoScrollEvent,
     messagesContainerRef,
     scrollToBottomNow,
-    setUserScrolledState,
+    applyUserScrolledState,
     stopFollowing,
     updateNearEdges,
   ]);

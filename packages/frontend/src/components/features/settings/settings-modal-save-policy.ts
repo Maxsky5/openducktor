@@ -7,6 +7,7 @@ export const hasAnyDirtySections = (dirtySections: DirtySections): boolean =>
   dirtySections.general ||
   dirtySections.reusablePrompts ||
   dirtySections.globalGit ||
+  dirtySections.agentRuntimes ||
   dirtySections.kanban ||
   dirtySections.autopilot ||
   dirtySections.globalPromptOverrides ||
@@ -16,6 +17,7 @@ export const isGlobalGitOnlySave = (dirtySections: DirtySections): boolean =>
   dirtySections.globalGit &&
   !dirtySections.general &&
   !dirtySections.chat &&
+  !dirtySections.agentRuntimes &&
   !dirtySections.reusablePrompts &&
   !dirtySections.kanban &&
   !dirtySections.autopilot &&
@@ -38,6 +40,11 @@ export const buildPromptValidationSaveError = (totalErrorCount: number): string 
 export const buildReusablePromptValidationSaveError = (totalErrorCount: number): string => {
   const suffix = totalErrorCount > 1 ? "s" : "";
   return `Fix ${totalErrorCount} reusable prompt field error${suffix} before saving.`;
+};
+
+export const buildRuntimeAvailabilitySaveError = (totalErrorCount: number): string => {
+  const suffix = totalErrorCount > 1 ? "s" : "";
+  return `Fix ${totalErrorCount} disabled runtime selection${suffix} before saving.`;
 };
 
 export const buildRepoScriptValidationSaveError = ({

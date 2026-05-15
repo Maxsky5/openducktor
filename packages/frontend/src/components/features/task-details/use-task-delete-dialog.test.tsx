@@ -165,6 +165,51 @@ describe("use-task-delete-dialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  test("keeps duplicate delete guard active after sheet closes while delete is pending", async () => {
+    const onOpenChange = mock(() => {});
+    let resolveDelete: (() => void) | null = null;
+    const onDelete = mock(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDelete = resolve;
+        }),
+    );
+    const task = makeTask("ODT-6");
+    const props: HarnessProps = {
+      sheetOpen: true,
+      task,
+      hasSubtasks: true,
+      onOpenChange,
+      onDelete,
+    };
+
+    await mount(props);
+    await run(() => latest?.openDeleteDialog());
+
+    await act(async () => {
+      latest?.confirmDelete();
+      await Promise.resolve();
+    });
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(latest?.isDeletePending).toBe(true);
+
+    await update({ ...props, sheetOpen: false });
+    await update(props);
+    await run(() => latest?.openDeleteDialog());
+    await run(() => latest?.confirmDelete());
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(latest?.isDeletePending).toBe(true);
+
+    await run(() => {
+      resolveDelete?.();
+    });
+
+    expect(latest?.isDeletePending).toBe(false);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   test("resets dialog state when sheet closes", async () => {
     const onOpenChange = mock(() => {});
     const onDelete = mock(async () => {

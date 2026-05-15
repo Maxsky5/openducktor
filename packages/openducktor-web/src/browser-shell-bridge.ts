@@ -4,6 +4,7 @@ import {
   buildLocalAttachmentPreviewUrl,
   createLocalHostClient,
   ensureLocalHostSession,
+  subscribeLocalHostCodexAppServerEvents,
   subscribeLocalHostDevServerEvents,
   subscribeLocalHostRunEvents,
   subscribeLocalHostTaskEvents,
@@ -38,6 +39,7 @@ export const createBrowserShellBridge = (): ShellBridge => {
     subscribeRunEvents: subscribeLocalHostRunEvents,
     subscribeDevServerEvents: subscribeLocalHostDevServerEvents,
     subscribeTaskEvents: subscribeLocalHostTaskEvents,
+    subscribeCodexAppServerEvents: subscribeLocalHostCodexAppServerEvents,
     openExternalUrl: async (url) => {
       const opened = window.open(validateExternalBrowserUrl(url), "_blank", "noopener,noreferrer");
       if (!opened) {

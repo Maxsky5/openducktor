@@ -353,6 +353,38 @@ describe("AppCrashShell", () => {
         });
       }
     });
+
+    test("uses a caller-provided kanban navigation target", async () => {
+      const originalReplace = window.location.replace;
+      const replaceMock = mock(() => {});
+      Object.defineProperty(window.location, "replace", {
+        value: replaceMock,
+        writable: true,
+        configurable: true,
+      });
+
+      try {
+        render(
+          <AppCrashShell kanbanLocation="#/kanban">
+            <ThrowingChild shouldThrow={true} />
+          </AppCrashShell>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId("fatal-error-go-kanban")).toBeDefined();
+        });
+
+        fireEvent.click(screen.getByTestId("fatal-error-go-kanban"));
+
+        expect(replaceMock).toHaveBeenCalledWith("#/kanban");
+      } finally {
+        Object.defineProperty(window.location, "replace", {
+          value: originalReplace,
+          writable: true,
+          configurable: true,
+        });
+      }
+    });
   });
 
   describe("lazy-load failure", () => {
@@ -363,7 +395,7 @@ describe("AppCrashShell", () => {
 
       render(
         <AppCrashShell>
-          <Suspense fallback={<div data-testid="loading">Loading...</div>}>
+          <Suspense fallback={<div data-testid="loading">Loading…</div>}>
             <LazyBroken />
           </Suspense>
         </AppCrashShell>,

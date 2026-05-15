@@ -1,0 +1,1506 @@
+import {
+  createAgentSessionRecord,
+  createBuildSettingsConfig,
+  createBuildWorkspaceSettingsService,
+  createDirectMergeDevServerService,
+  createDirectMergeGitPort,
+  createDirectMergeTaskWorktreeService,
+  createPullRequestDetectSystemCommands,
+  createPullRequestSyncSystemCommands,
+  createPullRequestUpsertSystemCommands,
+  createTaskService,
+  githubPullListPayload,
+  githubPullResponsePayload,
+  pullRequest,
+  type TaskStorePort,
+  task,
+} from "./test-support/task-workflow-harness";
+
+describe("createTaskService pull requests", () => {
+  test("detects and links an existing open pull request for the builder branch", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      async getTask(input) {
+        calls.push({ type: "get", input });
+        return task({ status: "human_review" });
+      },
+      async getTaskMetadata(input) {
+        calls.push({ type: "metadata", input });
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        };
+      },
+      async setPullRequest(input) {
+        calls.push({ type: "setPullRequest", input });
+        return true;
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+    const service = createTaskService({
+      gitPort: {
+        ...createDirectMergeGitPort({
+          calls,
+          currentBranches: {
+            "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+          },
+        }),
+        async listRemotes(workingDir) {
+          calls.push({ type: "listRemotes", workingDir });
+          return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+        },
+      },
+      systemCommands: createPullRequestDetectSystemCommands({
+        calls,
+        openPayload: githubPullListPayload([{ number: 42 }]),
+      }),
+      taskStore,
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+        git: {
+          providers: {
+            github: {
+              enabled: true,
+              repository: { host: "github.com", owner: "openai", name: "openducktor" },
+              autoDetected: false,
+            },
+          },
+        },
+      }),
+    });
+
+    await expect(
+      service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+    ).resolves.toMatchObject({
+      outcome: "linked",
+      pullRequest: {
+        providerId: "github",
+        number: 42,
+        state: "open",
+        url: "https://github.com/openai/openducktor/pull/42",
+      },
+    });
+    expect(calls).toContainEqual({
+      type: "setPullRequest",
+      input: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        pullRequest: expect.objectContaining({ number: 42, state: "open" }),
+      },
+    });
+  });
+
+  test("links a pull request by number after fetching provider metadata", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      async getTask(input) {
+        calls.push({ type: "get", input });
+        return task({ status: "human_review" });
+      },
+      async getTaskMetadata(input) {
+        calls.push({ type: "metadata", input });
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        };
+      },
+      async setPullRequest(input) {
+        calls.push({ type: "setPullRequest", input });
+        return true;
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+    const service = createTaskService({
+      gitPort: {
+        ...createDirectMergeGitPort({ calls }),
+        async listRemotes(workingDir) {
+          calls.push({ type: "listRemotes", workingDir });
+          return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+        },
+      },
+      systemCommands: {
+        async requiredCommandError(command) {
+          calls.push({ type: "requiredCommand", command });
+          return null;
+        },
+        async versionCommand() {
+          throw new Error("unexpected version command");
+        },
+        async runCommandAllowFailure(command, args, options) {
+          calls.push({ type: "command", command, args, options });
+          if (args.includes("auth")) {
+            return { ok: true, stdout: "Logged in to github.com account octocat\n", stderr: "" };
+          }
+          if (args.some((arg) => arg.includes("pulls/77"))) {
+            return { ok: true, stdout: githubPullResponsePayload({ number: 77 }), stderr: "" };
+          }
+          throw new Error(`unexpected command args: ${args.join(" ")}`);
+        },
+      },
+      taskStore,
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+        git: {
+          providers: {
+            github: {
+              enabled: true,
+              repository: { host: "github.com", owner: "openai", name: "openducktor" },
+              autoDetected: false,
+            },
+          },
+        },
+      }),
+    });
+
+    await expect(
+      service.linkPullRequest({
+        repoPath: "/repo",
+        taskId: "task-1",
+        providerId: "github",
+        number: 77,
+      }),
+    ).resolves.toMatchObject({
+      providerId: "github",
+      number: 77,
+      url: "https://github.com/openai/openducktor/pull/77",
+      state: "open",
+    });
+    expect(calls).toContainEqual({
+      type: "setPullRequest",
+      input: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        pullRequest: expect.objectContaining({ number: 77, state: "open" }),
+      },
+    });
+  });
+
+  test("detects a merged pull request without linking metadata", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      async getTask() {
+        return task({ status: "human_review" });
+      },
+      async getTaskMetadata() {
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        };
+      },
+      async setPullRequest(input) {
+        calls.push({ type: "setPullRequest", input });
+        return true;
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+
+    await expect(
+      createTaskService({
+        gitPort: {
+          ...createDirectMergeGitPort({
+            calls,
+            currentBranches: {
+              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+            },
+          }),
+          async listRemotes() {
+            return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+          },
+        },
+        systemCommands: createPullRequestDetectSystemCommands({
+          calls,
+          allPayload: githubPullListPayload([
+            {
+              number: 12,
+              state: "closed",
+              mergedAt: "2026-05-10T11:00:00.000Z",
+              updatedAt: "2026-05-10T11:00:00.000Z",
+            },
+          ]),
+        }),
+        taskStore,
+        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+          git: {
+            providers: {
+              github: {
+                enabled: true,
+                repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                autoDetected: false,
+              },
+            },
+          },
+        }),
+      }).detectPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+    ).resolves.toMatchObject({
+      outcome: "merged",
+      pullRequest: {
+        providerId: "github",
+        number: 12,
+        state: "merged",
+      },
+    });
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "setPullRequest" }));
+  });
+
+  test("reports not_found when no pull request matches the builder branch", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      async getTask() {
+        return task({ status: "human_review" });
+      },
+      async getTaskMetadata() {
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        };
+      },
+      async setPullRequest() {
+        throw new Error("unexpected set pull request");
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+
+    await expect(
+      createTaskService({
+        gitPort: {
+          ...createDirectMergeGitPort({
+            calls,
+            currentBranches: {
+              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+            },
+          }),
+          async listRemotes() {
+            return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+          },
+        },
+        systemCommands: createPullRequestDetectSystemCommands({ calls }),
+        taskStore,
+        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+          git: {
+            providers: {
+              github: {
+                enabled: true,
+                repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                autoDetected: false,
+              },
+            },
+          },
+        }),
+      }).detectPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+    ).resolves.toEqual({
+      outcome: "not_found",
+      sourceBranch: "odt/task-1",
+      targetBranch: "main",
+    });
+  });
+
+  test("creates a pull request from a clean builder worktree", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      async getTask() {
+        return task({ status: "human_review" });
+      },
+      async getTaskMetadata() {
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        };
+      },
+      async setPullRequest(input) {
+        calls.push({ type: "setPullRequest", input });
+        return true;
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+    const service = createTaskService({
+      gitPort: {
+        ...createDirectMergeGitPort({
+          calls,
+          currentBranches: {
+            "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+          },
+        }),
+        async listRemotes(workingDir) {
+          calls.push({ type: "listRemotes", workingDir });
+          return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+        },
+        async getWorktreeStatusSummaryData(workingDir, targetBranch, diffScope) {
+          calls.push({ type: "summary", workingDir, targetBranch, diffScope });
+          return {
+            currentBranch: { name: "odt/task-1", detached: false },
+            fileStatuses: [],
+            fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+            targetAheadBehind: { ahead: 1, behind: 0 },
+            upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+          };
+        },
+        async suggestedSquashCommitMessage() {
+          return undefined;
+        },
+        async pushBranch(workingDir, branch, options) {
+          calls.push({ type: "push", workingDir, branch, options });
+          return { outcome: "pushed", remote: options?.remote ?? "origin", branch, output: "" };
+        },
+      },
+      settingsConfig: {
+        ...createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+        async readConfig() {
+          return null;
+        },
+      },
+      systemCommands: createPullRequestUpsertSystemCommands({
+        calls,
+        payload: githubPullResponsePayload({ number: 77 }),
+      }),
+      taskStore,
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+        git: {
+          providers: {
+            github: {
+              enabled: true,
+              repository: { host: "github.com", owner: "openai", name: "openducktor" },
+              autoDetected: false,
+            },
+          },
+        },
+      }),
+    });
+
+    await expect(
+      service.upsertPullRequest({
+        repoPath: "/repo",
+        taskId: "task-1",
+        content: { title: "Create PR", body: "Body" },
+      }),
+    ).resolves.toMatchObject({
+      providerId: "github",
+      number: 77,
+      state: "open",
+    });
+
+    expect(calls).toContainEqual({
+      type: "push",
+      workingDir: "/worktrees/repo/task-1",
+      branch: "odt/task-1",
+      options: { remote: "origin", setUpstream: true, forceWithLease: false },
+    });
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        type: "command",
+        args: expect.arrayContaining([
+          "POST",
+          "repos/openai/openducktor/pulls",
+          "title=Create PR",
+          "head=odt/task-1",
+          "base=main",
+          "body=Body",
+        ]),
+      }),
+    );
+    expect(calls).toContainEqual({
+      type: "setPullRequest",
+      input: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        pullRequest: expect.objectContaining({ number: 77, state: "open" }),
+      },
+    });
+  });
+
+  test("updates an existing editable pull request", async () => {
+    const calls: unknown[] = [];
+    const existingPullRequest = {
+      providerId: "github" as const,
+      number: 42,
+      url: "https://github.com/openai/openducktor/pull/42",
+      state: "draft" as const,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    };
+    const taskStore: TaskStorePort = {
+      async getTask() {
+        return task({ status: "human_review" });
+      },
+      async getTaskMetadata() {
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          pullRequest: existingPullRequest,
+          agentSessions: [],
+        };
+      },
+      async setPullRequest(input) {
+        calls.push({ type: "setPullRequest", input });
+        return true;
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+
+    await expect(
+      createTaskService({
+        gitPort: {
+          ...createDirectMergeGitPort({
+            calls,
+            currentBranches: {
+              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+            },
+          }),
+          async listRemotes() {
+            return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+          },
+          async getWorktreeStatusSummaryData() {
+            return {
+              currentBranch: { name: "odt/task-1", detached: false },
+              fileStatuses: [],
+              fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+              targetAheadBehind: { ahead: 1, behind: 0 },
+              upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+            };
+          },
+          async suggestedSquashCommitMessage() {
+            return undefined;
+          },
+          async pushBranch(workingDir, branch, options) {
+            calls.push({ type: "push", workingDir, branch, options });
+            return { outcome: "pushed", remote: options?.remote ?? "origin", branch, output: "" };
+          },
+        },
+        settingsConfig: {
+          ...createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          async readConfig() {
+            return null;
+          },
+        },
+        systemCommands: createPullRequestUpsertSystemCommands({
+          calls,
+          payload: githubPullResponsePayload({ number: 42, draft: true }),
+        }),
+        taskStore,
+        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+          git: {
+            providers: {
+              github: {
+                enabled: true,
+                repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                autoDetected: false,
+              },
+            },
+          },
+        }),
+      }).upsertPullRequest({
+        repoPath: "/repo",
+        taskId: "task-1",
+        content: { title: "Updated PR", body: "Body" },
+      }),
+    ).resolves.toMatchObject({
+      providerId: "github",
+      number: 42,
+      state: "draft",
+    });
+
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        type: "command",
+        args: expect.arrayContaining([
+          "PATCH",
+          "repos/openai/openducktor/pulls/42",
+          "title=Updated PR",
+          "body=Body",
+        ]),
+      }),
+    );
+  });
+
+  test("rejects pull request upsert from a dirty builder worktree", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      async getTask() {
+        return task({ status: "human_review" });
+      },
+      async getTaskMetadata() {
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        };
+      },
+      async setPullRequest() {
+        throw new Error("unexpected set pull request");
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+
+    await expect(
+      createTaskService({
+        gitPort: {
+          ...createDirectMergeGitPort({
+            calls,
+            currentBranches: {
+              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+            },
+          }),
+          async listRemotes() {
+            return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+          },
+          async getWorktreeStatusSummaryData() {
+            return {
+              currentBranch: { name: "odt/task-1", detached: false },
+              fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
+              fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
+              targetAheadBehind: { ahead: 1, behind: 0 },
+              upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+            };
+          },
+          async suggestedSquashCommitMessage() {
+            return undefined;
+          },
+        },
+        settingsConfig: {
+          ...createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          async readConfig() {
+            return null;
+          },
+        },
+        systemCommands: createPullRequestUpsertSystemCommands({
+          calls,
+          payload: githubPullResponsePayload({ number: 77 }),
+        }),
+        taskStore,
+        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+          git: {
+            providers: {
+              github: {
+                enabled: true,
+                repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                autoDetected: false,
+              },
+            },
+          },
+        }),
+      }).upsertPullRequest({
+        repoPath: "/repo",
+        taskId: "task-1",
+        content: { title: "Create PR", body: "Body" },
+      }),
+    ).rejects.toThrow(
+      "Human approval is blocked because the builder worktree has 1 uncommitted file. Commit or discard it before merging or opening a pull request.",
+    );
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "push" }));
+  });
+
+  test("rejects pull request upsert when direct merge metadata exists", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      async getTask() {
+        return task({ status: "human_review" });
+      },
+      async getTaskMetadata() {
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          directMerge: {
+            method: "squash",
+            sourceBranch: "odt/task-1",
+            targetBranch: { branch: "main" },
+            mergedAt: "2026-05-10T11:00:00.000Z",
+          },
+          agentSessions: [],
+        };
+      },
+      async setPullRequest() {
+        throw new Error("unexpected set pull request");
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+
+    await expect(
+      createTaskService({
+        gitPort: createDirectMergeGitPort({ calls }),
+        settingsConfig: {
+          ...createBuildSettingsConfig(new Set(["/repo"])),
+          async readConfig() {
+            return null;
+          },
+        },
+        systemCommands: createPullRequestUpsertSystemCommands({
+          calls,
+          payload: githubPullResponsePayload({ number: 77 }),
+        }),
+        taskStore,
+        taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+        }),
+      }).upsertPullRequest({
+        repoPath: "/repo",
+        taskId: "task-1",
+        content: { title: "Create PR", body: "Body" },
+      }),
+    ).rejects.toThrow(
+      "A local direct merge is already recorded for task task-1. Finish or discard that direct merge workflow before opening a pull request.",
+    );
+  });
+
+  test("syncs a merged linked pull request and closes the task", async () => {
+    const calls: unknown[] = [];
+    const linkedPullRequest = {
+      providerId: "github" as const,
+      number: 42,
+      url: "https://github.com/openai/openducktor/pull/42",
+      state: "open" as const,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    };
+    const taskStore: TaskStorePort = {
+      async listPullRequestSyncCandidates(input) {
+        calls.push({ type: "syncCandidates", input });
+        return [
+          task({
+            status: "human_review",
+            pullRequest: linkedPullRequest,
+            agentSessions: [
+              createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
+            ],
+          }),
+        ];
+      },
+      async listTasks(input) {
+        calls.push({ type: "list", input });
+        return [
+          task({
+            status: "human_review",
+            pullRequest: linkedPullRequest,
+            agentSessions: [
+              createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
+            ],
+          }),
+        ];
+      },
+      async setPullRequest(input) {
+        calls.push({ type: "setPullRequest", input });
+        return true;
+      },
+      async transitionTask(input) {
+        calls.push({ type: "transition", input });
+        return task({ status: input.status });
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async getTask() {
+        throw new Error("unexpected get");
+      },
+      async getTaskMetadata() {
+        throw new Error("unexpected metadata");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+    };
+
+    await expect(
+      createTaskService({
+        devServerService: createDirectMergeDevServerService(calls),
+        gitPort: createDirectMergeGitPort({
+          calls,
+          currentBranches: {
+            "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+          },
+          branches: {
+            "/repo": [
+              { name: "main", isCurrent: true, isRemote: false },
+              { name: "odt/task-1", isCurrent: false, isRemote: false },
+            ],
+          },
+          ancestorResults: { "/repo|odt/task-1|main": true },
+        }),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+        systemCommands: createPullRequestSyncSystemCommands({
+          calls,
+          payload: githubPullResponsePayload({
+            number: 42,
+            state: "closed",
+            mergedAt: "2026-05-10T11:00:00.000Z",
+            updatedAt: "2026-05-10T11:00:00.000Z",
+          }),
+        }),
+        taskStore,
+        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+          git: {
+            providers: {
+              github: {
+                enabled: true,
+                repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                autoDetected: false,
+              },
+            },
+          },
+        }),
+      }).repoPullRequestSync({ repoPath: "/repo" }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(calls).toContainEqual({
+      type: "setPullRequest",
+      input: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        pullRequest: expect.objectContaining({ number: 42, state: "merged" }),
+      },
+    });
+    expect(calls).toContainEqual({
+      type: "transition",
+      input: { repoPath: "/repo", taskId: "task-1", status: "closed" },
+    });
+    expect(calls).toContainEqual({
+      type: "deleteLocalBranch",
+      repoPath: "/repo",
+      branch: "odt/task-1",
+      force: false,
+    });
+  });
+
+  test("syncs linked pull request metadata without closing open pull requests", async () => {
+    const calls: unknown[] = [];
+    const linkedPullRequest = {
+      providerId: "github" as const,
+      number: 42,
+      url: "https://github.com/openai/openducktor/pull/42",
+      state: "open" as const,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    };
+    const taskStore: TaskStorePort = {
+      async listPullRequestSyncCandidates() {
+        return [task({ status: "human_review", pullRequest: linkedPullRequest })];
+      },
+      async setPullRequest(input) {
+        calls.push({ type: "setPullRequest", input });
+        return true;
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async getTask() {
+        throw new Error("unexpected get");
+      },
+      async getTaskMetadata() {
+        throw new Error("unexpected metadata");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+    };
+
+    await expect(
+      createTaskService({
+        systemCommands: createPullRequestSyncSystemCommands({
+          calls,
+          payload: githubPullResponsePayload({
+            number: 42,
+            state: "open",
+            updatedAt: "2026-05-10T10:00:00.000Z",
+          }),
+        }),
+        taskStore,
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+          git: {
+            providers: {
+              github: {
+                enabled: true,
+                repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                autoDetected: false,
+              },
+            },
+          },
+        }),
+      }).repoPullRequestSync({ repoPath: "/repo" }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(calls).toContainEqual({
+      type: "setPullRequest",
+      input: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        pullRequest: expect.objectContaining({
+          number: 42,
+          state: "open",
+          updatedAt: "2026-05-10T10:00:00.000Z",
+        }),
+      },
+    });
+  });
+
+  test("skips pull request sync before reading candidates when provider is unavailable", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      async listPullRequestSyncCandidates() {
+        throw new Error("should not list candidates");
+      },
+      async setPullRequest() {
+        throw new Error("should not set pull request");
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async getTask() {
+        throw new Error("unexpected get");
+      },
+      async getTaskMetadata() {
+        throw new Error("unexpected metadata");
+      },
+      async setSpecDocument() {
+        throw new Error("unexpected set spec");
+      },
+      async setPlanDocument() {
+        throw new Error("unexpected set plan");
+      },
+      async recordQaOutcome() {
+        throw new Error("unexpected QA");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+
+    await expect(
+      createTaskService({
+        systemCommands: createPullRequestSyncSystemCommands({
+          calls,
+          available: false,
+          payload: githubPullResponsePayload({ number: 42 }),
+        }),
+        taskStore,
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+          git: {
+            providers: {
+              github: {
+                enabled: true,
+                repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                autoDetected: false,
+              },
+            },
+          },
+        }),
+      }).repoPullRequestSync({ repoPath: "/repo" }),
+    ).resolves.toEqual({ ok: false });
+
+    expect(calls).toEqual([{ type: "requiredCommand", command: "gh" }]);
+  });
+
+  test("unlinks a pull request after validating task state and metadata", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      async getTask(input) {
+        calls.push({ type: "get", input });
+        return task({ status: "human_review" });
+      },
+      async getTaskMetadata(input) {
+        calls.push({ type: "metadata", input });
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          pullRequest: {
+            providerId: "github",
+            number: 42,
+            url: "https://github.com/openai/openducktor/pull/42",
+            state: "open",
+            createdAt: "2026-05-01T00:00:00.000Z",
+            updatedAt: "2026-05-02T00:00:00.000Z",
+          },
+          agentSessions: [],
+        };
+      },
+      async setPullRequest(input) {
+        calls.push({ type: "setPullRequest", input });
+        return true;
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+
+    await expect(
+      createTaskService({ taskStore }).unlinkPullRequest({
+        repoPath: "/repo",
+        taskId: "task-1",
+      }),
+    ).resolves.toBe(true);
+
+    expect(calls).toEqual([
+      { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "setPullRequest",
+        input: { repoPath: "/repo", taskId: "task-1", pullRequest: null },
+      },
+    ]);
+  });
+
+  test("rejects pull request unlink outside PR management statuses", async () => {
+    const taskStore: TaskStorePort = {
+      async getTask() {
+        return task({ status: "ready_for_dev" });
+      },
+      async setPullRequest() {
+        throw new Error("unexpected set pull request");
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async getTaskMetadata() {
+        throw new Error("unexpected metadata");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+
+    await expect(
+      createTaskService({ taskStore }).unlinkPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+    ).rejects.toThrow(
+      "Pull request management is only available from in_progress, ai_review, or human_review.",
+    );
+  });
+
+  test("rejects pull request unlink when no linked pull request exists", async () => {
+    const taskStore: TaskStorePort = {
+      async getTask() {
+        return task({ status: "in_progress" });
+      },
+      async getTaskMetadata() {
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        };
+      },
+      async setPullRequest() {
+        throw new Error("unexpected set pull request");
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+      async listTasks() {
+        throw new Error("unexpected list");
+      },
+    };
+
+    await expect(
+      createTaskService({ taskStore }).unlinkPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+    ).rejects.toThrow("Task task-1 does not have a linked pull request.");
+  });
+
+  test("links a merged pull request, closes the task, and cleans builder state", async () => {
+    const calls: unknown[] = [];
+    const closedTask = task({ status: "closed" });
+    const taskStore: TaskStorePort = {
+      async listTasks(input) {
+        calls.push({ type: "list", input });
+        return [
+          task({
+            status: "human_review",
+            agentSessions: [
+              createAgentSessionRecord({
+                workingDirectory: "/worktrees/repo/task-1",
+              }),
+            ],
+          }),
+        ];
+      },
+      async getTaskMetadata(input) {
+        calls.push({ type: "metadata", input });
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        };
+      },
+      async setPullRequest(input) {
+        calls.push({ type: "setPullRequest", input });
+        return true;
+      },
+      async transitionTask(input) {
+        calls.push({ type: "transition", input });
+        return closedTask;
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async getTask() {
+        throw new Error("unexpected get");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+    };
+    const service = createTaskService({
+      devServerService: createDirectMergeDevServerService(calls),
+      gitPort: createDirectMergeGitPort({
+        calls,
+        currentBranches: {
+          "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+        },
+        branches: {
+          "/repo": [
+            { name: "main", isCurrent: true, isRemote: false },
+            { name: "odt/task-1", isCurrent: false, isRemote: false },
+          ],
+        },
+        ancestorResults: { "/repo|odt/task-1|main": true },
+      }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+      taskStore,
+      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    await expect(
+      service.linkMergedPullRequest({
+        repoPath: "/repo",
+        taskId: "task-1",
+        pullRequest: pullRequest(),
+      }),
+    ).resolves.toMatchObject({ id: "task-1", status: "closed" });
+
+    expect(calls).toEqual([
+      { type: "list", input: { repoPath: "/repo" } },
+      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      {
+        type: "setPullRequest",
+        input: { repoPath: "/repo", taskId: "task-1", pullRequest: pullRequest() },
+      },
+      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "list", input: { repoPath: "/repo" } },
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      {
+        type: "removeWorktree",
+        repoPath: "/repo",
+        worktreePath: "/worktrees/repo/task-1",
+        force: false,
+      },
+      { type: "listBranches", workingDir: "/repo" },
+      { type: "isAncestor", workingDir: "/repo", ancestor: "odt/task-1", descendant: "main" },
+      { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: false },
+      {
+        type: "transition",
+        input: { repoPath: "/repo", taskId: "task-1", status: "closed" },
+      },
+    ]);
+  });
+
+  test("returns a closed task unchanged when the same merged pull request is already linked", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      async listTasks(input) {
+        calls.push({ type: "list", input });
+        return [task({ status: "closed" })];
+      },
+      async getTaskMetadata(input) {
+        calls.push({ type: "metadata", input });
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          pullRequest: pullRequest(),
+          agentSessions: [],
+        };
+      },
+      async setPullRequest() {
+        throw new Error("should not set pull request");
+      },
+      async transitionTask() {
+        throw new Error("should not transition");
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async getTask() {
+        throw new Error("unexpected get");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+    };
+
+    await expect(
+      createTaskService({
+        devServerService: createDirectMergeDevServerService(calls),
+        gitPort: createDirectMergeGitPort({ calls }),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+        taskStore,
+        taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+        }),
+      }).linkMergedPullRequest({
+        repoPath: "/repo",
+        taskId: "task-1",
+        pullRequest: pullRequest(),
+      }),
+    ).resolves.toMatchObject({ id: "task-1", status: "closed" });
+
+    expect(calls).toEqual([
+      { type: "list", input: { repoPath: "/repo" } },
+      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+    ]);
+  });
+
+  test("rejects pull request link completion for unmerged pull requests", async () => {
+    const taskStore: TaskStorePort = {
+      async listTasks() {
+        return [task({ status: "human_review" })];
+      },
+      async getTaskMetadata() {
+        return {
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        };
+      },
+      async setPullRequest() {
+        throw new Error("should not set pull request");
+      },
+      async transitionTask() {
+        throw new Error("should not transition");
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async getTask() {
+        throw new Error("unexpected get");
+      },
+      async deleteTask() {
+        throw new Error("unexpected delete");
+      },
+    };
+
+    await expect(
+      createTaskService({
+        devServerService: createDirectMergeDevServerService([]),
+        gitPort: createDirectMergeGitPort({ calls: [] }),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+        taskStore,
+        taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+        }),
+      }).linkMergedPullRequest({
+        repoPath: "/repo",
+        taskId: "task-1",
+        pullRequest: { ...pullRequest(), state: "open" },
+      }),
+    ).rejects.toThrow("Task task-1 can only link a merged pull request from detection results.");
+  });
+});

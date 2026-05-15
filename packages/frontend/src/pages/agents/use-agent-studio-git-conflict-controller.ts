@@ -78,10 +78,13 @@ const haveSameConflictedFiles = (left: string[], right: string[]): boolean => {
     return false;
   }
 
-  const sortedLeft = [...left].sort();
-  const sortedRight = [...right].sort();
+  const sortedLeft = left.toSorted();
+  const sortedRight = right.toSorted();
 
-  return sortedLeft.every((filePath, index) => filePath === sortedRight[index]);
+  return (
+    sortedLeft.length === sortedRight.length &&
+    sortedLeft.every((filePath, index) => filePath === sortedRight[index])
+  );
 };
 
 const haveSameConflictMetadata = (left: GitConflict, right: GitConflict): boolean => {

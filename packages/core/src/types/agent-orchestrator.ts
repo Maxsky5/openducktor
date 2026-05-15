@@ -323,6 +323,7 @@ export type AgentStreamPart =
       reason?: string;
       cost?: number;
       totalTokens?: number;
+      contextWindow?: number;
     }
   | {
       kind: "subagent";
@@ -392,6 +393,7 @@ export type AgentEvent =
       messageId: RuntimeHistoryAnchor;
       message: string;
       totalTokens?: number;
+      contextWindow?: number;
       model?: AgentModelSelection;
     }
   | {

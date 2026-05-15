@@ -53,10 +53,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   const runtimeRegistry = useMemo(() => createAgentRuntimeRegistry(), []);
   const agentEngine = useMemo(() => runtimeRegistry.createAgentEngine(), [runtimeRegistry]);
   const runtimeCatalogOperations = useMemo(() => {
-    return createHostRuntimeCatalogOperations(
-      runtimeRegistry.getAdapter,
-      runtimeRegistry.getRuntimeDefinition,
-    );
+    return createHostRuntimeCatalogOperations(runtimeRegistry.getAdapter);
   }, [runtimeRegistry]);
   const checkRepoRuntimeHealth = useCallback(
     (repoPath: string, runtimeKind: RuntimeKind) =>

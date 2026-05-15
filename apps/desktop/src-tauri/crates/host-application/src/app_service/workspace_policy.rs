@@ -2,9 +2,9 @@ use super::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::WorkspaceRecord;
 use host_infra_system::{
-    normalize_hook_set, normalize_repo_dev_servers, AgentDefaults, AutopilotSettings, ChatSettings,
-    GeneralSettings, GitTargetBranch, HookSet, KanbanSettings, PromptOverrides, RepoConfig,
-    RepoDevServerScript, RepoGitConfig, ReusablePrompt,
+    normalize_hook_set, normalize_repo_dev_servers, AgentDefaults, AgentRuntimes,
+    AutopilotSettings, ChatSettings, GeneralSettings, GitTargetBranch, HookSet, KanbanSettings,
+    PromptOverrides, RepoConfig, RepoDevServerScript, RepoGitConfig, ReusablePrompt,
 };
 use std::collections::HashMap;
 
@@ -44,6 +44,7 @@ pub struct WorkspaceSettingsSnapshot {
     pub reusable_prompts: Vec<ReusablePrompt>,
     pub kanban: KanbanSettings,
     pub autopilot: AutopilotSettings,
+    pub agent_runtimes: AgentRuntimes,
     pub workspaces: HashMap<String, RepoConfig>,
     pub global_prompt_overrides: PromptOverrides,
 }

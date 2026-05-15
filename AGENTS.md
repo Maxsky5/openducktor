@@ -37,7 +37,7 @@ Package manager: **Bun** (not npm/yarn). All workspace commands use `bun run`.
 - `packages/contracts`: Shared runtime schemas and IPC contracts (TS).
 - `packages/core`: Core domain services and ports.
 - `packages/adapters-opencode-sdk`: `AgentEnginePort` adapter.
-- `packages/adapters-tauri-host`: Frontend IPC adapter.
+- `packages/host-client`: Frontend IPC adapter.
 - `packages/openducktor-mcp`: MCP server exposing `odt_*` workflow tools.
 
 ## Architecture

@@ -180,15 +180,22 @@ describe("useAgentChatComposerEditorSelection", () => {
   let nextAnimationFrameId = 1;
 
   const flushAnimationFrames = async (): Promise<void> => {
-    await act(async () => {
-      while (animationFrameCallbacks.size > 0) {
-        const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-        animationFrameCallbacks.clear();
-        for (const callback of queuedCallbacks) {
-          callback(16);
-        }
-        await Promise.resolve();
+    const drainFrames = async (): Promise<void> => {
+      if (animationFrameCallbacks.size === 0) {
+        return;
       }
+
+      const queuedCallbacks = Array.from(animationFrameCallbacks.values());
+      animationFrameCallbacks.clear();
+      for (const callback of queuedCallbacks) {
+        callback(16);
+      }
+      await Promise.resolve();
+      await drainFrames();
+    };
+
+    await act(async () => {
+      await drainFrames();
     });
   };
 

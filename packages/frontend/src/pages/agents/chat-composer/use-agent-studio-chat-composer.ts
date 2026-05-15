@@ -28,9 +28,9 @@ import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { resolveActiveSessionChatComposerContext } from "@/features/agent-chat-composer/session-context/active-session-chat-composer-context";
 import { pickDefaultVisibleSelectionForCatalog } from "@/features/session-start";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { DEFAULT_RUNTIME_KIND, findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -74,6 +74,7 @@ type AgentStudioChatComposerState = {
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
+  supportsProfiles?: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   slashCommandCatalog: AgentSlashCommandCatalog;
@@ -108,11 +109,12 @@ export function useAgentStudioChatComposer({
 }: UseAgentStudioChatComposerArgs): AgentStudioChatComposerState {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const {
-    runtimeDefinitions,
+    availableRuntimeDefinitions,
+    allRuntimeDefinitions,
     loadRepoRuntimeCatalog,
     loadRepoRuntimeSlashCommands,
     loadRepoRuntimeFileSearch,
-  } = useRuntimeDefinitionsContext();
+  } = useRuntimeAvailabilityContext();
   const queryClient = useQueryClient();
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
@@ -133,11 +135,24 @@ export function useAgentStudioChatComposer({
   const activeSessionMessages = activeSessionChatComposerContext.messages;
   const hasActiveSession = activeSessionChatComposerContext.hasActiveSession;
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
-    return toRoleDefaultModelSelection(
+    const selection = toRoleDefaultModelSelection(
       repoSettings?.agentDefaults[role],
       repoSettings?.defaultRuntimeKind,
     );
-  }, [repoSettings?.agentDefaults, repoSettings?.defaultRuntimeKind, role]);
+    if (!selection) {
+      return null;
+    }
+    const runtimeKind = selection.runtimeKind;
+    if (!runtimeKind) {
+      return null;
+    }
+    return findRuntimeDefinition(availableRuntimeDefinitions, runtimeKind) ? selection : null;
+  }, [
+    availableRuntimeDefinitions,
+    repoSettings?.agentDefaults,
+    repoSettings?.defaultRuntimeKind,
+    role,
+  ]);
   const {
     draftSelection,
     isAwaitingRepoSettingsForWorkspaceRepoPath,
@@ -149,13 +164,18 @@ export function useAgentStudioChatComposer({
       activeSessionSelectedModel,
       draftSelection,
       roleDefaultSelection,
-      repoDefaultRuntimeKind: repoSettings?.defaultRuntimeKind ?? null,
+      repoDefaultRuntimeKind:
+        repoSettings?.defaultRuntimeKind &&
+        findRuntimeDefinition(availableRuntimeDefinitions, repoSettings.defaultRuntimeKind)
+          ? repoSettings.defaultRuntimeKind
+          : null,
     });
   }, [
     activeSessionSelectedModel,
     draftSelection,
     repoSettings?.defaultRuntimeKind,
     roleDefaultSelection,
+    availableRuntimeDefinitions,
   ]);
   const activeSessionRuntimeQueryState = useMemo(
     () =>
@@ -180,12 +200,35 @@ export function useAgentStudioChatComposer({
   const { runtimeSupportsSlashCommands, supportsFileSearch } = useMemo(
     () =>
       resolveRuntimePromptInputSupport({
-        runtimeDefinitions,
+        runtimeDefinitions: hasActiveSession ? allRuntimeDefinitions : availableRuntimeDefinitions,
         readyActiveSessionRuntimeKind: activeSessionRuntimeQueryInput?.runtimeKind ?? null,
         selectedRuntimeKind,
       }),
-    [activeSessionRuntimeQueryInput?.runtimeKind, selectedRuntimeKind, runtimeDefinitions],
+    [
+      activeSessionRuntimeQueryInput?.runtimeKind,
+      allRuntimeDefinitions,
+      availableRuntimeDefinitions,
+      hasActiveSession,
+      selectedRuntimeKind,
+    ],
   );
+  const supportsProfiles = useMemo(() => {
+    const runtimeKind = hasActiveSession ? activeSessionRuntimeKind : selectedRuntimeKind;
+    if (!runtimeKind) {
+      return true;
+    }
+    const runtimeDefinitions = hasActiveSession
+      ? allRuntimeDefinitions
+      : availableRuntimeDefinitions;
+    const definition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
+    return definition?.capabilities.optionalSurfaces.supportsProfiles ?? false;
+  }, [
+    activeSessionRuntimeKind,
+    allRuntimeDefinitions,
+    availableRuntimeDefinitions,
+    hasActiveSession,
+    selectedRuntimeKind,
+  ]);
 
   const composerCatalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(
@@ -198,8 +241,21 @@ export function useAgentStudioChatComposer({
       activeExternalSessionId === null &&
       selectedRuntimeKind !== null,
   });
+  const activeSessionCatalogQuery = useQuery({
+    ...repoRuntimeCatalogQueryOptions(
+      activeSessionRuntimeQueryInput?.repoPath ?? "",
+      activeSessionRuntimeQueryInput?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      loadCatalogForRepo,
+    ),
+    enabled:
+      hasActiveSession &&
+      activeSessionModelCatalog === null &&
+      activeSessionRuntimeQueryInput !== null,
+  });
   const composerCatalog = composerCatalogQuery.data ?? null;
-  const isLoadingComposerCatalog = composerCatalogQuery.isLoading;
+  const activeSessionCatalog = activeSessionCatalogQuery.data ?? null;
+  const isLoadingComposerCatalog =
+    composerCatalogQuery.isLoading || activeSessionCatalogQuery.isLoading;
   const {
     supportsSlashCommands,
     slashCommandCatalog,
@@ -248,7 +304,7 @@ export function useAgentStudioChatComposer({
     isAwaitingRepoSettingsForWorkspaceRepoPath,
     roleDefaultSelection,
   ]);
-  const selectionCatalog = activeSessionModelCatalog ?? composerCatalog;
+  const selectionCatalog = activeSessionModelCatalog ?? activeSessionCatalog ?? composerCatalog;
   const searchFiles = useMemo(
     () =>
       createChatComposerFileSearch({
@@ -348,6 +404,7 @@ export function useAgentStudioChatComposer({
     selectedModelSelection,
     selectedModelDescriptor: selectedModelEntry,
     isSelectionCatalogLoading,
+    supportsProfiles,
     supportsSlashCommands,
     supportsFileSearch,
     slashCommandCatalog,

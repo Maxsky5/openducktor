@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
   type RepoPromptOverrides,
@@ -22,6 +23,7 @@ import {
 
 enableReactActEnvironment();
 
+const actualHostClientModule = await import("@/lib/host-client");
 const originalConsoleError = console.error;
 
 const startAgentSessionMock = mock(async () => "session-1");
@@ -249,6 +251,8 @@ const renderPage = async (options?: { waitForKanbanReady?: boolean }): Promise<R
       <RuntimeDefinitionsContext.Provider
         value={{
           runtimeDefinitions: [...RUNTIME_DEFINITIONS],
+          availableRuntimeDefinitions: [...RUNTIME_DEFINITIONS],
+          agentRuntimes: DEFAULT_AGENT_RUNTIMES,
           isLoadingRuntimeDefinitions: false,
           runtimeDefinitionsError: null,
           refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
@@ -403,10 +407,21 @@ describe("KanbanPage session start modal flow", () => {
     }));
 
     mock.module("@/components/features/kanban/kanban-column", () => ({
-      KanbanColumn: (props: Record<string, unknown>): ReactElement | null => {
+      KanbanColumn: (props: Record<string, unknown>): ReactElement => {
         latestKanbanColumnProps = props;
         latestKanbanColumnPropsList.push(props);
-        return null;
+        const column = props.column as {
+          title: string;
+          tasks: Array<{ id: string; title?: string }>;
+        };
+        return (
+          <div data-testid="kanban-column">
+            <span>{column.title}</span>
+            {column.tasks.map((task) => (
+              <span key={task.id}>{task.title}</span>
+            ))}
+          </div>
+        );
       },
     }));
 
@@ -645,7 +660,7 @@ describe("KanbanPage session start modal flow", () => {
         "@/features/human-review-feedback/human-review-feedback-modal",
         () => import("@/features/human-review-feedback/human-review-feedback-modal"),
       ],
-      ["@/lib/host-client", () => import("@/lib/host-client")],
+      ["@/lib/host-client", async () => actualHostClientModule],
       ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
     ]);
   });

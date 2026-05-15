@@ -294,6 +294,104 @@ fn builtin_opencode_runtime_stays_host_managed_with_local_http_routes() {
 }
 
 #[test]
+fn builtin_codex_runtime_exposes_codex_identity_and_defaults_are_unchanged() {
+    let registry = super::builtin_runtime_registry();
+    let definition = registry
+        .definition_by_str("codex")
+        .expect("codex runtime should be registered");
+
+    assert_eq!(definition.kind().as_str(), "codex");
+    assert!(matches!(
+        definition.descriptor().capabilities.provisioning_mode,
+        RuntimeProvisioningMode::HostManaged
+    ));
+    assert_eq!(
+        definition
+            .descriptor()
+            .capabilities
+            .session_lifecycle
+            .supported_start_modes,
+        vec![
+            RuntimeSessionStartMode::Fresh,
+            RuntimeSessionStartMode::Reuse,
+            RuntimeSessionStartMode::Fork,
+        ]
+    );
+    assert_eq!(
+        definition
+            .descriptor()
+            .capabilities
+            .approvals
+            .supported_request_types,
+        vec![
+            RuntimeApprovalRequestType::CommandExecution,
+            RuntimeApprovalRequestType::FileChange,
+            RuntimeApprovalRequestType::PermissionGrant,
+            RuntimeApprovalRequestType::RuntimeTool,
+        ]
+    );
+    assert_eq!(
+        definition
+            .descriptor()
+            .capabilities
+            .approvals
+            .supported_reply_outcomes,
+        vec![
+            RuntimeApprovalReplyOutcome::ApproveOnce,
+            RuntimeApprovalReplyOutcome::Reject,
+        ]
+    );
+    assert_eq!(
+        definition
+            .descriptor()
+            .capabilities
+            .prompt_input
+            .supported_parts,
+        vec![RuntimePromptInputPartType::Text]
+    );
+    assert!(
+        definition
+            .descriptor()
+            .capabilities
+            .optional_surfaces
+            .supports_variants
+    );
+    assert!(
+        definition
+            .descriptor()
+            .capabilities
+            .optional_surfaces
+            .supports_diff
+    );
+    assert!(
+        definition
+            .descriptor()
+            .capabilities
+            .optional_surfaces
+            .supports_mcp_status
+    );
+    assert_eq!(
+        definition.descriptor().read_only_role_blocked_tools,
+        vec![
+            "patch".to_string(),
+            "write".to_string(),
+            "shell".to_string(),
+            "network".to_string(),
+            "permissions".to_string(),
+        ]
+    );
+    assert_eq!(registry.default_kind().as_str(), "opencode");
+}
+
+#[test]
+fn builtin_runtime_definitions_return_default_runtime_first() {
+    let definitions = super::builtin_runtime_registry().definitions();
+
+    assert_eq!(definitions[0].kind().as_str(), "opencode");
+    assert_eq!(definitions[1].kind().as_str(), "codex");
+}
+
+#[test]
 fn runtime_descriptor_validation_reports_mandatory_capabilities_and_scopes() {
     let descriptor = RuntimeDescriptor {
         kind: AgentRuntimeKind::opencode(),

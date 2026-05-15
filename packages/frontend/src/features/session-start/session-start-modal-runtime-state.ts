@@ -74,6 +74,10 @@ export function useSessionStartModalRuntimeState({
     setRequestedRuntimeKindState(runtimeKind);
   }, []);
 
+  const usesInitialCatalog =
+    initialCatalog !== undefined &&
+    (initialCatalog === null || initialCatalog.runtime?.kind === selectedRuntimeKind);
+
   const catalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(
       workspaceRepoPath ?? "",
@@ -81,10 +85,7 @@ export function useSessionStartModalRuntimeState({
       loadCatalog,
     ),
     enabled:
-      initialCatalog === undefined &&
-      Boolean(workspaceRepoPath) &&
-      isOpen &&
-      selectedRuntimeKind !== null,
+      !usesInitialCatalog && Boolean(workspaceRepoPath) && isOpen && selectedRuntimeKind !== null,
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!workspaceRepoPath) {
         throw new Error("No repository selected.");
@@ -96,12 +97,9 @@ export function useSessionStartModalRuntimeState({
     },
   });
 
-  const catalog = initialCatalog ?? catalogQuery.data ?? null;
+  const catalog = usesInitialCatalog ? initialCatalog : (catalogQuery.data ?? null);
   const isCatalogLoading =
-    initialCatalog === undefined &&
-    isOpen &&
-    workspaceRepoPath !== null &&
-    selectedRuntimeKind !== null
+    !usesInitialCatalog && isOpen && workspaceRepoPath !== null && selectedRuntimeKind !== null
       ? catalogQuery.isLoading
       : false;
 

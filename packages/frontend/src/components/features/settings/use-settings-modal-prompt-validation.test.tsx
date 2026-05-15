@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -39,6 +39,7 @@ const createSnapshot = (): SettingsSnapshot => ({
       enabled: true,
     },
   },
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {
     "repo-a": {
       workspaceId: "repo-a",
@@ -98,6 +99,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.settingsSectionErrorCountById).toEqual({
       general: 0,
       git: 0,
+      runtimes: 0,
       repositories: 0,
       prompts: 0,
       "reusable-prompts": 0,
@@ -127,6 +129,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.settingsSectionErrorCountById).toEqual({
       general: 0,
       git: 0,
+      runtimes: 0,
       repositories: 1,
       prompts: 1,
       "reusable-prompts": 0,

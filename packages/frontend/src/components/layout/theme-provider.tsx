@@ -1,6 +1,6 @@
 import type { SettingsSnapshot, Theme } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { createContext, use, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
@@ -30,12 +30,9 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
     }
 
     const resolved = settingsSnapshot.theme === "dark" ? "dark" : "light";
+    applyThemeToDocument(resolved);
     setThemeState((current: Theme) => (current === resolved ? current : resolved));
   }, [settingsSnapshot]);
-
-  useLayoutEffect(() => {
-    applyThemeToDocument(theme);
-  }, [theme]);
 
   const value = useMemo(
     () => ({
@@ -46,6 +43,7 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
           settingsSnapshotQueryOptions().queryKey,
         );
         setThemeState(newTheme);
+        applyThemeToDocument(newTheme);
         queryClient.setQueryData(
           settingsSnapshotQueryOptions().queryKey,
           (current: SettingsSnapshot | undefined) => {
@@ -61,6 +59,7 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
         );
         void hostBridge.client.setTheme(newTheme).catch((error) => {
           console.error("Failed to persist theme change.", error);
+          applyThemeToDocument(previousTheme);
           setThemeState(previousTheme);
           if (previousSnapshot) {
             queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, previousSnapshot);
@@ -82,7 +81,7 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
 }
 
 export const useTheme = () => {
-  const context = useContext(ThemeProviderContext);
+  const context = use(ThemeProviderContext);
 
   if (context === undefined) {
     throw new Error("useTheme must be used within a ThemeProvider");

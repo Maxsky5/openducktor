@@ -250,7 +250,7 @@ export function useAppLifecycle({
       try {
         const beadsCheck = await refreshBeadsCheckForRepo(activeRepoPath, false);
         repoStoreHealth = getBlockingRepoStoreHealth(beadsCheck);
-        if (beadsCheck.repoStoreHealth.status !== "initializing") {
+        if (beadsCheck.repoStoreHealth.isReady) {
           clearBeadsPreparationTimer();
           if (beadsPreparationToastShown) {
             dismissBeadsPreparationToast();
@@ -333,7 +333,10 @@ export function useAppLifecycle({
       });
 
     return () => {
-      clearBeadsPreparationTimer();
+      if (beadsPreparationTimer !== null) {
+        clearTimeout(beadsPreparationTimer);
+        beadsPreparationTimer = null;
+      }
       dismissBeadsPreparationToast();
     };
   }, [

@@ -13,6 +13,13 @@ const BUILD_SELECTION = {
 
 const settleStartedAgentSession = () => undefined;
 
+const CODEX_BUILD_SELECTION = {
+  ...BUILD_SELECTION,
+  runtimeKind: "codex" as const,
+  providerId: "codex",
+  variant: "medium",
+};
+
 describe("session-start-workflow", () => {
   test("aborts before session creation when the before-start action fails", async () => {
     const startAgentSession = mock(async () => "session-new");
@@ -254,5 +261,96 @@ describe("session-start-workflow", () => {
     );
     expect(settleStartedAgentSession).toHaveBeenCalledWith("session-build-new");
     expect(sendAgentMessage).not.toHaveBeenCalled();
+  });
+
+  test("sends Codex fresh kickoff through the standard post-start message path", async () => {
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => "session-codex");
+
+    const result = await startSessionWorkflow({
+      activeWorkspace: null,
+      queryClient: new QueryClient(),
+      intent: {
+        taskId: "TASK-4",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        startMode: "fresh",
+        postStartAction: "kickoff",
+      },
+      selection: CODEX_BUILD_SELECTION,
+      task: createTaskCardFixture({
+        id: "TASK-4",
+        title: "Implement Codex",
+        description: "desc",
+        status: "ready_for_dev",
+        priority: 1,
+      }),
+      startAgentSession,
+      settleStartedAgentSession,
+      sendAgentMessage,
+    });
+
+    expect(result).toEqual({
+      externalSessionId: "session-codex",
+      postStartActionError: null,
+    });
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-codex", [
+      expect.objectContaining({
+        kind: "text",
+        text: expect.stringContaining("taskId TASK-4"),
+      }),
+    ]);
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startMode: "fresh",
+        selectedModel: CODEX_BUILD_SELECTION,
+      }),
+    );
+  });
+
+  test("sends Codex reuse kickoff through the standard post-start message path", async () => {
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => "session-codex-reuse");
+
+    const result = await startSessionWorkflow({
+      activeWorkspace: null,
+      queryClient: new QueryClient(),
+      intent: {
+        taskId: "TASK-5",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        startMode: "reuse",
+        sourceExternalSessionId: "session-codex-reuse",
+        postStartAction: "kickoff",
+      },
+      selection: CODEX_BUILD_SELECTION,
+      task: createTaskCardFixture({
+        id: "TASK-5",
+        title: "Continue Codex",
+        description: "desc",
+        status: "in_progress",
+        priority: 1,
+      }),
+      startAgentSession,
+      settleStartedAgentSession,
+      sendAgentMessage,
+    });
+
+    expect(result).toEqual({
+      externalSessionId: "session-codex-reuse",
+      postStartActionError: null,
+    });
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-codex-reuse", [
+      expect.objectContaining({
+        kind: "text",
+        text: expect.stringContaining("taskId TASK-5"),
+      }),
+    ]);
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startMode: "reuse",
+        sourceExternalSessionId: "session-codex-reuse",
+      }),
+    );
   });
 });

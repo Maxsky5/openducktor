@@ -3,7 +3,7 @@ import type { AgentEnginePort } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-export type DraftChannel = "text" | "reasoning";
+export type DraftChannel = "reasoning";
 export type DraftSource = "delta" | "part";
 export type DraftChannelValueMap<T> = Partial<Record<DraftChannel, T>>;
 

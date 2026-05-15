@@ -86,6 +86,20 @@ describe("AgentChatComposer", () => {
     expect(html).not.toContain("22.5%");
   });
 
+  test("hides the agent profile selector when runtime profiles are unsupported", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          supportsProfiles: false,
+        },
+      }),
+    );
+
+    expect(html).not.toContain("Hephaestus (Deep Agent)");
+    expect(html).toContain("GPT-5.3 Codex");
+  });
+
   test("stop button is enabled when session is working even when sends are otherwise disabled", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {

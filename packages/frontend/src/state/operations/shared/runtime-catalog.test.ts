@@ -112,9 +112,7 @@ const fileSearchResultsFixture: AgentFileSearchResult[] = [
 ];
 
 const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDependencies => ({
-  supportsMcpStatus: () => true,
-  repoRuntimeHealth: async () => healthyRepoRuntimeHealthFixture,
-  repoRuntimeHealthStatus: async () => ({
+  repoRuntimeHealth: async () => ({
     ...healthyRepoRuntimeHealthFixture,
     status: "checking",
     runtime: {
@@ -253,7 +251,7 @@ describe("runtime-catalog", () => {
     });
   });
 
-  test("delegates repo runtime health to the host-owned command", async () => {
+  test("delegates repo runtime health to the active host readiness command", async () => {
     const repoRuntimeHealth = mock(async () => healthyRepoRuntimeHealthFixture);
     const operations = createRuntimeCatalogOperations(createDeps({ repoRuntimeHealth }));
 
@@ -261,168 +259,5 @@ describe("runtime-catalog", () => {
 
     expect(repoRuntimeHealth).toHaveBeenCalledWith("opencode", "/tmp/repo");
     expect(result).toEqual(healthyRepoRuntimeHealthFixture);
-  });
-
-  test("preserves host startup stage when the frontend times out waiting on the host health command", async () => {
-    const operations = createRuntimeCatalogOperations(
-      createDeps({
-        runtimeHealthTimeoutMs: 5,
-        runtimeHealthStatusTimeoutMs: 5,
-        repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
-        repoRuntimeHealthStatus: async () => ({
-          ...healthyRepoRuntimeHealthFixture,
-          status: "checking",
-          runtime: {
-            status: "ready",
-            stage: "runtime_ready",
-            observation: "observing_existing_startup",
-            instance: runtimeFixture,
-            startedAt: startupStatusFixture.startedAt,
-            updatedAt: startupStatusFixture.updatedAt,
-            elapsedMs: startupStatusFixture.elapsedMs,
-            attempts: startupStatusFixture.attempts,
-            detail: null,
-            failureKind: null,
-            failureReason: null,
-          },
-          mcp: {
-            supported: true,
-            status: "checking",
-            serverName: "openducktor",
-            serverStatus: null,
-            toolIds: [],
-            detail: "Checking OpenDucktor MCP",
-            failureKind: null,
-          },
-        }),
-      }),
-    );
-
-    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
-
-    expect(result.status).toBe("checking");
-    expect(result.mcp?.status).toBe("checking");
-    expect(result.runtime.attempts).toBe(4);
-    expect(result.runtime.elapsedMs).toBe(5000);
-  });
-
-  test("does not trust a stale ready host snapshot when the foreground health query times out", async () => {
-    const operations = createRuntimeCatalogOperations(
-      createDeps({
-        runtimeHealthTimeoutMs: 5,
-        runtimeHealthStatusTimeoutMs: 5,
-        repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
-        repoRuntimeHealthStatus: async () => healthyRepoRuntimeHealthFixture,
-      }),
-    );
-
-    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
-
-    expect(result.status).toBe("checking");
-    expect(result.runtime.status).toBe("ready");
-    expect(result.mcp?.status).toBe("checking");
-    expect(result.mcp?.detail).toContain("Timed out after 5ms");
-    expect(result.mcp?.failureKind).toBe("timeout");
-  });
-
-  test("preserves a ready snapshot for runtimes without MCP status support when the foreground health query times out", async () => {
-    const readyWithoutMcp: RepoRuntimeHealthCheck = {
-      ...healthyRepoRuntimeHealthFixture,
-      checkedAt: "2026-02-22T08:00:11.000Z",
-      mcp: null,
-    };
-    const operations = createRuntimeCatalogOperations(
-      createDeps({
-        supportsMcpStatus: () => false,
-        runtimeHealthTimeoutMs: 5,
-        runtimeHealthStatusTimeoutMs: 5,
-        repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
-        repoRuntimeHealthStatus: async () => readyWithoutMcp,
-      }),
-    );
-
-    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
-
-    expect(result).toEqual(readyWithoutMcp);
-  });
-
-  test("omits synthetic MCP errors for runtimes without MCP status support when status fallback also times out", async () => {
-    const operations = createRuntimeCatalogOperations(
-      createDeps({
-        supportsMcpStatus: () => false,
-        runtimeHealthTimeoutMs: 5,
-        runtimeHealthStatusTimeoutMs: 5,
-        repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
-        repoRuntimeHealthStatus: async () => {
-          throw new Error("health status unavailable");
-        },
-      }),
-    );
-
-    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
-
-    expect(result.status).toBe("error");
-    expect(result.runtime.detail).toContain("health status unavailable");
-    expect(result.mcp).toBeNull();
-  });
-
-  test("keeps frontend observation timeout distinct from host timeout-shaped failures", async () => {
-    const operations = createRuntimeCatalogOperations(
-      createDeps({
-        repoRuntimeHealth: async () => ({
-          ...healthyRepoRuntimeHealthFixture,
-          status: "error",
-          mcp: {
-            supported: true,
-            status: "error",
-            serverName: "openducktor",
-            serverStatus: null,
-            toolIds: [],
-            detail: "OpenCode runtime failed to load MCP status: HTTP 504",
-            failureKind: "timeout",
-          },
-        }),
-      }),
-    );
-
-    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
-
-    expect(result.status).toBe("error");
-    expect(result.mcp?.failureKind).toBe("timeout");
-  });
-
-  test("surfaces startup-status read failures instead of swallowing them on frontend timeout", async () => {
-    const operations = createRuntimeCatalogOperations(
-      createDeps({
-        runtimeHealthTimeoutMs: 5,
-        runtimeHealthStatusTimeoutMs: 5,
-        repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
-        repoRuntimeHealthStatus: async () => {
-          throw new Error("health status unavailable");
-        },
-      }),
-    );
-
-    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
-
-    expect(result.status).toBe("error");
-    expect(result.runtime.detail).toContain("health status unavailable");
-  });
-
-  test("times out the fallback host status read too", async () => {
-    const operations = createRuntimeCatalogOperations(
-      createDeps({
-        runtimeHealthTimeoutMs: 5,
-        runtimeHealthStatusTimeoutMs: 5,
-        repoRuntimeHealth: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
-        repoRuntimeHealthStatus: async () => await new Promise<RepoRuntimeHealthCheck>(() => {}),
-      }),
-    );
-
-    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
-
-    expect(result.status).toBe("error");
-    expect(result.runtime.detail).toContain("Failed to load latest host runtime health status");
-    expect(result.runtime.detail).toContain("Timed out after 5ms");
   });
 });

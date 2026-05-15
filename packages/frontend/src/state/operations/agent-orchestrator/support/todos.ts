@@ -61,7 +61,7 @@ export const mergeTodoListPreservingOrder = (
   const normalizedIncoming = [...deduped.values()];
   const previousOrder = new Map(previous.map((todo, index) => [todo.id, index]));
 
-  return [...normalizedIncoming].sort((a, b) => {
+  return normalizedIncoming.toSorted((a, b) => {
     const aIndex = previousOrder.get(a.id);
     const bIndex = previousOrder.get(b.id);
     if (aIndex !== undefined && bIndex !== undefined) {

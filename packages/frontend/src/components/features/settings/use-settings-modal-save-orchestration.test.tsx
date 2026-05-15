@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -35,6 +35,7 @@ const createSnapshot = (): SettingsSnapshot => ({
     rules: [],
   },
   globalPromptOverrides: {},
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {
     repo: {
       workspaceId: "repo",
@@ -65,6 +66,8 @@ const createArgs = (
   promptValidationState: EMPTY_PROMPT_VALIDATION_STATE,
   hasReusablePromptValidationErrors: false,
   reusablePromptValidationErrorCount: 0,
+  hasRuntimeAvailabilityErrors: false,
+  runtimeAvailabilityErrorCount: 0,
   hasRepoScriptValidationErrors: false,
   repoScriptValidationErrorCount: 0,
   invalidRepoPathsWithDevServerErrors: [],
@@ -128,6 +131,30 @@ describe("useSettingsModalSaveOrchestration", () => {
 
     expect(didSave).toBe(false);
     expect(harness.getLatest().saveError).toBe("Fix 2 prompt placeholder errors before saving.");
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+
+    await harness.unmount();
+  });
+
+  test("blocks disabled runtime selections before persistence", async () => {
+    const saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(
+      createArgs({
+        hasRuntimeAvailabilityErrors: true,
+        runtimeAvailabilityErrorCount: 2,
+        saveSettingsSnapshot,
+      }),
+    );
+
+    await harness.mount();
+
+    let didSave = true;
+    await harness.run(async (state) => {
+      didSave = await state.submit();
+    });
+
+    expect(didSave).toBe(false);
+    expect(harness.getLatest().saveError).toBe("Fix 2 disabled runtime selections before saving.");
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
 
     await harness.unmount();

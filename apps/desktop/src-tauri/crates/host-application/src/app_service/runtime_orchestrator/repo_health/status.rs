@@ -44,6 +44,9 @@ impl AppService {
     ) -> Result<RepoRuntimeHealthCheck> {
         let runtime_kind = self.resolve_supported_runtime_kind(runtime_kind)?;
         let repo_key = self.resolve_authorized_repo_path(repo_path)?;
+        if !self.is_runtime_enabled(&runtime_kind)? {
+            return self.disabled_repo_runtime_health(&runtime_kind, repo_key.as_str());
+        }
         let status_key = Self::runtime_ensure_flight_key(&runtime_kind, repo_key.as_str());
 
         if let Some(snapshot) = self
@@ -83,6 +86,9 @@ impl AppService {
                     RuntimeHealthWorkflowStage::RuntimeReady | RuntimeHealthWorkflowStage::Ready
                 ),
                 runtime_error: match progress.stage {
+                    RuntimeHealthWorkflowStage::Disabled => {
+                        Some("Runtime is disabled in Agent Runtime settings.".to_string())
+                    }
                     RuntimeHealthWorkflowStage::Idle => {
                         Some("Runtime has not been started yet.".to_string())
                     }

@@ -215,10 +215,13 @@ const readAppendedTerminalOutput = (
   entries: AgentStudioDevServerTerminalBuffer["entries"],
   lastRenderedSequence: number | null,
 ): string => {
-  return entries
-    .filter((entry) => lastRenderedSequence === null || entry.sequence > lastRenderedSequence)
-    .map((entry) => entry.data)
-    .join("");
+  let output = "";
+  for (const entry of entries) {
+    if (lastRenderedSequence === null || entry.sequence > lastRenderedSequence) {
+      output += entry.data;
+    }
+  }
+  return output;
 };
 
 const renderTerminalBuffer = async ({

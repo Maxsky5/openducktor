@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import type { BeadsCheck } from "@openducktor/contracts";
+import { createHostClient } from "@openducktor/host-client";
 import { CancelledError } from "@tanstack/react-query";
 import { act } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -46,6 +46,28 @@ const createDeferred = <T,>() => {
 const makeBeadsCheck = (overrides: BeadsCheckFixtureOverrides = {}): BeadsCheck =>
   createBeadsCheckFixture({}, overrides);
 
+const makeMissingAttachmentBeadsCheck = (): BeadsCheck =>
+  makeBeadsCheck({
+    beadsOk: false,
+    beadsPath: "/repo/.beads",
+    beadsError: "Beads attachment is missing at /repo/.beads",
+    repoStoreHealth: {
+      category: "missing_attachment",
+      status: "blocking",
+      isReady: false,
+      detail: "Beads attachment is missing at /repo/.beads",
+      attachment: {
+        path: "/repo/.beads",
+        databaseName: "repo_db",
+      },
+      sharedServer: {
+        host: "127.0.0.1",
+        port: 38240,
+        ownershipState: "owned_by_current_process",
+      },
+    },
+  });
+
 const createActiveWorkspace = (
   repoPath: string,
   workspaceId = repoPath.replace(/^\//, "").replaceAll("/", "-"),
@@ -83,7 +105,7 @@ beforeEach(() => {
   };
   mock.module("@/lib/host-client", () => ({
     createHostBridge: () => ({
-      client: createTauriHostClient(async () => {
+      client: createHostClient(async () => {
         throw new Error("Tauri runtime not available. Run inside the desktop shell.");
       }),
       subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
@@ -94,11 +116,11 @@ beforeEach(() => {
       },
     }),
     createHostClient: () =>
-      createTauriHostClient(async () => {
+      createHostClient(async () => {
         throw new Error("Tauri runtime not available. Run inside the desktop shell.");
       }),
     hostBridge: {
-      client: createTauriHostClient(async () => {
+      client: createHostClient(async () => {
         throw new Error("Tauri runtime not available. Run inside the desktop shell.");
       }),
       subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
@@ -108,7 +130,7 @@ beforeEach(() => {
         return subscribeTaskEventsImpl(listener);
       },
     },
-    hostClient: createTauriHostClient(async () => {
+    hostClient: createHostClient(async () => {
       throw new Error("Tauri runtime not available. Run inside the desktop shell.");
     }),
     subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
@@ -1412,6 +1434,75 @@ describe("useAppLifecycle", () => {
     }
   });
 
+  test("keeps Beads preparation toast active while a missing attachment is initialized by task loading", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+
+    const taskDeferred = createDeferred<void>();
+    const branchesDeferred = createDeferred<void>();
+    const refreshBeadsCheckForRepo = mock(
+      async (_repoPath: string, force = false): Promise<BeadsCheck> =>
+        force
+          ? makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null })
+          : makeMissingAttachmentBeadsCheck(),
+    );
+
+    const baseArgs: HookArgs = {
+      activeRepo: null,
+      setEvents: mock((_updater) => {}),
+      setRunCompletionSignal: mock((_runId: string, _eventType) => {}),
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => branchesDeferred.promise),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo,
+      refreshTaskData: mock(async () => taskDeferred.promise),
+      clearBranchData: mock(() => {}),
+      beadsPreparationToastDelayMs: 5,
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    try {
+      await harness.mount();
+      await harness.update({
+        args: {
+          ...baseArgs,
+          activeRepo: "/repo",
+        },
+      });
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      });
+
+      expect(toastLoading).toHaveBeenCalledWith("Preparing Beads database", {
+        description: "OpenDucktor is initializing the Beads task store for this repository.",
+      });
+      expect(toastDismiss).not.toHaveBeenCalled();
+
+      await harness.run(async () => {
+        taskDeferred.resolve();
+        branchesDeferred.resolve();
+      });
+
+      expect(refreshBeadsCheckForRepo).toHaveBeenNthCalledWith(1, "/repo", false);
+      expect(refreshBeadsCheckForRepo).toHaveBeenNthCalledWith(2, "/repo", true);
+      expect(toastDismiss).toHaveBeenCalledWith("toast-id");
+      expect(toastSuccess).toHaveBeenCalledWith("Beads database ready", {
+        description: "The task store is ready for this repository.",
+      });
+    } finally {
+      taskDeferred.resolve();
+      branchesDeferred.resolve();
+      await harness.unmount();
+    }
+  });
+
   test("clears pending Beads preparation timer when initialization fails before the toast delay", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;
@@ -1538,7 +1629,7 @@ describe("useAppLifecycle", () => {
     }
   });
 
-  test("dismisses a shown Beads preparation toast as soon as the first check leaves initializing", async () => {
+  test("keeps a shown Beads preparation toast until task loading finishes after a blocking first check", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;
 
@@ -1584,16 +1675,18 @@ describe("useAppLifecycle", () => {
       });
 
       await harness.run(async () => {
-        beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
+        beadsDeferred.resolve(makeMissingAttachmentBeadsCheck());
       });
 
-      expect(toastDismiss).toHaveBeenCalledWith("toast-id");
+      expect(toastDismiss).not.toHaveBeenCalled();
       expect(toastSuccess).not.toHaveBeenCalled();
 
       await harness.run(async () => {
         taskDeferred.resolve();
         branchesDeferred.resolve();
       });
+
+      expect(toastDismiss).toHaveBeenCalledWith("toast-id");
     } finally {
       beadsDeferred.resolve(makeBeadsCheck({ beadsPath: null }));
       taskDeferred.resolve();

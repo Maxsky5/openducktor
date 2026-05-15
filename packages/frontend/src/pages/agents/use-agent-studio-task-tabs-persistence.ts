@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { type Dispatch, type SetStateAction, useEffect } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { toTabsStorageKey } from "./agents-page-selection";
@@ -46,6 +46,12 @@ type UseTaskTabPersistenceArgs = {
   setPersistedActiveTaskId: SetState<string | null>;
   setIntentActiveTaskId: SetState<string | null>;
   setTabsStorageHydratedWorkspaceId: SetState<string | null>;
+  clearTaskTabsStorageHydration: () => void;
+  hydrateTaskTabsStorage: (
+    tabs: string[],
+    activeTaskId: string | null,
+    workspaceId: string,
+  ) => void;
 };
 
 export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
@@ -59,41 +65,42 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
     tabsStorageHydratedWorkspaceId,
     activeTaskTabId,
     setOpenTaskTabs,
-    setPersistedActiveTaskId,
-    setIntentActiveTaskId,
-    setTabsStorageHydratedWorkspaceId,
+    clearTaskTabsStorageHydration,
+    hydrateTaskTabsStorage,
   } = args;
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
+  const clearTaskTabsStorageHydrationRef = useRef(clearTaskTabsStorageHydration);
+  const hydrateTaskTabsStorageRef = useRef(hydrateTaskTabsStorage);
+  clearTaskTabsStorageHydrationRef.current = clearTaskTabsStorageHydration;
+  hydrateTaskTabsStorageRef.current = hydrateTaskTabsStorage;
 
   useEffect(() => {
     if (!activeWorkspaceId) {
-      setOpenTaskTabs([]);
-      setPersistedActiveTaskId(null);
-      setIntentActiveTaskId(null);
-      setTabsStorageHydratedWorkspaceId(null);
+      clearTaskTabsStorageHydrationRef.current();
       return;
     }
 
     const tabsStorageKey = toTabsStorageKey(activeWorkspaceId);
     const raw = readTaskTabsStorage(tabsStorageKey);
     const persistedTabs = parsePersistedTaskTabs(raw);
-    setOpenTaskTabs(persistedTabs.tabs);
-    setPersistedActiveTaskId(persistedTabs.activeTaskId);
-    setTabsStorageHydratedWorkspaceId(activeWorkspaceId);
-  }, [
-    activeWorkspaceId,
-    setIntentActiveTaskId,
-    setOpenTaskTabs,
-    setPersistedActiveTaskId,
-    setTabsStorageHydratedWorkspaceId,
-  ]);
+    hydrateTaskTabsStorageRef.current(
+      persistedTabs.tabs,
+      persistedTabs.activeTaskId,
+      activeWorkspaceId,
+    );
+  }, [activeWorkspaceId]);
 
   useEffect(() => {
     if (isLoadingTasks) {
       return;
     }
     const openTaskIds = new Set(
-      tasks.filter((task) => task.status !== "closed").map((task) => task.id),
+      tasks.reduce<string[]>((taskIds, task) => {
+        if (task.status !== "closed") {
+          taskIds.push(task.id);
+        }
+        return taskIds;
+      }, []),
     );
     setOpenTaskTabs((current) => {
       const filtered = current.filter((taskTabId) => openTaskIds.has(taskTabId));

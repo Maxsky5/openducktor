@@ -54,9 +54,13 @@ const orderWorkspaceRecords = (
     return null;
   }
 
-  const orderedRecords = workspaceIds
-    .map((workspaceId) => recordsById.get(workspaceId) ?? null)
-    .filter((record): record is WorkspaceRecord => record !== null);
+  const orderedRecords = workspaceIds.reduce<WorkspaceRecord[]>((ordered, workspaceId) => {
+    const record = recordsById.get(workspaceId);
+    if (record) {
+      ordered.push(record);
+    }
+    return ordered;
+  }, []);
 
   if (orderedRecords.length !== records.length) {
     return null;
@@ -244,8 +248,7 @@ export function useWorkspaceSelectionOperations({
         workspaceName: input.workspaceName,
         repoPath: normalizedRepoPath,
       });
-      await refreshWorkspaceCachesAfterMutation();
-      await refreshWorkspaces();
+      await Promise.all([refreshWorkspaceCachesAfterMutation(), refreshWorkspaces()]);
       toast.success("Repository added", {
         description: workspace.repoPath,
       });

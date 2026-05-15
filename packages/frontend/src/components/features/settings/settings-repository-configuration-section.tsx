@@ -17,13 +17,17 @@ import {
 type RepositoryConfigurationSectionProps = {
   selectedRepoConfig: RepoConfig | null;
   selectedRepoDevServerValidationErrors?: Record<string, { name?: string; command?: string }>;
-  showDevServerValidationErrors?: boolean;
   selectedRepoEffectiveWorktreeBasePath: string | null;
   selectedRepoBranches: GitBranch[];
   selectedRepoBranchesError: string | null;
-  isLoadingSettings: boolean;
-  isSaving: boolean;
-  isLoadingSelectedRepoBranches: boolean;
+  validationState?: {
+    showDevServerValidationErrors?: boolean;
+  };
+  loadingState: {
+    isLoadingSettings: boolean;
+    isSaving: boolean;
+    isLoadingSelectedRepoBranches: boolean;
+  };
   onRetrySelectedRepoBranchesLoad: () => void;
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
 };
@@ -45,18 +49,17 @@ export function resolveFolderPickerInitialPath(
 export function RepositoryConfigurationSection({
   selectedRepoConfig,
   selectedRepoDevServerValidationErrors,
-  showDevServerValidationErrors = false,
   selectedRepoEffectiveWorktreeBasePath,
   selectedRepoBranches,
   selectedRepoBranchesError,
-  isLoadingSettings,
-  isSaving,
-  isLoadingSelectedRepoBranches,
+  validationState,
+  loadingState,
   onRetrySelectedRepoBranchesLoad,
   onUpdateSelectedRepoConfig,
 }: RepositoryConfigurationSectionProps): ReactElement {
   const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
   const [isRepoPathPickerOpen, setIsRepoPathPickerOpen] = useState(false);
+  const { isLoadingSettings, isSaving, isLoadingSelectedRepoBranches } = loadingState;
 
   if (!selectedRepoConfig) {
     return (
@@ -105,10 +108,11 @@ export function RepositoryConfigurationSection({
       },
     }));
   };
-  const devServerValidationErrors = showDevServerValidationErrors
-    ? (selectedRepoDevServerValidationErrors ??
-      buildDevServerDraftValidationMap(selectedRepoConfig.devServers ?? []))
-    : {};
+  const devServerValidationErrors =
+    validationState?.showDevServerValidationErrors === true
+      ? (selectedRepoDevServerValidationErrors ??
+        buildDevServerDraftValidationMap(selectedRepoConfig.devServers ?? []))
+      : {};
   const folderPickerInitialPath = resolveFolderPickerInitialPath(
     selectedRepoConfig,
     selectedRepoEffectiveWorktreeBasePath,
@@ -136,10 +140,12 @@ export function RepositoryConfigurationSection({
           branchPrefix={selectedRepoConfig.branchPrefix}
           defaultTargetBranchOptions={defaultTargetBranchOptions}
           defaultTargetBranchPlaceholder={defaultTargetBranchPlaceholder}
-          isBranchPrefixDisabled={isLoadingSettings || isSaving}
-          isDefaultTargetBranchPickerDisabled={isDefaultTargetBranchPickerDisabled}
-          isLoadingSelectedRepoBranches={isLoadingSelectedRepoBranches}
-          isSaving={isSaving}
+          controlState={{
+            isBranchPrefixDisabled: isLoadingSettings || isSaving,
+            isDefaultTargetBranchPickerDisabled,
+            isLoadingSelectedRepoBranches,
+            isSaving,
+          }}
           selectedRepoBranchesError={selectedRepoBranchesError}
           targetBranchSelectorValue={targetBranchSelectorValue}
           onRetrySelectedRepoBranchesLoad={onRetrySelectedRepoBranchesLoad}
@@ -335,10 +341,7 @@ function RepositoryBranchSettingsSection({
   branchPrefix,
   defaultTargetBranchOptions,
   defaultTargetBranchPlaceholder,
-  isBranchPrefixDisabled,
-  isDefaultTargetBranchPickerDisabled,
-  isLoadingSelectedRepoBranches,
-  isSaving,
+  controlState,
   selectedRepoBranchesError,
   targetBranchSelectorValue,
   onRetrySelectedRepoBranchesLoad,
@@ -347,16 +350,24 @@ function RepositoryBranchSettingsSection({
   branchPrefix: string;
   defaultTargetBranchOptions: ReturnType<typeof toBranchSelectorOptions>;
   defaultTargetBranchPlaceholder: string;
-  isBranchPrefixDisabled: boolean;
-  isDefaultTargetBranchPickerDisabled: boolean;
-  isLoadingSelectedRepoBranches: boolean;
-  isSaving: boolean;
+  controlState: {
+    isBranchPrefixDisabled: boolean;
+    isDefaultTargetBranchPickerDisabled: boolean;
+    isLoadingSelectedRepoBranches: boolean;
+    isSaving: boolean;
+  };
   selectedRepoBranchesError: string | null;
   targetBranchSelectorValue: string;
   onRetrySelectedRepoBranchesLoad: () => void;
   onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
   const defaultTargetBranchLabelId = "repo-default-target-branch-label";
+  const {
+    isBranchPrefixDisabled,
+    isDefaultTargetBranchPickerDisabled,
+    isLoadingSelectedRepoBranches,
+    isSaving,
+  } = controlState;
 
   return (
     <div className="grid gap-2 md:grid-cols-2">
@@ -483,12 +494,17 @@ function RepositoryDevServersSection({
           onClick={() => {
             onUpdateSelectedRepoConfig((repoConfig) => {
               const nextIndex = repoConfig.devServers.length + 1;
+              let nextIdIndex = nextIndex;
+              const existingIds = new Set(repoConfig.devServers.map((server) => server.id));
+              while (existingIds.has(`draft-dev-server-${nextIdIndex}`)) {
+                nextIdIndex += 1;
+              }
               return {
                 ...repoConfig,
                 devServers: [
                   ...repoConfig.devServers,
                   {
-                    id: crypto.randomUUID(),
+                    id: `draft-dev-server-${nextIdIndex}`,
                     name: `Dev server ${nextIndex}`,
                     command: "",
                   },

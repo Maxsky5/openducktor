@@ -1,0 +1,21 @@
+{
+  "name": "@openducktor/host-client",
+  "version": "0.3.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "bunx tsc -p tsconfig.json",
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit",
+    "test": "bun test --pass-with-no-tests --timeout 1000",
+    "lint": "biome check src"
+  },
+  "dependencies": {
+    "@openducktor/contracts": "workspace:*",
+    "@openducktor/core": "workspace:*",
+    "@openducktor/host": "workspace:*"
+  }
+}

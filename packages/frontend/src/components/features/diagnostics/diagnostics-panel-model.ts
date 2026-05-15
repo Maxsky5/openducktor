@@ -29,7 +29,11 @@ import {
   hasDiagnosticsRetryingState,
   hasRuntimeCheckFailure,
 } from "@/state/operations/workspace/check-diagnostics";
-import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
+import type {
+  RepoRuntimeFailureKind,
+  RepoRuntimeHealthCheck,
+  RepoRuntimeHealthMap,
+} from "@/types/diagnostics";
 import { buildDiagnosticsSummary, type DiagnosticsSummary } from "./diagnostics-model";
 
 export type DiagnosticKeyValueRowModel = {
@@ -75,6 +79,54 @@ type BuildDiagnosticsPanelModelInput = {
 };
 
 type RuntimeHealthState = RepoRuntimeHealthMap[string] | undefined;
+
+const formatCliRuntimeValue = (cliHealth: RuntimeCheck["runtimes"][number] | null): string => {
+  if (cliHealth?.enabled === false) {
+    const detectedValue = cliHealth.ok ? (cliHealth.version ?? "detected") : "missing";
+    return `${detectedValue} (runtime disabled)`;
+  }
+
+  if (cliHealth?.ok) {
+    return cliHealth.version ?? "detected";
+  }
+
+  return "missing";
+};
+
+const buildDisabledRuntimeHealth = (definition: RuntimeDescriptor): RepoRuntimeHealthCheck => {
+  const checkedAt = new Date().toISOString();
+  const detail = `${definition.label} runtime is disabled in Agent Runtime settings.`;
+  const supportsMcpStatus = definition.capabilities.optionalSurfaces.supportsMcpStatus;
+
+  return {
+    status: "disabled",
+    checkedAt,
+    runtime: {
+      status: "disabled",
+      stage: "idle",
+      observation: null,
+      instance: null,
+      startedAt: null,
+      updatedAt: checkedAt,
+      elapsedMs: null,
+      attempts: null,
+      detail,
+      failureKind: null,
+      failureReason: null,
+    },
+    mcp: supportsMcpStatus
+      ? {
+          supported: true,
+          status: "unsupported",
+          serverName: ODT_MCP_SERVER_NAME,
+          serverStatus: null,
+          toolIds: [],
+          detail: "Runtime is disabled, so MCP is not checked.",
+          failureKind: null,
+        }
+      : null,
+  };
+};
 
 const getFailureBadge = (
   ok: boolean | null,
@@ -259,10 +311,21 @@ const buildRuntimeRows = (runtimeHealth: RuntimeHealthState): DiagnosticKeyValue
 
   if (runtimeHealth.runtime.status !== "ready") {
     rows.push({
-      label: "Stage",
-      value: runtimeHealth.runtime.stage.replaceAll("_", " "),
+      label: runtimeHealth.runtime.status === "disabled" ? "Status" : "Stage",
+      value:
+        runtimeHealth.runtime.status === "disabled"
+          ? "Disabled in Agent Runtime settings"
+          : runtimeHealth.runtime.stage.replaceAll("_", " "),
       valueClassName: "text-muted-foreground",
     });
+
+    if (runtimeHealth.runtime.detail) {
+      rows.push({
+        label: "Detail",
+        value: runtimeHealth.runtime.detail,
+        valueClassName: "text-muted-foreground",
+      });
+    }
 
     const observation = formatRepoRuntimeObservation(runtimeHealth.runtime.observation);
     if (observation) {
@@ -388,16 +451,25 @@ export const buildDiagnosticsPanelModel = (
   const repoName = workspaceRepoPath?.split("/").filter(Boolean).at(-1) ?? "No repository";
   const effectiveWorktreeBasePath = activeWorkspace?.effectiveWorktreeBasePath ?? null;
   const worktreeAvailable = Boolean(effectiveWorktreeBasePath);
-  const runtimeEntries = runtimeDefinitions.map((definition) => ({
-    definition,
-    cliHealth: runtimeCheck?.runtimes.find((entry) => entry.kind === definition.kind) ?? null,
-    runtimeHealth: runtimeHealthByRuntime[definition.kind],
-  }));
-  const isRuntimeHealthPending = runtimeDefinitions.some(
-    (definition) => runtimeHealthByRuntime[definition.kind] === undefined,
+  const runtimeEntries = runtimeDefinitions.map((definition) => {
+    const cliHealth =
+      runtimeCheck?.runtimes.find((entry) => entry.kind === definition.kind) ?? null;
+    return {
+      definition,
+      cliHealth,
+      runtimeHealth:
+        runtimeHealthByRuntime[definition.kind] ??
+        (cliHealth?.enabled === false ? buildDisabledRuntimeHealth(definition) : undefined),
+    };
+  });
+  const isRuntimeHealthPending = runtimeEntries.some(
+    ({ runtimeHealth }) => runtimeHealth === undefined,
   );
   const hasCheckingRuntimeHealth = runtimeEntries.some(
     ({ runtimeHealth }) => runtimeHealth?.status === "checking",
+  );
+  const hasNotStartedRuntimeHealth = runtimeEntries.some(
+    ({ runtimeHealth }) => runtimeHealth?.status === "not_started",
   );
 
   const criticalReasons: string[] = [];
@@ -479,7 +551,7 @@ export const buildDiagnosticsPanelModel = (
     runtimeDefinitions.length > 0
       ? runtimeEntries.map(({ definition, cliHealth }) => ({
           label: runtimeLabelFor({ runtimeDefinitions, runtimeKind: definition.kind }),
-          value: cliHealth?.ok ? (cliHealth.version ?? "detected") : "missing",
+          value: formatCliRuntimeValue(cliHealth),
         }))
       : (runtimeCheck?.runtimes ?? []).map((runtimeEntry) => ({
           label: runtimeEntry.kind,
@@ -565,6 +637,7 @@ export const buildDiagnosticsPanelModel = (
       hasActiveWorkspace: Boolean(workspaceRepoPath),
       isChecking: isSummaryChecking,
       hasCriticalIssues: criticalReasons.length > 0,
+      hasPendingRuntimeStartup: hasNotStartedRuntimeHealth,
       hasSetupIssues: setupReasons.length > 0,
     }),
     criticalReasons,

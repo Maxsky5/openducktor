@@ -1,5 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import { catalogModelOptionValue } from "@/components/features/agents/catalog-select-options";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   coerceVisibleSelectionToCatalog,
@@ -120,7 +121,9 @@ export const resolveSelectionForModelChange = ({
     return currentSelection;
   }
 
-  const model = catalog.models.find((entry) => entry.id === modelKey);
+  const model = catalog.models.find(
+    (entry) => entry.id === modelKey || catalogModelOptionValue(entry) === modelKey,
+  );
   if (!model) {
     return currentSelection;
   }

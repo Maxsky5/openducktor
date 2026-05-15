@@ -19,7 +19,7 @@
     "lint": "biome check src scripts"
   },
   "dependencies": {
-    "@openducktor/adapters-tauri-host": "workspace:*",
+    "@openducktor/host-client": "workspace:*",
     "@openducktor/frontend": "workspace:*",
     "@tauri-apps/api": "^2.0.0"
   },

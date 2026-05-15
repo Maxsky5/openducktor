@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
 import { SettingsChatSection } from "./settings-chat-section";
 import { GeneralSettingsSection } from "./settings-general-section";
@@ -54,6 +55,8 @@ export function SettingsModalContent({
     runtimeDefinitionsError,
     snapshotDraft,
     runtimeDefinitions,
+    availableRuntimeDefinitions,
+    updateAgentRuntimes,
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
     isCatalogLoadingForRuntime,
@@ -69,6 +72,7 @@ export function SettingsModalContent({
     selectedRepoDevServerValidationErrors,
     promptValidationState,
     reusablePromptValidationState,
+    selectedRepoRuntimeAvailabilityErrors,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
@@ -99,7 +103,7 @@ export function SettingsModalContent({
   if (isLoadingSettings || !snapshotDraft) {
     return (
       <div className="rounded-md border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
-        Loading settings...
+        Loading settings…
       </div>
     );
   }
@@ -145,6 +149,17 @@ export function SettingsModalContent({
         runtimeCheck={controller.runtimeCheck}
         disabled={isInteractionDisabled}
         onUpdateGit={updateGlobalGitConfig}
+      />
+    );
+  }
+
+  if (section === "runtimes") {
+    return (
+      <AgentRuntimesSection
+        agentRuntimes={snapshotDraft.agentRuntimes}
+        runtimeDefinitions={runtimeDefinitions}
+        disabled={isInteractionDisabled}
+        onUpdateAgentRuntimes={updateAgentRuntimes}
       />
     );
   }
@@ -218,11 +233,15 @@ export function SettingsModalContent({
             selectedRepoEffectiveWorktreeBasePath={selectedRepoEffectiveWorktreeBasePath}
             selectedRepoBranches={selectedRepoBranches}
             selectedRepoBranchesError={selectedRepoBranchesError}
-            isLoadingSettings={isLoadingSettings}
-            isSaving={isSaving}
-            isLoadingSelectedRepoBranches={isLoadingSelectedRepoBranches}
+            loadingState={{
+              isLoadingSettings: isLoadingSettings,
+              isSaving: isSaving,
+              isLoadingSelectedRepoBranches: isLoadingSelectedRepoBranches,
+            }}
             onRetrySelectedRepoBranchesLoad={retrySelectedRepoBranchesLoad}
-            showDevServerValidationErrors={showRepoScriptValidationErrors}
+            validationState={{
+              showDevServerValidationErrors: showRepoScriptValidationErrors,
+            }}
             selectedRepoDevServerValidationErrors={selectedRepoDevServerValidationErrors}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
           />
@@ -242,12 +261,15 @@ export function SettingsModalContent({
         {repositorySection === "agents" ? (
           <RepositoryAgentsSection
             selectedRepoConfig={selectedRepoConfig}
-            runtimeDefinitions={runtimeDefinitions}
-            isLoadingRuntimeDefinitions={isLoadingRuntimeDefinitions}
-            isLoadingCatalog={isLoadingCatalog}
-            isLoadingSettings={isLoadingSettings}
-            isSaving={isSaving}
+            availableRuntimeDefinitions={availableRuntimeDefinitions}
+            loadingState={{
+              isLoadingRuntimeDefinitions,
+              isLoadingCatalog,
+              isLoadingSettings,
+              isSaving,
+            }}
             runtimeDefinitionsError={runtimeDefinitionsError}
+            runtimeAvailabilityErrors={selectedRepoRuntimeAvailabilityErrors}
             getCatalogForRuntime={getCatalogForRuntime}
             getCatalogErrorForRuntime={getCatalogErrorForRuntime}
             isCatalogLoadingForRuntime={isCatalogLoadingForRuntime}

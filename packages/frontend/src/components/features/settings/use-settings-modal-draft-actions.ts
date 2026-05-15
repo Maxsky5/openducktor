@@ -1,4 +1,5 @@
 import type {
+  AgentRuntimes,
   GlobalGitConfig,
   RepoConfig,
   RepoPromptOverrides,
@@ -23,6 +24,7 @@ export type SettingsModalDraftActions = {
   updateGlobalGeneralSettings: (
     updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
   ) => void;
+  updateAgentRuntimes: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
   updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
@@ -136,6 +138,22 @@ export const useSettingsModalDraftActions = ({
     [setSnapshotDraft],
   );
 
+  const updateAgentRuntimes = useCallback(
+    (updater: (current: AgentRuntimes) => AgentRuntimes): void => {
+      setSnapshotDraft((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          agentRuntimes: updater(current.agentRuntimes),
+        };
+      });
+    },
+    [setSnapshotDraft],
+  );
+
   const updateReusablePrompts = useCallback(
     (updater: (current: ReusablePrompt[]) => ReusablePrompt[]): void => {
       setSnapshotDraft((current) => {
@@ -240,6 +258,7 @@ export const useSettingsModalDraftActions = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalGeneralSettings,
+    updateAgentRuntimes,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,

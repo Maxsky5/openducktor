@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
 import { useState } from "react";
 import {
   createHookHarness as createSharedHookHarness,
@@ -36,6 +36,7 @@ const createSnapshot = (): SettingsSnapshot => ({
     rules: [],
   },
   globalPromptOverrides: {},
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {
     repo: {
       workspaceId: "repo",

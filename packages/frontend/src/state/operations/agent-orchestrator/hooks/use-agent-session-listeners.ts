@@ -120,14 +120,9 @@ export const useAgentSessionListeners = ({
           }
         }),
       );
-      const externalSessionIds = matchingSessions
-        .filter(
-          (session, index, sessions) =>
-            sessions.findIndex(
-              (candidate) => candidate.externalSessionId === session.externalSessionId,
-            ) === index,
-        )
-        .map((session) => session.externalSessionId);
+      const externalSessionIds = Array.from(
+        new Set(matchingSessions.map((session) => session.externalSessionId)),
+      );
       removeSessionIds(externalSessionIds);
     },
     [agentEngine, removeSessionIds, sessionsRef],

@@ -41,12 +41,13 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
 const DETAIL_ACTIONS_WITHOUT_TASK_RESET = DETAIL_ACTIONS.filter(
   (action) => action !== "reset_task",
 );
+const EMPTY_TASK_SESSIONS: NonNullable<TaskDetailsSheetProps["taskSessions"]> = [];
 
 export function TaskDetailsSheet({
   activeWorkspace = null,
   task,
   allTasks,
-  taskSessions = [],
+  taskSessions = EMPTY_TASK_SESSIONS,
   hasActiveSession = false,
   activeSessionRole,
   open,
@@ -161,12 +162,14 @@ export function TaskDetailsSheet({
             specDoc={viewModel.specDoc}
             planDoc={viewModel.planDoc}
             qaDoc={viewModel.qaDoc}
-            hasSpecDocument={viewModel.hasSpecDocument}
-            hasPlanDocument={viewModel.hasPlanDocument}
-            hasQaDocument={viewModel.hasQaDocument}
-            specSummaryUpdatedAt={viewModel.specSummaryUpdatedAt}
-            planSummaryUpdatedAt={viewModel.planSummaryUpdatedAt}
-            qaSummaryUpdatedAt={viewModel.qaSummaryUpdatedAt}
+            documentSummaries={{
+              hasSpec: viewModel.hasSpecDocument,
+              hasPlan: viewModel.hasPlanDocument,
+              hasQa: viewModel.hasQaDocument,
+              specUpdatedAt: viewModel.specSummaryUpdatedAt,
+              planUpdatedAt: viewModel.planSummaryUpdatedAt,
+              qaUpdatedAt: viewModel.qaSummaryUpdatedAt,
+            }}
             loadSpecDocumentSection={viewModel.loadSpecDocumentSection}
             loadPlanDocumentSection={viewModel.loadPlanDocumentSection}
             loadQaDocumentSection={viewModel.loadQaDocumentSection}
@@ -198,13 +201,17 @@ export function TaskDetailsSheet({
           onConfirm={viewModel.confirmDelete}
           taskId={viewModel.taskId}
           subtasksCount={viewModel.subtasks.length}
-          hasSubtasks={viewModel.subtasks.length > 0}
-          isLoadingImpact={viewModel.isLoadingDeleteImpact}
-          hasManagedSessionCleanup={viewModel.hasManagedDeleteSessionCleanup}
-          managedWorktreeCount={viewModel.deleteManagedWorktreeCount}
-          impactError={viewModel.deleteImpactError}
-          isDeletePending={viewModel.isDeletePending}
-          deleteError={viewModel.deleteError}
+          impact={{
+            hasSubtasks: viewModel.subtasks.length > 0,
+            isLoading: viewModel.isLoadingDeleteImpact,
+            hasManagedSessionCleanup: viewModel.hasManagedDeleteSessionCleanup,
+            managedWorktreeCount: viewModel.deleteManagedWorktreeCount,
+            error: viewModel.deleteImpactError,
+          }}
+          deletion={{
+            isPending: viewModel.isDeletePending,
+            error: viewModel.deleteError,
+          }}
         />
       ) : null}
 

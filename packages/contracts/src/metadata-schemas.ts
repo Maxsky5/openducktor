@@ -6,6 +6,10 @@ import { qaWorkflowVerdictSchema } from "./task-schemas";
 export const taskMetadataDocumentSchema = z.object({
   markdown: z.string().default(""),
   updatedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  revision: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.number().int().nonnegative().optional(),
+  ),
   error: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
 });
 export type TaskMetadataDocument = z.infer<typeof taskMetadataDocumentSchema>;

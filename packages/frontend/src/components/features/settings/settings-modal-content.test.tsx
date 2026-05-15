@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsModalContent } from "./settings-modal-content";
@@ -12,6 +17,7 @@ const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): Settings
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {},
   globalPromptOverrides: {},
   ...overrides,
@@ -27,6 +33,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   saveError: null,
   snapshotDraft: snapshot,
   runtimeDefinitions: [],
+  availableRuntimeDefinitions: [],
   runtimeCheck: null,
   getCatalogForRuntime: () => null,
   getCatalogErrorForRuntime: () => null,
@@ -52,6 +59,14 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   hasPromptValidationErrors: false,
   reusablePromptValidationState: { errorsById: {}, totalErrorCount: 0 },
   hasReusablePromptValidationErrors: false,
+  runtimeAvailabilityValidationState: {
+    errorsByWorkspaceId: {},
+    errorCountByWorkspaceId: {},
+    totalErrorCount: 0,
+  },
+  hasRuntimeAvailabilityErrors: false,
+  selectedRepoRuntimeAvailabilityErrors: [],
+  selectedRepoRuntimeAvailabilityErrorCount: 0,
   hasRepoScriptValidationErrors: false,
   repoScriptValidationErrorCount: 0,
   showRepoScriptValidationErrors: false,
@@ -63,6 +78,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   settingsSectionErrorCountById: {
     general: 0,
     git: 0,
+    runtimes: 0,
     repositories: 0,
     prompts: 0,
     "reusable-prompts": 0,
@@ -78,6 +94,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateGlobalGitConfig: () => {},
   updateGlobalGeneralSettings: () => {},
   updateGlobalChatSettings: () => {},
+  updateAgentRuntimes: () => {},
   updateReusablePrompts: () => {},
   updateGlobalKanbanSettings: () => {},
   updateGlobalAutopilotSettings: () => {},
@@ -171,6 +188,36 @@ describe("settings modal content", () => {
     expect(html).toContain("Reusable prompts");
     expect(html).toContain("review");
     expect(html).toContain("Review files");
+  });
+
+  test("renders OpenCode before Codex in Agent Runtimes", () => {
+    const controller = {
+      ...createMockController(createMockSnapshot()),
+      runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
+      availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(SettingsModalContent, {
+        section: "runtimes",
+        repositorySection: "configuration",
+        globalPromptRoleTab: "shared",
+        repoPromptRoleTab: "shared",
+        selectedReusablePromptId: null,
+        isInteractionDisabled: false,
+        controller,
+        onRepositorySectionChange: () => {},
+        onGlobalPromptRoleTabChange: () => {},
+        onRepoPromptRoleTabChange: () => {},
+        onSelectedReusablePromptIdChange: () => {},
+      }),
+    );
+
+    expect(html.indexOf("OpenCode")).toBeLessThan(html.indexOf("Codex"));
+    expect(html).toContain("Local OpenCode runtime connected through the OpenDucktor MCP bridge.");
+    expect(html).toContain(
+      "Local Codex app-server runtime connected through the OpenDucktor MCP bridge.",
+    );
   });
 
   test("renders kanban section when section is kanban", () => {

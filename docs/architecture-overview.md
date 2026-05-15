@@ -20,7 +20,7 @@ Current scope note:
 | Frontend state/orchestration | `apps/desktop/src/state/app-state-provider.tsx`, `apps/desktop/src/state/operations/*` | App-level state slices, async operation orchestration, session hydration | Persisted schema definitions, Beads mutation semantics |
 | Shared contracts (TS) | `packages/contracts/src/*` | Runtime-validated schemas for tasks, sessions, workflows, IPC payloads | Runtime orchestration, host process control |
 | Core domain services + ports (TS) | `packages/core/src/ports/agent-engine.ts`, `packages/core/src/services/*`, `packages/core/src/types/agent-orchestrator.ts` | `AgentEnginePort` boundary, role/tool policy, tool normalization, prompt composition helpers | Tauri invocation details, Beads CLI calls |
-| Frontend adapters (TS) | `packages/adapters-tauri-host/src/*`, `packages/adapters-opencode-sdk/src/*` | Concrete host IPC adapter and OpenCode `AgentEnginePort` adapter | Business workflow policy ownership |
+| Frontend adapters (TS) | `packages/host-client/src/*`, `packages/adapters-opencode-sdk/src/*` | Concrete shell-host client and OpenCode `AgentEnginePort` adapter | Business workflow policy ownership |
 | Tauri command bridge (Rust) | `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src-tauri/src/commands/*` | Typed command surface (`tauri::command`), argument mapping, command registration | Deep business policy (kept in `AppService`) |
 | Host application/domain (Rust) | `apps/desktop/src-tauri/crates/host-application/src/app_service/*`, `apps/desktop/src-tauri/crates/host-domain/src/*` | Workflow transition rules, task enrichment (`available_actions`, `agent_workflows`), runtime orchestration, `TaskStore` trait | UI concerns, view-level behavior |
 | Infrastructure/persistence (Rust) | `apps/desktop/src-tauri/crates/host-infra-beads/*`, `apps/desktop/src-tauri/crates/host-infra-system/*` | Beads-backed `TaskStore` persistence gateway, Beads lifecycle coordination, config/worktree/process integrations | UI workflow decisions |
@@ -39,8 +39,8 @@ Current scope note:
 ### 1) List tasks for Kanban
 1. `useTaskOperations.refreshTasks` (frontend) validates repo readiness and calls `refreshTaskData`.
 2. `refreshTaskData` requests `host.tasksList(repoPath)` and `host.runsList(repoPath)` in parallel.
-3. `host` is `TauriHostClient` (`apps/desktop/src/lib/host-client.ts`), which invokes Tauri commands through `@tauri-apps/api/core`.
-4. `packages/adapters-tauri-host/src/task-client.ts` maps `tasksList` to `tasks_list`.
+3. `host` is `HostClient` (`packages/frontend/src/lib/host-client.ts`), which invokes shell-provided host commands.
+4. `packages/host-client/src/task-client.ts` maps `tasksList` to `tasks_list`.
 5. `apps/desktop/src-tauri/src/commands/tasks.rs::tasks_list` calls `AppService::tasks_list`.
 6. `AppService::tasks_list` ensures repo init, calls `TaskStore::list_tasks`, then enriches each task with backend-derived `available_actions` and `agent_workflows`.
 7. `BeadsTaskStore` (`host-infra-beads`) ensures repo readiness through its private lifecycle subsystem, then reads from Beads via `bd`, parses metadata, and returns `TaskCard` data.

@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import type { TaskApprovalContext, TaskApprovalContextLoadResult } from "@openducktor/contracts";
+import { createHostClient } from "@openducktor/host-client";
 import { waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act } from "react";
@@ -67,7 +67,7 @@ const originalToastSuccess = toast.success;
 const originalToastError = toast.error;
 
 const createUnavailableHostClient = () =>
-  createTauriHostClient(async () => {
+  createHostClient(async () => {
     throw new Error("Tauri runtime not available. Run inside the desktop shell.");
   });
 
@@ -132,8 +132,10 @@ type HostLike = Record<HostMethodName, unknown>;
 let originalHostMethods: Partial<HostLike> | null = null;
 
 const applyHostMocks = async (): Promise<void> => {
-  const hostModule = await import("@/state/operations/host");
-  const hostClientModule = await import("@/lib/host-client");
+  const [hostModule, hostClientModule] = await Promise.all([
+    import("@/state/operations/host"),
+    import("@/lib/host-client"),
+  ]);
   const mockedHost = buildMockedHost();
   if (!originalHostMethods) {
     originalHostMethods = Object.fromEntries(
@@ -148,8 +150,10 @@ const restoreHostMocks = async (): Promise<void> => {
   if (!originalHostMethods) {
     return;
   }
-  const hostModule = await import("@/state/operations/host");
-  const hostClientModule = await import("@/lib/host-client");
+  const [hostModule, hostClientModule] = await Promise.all([
+    import("@/state/operations/host"),
+    import("@/lib/host-client"),
+  ]);
   Object.assign(hostClientModule.hostClient, originalHostMethods);
   Object.assign(hostModule.host, originalHostMethods);
 };

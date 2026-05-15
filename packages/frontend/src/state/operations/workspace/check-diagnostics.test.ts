@@ -33,7 +33,13 @@ describe("check-diagnostics helpers", () => {
       expect.objectContaining({
         gitOk: false,
         ghAuthError: "Timed out after 15000ms",
-        runtimes: [{ kind: "opencode", ok: false, version: null }],
+        runtimes: [
+          expect.objectContaining({
+            kind: "opencode",
+            ok: false,
+            version: null,
+          }),
+        ],
       }),
     );
 

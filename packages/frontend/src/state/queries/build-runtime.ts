@@ -30,17 +30,20 @@ const withTimeout = async <T>(
 
 export const taskWorktreeQueryKeys = {
   all: ["task-worktree"] as const,
-  taskWorktree: (repoPath: string, taskId: string) =>
-    [...taskWorktreeQueryKeys.all, repoPath, taskId] as const,
+  taskWorktree: (repoPath: string, taskId: string, recoverySignal?: number | null) =>
+    recoverySignal == null
+      ? ([...taskWorktreeQueryKeys.all, repoPath, taskId] as const)
+      : ([...taskWorktreeQueryKeys.all, repoPath, taskId, recoverySignal] as const),
 };
 
 export const taskWorktreeQueryOptions = (
   repoPath: string,
   taskId: string,
   hostClient: TaskWorktreeQueryHost = host,
+  recoverySignal?: number | null,
 ) =>
   queryOptions({
-    queryKey: taskWorktreeQueryKeys.taskWorktree(repoPath, taskId),
+    queryKey: taskWorktreeQueryKeys.taskWorktree(repoPath, taskId, recoverySignal),
     queryFn: (): Promise<TaskWorktreeSummary | null> =>
       withTimeout(
         hostClient.taskWorktreeGet(repoPath, taskId),

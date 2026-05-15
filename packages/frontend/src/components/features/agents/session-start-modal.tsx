@@ -534,14 +534,16 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                 onSelectRuntime={onSelectRuntime}
               />
 
-              <AgentField
-                agentOptions={agentOptions}
-                disabled={agentDisabled}
-                helperText={agentHelperText}
-                selectedAgent={selectedAgent}
-                supportsProfiles={supportsProfiles}
-                onSelectAgent={onSelectAgent}
-              />
+              {supportsProfiles ? (
+                <AgentField
+                  agentOptions={agentOptions}
+                  disabled={agentDisabled}
+                  helperText={agentHelperText}
+                  selectedAgent={selectedAgent}
+                  supportsProfiles={supportsProfiles}
+                  onSelectAgent={onSelectAgent}
+                />
+              ) : null}
 
               <ModelVariantFields
                 isSelectionCatalogLoading={isSelectionCatalogLoading}

@@ -101,9 +101,13 @@ export const getSessionLaunchAction = (id: SessionLaunchActionId): SessionLaunch
   SESSION_LAUNCH_ACTIONS[id];
 
 export const getSessionLaunchActionsForRole = (role: AgentRole): SessionLaunchAction[] =>
-  sessionLaunchActionIds
-    .map((id) => SESSION_LAUNCH_ACTIONS[id])
-    .filter((action) => action.role === role);
+  sessionLaunchActionIds.reduce<SessionLaunchAction[]>((actions, id) => {
+    const action = SESSION_LAUNCH_ACTIONS[id];
+    if (action.role === role) {
+      actions.push(action);
+    }
+    return actions;
+  }, []);
 
 export const defaultSessionLaunchActionForRole = (role: AgentRole): SessionLaunchActionId => {
   const [action] = getSessionLaunchActionsForRole(role);

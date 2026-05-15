@@ -1,0 +1,44 @@
+{
+  "name": "@openducktor/electron",
+  "productName": "OpenDucktor",
+  "version": "0.3.1",
+  "description": "OpenDucktor desktop application",
+  "homepage": "https://github.com/Maxsky5/openducktor",
+  "author": {
+    "name": "Maxsky5",
+    "email": "maxsky5@users.noreply.github.com"
+  },
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "build:main": "bun build --target=node --external electron --outfile dist/main.js src/main/main.ts",
+    "build:preload": "bun build --target=node --format=cjs --external electron --outfile dist/preload.cjs src/preload/preload.ts",
+    "build:renderer": "vite build --outDir dist/renderer --emptyOutDir",
+    "builder": "electron-builder",
+    "dev": "bun run scripts/dev.ts",
+    "dev:electron": "bun run scripts/dev.ts",
+    "dev:renderer": "vite --host 127.0.0.1 --port 1430 --strictPort",
+    "package": "bun run scripts/package-build.ts",
+    "release:artifact": "bun run scripts/package-build.ts --stage-release-artifacts",
+    "preview": "electron dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test --pass-with-no-tests --timeout 1000",
+    "lint": "biome check src scripts vite.config.ts"
+  },
+  "dependencies": {
+    "@openducktor/host-client": "workspace:*",
+    "@openducktor/frontend": "workspace:*",
+    "@openducktor/host": "workspace:*"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/node": "^25.6.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "bun-types": "^1.3.13",
+    "electron": "^42.0.1",
+    "electron-builder": "^26.8.1",
+    "vite": "^8.0.10"
+  }
+}

@@ -231,6 +231,7 @@ describe("agent-orchestrator/support/persistence", () => {
           timestamp: "2026-02-22T08:00:05.000Z",
           text: "Done",
           totalTokens: 123,
+          contextWindow: 1_000,
           model: {
             providerId: "anthropic",
             modelId: "claude-3-7-sonnet",
@@ -257,6 +258,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
     expect(contextUsage).toEqual({
       totalTokens: 123,
+      contextWindow: 1_000,
       providerId: "anthropic",
       modelId: "claude-3-7-sonnet",
       profileId: "Hephaestus",
@@ -302,6 +304,7 @@ describe("agent-orchestrator/support/persistence", () => {
           timestamp: "2026-02-22T08:00:02.000Z",
           text: "Done",
           totalTokens: 123,
+          contextWindow: 1_000,
           model: {
             providerId: "anthropic",
             modelId: "claude-3-7-sonnet",
@@ -391,6 +394,7 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(assistant.meta.agentRole).toBe("build");
     expect(assistant.meta.isFinal).toBe(true);
     expect(assistant.meta.totalTokens).toBe(123);
+    expect(assistant.meta.contextWindow).toBe(1_000);
     expect(assistant.meta.providerId).toBe("anthropic");
     expect(assistant.meta.modelId).toBe("claude-3-7-sonnet");
     expect(assistant.meta.profileId).toBe("Hephaestus");
@@ -1002,6 +1006,207 @@ describe("agent-orchestrator/support/persistence", () => {
 
     expect(assistant.meta.isFinal).toBe(true);
     expect(assistant.meta.durationMs).toBe(27_000);
+  });
+
+  test("uses Codex turn user and final assistant timestamps for hydrated duration", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "codex-user-1",
+          role: "user",
+          state: "read",
+          timestamp: "2026-02-22T08:00:00.000Z",
+          text: "Write the spec",
+          displayParts: [{ kind: "text", text: "Write the spec" }],
+          parts: [],
+        },
+        {
+          messageId: "codex-agent-final",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:30.000Z",
+          text: "Persisted the canonical spec.",
+          parts: [
+            {
+              kind: "step",
+              messageId: "codex-agent-final",
+              partId: "codex-agent-final-finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      {
+        role: "spec",
+        selectedModel: null,
+      },
+    );
+
+    expect(messages).toHaveLength(2);
+    const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 1);
+    if (!assistant || assistant.meta?.kind !== "assistant") {
+      throw new Error("Expected assistant message with assistant meta");
+    }
+
+    expect(assistant.meta.isFinal).toBe(true);
+    expect(assistant.meta.durationMs).toBe(30_000);
+  });
+
+  test("uses explicit hydrated assistant turn duration when provided", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "codex-agent-final",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:30.000Z",
+          text: "Done.",
+          durationMs: 12_345,
+          parts: [
+            {
+              kind: "step",
+              messageId: "codex-agent-final",
+              partId: "codex-agent-final-finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      {
+        role: "spec",
+        selectedModel: null,
+      },
+    );
+
+    const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 0);
+    if (!assistant || assistant.meta?.kind !== "assistant") {
+      throw new Error("Expected assistant message with assistant meta");
+    }
+
+    expect(assistant.meta.isFinal).toBe(true);
+    expect(assistant.meta.durationMs).toBe(12_345);
+  });
+
+  test("hydrates Codex command and file-change parts as visible tool messages", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "codex-user-1",
+          role: "user",
+          state: "read",
+          timestamp: "2026-02-22T08:00:00.000Z",
+          text: "Inspect and patch",
+          displayParts: [{ kind: "text", text: "Inspect and patch" }],
+          parts: [],
+        },
+        {
+          messageId: "codex-command-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:10.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "tool",
+              messageId: "codex-command-1",
+              partId: "codex-command-1",
+              callId: "codex-command-1",
+              tool: "read",
+              title: "cat src/app.ts",
+              status: "completed",
+              input: { path: "/repo/src/app.ts" },
+              output: "const app = true;",
+            },
+          ],
+        },
+        {
+          messageId: "codex-file-change-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:20.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "tool",
+              messageId: "codex-file-change-1",
+              partId: "codex-file-change-1",
+              callId: "codex-file-change-1",
+              tool: "apply_patch",
+              title: "File changes",
+              status: "completed",
+              output: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new",
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        role: "tool",
+        meta: expect.objectContaining({ kind: "tool", tool: "read", title: "cat src/app.ts" }),
+      }),
+    );
+    expect(messages).toContainEqual(
+      expect.objectContaining({
+        role: "tool",
+        meta: expect.objectContaining({ kind: "tool", tool: "apply_patch", title: "File changes" }),
+      }),
+    );
+  });
+
+  test("does not mark visible hydrated assistant text final from a later metadata-only message", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "codex-user-1",
+          role: "user",
+          state: "read",
+          timestamp: "2026-02-22T08:00:00.000Z",
+          text: "Write the spec",
+          displayParts: [{ kind: "text", text: "Write the spec" }],
+          parts: [],
+        },
+        {
+          messageId: "codex-agent-visible",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:30.000Z",
+          text: "Persisted the canonical spec.",
+          parts: [],
+        },
+        {
+          messageId: "codex-agent-terminal-only",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:30.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "step",
+              messageId: "codex-agent-terminal-only",
+              partId: "codex-agent-terminal-only-finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      {
+        role: "spec",
+        selectedModel: null,
+      },
+    );
+
+    const assistant = messages.find(
+      (entry) => entry.role === "assistant" && entry.content === "Persisted the canonical spec.",
+    );
+    if (!assistant || assistant.meta?.kind !== "assistant") {
+      throw new Error("Expected visible assistant message with assistant meta");
+    }
+
+    expect(assistant.meta.isFinal).toBe(false);
+    expect(assistant.meta.durationMs).toBeUndefined();
   });
 
   test("does not reuse a previous-turn user anchor for a later assistant completion", () => {

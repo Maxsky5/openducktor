@@ -7,7 +7,7 @@ import {
   type ChecksOperationsContextValue,
   ChecksStateContext,
   useActiveWorkspaceContext,
-  useRuntimeDefinitionsContext,
+  useRuntimeAvailabilityContext,
 } from "../app-state-contexts";
 import { useChecks } from "../operations";
 
@@ -23,7 +23,7 @@ export function ChecksStateProvider({
   children,
 }: ChecksStateProviderProps): ReactElement {
   const { activeWorkspace } = useActiveWorkspaceContext();
-  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
+  const { availableRuntimeDefinitions } = useRuntimeAvailabilityContext();
   const {
     runtimeCheck,
     runtimeCheckFailureKind,
@@ -43,7 +43,7 @@ export function ChecksStateProvider({
     clearActiveRepoRuntimeHealth,
   } = useChecks({
     activeWorkspace,
-    runtimeDefinitions,
+    runtimeDefinitions: availableRuntimeDefinitions,
     checkRepoRuntimeHealth,
   });
 

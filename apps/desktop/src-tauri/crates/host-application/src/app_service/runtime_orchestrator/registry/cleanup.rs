@@ -2,6 +2,7 @@ use super::super::super::{
     terminate_child_process, AgentRuntimeProcess, AppService, RuntimeCleanupTarget,
 };
 use anyhow::{anyhow, Result};
+use host_domain::AgentRuntimeKind;
 use std::process::Child;
 
 impl AppService {
@@ -29,11 +30,29 @@ impl AppService {
         Self::cleanup_runtime_worktree_if_needed(cleanup_target)
     }
 
-    pub(super) fn cleanup_runtime_process(runtime: &mut AgentRuntimeProcess) -> Result<()> {
+    pub(super) fn cleanup_runtime_process(&self, runtime: &mut AgentRuntimeProcess) -> Result<()> {
         if let Some(child) = runtime.child.as_mut() {
             terminate_child_process(child);
         }
-        Self::cleanup_runtime_worktree_if_needed(runtime.cleanup_target.as_ref())
+        let codex_transport_cleanup = if runtime.summary.kind == AgentRuntimeKind::codex() {
+            self.cleanup_codex_app_server_transport(runtime.summary.runtime_id.as_str())
+        } else {
+            Ok(())
+        };
+        let mut errors = Vec::new();
+        if let Err(error) =
+            Self::cleanup_runtime_worktree_if_needed(runtime.cleanup_target.as_ref())
+        {
+            errors.push(error.to_string());
+        }
+        if let Err(error) = codex_transport_cleanup {
+            errors.push(error.to_string());
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(anyhow!(errors.join("\n")))
+        }
     }
 
     pub(crate) fn cleanup_failed_host_managed_start(

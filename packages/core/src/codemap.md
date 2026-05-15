@@ -12,5 +12,5 @@ Core agent workflow logic: ports, runtime guards, approval policy, session-prese
 `ports/agent-engine.ts` defines the agent-session, runtime-registry, and workspace-inspection contract. `services/*` shape approval policy, live session presence, runtime-connection validation, planner persistence, prompt synthesis, and todo mapping. `types/*` define orchestrator inputs/outputs, runtime descriptors, and tool-call models.
 
 ## Integration Points
-- Used by `packages/adapters-opencode-sdk`, `packages/adapters-tauri-host`, and `packages/openducktor-mcp`
+- Used by `packages/adapters-opencode-sdk`, `packages/host-client`, and `packages/openducktor-mcp`
 - Re-exported from `src/index.ts`

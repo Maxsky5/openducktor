@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { TauriHostClient } from "@openducktor/adapters-tauri-host";
+import type { HostClient } from "@openducktor/host-client";
 import { resolveLocalAttachmentPreviewSrc } from "./local-attachment-files";
 import {
   configureShellBridge,
@@ -8,7 +8,7 @@ import {
 } from "./shell-bridge";
 
 const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridge => ({
-  client: {} as TauriHostClient,
+  client: {} as HostClient,
   subscribeRunEvents: async () => () => {},
   subscribeDevServerEvents: async () => () => {},
   subscribeTaskEvents: async () => () => {},

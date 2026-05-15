@@ -1,5 +1,10 @@
+import type {
+  CodexJsonRpcRequest,
+  CodexJsonRpcTransportFactory,
+} from "@openducktor/adapters-codex-app-server";
+import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentCatalogPort,
   AgentEnginePort,
@@ -7,8 +12,10 @@ import type {
   AgentRuntimeDefinition,
   AgentSessionPort,
   AgentWorkspaceInspectionPort,
+  RepoRuntimeRef,
 } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND, validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
+import { subscribeCodexAppServerEvents } from "@/lib/host-client";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { host } from "./operations/shared/host";
 import type { RuntimeCatalogAdapter } from "./operations/shared/runtime-catalog";
@@ -28,32 +35,102 @@ type AgentRuntimeRegistry = {
   createAgentEngine: () => AgentEnginePort;
 };
 
+type HostRepoRuntimeResolver = {
+  ensureRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
+  requireRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
+  requireRuntimeById(ref: RepoRuntimeRef, runtimeId: string): Promise<RuntimeInstanceSummary>;
+};
+
+const requireListedRuntime = async (
+  { repoPath, runtimeKind }: RepoRuntimeRef,
+  predicate: (runtime: RuntimeInstanceSummary) => boolean,
+  errorDetails: string,
+): Promise<RuntimeInstanceSummary> => {
+  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+  const runtimes = await host.runtimeList(repoPath, runtimeKind);
+  const runtime = runtimes.find(
+    (entry) =>
+      entry.kind === runtimeKind &&
+      normalizeWorkingDirectory(entry.repoPath) === normalizedRepoPath &&
+      predicate(entry),
+  );
+  if (!runtime) {
+    throw new Error(errorDetails);
+  }
+  return runtime;
+};
+
+const requireRepoRuntime = (ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary> =>
+  requireListedRuntime(
+    ref,
+    () => true,
+    `No live repo runtime found for repo '${ref.repoPath}', runtime '${ref.runtimeKind}'.`,
+  );
+
+const requireRuntimeById = (
+  ref: RepoRuntimeRef,
+  runtimeId: string,
+): Promise<RuntimeInstanceSummary> =>
+  requireListedRuntime(
+    ref,
+    (runtime) => runtime.runtimeId === runtimeId,
+    `No live repo runtime found for repo '${ref.repoPath}', runtime '${ref.runtimeKind}' and runtime id '${runtimeId}'.`,
+  );
+
+const hostRepoRuntimeResolver: HostRepoRuntimeResolver = {
+  ensureRepoRuntime: async ({ repoPath, runtimeKind }) => {
+    return host.runtimeEnsure(repoPath, runtimeKind);
+  },
+  requireRepoRuntime,
+  requireRuntimeById,
+};
+
 export { DEFAULT_RUNTIME_KIND };
 
 export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
+  const codexTransportFactory: CodexJsonRpcTransportFactory = (runtimeId) => ({
+    request: async <Response = unknown>(request: CodexJsonRpcRequest) =>
+      host.codexAppServerRequest(runtimeId, request.method, request.params) as Promise<Response>,
+  });
   const opencodeAdapter = new OpencodeSdkAdapter({
-    repoRuntimeResolver: {
-      ensureRepoRuntime: async ({ repoPath, runtimeKind }) => {
-        return host.runtimeEnsure(repoPath, runtimeKind);
-      },
-      requireRepoRuntime: async ({ repoPath, runtimeKind }) => {
-        const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-        const runtimes = await host.runtimeList(repoPath, runtimeKind);
-        const runtime = runtimes.find(
-          (entry) =>
-            entry.kind === runtimeKind &&
-            normalizeWorkingDirectory(entry.repoPath) === normalizedRepoPath,
-        );
-        if (!runtime) {
-          throw new Error(
-            `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'.`,
-          );
+    repoRuntimeResolver: hostRepoRuntimeResolver,
+  }) as RegisteredRuntimeAdapter;
+  const codexAdapter = new CodexAppServerAdapter({
+    repoRuntimeResolver: hostRepoRuntimeResolver,
+    transportFactory: codexTransportFactory,
+    drainServerRequests: async (runtimeId: string) => {
+      return host.codexAppServerRequests(runtimeId) as Promise<unknown[]>;
+    },
+    drainNotifications: async (runtimeId: string) => {
+      return host.codexAppServerNotifications(runtimeId) as Promise<unknown[]>;
+    },
+    subscribeEvents: (runtimeId, listener) => {
+      const subscribe = subscribeCodexAppServerEvents;
+      if (!subscribe) {
+        throw new Error("Codex app-server event subscriptions are unavailable.");
+      }
+      return subscribe((payload) => {
+        if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+          return;
         }
-        return runtime;
-      },
+        const event = payload as { runtimeId?: unknown; kind?: unknown; message?: unknown };
+        if (event.runtimeId !== runtimeId) {
+          return;
+        }
+        if (event.kind !== "notification" && event.kind !== "server_request") {
+          return;
+        }
+        listener({ runtimeId, kind: event.kind, message: event.message });
+      });
+    },
+    respondServerRequest: async (runtimeId: string, requestId: number, result, error) => {
+      await host.codexAppServerRespond(runtimeId, requestId, result, error);
     },
   }) as RegisteredRuntimeAdapter;
-  const adapters = new Map<RuntimeKind, RegisteredRuntimeAdapter>([["opencode", opencodeAdapter]]);
+  const adapters = new Map<RuntimeKind, RegisteredRuntimeAdapter>([
+    ["opencode", opencodeAdapter],
+    ["codex", codexAdapter],
+  ]);
   const registeredRuntimeKinds = Array.from(adapters.keys());
 
   const getAdapter = (runtimeKind: RuntimeKind): RegisteredRuntimeAdapter => {

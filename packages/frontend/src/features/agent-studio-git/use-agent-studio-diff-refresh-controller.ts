@@ -128,20 +128,20 @@ export function useAgentStudioDiffRefreshController({
         scheduledFetchAtByContextRef.current.set(scheduledFetchCooldownKey, Date.now());
       };
       const fetchRemote = async (): Promise<boolean> => {
+        if (!hasSameRefreshContext()) {
+          return false;
+        }
         const fetchResult = await hostClient.gitFetchRemote(
           activeRefreshContext.repoPath,
           activeRefreshContext.targetBranch,
           activeRefreshContext.workingDir ?? undefined,
         );
-        if (!hasSameRefreshContext()) {
-          return false;
+        if (hasSameRefreshContext() && fetchResult.outcome === "fetched") {
+          await invalidateRepoBranchesQuery(appQueryClient, activeRefreshContext.repoPath);
         }
 
-        if (fetchResult.outcome === "fetched") {
-          await invalidateRepoBranchesQuery(appQueryClient, activeRefreshContext.repoPath);
-          if (!hasSameRefreshContext()) {
-            return false;
-          }
+        if (!hasSameRefreshContext()) {
+          return false;
         }
 
         updateScheduledFetchCooldown();
@@ -245,15 +245,20 @@ export function useAgentStudioDiffRefreshController({
       };
 
       const refreshPromise = (async (): Promise<void> => {
-        while (queuedRefreshRequestRef.current != null) {
+        const runQueuedRefreshRequest = async (): Promise<void> => {
+          if (queuedRefreshRequestRef.current == null) {
+            return;
+          }
           const activeRefreshRequest = queuedRefreshRequestRef.current;
           queuedRefreshRequestRef.current = null;
 
           const shouldContinue = await runRefreshRequest(activeRefreshRequest);
-          if (!shouldContinue) {
-            break;
+          if (shouldContinue) {
+            await runQueuedRefreshRequest();
           }
-        }
+        };
+
+        await runQueuedRefreshRequest();
       })().finally(() => {
         if (refreshPromiseRef.current === refreshPromise) {
           refreshPromiseRef.current = null;

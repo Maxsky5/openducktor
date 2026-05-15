@@ -1,6 +1,16 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeKind } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeKind,
+} from "@openducktor/contracts";
+import type { HostClient } from "@openducktor/host-client";
+import {
+  configureShellBridge,
+  createUnavailableShellBridge,
+  type ShellBridge,
+} from "@/lib/shell-bridge";
 import { createAgentRuntimeRegistry, DEFAULT_RUNTIME_KIND } from "./agent-runtime-registry";
 import { host } from "./operations/shared/host";
 
@@ -17,19 +27,248 @@ const createDeferred = <T>() => {
   };
 };
 
+const waitForSessionIdleEvent = async (
+  events: Array<{ type?: string }>,
+  deadline = Date.now() + 1_000,
+): Promise<void> => {
+  if (events.some((event) => event.type === "session_idle") || Date.now() >= deadline) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await waitForSessionIdleEvent(events, deadline);
+};
+
 describe("agent-runtime-registry", () => {
-  test("registers only the shipped opencode runtime adapter", () => {
+  test("registers the shipped opencode and codex runtime adapters", () => {
     const registry = createAgentRuntimeRegistry();
 
     expect(registry.defaultRuntimeKind).toBe(DEFAULT_RUNTIME_KIND);
-    expect(registry.registeredRuntimeKinds).toEqual(["opencode"]);
+    expect(registry.registeredRuntimeKinds).toEqual(["opencode", "codex"]);
     expect(registry.getRuntimeDefinition("opencode").kind).toBe("opencode");
+    expect(registry.getRuntimeDefinition("codex").kind).toBe("codex");
     expect(
       registry
         .createAgentEngine()
         .listRuntimeDefinitions()
         .map((runtime) => runtime.kind),
-    ).toEqual(["opencode"]);
+    ).toEqual(["opencode", "codex"]);
+  });
+
+  test("codex adapter resolves host-managed runtime ids through the host bridge", async () => {
+    const originalRuntimeEnsure = host.runtimeEnsure;
+    const originalRuntimeList = host.runtimeList;
+    const originalCodexAppServerRequest = host.codexAppServerRequest;
+    const runtimeEnsureCalls: unknown[][] = [];
+    const runtimeListCalls: unknown[][] = [];
+    const codexRequestCalls: unknown[][] = [];
+
+    host.runtimeEnsure = mock(async (...args: unknown[]) => {
+      runtimeEnsureCalls.push(args);
+      return {
+        kind: "codex",
+        runtimeId: "runtime-codex-ensure",
+        repoPath: "/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/repo",
+        runtimeRoute: { type: "stdio" as const, identity: "runtime-codex-ensure" },
+        startedAt: "2026-02-22T09:00:00.000Z",
+        descriptor: CODEX_RUNTIME_DESCRIPTOR,
+      };
+    }) as typeof host.runtimeEnsure;
+    host.runtimeList = mock(async (...args: unknown[]) => {
+      runtimeListCalls.push(args);
+      return [
+        {
+          kind: "codex",
+          runtimeId: "runtime-codex-live",
+          repoPath: "/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/repo",
+          runtimeRoute: { type: "stdio" as const, identity: "runtime-codex-live" },
+          startedAt: "2026-02-22T09:00:00.000Z",
+          descriptor: CODEX_RUNTIME_DESCRIPTOR,
+        },
+      ];
+    }) as typeof host.runtimeList;
+    host.codexAppServerRequest = mock(async (...args: unknown[]) => {
+      codexRequestCalls.push(args);
+      const [, method] = args as [string, string, unknown?];
+      if (method === "model/list") {
+        return {
+          data: [
+            {
+              id: "gpt-5",
+              model: "gpt-5",
+              displayName: "GPT-5",
+              supportedReasoningEfforts: [
+                { reasoningEffort: "medium", description: "Balanced reasoning" },
+              ],
+              isDefault: true,
+            },
+          ],
+          nextCursor: null,
+        };
+      }
+      return { thread: { id: "thread-codex" }, startedAt: "2026-02-22T09:00:00.000Z" };
+    }) as typeof host.codexAppServerRequest;
+    configureShellBridge({
+      client: {} as HostClient,
+      subscribeRunEvents: async () => () => {},
+      subscribeDevServerEvents: async () => () => {},
+      subscribeTaskEvents: async () => () => {},
+      subscribeCodexAppServerEvents: async () => () => {},
+      capabilities: {
+        canOpenExternalUrls: true,
+        canPreviewLocalAttachments: true,
+      },
+      openExternalUrl: async () => {},
+      resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
+    } satisfies ShellBridge);
+
+    try {
+      const registry = createAgentRuntimeRegistry();
+
+      await expect(
+        registry.getAdapter("codex").startSession({
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo",
+          taskId: "task-1",
+          role: "build",
+          systemPrompt: "Use the repo rules.",
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      ).resolves.toMatchObject({ externalSessionId: "thread-codex" });
+
+      await expect(
+        registry.getAdapter("codex").listAvailableModels({
+          repoPath: "/repo",
+          runtimeKind: "codex",
+        }),
+      ).resolves.toMatchObject({ runtime: { kind: "codex" } });
+
+      expect(runtimeEnsureCalls).toEqual([["/repo", "codex"]]);
+      expect(runtimeListCalls).toEqual([["/repo", "codex"]]);
+      expect(codexRequestCalls[0]?.[0]).toBe("runtime-codex-ensure");
+      expect(codexRequestCalls[1]?.[0]).toBe("runtime-codex-ensure");
+      expect(codexRequestCalls[2]?.[0]).toBe("runtime-codex-live");
+    } finally {
+      host.runtimeEnsure = originalRuntimeEnsure;
+      host.runtimeList = originalRuntimeList;
+      host.codexAppServerRequest = originalCodexAppServerRequest;
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  });
+
+  test("codex adapter receives live app-server events from the shell bridge", async () => {
+    const originalRuntimeList = host.runtimeList;
+    const originalCodexAppServerRequest = host.codexAppServerRequest;
+    const codexEventBridge: { listener?: (payload: unknown) => void } = {};
+
+    host.runtimeList = mock(async () => [
+      {
+        kind: "codex",
+        runtimeId: "runtime-codex-live",
+        repoPath: "/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/repo",
+        runtimeRoute: { type: "stdio" as const, identity: "runtime-codex-live" },
+        startedAt: "2026-02-22T09:00:00.000Z",
+        descriptor: CODEX_RUNTIME_DESCRIPTOR,
+      },
+    ]) as typeof host.runtimeList;
+    host.codexAppServerRequest = mock(async (_runtimeId, method) => {
+      if (method === "model/list") {
+        return {
+          data: [
+            {
+              id: "gpt-5",
+              model: "gpt-5",
+              displayName: "GPT-5",
+              supportedReasoningEfforts: [
+                { reasoningEffort: "medium", description: "Balanced reasoning" },
+              ],
+              isDefault: true,
+            },
+          ],
+          nextCursor: null,
+        };
+      }
+      if (method === "thread/resume") {
+        return {
+          thread: {
+            id: "thread-live",
+            cwd: "/repo",
+            createdAt: 1_778_112_000,
+            status: { type: "active", activeFlags: [] },
+          },
+          startedAt: "2026-02-22T09:00:00.000Z",
+        };
+      }
+      throw new Error(`Unexpected Codex request '${method}'.`);
+    }) as typeof host.codexAppServerRequest;
+    configureShellBridge({
+      client: {} as HostClient,
+      subscribeRunEvents: async () => () => {},
+      subscribeDevServerEvents: async () => () => {},
+      subscribeTaskEvents: async () => () => {},
+      subscribeCodexAppServerEvents: async (listener) => {
+        codexEventBridge.listener = listener;
+        return () => {
+          delete codexEventBridge.listener;
+        };
+      },
+      capabilities: {
+        canOpenExternalUrls: true,
+        canPreviewLocalAttachments: true,
+      },
+      openExternalUrl: async () => {},
+      resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
+    } satisfies ShellBridge);
+
+    try {
+      const adapter = createAgentRuntimeRegistry().getAdapter("codex");
+      await adapter.attachSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        role: "build",
+        systemPrompt: "Use the repo rules.",
+        externalSessionId: "thread-live",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      });
+
+      const events: Array<{ type?: string }> = [];
+      const unsubscribe = adapter.subscribeEvents("thread-live", (event) => events.push(event));
+      const emitCodexEvent = codexEventBridge.listener;
+      if (!emitCodexEvent) {
+        throw new Error("Codex app-server event listener was not registered.");
+      }
+      emitCodexEvent({
+        runtimeId: "runtime-codex-live",
+        kind: "notification",
+        message: {
+          method: "turn/completed",
+          params: {
+            threadId: "thread-live",
+            turn: { id: "turn-live", status: "completed" },
+          },
+        },
+      });
+
+      await waitForSessionIdleEvent(events);
+      expect(events.some((event) => event.type === "session_idle")).toBe(true);
+      unsubscribe();
+    } finally {
+      host.runtimeList = originalRuntimeList;
+      host.codexAppServerRequest = originalCodexAppServerRequest;
+      configureShellBridge(createUnavailableShellBridge());
+    }
   });
 
   test("rejects unsupported runtime adapters", () => {

@@ -24,6 +24,22 @@ const createStartAgentSessionWithFlatDeps = (deps: FlatStartSessionDependencies)
   return createStartAgentSession(toStartSessionDependencies(deps));
 };
 
+const waitForSessionCount = async (
+  getCount: () => number,
+  expectedCount: number,
+  remainingAttempts = 10,
+): Promise<void> => {
+  if (getCount() === expectedCount) {
+    return;
+  }
+  if (remainingAttempts <= 0) {
+    return;
+  }
+  await Promise.resolve();
+  await Promise.resolve();
+  await waitForSessionCount(getCount, expectedCount, remainingAttempts - 1);
+};
+
 const persistedSessionRecord = (
   input: {
     externalSessionId: string;
@@ -432,13 +448,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         selectedModel: PLANNER_SELECTION,
       });
 
-      for (let attempt = 0; attempt < 10; attempt += 1) {
-        if (Object.values(sessionsById).length === 1) {
-          break;
-        }
-        await Promise.resolve();
-        await Promise.resolve();
-      }
+      await waitForSessionCount(() => Object.values(sessionsById).length, 1);
 
       expect(Object.values(sessionsById)).toHaveLength(1);
       expect(Object.values(sessionsById)[0]?.status).toBe("starting");

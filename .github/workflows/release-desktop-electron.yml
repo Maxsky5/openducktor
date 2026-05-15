@@ -1,0 +1,305 @@
+name: Release Desktop Electron
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (for example v0.1.0)"
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: 1.3.11
+  XCODE_APP_PATH: /Applications/Xcode_26.2.app
+
+jobs:
+  preflight:
+    name: Preflight Electron desktop release
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.release_meta.outputs.tag }}
+      version: ${{ steps.release_meta.outputs.version }}
+      release_url: ${{ steps.release_meta.outputs.release_url }}
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun download cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Resolve release metadata
+        id: release_meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="$INPUT_TAG"
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must look like v0.1.0 or v0.1.0-rc.1." >&2
+            exit 1
+          fi
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Draft release $TAG was not found. Run Prepare Release first or rerun this workflow manually with the correct tag." >&2
+            exit 1
+          fi
+
+          IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+          if [[ "$IS_DRAFT" != "true" ]]; then
+            echo "Release $TAG already exists and is not a draft. Electron desktop artifacts should only attach to a draft release." >&2
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "release_url=$(gh release view "$TAG" --json url --jq '.url')" >> "$GITHUB_OUTPUT"
+
+      - name: Verify repo version matches tag
+        run: bun run release:version:check "${{ steps.release_meta.outputs.version }}"
+
+      - name: Lint Electron workspace
+        run: bun run --filter @openducktor/electron lint
+
+      - name: Typecheck Electron workspace
+        run: bun run --filter @openducktor/electron typecheck
+
+      - name: Test Electron workspace
+        run: bun run --filter @openducktor/electron test
+
+  build-electron:
+    name: Build ${{ matrix.label }} Electron assets
+    permissions:
+      contents: read
+    needs:
+      - preflight
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x64
+            runner: ubuntu-latest
+            platform: linux
+            arch: x64
+            signed_args: ""
+          - label: macOS Apple Silicon
+            runner: macos-15
+            platform: macos
+            arch: arm64
+            signed_args: "--signed"
+          - label: macOS Intel
+            runner: macos-15-intel
+            platform: macos
+            arch: x64
+            signed_args: "--signed"
+          - label: Windows x64
+            runner: windows-latest
+            platform: windows
+            arch: x64
+            signed_args: ""
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.preflight.outputs.tag }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun download cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Select Xcode 26.2 SDK
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -d "$XCODE_APP_PATH" ]]; then
+            echo "Expected Xcode at $XCODE_APP_PATH on the GitHub macOS runner." >&2
+            exit 1
+          fi
+
+          sudo xcode-select -s "$XCODE_APP_PATH"
+          echo "DEVELOPER_DIR=$XCODE_APP_PATH/Contents/Developer" >> "$GITHUB_ENV"
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
+
+      - name: Validate Electron macOS signing secrets
+        if: matrix.platform == 'macos'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            printf 'Missing required Electron macOS release secrets:\n' >&2
+            printf ' - %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
+
+      - name: Build Electron release artifacts
+        env:
+          CSC_LINK: ${{ matrix.platform == 'macos' && secrets.APPLE_CERTIFICATE || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'macos' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          CSC_NAME: ${{ matrix.platform == 'macos' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'macos' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_TEAM_ID || '' }}
+          SIGNED_ARGS: ${{ matrix.signed_args }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            --platform "${{ matrix.platform }}"
+            --arch "${{ matrix.arch }}"
+            --output-dir release-publish
+          )
+          if [[ -n "$SIGNED_ARGS" ]]; then
+            args+=("$SIGNED_ARGS")
+          fi
+
+          bun run --cwd apps/electron release:artifact -- "${args[@]}"
+
+      - name: Verify signed Electron macOS app
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_bundle="$(find apps/electron/release -maxdepth 3 -type d -name 'OpenDucktor.app' -print -quit)"
+          if [[ -z "$app_bundle" ]]; then
+            echo "Packaged Electron app bundle was not found under apps/electron/release." >&2
+            exit 1
+          fi
+
+          sidecar="$app_bundle/Contents/Resources/bin/openducktor-mcp"
+          if [[ ! -f "$sidecar" ]]; then
+            echo "Packaged Electron MCP sidecar was not found at $sidecar." >&2
+            exit 1
+          fi
+
+          codesign --verify --deep --strict --verbose=4 "$app_bundle"
+          codesign --verify --strict --verbose=4 "$sidecar"
+
+      - name: Upload Electron build artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: electron-${{ matrix.platform }}-${{ matrix.arch }}
+          path: apps/electron/release-publish/*
+          if-no-files-found: error
+
+  publish-electron-release:
+    name: Publish Electron release assets
+    permissions:
+      contents: write
+    needs:
+      - preflight
+      - build-electron
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download Electron build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: electron-*
+          merge-multiple: true
+          path: electron-release-assets
+
+      - name: Publish Electron assets to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          artifacts=(electron-release-assets/*)
+          if [[ ${#artifacts[@]} -eq 0 ]]; then
+            echo "No Electron release assets were downloaded." >&2
+            exit 1
+          fi
+
+          gh release upload "$TAG" "${artifacts[@]}" --clobber
+
+  finalize-release:
+    name: Summarize Electron release draft
+    if: ${{ always() }}
+    permissions:
+      contents: read
+    needs:
+      - preflight
+      - build-electron
+      - publish-electron-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish workflow summary
+        env:
+          RELEASE_VALIDATION_RESULT: ${{ needs.preflight.result }}
+          ELECTRON_BUILD_RESULT: ${{ needs.build-electron.result }}
+          ELECTRON_PUBLISH_RESULT: ${{ needs.publish-electron-release.result }}
+          RELEASE_URL: ${{ needs.preflight.outputs.release_url }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+        run: |
+          set -euo pipefail
+          RELEASE_LABEL="${TAG:-${{ inputs.tag }}}"
+          RELEASE_LINK="${RELEASE_URL:-unavailable because release validation did not complete}"
+          {
+            echo "## Electron desktop release draft ready"
+            echo
+            echo "- Tag: $RELEASE_LABEL"
+            echo "- Release validation result: $RELEASE_VALIDATION_RESULT"
+            echo "- Electron build job result: $ELECTRON_BUILD_RESULT"
+            echo "- Electron publish job result: $ELECTRON_PUBLISH_RESULT"
+            echo "- Draft release: $RELEASE_LINK"
+            echo "- Electron assets built for Linux x64, macOS arm64, macOS Intel, and Windows x64"
+            echo "- macOS signing/notarization: required for Electron assets"
+            echo "- Next step: smoke-test the Electron draft assets before publishing them as stable"
+          } >> "$GITHUB_STEP_SUMMARY"

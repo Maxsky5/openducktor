@@ -1,5 +1,5 @@
 import type { IssueType, TaskCard } from "@openducktor/contracts";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 import type { TaskDocumentSection } from "@/components/features/task-composer";
 import {
   collectKnownLabels,
@@ -36,6 +36,99 @@ type UseTaskCreateModalControllerOptions = {
   task: TaskCard | null;
 };
 
+type TaskCreateModalState = {
+  step: ComposerStep;
+  editSection: EditTaskSection;
+  composer: ComposerState;
+  selectedCreateIssueType: IssueType | null;
+  error: string | null;
+  documentError: string | null;
+  isSubmitting: boolean;
+  isSavingDocument: DocumentSection | null;
+  pendingDiscardIntent: PendingDiscardIntent | null;
+};
+
+type TaskCreateModalAction =
+  | { type: "resetForOpenTask"; task: TaskCard | null }
+  | { type: "composerPatched"; patch: Partial<ComposerState> }
+  | { type: "issueTypeSelected"; issueType: IssueType }
+  | { type: "stepChanged"; step: ComposerStep }
+  | { type: "documentErrorCleared" }
+  | { type: "discardIntentSet"; intent: PendingDiscardIntent }
+  | { type: "sectionChanged"; section: EditTaskSection }
+  | { type: "submitBlocked"; error: string }
+  | { type: "submitStarted" }
+  | { type: "submitFailed"; error: string }
+  | { type: "submitFinished" }
+  | { type: "documentSaveStarted"; section: DocumentSection }
+  | { type: "documentSaveFailed"; error: string }
+  | { type: "documentSaveFinished" }
+  | { type: "discardIntentCleared" };
+
+const initialTaskCreateModalState = (task: TaskCard | null): TaskCreateModalState => ({
+  step: task ? "details" : "type",
+  editSection: "details",
+  composer: toComposerState(task),
+  selectedCreateIssueType: task?.issueType ?? null,
+  error: null,
+  documentError: null,
+  isSubmitting: false,
+  isSavingDocument: null,
+  pendingDiscardIntent: null,
+});
+
+const taskCreateModalReducer = (
+  state: TaskCreateModalState,
+  action: TaskCreateModalAction,
+): TaskCreateModalState => {
+  switch (action.type) {
+    case "resetForOpenTask":
+      return initialTaskCreateModalState(action.task);
+    case "composerPatched":
+      return { ...state, composer: { ...state.composer, ...action.patch } };
+    case "issueTypeSelected":
+      return {
+        ...state,
+        selectedCreateIssueType: action.issueType,
+        composer: {
+          ...state.composer,
+          issueType: action.issueType,
+          aiReviewEnabled: ISSUE_TYPE_DEFAULTS[action.issueType].aiReviewEnabled,
+        },
+        step: "details",
+      };
+    case "stepChanged":
+      return { ...state, step: action.step };
+    case "documentErrorCleared":
+      return { ...state, documentError: null };
+    case "discardIntentSet":
+      return { ...state, pendingDiscardIntent: action.intent };
+    case "sectionChanged":
+      return { ...state, editSection: action.section, documentError: null };
+    case "submitBlocked":
+      return { ...state, error: action.error };
+    case "submitStarted":
+      return { ...state, error: null, documentError: null, isSubmitting: true };
+    case "submitFailed":
+      return { ...state, error: action.error };
+    case "submitFinished":
+      return { ...state, isSubmitting: false };
+    case "documentSaveStarted":
+      return {
+        ...state,
+        error: null,
+        documentError: null,
+        isSavingDocument: action.section,
+      };
+    case "documentSaveFailed":
+      return { ...state, documentError: action.error };
+    case "documentSaveFinished":
+      return { ...state, isSavingDocument: null };
+    case "discardIntentCleared":
+      return { ...state, pendingDiscardIntent: null };
+  }
+};
+
 export function useTaskCreateModalController({
   open,
   onOpenChange,
@@ -50,19 +143,22 @@ export function useTaskCreateModalController({
   const mode: ComposerMode = task ? "edit" : "create";
   const taskId = task?.id ?? null;
 
-  const [step, setStep] = useState<ComposerStep>("type");
-  const [editSection, setEditSection] = useState<EditTaskSection>("details");
-  const [state, setState] = useState<ComposerState>(() => toComposerState(task));
-  const [selectedCreateIssueType, setSelectedCreateIssueType] = useState<IssueType | null>(
-    task?.issueType ?? null,
+  const [modalState, dispatch] = useReducer(
+    taskCreateModalReducer,
+    task,
+    initialTaskCreateModalState,
   );
-  const [error, setError] = useState<string | null>(null);
-  const [documentError, setDocumentError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSavingDocument, setIsSavingDocument] = useState<DocumentSection | null>(null);
-  const [pendingDiscardIntent, setPendingDiscardIntent] = useState<PendingDiscardIntent | null>(
-    null,
-  );
+  const {
+    step,
+    editSection,
+    composer,
+    selectedCreateIssueType,
+    error,
+    documentError,
+    isSubmitting,
+    isSavingDocument,
+    pendingDiscardIntent,
+  } = modalState;
 
   const previousModalContext = useRef<{ open: boolean; taskId: string | null } | null>(null);
   const activeDocumentSection =
@@ -97,15 +193,7 @@ export function useTaskCreateModalController({
       return;
     }
 
-    setState(toComposerState(task));
-    setSelectedCreateIssueType(task?.issueType ?? null);
-    setStep(task ? "details" : "type");
-    setEditSection("details");
-    setError(null);
-    setDocumentError(null);
-    setIsSubmitting(false);
-    setIsSavingDocument(null);
-    setPendingDiscardIntent(null);
+    dispatch({ type: "resetForOpenTask", task });
   }, [open, task, taskId]);
 
   const knownLabels = useMemo(() => collectKnownLabels(tasks), [tasks]);
@@ -134,17 +222,11 @@ export function useTaskCreateModalController({
         : false;
 
   const updateState = (patch: Partial<ComposerState>): void => {
-    setState((current) => ({ ...current, ...patch }));
+    dispatch({ type: "composerPatched", patch });
   };
 
   const selectCreateIssueType = (issueType: IssueType): void => {
-    setSelectedCreateIssueType(issueType);
-    setState((current) => ({
-      ...current,
-      issueType,
-      aiReviewEnabled: ISSUE_TYPE_DEFAULTS[issueType].aiReviewEnabled,
-    }));
-    setStep("details");
+    dispatch({ type: "issueTypeSelected", issueType });
   };
 
   const discardCurrentDocumentDraft = (): void => {
@@ -152,7 +234,7 @@ export function useTaskCreateModalController({
       return;
     }
     discardDocumentDraft(activeDocumentSection);
-    setDocumentError(null);
+    dispatch({ type: "documentErrorCleared" });
   };
 
   const close = (): void => {
@@ -160,7 +242,7 @@ export function useTaskCreateModalController({
       return;
     }
     if (hasUnsavedActiveDocument) {
-      setPendingDiscardIntent({ type: "close-modal" });
+      dispatch({ type: "discardIntentSet", intent: { type: "close-modal" } });
       return;
     }
     onOpenChange(false);
@@ -171,12 +253,11 @@ export function useTaskCreateModalController({
       return;
     }
     if (hasUnsavedActiveDocument) {
-      setPendingDiscardIntent({ type: "switch-section", next });
+      dispatch({ type: "discardIntentSet", intent: { type: "switch-section", next } });
       return;
     }
 
-    setEditSection(next);
-    setDocumentError(null);
+    dispatch({ type: "sectionChanged", section: next });
     if (isDocumentSection(next)) {
       void loadDocumentSection(next);
     }
@@ -184,28 +265,26 @@ export function useTaskCreateModalController({
 
   const submit = async (): Promise<void> => {
     if (!workspaceRepoPath) {
-      setError("Select a repository before creating tasks.");
+      dispatch({ type: "submitBlocked", error: "Select a repository before creating tasks." });
       return;
     }
-    if (!state.title.trim()) {
-      setError("Title is required.");
+    if (!composer.title.trim()) {
+      dispatch({ type: "submitBlocked", error: "Title is required." });
       return;
     }
 
-    setError(null);
-    setDocumentError(null);
-    setIsSubmitting(true);
+    dispatch({ type: "submitStarted" });
     try {
       if (mode === "create") {
-        await createTask(toTaskCreateInput(state));
+        await createTask(toTaskCreateInput(composer));
       } else if (task) {
-        await updateTask(task.id, toTaskUpdatePatch(state));
+        await updateTask(task.id, toTaskUpdatePatch(composer));
       }
       onOpenChange(false);
     } catch (reason) {
-      setError(errorMessage(reason));
+      dispatch({ type: "submitFailed", error: errorMessage(reason) });
     } finally {
-      setIsSubmitting(false);
+      dispatch({ type: "submitFinished" });
     }
   };
 
@@ -215,9 +294,7 @@ export function useTaskCreateModalController({
     }
 
     const markdown = activeDocument.draftMarkdown.trim();
-    setError(null);
-    setDocumentError(null);
-    setIsSavingDocument(activeDocumentSection);
+    dispatch({ type: "documentSaveStarted", section: activeDocumentSection });
     try {
       const saved =
         activeDocumentSection === "spec"
@@ -225,9 +302,9 @@ export function useTaskCreateModalController({
           : await savePlanDocument(taskId, markdown);
       applySavedDocument(activeDocumentSection, markdown, saved.updatedAt);
     } catch (reason) {
-      setDocumentError(errorMessage(reason));
+      dispatch({ type: "documentSaveFailed", error: errorMessage(reason) });
     } finally {
-      setIsSavingDocument(null);
+      dispatch({ type: "documentSaveFinished" });
     }
   };
 
@@ -240,14 +317,13 @@ export function useTaskCreateModalController({
     if (pendingDiscardIntent.type === "close-modal") {
       onOpenChange(false);
     } else {
-      setEditSection(pendingDiscardIntent.next);
-      setDocumentError(null);
+      dispatch({ type: "sectionChanged", section: pendingDiscardIntent.next });
       if (isDocumentSection(pendingDiscardIntent.next)) {
         void loadDocumentSection(pendingDiscardIntent.next);
       }
     }
 
-    setPendingDiscardIntent(null);
+    dispatch({ type: "discardIntentCleared" });
   };
 
   const onDialogOpenChange = (nextOpen: boolean): void => {
@@ -259,7 +335,11 @@ export function useTaskCreateModalController({
   };
 
   const clearPendingDiscardIntent = (): void => {
-    setPendingDiscardIntent(null);
+    dispatch({ type: "discardIntentCleared" });
+  };
+
+  const setStep = (nextStep: ComposerStep): void => {
+    dispatch({ type: "stepChanged", step: nextStep });
   };
 
   return {
@@ -269,7 +349,7 @@ export function useTaskCreateModalController({
     setStep,
     selectedCreateIssueType,
     editSection,
-    state,
+    state: composer,
     documents,
     views,
     activeDocumentSection,

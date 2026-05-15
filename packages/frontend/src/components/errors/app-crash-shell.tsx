@@ -5,9 +5,13 @@ import { buildFatalErrorReport, type FatalErrorReport, logFatalError } from "./f
 
 interface AppCrashShellProps {
   children: ReactNode;
+  kanbanLocation?: string;
 }
 
-export function AppCrashShell({ children }: AppCrashShellProps): ReactElement {
+export function AppCrashShell({
+  children,
+  kanbanLocation = "/kanban",
+}: AppCrashShellProps): ReactElement {
   const [fatalReport, setFatalReport] = useState<FatalErrorReport | null>(null);
   const [resetKey, setResetKey] = useState(0);
 
@@ -55,8 +59,8 @@ export function AppCrashShell({ children }: AppCrashShellProps): ReactElement {
   }, []);
 
   const handleNavigateToKanban = useCallback(() => {
-    window.location.replace("/kanban");
-  }, []);
+    window.location.replace(kanbanLocation);
+  }, [kanbanLocation]);
 
   if (fatalReport) {
     return (

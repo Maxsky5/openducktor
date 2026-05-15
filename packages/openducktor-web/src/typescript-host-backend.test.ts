@@ -1,0 +1,69 @@
+import { describe, expect, test } from "bun:test";
+
+const nativeResponse = await Bun.fetch("data:,");
+(globalThis as typeof globalThis & { Response: typeof Response }).Response =
+  nativeResponse.constructor as typeof Response;
+
+const { __typescriptHostBackendTestInternals, startTypescriptHostBackend } = await import(
+  "./typescript-host-backend"
+);
+
+const APP_TOKEN = "app-token";
+const CONTROL_TOKEN = "control-token";
+const FRONTEND_ORIGIN = "http://127.0.0.1:1420";
+
+describe("TypeScript web host backend", () => {
+  test("serves health, session, invoke, and shutdown through the browser HTTP contract", async () => {
+    const backend = startTypescriptHostBackend({
+      port: 0,
+      frontendOrigin: FRONTEND_ORIGIN,
+      controlToken: CONTROL_TOKEN,
+      appToken: APP_TOKEN,
+    });
+    const backendUrl = `http://127.0.0.1:${backend.port}`;
+
+    try {
+      const health = await Bun.fetch(`${backendUrl}/health`);
+      expect(health.status).toBe(200);
+      expect(await health.json()).toEqual({ ok: true });
+
+      const session = await Bun.fetch(`${backendUrl}/session`, {
+        method: "POST",
+        headers: { "x-openducktor-app-token": APP_TOKEN },
+      });
+      expect(session.status).toBe(200);
+      expect(session.headers.get("set-cookie")).toContain("openducktor_web_session=app-token");
+
+      const invoke = await Bun.fetch(`${backendUrl}/invoke/runtime_definitions_list`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({}),
+      });
+      expect(invoke.status).toBe(200);
+      expect(await invoke.json()).toMatchObject([{ kind: "opencode" }, { kind: "codex" }]);
+
+      const shutdown = await Bun.fetch(`${backendUrl}/shutdown`, {
+        method: "POST",
+        headers: { "x-openducktor-control-token": CONTROL_TOKEN },
+      });
+      expect(shutdown.status).toBe(202);
+      await expect(backend.exited).resolves.toBe(0);
+    } finally {
+      await backend.stop();
+    }
+  });
+
+  test("rejects invalid browser frontend origins before opening a host port", () => {
+    const { validateWebFrontendOrigin } = __typescriptHostBackendTestInternals;
+
+    expect(() => validateWebFrontendOrigin("https://127.0.0.1:1420")).toThrow(
+      "browser frontend origin must use http",
+    );
+    expect(() => validateWebFrontendOrigin("http://example.com:1420")).toThrow(
+      "browser frontend origin must target 127.0.0.1, localhost, or [::1]",
+    );
+  });
+});

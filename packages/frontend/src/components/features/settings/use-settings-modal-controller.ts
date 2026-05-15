@@ -1,5 +1,6 @@
 import type {
   AgentPromptTemplateId,
+  AgentRuntimes,
   GitBranch,
   GitProviderRepository,
   RepoConfig,
@@ -14,10 +15,11 @@ import type {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useEffect, useMemo } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
+import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
   ChecksStateContext,
   useRequiredContext,
-  useRuntimeDefinitionsContext,
+  useRuntimeAvailabilityContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
@@ -32,6 +34,8 @@ import { useSettingsModalRepoScriptValidation } from "./use-settings-modal-repo-
 import { useSettingsModalRepositoryActions } from "./use-settings-modal-repository-actions";
 import type { ReusablePromptValidationState } from "./use-settings-modal-reusable-prompt-validation";
 import { useSettingsModalReusablePromptValidation } from "./use-settings-modal-reusable-prompt-validation";
+import type { RuntimeAvailabilityValidationState } from "./use-settings-modal-runtime-validation";
+import { useSettingsModalRuntimeValidation } from "./use-settings-modal-runtime-validation";
 import { useSettingsModalSaveOrchestration } from "./use-settings-modal-save-orchestration";
 import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-state";
 
@@ -45,6 +49,7 @@ export type SettingsModalController = {
   saveError: string | null;
   snapshotDraft: SettingsSnapshot | null;
   runtimeDefinitions: RuntimeDescriptor[];
+  availableRuntimeDefinitions: RuntimeDescriptor[];
   runtimeCheck: RuntimeCheck | null;
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
@@ -68,6 +73,10 @@ export type SettingsModalController = {
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
   reusablePromptValidationState: ReusablePromptValidationState;
   hasReusablePromptValidationErrors: boolean;
+  runtimeAvailabilityValidationState: RuntimeAvailabilityValidationState;
+  hasRuntimeAvailabilityErrors: boolean;
+  selectedRepoRuntimeAvailabilityErrors: string[];
+  selectedRepoRuntimeAvailabilityErrorCount: number;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCount: number;
   showRepoScriptValidationErrors: boolean;
@@ -86,6 +95,7 @@ export type SettingsModalController = {
   updateGlobalGeneralSettings: (
     updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
   ) => void;
+  updateAgentRuntimes: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
   updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
@@ -129,8 +139,11 @@ export const useSettingsModalController = ({
   } = workspaceState;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeCheck } = checksState;
-  const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
-    useRuntimeDefinitionsContext();
+  const {
+    allRuntimeDefinitions: runtimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+  } = useRuntimeAvailabilityContext();
 
   const {
     loadedSnapshot,
@@ -168,9 +181,19 @@ export const useSettingsModalController = ({
     selectedRepoPath: selectedWorkspaceRepoPath,
   });
 
+  const availableRuntimeDefinitions = useMemo(
+    () =>
+      snapshotDraft
+        ? getAvailableRuntimeDefinitions({
+            runtimeDefinitions,
+            agentRuntimes: snapshotDraft.agentRuntimes,
+          })
+        : [],
+    [runtimeDefinitions, snapshotDraft],
+  );
   const catalogRuntimeKinds = useMemo(
-    () => getNeededCatalogRuntimeKinds(selectedRepoConfig, runtimeDefinitions),
-    [selectedRepoConfig, runtimeDefinitions],
+    () => getNeededCatalogRuntimeKinds(selectedRepoConfig, availableRuntimeDefinitions),
+    [availableRuntimeDefinitions, selectedRepoConfig],
   );
 
   const {
@@ -198,12 +221,28 @@ export const useSettingsModalController = ({
   });
   const reusablePromptValidationState = useSettingsModalReusablePromptValidation({ snapshotDraft });
   const hasReusablePromptValidationErrors = reusablePromptValidationState.totalErrorCount > 0;
+  const runtimeAvailabilityValidationState = useSettingsModalRuntimeValidation({
+    runtimeDefinitions,
+    snapshotDraft,
+  });
+  const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;
+  const selectedRepoRuntimeAvailabilityErrors = selectedWorkspaceId
+    ? (runtimeAvailabilityValidationState.errorsByWorkspaceId[selectedWorkspaceId] ?? [])
+    : [];
+  const selectedRepoRuntimeAvailabilityErrorCount = selectedRepoRuntimeAvailabilityErrors.length;
   const settingsSectionErrorCountByIdWithReusablePrompts = useMemo(
     () => ({
       ...settingsSectionErrorCountById,
+      repositories:
+        settingsSectionErrorCountById.repositories +
+        runtimeAvailabilityValidationState.totalErrorCount,
       "reusable-prompts": reusablePromptValidationState.totalErrorCount,
     }),
-    [reusablePromptValidationState.totalErrorCount, settingsSectionErrorCountById],
+    [
+      reusablePromptValidationState.totalErrorCount,
+      runtimeAvailabilityValidationState.totalErrorCount,
+      settingsSectionErrorCountById,
+    ],
   );
 
   const {
@@ -211,6 +250,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
     updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
     updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
+    updateAgentRuntimes: applyAgentRuntimesUpdate,
     updateReusablePrompts: applyReusablePromptsUpdate,
     updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
     updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
@@ -263,6 +303,8 @@ export const useSettingsModalController = ({
     promptValidationState,
     hasReusablePromptValidationErrors: hasReusablePromptValidationErrors,
     reusablePromptValidationErrorCount: reusablePromptValidationState.totalErrorCount,
+    hasRuntimeAvailabilityErrors,
+    runtimeAvailabilityErrorCount: runtimeAvailabilityValidationState.totalErrorCount,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
     invalidRepoPathsWithDevServerErrors,
@@ -276,6 +318,7 @@ export const useSettingsModalController = ({
       updateGlobalGitConfig: applyGlobalGitConfigUpdate,
       updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
       updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
+      updateAgentRuntimes: applyAgentRuntimesUpdate,
       updateReusablePrompts: applyReusablePromptsUpdate,
       updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
       updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
@@ -289,6 +332,7 @@ export const useSettingsModalController = ({
       applyGlobalGitConfigUpdate,
       applyGlobalChatSettingsUpdate,
       applyGlobalGeneralSettingsUpdate,
+      applyAgentRuntimesUpdate,
       applyReusablePromptsUpdate,
       applyGlobalKanbanSettingsUpdate,
       applyGlobalAutopilotSettingsUpdate,
@@ -303,6 +347,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalGeneralSettings,
+    updateAgentRuntimes,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
@@ -338,6 +383,7 @@ export const useSettingsModalController = ({
     saveError,
     snapshotDraft,
     runtimeDefinitions,
+    availableRuntimeDefinitions,
     runtimeCheck,
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
@@ -361,6 +407,10 @@ export const useSettingsModalController = ({
     settingsSectionErrorCountById: settingsSectionErrorCountByIdWithReusablePrompts,
     reusablePromptValidationState,
     hasReusablePromptValidationErrors,
+    runtimeAvailabilityValidationState,
+    hasRuntimeAvailabilityErrors,
+    selectedRepoRuntimeAvailabilityErrors,
+    selectedRepoRuntimeAvailabilityErrorCount,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
     showRepoScriptValidationErrors,
@@ -373,6 +423,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalGeneralSettings,
+    updateAgentRuntimes,
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,

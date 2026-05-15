@@ -1,14 +1,5 @@
-import { afterEach, beforeAll, describe, expect, test } from "bun:test";
-
-type SelectionModule = typeof import("./agent-chat-composer-selection");
-
-let selectionModule: SelectionModule;
-
-beforeAll(async () => {
-  selectionModule = (await import(
-    new URL("./agent-chat-composer-selection.ts", import.meta.url).href
-  )) as SelectionModule;
-});
+import { afterEach, describe, expect, test } from "bun:test";
+import * as selectionModule from "./agent-chat-composer-selection";
 
 const createSelectionHost = (): HTMLElement => {
   const root = document.createElement("div");

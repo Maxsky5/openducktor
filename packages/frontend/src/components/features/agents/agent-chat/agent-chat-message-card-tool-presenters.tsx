@@ -383,7 +383,7 @@ export const RegularToolMessage = ({
           <summary className="cursor-pointer px-2 py-1 text-[11px] font-medium text-foreground">
             Questions and answers
           </summary>
-          <div className="space-y-2 border-t border-border px-2 py-2 text-xs text-foreground">
+          <div className="space-y-2 border-t border-border p-2 text-xs text-foreground">
             {questionDetailRenderEntries.map(({ key, detail }) => (
               <div key={key} className="space-y-0.5">
                 <p className="font-medium text-foreground">{detail.prompt}</p>

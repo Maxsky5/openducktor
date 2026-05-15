@@ -81,16 +81,12 @@ const clearDraftChannelBuffer = (
   source?: "delta" | "part",
   messageId?: string,
 ): void => {
-  if (channel === "reasoning") {
-    const timeoutId =
-      context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.externalSessionId];
-    if (timeoutId !== undefined) {
-      clearTimeout(timeoutId);
-      if (context.drafts.draftFlushTimeoutBySessionRef) {
-        delete context.drafts.draftFlushTimeoutBySessionRef.current[
-          context.store.externalSessionId
-        ];
-      }
+  const timeoutId =
+    context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.externalSessionId];
+  if (timeoutId !== undefined) {
+    clearTimeout(timeoutId);
+    if (context.drafts.draftFlushTimeoutBySessionRef) {
+      delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.externalSessionId];
     }
   }
 
@@ -204,7 +200,6 @@ export const handleAssistantDelta = (
     }
     const messageId = event.messageId;
     markSessionRunning(context);
-    clearDraftChannelBuffer(context, "text");
     context.store.updateSession(
       context.store.externalSessionId,
       (current) => {
@@ -270,7 +265,6 @@ const handleTextPart = (
   if (part.synthetic) {
     return;
   }
-  clearDraftChannelBuffer(context, "text");
   context.store.updateSession(
     context.store.externalSessionId,
     (current) => {
@@ -463,7 +457,11 @@ const handleStepPart = (
     (current) => {
       const prepared = prepareCurrent(current);
       const model = resolvePartModelSelection(context, prepared, part.messageId);
-      const nextContextUsage = toSessionContextUsage(prepared, part.totalTokens, model);
+      const baseContextUsage = toSessionContextUsage(prepared, part.totalTokens, model);
+      const nextContextUsage =
+        baseContextUsage && typeof part.contextWindow === "number"
+          ? { ...baseContextUsage, contextWindow: part.contextWindow }
+          : baseContextUsage;
       if (!nextContextUsage) {
         return prepared.status === "running"
           ? prepared

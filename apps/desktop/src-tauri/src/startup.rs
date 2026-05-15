@@ -12,8 +12,11 @@ use host_application::AppService;
 use host_domain::TASK_METADATA_NAMESPACE;
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RuntimeConfigStore};
+use serde_json::Value;
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
+
+const CODEX_APP_SERVER_EVENT_NAME: &str = "openducktor://codex-app-server-event";
 
 fn validate_startup_config(
     config_store: &AppConfigStore,
@@ -112,6 +115,18 @@ fn startup_phase_build_tauri_app(
         macos_cef_quit::install(app)?;
 
         let stop_requested = start_task_event_relay(setup_service.clone(), app.handle().clone());
+        setup_service.set_codex_app_server_event_emitter(Some({
+            let app_handle = app.handle().clone();
+            Arc::new(move |event: Value| {
+                if let Err(error) = app_handle.emit(CODEX_APP_SERVER_EVENT_NAME, event) {
+                    tracing::error!(
+                        target: "openducktor.codex-runtime",
+                        error = %error,
+                        "Failed to emit a desktop Codex app-server event"
+                    );
+                }
+            })
+        }))?;
         let pull_request_sync_stop_requested =
             start_pull_request_sync_loop(setup_service.clone(), {
                 let app_handle = app.handle().clone();

@@ -1,4 +1,5 @@
 import {
+  type AgentRuntimes,
   type AgentSessionStartMode,
   getMissingRequiredRuntimeSupportedScopes,
   mandatoryRuntimeCapabilityKeys,
@@ -28,6 +29,25 @@ export const toAgentRuntimeOptions = (
     label: definition.label,
     icon: createElement(AgentRuntimeIcon, { runtimeKind: definition.kind }),
   }));
+};
+
+export const isRuntimeEnabled = (agentRuntimes: AgentRuntimes, runtimeKind: RuntimeKind): boolean =>
+  agentRuntimes[runtimeKind]?.enabled === true;
+
+export const filterEnabledRuntimeDefinitions = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  agentRuntimes: AgentRuntimes,
+): RuntimeDescriptor[] =>
+  runtimeDefinitions.filter((definition) => isRuntimeEnabled(agentRuntimes, definition.kind));
+
+export const getAvailableRuntimeDefinitions = ({
+  runtimeDefinitions,
+  agentRuntimes,
+}: {
+  runtimeDefinitions: RuntimeDescriptor[];
+  agentRuntimes: AgentRuntimes;
+}): RuntimeDescriptor[] => {
+  return filterEnabledRuntimeDefinitions(runtimeDefinitions, agentRuntimes);
 };
 
 export const findRuntimeDefinition = (
@@ -121,6 +141,21 @@ export const filterRuntimeDefinitionsForStartMode = (
   startMode: AgentSessionStartMode,
 ): RuntimeDescriptor[] => {
   return runtimeDefinitions.filter((definition) => runtimeSupportsStartMode(definition, startMode));
+};
+
+export const getAvailableRuntimeDefinitionsForStartMode = ({
+  runtimeDefinitions,
+  agentRuntimes,
+  startMode,
+}: {
+  runtimeDefinitions: RuntimeDescriptor[];
+  agentRuntimes: AgentRuntimes;
+  startMode: AgentSessionStartMode;
+}): RuntimeDescriptor[] => {
+  return filterRuntimeDefinitionsForStartMode(
+    getAvailableRuntimeDefinitions({ runtimeDefinitions, agentRuntimes }),
+    startMode,
+  );
 };
 
 export const runtimeSupportsCapability = (

@@ -64,11 +64,11 @@ const statusIndicatorClassName = (status: DevServerScriptState["status"]): strin
 
 const getStartLabel = (isLoading: boolean, isStartPending: boolean): string => {
   if (isLoading) {
-    return "Loading dev servers...";
+    return "Loading dev servers…";
   }
 
   if (isStartPending) {
-    return "Starting dev servers...";
+    return "Starting dev servers…";
   }
 
   return "Start dev servers";
@@ -76,7 +76,7 @@ const getStartLabel = (isLoading: boolean, isStartPending: boolean): string => {
 
 const getEmptyTerminalMessage = (script: DevServerScriptState): string => {
   if (script.status === "starting") {
-    return "Starting this dev server...";
+    return "Starting this dev server…";
   }
 
   if (script.status === "failed") {
@@ -86,7 +86,7 @@ const getEmptyTerminalMessage = (script: DevServerScriptState): string => {
   return "Terminal output will appear here once this dev server writes output. Drag to select logs, then press Cmd/Ctrl+C to copy.";
 };
 
-const renderCompactStartButton = ({
+function CompactStartButton({
   button,
   disabledReason,
   disabledReasonId,
@@ -99,7 +99,7 @@ const renderCompactStartButton = ({
   }>;
   disabledReason: string | null;
   disabledReasonId: string;
-}): ReactElement => {
+}): ReactElement {
   if (!disabledReason) {
     return button;
   }
@@ -125,7 +125,7 @@ const renderCompactStartButton = ({
       </Tooltip>
     </TooltipProvider>
   );
-};
+}
 
 export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel({
   model,
@@ -165,7 +165,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
     }
 
     if (model.mode === "loading") {
-      return "Loading builder dev server state...";
+      return "Loading builder dev server state…";
     }
 
     if (model.mode === "stopped") {
@@ -209,15 +209,15 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
 
     return (
       <div
-        className="border-t border-border bg-card/70 px-3 py-3"
+        className="border-t border-border bg-card/70 p-3"
         data-testid="agent-studio-dev-server-compact-panel"
       >
         <div className="flex items-center">
-          {renderCompactStartButton({
-            button: startButton,
-            disabledReason: model.disabledReason,
-            disabledReasonId,
-          })}
+          <CompactStartButton
+            button={startButton}
+            disabledReason={model.disabledReason}
+            disabledReasonId={disabledReasonId}
+          />
         </div>
         {panelError ? (
           <div
@@ -248,7 +248,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
             data-testid="agent-studio-dev-server-stop-button"
           >
             <Square className="size-3.5 fill-current" />
-            {model.isStopPending ? "Stopping..." : "Stop"}
+            {model.isStopPending ? "Stopping…" : "Stop"}
           </Button>
           <Button
             type="button"
@@ -262,7 +262,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
             <RefreshCw
               className={cn("size-4", model.isRestartPending ? "animate-spin" : undefined)}
             />
-            {model.isRestartPending ? "Restarting..." : "Restart"}
+            {model.isRestartPending ? "Restarting…" : "Restart"}
           </Button>
         </div>
 

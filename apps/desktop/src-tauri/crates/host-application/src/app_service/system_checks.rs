@@ -5,7 +5,7 @@ use host_domain::{
     RuntimeCheck, SystemCheck,
 };
 use host_infra_system::{
-    required_command_error, run_command_allow_failure_with_env, version_command,
+    required_command_error, run_command_allow_failure_with_env, version_command, GlobalConfig,
 };
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -130,14 +130,29 @@ impl AppService {
         } else {
             (false, None, gh_error.clone())
         };
+        let config = self.config_store.load()?;
         let runtimes = self
             .runtime_registry
             .definitions()
             .into_iter()
             .map(|definition| {
-                self.runtime_registry
+                let enabled = config
+                    .agent_runtimes
+                    .get(definition.kind().as_str())
+                    .map(|runtime| runtime.enabled)
+                    .or_else(|| {
+                        GlobalConfig::default()
+                            .agent_runtimes
+                            .get(definition.kind().as_str())
+                            .map(|runtime| runtime.enabled)
+                    })
+                    .unwrap_or(false);
+                let mut health = self
+                    .runtime_registry
                     .runtime(definition.kind())
-                    .map(|runtime| runtime.runtime_health())
+                    .map(|runtime| runtime.runtime_health())?;
+                health.enabled = enabled;
+                Ok(health)
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -149,8 +164,10 @@ impl AppService {
             errors.push(error);
         }
         for runtime in &runtimes {
-            if let Some(error) = runtime.error.as_ref() {
-                errors.push(error.clone());
+            if runtime.enabled {
+                if let Some(error) = runtime.error.as_ref() {
+                    errors.push(error.clone());
+                }
             }
         }
 
@@ -249,6 +266,7 @@ mod tests {
             gh_auth_error: Some("cached-gh-auth-sentinel".to_string()),
             runtimes: vec![RuntimeHealth {
                 kind: "opencode".to_string(),
+                enabled: true,
                 ok: false,
                 version: Some("cached-opencode-sentinel".to_string()),
                 error: None,
@@ -306,6 +324,7 @@ mod tests {
                     gh_auth_error: Some("cached-gh-auth-sentinel".to_string()),
                     runtimes: vec![RuntimeHealth {
                         kind: "opencode".to_string(),
+                        enabled: true,
                         ok: false,
                         version: Some("cached-opencode-sentinel".to_string()),
                         error: None,
@@ -331,6 +350,30 @@ mod tests {
     }
 
     #[test]
+    fn module_runtime_check_reports_disabled_runtime_cli_health_without_failing() {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+
+        let runtime = service
+            .runtime_check_with_refresh(true)
+            .expect("runtime check should include disabled runtimes");
+
+        assert!(runtime
+            .runtimes
+            .iter()
+            .any(|entry| entry.kind == "opencode"));
+        let codex_health = runtime
+            .runtimes
+            .iter()
+            .find(|entry| entry.kind == "codex")
+            .expect("disabled Codex CLI health should still be reported");
+        assert!(!codex_health.enabled);
+        assert!(!runtime
+            .errors
+            .iter()
+            .any(|error| error.to_lowercase().contains("codex")));
+    }
+
+    #[test]
     fn module_runtime_check_refreshes_when_cache_is_stale() {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
         let sentinel_error = "cached-runtime-sentinel".to_string();
@@ -351,6 +394,7 @@ mod tests {
                     gh_auth_error: Some("cached-gh-auth-sentinel".to_string()),
                     runtimes: vec![RuntimeHealth {
                         kind: "opencode".to_string(),
+                        enabled: true,
                         ok: false,
                         version: Some("cached-opencode-sentinel".to_string()),
                         error: None,

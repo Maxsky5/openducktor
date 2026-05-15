@@ -75,7 +75,15 @@ export function useAgentStudioTaskTabs(args: {
   const taskIdForTabs = selectedTask?.status === "closed" ? "" : taskId;
 
   const selectableTaskIds = useMemo(
-    () => new Set(tasks.filter((task) => task.status !== "closed").map((task) => task.id)),
+    () =>
+      new Set(
+        tasks.reduce<string[]>((taskIds, task) => {
+          if (task.status !== "closed") {
+            taskIds.push(task.id);
+          }
+          return taskIds;
+        }, []),
+      ),
     [tasks],
   );
   const selectableOpenTaskTabs = useMemo(
@@ -93,6 +101,20 @@ export function useAgentStudioTaskTabs(args: {
   const clearTaskSelection = useCallback((): void => {
     updateQuery(toClearTaskQueryUpdate());
   }, [updateQuery]);
+  const clearTaskTabsStorageHydration = useCallback((): void => {
+    setOpenTaskTabs([]);
+    setPersistedActiveTaskId(null);
+    setIntentActiveTaskId(null);
+    setTabsStorageHydratedWorkspaceId(null);
+  }, []);
+  const hydrateTaskTabsStorage = useCallback(
+    (tabs: string[], activeTaskId: string | null, workspaceId: string): void => {
+      setOpenTaskTabs(tabs);
+      setPersistedActiveTaskId(activeTaskId);
+      setTabsStorageHydratedWorkspaceId(workspaceId);
+    },
+    [],
+  );
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({
     activeWorkspace,
@@ -123,6 +145,8 @@ export function useAgentStudioTaskTabs(args: {
     setPersistedActiveTaskId,
     setIntentActiveTaskId,
     setTabsStorageHydratedWorkspaceId,
+    clearTaskTabsStorageHydration,
+    hydrateTaskTabsStorage,
   });
 
   const availableTabTasks = useMemo(

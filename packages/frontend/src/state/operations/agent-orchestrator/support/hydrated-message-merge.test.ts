@@ -73,6 +73,51 @@ describe("agent-orchestrator/support/hydrated-message-merge", () => {
     });
   });
 
+  test("updates current final assistant metadata from hydrated duration", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "Final answer",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+            durationMs: 12_000,
+          },
+        },
+      ],
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "Final answer",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+          },
+        },
+      ],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      id: "assistant-1",
+      role: "assistant",
+      content: "Final answer",
+      meta: {
+        kind: "assistant",
+        agentRole: "build",
+        isFinal: true,
+        durationMs: 12_000,
+      },
+    });
+  });
+
   test("keeps completed current reasoning when hydrated reasoning is still incomplete", () => {
     const merged = mergedMessages(
       [

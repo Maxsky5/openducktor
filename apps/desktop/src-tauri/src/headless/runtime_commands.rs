@@ -31,6 +31,23 @@ struct RuntimeStopArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct CodexAppServerRequestArgs {
+    runtime_id: String,
+    method: String,
+    params: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexAppServerRespondArgs {
+    runtime_id: String,
+    request_id: u64,
+    result: Option<Value>,
+    error: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct BuildStartArgs {
     repo_path: String,
     task_id: String,
@@ -100,6 +117,18 @@ pub(super) fn register_commands(registry: &mut CommandRegistry) -> Result<(), St
     })?;
     registry.register("repo_runtime_health_status", |state, args| {
         Box::pin(handle_repo_runtime_health_status(state, args))
+    })?;
+    registry.register("codex_app_server_request", |state, args| {
+        Box::pin(handle_codex_app_server_request(state, args))
+    })?;
+    registry.register("codex_app_server_notifications", |state, args| {
+        Box::pin(handle_codex_app_server_notifications(state, args))
+    })?;
+    registry.register("codex_app_server_requests", |state, args| {
+        Box::pin(handle_codex_app_server_requests(state, args))
+    })?;
+    registry.register("codex_app_server_respond", |state, args| {
+        Box::pin(handle_codex_app_server_respond(state, args))
     })?;
     registry.register("agent_sessions_list", |state, args| {
         Box::pin(handle_agent_sessions_list(state, args))
@@ -232,6 +261,66 @@ async fn handle_runtime_stop(state: &HeadlessState, args: Value) -> CommandResul
     Ok(json!({
         "ok": run_headless_blocking("runtime_stop", move || service.runtime_stop(&runtime_id)).await?
     }))
+}
+
+async fn handle_codex_app_server_request(state: &HeadlessState, args: Value) -> CommandResult {
+    let CodexAppServerRequestArgs {
+        runtime_id,
+        method,
+        params,
+    } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_service_blocking_tokio("codex_app_server_request", move || {
+            service.codex_app_server_request(runtime_id.as_str(), method.as_str(), params)
+        })
+        .await
+        .map_err(service_error)?,
+    )
+}
+
+async fn handle_codex_app_server_notifications(
+    state: &HeadlessState,
+    args: Value,
+) -> CommandResult {
+    let RuntimeStopArgs { runtime_id } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_service_blocking_tokio("codex_app_server_notifications", move || {
+            service.codex_app_server_notifications(runtime_id.as_str())
+        })
+        .await
+        .map_err(service_error)?,
+    )
+}
+
+async fn handle_codex_app_server_requests(state: &HeadlessState, args: Value) -> CommandResult {
+    let RuntimeStopArgs { runtime_id } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_service_blocking_tokio("codex_app_server_requests", move || {
+            service.codex_app_server_requests(runtime_id.as_str())
+        })
+        .await
+        .map_err(service_error)?,
+    )
+}
+
+async fn handle_codex_app_server_respond(state: &HeadlessState, args: Value) -> CommandResult {
+    let CodexAppServerRespondArgs {
+        runtime_id,
+        request_id,
+        result,
+        error,
+    } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_service_blocking_tokio("codex_app_server_respond", move || {
+            service.codex_app_server_respond(runtime_id.as_str(), request_id, result, error)
+        })
+        .await
+        .map_err(service_error)?,
+    )
 }
 
 async fn handle_runtime_ensure(state: &HeadlessState, args: Value) -> CommandResult {

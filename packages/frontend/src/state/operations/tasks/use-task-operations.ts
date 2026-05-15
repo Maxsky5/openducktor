@@ -8,10 +8,9 @@ import { useTaskResetOperations } from "./use-task-reset-operations";
 
 export function useTaskOperations({
   activeWorkspace,
-  refreshBeadsCheckForRepo,
 }: UseTaskOperationsArgs): UseTaskOperationsResult {
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
-  const taskReadFlow = useTaskReadFlow({ activeRepoPath, refreshBeadsCheckForRepo });
+  const taskReadFlow = useTaskReadFlow({ activeRepoPath });
   const mutationRunner = useTaskMutationRunner({ activeRepoPath });
   const mutationCommands = useTaskMutationCommands({
     activeRepoPath,

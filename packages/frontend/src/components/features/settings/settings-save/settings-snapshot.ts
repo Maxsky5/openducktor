@@ -21,6 +21,7 @@ export const prepareSettingsSnapshotForSave = (snapshot: SettingsSnapshot): Sett
     reusablePrompts: prepareReusablePromptsForSave(snapshot.reusablePrompts),
     kanban: snapshot.kanban,
     autopilot: prepareAutopilotSettingsForSave(snapshot.autopilot),
+    agentRuntimes: snapshot.agentRuntimes,
     workspaces,
     globalPromptOverrides: preparePromptOverridesForSave(snapshot.globalPromptOverrides),
   };

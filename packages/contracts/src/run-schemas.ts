@@ -8,6 +8,7 @@ import { failureKindSchema } from "./failure-schemas";
 
 export const runtimeHealthSchema = z.object({
   kind: runtimeKindSchema,
+  enabled: z.boolean().default(true).optional(),
   ok: z.boolean(),
   version: z.string().nullable(),
   error: z.string().nullable().optional(),
@@ -176,7 +177,13 @@ export const repoRuntimeStartupStatusSchema = z.object({
 });
 export type RepoRuntimeStartupStatus = z.infer<typeof repoRuntimeStartupStatusSchema>;
 
-export const repoRuntimeHealthStateSchema = z.enum(["idle", "checking", "ready", "error"]);
+export const repoRuntimeHealthStateSchema = z.enum([
+  "disabled",
+  "not_started",
+  "checking",
+  "ready",
+  "error",
+]);
 export type RepoRuntimeHealthState = z.infer<typeof repoRuntimeHealthStateSchema>;
 
 export const repoRuntimeHealthObservationSchema = z.enum([

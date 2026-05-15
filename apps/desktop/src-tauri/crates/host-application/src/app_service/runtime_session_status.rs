@@ -352,7 +352,7 @@ impl AppService {
         Ok(self
             .runtime_registry
             .runtime(target.runtime_kind())?
-            .probe_session_status(target))
+            .probe_session_status(self, target))
     }
 
     fn cached_runtime_session_status_outcome(
@@ -581,7 +581,8 @@ mod tests {
             "/tmp/repo path",
         );
 
-        let outcome = OpenCodeRuntime::default().probe_session_status(&target);
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let outcome = OpenCodeRuntime::default().probe_session_status(&service, &target);
         let RuntimeSessionStatusProbeOutcome::Snapshot(snapshot) = outcome else {
             panic!("status request should succeed");
         };

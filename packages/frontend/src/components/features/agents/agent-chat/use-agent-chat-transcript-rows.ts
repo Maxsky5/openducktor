@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useReducer, useRef } from "react";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState, SessionMessagesState } from "@/types/agent-orchestrator";
 import {
@@ -265,7 +265,9 @@ export const useAgentChatTranscriptRows = ({
     () => toTranscriptRowsRevisionKey(activeRevision),
     [activeRevision],
   );
-  const [resolvedTranscriptState, setResolvedTranscriptState] = useState<TranscriptRowsState>(
+  const [resolvedTranscriptState, dispatchResolvedTranscriptState] = useReducer(
+    (_current: TranscriptRowsState, next: TranscriptRowsState) => next,
+    undefined,
     () => {
       if (
         !session ||
@@ -312,7 +314,7 @@ export const useAgentChatTranscriptRows = ({
     const currentRevision = activeRevisionRef.current;
 
     if (!currentSession) {
-      setResolvedTranscriptState(EMPTY_TRANSCRIPT_ROWS_STATE);
+      dispatchResolvedTranscriptState(EMPTY_TRANSCRIPT_ROWS_STATE);
       return;
     }
 
@@ -336,7 +338,7 @@ export const useAgentChatTranscriptRows = ({
       });
       startTransition(() => {
         if (derivationTokenRef.current === derivationToken) {
-          setResolvedTranscriptState(nextTranscriptState);
+          dispatchResolvedTranscriptState(nextTranscriptState);
         }
       });
       return;
@@ -384,7 +386,7 @@ export const useAgentChatTranscriptRows = ({
         });
         startTransition(() => {
           if (derivationTokenRef.current === derivationToken) {
-            setResolvedTranscriptState(nextTranscriptState);
+            dispatchResolvedTranscriptState(nextTranscriptState);
           }
         });
       }, 0);

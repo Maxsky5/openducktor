@@ -62,6 +62,7 @@ export type SessionLifecycleAdapter = Pick<
   AgentEnginePort,
   "hasSession" | "loadSessionHistory" | "resumeSession" | "attachSession"
 > & {
+  loadSessionTodos?: AgentEnginePort["loadSessionTodos"];
   listSessionPresence?: AgentEnginePort["listSessionPresence"];
   readSessionPresence?: AgentEnginePort["readSessionPresence"];
 };
@@ -469,19 +470,18 @@ export const preparePersistedSessionMergeStage = async ({
     }
     return record;
   });
-  const historyHydrationSessionIds = new Set(
-    recordsToHydrate
-      .filter((record) => {
-        if (intent.historyPolicy !== "requested_only") {
-          return false;
-        }
-        return (
-          intent.requestedSessionId === null ||
-          record.externalSessionId === intent.requestedSessionId
-        );
-      })
-      .map((record) => record.externalSessionId),
-  );
+  const historyHydrationSessionIds = recordsToHydrate.reduce<Set<string>>((sessionIds, record) => {
+    if (intent.historyPolicy !== "requested_only") {
+      return sessionIds;
+    }
+    if (
+      intent.requestedSessionId === null ||
+      record.externalSessionId === intent.requestedSessionId
+    ) {
+      sessionIds.add(record.externalSessionId);
+    }
+    return sessionIds;
+  }, new Set());
 
   return {
     persistedRecords,
@@ -611,49 +611,48 @@ export const reconcileLiveSessionsStage = async ({
     readSessionPresence: (record) =>
       readPlannerAgentSessionPresenceSnapshot(runtimePlanner, record),
     attachMissingLiveSession: async ({ record, runtimeKind, workingDirectory }) => {
+      if (isStaleRepoOperation()) {
+        return;
+      }
       const promptOverrides = await getRepoPromptOverrides();
-      if (isStaleRepoOperation()) {
-        return;
-      }
-      const selectedModel = normalizePersistedSelection(record.selectedModel);
-      const systemPrompt = await promptAssembler.buildHydrationSystemPrompt({
-        record,
-        promptOverrides,
-      });
-      if (isStaleRepoOperation()) {
-        return;
-      }
+      if (!isStaleRepoOperation()) {
+        const selectedModel = normalizePersistedSelection(record.selectedModel);
+        const systemPrompt = await promptAssembler.buildHydrationSystemPrompt({
+          record,
+          promptOverrides,
+        });
+        if (isStaleRepoOperation()) {
+          return;
+        }
+        const attachInput = {
+          externalSessionId: record.externalSessionId,
+          repoPath: intent.repoPath,
+          runtimeKind,
+          workingDirectory,
+          taskId: intent.taskId,
+          role: record.role,
+          systemPrompt,
+          ...(selectedModel ? { model: selectedModel } : {}),
+        };
 
-      const attachInput = {
-        externalSessionId: record.externalSessionId,
-        repoPath: intent.repoPath,
-        runtimeKind,
-        workingDirectory,
-        taskId: intent.taskId,
-        role: record.role,
-        systemPrompt,
-        ...(selectedModel ? { model: selectedModel } : {}),
-      };
-
-      if (intent.mode === "requested_history") {
-        await adapter.attachSession(attachInput);
-        return;
+        if (intent.mode === "requested_history") {
+          await adapter.attachSession(attachInput);
+        } else {
+          await adapter.resumeSession(attachInput);
+        }
       }
-
-      await adapter.resumeSession(attachInput);
     },
     allowAttachMissingSession: options?.allowLiveSessionResume !== false,
     isStaleRepoOperation,
   });
 
   const reattachedSessionIds = new Set<string>();
-  for (
-    let offset = 0;
-    offset < recordsToHydrate.length;
-    offset += SESSION_HISTORY_HYDRATION_CONCURRENCY
-  ) {
+  const processReattachBatch = async (offset: number): Promise<void> => {
+    if (offset >= recordsToHydrate.length) {
+      return;
+    }
     if (isStaleRepoOperation()) {
-      return { reattachedSessionIds };
+      return;
     }
     const batch = recordsToHydrate.slice(offset, offset + SESSION_HISTORY_HYDRATION_CONCURRENCY);
     const reattachResults = await Promise.all(
@@ -662,25 +661,27 @@ export const reconcileLiveSessionsStage = async ({
         reattached: await maybeResumeLiveRecord(record),
       })),
     );
-    if (isStaleRepoOperation()) {
-      return { reattachedSessionIds };
-    }
-    for (const { record, reattached } of reattachResults) {
-      if (reattached) {
-        reattachedSessionIds.add(record.externalSessionId);
-        continue;
+    if (!isStaleRepoOperation()) {
+      for (const { record, reattached } of reattachResults) {
+        if (reattached) {
+          reattachedSessionIds.add(record.externalSessionId);
+          continue;
+        }
+        updateSession(
+          record.externalSessionId,
+          (current) => ({
+            ...current,
+            pendingApprovals: [],
+            pendingQuestions: [],
+          }),
+          { persist: false },
+        );
       }
-      updateSession(
-        record.externalSessionId,
-        (current) => ({
-          ...current,
-          pendingApprovals: [],
-          pendingQuestions: [],
-        }),
-        { persist: false },
-      );
     }
-  }
+    await processReattachBatch(offset + SESSION_HISTORY_HYDRATION_CONCURRENCY);
+  };
+
+  await processReattachBatch(0);
 
   return { reattachedSessionIds };
 };
@@ -707,6 +708,7 @@ type HydratedRecordHistoryState = {
   loadMode: AgentSessionLoadMode;
   promptOverrides: RepoPromptOverrides;
   history: Awaited<ReturnType<SessionLifecycleAdapter["loadSessionHistory"]>>;
+  todos: Awaited<ReturnType<AgentEnginePort["loadSessionTodos"]>>;
   runtimeResolution: SuccessfulHydrationRuntime;
   sessionPresence: AgentSessionPresenceSnapshot | null;
   hydratedMessages: AgentSessionState["messages"];
@@ -853,6 +855,7 @@ const applyHydratedRecordHistory = (
   {
     promptOverrides,
     history,
+    todos,
     runtimeResolution,
     sessionPresence,
     hydratedMessages,
@@ -879,6 +882,7 @@ const applyHydratedRecordHistory = (
     promptOverrides,
     historyHydrationState: "hydrated",
     runtimeRecoveryState: current.runtimeRecoveryState ?? "idle",
+    todos: todos.length > 0 ? todos : sessionWithLivePresence.todos,
     subagentPendingApprovalsByExternalSessionId: mergeSubagentPendingApprovalOverlay({
       current: current.subagentPendingApprovalsByExternalSessionId,
       scannedChildExternalSessionIds:
@@ -934,25 +938,38 @@ const hydrateRecordHistory = async ({
 }): Promise<void> => {
   const shouldApplyLivePresence = livePresenceMode === "apply";
   const { runtimeRef, workingDirectory } = runtimeResolution;
-  const promptOverrides = await getRepoPromptOverrides();
+  const [promptOverrides, history, todos, sessionPresence] = await Promise.all([
+    getRepoPromptOverrides(),
+    adapter.loadSessionHistory({
+      repoPath,
+      runtimeKind: runtimeRef.runtimeKind,
+      workingDirectory,
+      externalSessionId: record.externalSessionId,
+      limit: INITIAL_SESSION_HISTORY_LIMIT,
+    }),
+    adapter.loadSessionTodos
+      ? adapter.loadSessionTodos({
+          repoPath,
+          runtimeKind: runtimeRef.runtimeKind,
+          workingDirectory,
+          externalSessionId: record.externalSessionId,
+        })
+      : Promise.resolve([]),
+    shouldApplyLivePresence
+      ? readPlannerAgentSessionPresenceSnapshot(runtimePlanner, record)
+      : Promise.resolve(null),
+  ]);
   const preludeMessages = await promptAssembler.buildHydrationPreludeMessages({
     record,
     promptOverrides,
   });
-  const history = await adapter.loadSessionHistory({
-    repoPath,
-    runtimeKind: runtimeRef.runtimeKind,
-    workingDirectory,
-    externalSessionId: record.externalSessionId,
-    limit: INITIAL_SESSION_HISTORY_LIMIT,
-  });
-  const sessionPresence = shouldApplyLivePresence
-    ? await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, record)
-    : null;
   const selectedModel = normalizePersistedSelection(record.selectedModel);
   const hydratedMessages = createSessionMessagesState(record.externalSessionId, [
     ...getSessionMessagesSlice(
-      { externalSessionId: record.externalSessionId, messages: preludeMessages },
+      {
+        externalSessionId: record.externalSessionId,
+        messages: preludeMessages,
+      },
       0,
     ),
     ...historyToChatMessages(history, {
@@ -977,6 +994,7 @@ const hydrateRecordHistory = async ({
       applyHydratedRecordHistory(current, {
         promptOverrides,
         history,
+        todos,
         runtimeResolution,
         sessionPresence,
         hydratedMessages,
@@ -1010,46 +1028,48 @@ const hydrateSessionRecord = async ({
     return;
   }
 
-  const runtimeResolution = await runtimePlanner.resolveHydrationRuntime(record);
   if (isStaleRepoOperation()) {
     return;
   }
-  if (!runtimeResolution.ok) {
-    applyMissingHydrationRuntime({
-      record,
-      runtimeResolution,
-      shouldHydrateHistory,
-      failOnRuntimeResolutionError,
-      updateSession,
-    });
-    return;
-  }
+  const runtimeResolution = await runtimePlanner.resolveHydrationRuntime(record);
+  if (!isStaleRepoOperation()) {
+    if (!runtimeResolution.ok) {
+      applyMissingHydrationRuntime({
+        record,
+        runtimeResolution,
+        shouldHydrateHistory,
+        failOnRuntimeResolutionError,
+        updateSession,
+      });
+      return;
+    }
 
-  if (!shouldHydrateHistory) {
-    await hydrateRuntimeOnlyRecord({
+    if (!shouldHydrateHistory) {
+      await hydrateRuntimeOnlyRecord({
+        loadMode,
+        updateSession,
+        isStaleRepoOperation,
+        record,
+        runtimeResolution,
+        runtimePlanner,
+      });
+      return;
+    }
+
+    await hydrateRecordHistory({
       loadMode,
+      repoPath,
+      adapter,
       updateSession,
       isStaleRepoOperation,
       record,
       runtimeResolution,
       runtimePlanner,
+      promptAssembler,
+      getRepoPromptOverrides,
+      livePresenceMode,
     });
-    return;
   }
-
-  await hydrateRecordHistory({
-    loadMode,
-    repoPath,
-    adapter,
-    updateSession,
-    isStaleRepoOperation,
-    record,
-    runtimeResolution,
-    runtimePlanner,
-    promptAssembler,
-    getRepoPromptOverrides,
-    livePresenceMode,
-  });
 };
 
 export const hydrateSessionRecordsStage = async ({
@@ -1071,13 +1091,15 @@ export const hydrateSessionRecordsStage = async ({
     return;
   }
 
-  markRequestedHistoryHydrationInProgress({ historyHydrationSessionIds, setSessionsById });
+  markRequestedHistoryHydrationInProgress({
+    historyHydrationSessionIds,
+    setSessionsById,
+  });
 
-  for (
-    let offset = 0;
-    offset < recordsToHydrate.length;
-    offset += SESSION_HISTORY_HYDRATION_CONCURRENCY
-  ) {
+  const processHydrationBatch = async (offset: number): Promise<void> => {
+    if (offset >= recordsToHydrate.length) {
+      return;
+    }
     if (isStaleRepoOperation()) {
       return;
     }
@@ -1107,5 +1129,8 @@ export const hydrateSessionRecordsStage = async ({
         }),
       ),
     );
-  }
+    await processHydrationBatch(offset + SESSION_HISTORY_HYDRATION_CONCURRENCY);
+  };
+
+  await processHydrationBatch(0);
 };

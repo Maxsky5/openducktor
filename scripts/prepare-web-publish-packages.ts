@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -7,16 +6,6 @@ type PackageManifest = {
   version: string;
   dependencies?: Record<string, string>;
 };
-
-const webHostArtifacts = [
-  "openducktor-web-host-darwin-arm64",
-  "openducktor-web-host-darwin-x64",
-] as const;
-
-const mcpSidecarArtifacts = [
-  "openducktor-mcp-darwin-arm64",
-  "openducktor-mcp-darwin-x64",
-] as const;
 
 const expectedPackageFiles = ["dist/cli.js", "dist/web-shell/index.html"] as const;
 
@@ -47,34 +36,8 @@ const assertFile = (filePath: string): void => {
   }
 };
 
-const verifyChecksum = (binaryPath: string, label: string): void => {
-  assertFile(binaryPath);
-  if (process.platform !== "win32" && (statSync(binaryPath).mode & 0o111) === 0) {
-    throw new Error(`${label} is not executable: ${binaryPath}`);
-  }
-
-  const checksumPath = `${binaryPath}.sha256`;
-  assertFile(checksumPath);
-
-  const expected = readFileSync(checksumPath, "utf8").trim().split(/\s+/)[0];
-  const actual = createHash("sha256").update(readFileSync(binaryPath)).digest("hex");
-  if (actual !== expected) {
-    throw new Error(
-      `${label} checksum mismatch for ${binaryPath}. Expected ${expected}, received ${actual}.`,
-    );
-  }
-};
-
 for (const relativePath of expectedPackageFiles) {
   assertFile(path.join(packageRoot, relativePath));
-}
-
-for (const artifactName of webHostArtifacts) {
-  verifyChecksum(path.join(packageRoot, "bin", artifactName), "OpenDucktor web host binary");
-}
-
-for (const artifactName of mcpSidecarArtifacts) {
-  verifyChecksum(path.join(packageRoot, "bin", artifactName), "OpenDucktor MCP sidecar");
 }
 
 console.log("@openducktor/web package contents are ready for npm publish.");

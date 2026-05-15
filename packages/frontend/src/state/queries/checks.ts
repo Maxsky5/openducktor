@@ -62,7 +62,7 @@ const buildRuntimeHealthErrorCheck = (
 });
 
 const sortRuntimeKindsForQueryKey = (runtimeKinds: RuntimeKind[]): RuntimeKind[] =>
-  [...runtimeKinds].sort();
+  runtimeKinds.toSorted();
 
 const hasTransientRepoRuntimeHealth = (
   runtimeDefinitions: RuntimeDescriptor[],

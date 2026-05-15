@@ -120,7 +120,10 @@ export const prepareReusablePromptsForSave = (prompts: ReusablePrompt[]): Reusab
 };
 
 const normalizeHookCommands = (commands: string[]): string[] =>
-  commands.map((entry) => entry.trim()).filter(Boolean);
+  commands.flatMap((entry) => {
+    const trimmed = entry.trim();
+    return trimmed ? [trimmed] : [];
+  });
 
 const normalizeDevServerName = (name: string): string => name.trim();
 

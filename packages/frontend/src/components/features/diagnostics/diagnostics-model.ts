@@ -17,11 +17,13 @@ export const buildDiagnosticsSummary = ({
   hasActiveWorkspace,
   isChecking,
   hasCriticalIssues,
+  hasPendingRuntimeStartup,
   hasSetupIssues,
 }: {
   hasActiveWorkspace: boolean;
   isChecking: boolean;
   hasCriticalIssues: boolean;
+  hasPendingRuntimeStartup?: boolean;
   hasSetupIssues: boolean;
 }): DiagnosticsSummary => {
   if (!hasActiveWorkspace) {
@@ -45,6 +47,14 @@ export const buildDiagnosticsSummary = ({
       label: "Checking...",
       toneClass: "text-muted-foreground",
       iconClass: "text-muted-foreground",
+    };
+  }
+
+  if (hasPendingRuntimeStartup) {
+    return {
+      label: "Runtime not started",
+      toneClass: "text-warning-muted",
+      iconClass: "text-warning-accent",
     };
   }
 

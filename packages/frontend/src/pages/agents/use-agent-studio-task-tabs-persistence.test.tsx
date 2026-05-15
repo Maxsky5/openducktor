@@ -25,6 +25,8 @@ type HookArgs = Omit<
   | "setPersistedActiveTaskId"
   | "setIntentActiveTaskId"
   | "setTabsStorageHydratedWorkspaceId"
+  | "clearTaskTabsStorageHydration"
+  | "hydrateTaskTabsStorage"
 > & {
   activeWorkspace?: ActiveWorkspace | null;
   workspaceRepoPath?: string | null;
@@ -136,6 +138,21 @@ const useTaskTabPersistenceHarness = (props: HookArgs) => {
   const [tabsStorageHydratedWorkspaceId, setTabsStorageHydratedWorkspaceId] = useState(
     props.initialTabsStorageHydratedWorkspaceId ?? null,
   );
+  const clearTaskTabsStorageHydration = (): void => {
+    setOpenTaskTabs([]);
+    setPersistedActiveTaskId(null);
+    setIntentActiveTaskId(null);
+    setTabsStorageHydratedWorkspaceId(null);
+  };
+  const hydrateTaskTabsStorage = (
+    tabs: string[],
+    activeTaskId: string | null,
+    workspaceId: string,
+  ): void => {
+    setOpenTaskTabs(tabs);
+    setPersistedActiveTaskId(activeTaskId);
+    setTabsStorageHydratedWorkspaceId(workspaceId);
+  };
 
   useTaskTabPersistence({
     activeWorkspace,
@@ -150,6 +167,8 @@ const useTaskTabPersistenceHarness = (props: HookArgs) => {
     setPersistedActiveTaskId,
     setIntentActiveTaskId,
     setTabsStorageHydratedWorkspaceId,
+    clearTaskTabsStorageHydration,
+    hydrateTaskTabsStorage,
   });
 
   return {

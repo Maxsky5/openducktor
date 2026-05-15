@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
   type AgentChatComposerDraft,
@@ -129,6 +129,8 @@ const createHookHarness = (initialProps: HookArgs) => {
           {
             value: {
               runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
+              availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, QUEUED_RUNTIME_DESCRIPTOR],
+              agentRuntimes: DEFAULT_AGENT_RUNTIMES,
               isLoadingRuntimeDefinitions: false,
               runtimeDefinitionsError: null,
               refreshRuntimeDefinitions: async () => [
@@ -284,6 +286,7 @@ describe("useAgentStudioSessionActions", () => {
       autopilot: {
         rules: [],
       },
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
       workspaces: {},
       globalPromptOverrides: {},
     });

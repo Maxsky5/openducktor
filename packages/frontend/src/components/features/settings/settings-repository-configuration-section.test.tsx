@@ -37,13 +37,19 @@ const renderSection = (
       selectedRepoEffectiveWorktreeBasePath: null,
       selectedRepoBranches: [] as GitBranch[],
       selectedRepoBranchesError: null,
-      isLoadingSettings: false,
-      isSaving: false,
-      isLoadingSelectedRepoBranches: false,
+      loadingState: {
+        isLoadingSettings: false,
+        isSaving: false,
+        isLoadingSelectedRepoBranches: false,
+      },
       onRetrySelectedRepoBranchesLoad: () => {},
       onUpdateSelectedRepoConfig,
       ...(options?.showDevServerValidationErrors !== undefined
-        ? { showDevServerValidationErrors: options.showDevServerValidationErrors }
+        ? {
+            validationState: {
+              showDevServerValidationErrors: options.showDevServerValidationErrors,
+            },
+          }
         : {}),
     }),
   );
@@ -60,9 +66,11 @@ const renderStatefulSection = (initialRepoConfig: RepoConfig) => {
       selectedRepoEffectiveWorktreeBasePath: null,
       selectedRepoBranches: [] as GitBranch[],
       selectedRepoBranchesError: null,
-      isLoadingSettings: false,
-      isSaving: false,
-      isLoadingSelectedRepoBranches: false,
+      loadingState: {
+        isLoadingSettings: false,
+        isSaving: false,
+        isLoadingSelectedRepoBranches: false,
+      },
       onRetrySelectedRepoBranchesLoad: () => {},
       onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => {
         setSelectedRepoConfig((current) => updater(current));
@@ -106,7 +114,9 @@ describe("RepositoryConfigurationSection", () => {
       expect(repoPathInput.readOnly).toBe(true);
       expect(repoPathInput.value).toBe("/repo");
 
-      fireEvent.change(workspaceNameInput, { target: { value: "Renamed Repo" } });
+      fireEvent.change(workspaceNameInput, {
+        target: { value: "Renamed Repo" },
+      });
 
       const updater = updaters[0];
       if (!updater) {
@@ -316,8 +326,6 @@ describe("RepositoryConfigurationSection", () => {
       updaters.push(updater);
     });
     const rendered = renderSection(baseRepoConfig, onUpdateSelectedRepoConfig);
-    const originalRandomUuid = crypto.randomUUID;
-    crypto.randomUUID = () => "00000000-0000-4000-8000-000000000002";
 
     try {
       const addButton = screen.getByRole("button", { name: "Add server" });
@@ -332,14 +340,13 @@ describe("RepositoryConfigurationSection", () => {
         ...baseRepoConfig,
         devServers: [
           {
-            id: "00000000-0000-4000-8000-000000000002",
+            id: "draft-dev-server-1",
             name: "Dev server 1",
             command: "",
           },
         ],
       });
     } finally {
-      crypto.randomUUID = originalRandomUuid;
       rendered.unmount();
     }
   });

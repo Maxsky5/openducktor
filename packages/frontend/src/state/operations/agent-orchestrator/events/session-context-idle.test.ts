@@ -971,6 +971,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
         (message) => message.id === "assistant-buffered-1" && message.content === "Buffered answer",
       ),
     ).toBe(true);
+    const streamedAssistant = getSessionMessages(sessionsRef).find(
+      (message) => message.id === "assistant-buffered-1",
+    );
+    expect(streamedAssistant?.meta).toMatchObject({ kind: "assistant", isFinal: false });
     expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
   });
 

@@ -27,12 +27,15 @@ import {
 
 type RepositoryAgentsSectionProps = {
   selectedRepoConfig: RepoConfig | null;
-  runtimeDefinitions: RuntimeDescriptor[];
-  isLoadingRuntimeDefinitions: boolean;
-  isLoadingCatalog: boolean;
-  isLoadingSettings: boolean;
-  isSaving: boolean;
+  availableRuntimeDefinitions: RuntimeDescriptor[];
+  loadingState: {
+    isLoadingRuntimeDefinitions: boolean;
+    isLoadingCatalog: boolean;
+    isLoadingSettings: boolean;
+    isSaving: boolean;
+  };
   runtimeDefinitionsError: string | null;
+  runtimeAvailabilityErrors: string[];
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
@@ -57,6 +60,22 @@ type RepositoryAgentRoleViewModel = {
   modelGroups: ComboboxGroup[];
   roleVariantOptions: ReturnType<typeof toRoleVariantOptions>;
   modelKey: string;
+};
+
+const agentPlaceholderFor = ({
+  isCatalogLoading,
+  supportsProfiles,
+}: {
+  isCatalogLoading: boolean;
+  supportsProfiles: boolean;
+}): string => {
+  if (!supportsProfiles) {
+    return "Runtime does not support agent profiles";
+  }
+  if (isCatalogLoading) {
+    return "Loading agents…";
+  }
+  return "Select agent";
 };
 
 const buildRepositoryAgentRoleViewModel = ({
@@ -100,40 +119,14 @@ const buildRepositoryAgentRoleViewModel = ({
   };
 };
 
-export function RepositoryAgentsSection({
+const findMissingRoleLabels = ({
   selectedRepoConfig,
   runtimeDefinitions,
-  isLoadingRuntimeDefinitions,
-  isLoadingCatalog,
-  isLoadingSettings,
-  isSaving,
-  runtimeDefinitionsError,
-  getCatalogForRuntime,
-  getCatalogErrorForRuntime,
-  isCatalogLoadingForRuntime,
-  onUpdateSelectedRepoConfig,
-  onUpdateSelectedRepoAgentDefault,
-  onClearSelectedRepoAgentDefault,
-}: RepositoryAgentsSectionProps): ReactElement {
-  if (!selectedRepoConfig) {
-    return (
-      <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
-        Select a repository to edit agent defaults.
-      </div>
-    );
-  }
-
-  const runtimeOptions = toAgentRuntimeOptions(runtimeDefinitions);
-  const runtimeDropdownClassName = "sm:min-w-[18rem]";
-  const agentDropdownClassName = "sm:min-w-[18rem]";
-  const modelDropdownClassName = "sm:min-w-[26rem]";
-  const variantDropdownClassName = "sm:min-w-[16rem]";
-  const selectedDefaultRuntimeKind =
-    resolveRuntimeKindSelection({
-      runtimeDefinitions,
-      requestedRuntimeKind: selectedRepoConfig.defaultRuntimeKind,
-    }) ?? "";
-  const missingRoleLabels = ROLE_DEFAULTS.filter(({ role }) => {
+}: {
+  selectedRepoConfig: RepoConfig;
+  runtimeDefinitions: RuntimeDescriptor[];
+}): string[] =>
+  ROLE_DEFAULTS.reduce<string[]>((labels, { role, label }) => {
     const value = selectedRepoConfig.agentDefaults[role];
     const runtimeKind = resolveRepoAgentDefaultRuntimeKind({
       selectedRepoConfig,
@@ -143,15 +136,59 @@ export function RepositoryAgentsSection({
     const runtimeDefinition = runtimeKind
       ? findRuntimeDefinition(runtimeDefinitions, runtimeKind)
       : null;
-    return !(
+    const hasCompleteDefault = Boolean(
       value &&
-      runtimeDefinition &&
-      value.providerId.trim().length > 0 &&
-      value.modelId.trim().length > 0 &&
-      (!runtimeDefinition?.capabilities.optionalSurfaces.supportsProfiles ||
-        (value.profileId?.trim().length ?? 0) > 0)
+        runtimeDefinition &&
+        value.providerId.trim().length > 0 &&
+        value.modelId.trim().length > 0 &&
+        (!runtimeDefinition.capabilities.optionalSurfaces.supportsProfiles ||
+          (value.profileId?.trim().length ?? 0) > 0),
     );
-  }).map(({ label }) => label);
+
+    if (!hasCompleteDefault) {
+      labels.push(label);
+    }
+
+    return labels;
+  }, []);
+
+export function RepositoryAgentsSection({
+  selectedRepoConfig,
+  availableRuntimeDefinitions,
+  loadingState,
+  runtimeDefinitionsError,
+  runtimeAvailabilityErrors,
+  getCatalogForRuntime,
+  getCatalogErrorForRuntime,
+  isCatalogLoadingForRuntime,
+  onUpdateSelectedRepoConfig,
+  onUpdateSelectedRepoAgentDefault,
+  onClearSelectedRepoAgentDefault,
+}: RepositoryAgentsSectionProps): ReactElement {
+  const { isLoadingRuntimeDefinitions, isLoadingCatalog, isLoadingSettings, isSaving } =
+    loadingState;
+  if (!selectedRepoConfig) {
+    return (
+      <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
+        Select a repository to edit agent defaults.
+      </div>
+    );
+  }
+
+  const runtimeOptions = toAgentRuntimeOptions(availableRuntimeDefinitions);
+  const runtimeDropdownClassName = "sm:min-w-[18rem]";
+  const agentDropdownClassName = "sm:min-w-[18rem]";
+  const modelDropdownClassName = "sm:min-w-[26rem]";
+  const variantDropdownClassName = "sm:min-w-[16rem]";
+  const selectedDefaultRuntimeKind =
+    resolveRuntimeKindSelection({
+      runtimeDefinitions: availableRuntimeDefinitions,
+      requestedRuntimeKind: selectedRepoConfig.defaultRuntimeKind,
+    }) ?? "";
+  const missingRoleLabels = findMissingRoleLabels({
+    selectedRepoConfig,
+    runtimeDefinitions: availableRuntimeDefinitions,
+  });
 
   return (
     <div className="grid gap-4 p-4">
@@ -184,15 +221,22 @@ export function RepositoryAgentsSection({
       </div>
 
       {isLoadingCatalog ? (
-        <p className="text-xs text-muted-foreground">Loading available agents and models...</p>
+        <p className="text-xs text-muted-foreground">Loading available agents and models…</p>
       ) : null}
       {isLoadingRuntimeDefinitions ? (
-        <p className="text-xs text-muted-foreground">Loading available runtimes...</p>
+        <p className="text-xs text-muted-foreground">Loading available runtimes…</p>
       ) : null}
       {runtimeDefinitionsError ? (
         <p className="text-xs text-warning-muted">
           Failed to load runtime definitions: {runtimeDefinitionsError}
         </p>
+      ) : null}
+      {runtimeAvailabilityErrors.length > 0 ? (
+        <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-xs text-warning-surface-foreground">
+          {runtimeAvailabilityErrors.map((error) => (
+            <p key={error}>{error}</p>
+          ))}
+        </div>
       ) : null}
       {missingRoleLabels.length > 0 ? (
         <p className="text-xs text-warning-muted">
@@ -205,7 +249,7 @@ export function RepositoryAgentsSection({
           const roleRuntimeOptions = runtimeOptions;
           const roleViewModel = buildRepositoryAgentRoleViewModel({
             selectedRepoConfig,
-            runtimeDefinitions,
+            runtimeDefinitions: availableRuntimeDefinitions,
             role,
             getCatalogForRuntime,
             getCatalogErrorForRuntime,
@@ -224,6 +268,14 @@ export function RepositoryAgentsSection({
             roleVariantOptions,
             modelKey,
           } = roleViewModel;
+          const supportsProfiles =
+            runtimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles === true;
+          const agentPlaceholder = agentPlaceholderFor({
+            isCatalogLoading: isRoleCatalogLoading,
+            supportsProfiles,
+          });
+          const isAgentSelectDisabled =
+            isRoleCatalogLoading || isSaving || !supportsProfiles || agentOptions.length === 0;
 
           return (
             <div key={role} className="grid gap-2 rounded-md border border-border bg-card p-3">
@@ -270,21 +322,19 @@ export function RepositoryAgentsSection({
                   />
                 </div>
 
-                {runtimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles ? (
-                  <div className="grid min-w-0 gap-1">
-                    <Label className="text-xs">Agent</Label>
-                    <Combobox
-                      value={value.profileId}
-                      options={agentOptions}
-                      placeholder={isRoleCatalogLoading ? "Loading agents..." : "Select agent"}
-                      disabled={isRoleCatalogLoading || isSaving || agentOptions.length === 0}
-                      className={agentDropdownClassName}
-                      onValueChange={(profileId) =>
-                        onUpdateSelectedRepoAgentDefault(role, "profileId", profileId)
-                      }
-                    />
-                  </div>
-                ) : null}
+                <div className="grid min-w-0 gap-1">
+                  <Label className="text-xs">Agent Profile</Label>
+                  <Combobox
+                    value={value.profileId}
+                    options={agentOptions}
+                    placeholder={agentPlaceholder}
+                    disabled={isAgentSelectDisabled}
+                    className={agentDropdownClassName}
+                    onValueChange={(profileId) =>
+                      onUpdateSelectedRepoAgentDefault(role, "profileId", profileId)
+                    }
+                  />
+                </div>
 
                 <div className="grid min-w-0 gap-1">
                   <Label className="text-xs">Model</Label>
@@ -293,7 +343,7 @@ export function RepositoryAgentsSection({
                     options={modelOptions}
                     groups={modelGroups}
                     matchAllSearchTerms
-                    placeholder={isRoleCatalogLoading ? "Loading models..." : "Select model"}
+                    placeholder={isRoleCatalogLoading ? "Loading models…" : "Select model"}
                     disabled={isRoleCatalogLoading || isSaving || modelOptions.length === 0}
                     className={modelDropdownClassName}
                     onValueChange={(selectedModelKey) => {

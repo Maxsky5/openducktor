@@ -26,10 +26,10 @@
   },
   "scripts": {
     "start": "bun run src/index.ts",
-    "build": "bun build --target=bun --outfile dist/index.js --banner '#!/usr/bin/env bun' src/index.ts && chmod +x dist/index.js && bunx tsc -p tsconfig.json --emitDeclarationOnly",
-    "typecheck": "bunx tsc -p tsconfig.json --noEmit",
+    "build": "bun run scripts/build.ts",
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit && bunx tsc -p tsconfig.scripts.json --noEmit",
     "test": "bun test --timeout 1000",
-    "lint": "biome check src",
+    "lint": "biome check src scripts",
     "publish:dry-run": "bun publish --dry-run"
   },
   "dependencies": {
@@ -37,6 +37,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@openducktor/contracts": "workspace:*"
+    "@openducktor/contracts": "workspace:*",
+    "bun-types": "^1.3.13"
   }
 }

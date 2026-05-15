@@ -9,7 +9,10 @@
   ],
   "scripts": {
     "dev": "bun run --filter @openducktor/desktop dev",
-    "browser:dev": "FORCE_COLOR=1 bun packages/openducktor-web/src/cli.ts --workspace",
+    "electron:dev": "cd apps/electron && bun run dev",
+    "electron:build": "bun run --filter @openducktor/electron build",
+    "electron:package": "bun run --filter @openducktor/electron package",
+    "browser:dev": "bun run --filter @openducktor/web dev",
     "hooks:install": "husky",
     "prepare": "bun run hooks:install",
     "release:version:set": "bun run scripts/release-version.ts set",
@@ -30,8 +33,9 @@
     "typecheck": "bun run --workspaces typecheck",
     "test": "bun run --workspaces test",
     "test:hooks": "bun run --filter @openducktor/desktop test:hooks",
-    "lint": "bun run tauri:commands:panic-guard && bun run frontend:boundary-guard && bun run --workspaces lint",
+    "lint": "bun run tauri:commands:panic-guard && bun run frontend:boundary-guard && bun run host:architecture-guard && bun run --workspaces lint",
     "frontend:boundary-guard": "bun run scripts/frontend-boundary-guard.ts",
+    "host:architecture-guard": "bun run scripts/host-architecture-guard.ts",
     "tauri:commands:panic-guard": "bun run scripts/tauri-command-panic-guard.ts",
     "deps:unused:deps": "bunx knip --workspace='@openducktor/*' --include dependencies",
     "deps:unused:exports": "bunx knip --workspace='@openducktor/*' --include exports --no-exit-code",
@@ -39,7 +43,9 @@
     "deps:audit:high": "bun run scripts/audit-high-severity-guard.ts",
     "deps:audit:hono": "bun run scripts/audit-hono-guard.ts",
     "deps:outdated": "bun outdated",
-    "deps:check": "bun run deps:audit:high && bun run deps:audit:hono && bun run deps:unused:deps"
+    "deps:check": "bun run deps:audit:high && bun run deps:audit:hono && bun run deps:unused:deps",
+    "react-doctor:full": "npx -y react-doctor@latest . --full",
+    "react-doctor:diff": "npx -y react-doctor@latest . --diff main --yes"
   },
   "overrides": {
     "@hono/node-server": "^1.19.11",

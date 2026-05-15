@@ -1746,11 +1746,131 @@ exit 1
     write_executable_script(path, script)
 }
 
+pub(crate) fn create_fake_codex_app_server(path: &Path) -> Result<()> {
+    let script = r#"#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "codex-fake 0.0.1"
+  exit 0
+fi
+
+ARGS_FILE="${OPENDUCKTOR_TEST_CODEX_ARGS_FILE:-}"
+if [ -n "$ARGS_FILE" ]; then
+  : > "$ARGS_FILE"
+  for arg in "$@"; do
+    printf '%s\n' "$arg" >> "$ARGS_FILE"
+  done
+fi
+
+ENV_FILE="${OPENDUCKTOR_TEST_CODEX_ENV_FILE:-}"
+if [ -n "$ENV_FILE" ]; then
+  {
+    printf 'ODT_WORKSPACE_ID=%s\n' "${ODT_WORKSPACE_ID:-}"
+    printf 'ODT_HOST_URL=%s\n' "${ODT_HOST_URL:-}"
+    printf 'ODT_HOST_TOKEN=%s\n' "${ODT_HOST_TOKEN:-}"
+    printf 'ODT_FORBID_WORKSPACE_ID_INPUT=%s\n' "${ODT_FORBID_WORKSPACE_ID_INPUT:-}"
+    printf 'ODT_ALLOWED_TOOLS=%s\n' "${ODT_ALLOWED_TOOLS:-}"
+  } > "$ENV_FILE"
+fi
+
+while [ "$#" -gt 0 ] && [ "$1" != "app-server" ]; do
+  shift
+done
+
+if [ "$1" = "app-server" ]; then
+  WORKDIR_FILE="${OPENDUCKTOR_TEST_CODEX_WORKDIR_FILE:-}"
+  STDIN_FILE="${OPENDUCKTOR_TEST_CODEX_STDIN_FILE:-}"
+  INVALID_STDOUT="${OPENDUCKTOR_TEST_CODEX_INVALID_STDOUT:-}"
+  SILENT="${OPENDUCKTOR_TEST_CODEX_SILENT:-}"
+  exec python3 -c 'import json, os, sys
+workdir_file = sys.argv[1]
+stdin_file = sys.argv[2]
+invalid_stdout = sys.argv[3] == "1"
+silent = sys.argv[4] == "1"
+
+if workdir_file:
+    try:
+        with open(workdir_file, "w", encoding="utf-8") as file:
+            file.write(os.getcwd())
+    except Exception:
+        pass
+
+if invalid_stdout:
+    print("not-json", flush=True)
+
+request_method = os.environ.get("OPENDUCKTOR_TEST_CODEX_SERVER_REQUEST_METHOD", "")
+request_id_raw = os.environ.get("OPENDUCKTOR_TEST_CODEX_SERVER_REQUEST_ID", "")
+request_params_raw = os.environ.get("OPENDUCKTOR_TEST_CODEX_SERVER_REQUEST_PARAMS", "")
+request_emitted = False
+
+for raw_line in sys.stdin:
+    line = raw_line.rstrip("\n")
+    if stdin_file:
+        try:
+            with open(stdin_file, "a", encoding="utf-8") as file:
+                file.write(line + "\n")
+        except Exception:
+            pass
+
+    if not line.strip():
+        continue
+
+    message = json.loads(line)
+    method = message.get("method")
+    request_id = message.get("id")
+
+    if request_id is not None and method == "initialize":
+        if silent:
+            continue
+        response = {"jsonrpc": "2.0", "id": request_id, "result": {"ok": True}}
+        print(json.dumps(response), flush=True)
+        continue
+
+    if request_id is None and method == "initialized":
+        notification = {"jsonrpc": "2.0", "method": "codex/app-server/ready", "params": {"cwd": os.getcwd()}}
+        print(json.dumps(notification), flush=True)
+        if request_method and not request_emitted:
+            request = {"jsonrpc": "2.0", "id": int(request_id_raw or "1"), "method": request_method}
+            if request_params_raw:
+                request["params"] = json.loads(request_params_raw)
+            print(json.dumps(request), flush=True)
+            request_emitted = True
+        continue
+
+    if request_id is not None:
+        if silent:
+            continue
+        if method == "thread/loaded/list":
+            raw_result = os.environ.get("OPENDUCKTOR_TEST_CODEX_THREAD_LOADED_LIST_RESULT", "")
+            result = json.loads(raw_result) if raw_result else {"data": []}
+            response = {"jsonrpc": "2.0", "id": request_id, "result": result}
+            print(json.dumps(response), flush=True)
+            continue
+        if method == "thread/list":
+            raw_result = os.environ.get("OPENDUCKTOR_TEST_CODEX_THREAD_LIST_RESULT", "")
+            result = json.loads(raw_result) if raw_result else {"data": []}
+            response = {"jsonrpc": "2.0", "id": request_id, "result": result}
+            print(json.dumps(response), flush=True)
+            continue
+        response = {"jsonrpc": "2.0", "id": request_id, "result": {"method": method, "params": message.get("params")}}
+        print(json.dumps(response), flush=True)
+' "$WORKDIR_FILE" "$STDIN_FILE" "$INVALID_STDOUT" "$SILENT"
+fi
+
+echo "unsupported codex invocation" >&2
+exit 1
+"#;
+    write_executable_script(path, script)
+}
+
 pub(crate) fn set_fake_opencode_and_bridge_binaries(path: &Path) -> (EnvVarGuard, EnvVarGuard) {
     let value = path.to_string_lossy().to_string();
     let opencode_guard = set_env_var("OPENDUCKTOR_OPENCODE_BINARY", value.as_str());
     let bridge_guard = set_env_var("OPENDUCKTOR_MCP_BRIDGE_BINARY", value.as_str());
     (opencode_guard, bridge_guard)
+}
+
+pub(crate) fn set_fake_codex_binary(path: &Path) -> EnvVarGuard {
+    set_env_var("OPENDUCKTOR_CODEX_BINARY", path.to_string_lossy().as_ref())
 }
 
 pub(crate) fn create_failing_opencode(path: &Path) -> Result<()> {

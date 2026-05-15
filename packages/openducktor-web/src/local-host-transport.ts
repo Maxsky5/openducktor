@@ -1,9 +1,9 @@
-import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapters-tauri-host";
 import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@openducktor/frontend/lib/browser-live/constants";
 import { browserLiveControlEvent } from "@openducktor/frontend/lib/browser-live-control-events";
+import { createHostClient, type HostClient } from "@openducktor/host-client";
 import { getBrowserAuthToken, getBrowserBackendUrl } from "./browser-config";
 
 type BrowserSseListener = (payload: unknown) => void;
@@ -108,8 +108,7 @@ const createHttpInvoke = () => {
   };
 };
 
-export const createLocalHostClient = (): TauriHostClient =>
-  createTauriHostClient(createHttpInvoke());
+export const createLocalHostClient = (): HostClient => createHostClient(createHttpInvoke());
 
 const parseSsePayload = (raw: string): unknown => {
   try {
@@ -217,6 +216,13 @@ export const subscribeLocalHostTaskEvents = async (
 ): Promise<() => void> => {
   await ensureLocalHostSession();
   return subscribeSseChannel("task-events", listener);
+};
+
+export const subscribeLocalHostCodexAppServerEvents = async (
+  listener: (payload: unknown) => void,
+): Promise<() => void> => {
+  await ensureLocalHostSession();
+  return subscribeSseChannel("codex-app-server-events", listener);
 };
 
 export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: string): string => {

@@ -3,6 +3,7 @@ import { agentPromptTemplateIdValues } from "@openducktor/contracts";
 import { listBuiltinAgentPromptTemplates } from "@openducktor/core";
 import {
   Columns3,
+  Cpu,
   FolderGit2,
   type LucideIcon,
   MessageSquare,
@@ -15,6 +16,7 @@ import {
 export type SettingsSectionId =
   | "general"
   | "git"
+  | "runtimes"
   | "repositories"
   | "prompts"
   | "reusable-prompts"
@@ -33,6 +35,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
 }> = [
   { id: "general", label: "General", icon: SlidersHorizontal },
   { id: "git", label: "Git", icon: FolderGit2 },
+  { id: "runtimes", label: "Agent Runtimes", icon: Cpu },
   { id: "repositories", label: "Repositories", icon: FolderGit2 },
   { id: "prompts", label: "System Prompts", icon: MessageSquareText },
   { id: "reusable-prompts", label: "Reusable Prompts", icon: MessageSquarePlus },

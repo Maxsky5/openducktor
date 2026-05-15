@@ -1,4 +1,4 @@
-mod mcp_config;
+pub(crate) mod mcp_config;
 mod process_lifecycle;
 mod process_registry;
 mod startup_readiness;

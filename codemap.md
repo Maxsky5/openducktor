@@ -1,18 +1,19 @@
 # Repository Atlas: openducktor
 
 ## Project Responsibility
-OpenDucktor is a Bun monorepo for a macOS-first Tauri v2 desktop app and local browser runner that orchestrate AI planning/building workflows with Beads as the V1 task source of truth. The repository combines a shared React/Vite frontend, thin desktop and web shells, a Rust host application, shared TypeScript contracts/core services, OpenCode/Tauri adapters, an ODT MCP server, and repo-level operational scripts.
+OpenDucktor is a Bun monorepo for a macOS-first Tauri v2 desktop app, additive Electron shell, and local browser runner that orchestrate AI planning/building workflows with Beads as the V1 task source of truth. The repository combines a shared React/Vite frontend, thin desktop and web shells, a migrating TypeScript host boundary, a legacy Rust host application, shared TypeScript contracts/core services, OpenCode/Tauri adapters, an ODT MCP server, and repo-level operational scripts.
 
 ## System Entry Points
 - `package.json`: root workspace manifest and Bun command surface for dev, build, test, lint, Tauri, release, and dependency guard workflows.
 - `packages/frontend/src/index.ts`: shared React shell bootstrap, shell bridge contract, and style export used by both shells.
 - `apps/desktop/src/main.tsx`: thin Tauri desktop shell that supplies the desktop shell bridge to `@openducktor/frontend` bootstrap.
-- `packages/openducktor-web/src/cli.ts`: `@openducktor/web` launcher CLI for starting the Rust web host and Vite browser shell.
+- `apps/electron/src/main/main.ts`: additive Electron desktop shell entrypoint that adapts Electron IPC to the TypeScript host router.
+- `packages/openducktor-web/src/cli.ts`: `@openducktor/web` launcher CLI for starting the TypeScript web host and Vite browser shell.
 - `apps/desktop/src-tauri/src/main.rs`: Tauri desktop startup and legacy browser-backend compatibility path.
-- `apps/desktop/src-tauri/src/bin/openducktor_web_host.rs`: dedicated local web host binary used by `@openducktor/web`.
 - `apps/desktop/src-tauri/src/lib.rs`: Tauri command registration, app service wiring, runtime registry setup, and event relay integration.
 - `packages/contracts/src/index.ts`: public shared schema/constant barrel used by packages, adapters, and host-facing boundaries.
 - `packages/core/src/index.ts`: public core domain/service/port surface.
+- `packages/host/src/index.ts`: TypeScript host command router and host-event port surface for Electron/web transports.
 - `packages/openducktor-mcp/src/index.ts`: MCP stdio server CLI entry point for `odt_*` workflow tools.
 - `scripts/browser-dev.ts`: compatibility launcher that starts the repo-local web runner in workspace mode.
 - `scripts/*.ts`: release, dependency audit, browser dev, frontend boundary, and Tauri command guard automation invoked from the root scripts.
@@ -21,18 +22,18 @@ OpenDucktor is a Bun monorepo for a macOS-first Tauri v2 desktop app and local b
 - **Contracts-first boundary:** `packages/contracts` defines runtime/task/session/MCP schemas before adapters or host code translate them.
 - **Hexagonal core:** `packages/core` and Rust `host-domain` define ports and policies; adapters/infra crates implement external runtime, IPC, Beads, git, config, and process integrations.
 - **Shared frontend composition:** `packages/frontend/src` owns UI composition, shell bootstrap ordering, TanStack Query read models, app-state operations, and host interaction hooks behind an explicit shell bridge.
-- **Thin shell composition:** `apps/desktop/src` provides the Tauri shell bridge, while `packages/openducktor-web/src` provides the browser/local-host shell bridge, runtime config readiness, and launcher.
+- **Thin shell composition:** `apps/desktop/src` provides the Tauri shell bridge, `apps/electron` provides the Electron IPC/preload shell, and `packages/openducktor-web/src` provides the browser/local-host shell bridge, TypeScript host backend, runtime config readiness, and launcher.
 - **Runtime/session separation:** durable task/session metadata stays separate from live runtime routes and connections; request-scoped operations resolve live runtime connections at adapter boundaries.
 - **No fallback masking:** guard scripts, host startup, runtime selection, and workflow tool routing are documented to fail at the originating layer with actionable errors.
 
 ## Repository Directory Map
 | Directory | Responsibility Summary | Detailed Map |
 |-----------|------------------------|--------------|
-| `apps/` | Application workspaces for OpenDucktor, currently centered on the desktop product workspace. | [apps/codemap.md](apps/codemap.md) |
+| `apps/` | Application workspaces for OpenDucktor, currently covering the legacy Tauri desktop workspace and additive Electron migration shell. | [apps/codemap.md](apps/codemap.md) |
 | `apps/desktop/` | Tauri desktop workspace that owns the thin shell, desktop bridge, Tauri configuration, packaging helpers, and Rust host workspace. | [apps/desktop/codemap.md](apps/desktop/codemap.md) |
 | `apps/desktop/scripts/` | Desktop-specific build, CEF, Tauri dev/build, signing, and release helper scripts. | [apps/desktop/scripts/codemap.md](apps/desktop/scripts/codemap.md) |
 | `apps/desktop/src/` | Thin Tauri desktop shell that configures the desktop shell bridge and mounts `@openducktor/frontend`. | [apps/desktop/src/codemap.md](apps/desktop/src/codemap.md) |
-| `apps/desktop/src-tauri/` | Tauri host root, dedicated web-host binary, command registration, headless HTTP/SSE bridge, and Rust workspace. | [apps/desktop/src-tauri/codemap.md](apps/desktop/src-tauri/codemap.md) |
+| `apps/desktop/src-tauri/` | Legacy Tauri host root, command registration, headless compatibility bridge, and Rust workspace. | [apps/desktop/src-tauri/codemap.md](apps/desktop/src-tauri/codemap.md) |
 | `apps/desktop/src-tauri/capabilities/` | Tauri capability manifests for frontend command permissions. | [apps/desktop/src-tauri/capabilities/codemap.md](apps/desktop/src-tauri/capabilities/codemap.md) |
 | `apps/desktop/src-tauri/crates/` | Rust crates for host-domain models, application services, infra adapters, and test support. | [apps/desktop/src-tauri/crates/codemap.md](apps/desktop/src-tauri/crates/codemap.md) |
 | `apps/desktop/src-tauri/crates/host-application/` | Application service crate that orchestrates host behavior, runtime lifecycle, workflow services, and workspace policy. | [apps/desktop/src-tauri/crates/host-application/codemap.md](apps/desktop/src-tauri/crates/host-application/codemap.md) |
@@ -72,13 +73,14 @@ OpenDucktor is a Bun monorepo for a macOS-first Tauri v2 desktop app and local b
 | `apps/desktop/src-tauri/src/command_services/git/` | Shared git command-service layer for request DTOs, snapshots, and repo/worktree authorization used by Tauri and headless transports. | [apps/desktop/src-tauri/src/command_services/git/codemap.md](apps/desktop/src-tauri/src/command_services/git/codemap.md) |
 | `apps/desktop/src-tauri/src/command_services/git/authorization/` | Repo and worktree path validation before shared git commands run. | [apps/desktop/src-tauri/src/command_services/git/authorization/codemap.md](apps/desktop/src-tauri/src/command_services/git/authorization/codemap.md) |
 | `apps/desktop/src-tauri/src/headless/` | Local web-host server path used when the desktop shell is not driving the UI. | [apps/desktop/src-tauri/src/headless/codemap.md](apps/desktop/src-tauri/src/headless/codemap.md) |
-| `packages/` | Shared package workspace for frontend, web runner, contract schemas, core domain services, runtime adapters, and MCP tooling. | [packages/codemap.md](packages/codemap.md) |
+| `apps/electron/` | Additive Electron shell for the migration, including main-process IPC, preload bridge, renderer bootstrap, and TypeScript host-router integration. | [apps/electron/codemap.md](apps/electron/codemap.md) |
+| `packages/` | Shared package workspace for frontend, web runner, contract schemas, core domain services, TypeScript host boundaries, runtime adapters, and MCP tooling. | [packages/codemap.md](packages/codemap.md) |
 | `packages/adapters-opencode-sdk/` | OpenCode SDK adapter implementing catalog, session, workspace inspection, and runtime registry reads. | [packages/adapters-opencode-sdk/codemap.md](packages/adapters-opencode-sdk/codemap.md) |
 | `packages/adapters-opencode-sdk/src/` | OpenCode-backed session, catalog, tool authorization, runtime-connection, history, workspace inspection, and event processing. | [packages/adapters-opencode-sdk/src/codemap.md](packages/adapters-opencode-sdk/src/codemap.md) |
 | `packages/adapters-opencode-sdk/src/event-stream/` | Normalizes OpenCode global/session event streams into OpenDucktor session events. | [packages/adapters-opencode-sdk/src/event-stream/codemap.md](packages/adapters-opencode-sdk/src/event-stream/codemap.md) |
 | `packages/adapters-opencode-sdk/src/event-stream/message-events/` | Role-specific OpenCode message event normalization for assistant/user updates, part deltas, visibility, and subagent correlation. | [packages/adapters-opencode-sdk/src/event-stream/message-events/codemap.md](packages/adapters-opencode-sdk/src/event-stream/message-events/codemap.md) |
-| `packages/adapters-tauri-host/` | Typed Tauri IPC adapter package for workspace, task, filesystem, system, git, runtime, and build operations. | [packages/adapters-tauri-host/codemap.md](packages/adapters-tauri-host/codemap.md) |
-| `packages/adapters-tauri-host/src/` | Host-side client modules wrapping Tauri commands for frontend consumers. | [packages/adapters-tauri-host/src/codemap.md](packages/adapters-tauri-host/src/codemap.md) |
+| `packages/host-client/` | Typed invoke-based host client package for workspace, task, filesystem, system, git, runtime, and build operations. | [packages/host-client/codemap.md](packages/host-client/codemap.md) |
+| `packages/host-client/src/` | Host-side client modules wrapping shell-provided host commands for frontend consumers. | [packages/host-client/src/codemap.md](packages/host-client/src/codemap.md) |
 | `packages/contracts/` | Shared runtime schemas, enums, descriptors, prompt/session/run shapes, host-bridge schemas, browser config, and tool constants. | [packages/contracts/codemap.md](packages/contracts/codemap.md) |
 | `packages/contracts/src/` | Public schema surface for runtime descriptors/routes, session records, task/workflow records, MCP payloads, host-bridge responses, browser config, and shared enums. | [packages/contracts/src/codemap.md](packages/contracts/src/codemap.md) |
 | `packages/core/` | Adapter-independent domain services, ports, guards, workflow types, runtime-connection helpers, and agent prompt synthesis. | [packages/core/codemap.md](packages/core/codemap.md) |
@@ -86,6 +88,7 @@ OpenDucktor is a Bun monorepo for a macOS-first Tauri v2 desktop app and local b
 | `packages/core/src/ports/` | Adapter-facing `AgentEnginePort` contract for runtime registry, catalog, session lifecycle, and workspace inspection behavior. | [packages/core/src/ports/codemap.md](packages/core/src/ports/codemap.md) |
 | `packages/core/src/services/` | Core workflow services for runtime validation, tool selection, planner/spec handling, todos, prompts, and kanban mapping. | [packages/core/src/services/codemap.md](packages/core/src/services/codemap.md) |
 | `packages/core/src/types/` | Shared core types for agent orchestration, runtime descriptors, planning inputs, session events, and workflow tool calls. | [packages/core/src/types/codemap.md](packages/core/src/types/codemap.md) |
+| `packages/host/` | Transport-neutral TypeScript host command router and event ports for Electron IPC, browser HTTP/SSE, and future host adapters. | [packages/host/codemap.md](packages/host/codemap.md) |
 | `packages/frontend/` | Shared React/Vite frontend package owning App composition, components, routes, state/query orchestration, markdown/document helpers, styles, test utilities, and shell bridge contracts. | [packages/frontend/codemap.md](packages/frontend/codemap.md) |
 | `packages/frontend/src/` | Shared frontend source for App, routes, components, feature orchestration, state/query layers, runtime helpers, markdown/document preview helpers, styles, and tests. | [packages/frontend/src/codemap.md](packages/frontend/src/codemap.md) |
 | `packages/frontend/src/components/` | Reusable UI and feature widgets, including layout chrome, shadcn primitives, error screens, markdown/document preview controls, and feature panels/modals. | [packages/frontend/src/components/codemap.md](packages/frontend/src/components/codemap.md) |
@@ -152,13 +155,13 @@ OpenDucktor is a Bun monorepo for a macOS-first Tauri v2 desktop app and local b
 | `packages/frontend/src/types/` | Shared TypeScript contracts for app-state slices, orchestrator/session models, browser-live events, documents, diagnostics, and constants. | [packages/frontend/src/types/codemap.md](packages/frontend/src/types/codemap.md) |
 | `packages/openducktor-mcp/` | MCP server package exposing OpenDucktor workflow tools over stdio and forwarding them to the desktop host bridge. | [packages/openducktor-mcp/codemap.md](packages/openducktor-mcp/codemap.md) |
 | `packages/openducktor-mcp/src/` | MCP server entrypoint, task-store facade, host bridge client, store-context resolver, and response formatting helpers. | [packages/openducktor-mcp/src/codemap.md](packages/openducktor-mcp/src/codemap.md) |
-| `packages/openducktor-web/` | Public local browser runner CLI that starts the Rust web host, waits for readiness, serves the shared frontend, and injects runtime config. | [packages/openducktor-web/codemap.md](packages/openducktor-web/codemap.md) |
+| `packages/openducktor-web/` | Public local browser runner CLI that starts the TypeScript host backend, waits for readiness, serves the shared frontend, and injects runtime config. | [packages/openducktor-web/codemap.md](packages/openducktor-web/codemap.md) |
 | `scripts/` | Repo-level release, dependency audit, browser dev, and Tauri command safety automation. | [scripts/codemap.md](scripts/codemap.md) |
 
 ## Deep-Dive Guidance
 - Start with this atlas, then follow the directory map to the nearest scope-specific `codemap.md`.
 - For shared frontend work, read `packages/frontend/src/codemap.md` plus the relevant `components/`, `pages/`, `state/`, or `features/` submap.
 - For shell-specific work, read `apps/desktop/src/codemap.md` for Tauri shell code or `packages/openducktor-web/codemap.md` for browser/web-host launcher code.
-- For host/runtime work, read `apps/desktop/src-tauri/codemap.md`, then the relevant `src/commands` or `crates/*` submap.
+- For host/runtime work, read `packages/host/codemap.md`; for legacy Tauri compatibility work, also read `apps/desktop/src-tauri/codemap.md` and the relevant `src/commands` or `crates/*` submap.
 - For cross-layer contract changes, read `packages/contracts/codemap.md`, `packages/core/codemap.md`, and the corresponding adapter/host submaps before editing.
 - For MCP workflow tool changes, read `packages/openducktor-mcp/codemap.md`, `packages/core/src/services/codemap.md`, and host runtime/workflow submaps.

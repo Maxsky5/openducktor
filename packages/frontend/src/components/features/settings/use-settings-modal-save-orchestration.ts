@@ -7,6 +7,7 @@ import {
   buildPromptValidationSaveError,
   buildRepoScriptValidationSaveError,
   buildReusablePromptValidationSaveError,
+  buildRuntimeAvailabilitySaveError,
   hasAnyDirtySections,
   hasSameSaveReadyGlobalGitConfig,
   isGlobalGitOnlySave,
@@ -24,6 +25,8 @@ type UseSettingsModalSaveOrchestrationArgs = {
   promptValidationState: PromptValidationState;
   hasReusablePromptValidationErrors: boolean;
   reusablePromptValidationErrorCount: number;
+  hasRuntimeAvailabilityErrors: boolean;
+  runtimeAvailabilityErrorCount: number;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCount: number;
   invalidRepoPathsWithDevServerErrors: string[];
@@ -50,6 +53,8 @@ export const useSettingsModalSaveOrchestration = ({
   promptValidationState,
   hasReusablePromptValidationErrors,
   reusablePromptValidationErrorCount,
+  hasRuntimeAvailabilityErrors,
+  runtimeAvailabilityErrorCount,
   hasRepoScriptValidationErrors,
   repoScriptValidationErrorCount,
   invalidRepoPathsWithDevServerErrors,
@@ -114,6 +119,15 @@ export const useSettingsModalSaveOrchestration = ({
       return false;
     }
 
+    if (hasRuntimeAvailabilityErrors) {
+      const reason = buildRuntimeAvailabilitySaveError(runtimeAvailabilityErrorCount);
+      setSaveError(reason);
+      toast.error("Cannot save settings", {
+        description: reason,
+      });
+      return false;
+    }
+
     if (hasRepoScriptValidationErrors) {
       setHasAttemptedRepoScriptSubmit(true);
       const reason = buildRepoScriptValidationSaveError({
@@ -169,11 +183,13 @@ export const useSettingsModalSaveOrchestration = ({
     reusablePromptValidationErrorCount,
     hasPromptValidationErrors,
     hasReusablePromptValidationErrors,
+    hasRuntimeAvailabilityErrors,
     hasRepoScriptValidationErrors,
     invalidRepoPathsWithDevServerErrors,
     loadedSnapshot,
     promptValidationState.totalErrorCount,
     repoScriptValidationErrorCount,
+    runtimeAvailabilityErrorCount,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
     selectedWorkspaceId,

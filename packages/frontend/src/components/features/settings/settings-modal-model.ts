@@ -7,6 +7,7 @@ import {
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { catalogModelOptionValue } from "@/components/features/agents/catalog-select-options";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -93,13 +94,15 @@ export const selectedModelKeyForRole = (
   return `${value.providerId}/${value.modelId}`;
 };
 
-export const ensureAgentDefault = ensureDraftAgentDefault;
-
 export const findCatalogModel = (
   catalog: AgentModelCatalog | null,
   modelKey: string,
 ): AgentModelCatalog["models"][number] | null => {
-  return catalog?.models.find((entry) => entry.id === modelKey) ?? null;
+  return (
+    catalog?.models.find(
+      (entry) => entry.id === modelKey || catalogModelOptionValue(entry) === modelKey,
+    ) ?? null
+  );
 };
 
 export const toRoleVariantOptions = (
@@ -118,15 +121,18 @@ export const toRoleVariantOptions = (
 };
 
 export const getMissingRequiredRoleLabels = (agentDefaults: RepoAgentDefaultsInput): string[] => {
-  return ROLE_DEFAULTS.filter(({ role }) => {
+  return ROLE_DEFAULTS.reduce<string[]>((labels, { role, label }) => {
     const value = agentDefaults[role];
-    return !(
+    const hasRequiredDefault =
       value &&
       value.providerId.trim().length > 0 &&
       value.modelId.trim().length > 0 &&
-      (value.profileId?.trim().length ?? 0) > 0
-    );
-  }).map(({ label }) => label);
+      (value.profileId?.trim().length ?? 0) > 0;
+    if (!hasRequiredDefault) {
+      labels.push(label);
+    }
+    return labels;
+  }, []);
 };
 
 export const resolveRepoAgentDefaultRuntimeKind = ({

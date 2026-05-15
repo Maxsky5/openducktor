@@ -14,6 +14,10 @@ impl AgentRuntimeKind {
         Self::new("opencode")
     }
 
+    pub fn codex() -> Self {
+        Self::new("codex")
+    }
+
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }

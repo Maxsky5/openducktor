@@ -10,8 +10,9 @@
       "@/*": ["../frontend/src/*", "./src/*"],
       "@openducktor/frontend": ["../frontend/src/index.ts"],
       "@openducktor/frontend/styles.css": ["../frontend/src/styles.css"],
-      "@openducktor/frontend/lib/*": ["../frontend/src/lib/*"]
+      "@openducktor/frontend/lib/*": ["../frontend/src/lib/*"],
+      "@openducktor/host": ["../host/src/index.ts"]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "scripts", "vite.config.ts"]
 }

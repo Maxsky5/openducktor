@@ -1,4 +1,5 @@
 mod capabilities;
+mod codex;
 mod descriptor;
 mod kind;
 mod odt_tools;
@@ -138,7 +139,17 @@ impl RuntimeRegistry {
     }
 
     pub fn definitions(&self) -> Vec<RuntimeDefinition> {
-        self.definitions_by_kind.values().cloned().collect()
+        let mut definitions = Vec::with_capacity(self.definitions_by_kind.len());
+        if let Some(default_definition) = self.definitions_by_kind.get(self.default_kind.as_str()) {
+            definitions.push(default_definition.clone());
+        }
+        definitions.extend(
+            self.definitions_by_kind
+                .iter()
+                .filter(|(kind, _definition)| kind.as_str() != self.default_kind.as_str())
+                .map(|(_kind, definition)| definition.clone()),
+        );
+        definitions
     }
 
     pub fn definition(&self, kind: &AgentRuntimeKind) -> Result<&RuntimeDefinition> {
@@ -162,7 +173,10 @@ impl RuntimeRegistry {
 
 static BUILTIN_RUNTIME_REGISTRY: LazyLock<RuntimeRegistry> = LazyLock::new(|| {
     RuntimeRegistry::new_with_default_kind(
-        vec![opencode::opencode_runtime_definition()],
+        vec![
+            opencode::opencode_runtime_definition(),
+            codex::codex_runtime_definition(),
+        ],
         Some(AgentRuntimeKind::opencode()),
     )
     .expect("builtin runtime registry should be valid")

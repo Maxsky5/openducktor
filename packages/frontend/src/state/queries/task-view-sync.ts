@@ -113,26 +113,6 @@ export const refreshRepoTaskViewsFromQuery = async (
     removeCachedTaskDocumentQueries(queryClient, repoPath, options.taskIds);
   }
 
-  if (
-    options?.forceFreshTaskList === true ||
-    options?.taskDocumentStrategy === "refresh" ||
-    options?.taskDocumentStrategy === "invalidate" ||
-    options?.taskDocumentStrategy === "remove"
-  ) {
-    try {
-      await queryClient.cancelQueries(
-        {
-          queryKey: taskQueryKeys.repoDataPrefix(repoPath),
-          exact: false,
-        },
-        { silent: true },
-      );
-    } catch (error) {
-      if (!isCancelledQueryError(error)) {
-        throw error;
-      }
-    }
-  }
   await invalidateRepoTaskQueries(queryClient, repoPath);
   try {
     await loadRepoTaskDataFromQuery(queryClient, repoPath, doneVisibleDays);

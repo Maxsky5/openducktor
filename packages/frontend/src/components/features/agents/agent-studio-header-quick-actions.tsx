@@ -1,6 +1,6 @@
 import type { AgentRole } from "@openducktor/core";
 import { ChevronDown, MessageCirclePlus, Zap } from "lucide-react";
-import { type ReactElement, useEffect } from "react";
+import { type ReactElement, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -175,12 +175,17 @@ export function QuickActionsMenu({
   const primaryActionDisabled = primaryAction !== null && !canRunPrimaryAction;
   const canOpenActionsMenu = agentStudioReady && menuEntries.length > 0 && !primaryActionDisabled;
   const groupedMenuEntries = buildQuickActionMenuGroups(menuEntries);
+  const onOpenChangeRef = useRef(onOpenChange);
+
+  useEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
 
   useEffect(() => {
     if (isOpen && !canOpenActionsMenu) {
-      onOpenChange(false);
+      onOpenChangeRef.current(false);
     }
-  }, [canOpenActionsMenu, isOpen, onOpenChange]);
+  }, [canOpenActionsMenu, isOpen]);
 
   const selectMenuEntry = (entry: QuickActionMenuEntry): void => {
     if (

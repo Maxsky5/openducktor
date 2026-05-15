@@ -43,7 +43,7 @@ export const PullRebaseDialog = memo(function PullRebaseDialog({
       onClose={onCancel}
       closeTestId="agent-studio-git-cancel-pull-rebase-button"
       confirmLabel="Pull with rebase"
-      confirmPendingLabel="Pulling..."
+      confirmPendingLabel="Pulling…"
       confirmPending={isRebasing}
       confirmDisabled={isRebasing}
       onConfirm={onConfirm}
@@ -52,7 +52,7 @@ export const PullRebaseDialog = memo(function PullRebaseDialog({
       contentTestId="agent-studio-git-pull-rebase-modal"
     >
       <div
-        className="rounded-xl border border-border bg-muted/50 px-4 py-4"
+        className="rounded-xl border border-border bg-muted/50 p-4"
         data-testid="agent-studio-git-pull-rebase-safety-note"
       >
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">

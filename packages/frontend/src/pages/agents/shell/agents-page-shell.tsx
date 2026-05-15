@@ -33,7 +33,7 @@ export function AgentsPageShell({
   if (navigationPersistenceError) {
     return (
       <div className="flex h-full min-h-0 items-center justify-center bg-card p-4">
-        <div className="flex w-full max-w-2xl flex-col gap-4 rounded-xl border border-destructive-border bg-destructive-surface px-4 py-4 text-sm text-destructive-muted">
+        <div className="flex w-full max-w-2xl flex-col gap-4 rounded-xl border border-destructive-border bg-destructive-surface p-4 text-sm text-destructive-muted">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 size-5 shrink-0" />
             <div className="min-w-0 space-y-2">

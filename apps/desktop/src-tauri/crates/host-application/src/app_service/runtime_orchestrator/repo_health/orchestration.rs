@@ -8,6 +8,9 @@ impl AppService {
     ) -> Result<RepoRuntimeHealthCheck> {
         let runtime_kind = self.resolve_supported_runtime_kind(runtime_kind)?;
         let repo_key = self.resolve_authorized_repo_path(repo_path)?;
+        if !self.is_runtime_enabled(&runtime_kind)? {
+            return self.disabled_repo_runtime_health(&runtime_kind, repo_key.as_str());
+        }
         let (flight, is_leader) =
             self.acquire_repo_runtime_health_flight(runtime_kind.clone(), repo_key.as_str())?;
         if !is_leader {
@@ -137,6 +140,51 @@ impl AppService {
             &result,
         )?;
         result
+    }
+
+    pub(in crate::app_service::runtime_orchestrator) fn disabled_repo_runtime_health(
+        &self,
+        runtime_kind: &AgentRuntimeKind,
+        repo_key: &str,
+    ) -> Result<RepoRuntimeHealthCheck> {
+        let checked_at = now_rfc3339();
+        let descriptor = self.runtime_registry.definition(runtime_kind)?.descriptor();
+        let supports_mcp_status = descriptor
+            .capabilities
+            .optional_surfaces
+            .supports_mcp_status;
+        self.store_repo_runtime_health(
+            runtime_kind,
+            repo_key,
+            build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                checked_at: checked_at.clone(),
+                runtime: None,
+                runtime_ok: false,
+                runtime_error: Some(format!(
+                    "{} runtime is disabled in Agent Runtime settings.",
+                    descriptor.label
+                )),
+                runtime_failure_kind: None,
+                supports_mcp_status,
+                mcp_ok: true,
+                mcp_error: supports_mcp_status
+                    .then(|| "Runtime is disabled, so MCP is not checked.".to_string()),
+                mcp_failure_kind: None,
+                mcp_server_status: None,
+                available_tool_ids: Vec::new(),
+                progress: Some(repo_runtime_progress(RepoRuntimeProgressInput {
+                    stage: RuntimeHealthWorkflowStage::Disabled,
+                    observation: None,
+                    host: None,
+                    checked_at,
+                    failure_reason: None,
+                    started_at: None,
+                    updated_at: None,
+                    elapsed_ms: None,
+                    attempts: None,
+                })),
+            }),
+        )
     }
 
     pub(in crate::app_service::runtime_orchestrator) fn complete_repo_runtime_health(

@@ -3,8 +3,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 export const COMPOSER_EDITOR_MIN_HEIGHT_PX = 44;
 export const COMPOSER_EDITOR_MAX_HEIGHT_PX = 220;
-export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = COMPOSER_EDITOR_MIN_HEIGHT_PX;
-export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = COMPOSER_EDITOR_MAX_HEIGHT_PX;
 
 const readInlineHeightPx = (styleHeight: string): number | null => {
   const inlineHeight = Number.parseFloat(styleHeight);
@@ -29,8 +27,6 @@ export const computeComposerEditorLayout = (
     overflowY: scrollHeight > COMPOSER_EDITOR_MAX_HEIGHT_PX ? "auto" : "hidden",
   };
 };
-
-export const computeComposerTextareaLayout = computeComposerEditorLayout;
 
 const readComposerEditorHeight = (editor: HTMLDivElement, previousHeightPx?: number): number => {
   const inlineHeight = readInlineHeightPx(editor.style.height);
@@ -135,7 +131,7 @@ export const useAgentChatLayout = ({
   const resizeTextareaFrameIdRef = useRef<number | null>(null);
   const didInitializeComposerForSessionRef = useRef(false);
   const composerEditorHeightRef = useRef(COMPOSER_EDITOR_MIN_HEIGHT_PX);
-  const composerTextareaHeightRef = useRef(COMPOSER_TEXTAREA_MIN_HEIGHT_PX);
+  const composerTextareaHeightRef = useRef(COMPOSER_EDITOR_MIN_HEIGHT_PX);
 
   const flushComposerEditorResize = useCallback((): void => {
     const editor = composerEditorRef.current;
@@ -189,7 +185,7 @@ export const useAgentChatLayout = ({
     composerTextareaHeightRef.current =
       readInlineHeightPx(textarea.style.height) ??
       (textarea.value.length === 0
-        ? COMPOSER_TEXTAREA_MIN_HEIGHT_PX
+        ? COMPOSER_EDITOR_MIN_HEIGHT_PX
         : composerTextareaHeightRef.current);
     if (didHeightChange) {
       syncBottomAfterComposerLayoutRef?.current?.();
@@ -216,7 +212,7 @@ export const useAgentChatLayout = ({
   useLayoutEffect(() => {
     didInitializeComposerForSessionRef.current = false;
     composerEditorHeightRef.current = COMPOSER_EDITOR_MIN_HEIGHT_PX;
-    composerTextareaHeightRef.current = COMPOSER_TEXTAREA_MIN_HEIGHT_PX;
+    composerTextareaHeightRef.current = COMPOSER_EDITOR_MIN_HEIGHT_PX;
     const hasActiveSession = activeExternalSessionId !== null;
     if (hasActiveSession && resizeFrameIdRef.current !== null) {
       const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;

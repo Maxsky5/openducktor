@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { TauriHostClient } from "@openducktor/adapters-tauri-host";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { HostClient } from "@openducktor/host-client";
 import {
   configureShellBridge,
   createUnavailableShellBridge,
@@ -23,7 +23,7 @@ const createRuntimeInstanceSummary = (runtimeId: string): RuntimeInstanceSummary
 });
 
 const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridge => ({
-  client: {} as TauriHostClient,
+  client: {} as HostClient,
   subscribeRunEvents: async () => () => {},
   subscribeDevServerEvents: async () => () => {},
   subscribeTaskEvents: async () => () => {},
@@ -75,7 +75,7 @@ describe("host-client", () => {
 
     configureShellBridge(
       createTestShellBridge({
-        client: { runtimeEnsure: firstRuntimeEnsure } as unknown as TauriHostClient,
+        client: { runtimeEnsure: firstRuntimeEnsure } as unknown as HostClient,
       }),
     );
 
@@ -87,7 +87,7 @@ describe("host-client", () => {
 
     configureShellBridge(
       createTestShellBridge({
-        client: { runtimeEnsure: secondRuntimeEnsure } as unknown as TauriHostClient,
+        client: { runtimeEnsure: secondRuntimeEnsure } as unknown as HostClient,
       }),
     );
 
@@ -105,14 +105,14 @@ describe("host-client", () => {
     );
     configureShellBridge(
       createTestShellBridge({
-        client: { runtimeEnsure: shellRuntimeEnsure } as unknown as TauriHostClient,
+        client: { runtimeEnsure: shellRuntimeEnsure } as unknown as HostClient,
       }),
     );
 
     const { hostClient } = await import("./host-client");
     const originalRuntimeEnsure = hostClient.runtimeEnsure;
 
-    hostClient.runtimeEnsure = overrideRuntimeEnsure as TauriHostClient["runtimeEnsure"];
+    hostClient.runtimeEnsure = overrideRuntimeEnsure as HostClient["runtimeEnsure"];
     try {
       await expect(hostClient.runtimeEnsure("/repo", "opencode")).resolves.toMatchObject({
         runtimeId: "runtime-override",

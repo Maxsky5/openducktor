@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { hostClient } from "@/lib/host-client";
 import { resolveTaskTargetBranchState, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import {
@@ -95,73 +95,6 @@ const DEFAULT_SNAPSHOT_DEPENDENCIES: AgentStudioBuildToolsWorktreeSnapshotDepend
   useDiffData: useAgentStudioDiffData,
   useDevServerPanel: useAgentStudioDevServerPanel,
 };
-
-function useQueuedWorktreeRecoveryRefetch({
-  contextKey,
-  hasResolvedWorktree,
-  isResolving,
-  refetch,
-  worktreeRecoverySignal,
-}: {
-  contextKey: string | null;
-  hasResolvedWorktree: boolean;
-  isResolving: boolean;
-  refetch: () => void | Promise<void>;
-  worktreeRecoverySignal: number | undefined;
-}): void {
-  const lastHandledSignalRef = useRef<number | null>(null);
-  const pendingSignalRef = useRef<number | null>(null);
-  const lastContextKeyRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (lastContextKeyRef.current !== contextKey) {
-      lastContextKeyRef.current = contextKey;
-      lastHandledSignalRef.current = null;
-      pendingSignalRef.current = null;
-    }
-
-    if (worktreeRecoverySignal == null) {
-      lastHandledSignalRef.current = null;
-      pendingSignalRef.current = null;
-      return;
-    }
-
-    const pendingSignal = pendingSignalRef.current;
-    if (pendingSignal != null && !isResolving) {
-      pendingSignalRef.current = null;
-      lastHandledSignalRef.current = pendingSignal;
-      if (contextKey != null && !hasResolvedWorktree) {
-        void refetch();
-      }
-      return;
-    }
-
-    if (lastHandledSignalRef.current === null) {
-      lastHandledSignalRef.current = worktreeRecoverySignal;
-      return;
-    }
-
-    if (
-      worktreeRecoverySignal === lastHandledSignalRef.current ||
-      worktreeRecoverySignal === pendingSignalRef.current
-    ) {
-      return;
-    }
-
-    if (contextKey == null || hasResolvedWorktree) {
-      lastHandledSignalRef.current = worktreeRecoverySignal;
-      return;
-    }
-
-    if (isResolving) {
-      pendingSignalRef.current = worktreeRecoverySignal;
-      return;
-    }
-
-    lastHandledSignalRef.current = worktreeRecoverySignal;
-    void refetch();
-  }, [contextKey, hasResolvedWorktree, isResolving, refetch, worktreeRecoverySignal]);
-}
 
 function resolveBuildToolsWorktreeStatus({
   isEnabled,
@@ -266,8 +199,14 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     repoPath != null &&
     taskId != null &&
     directWorktreePath == null;
+  const taskWorktreeOptions = taskWorktreeQueryOptions(
+    repoPath ?? "",
+    taskId ?? "",
+    dependencies.taskWorktreeHost,
+    shouldQueryTaskWorktree && !directWorktreePath ? worktreeRecoverySignal : null,
+  );
   const taskWorktreeQuery = useQuery({
-    ...taskWorktreeQueryOptions(repoPath ?? "", taskId ?? "", dependencies.taskWorktreeHost),
+    ...taskWorktreeOptions,
     enabled: shouldQueryTaskWorktree,
   });
   const queriedWorktree =
@@ -285,7 +224,6 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   const worktreeError = queryError ?? queriedWorktree.error;
   const worktreePath =
     gitPanelContextMode === "worktree" ? (directWorktreePath ?? queriedWorktree.path) : null;
-  const hasResolvedWorktree = gitPanelContextMode === "repository" || worktreePath != null;
   const isWorktreeResolving = shouldQueryTaskWorktree && taskWorktreeQuery.isFetching;
   const refetchTaskWorktree = taskWorktreeQuery.refetch;
   const retryWorktreeResolution = useCallback(async (): Promise<void> => {
@@ -295,16 +233,6 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
 
     await refetchTaskWorktree();
   }, [refetchTaskWorktree, shouldQueryTaskWorktree]);
-  const recoveryContextKey =
-    shouldQueryTaskWorktree && repoPath != null && taskId != null ? `${repoPath}::${taskId}` : null;
-  useQueuedWorktreeRecoveryRefetch({
-    contextKey: recoveryContextKey,
-    hasResolvedWorktree,
-    isResolving: isWorktreeResolving,
-    refetch: retryWorktreeResolution,
-    worktreeRecoverySignal,
-  });
-
   const worktreeStatus = resolveBuildToolsWorktreeStatus({
     isEnabled,
     contextMode: gitPanelContextMode,

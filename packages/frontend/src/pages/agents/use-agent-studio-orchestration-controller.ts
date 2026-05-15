@@ -125,6 +125,7 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "selectedModelSelection"
   | "selectedModelDescriptor"
   | "isSelectionCatalogLoading"
+  | "supportsProfiles"
   | "supportsSlashCommands"
   | "supportsFileSearch"
   | "slashCommandCatalog"
@@ -290,6 +291,7 @@ export function useAgentStudioOrchestrationController({
     selectedModelSelection,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
+    supportsProfiles,
     supportsSlashCommands,
     supportsFileSearch,
     slashCommandCatalog,
@@ -486,6 +488,7 @@ export function useAgentStudioOrchestrationController({
       selectedModelSelection,
       selectedModelDescriptor,
       isSelectionCatalogLoading,
+      supportsProfiles: supportsProfiles ?? true,
       supportsSlashCommands,
       supportsFileSearch,
       slashCommandCatalog,

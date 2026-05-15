@@ -1,7 +1,7 @@
 import type { DevServerEvent, DevServerGroupState } from "@openducktor/contracts";
 import { devServerEventSchema } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   type AgentStudioDevServerPanelMode,
   type AgentStudioDevServerPanelModel,
@@ -35,6 +35,49 @@ type UseAgentStudioDevServerPanelArgs = {
   enabled: boolean;
 };
 
+type DevServerPanelLocalState = {
+  liveState: DevServerGroupState | null;
+  actionError: string | null;
+  subscriptionError: string | null;
+};
+
+type DevServerPanelAction =
+  | { type: "scopeReset" }
+  | { type: "liveStateChanged"; state: DevServerGroupState | null }
+  | {
+      type: "liveStateUpdated";
+      update: (current: DevServerGroupState | null) => DevServerGroupState | null;
+    }
+  | { type: "actionStarted" }
+  | { type: "actionFailed"; error: string }
+  | { type: "subscriptionFailed"; error: string }
+  | { type: "eventsSynced" }
+  | { type: "subscriptionReady" };
+
+const devServerPanelReducer = (
+  state: DevServerPanelLocalState,
+  action: DevServerPanelAction,
+): DevServerPanelLocalState => {
+  switch (action.type) {
+    case "scopeReset":
+      return { liveState: null, actionError: null, subscriptionError: null };
+    case "liveStateChanged":
+      return { ...state, liveState: action.state };
+    case "liveStateUpdated":
+      return { ...state, liveState: action.update(state.liveState) };
+    case "actionStarted":
+      return { ...state, actionError: null };
+    case "actionFailed":
+      return { ...state, actionError: action.error };
+    case "subscriptionFailed":
+      return { ...state, subscriptionError: action.error };
+    case "eventsSynced":
+      return { ...state, actionError: null, subscriptionError: null };
+    case "subscriptionReady":
+      return { ...state, subscriptionError: null };
+  }
+};
+
 export function useAgentStudioDevServerPanel({
   repoPath,
   taskId,
@@ -44,9 +87,12 @@ export function useAgentStudioDevServerPanel({
   const queryClient = useQueryClient();
   const forceHydrateFromQueryRef = useRef(false);
   const previousTaskMemoryKeyRef = useRef<string | null | undefined>(undefined);
-  const [liveState, setLiveState] = useState<DevServerGroupState | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
+  const [localState, dispatchLocalState] = useReducer(devServerPanelReducer, {
+    liveState: null,
+    actionError: null,
+    subscriptionError: null,
+  });
+  const { liveState, actionError, subscriptionError } = localState;
 
   const configuredScripts = repoSettings?.devServers ?? [];
   const hasConfiguredScripts = configuredScripts.length > 0;
@@ -160,14 +206,19 @@ export function useAgentStudioDevServerPanel({
       if (event.type !== "terminal_chunk") {
         const queryKey = devServerQueryKeys.state(repoPath, taskId);
         const cachedState = queryClient.getQueryData<DevServerGroupState>(queryKey) ?? null;
-        setLiveState((current) => {
-          const scopedCurrent =
-            current && current.repoPath === repoPath && current.taskId === taskId ? current : null;
-          const nextState = applyDevServerEventToState(cachedState ?? scopedCurrent, event);
-          if (nextState) {
-            queryClient.setQueryData(queryKey, nextState);
-          }
-          return nextState;
+        dispatchLocalState({
+          type: "liveStateUpdated",
+          update: (current) => {
+            const scopedCurrent =
+              current && current.repoPath === repoPath && current.taskId === taskId
+                ? current
+                : null;
+            const nextState = applyDevServerEventToState(cachedState ?? scopedCurrent, event);
+            if (nextState) {
+              queryClient.setQueryData(queryKey, nextState);
+            }
+            return nextState;
+          },
         });
       }
     },
@@ -188,19 +239,15 @@ export function useAgentStudioDevServerPanel({
     if (scopeChanged) {
       clearTerminalBuffers();
       forceHydrateFromQueryRef.current = false;
-      setLiveState(null);
       resetSelectedScript();
-      setActionError(null);
-      setSubscriptionError(null);
+      dispatchLocalState({ type: "scopeReset" });
     }
 
     if (!queryEnabled) {
       clearTerminalBuffers();
       forceHydrateFromQueryRef.current = false;
-      setLiveState(null);
-      setActionError(null);
-      setSubscriptionError(null);
       resetSelectedScript();
+      dispatchLocalState({ type: "scopeReset" });
       return;
     }
 
@@ -215,7 +262,7 @@ export function useAgentStudioDevServerPanel({
         forceHydrateFromQueryRef.current,
       );
       forceHydrateFromQueryRef.current = false;
-      setLiveState(stateQuery.data);
+      dispatchLocalState({ type: "liveStateChanged", state: stateQuery.data });
     }
   }, [
     clearTerminalBuffers,
@@ -232,15 +279,10 @@ export function useAgentStudioDevServerPanel({
 
   const syncQueryState = useCallback(
     (nextState: DevServerGroupState): void => {
-      if (!repoPath || !taskId) {
-        return;
-      }
-
       syncTerminalBuffersFromMutationState(nextState, selectedScriptIdRef.current);
-      queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), nextState);
-      setLiveState(nextState);
+      dispatchLocalState({ type: "liveStateChanged", state: nextState });
     },
-    [queryClient, repoPath, selectedScriptIdRef, syncTerminalBuffersFromMutationState, taskId],
+    [selectedScriptIdRef, syncTerminalBuffersFromMutationState],
   );
 
   const restoreCachedState = useCallback((): void => {
@@ -252,7 +294,7 @@ export function useAgentStudioDevServerPanel({
       queryClient.getQueryData<DevServerGroupState>(devServerQueryKeys.state(repoPath, taskId)) ??
       null;
     replaceTerminalBuffersFromState(cachedState, selectedScriptIdRef.current);
-    setLiveState(cachedState);
+    dispatchLocalState({ type: "liveStateChanged", state: cachedState });
   }, [queryClient, repoPath, replaceTerminalBuffersFromState, selectedScriptIdRef, taskId]);
 
   const invalidateState = useCallback((): void => {
@@ -276,14 +318,19 @@ export function useAgentStudioDevServerPanel({
       return hostClient.devServerStart(repoPath, taskId);
     },
     onMutate: () => {
-      setActionError(null);
+      dispatchLocalState({ type: "actionStarted" });
       beginMutationReplaySync(effectiveState);
     },
-    onSuccess: syncQueryState,
+    onSuccess: (data) => {
+      if (repoPath && taskId) {
+        queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), data);
+      }
+      syncQueryState(data);
+    },
     onError: (error: unknown) => {
       cancelMutationReplaySync();
       restoreCachedState();
-      setActionError(errorMessage(error));
+      dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
     },
     onSettled: (_data, error) => {
       if (error) {
@@ -301,13 +348,18 @@ export function useAgentStudioDevServerPanel({
       return hostClient.devServerStop(repoPath, taskId);
     },
     onMutate: () => {
-      setActionError(null);
+      dispatchLocalState({ type: "actionStarted" });
       beginMutationReplaySync(effectiveState);
     },
-    onSuccess: syncQueryState,
+    onSuccess: (data) => {
+      if (repoPath && taskId) {
+        queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), data);
+      }
+      syncQueryState(data);
+    },
     onError: (error: unknown) => {
       cancelMutationReplaySync();
-      setActionError(errorMessage(error));
+      dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
     },
     onSettled: (_data, error) => {
       if (error) {
@@ -325,13 +377,18 @@ export function useAgentStudioDevServerPanel({
       return hostClient.devServerRestart(repoPath, taskId);
     },
     onMutate: () => {
-      setActionError(null);
+      dispatchLocalState({ type: "actionStarted" });
       beginMutationReplaySync(effectiveState);
     },
-    onSuccess: syncQueryState,
+    onSuccess: (data) => {
+      if (repoPath && taskId) {
+        queryClient.setQueryData(devServerQueryKeys.state(repoPath, taskId), data);
+      }
+      syncQueryState(data);
+    },
     onError: (error: unknown) => {
       cancelMutationReplaySync();
-      setActionError(errorMessage(error));
+      dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
     },
     onSettled: (_data, error) => {
       if (error) {
@@ -363,9 +420,10 @@ export function useAgentStudioDevServerPanel({
             error: parsed.error,
           },
         );
-        setSubscriptionError(
-          `Received invalid dev server event payload: ${errorMessage(parsed.error)}`,
-        );
+        dispatchLocalState({
+          type: "subscriptionFailed",
+          error: `Received invalid dev server event payload: ${errorMessage(parsed.error)}`,
+        });
         return;
       }
 
@@ -381,8 +439,7 @@ export function useAgentStudioDevServerPanel({
       }
 
       syncStateFromEvent(event);
-      setActionError(null);
-      setSubscriptionError(null);
+      dispatchLocalState({ type: "eventsSynced" });
     })
       .then((cleanup) => {
         if (cancelled) {
@@ -391,11 +448,11 @@ export function useAgentStudioDevServerPanel({
         }
 
         unsubscribe = cleanup;
-        setSubscriptionError(null);
+        dispatchLocalState({ type: "subscriptionReady" });
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setSubscriptionError(errorMessage(error));
+          dispatchLocalState({ type: "subscriptionFailed", error: errorMessage(error) });
         }
       });
 
@@ -461,11 +518,11 @@ export function useAgentStudioDevServerPanel({
     isRestartPending: restartMutation.isPending,
     onSelectScript,
     onStart: () => {
-      setActionError(null);
+      dispatchLocalState({ type: "actionStarted" });
       if (effectiveState) {
         const optimisticState = buildOptimisticStartingState(effectiveState);
         replaceTerminalBuffersFromState(optimisticState, selectedScriptIdRef.current);
-        setLiveState(optimisticState);
+        dispatchLocalState({ type: "liveStateChanged", state: optimisticState });
       }
       startMutation.mutate();
     },

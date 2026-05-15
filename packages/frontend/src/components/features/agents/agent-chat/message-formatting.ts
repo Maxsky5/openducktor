@@ -8,16 +8,18 @@ import { stripToolPrefix } from "./tool-text-utils";
 
 export const SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
 
+const MESSAGE_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
 export const formatTime = (timestamp: string): string => {
   const value = new Date(timestamp);
   if (Number.isNaN(value.getTime())) {
     return "";
   }
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(value);
+  return MESSAGE_TIME_FORMATTER.format(value);
 };
 
 export const formatRawJsonLikeText = (value: string): string => {
@@ -90,10 +92,13 @@ export const getAssistantFooterData = (message: AgentChatMessage): { infoParts: 
 
   const providerLabel = assistantMeta.providerId;
   const modelLabel = assistantMeta.modelId;
-  const providerModelLabel = [providerLabel, modelLabel]
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .map((value) => value.trim())
-    .join("/");
+  const providerModelParts: string[] = [];
+  for (const value of [providerLabel, modelLabel]) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      providerModelParts.push(value.trim());
+    }
+  }
+  const providerModelLabel = providerModelParts.join("/");
   if (providerModelLabel.length > 0) {
     parts.push(providerModelLabel);
   }

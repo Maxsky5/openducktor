@@ -6,9 +6,20 @@ import {
 } from "./agent-workflow-schemas";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "./odt-tool-names";
 
-export const knownRuntimeKindValues = ["opencode"] as const;
+export const knownRuntimeKindValues = ["opencode", "codex"] as const;
 export const knownRuntimeKindSchema = z.enum(knownRuntimeKindValues);
 export type KnownRuntimeKind = z.infer<typeof knownRuntimeKindSchema>;
+
+export const codexReasoningEffortValues = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+] as const;
+export const codexReasoningEffortSchema = z.enum(codexReasoningEffortValues);
+export type CodexReasoningEffort = z.infer<typeof codexReasoningEffortSchema>;
 
 export const runtimeKindSchema = knownRuntimeKindSchema;
 export type RuntimeKind = KnownRuntimeKind;

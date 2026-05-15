@@ -382,7 +382,11 @@ const resolveFinalAssistantSnapshot = ({
   event: AssistantMessageEvent;
   shouldPreserveContextUsage: boolean;
 }) => {
-  const nextContextUsage = toSessionContextUsage(current, event.totalTokens, event.model);
+  const baseContextUsage = toSessionContextUsage(current, event.totalTokens, event.model);
+  const nextContextUsage =
+    baseContextUsage && typeof event.contextWindow === "number"
+      ? { ...baseContextUsage, contextWindow: event.contextWindow }
+      : baseContextUsage;
   const resolvedContextUsage = shouldPreserveContextUsage
     ? (current.contextUsage ?? null)
     : nextContextUsage;

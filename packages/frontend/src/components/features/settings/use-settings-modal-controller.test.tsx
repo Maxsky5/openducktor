@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
+  CODEX_RUNTIME_DESCRIPTOR,
   createDefaultAutopilotSettings,
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeDescriptor,
   type RuntimeKind,
   type SettingsSnapshot,
   type WorkspaceRecord,
@@ -22,13 +23,6 @@ import { useSettingsModalController } from "./use-settings-modal-controller";
 
 enableReactActEnvironment();
 
-const CODEX_RUNTIME_DESCRIPTOR = {
-  ...OPENCODE_RUNTIME_DESCRIPTOR,
-  kind: "opencode",
-  label: "Codex",
-  description: "Codex runtime",
-} satisfies RuntimeDescriptor;
-
 const createSettingsSnapshot = (): SettingsSnapshot => ({
   theme: "light",
   git: {
@@ -46,6 +40,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
     emptyColumnDisplay: "show",
   },
   autopilot: createDefaultAutopilotSettings(),
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {
     repo: {
       workspaceId: "repo",
@@ -168,6 +163,8 @@ const createHookHarness = (
 
   const runtimeDefinitionsContext = {
     runtimeDefinitions,
+    availableRuntimeDefinitions: runtimeDefinitions,
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
     refreshRuntimeDefinitions: async () => runtimeDefinitions,
@@ -284,6 +281,33 @@ describe("useSettingsModalController", () => {
     await harness.unmount();
   });
 
+  test("keeps disabled runtimes visible while exposing only enabled runtimes for repository defaults", async () => {
+    const harness = createHookHarness(true);
+    await harness.mount();
+    await harness.waitFor((state) => state.snapshotDraft !== null);
+
+    expect(harness.getLatest().runtimeDefinitions.map((definition) => definition.kind)).toEqual([
+      "opencode",
+      "codex",
+    ]);
+    expect(
+      harness.getLatest().availableRuntimeDefinitions.map((definition) => definition.kind),
+    ).toEqual(["opencode"]);
+
+    await harness.run((state) => {
+      state.updateAgentRuntimes((agentRuntimes) => ({
+        ...agentRuntimes,
+        codex: { enabled: true },
+      }));
+    });
+
+    expect(
+      harness.getLatest().availableRuntimeDefinitions.map((definition) => definition.kind),
+    ).toEqual(["opencode", "codex"]);
+
+    await harness.unmount();
+  });
+
   test("recalculates catalog runtime kinds when the selected repo changes", async () => {
     const loadRepoRuntimeCatalog = mock(async () => ({
       models: [],
@@ -340,6 +364,7 @@ describe("useSettingsModalController", () => {
         showThinkingMessages: true,
       },
       reusablePrompts: [],
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     });
 
     await harness.unmount();

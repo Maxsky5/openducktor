@@ -5,6 +5,10 @@ import { formatTokenCompact } from "./agent-chat/format-token-count";
 
 const isVisibleAgent = (entry: AgentDescriptor): boolean => !entry.hidden;
 
+export const catalogModelOptionValue = (
+  entry: Pick<AgentModelCatalog["models"][number], "providerId" | "modelId">,
+): string => `${entry.providerId}/${entry.modelId}`;
+
 const isPrimaryCatalogAgent = (entry: AgentDescriptor): boolean => {
   return isVisibleAgent(entry) && (entry.mode === "primary" || entry.mode === "all");
 };
@@ -42,7 +46,7 @@ export const toModelOptions = (catalog: AgentModelCatalog | null): ComboboxOptio
   return catalog.models.map((entry) => {
     const contextWindowLabel = formatTokenCompact(entry.contextWindow);
     return {
-      value: entry.id,
+      value: catalogModelOptionValue(entry),
       label: entry.modelName,
       description: entry.modelId,
       ...(contextWindowLabel ? { secondaryLabel: contextWindowLabel } : {}),
@@ -68,7 +72,7 @@ export const toModelGroupsByProvider = (catalog: AgentModelCatalog | null): Comb
     const options = grouped.get(label) ?? [];
     const contextWindowLabel = formatTokenCompact(model.contextWindow);
     options.push({
-      value: model.id,
+      value: catalogModelOptionValue(model),
       label: model.modelName,
       description: model.modelId,
       ...(contextWindowLabel ? { secondaryLabel: contextWindowLabel } : {}),

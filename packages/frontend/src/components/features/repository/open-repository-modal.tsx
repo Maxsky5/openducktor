@@ -1,5 +1,5 @@
 import { CheckCircle2, FolderOpen, Sparkles } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useReducer } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -72,6 +72,164 @@ type OpenRepositoryModalProps = {
   onOpenChange: (open: boolean) => void;
 };
 
+type OpenRepositoryState = {
+  isFolderPickerOpen: boolean;
+  selectedRepoPath: string | null;
+  workspaceName: string;
+  workspaceId: string;
+  hasEditedWorkspaceId: boolean;
+  isCreatingWorkspace: boolean;
+  error: string | null;
+};
+
+type OpenRepositoryAction =
+  | { type: "reset" }
+  | { type: "folderPickerOpened" }
+  | { type: "folderPickerChanged"; open: boolean }
+  | {
+      type: "repoConfirmed";
+      repoPath: string;
+      workspaceName: string;
+      workspaceId: string;
+    }
+  | { type: "workspaceIdChanged"; workspaceId: string }
+  | { type: "workspaceNameChanged"; workspaceName: string; workspaceId: string }
+  | { type: "creationStarted" }
+  | { type: "operationFailed"; error: string }
+  | { type: "creationFinished" };
+
+const initialOpenRepositoryState: OpenRepositoryState = {
+  isFolderPickerOpen: false,
+  selectedRepoPath: null,
+  workspaceName: "",
+  workspaceId: "",
+  hasEditedWorkspaceId: false,
+  isCreatingWorkspace: false,
+  error: null,
+};
+
+const openRepositoryReducer = (
+  state: OpenRepositoryState,
+  action: OpenRepositoryAction,
+): OpenRepositoryState => {
+  switch (action.type) {
+    case "reset":
+      return initialOpenRepositoryState;
+    case "folderPickerOpened":
+      return { ...state, error: null, isFolderPickerOpen: true };
+    case "folderPickerChanged":
+      return { ...state, isFolderPickerOpen: action.open };
+    case "repoConfirmed":
+      return {
+        ...state,
+        selectedRepoPath: action.repoPath,
+        workspaceName: action.workspaceName,
+        workspaceId: action.workspaceId,
+        hasEditedWorkspaceId: false,
+        error: null,
+      };
+    case "workspaceIdChanged":
+      return {
+        ...state,
+        workspaceId: action.workspaceId,
+        hasEditedWorkspaceId: true,
+      };
+    case "workspaceNameChanged":
+      return {
+        ...state,
+        workspaceName: action.workspaceName,
+        workspaceId: action.workspaceId,
+      };
+    case "creationStarted":
+      return { ...state, error: null, isCreatingWorkspace: true };
+    case "operationFailed":
+      return { ...state, error: action.error };
+    case "creationFinished":
+      return { ...state, isCreatingWorkspace: false };
+  }
+};
+
+function OpenRepositoryWorkspaceIdentity({
+  existingWorkspaceIds,
+  form,
+  isModalBusy,
+  onChange,
+}: {
+  existingWorkspaceIds: Set<string>;
+  form: {
+    hasEditedWorkspaceId: boolean;
+    selectedRepoPath: string;
+    workspaceId: string;
+    workspaceName: string;
+  };
+  isModalBusy: boolean;
+  onChange: (action: OpenRepositoryAction) => void;
+}): ReactElement {
+  const { hasEditedWorkspaceId, selectedRepoPath, workspaceId, workspaceName } = form;
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-foreground">Review workspace identity</p>
+        <p className="text-sm text-muted-foreground">
+          OpenDucktor will use this ID as the durable workspace identity. You can edit the name and
+          ID before initialization.
+        </p>
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label htmlFor="open-repo-path">Repository path</Label>
+        <Input
+          id="open-repo-path"
+          value={selectedRepoPath}
+          readOnly
+          disabled={isModalBusy}
+          className="font-mono"
+        />
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label htmlFor="open-workspace-id">Workspace ID</Label>
+        <Input
+          id="open-workspace-id"
+          value={workspaceId}
+          disabled={isModalBusy}
+          className="font-mono"
+          onChange={(event) => {
+            onChange({
+              type: "workspaceIdChanged",
+              workspaceId: event.currentTarget.value.trim(),
+            });
+          }}
+        />
+        <p className="text-xs text-muted-foreground">
+          Use lowercase letters, digits, and dashes only.
+        </p>
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label htmlFor="open-workspace-name">Workspace name</Label>
+        <Input
+          id="open-workspace-name"
+          value={workspaceName}
+          disabled={isModalBusy}
+          onChange={(event) => {
+            const nextWorkspaceName = event.currentTarget.value;
+            const nextWorkspaceId = hasEditedWorkspaceId
+              ? workspaceId
+              : uniquifyWorkspaceId(proposeWorkspaceId(nextWorkspaceName), existingWorkspaceIds);
+            onChange({
+              type: "workspaceNameChanged",
+              workspaceName: nextWorkspaceName,
+              workspaceId: nextWorkspaceId,
+            });
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function OpenRepositoryModal({
   open,
   canClose,
@@ -80,29 +238,26 @@ export function OpenRepositoryModal({
   const { activeWorkspace, workspaces, addWorkspace, selectWorkspace, isSwitchingWorkspace } =
     useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
-  const [selectedRepoPath, setSelectedRepoPath] = useState<string | null>(null);
-  const [workspaceName, setWorkspaceName] = useState("");
-  const [workspaceId, setWorkspaceId] = useState("");
-  const [hasEditedWorkspaceId, setHasEditedWorkspaceId] = useState(false);
-  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(openRepositoryReducer, initialOpenRepositoryState);
+  const {
+    isFolderPickerOpen,
+    selectedRepoPath,
+    workspaceName,
+    workspaceId,
+    hasEditedWorkspaceId,
+    isCreatingWorkspace,
+    error,
+  } = state;
 
   useEffect(() => {
     if (!open) {
-      setIsFolderPickerOpen(false);
-      setSelectedRepoPath(null);
-      setWorkspaceName("");
-      setWorkspaceId("");
-      setHasEditedWorkspaceId(false);
-      setIsCreatingWorkspace(false);
-      setError(null);
+      dispatch({ type: "reset" });
     }
   }, [open]);
 
   const isModalBusy = isSwitchingWorkspace || isCreatingWorkspace;
   const sortedRecent = useMemo(
-    () => [...workspaces].sort((a, b) => Number(b.isActive) - Number(a.isActive)),
+    () => workspaces.toSorted((a, b) => Number(b.isActive) - Number(a.isActive)),
     [workspaces],
   );
   const existingWorkspaceIds = useMemo(
@@ -146,21 +301,21 @@ export function OpenRepositoryModal({
   ]);
 
   const openSelectedRepo = (): void => {
-    setError(null);
-    setIsFolderPickerOpen(true);
+    dispatch({ type: "folderPickerOpened" });
   };
 
   const confirmSelectedRepo = async (path: string): Promise<void> => {
-    setError(null);
     const nextWorkspaceName = deriveWorkspaceNameFromRepoPath(path);
     const nextWorkspaceId = uniquifyWorkspaceId(
       proposeWorkspaceId(nextWorkspaceName),
       existingWorkspaceIds,
     );
-    setSelectedRepoPath(path);
-    setWorkspaceName(nextWorkspaceName);
-    setWorkspaceId(nextWorkspaceId);
-    setHasEditedWorkspaceId(false);
+    dispatch({
+      type: "repoConfirmed",
+      repoPath: path,
+      workspaceName: nextWorkspaceName,
+      workspaceId: nextWorkspaceId,
+    });
   };
 
   const submitWorkspaceCreation = async (): Promise<void> => {
@@ -168,8 +323,7 @@ export function OpenRepositoryModal({
       return;
     }
 
-    setError(null);
-    setIsCreatingWorkspace(true);
+    dispatch({ type: "creationStarted" });
     try {
       await addWorkspace({
         workspaceId: workspaceId.trim(),
@@ -178,14 +332,13 @@ export function OpenRepositoryModal({
       });
       onOpenChange(false);
     } catch (reason) {
-      setError(errorMessage(reason));
+      dispatch({ type: "operationFailed", error: errorMessage(reason) });
     } finally {
-      setIsCreatingWorkspace(false);
+      dispatch({ type: "creationFinished" });
     }
   };
 
   const selectRecentWorkspace = async (workspaceId: string): Promise<void> => {
-    setError(null);
     try {
       const selectedWorkspace = workspaces.find(
         (workspace) => workspace.workspaceId === workspaceId,
@@ -199,7 +352,7 @@ export function OpenRepositoryModal({
       }
       onOpenChange(false);
     } catch (reason) {
-      setError(errorMessage(reason));
+      dispatch({ type: "operationFailed", error: errorMessage(reason) });
     }
   };
 
@@ -251,64 +404,17 @@ export function OpenRepositoryModal({
           </Button>
 
           {selectedRepoPath ? (
-            <div className="space-y-3 rounded-lg border border-border bg-card p-4">
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground">Review workspace identity</p>
-                <p className="text-sm text-muted-foreground">
-                  OpenDucktor will use this ID as the durable workspace identity. You can edit the
-                  name and ID before initialization.
-                </p>
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor="open-repo-path">Repository path</Label>
-                <Input
-                  id="open-repo-path"
-                  value={selectedRepoPath}
-                  readOnly
-                  disabled={isModalBusy}
-                  className="font-mono"
-                />
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor="open-workspace-id">Workspace ID</Label>
-                <Input
-                  id="open-workspace-id"
-                  value={workspaceId}
-                  disabled={isModalBusy}
-                  className="font-mono"
-                  onChange={(event) => {
-                    setHasEditedWorkspaceId(true);
-                    setWorkspaceId(event.currentTarget.value.trim());
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Use lowercase letters, digits, and dashes only.
-                </p>
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor="open-workspace-name">Workspace name</Label>
-                <Input
-                  id="open-workspace-name"
-                  value={workspaceName}
-                  disabled={isModalBusy}
-                  onChange={(event) => {
-                    const nextWorkspaceName = event.currentTarget.value;
-                    setWorkspaceName(nextWorkspaceName);
-                    if (!hasEditedWorkspaceId) {
-                      setWorkspaceId(
-                        uniquifyWorkspaceId(
-                          proposeWorkspaceId(nextWorkspaceName),
-                          existingWorkspaceIds,
-                        ),
-                      );
-                    }
-                  }}
-                />
-              </div>
-            </div>
+            <OpenRepositoryWorkspaceIdentity
+              existingWorkspaceIds={existingWorkspaceIds}
+              form={{
+                hasEditedWorkspaceId,
+                selectedRepoPath,
+                workspaceId,
+                workspaceName,
+              }}
+              isModalBusy={isModalBusy}
+              onChange={dispatch}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">
               Choose a repository folder to review the proposed workspace ID and name before
@@ -381,7 +487,7 @@ export function OpenRepositoryModal({
       {isFolderPickerOpen ? (
         <FolderPickerDialog
           open={isFolderPickerOpen}
-          onOpenChange={setIsFolderPickerOpen}
+          onOpenChange={(nextOpen) => dispatch({ type: "folderPickerChanged", open: nextOpen })}
           title="Open Repository"
           description="Browse to an existing Git repository on disk, then review the proposed workspace ID and name before initialization."
           confirmLabel="Choose This Folder"

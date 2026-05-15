@@ -1,5 +1,5 @@
 import { Check, Pencil, Trash2 } from "lucide-react";
-import { type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, useReducer, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,6 +59,53 @@ export const DiffAnnotationShell = ({ children }: { children: ReactElement }): R
   return <div className="py-2 px-4">{children}</div>;
 };
 
+const EditingDraftCommentCard = ({
+  comment,
+  onCancelEditing,
+  onSaveEditing,
+}: {
+  comment: InlineCommentDraft;
+  onCancelEditing: () => void;
+  onSaveEditing: (commentId: string, text: string) => void;
+}): ReactElement => {
+  const isSubmitting = comment.status === "submitting";
+  const [editingText, setEditingText] = useReducer(
+    (_current: string, next: string) => next,
+    comment.text,
+  );
+
+  return (
+    <>
+      <Textarea
+        value={editingText}
+        className="mt-3 min-h-24"
+        disabled={isSubmitting}
+        onChange={(event) => setEditingText(event.currentTarget.value)}
+      />
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={isSubmitting}
+          onClick={onCancelEditing}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          disabled={isSubmitting || editingText.trim().length === 0}
+          onClick={() => onSaveEditing(comment.id, editingText)}
+        >
+          <Check className="size-4" />
+          Save
+        </Button>
+      </div>
+    </>
+  );
+};
+
 export const DraftCommentCard = ({
   comment,
   isEditing,
@@ -75,13 +122,6 @@ export const DraftCommentCard = ({
   onRemove: (commentId: string) => void;
 }): ReactElement => {
   const isSubmitting = comment.status === "submitting";
-  const [editingText, setEditingText] = useState(comment.text);
-
-  useEffect(() => {
-    if (isEditing) {
-      setEditingText(comment.text);
-    }
-  }, [comment.text, isEditing]);
 
   return (
     <div
@@ -90,34 +130,12 @@ export const DraftCommentCard = ({
     >
       <CommentMeta status={comment.status} />
       {isEditing ? (
-        <>
-          <Textarea
-            value={editingText}
-            className="mt-3 min-h-24"
-            disabled={isSubmitting}
-            onChange={(event) => setEditingText(event.currentTarget.value)}
-          />
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isSubmitting}
-              onClick={onCancelEditing}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={isSubmitting || editingText.trim().length === 0}
-              onClick={() => onSaveEditing(comment.id, editingText)}
-            >
-              <Check className="size-4" />
-              Save
-            </Button>
-          </div>
-        </>
+        <EditingDraftCommentCard
+          key={comment.id}
+          comment={comment}
+          onCancelEditing={onCancelEditing}
+          onSaveEditing={onSaveEditing}
+        />
       ) : (
         <>
           <p className={`mt-3 whitespace-pre-wrap ${COMMENT_BODY_CLASS_NAME}`}>{comment.text}</p>

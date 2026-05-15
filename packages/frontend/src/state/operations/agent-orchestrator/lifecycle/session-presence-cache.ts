@@ -30,13 +30,14 @@ export class AgentSessionPresenceCache {
       directories: string[];
     },
   ): Promise<AgentSessionPresenceSnapshot[]> {
-    const normalizedDirectories = Array.from(
-      new Set(
-        input.directories
-          .map((directory) => normalizeWorkingDirectory(directory))
-          .filter((directory) => directory.length > 0),
-      ),
-    ).sort();
+    const uniqueDirectories = new Set<string>();
+    for (const directory of input.directories) {
+      const normalizedDirectory = normalizeWorkingDirectory(directory);
+      if (normalizedDirectory.length > 0) {
+        uniqueDirectories.add(normalizedDirectory);
+      }
+    }
+    const normalizedDirectories = Array.from(uniqueDirectories).sort();
     if (input.directories.length > 0 && normalizedDirectories.length === 0) {
       throw new Error("Cannot scan session presence without a valid working directory.");
     }

@@ -119,17 +119,20 @@ const flush = async (): Promise<void> => {
 };
 
 const flushAnimationFrames = async (): Promise<void> => {
-  while (animationFrameCallbacks.size > 0) {
-    const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-    animationFrameCallbacks.clear();
-
-    await act(async () => {
-      for (const callback of queuedCallbacks) {
-        callback(16);
-      }
-      await flush();
-    });
+  if (animationFrameCallbacks.size === 0) {
+    return;
   }
+
+  const queuedCallbacks = Array.from(animationFrameCallbacks.values());
+  animationFrameCallbacks.clear();
+
+  await act(async () => {
+    for (const callback of queuedCallbacks) {
+      callback(16);
+    }
+    await flush();
+  });
+  await flushAnimationFrames();
 };
 
 const getMaxScrollTop = (container: HTMLDivElement): number => {

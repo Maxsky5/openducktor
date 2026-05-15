@@ -85,14 +85,18 @@ export const createHookHarness = <Props, State>(
     const hook = rendered;
     const startedAt = Date.now();
 
-    while (Date.now() - startedAt < timeoutMs) {
+    const waitForReadyState = async (): Promise<void> => {
       if (predicate(hook.result.current)) {
         return;
       }
+      if (Date.now() - startedAt >= timeoutMs) {
+        throw new Error("Hook state not ready");
+      }
       await flushHookEffects();
-    }
+      return waitForReadyState();
+    };
 
-    throw new Error("Hook state not ready");
+    return waitForReadyState();
   };
 
   const unmount = async (): Promise<void> => {

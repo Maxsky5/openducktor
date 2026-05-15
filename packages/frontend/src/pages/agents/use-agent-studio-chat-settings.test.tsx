@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
@@ -30,6 +30,7 @@ const hostMock = {
       autopilot: {
         rules: [],
       },
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
       workspaces: {},
       globalPromptOverrides: {},
     }),
@@ -91,6 +92,7 @@ const createSettingsSnapshot = (
     autopilot: {
       rules: [],
     },
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     workspaces: {},
     globalPromptOverrides: {},
     reusablePrompts: [

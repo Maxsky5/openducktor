@@ -18,12 +18,14 @@ type TaskDetailsSheetBodyProps = {
   specDoc: TaskDocumentState;
   planDoc: TaskDocumentState;
   qaDoc: TaskDocumentState;
-  specSummaryUpdatedAt: string | null;
-  planSummaryUpdatedAt: string | null;
-  qaSummaryUpdatedAt: string | null;
-  hasSpecDocument: boolean;
-  hasPlanDocument: boolean;
-  hasQaDocument: boolean;
+  documentSummaries: {
+    specUpdatedAt: string | null;
+    planUpdatedAt: string | null;
+    qaUpdatedAt: string | null;
+    hasSpec: boolean;
+    hasPlan: boolean;
+    hasQa: boolean;
+  };
   loadSpecDocumentSection: () => void;
   loadPlanDocumentSection: () => void;
   loadQaDocumentSection: () => void;
@@ -36,12 +38,7 @@ export function TaskDetailsSheetBody({
   specDoc,
   planDoc,
   qaDoc,
-  specSummaryUpdatedAt,
-  planSummaryUpdatedAt,
-  qaSummaryUpdatedAt,
-  hasSpecDocument,
-  hasPlanDocument,
-  hasQaDocument,
+  documentSummaries,
   loadSpecDocumentSection,
   loadPlanDocumentSection,
   loadQaDocumentSection,
@@ -64,8 +61,8 @@ export function TaskDetailsSheetBody({
         title="Specification"
         empty="No specification yet."
         document={specDoc}
-        hasDocument={hasSpecDocument}
-        summaryUpdatedAt={specSummaryUpdatedAt}
+        hasDocument={documentSummaries.hasSpec}
+        summaryUpdatedAt={documentSummaries.specUpdatedAt}
         onLoad={loadSpecDocumentSection}
         taskId={task.id}
       />
@@ -76,8 +73,8 @@ export function TaskDetailsSheetBody({
         title="Implementation Plan"
         empty="No implementation plan yet."
         document={planDoc}
-        hasDocument={hasPlanDocument}
-        summaryUpdatedAt={planSummaryUpdatedAt}
+        hasDocument={documentSummaries.hasPlan}
+        summaryUpdatedAt={documentSummaries.planUpdatedAt}
         onLoad={loadPlanDocumentSection}
         taskId={task.id}
       />
@@ -88,8 +85,8 @@ export function TaskDetailsSheetBody({
         title="QA Reports"
         empty="No QA report yet."
         document={qaDoc}
-        hasDocument={hasQaDocument}
-        summaryUpdatedAt={qaSummaryUpdatedAt}
+        hasDocument={documentSummaries.hasQa}
+        summaryUpdatedAt={documentSummaries.qaUpdatedAt}
         onLoad={loadQaDocumentSection}
         taskId={task.id}
       />

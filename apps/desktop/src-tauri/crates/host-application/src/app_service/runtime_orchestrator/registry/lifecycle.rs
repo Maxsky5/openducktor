@@ -139,7 +139,7 @@ impl AppService {
         let mut runtime = runtimes
             .remove(runtime_id)
             .ok_or_else(|| anyhow!("Runtime not found: {runtime_id}"))?;
-        let cleanup_result = Self::cleanup_runtime_process(&mut runtime);
+        let cleanup_result = self.cleanup_runtime_process(&mut runtime);
         let clear_startup_result = self.clear_runtime_startup_status_for_runtime(&runtime.summary);
         let clear_repo_health_result = if clear_repo_runtime_health {
             self.clear_repo_runtime_health_status_for_runtime(&runtime.summary)
@@ -243,7 +243,7 @@ impl AppService {
                             runtime.summary.runtime_id, error
                         ));
                     }
-                    if let Err(error) = Self::cleanup_runtime_process(&mut runtime) {
+                    if let Err(error) = self.cleanup_runtime_process(&mut runtime) {
                         cleanup_errors.push(format!(
                             "Failed shutting down runtime {}: {}",
                             runtime.summary.runtime_id, error
@@ -321,7 +321,7 @@ impl AppService {
                         "Failed clearing repo runtime health status for stale runtime {runtime_id}: {error}"
                     ));
                 }
-                if let Err(error) = Self::cleanup_runtime_process(&mut runtime) {
+                if let Err(error) = self.cleanup_runtime_process(&mut runtime) {
                     cleanup_errors.push(format!(
                         "Failed pruning stale runtime {runtime_id}: {error}"
                     ));

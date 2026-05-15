@@ -36,7 +36,7 @@ export function TaskDetailsForm({
     <div className="flex flex-col gap-4">
       <div className="grid gap-2">
         <Label>Issue Type *</Label>
-        <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-card px-3 py-3">
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-card p-3">
           <div className="flex min-w-0 items-start gap-3">
             <span
               className={cn(
@@ -83,7 +83,7 @@ export function TaskDetailsForm({
           <Combobox
             value={String(state.priority)}
             options={priorityOptions}
-            searchPlaceholder="Search priority..."
+            searchPlaceholder="Search priority…"
             onValueChange={(nextValue) => {
               const parsed = Number(nextValue);
               if (!Number.isNaN(parsed)) {

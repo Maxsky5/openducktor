@@ -565,6 +565,20 @@ describe("agent-chat-message-card-model", () => {
       ).toContain("bun run test");
     });
 
+    test("prefers bash input command over shell wrapper titles", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "bash",
+            title: "/bin/zsh -lc 'cd /repo && bun test'",
+            preview: "/bin/zsh -lc 'cd /repo && bun test'",
+            input: { command: "cd /repo && bun test" },
+          }),
+          "",
+        ),
+      ).toBe("cd /repo && bun test");
+    });
+
     test("builds summaries from structured output and falls back to content", () => {
       expect(
         buildToolSummary(
@@ -1060,6 +1074,123 @@ describe("agent-chat-message-card-model", () => {
         {
           filePath: "src/second.ts",
           diff: "--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+      ]);
+    });
+
+    test("extracts Codex file changes from metadata entries", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          metadata: {
+            changes: [
+              { path: "/repo/src/first.ts", diff: "@@ -1 +1 @@\n-old\n+new\n" },
+              { path: "/repo/src/second.ts", diff: "@@ -1 +1,2 @@\n-old\n+new\n+line\n" },
+            ],
+          },
+        }),
+        "/repo",
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/first.ts",
+          diff: "--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+        {
+          filePath: "src/second.ts",
+          diff: "--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+          additions: 2,
+          deletions: 1,
+        },
+      ]);
+    });
+
+    test("extracts Codex file changes from metadata diffs entries", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          metadata: {
+            diffs: [{ path: "/repo/src/app.ts", diff: "@@ -1 +1 @@\n-old\n+new\n" }],
+          },
+        }),
+        "/repo",
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/app.ts",
+          diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+      ]);
+    });
+
+    test("extracts apply_patch custom tool patches from Codex hydration", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          input: {
+            patch:
+              "*** Begin Patch\n" +
+              "*** Update File: /repo/src/app.ts\n" +
+              "@@\n" +
+              "-old\n" +
+              "+new\n" +
+              "*** End Patch\n",
+          },
+        }),
+        "/repo",
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/app.ts",
+          diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n",
+          additions: 1,
+          deletions: 1,
+        },
+      ]);
+    });
+
+    test("extracts every file from multi-file Codex apply_patch input", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "apply_patch",
+          input: {
+            patch:
+              "*** Begin Patch\n" +
+              "*** Add File: /repo/src/new.ts\n" +
+              "+export const created = true;\n" +
+              "*** Update File: /repo/src/app.ts\n" +
+              "@@\n" +
+              "-old\n" +
+              "+new\n" +
+              "*** End Patch\n",
+          },
+        }),
+        "/repo",
+      );
+
+      expect(data).toEqual([
+        {
+          filePath: "src/new.ts",
+          diff:
+            "--- /dev/null\n" +
+            "+++ b/src/new.ts\n" +
+            "@@ -0,0 +1,1 @@\n" +
+            "+export const created = true;\n",
+          additions: 1,
+          deletions: 0,
+        },
+        {
+          filePath: "src/app.ts",
+          diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n",
           additions: 1,
           deletions: 1,
         },

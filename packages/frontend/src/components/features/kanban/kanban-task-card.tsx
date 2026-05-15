@@ -508,7 +508,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         <BorderRay turnDurationMs={2500} strokeWidth={4.4} className="kanban-active-session-ray" />
       ) : null}
 
-      <div className="kanban-active-session-content flex min-w-0 flex-col space-y-1 p-3.5">
+      <div className="kanban-active-session-content flex min-w-0 flex-col gap-y-1 p-3.5">
         {/* biome-ignore lint/a11y/useSemanticElements: TaskIdBadge contains a button element */}
         <div
           role="button"

@@ -153,8 +153,7 @@ export const createLoadAgentSessions = ({
     if (requestedHistoryKey) {
       const existingLoad = inFlightRequestedHistoryLoads.get(requestedHistoryKey);
       if (existingLoad) {
-        await existingLoad;
-        return;
+        return existingLoad;
       }
     }
     if (runtimeAttachmentRecoveryKeyWithSignal) {
@@ -162,8 +161,7 @@ export const createLoadAgentSessions = ({
         runtimeAttachmentRecoveryKeyWithSignal,
       );
       if (existingLoad) {
-        await existingLoad;
-        return;
+        return existingLoad;
       }
     }
 
@@ -183,15 +181,11 @@ export const createLoadAgentSessions = ({
           },
           loadRepoPromptOverrides,
         });
-      if (isStaleRepoOperation()) {
-        return;
-      }
-
-      if (!intent.shouldHydrateRequestedSession && !intent.shouldReconcileLiveSessions) {
-        return;
-      }
-
-      if (recordsToHydrate.length === 0) {
+      const shouldSkipHydration =
+        isStaleRepoOperation() ||
+        (!intent.shouldHydrateRequestedSession && !intent.shouldReconcileLiveSessions) ||
+        recordsToHydrate.length === 0;
+      if (shouldSkipHydration) {
         return;
       }
 
@@ -220,40 +214,38 @@ export const createLoadAgentSessions = ({
         promptAssembler,
         getRepoPromptOverrides,
       });
-      if (isStaleRepoOperation()) {
-        return;
-      }
-
-      const effectiveHistoryHydrationSessionIds = new Set(historyHydrationSessionIds);
-      if (intent.historyPolicy === "live_if_empty") {
-        for (const externalSessionId of reattachedSessionIds) {
-          const currentSession = sessionsRef.current[externalSessionId];
-          if (!currentSession) {
-            continue;
+      if (!isStaleRepoOperation()) {
+        const effectiveHistoryHydrationSessionIds = new Set(historyHydrationSessionIds);
+        if (intent.historyPolicy === "live_if_empty") {
+          for (const externalSessionId of reattachedSessionIds) {
+            const currentSession = sessionsRef.current[externalSessionId];
+            if (!currentSession) {
+              continue;
+            }
+            const hasHydratedHistory = currentSession.historyHydrationState === "hydrated";
+            if (hasHydratedHistory && getSessionMessageCount(currentSession) > 0) {
+              continue;
+            }
+            effectiveHistoryHydrationSessionIds.add(externalSessionId);
           }
-          const hasHydratedHistory = currentSession.historyHydrationState === "hydrated";
-          if (hasHydratedHistory && getSessionMessageCount(currentSession) > 0) {
-            continue;
-          }
-          effectiveHistoryHydrationSessionIds.add(externalSessionId);
         }
-      }
 
-      await hydrateSessionRecordsStage({
-        loadMode: intent.mode,
-        repoPath: intent.repoPath,
-        adapter,
-        setSessionsById,
-        updateSession,
-        isStaleRepoOperation,
-        recordsToHydrate,
-        historyHydrationSessionIds: effectiveHistoryHydrationSessionIds,
-        failOnRuntimeResolutionError: true,
-        runtimePlanner,
-        promptAssembler,
-        getRepoPromptOverrides,
-        livePresenceMode: intent.shouldReconcileLiveSessions ? "apply" : "skip",
-      });
+        await hydrateSessionRecordsStage({
+          loadMode: intent.mode,
+          repoPath: intent.repoPath,
+          adapter,
+          setSessionsById,
+          updateSession,
+          isStaleRepoOperation,
+          recordsToHydrate,
+          historyHydrationSessionIds: effectiveHistoryHydrationSessionIds,
+          failOnRuntimeResolutionError: true,
+          runtimePlanner,
+          promptAssembler,
+          getRepoPromptOverrides,
+          livePresenceMode: intent.shouldReconcileLiveSessions ? "apply" : "skip",
+        });
+      }
     };
 
     if (!requestedHistoryKey && !runtimeAttachmentRecoveryKeyWithSignal) {

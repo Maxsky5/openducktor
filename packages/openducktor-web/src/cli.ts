@@ -8,7 +8,6 @@ type CliOptions = {
   workspaceMode: boolean;
   frontendPort: number;
   backendPort: number;
-  explicitHostBinary?: string;
 };
 
 const DEFAULT_FRONTEND_PORT = 1420;
@@ -16,7 +15,7 @@ const DEFAULT_BACKEND_PORT = 14327;
 
 const printHelp = (): void => {
   console.log(
-    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend Vite port (default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local Rust host port (default ${DEFAULT_BACKEND_PORT})\n  --host-binary <path>    Use an explicit openducktor-web-host binary\n  --workspace             Use the repo-local Rust workspace binary for development\n  -h, --help              Show this help`,
+    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend Vite port (default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local TypeScript host port (default ${DEFAULT_BACKEND_PORT})\n  --workspace             Serve the repo-local frontend with Vite for development\n  -h, --help              Show this help`,
   );
 };
 
@@ -58,15 +57,6 @@ export const parseCliArgs = (args: string[]): CliOptions => {
       index += 1;
       continue;
     }
-    if (arg === "--host-binary") {
-      const value = args[index + 1];
-      if (!value) {
-        throw new Error("Missing value for --host-binary.");
-      }
-      options.explicitHostBinary = value;
-      index += 1;
-      continue;
-    }
     if (arg === "-h" || arg === "--help") {
       printHelp();
       process.exit(0);
@@ -92,11 +82,7 @@ const runCli = async (): Promise<void> => {
       frontendPort: cliOptions.frontendPort,
       backendPort: cliOptions.backendPort,
     };
-    const exitCode = await runLauncher(
-      cliOptions.explicitHostBinary
-        ? { ...launcherOptions, explicitHostBinary: cliOptions.explicitHostBinary }
-        : launcherOptions,
-    );
+    const exitCode = await runLauncher(launcherOptions);
     process.exit(exitCode);
   } catch (error) {
     logError(error instanceof Error ? error.message : String(error));

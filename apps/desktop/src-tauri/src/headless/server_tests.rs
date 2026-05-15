@@ -588,6 +588,7 @@ fn headless_state(task_store: Arc<dyn TaskStore>, config_store: AppConfigStore) 
         events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
         dev_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
         task_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
+        codex_app_server_events: HeadlessEventBus::new(EVENT_BUFFER_CAPACITY),
         pull_request_sync_stop_requested: Arc::new(AtomicBool::new(false)),
         registry: Arc::new(build_registry().expect("registry should build")),
         shutdown_signal: Arc::new(Notify::new()),

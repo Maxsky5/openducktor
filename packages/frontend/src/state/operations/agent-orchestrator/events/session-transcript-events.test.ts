@@ -226,107 +226,109 @@ describe("agent-orchestrator session transcript events", () => {
       },
     ] as const;
 
-    for (const testCase of cases) {
-      const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-      let refreshTaskDataCalls = 0;
-      const refreshTaskDataArgs: Array<[string, string | undefined]> = [];
+    await Promise.all(
+      cases.map(async (testCase) => {
+        const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+        let refreshTaskDataCalls = 0;
+        const refreshTaskDataArgs: Array<[string, string | undefined]> = [];
 
-      const adapter: SessionEventAdapter = {
-        subscribeEvents: (_externalSessionId, handler) => {
-          handlers.push(
-            handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
-          );
-          return () => {};
-        },
-        replyApproval: async () => {},
-      };
-
-      const sessionsRef: { current: Record<string, AgentSessionState> } = {
-        current: {
-          "session-1": buildSession({ role: "build" }),
-        },
-      };
-
-      const updateSession = (
-        externalSessionId: string,
-        updater: (current: AgentSessionState) => AgentSessionState,
-      ) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current = {
-          ...sessionsRef.current,
-          [externalSessionId]: updater(current),
+        const adapter: SessionEventAdapter = {
+          subscribeEvents: (_externalSessionId, handler) => {
+            handlers.push(
+              handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+            );
+            return () => {};
+          },
+          replyApproval: async () => {},
         };
-      };
 
-      attachAgentSessionListener({
-        adapter,
-        repoPath: "/tmp/repo",
-        externalSessionId: "session-1",
-        sessionsRef,
-        draftRawBySessionRef: { current: {} },
-        draftSourceBySessionRef: { current: {} },
-        draftMessageIdBySessionRef: { current: {} },
-        draftFlushTimeoutBySessionRef: { current: {} },
-        turnStartedAtBySessionRef: { current: {} },
-        updateSession,
-        resolveTurnDurationMs: () => undefined,
-        clearTurnDuration: () => {},
-        refreshTaskData: async (repoPath, taskIdOrIds) => {
-          refreshTaskDataCalls += 1;
-          refreshTaskDataArgs.push([
-            repoPath,
-            typeof taskIdOrIds === "string" ? taskIdOrIds : undefined,
-          ]);
-        },
-      });
+        const sessionsRef: { current: Record<string, AgentSessionState> } = {
+          current: {
+            "session-1": buildSession({ role: "build" }),
+          },
+        };
 
-      const handleEvent = handlers[0];
-      if (!handleEvent) {
-        throw new Error("Expected session event handler to be registered");
-      }
+        const updateSession = (
+          externalSessionId: string,
+          updater: (current: AgentSessionState) => AgentSessionState,
+        ) => {
+          const current = sessionsRef.current[externalSessionId];
+          if (!current) {
+            return;
+          }
+          sessionsRef.current = {
+            ...sessionsRef.current,
+            [externalSessionId]: updater(current),
+          };
+        };
 
-      handleEvent({
-        type: "assistant_part",
-        externalSessionId: "session-1",
-        timestamp: "2026-02-22T08:00:05.000Z",
-        part: {
-          kind: "tool",
-          messageId: "tool-msg-dup",
-          partId: "part-dup",
-          callId: "call-dup",
-          tool: testCase.tool,
-          status: "completed",
-          output: testCase.output,
-          error: "",
-        },
-      });
+        attachAgentSessionListener({
+          adapter,
+          repoPath: "/tmp/repo",
+          externalSessionId: "session-1",
+          sessionsRef,
+          draftRawBySessionRef: { current: {} },
+          draftSourceBySessionRef: { current: {} },
+          draftMessageIdBySessionRef: { current: {} },
+          draftFlushTimeoutBySessionRef: { current: {} },
+          turnStartedAtBySessionRef: { current: {} },
+          updateSession,
+          resolveTurnDurationMs: () => undefined,
+          clearTurnDuration: () => {},
+          refreshTaskData: async (repoPath, taskIdOrIds) => {
+            refreshTaskDataCalls += 1;
+            refreshTaskDataArgs.push([
+              repoPath,
+              typeof taskIdOrIds === "string" ? taskIdOrIds : undefined,
+            ]);
+          },
+        });
 
-      handleEvent({
-        type: "assistant_part",
-        externalSessionId: "session-1",
-        timestamp: "2026-02-22T08:00:06.000Z",
-        part: {
-          kind: "tool",
-          messageId: "tool-msg-dup",
-          partId: "part-dup",
-          callId: "call-dup",
-          tool: testCase.tool,
-          status: "completed",
-          output: testCase.output,
-          error: "",
-        },
-      });
+        const handleEvent = handlers[0];
+        if (!handleEvent) {
+          throw new Error("Expected session event handler to be registered");
+        }
 
-      await Promise.resolve();
+        handleEvent({
+          type: "assistant_part",
+          externalSessionId: "session-1",
+          timestamp: "2026-02-22T08:00:05.000Z",
+          part: {
+            kind: "tool",
+            messageId: "tool-msg-dup",
+            partId: "part-dup",
+            callId: "call-dup",
+            tool: testCase.tool,
+            status: "completed",
+            output: testCase.output,
+            error: "",
+          },
+        });
 
-      expect(refreshTaskDataCalls).toBe(testCase.expectedRefreshTaskDataCalls);
-      if (testCase.expectedRefreshTaskDataCalls > 0) {
-        expect(refreshTaskDataArgs).toEqual([["/tmp/repo", "task-1"]]);
-      }
-    }
+        handleEvent({
+          type: "assistant_part",
+          externalSessionId: "session-1",
+          timestamp: "2026-02-22T08:00:06.000Z",
+          part: {
+            kind: "tool",
+            messageId: "tool-msg-dup",
+            partId: "part-dup",
+            callId: "call-dup",
+            tool: testCase.tool,
+            status: "completed",
+            output: testCase.output,
+            error: "",
+          },
+        });
+
+        await Promise.resolve();
+
+        expect(refreshTaskDataCalls).toBe(testCase.expectedRefreshTaskDataCalls);
+        if (testCase.expectedRefreshTaskDataCalls > 0) {
+          expect(refreshTaskDataArgs).toEqual([["/tmp/repo", "task-1"]]);
+        }
+      }),
+    );
   });
 
   test("writes canonical user_message events into the transcript", async () => {
