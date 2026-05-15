@@ -241,8 +241,8 @@ export const createCodexWorkspaceRuntimeStarter = ({
       await transport.notify("initialized", {});
     } catch (error) {
       codexAppServer.unregisterTransport(nextRuntimeId);
-      await transport.close();
       await stopChildProcess(child, pid, () => closed, stopTimeoutMs);
+      await transport.close();
       throw error;
     }
 
@@ -265,8 +265,8 @@ export const createCodexWorkspaceRuntimeStarter = ({
       runtime,
       async stop() {
         codexAppServer.unregisterTransport(nextRuntimeId);
-        await transport.close();
         await stopChildProcess(child, pid, () => closed, stopTimeoutMs);
+        await transport.close();
       },
     };
   },
