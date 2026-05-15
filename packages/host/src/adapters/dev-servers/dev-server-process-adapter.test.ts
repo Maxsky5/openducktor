@@ -14,19 +14,37 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 500): Promise<void>
   }
 };
 
-const createCommandScript = async (
+const quoteShellArg = (value: string): string =>
+  process.platform === "win32"
+    ? `"${value.replaceAll('"', '""')}"`
+    : `'${value.replaceAll("'", "'\\''")}'`;
+
+const createBunScriptCommand = async (
+  root: string,
+  name: string,
+  source: string,
+): Promise<string> => {
+  const scriptPath = join(root, `${name}.js`);
+  await writeFile(scriptPath, source);
+  return `${quoteShellArg(process.execPath)} ${quoteShellArg(scriptPath)}`;
+};
+
+const createShellScriptCommand = async (
   root: string,
   name: string,
   content: string,
 ): Promise<string> => {
-  const scriptPath = join(root, process.platform === "win32" ? `${name}.cmd` : name);
+  const scriptPath = join(root, name);
   await writeFile(scriptPath, content);
-  if (process.platform !== "win32") {
-    await chmod(scriptPath, 0o755);
+  await chmod(scriptPath, 0o755);
+  return quoteShellArg(scriptPath);
+};
+
+const createCommandScript = async (root: string, name: string, source: string): Promise<string> => {
+  if (process.platform === "win32") {
+    return createBunScriptCommand(root, name, source);
   }
-  return process.platform === "win32"
-    ? `"${scriptPath}"`
-    : `'${scriptPath.replaceAll("'", "'\\''")}'`;
+  return createShellScriptCommand(root, name, source);
 };
 
 describe("createDevServerProcessAdapter", () => {
@@ -44,7 +62,7 @@ describe("createDevServerProcessAdapter", () => {
         root,
         "dev-server",
         process.platform === "win32"
-          ? "@echo off\r\necho ready\r\nping -n 6 127.0.0.1 > nul\r\n"
+          ? 'process.stdout.write("ready"); setInterval(function() {}, 5000);\n'
           : "#!/bin/sh\nprintf ready\nsleep 5\n",
       );
 
@@ -81,7 +99,7 @@ describe("createDevServerProcessAdapter", () => {
       const command = await createCommandScript(
         root,
         "exit-server",
-        process.platform === "win32" ? "@echo off\r\nexit /b 42\r\n" : "#!/bin/sh\nexit 42\n",
+        process.platform === "win32" ? "process.exit(42);\n" : "#!/bin/sh\nexit 42\n",
       );
 
       await expect(
