@@ -265,11 +265,22 @@ impl CodexAppServerTransport {
             match reader.read_line(&mut line) {
                 Ok(0) => break,
                 Ok(_) => {
-                    if line.trim().is_empty() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
                         continue;
                     }
+                    tracing::warn!(
+                        "Codex app-server stderr for runtime {}: {trimmed}",
+                        self.inner.identity
+                    );
                 }
-                Err(_) => break,
+                Err(error) => {
+                    tracing::warn!(
+                        "Failed reading Codex app-server stderr for runtime {}: {error}",
+                        self.inner.identity
+                    );
+                    break;
+                }
             }
         }
     }

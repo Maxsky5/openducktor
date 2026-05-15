@@ -33,6 +33,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   saveError: null,
   snapshotDraft: snapshot,
   runtimeDefinitions: [],
+  availableRuntimeDefinitions: [],
   runtimeCheck: null,
   getCatalogForRuntime: () => null,
   getCatalogErrorForRuntime: () => null,
@@ -193,6 +194,7 @@ describe("settings modal content", () => {
     const controller = {
       ...createMockController(createMockSnapshot()),
       runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
+      availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     };
 
     const html = renderToStaticMarkup(

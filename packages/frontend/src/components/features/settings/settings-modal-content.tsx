@@ -55,6 +55,7 @@ export function SettingsModalContent({
     runtimeDefinitionsError,
     snapshotDraft,
     runtimeDefinitions,
+    availableRuntimeDefinitions,
     updateAgentRuntimes,
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
@@ -260,8 +261,7 @@ export function SettingsModalContent({
         {repositorySection === "agents" ? (
           <RepositoryAgentsSection
             selectedRepoConfig={selectedRepoConfig}
-            agentRuntimes={snapshotDraft.agentRuntimes}
-            runtimeDefinitions={runtimeDefinitions}
+            availableRuntimeDefinitions={availableRuntimeDefinitions}
             loadingState={{
               isLoadingRuntimeDefinitions,
               isLoadingCatalog,

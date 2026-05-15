@@ -41,6 +41,27 @@ export type CodexTokenUsageTotals = {
   contextWindow?: number;
 };
 
+const extractOptionalFiniteNumberField = (
+  value: Record<string, unknown>,
+  keys: string[],
+  label: string,
+): number | null => {
+  for (const key of keys) {
+    if (!Object.hasOwn(value, key)) {
+      continue;
+    }
+    const candidate = value[key];
+    if (candidate === null || candidate === undefined) {
+      return null;
+    }
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return candidate;
+    }
+    throw new Error(`Codex commandExecution ${label} must be a finite number when present.`);
+  }
+  return null;
+};
+
 export type CodexTurnTiming = {
   durationMs?: number;
 };
@@ -620,9 +641,20 @@ export const toStreamPart = (
     const explicitError = stringifyJsonValue(value.error);
     const status = statusFromCodexStatus(value.status);
     const error = explicitError ?? (status === "error" ? output : null);
-    const startedAtMs = extractNumberField(value, ["startedAtMs", "started_at_ms"]);
-    const durationMs = extractNumberField(value, ["durationMs", "duration_ms"]);
-    const endedAtMs = startedAtMs && durationMs ? startedAtMs + durationMs : null;
+    const startedAtMs = extractOptionalFiniteNumberField(
+      value,
+      ["startedAtMs", "started_at_ms"],
+      "startedAtMs",
+    );
+    const durationMs = extractOptionalFiniteNumberField(
+      value,
+      ["durationMs", "duration_ms"],
+      "durationMs",
+    );
+    const endedAtMs =
+      typeof startedAtMs === "number" && typeof durationMs === "number"
+        ? startedAtMs + durationMs
+        : null;
     return [
       normalizeCodexToolInvocation({
         messageId,

@@ -79,6 +79,51 @@ describe("Codex tool normalization", () => {
     expect(part).not.toEqual(expect.objectContaining({ output: expect.stringContaining("patch") }));
   });
 
+  test("keeps zero command timing values when Codex provides them", () => {
+    const part = toStreamPart(
+      {
+        type: "commandExecution",
+        id: "cmd-1",
+        command: "true",
+        cwd: "/repo",
+        status: "completed",
+        commandActions: [],
+        aggregatedOutput: "",
+        startedAtMs: 0,
+        durationMs: 0,
+      },
+      "message-live",
+      "cmd-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        startedAtMs: 0,
+        endedAtMs: 0,
+      }),
+    );
+  });
+
+  test("rejects malformed command timing fields when Codex provides them", () => {
+    expect(() =>
+      toStreamPart(
+        {
+          type: "commandExecution",
+          id: "cmd-1",
+          command: "true",
+          cwd: "/repo",
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "",
+          durationMs: "0",
+        },
+        "message-live",
+        "cmd-1",
+      ),
+    ).toThrow("Codex commandExecution durationMs must be a finite number when present.");
+  });
+
   test("uses Codex web search action details when top-level query is absent", () => {
     const part = toStreamPart(
       {

@@ -408,6 +408,34 @@ describe("CodexAppServerAdapter approvals", () => {
     });
   });
 
+  test("rejects malformed approval request ids before replying to the Codex server", async () => {
+    const { adapter, respondServerRequest } = createHarness();
+
+    await expect(
+      adapter.replyApproval({
+        externalSessionId: "thread/start-runtime-ensure",
+        requestId: "not-a-number",
+        outcome: "approve_once",
+      }),
+    ).rejects.toThrow("Codex approval request id 'not-a-number' must be numeric.");
+
+    expect(respondServerRequest).toHaveBeenCalledTimes(0);
+  });
+
+  test("rejects malformed question request ids before replying to the Codex server", async () => {
+    const { adapter, respondServerRequest } = createHarness();
+
+    await expect(
+      adapter.replyQuestion({
+        externalSessionId: "thread/start-runtime-ensure",
+        requestId: "32.5",
+        answers: [["yes"]],
+      }),
+    ).rejects.toThrow("Codex question request id '32.5' must be numeric.");
+
+    expect(respondServerRequest).toHaveBeenCalledTimes(0);
+  });
+
   test("continues a paused turn from streamed requests after approval replies", async () => {
     const dynamicToolRejected = createDeferred<void>();
     const respondServerRequest = mock(async (_runtimeId: string, requestId: number) => {

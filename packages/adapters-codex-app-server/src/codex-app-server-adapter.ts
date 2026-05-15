@@ -109,6 +109,22 @@ import type {
 
 export { createCodexAppServerClient } from "./app-server-client";
 
+const requireCodexServerRequestId = (requestId: string, requestType: string): number => {
+  const trimmed = requestId.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error(`Codex ${requestType} request id '${requestId}' must be numeric.`);
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(
+      `Codex ${requestType} request id '${requestId}' exceeds the safe integer range.`,
+    );
+  }
+
+  return parsed;
+};
+
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
@@ -353,10 +369,21 @@ export class CodexAppServerAdapter
     const existingActiveTurn = this.activeTurnsBySessionId.get(session.threadId);
     if (existingActiveTurn && !existingActiveTurn.isTurnSettled()) {
       const didSteer = await this.steerActiveTurn(existingActiveTurn, parts);
-      if (!didSteer) {
-        await this.startTurnForSession(externalSessionId, parts, requestedModel);
+      if (didSteer) {
+        return;
       }
-      return;
+
+      const latestActiveTurn = this.activeTurnsBySessionId.get(session.threadId);
+      if (latestActiveTurn && !latestActiveTurn.isTurnSettled()) {
+        throw new Error(
+          `Codex session '${externalSessionId}' still has an active turn after steering failed.`,
+        );
+      }
+    }
+
+    const staleActiveTurn = this.activeTurnsBySessionId.get(session.threadId);
+    if (staleActiveTurn?.isTurnSettled()) {
+      this.activeTurnsBySessionId.delete(session.threadId);
     }
 
     let turnSettled = false;
@@ -656,6 +683,7 @@ export class CodexAppServerAdapter
   }
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
+    const requestId = requireCodexServerRequestId(input.requestId, "approval");
     const pending = this.pendingApprovalsByRequestId.get(input.requestId);
     if (!pending) {
       throw new Error(`Unknown Codex approval request '${input.requestId}'.`);
@@ -666,7 +694,7 @@ export class CodexAppServerAdapter
     const approved = input.outcome === "approve_once";
     await this.options.respondServerRequest(
       pending.runtimeId,
-      Number(input.requestId),
+      requestId,
       {
         approved,
         outcome: input.outcome,
@@ -686,6 +714,7 @@ export class CodexAppServerAdapter
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
+    const requestId = requireCodexServerRequestId(input.requestId, "question");
     const pending = this.pendingQuestionsByRequestId.get(input.requestId);
     if (!pending) {
       throw new Error(`Unknown Codex question request '${input.requestId}'.`);
@@ -707,12 +736,7 @@ export class CodexAppServerAdapter
       ]),
     );
     const output = JSON.stringify({ answers });
-    await this.options.respondServerRequest(
-      pending.runtimeId,
-      Number(input.requestId),
-      { answers },
-      undefined,
-    );
+    await this.options.respondServerRequest(pending.runtimeId, requestId, { answers }, undefined);
     this.emitSessionEvent(input.externalSessionId, {
       type: "assistant_part",
       externalSessionId: input.externalSessionId,

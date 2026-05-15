@@ -49,6 +49,7 @@ export type SettingsModalController = {
   saveError: string | null;
   snapshotDraft: SettingsSnapshot | null;
   runtimeDefinitions: RuntimeDescriptor[];
+  availableRuntimeDefinitions: RuntimeDescriptor[];
   runtimeCheck: RuntimeCheck | null;
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
@@ -139,7 +140,7 @@ export const useSettingsModalController = ({
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeCheck } = checksState;
   const {
-    availableRuntimeDefinitions: runtimeDefinitions,
+    allRuntimeDefinitions: runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
   } = useRuntimeAvailabilityContext();
@@ -180,18 +181,19 @@ export const useSettingsModalController = ({
     selectedRepoPath: selectedWorkspaceRepoPath,
   });
 
-  const catalogRuntimeKinds = useMemo(
+  const availableRuntimeDefinitions = useMemo(
     () =>
-      getNeededCatalogRuntimeKinds(
-        selectedRepoConfig,
-        snapshotDraft
-          ? getAvailableRuntimeDefinitions({
-              runtimeDefinitions,
-              agentRuntimes: snapshotDraft.agentRuntimes,
-            })
-          : [],
-      ),
-    [selectedRepoConfig, runtimeDefinitions, snapshotDraft],
+      snapshotDraft
+        ? getAvailableRuntimeDefinitions({
+            runtimeDefinitions,
+            agentRuntimes: snapshotDraft.agentRuntimes,
+          })
+        : [],
+    [runtimeDefinitions, snapshotDraft],
+  );
+  const catalogRuntimeKinds = useMemo(
+    () => getNeededCatalogRuntimeKinds(selectedRepoConfig, availableRuntimeDefinitions),
+    [availableRuntimeDefinitions, selectedRepoConfig],
   );
 
   const {
@@ -381,6 +383,7 @@ export const useSettingsModalController = ({
     saveError,
     snapshotDraft,
     runtimeDefinitions,
+    availableRuntimeDefinitions,
     runtimeCheck,
     getCatalogForRuntime,
     getCatalogErrorForRuntime,

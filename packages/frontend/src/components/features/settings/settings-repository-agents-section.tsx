@@ -1,9 +1,4 @@
-import type {
-  AgentRuntimes,
-  RepoConfig,
-  RuntimeDescriptor,
-  RuntimeKind,
-} from "@openducktor/contracts";
+import type { RepoConfig, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ReactElement } from "react";
 import {
@@ -26,15 +21,13 @@ import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import {
   findRuntimeDefinition,
-  getAvailableRuntimeDefinitions,
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
 
 type RepositoryAgentsSectionProps = {
   selectedRepoConfig: RepoConfig | null;
-  agentRuntimes: AgentRuntimes;
-  runtimeDefinitions: RuntimeDescriptor[];
+  availableRuntimeDefinitions: RuntimeDescriptor[];
   loadingState: {
     isLoadingRuntimeDefinitions: boolean;
     isLoadingCatalog: boolean;
@@ -161,8 +154,7 @@ const findMissingRoleLabels = ({
 
 export function RepositoryAgentsSection({
   selectedRepoConfig,
-  agentRuntimes,
-  runtimeDefinitions,
+  availableRuntimeDefinitions,
   loadingState,
   runtimeDefinitionsError,
   runtimeAvailabilityErrors,
@@ -183,23 +175,19 @@ export function RepositoryAgentsSection({
     );
   }
 
-  const enabledRuntimeDefinitions = getAvailableRuntimeDefinitions({
-    runtimeDefinitions,
-    agentRuntimes,
-  });
-  const runtimeOptions = toAgentRuntimeOptions(enabledRuntimeDefinitions);
+  const runtimeOptions = toAgentRuntimeOptions(availableRuntimeDefinitions);
   const runtimeDropdownClassName = "sm:min-w-[18rem]";
   const agentDropdownClassName = "sm:min-w-[18rem]";
   const modelDropdownClassName = "sm:min-w-[26rem]";
   const variantDropdownClassName = "sm:min-w-[16rem]";
   const selectedDefaultRuntimeKind =
     resolveRuntimeKindSelection({
-      runtimeDefinitions: enabledRuntimeDefinitions,
+      runtimeDefinitions: availableRuntimeDefinitions,
       requestedRuntimeKind: selectedRepoConfig.defaultRuntimeKind,
     }) ?? "";
   const missingRoleLabels = findMissingRoleLabels({
     selectedRepoConfig,
-    runtimeDefinitions: enabledRuntimeDefinitions,
+    runtimeDefinitions: availableRuntimeDefinitions,
   });
 
   return (
@@ -261,7 +249,7 @@ export function RepositoryAgentsSection({
           const roleRuntimeOptions = runtimeOptions;
           const roleViewModel = buildRepositoryAgentRoleViewModel({
             selectedRepoConfig,
-            runtimeDefinitions: enabledRuntimeDefinitions,
+            runtimeDefinitions: availableRuntimeDefinitions,
             role,
             getCatalogForRuntime,
             getCatalogErrorForRuntime,

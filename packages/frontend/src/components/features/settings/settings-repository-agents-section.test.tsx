@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  CODEX_RUNTIME_DESCRIPTOR,
-  DEFAULT_AGENT_RUNTIMES,
-  type RepoConfig,
-} from "@openducktor/contracts";
+import { CODEX_RUNTIME_DESCRIPTOR, type RepoConfig } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -53,8 +49,7 @@ describe("RepositoryAgentsSection", () => {
     const html = renderToStaticMarkup(
       createElement(RepositoryAgentsSection, {
         selectedRepoConfig: repoConfig,
-        agentRuntimes: { ...DEFAULT_AGENT_RUNTIMES, codex: { enabled: true } },
-        runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
         loadingState: {
           isLoadingRuntimeDefinitions: false,
           isLoadingCatalog: false,
