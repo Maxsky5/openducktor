@@ -12,6 +12,9 @@ export type CreateProcessEnvironmentInput = {
   readLoginShellPath?: (env: NodeJS.ProcessEnv) => string | null;
 };
 
+const pathDelimiterForPlatform = (platform: NodeJS.Platform): ":" | ";" =>
+  platform === "win32" ? ";" : ":";
+
 const uniquePathEntries = (entries: Iterable<string>): string[] => {
   const nextEntries: string[] = [];
   const seen = new Set<string>();
@@ -28,11 +31,15 @@ const uniquePathEntries = (entries: Iterable<string>): string[] => {
   return nextEntries;
 };
 
-export const mergePathValues = (primaryPath: string, secondaryPath: string | undefined): string =>
+export const mergePathValues = (
+  primaryPath: string,
+  secondaryPath: string | undefined,
+  pathDelimiter = delimiter,
+): string =>
   uniquePathEntries([
-    ...primaryPath.split(delimiter),
-    ...(secondaryPath ?? "").split(delimiter),
-  ]).join(delimiter);
+    ...primaryPath.split(pathDelimiter),
+    ...(secondaryPath ?? "").split(pathDelimiter),
+  ]).join(pathDelimiter);
 
 const currentUserShell = (env: NodeJS.ProcessEnv): string | null => {
   const shell = env.SHELL;
@@ -119,7 +126,7 @@ export const createProcessEnvironment = ({
 
   const loginShellPath = readLoginShellPath(env);
   if (loginShellPath) {
-    env.PATH = mergePathValues(loginShellPath, env.PATH);
+    env.PATH = mergePathValues(loginShellPath, env.PATH, pathDelimiterForPlatform(platform));
   }
 
   return env;

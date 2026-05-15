@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import path from "node:path";
+import path, { delimiter } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { BeadsCliContext } from "./beads-cli-context";
 import { createBeadsTaskRepository } from "./beads-task-repository";
@@ -52,6 +52,19 @@ const createExistingBeadsCliContext = async (): Promise<BeadsCliContext> => {
   const beadsDir = path.join(attachmentRoot, ".beads");
   await mkdir(beadsDir);
   return createBeadsCliContext(beadsDir);
+};
+
+const createFakeBd = async (binDir: string, script: string): Promise<void> => {
+  const scriptPath = path.join(binDir, "bd.mjs");
+  await writeFile(scriptPath, script);
+  if (process.platform === "win32") {
+    await writeFile(path.join(binDir, "bd.cmd"), `@echo off\r\nbun "%~dp0bd.mjs" %*\r\n`);
+    return;
+  }
+
+  const bdPath = path.join(binDir, "bd");
+  await writeFile(bdPath, `#!/bin/sh\nexec bun "$(dirname "$0")/bd.mjs" "$@"\n`);
+  await chmod(bdPath, 0o755);
 };
 
 describe("createBeadsTaskRepository", () => {
@@ -202,15 +215,11 @@ describe("createBeadsTaskRepository", () => {
   test("uses configured workspace id for default bd command runner", async () => {
     const context = await createExistingBeadsCliContext();
     const binDir = await mkdtemp(path.join(tmpdir(), "odt-fake-bd-bin-"));
-    const bdPath = path.join(binDir, "bd");
-    await writeFile(
-      bdPath,
-      `#!/bin/sh
-printf '%s\\n' '[{"id":"task-1","title":"Task","status":"open","priority":0,"issue_type":"task","labels":[],"updated_at":"2026-05-10T00:00:00Z","created_at":"2026-05-10T00:00:00Z"}]'
-`,
+    await createFakeBd(
+      binDir,
+      `console.log(JSON.stringify([{ id: "task-1", title: "Task", status: "open", priority: 0, issue_type: "task", labels: [], updated_at: "2026-05-10T00:00:00Z", created_at: "2026-05-10T00:00:00Z" }]));\n`,
     );
-    await chmod(bdPath, 0o755);
-    context.env.PATH = `${binDir}:${process.env.PATH ?? ""}`;
+    context.env.PATH = `${binDir}${delimiter}${process.env.PATH ?? ""}`;
 
     const requestedWorkspaceIds: Array<string | null | undefined> = [];
     const port = createBeadsTaskRepository({
@@ -233,26 +242,20 @@ printf '%s\\n' '[{"id":"task-1","title":"Task","status":"open","priority":0,"iss
   test("reuses the prepared Beads context across default bd task-list commands", async () => {
     const context = await createExistingBeadsCliContext();
     const binDir = await mkdtemp(path.join(tmpdir(), "odt-fake-bd-bin-"));
-    const bdPath = path.join(binDir, "bd");
-    await writeFile(
-      bdPath,
-      `#!/bin/sh
-case "$*" in
-  "list --limit 0 --json")
-    printf '%s\\n' '[{"id":"task-1","title":"Task","status":"open","priority":0,"issue_type":"task","labels":[],"updated_at":"2026-05-10T00:00:00Z","created_at":"2026-05-10T00:00:00Z"}]'
-    ;;
-  list\\ --status\\ closed\\ --closed-after\\ *\\ --limit\\ 0\\ --json)
-    printf '%s\\n' '[]'
-    ;;
-  *)
-    printf '%s\\n' "unexpected bd args: $*" >&2
-    exit 1
-    ;;
-esac
+    await createFakeBd(
+      binDir,
+      `const args = process.argv.slice(2);
+if (args.join(" ") === "list --limit 0 --json") {
+  console.log(JSON.stringify([{ id: "task-1", title: "Task", status: "open", priority: 0, issue_type: "task", labels: [], updated_at: "2026-05-10T00:00:00Z", created_at: "2026-05-10T00:00:00Z" }]));
+} else if (args[0] === "list" && args.includes("--status") && args.includes("closed") && args.includes("--closed-after")) {
+  console.log("[]");
+} else {
+  console.error(\`unexpected bd args: \${args.join(" ")}\`);
+  process.exit(1);
+}
 `,
     );
-    await chmod(bdPath, 0o755);
-    context.env.PATH = `${binDir}:${process.env.PATH ?? ""}`;
+    context.env.PATH = `${binDir}${delimiter}${process.env.PATH ?? ""}`;
 
     const requestedWorkspaceIds: Array<string | null | undefined> = [];
     const port = createBeadsTaskRepository({

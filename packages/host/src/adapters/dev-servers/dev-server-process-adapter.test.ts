@@ -10,6 +10,9 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 500): Promise<void>
   }
 };
 
+const bunEvalCommand = (source: string): string =>
+  `${JSON.stringify(process.execPath)} -e ${JSON.stringify(source)}`;
+
 describe("createDevServerProcessAdapter", () => {
   test("starts a shell command, streams output, and stops the process group", async () => {
     const outputs: string[] = [];
@@ -20,7 +23,7 @@ describe("createDevServerProcessAdapter", () => {
     });
 
     const handle = await port.start({
-      command: "printf ready; sleep 5",
+      command: bunEvalCommand("process.stdout.write('ready'); setTimeout(() => {}, 5000);"),
       cwd: process.cwd(),
       onExit: (exit) => exits.push(exit),
       onOutput: (output) => outputs.push(output.data),
@@ -46,7 +49,7 @@ describe("createDevServerProcessAdapter", () => {
 
     await expect(
       port.start({
-        command: "exit 42",
+        command: bunEvalCommand("process.exit(42);"),
         cwd: process.cwd(),
         onExit: () => {},
         onOutput: () => {},

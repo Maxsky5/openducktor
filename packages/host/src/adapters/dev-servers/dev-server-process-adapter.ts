@@ -6,6 +6,7 @@ import {
   DevServerProcessStartExitError,
   type DevServerProcessStartInput,
 } from "../../ports/dev-server-process-port";
+import { signalProcessTree } from "../process/process-tree";
 
 export type CreateDevServerProcessAdapterInput = {
   processEnv?: NodeJS.ProcessEnv;
@@ -16,18 +17,10 @@ export type CreateDevServerProcessAdapterInput = {
 const DEFAULT_START_GRACE_PERIOD_MS = 150;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 
-const processGroupId = (pid: number): number => -pid;
-
-const signalProcessGroup = (pid: number, signal: NodeJS.Signals): void => {
-  try {
-    process.kill(processGroupId(pid), signal);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ESRCH") {
-      return;
-    }
-    throw error;
-  }
-};
+const shellCommand = (command: string): { file: string; args: string[] } =>
+  process.platform === "win32"
+    ? { file: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/s", "/c", command] }
+    : { file: "/bin/sh", args: ["-c", command] };
 
 export const createDevServerProcessAdapter = ({
   processEnv = process.env,
@@ -35,15 +28,12 @@ export const createDevServerProcessAdapter = ({
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
 }: CreateDevServerProcessAdapterInput = {}): DevServerProcessPort => ({
   async start({ command, cwd, env, onExit, onOutput }: DevServerProcessStartInput) {
-    if (process.platform === "win32") {
-      throw new Error("Builder dev servers are only supported on Unix hosts in this build.");
-    }
-
     if (command.trim().length === 0) {
       throw new Error("Dev server command is empty. Provide a command to run.");
     }
 
-    const child = spawn("/bin/sh", ["-c", command], {
+    const shell = shellCommand(command);
+    const child = spawn(shell.file, shell.args, {
       cwd,
       detached: true,
       env: { ...processEnv, ...env },
@@ -135,12 +125,12 @@ export const createDevServerProcessAdapter = ({
           return;
         }
 
-        signalProcessGroup(pid, "SIGTERM");
+        signalProcessTree(pid, "SIGTERM");
         if (await waitForClose(stopTimeoutMs)) {
           return;
         }
 
-        signalProcessGroup(pid, "SIGKILL");
+        signalProcessTree(pid, "SIGKILL");
         if (await waitForClose(stopTimeoutMs)) {
           return;
         }

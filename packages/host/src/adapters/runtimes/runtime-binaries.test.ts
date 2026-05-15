@@ -22,8 +22,8 @@ describe("resolveCodexBinary", () => {
     try {
       const binDir = join(root, "bin");
       await mkdir(binDir);
-      const codex = join(binDir, "codex");
-      await writeFile(codex, "#!/bin/sh\n");
+      const codex = join(binDir, process.platform === "win32" ? "codex.exe" : "codex");
+      await writeFile(codex, "");
       await chmod(codex, 0o755);
 
       await expect(

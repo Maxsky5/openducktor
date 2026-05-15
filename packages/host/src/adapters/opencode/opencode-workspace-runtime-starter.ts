@@ -11,6 +11,7 @@ import type {
 } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
+import { signalProcessTree } from "../process/process-tree";
 import { resolveOpencodeBinary } from "../runtimes/runtime-binaries";
 
 export type OpenCodeMcpBridgeConnection = {
@@ -117,19 +118,6 @@ const pickFreePort = (): Promise<number> =>
     });
   });
 
-const processGroupId = (pid: number): number => -pid;
-
-const signalProcessGroup = (pid: number, signal: NodeJS.Signals): void => {
-  try {
-    process.kill(processGroupId(pid), signal);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ESRCH") {
-      return;
-    }
-    throw error;
-  }
-};
-
 const appendCapturedOutput = (current: string, chunk: Buffer): string => {
   const next = current + chunk.toString("utf8");
   if (next.length <= MAX_CAPTURED_OUTPUT_BYTES) {
@@ -200,12 +188,12 @@ const stopChildProcess = async (
     return;
   }
 
-  signalProcessGroup(pid, "SIGTERM");
+  signalProcessTree(pid, "SIGTERM");
   if (await waitForClose(child, isClosed, stopTimeoutMs)) {
     return;
   }
 
-  signalProcessGroup(pid, "SIGKILL");
+  signalProcessTree(pid, "SIGKILL");
   if (await waitForClose(child, isClosed, stopTimeoutMs)) {
     return;
   }
@@ -227,11 +215,6 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
   runtimeId = () => randomUUID(),
 }: CreateOpenCodeWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
-    if (process.platform === "win32") {
-      throw new Error(
-        "OpenCode workspace runtimes are only supported on Unix hosts in this build.",
-      );
-    }
     if (input.runtimeKind !== "opencode") {
       throw new Error(
         `OpenCode workspace runtime starter does not support runtime kind ${input.runtimeKind}.`,

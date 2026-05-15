@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { delimiter } from "node:path";
 import {
   createProcessEnvironment,
   mergePathValues,
@@ -14,7 +13,7 @@ describe("createProcessEnvironment", () => {
       readLoginShellPath: () => "/opt/homebrew/bin:/usr/bin",
     });
 
-    expect(env.PATH?.split(delimiter)).toEqual(["/opt/homebrew/bin", "/usr/bin", "/bin"]);
+    expect(env.PATH?.split(":")).toEqual(["/opt/homebrew/bin", "/usr/bin", "/bin"]);
   });
 
   test("does not read a login shell PATH on non-macOS platforms", () => {
@@ -39,14 +38,14 @@ describe("createProcessEnvironment", () => {
     });
 
     expect(baseEnv.PATH).toBe("/usr/bin:/bin");
-    expect(env.PATH).toBe(`/opt/homebrew/bin${delimiter}/usr/bin${delimiter}/bin`);
+    expect(env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/bin");
   });
 });
 
 describe("mergePathValues", () => {
   test("keeps first occurrence of duplicate PATH entries", () => {
-    expect(mergePathValues("/opt/bin:/usr/bin", "/usr/bin:/bin")).toBe(
-      `/opt/bin${delimiter}/usr/bin${delimiter}/bin`,
+    expect(mergePathValues("/opt/bin:/usr/bin", "/usr/bin:/bin", ":")).toBe(
+      "/opt/bin:/usr/bin:/bin",
     );
   });
 });

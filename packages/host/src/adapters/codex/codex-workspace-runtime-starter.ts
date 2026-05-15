@@ -12,6 +12,7 @@ import type {
 } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
+import { signalProcessTree } from "../process/process-tree";
 import { resolveCodexBinary } from "../runtimes/runtime-binaries";
 import {
   type CodexAppServerEventEmitter,
@@ -102,19 +103,6 @@ const requireBridgeValue = (value: string, label: keyof CodexMcpBridgeConnection
   return trimmed;
 };
 
-const processGroupId = (pid: number): number => -pid;
-
-const signalProcessGroup = (pid: number, signal: NodeJS.Signals): void => {
-  try {
-    process.kill(processGroupId(pid), signal);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ESRCH") {
-      return;
-    }
-    throw error;
-  }
-};
-
 const waitForClose = (
   child: CodexChildProcess,
   isClosed: () => boolean,
@@ -147,12 +135,12 @@ const stopChildProcess = async (
     return;
   }
 
-  signalProcessGroup(pid, "SIGTERM");
+  signalProcessTree(pid, "SIGTERM");
   if (await waitForClose(child, isClosed, stopTimeoutMs)) {
     return;
   }
 
-  signalProcessGroup(pid, "SIGKILL");
+  signalProcessTree(pid, "SIGKILL");
   if (await waitForClose(child, isClosed, stopTimeoutMs)) {
     return;
   }
@@ -175,9 +163,6 @@ export const createCodexWorkspaceRuntimeStarter = ({
   runtimeId = () => randomUUID(),
 }: CreateCodexWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
-    if (process.platform === "win32") {
-      throw new Error("Codex app-server runtimes are only supported on Unix hosts in this build.");
-    }
     if (input.runtimeKind !== "codex") {
       throw new Error(
         `Codex workspace runtime starter does not support runtime kind ${input.runtimeKind}.`,

@@ -21,11 +21,11 @@ const createSystemCommands = (): SystemCommandPort => ({
 });
 
 const createFakeOpenCode = async (root: string): Promise<string> => {
-  const executable = join(root, "opencode");
+  const scriptPath = join(root, "opencode.mjs");
+  const executable = join(root, process.platform === "win32" ? "opencode.cmd" : "opencode");
   await writeFile(
-    executable,
-    `#!/usr/bin/env bun
-import { createServer } from "node:net";
+    scriptPath,
+    `import { createServer } from "node:net";
 
 const args = process.argv.slice(2);
 if (args[0] !== "serve") {
@@ -41,6 +41,11 @@ process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
 `,
   );
+  if (process.platform === "win32") {
+    await writeFile(executable, `@echo off\r\nbun "%~dp0opencode.mjs" %*\r\n`);
+  } else {
+    await writeFile(executable, `#!/bin/sh\nexec bun "$(dirname "$0")/opencode.mjs" "$@"\n`);
+  }
   await chmod(executable, 0o755);
   return executable;
 };

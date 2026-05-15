@@ -22,11 +22,11 @@ const createSystemCommands = (): SystemCommandPort => ({
 });
 
 const createFakeCodex = async (root: string): Promise<string> => {
-  const executable = join(root, "codex");
+  const scriptPath = join(root, "codex.mjs");
+  const executable = join(root, process.platform === "win32" ? "codex.cmd" : "codex");
   await writeFile(
-    executable,
-    `#!/usr/bin/env bun
-import { createInterface } from "node:readline";
+    scriptPath,
+    `import { createInterface } from "node:readline";
 import { writeFileSync } from "node:fs";
 
 const capturePath = process.env.CODEX_CAPTURE_PATH;
@@ -75,6 +75,11 @@ process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
 `,
   );
+  if (process.platform === "win32") {
+    await writeFile(executable, `@echo off\r\nbun "%~dp0codex.mjs" %*\r\n`);
+  } else {
+    await writeFile(executable, `#!/bin/sh\nexec bun "$(dirname "$0")/codex.mjs" "$@"\n`);
+  }
   await chmod(executable, 0o755);
   return executable;
 };
