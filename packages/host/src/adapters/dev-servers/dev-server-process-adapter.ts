@@ -19,7 +19,7 @@ const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 
 const shellCommand = (command: string): { file: string; args: string[] } =>
   process.platform === "win32"
-    ? { file: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/s", "/c", `"${command}"`] }
+    ? { file: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/c", command] }
     : { file: "/bin/sh", args: ["-c", command] };
 
 export const createDevServerProcessAdapter = ({
