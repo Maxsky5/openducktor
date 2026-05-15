@@ -327,6 +327,7 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("keeps the selected session model while the full session object is still hydrating", async () => {
+    const catalogLoad = createDeferred<AgentModelCatalog>();
     const harness = createHookHarness(
       createBaseProps({
         activeSession: null,
@@ -348,6 +349,7 @@ describe("useAgentStudioChatComposer", () => {
           pendingApprovals: [],
           pendingQuestions: [],
         },
+        loadCatalog: async () => catalogLoad.promise,
       }),
     );
 
@@ -361,7 +363,14 @@ describe("useAgentStudioChatComposer", () => {
         modelId: "claude-sonnet",
         profileId: "build-agent",
       });
+
+      await harness.run(async () => {
+        catalogLoad.resolve(CATALOG);
+        await catalogLoad.promise;
+      });
+      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
     } finally {
+      catalogLoad.resolve(CATALOG);
       await harness.unmount();
     }
   });
