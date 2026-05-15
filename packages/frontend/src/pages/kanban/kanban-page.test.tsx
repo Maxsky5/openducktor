@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
   type RepoPromptOverrides,
@@ -250,6 +251,8 @@ const renderPage = async (options?: { waitForKanbanReady?: boolean }): Promise<R
       <RuntimeDefinitionsContext.Provider
         value={{
           runtimeDefinitions: [...RUNTIME_DEFINITIONS],
+          availableRuntimeDefinitions: [...RUNTIME_DEFINITIONS],
+          agentRuntimes: DEFAULT_AGENT_RUNTIMES,
           isLoadingRuntimeDefinitions: false,
           runtimeDefinitionsError: null,
           refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],

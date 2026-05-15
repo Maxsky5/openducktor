@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord, SettingsSnapshot, TaskCard } from "@openducktor/contracts";
+import {
+  type AgentSessionRecord,
+  DEFAULT_AGENT_RUNTIMES,
+  type SettingsSnapshot,
+  type TaskCard,
+} from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
 import { documentQueryKeys } from "./documents";
@@ -25,6 +30,7 @@ const settingsSnapshotFixture: SettingsSnapshot = {
   reusablePrompts: [],
   kanban: { doneVisibleDays: DONE_VISIBLE_DAYS, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {},
   globalPromptOverrides: {},
 };

@@ -40,6 +40,16 @@ export const filterEnabledRuntimeDefinitions = (
 ): RuntimeDescriptor[] =>
   runtimeDefinitions.filter((definition) => isRuntimeEnabled(agentRuntimes, definition.kind));
 
+export const getAvailableRuntimeDefinitions = ({
+  runtimeDefinitions,
+  agentRuntimes,
+}: {
+  runtimeDefinitions: RuntimeDescriptor[];
+  agentRuntimes: AgentRuntimes;
+}): RuntimeDescriptor[] => {
+  return filterEnabledRuntimeDefinitions(runtimeDefinitions, agentRuntimes);
+};
+
 export const findRuntimeDefinition = (
   runtimeDefinitions: RuntimeDescriptor[],
   runtimeKind: RuntimeKind,
@@ -109,6 +119,25 @@ export const resolveRuntimeKindSelection = (
   return resolveRuntimeKindSelectionState(input).runtimeKind;
 };
 
+export const resolveAvailableRuntimeKindSelection = ({
+  runtimeDefinitions,
+  agentRuntimes,
+  requestedRuntimeKind,
+}: {
+  runtimeDefinitions: RuntimeDescriptor[];
+  agentRuntimes: AgentRuntimes;
+  requestedRuntimeKind: RuntimeKind | null;
+}): RuntimeKind | null => {
+  const availableRuntimeDefinitions = getAvailableRuntimeDefinitions({
+    runtimeDefinitions,
+    agentRuntimes,
+  });
+  return resolveRuntimeKindSelection({
+    runtimeDefinitions: availableRuntimeDefinitions,
+    requestedRuntimeKind,
+  });
+};
+
 export const runtimeLabelFor = ({
   runtimeDefinitions,
   runtimeKind,
@@ -131,6 +160,21 @@ export const filterRuntimeDefinitionsForStartMode = (
   startMode: AgentSessionStartMode,
 ): RuntimeDescriptor[] => {
   return runtimeDefinitions.filter((definition) => runtimeSupportsStartMode(definition, startMode));
+};
+
+export const getAvailableRuntimeDefinitionsForStartMode = ({
+  runtimeDefinitions,
+  agentRuntimes,
+  startMode,
+}: {
+  runtimeDefinitions: RuntimeDescriptor[];
+  agentRuntimes: AgentRuntimes;
+  startMode: AgentSessionStartMode;
+}): RuntimeDescriptor[] => {
+  return filterRuntimeDefinitionsForStartMode(
+    getAvailableRuntimeDefinitions({ runtimeDefinitions, agentRuntimes }),
+    startMode,
+  );
 };
 
 export const runtimeSupportsCapability = (

@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeDescriptor,
+} from "@openducktor/contracts";
 import type { AgentFileSearchResult, AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -153,6 +157,8 @@ const createHookHarness = (
   const runtimeDefinitions = options.runtimeDefinitions ?? [OPENCODE_RUNTIME_DESCRIPTOR];
   const runtimeDefinitionsContext = {
     runtimeDefinitions,
+    availableRuntimeDefinitions: runtimeDefinitions,
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
     refreshRuntimeDefinitions: async () => runtimeDefinitions,

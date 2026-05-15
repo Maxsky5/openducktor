@@ -12,11 +12,10 @@ import type {
   SettingsSnapshot,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useEffect, useMemo } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
-import { filterEnabledRuntimeDefinitions } from "@/lib/agent-runtime";
+import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
   ChecksStateContext,
   useRequiredContext,
@@ -35,6 +34,8 @@ import { useSettingsModalRepoScriptValidation } from "./use-settings-modal-repo-
 import { useSettingsModalRepositoryActions } from "./use-settings-modal-repository-actions";
 import type { ReusablePromptValidationState } from "./use-settings-modal-reusable-prompt-validation";
 import { useSettingsModalReusablePromptValidation } from "./use-settings-modal-reusable-prompt-validation";
+import type { RuntimeAvailabilityValidationState } from "./use-settings-modal-runtime-validation";
+import { useSettingsModalRuntimeValidation } from "./use-settings-modal-runtime-validation";
 import { useSettingsModalSaveOrchestration } from "./use-settings-modal-save-orchestration";
 import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-state";
 
@@ -71,6 +72,10 @@ export type SettingsModalController = {
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
   reusablePromptValidationState: ReusablePromptValidationState;
   hasReusablePromptValidationErrors: boolean;
+  runtimeAvailabilityValidationState: RuntimeAvailabilityValidationState;
+  hasRuntimeAvailabilityErrors: boolean;
+  selectedRepoRuntimeAvailabilityErrors: string[];
+  selectedRepoRuntimeAvailabilityErrorCount: number;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCount: number;
   showRepoScriptValidationErrors: boolean;
@@ -89,7 +94,7 @@ export type SettingsModalController = {
   updateGlobalGeneralSettings: (
     updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
   ) => void;
-  updateAgentRuntimes?: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
+  updateAgentRuntimes: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
   updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
   updateGlobalKanbanSettings: (
     updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
@@ -177,10 +182,10 @@ export const useSettingsModalController = ({
       getNeededCatalogRuntimeKinds(
         selectedRepoConfig,
         snapshotDraft
-          ? filterEnabledRuntimeDefinitions(
+          ? getAvailableRuntimeDefinitions({
               runtimeDefinitions,
-              snapshotDraft.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES,
-            )
+              agentRuntimes: snapshotDraft.agentRuntimes,
+            })
           : [],
       ),
     [selectedRepoConfig, runtimeDefinitions, snapshotDraft],
@@ -211,12 +216,28 @@ export const useSettingsModalController = ({
   });
   const reusablePromptValidationState = useSettingsModalReusablePromptValidation({ snapshotDraft });
   const hasReusablePromptValidationErrors = reusablePromptValidationState.totalErrorCount > 0;
+  const runtimeAvailabilityValidationState = useSettingsModalRuntimeValidation({
+    runtimeDefinitions,
+    snapshotDraft,
+  });
+  const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;
+  const selectedRepoRuntimeAvailabilityErrors = selectedWorkspaceId
+    ? (runtimeAvailabilityValidationState.errorsByWorkspaceId[selectedWorkspaceId] ?? [])
+    : [];
+  const selectedRepoRuntimeAvailabilityErrorCount = selectedRepoRuntimeAvailabilityErrors.length;
   const settingsSectionErrorCountByIdWithReusablePrompts = useMemo(
     () => ({
       ...settingsSectionErrorCountById,
+      repositories:
+        settingsSectionErrorCountById.repositories +
+        runtimeAvailabilityValidationState.totalErrorCount,
       "reusable-prompts": reusablePromptValidationState.totalErrorCount,
     }),
-    [reusablePromptValidationState.totalErrorCount, settingsSectionErrorCountById],
+    [
+      reusablePromptValidationState.totalErrorCount,
+      runtimeAvailabilityValidationState.totalErrorCount,
+      settingsSectionErrorCountById,
+    ],
   );
 
   const {
@@ -277,6 +298,8 @@ export const useSettingsModalController = ({
     promptValidationState,
     hasReusablePromptValidationErrors: hasReusablePromptValidationErrors,
     reusablePromptValidationErrorCount: reusablePromptValidationState.totalErrorCount,
+    hasRuntimeAvailabilityErrors,
+    runtimeAvailabilityErrorCount: runtimeAvailabilityValidationState.totalErrorCount,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
     invalidRepoPathsWithDevServerErrors,
@@ -378,6 +401,10 @@ export const useSettingsModalController = ({
     settingsSectionErrorCountById: settingsSectionErrorCountByIdWithReusablePrompts,
     reusablePromptValidationState,
     hasReusablePromptValidationErrors,
+    runtimeAvailabilityValidationState,
+    hasRuntimeAvailabilityErrors,
+    selectedRepoRuntimeAvailabilityErrors,
+    selectedRepoRuntimeAvailabilityErrorCount,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
     showRepoScriptValidationErrors,

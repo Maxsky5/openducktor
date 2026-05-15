@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useChecksState, useWorkspaceState } from "@/state";
 import {
   useChecksOperationsContext,
-  useRuntimeDefinitionsContext,
+  useRuntimeAvailabilityContext,
 } from "@/state/app-state-contexts";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
@@ -21,7 +21,7 @@ export function DiagnosticsPanel(): ReactElement {
   const { activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
-    useRuntimeDefinitionsContext();
+    useRuntimeAvailabilityContext();
   const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
     useChecksOperationsContext();
   const {

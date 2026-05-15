@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import { agentPromptTemplateIdValues, type SettingsSnapshot } from "@openducktor/contracts";
+import {
+  agentPromptTemplateIdValues,
+  DEFAULT_AGENT_RUNTIMES,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -84,6 +88,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   autopilot: {
     rules: [],
   },
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {},
   globalPromptOverrides: {},
 });
@@ -590,6 +595,7 @@ describe("use-repo-settings-operations", () => {
     const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
     const normalizedSnapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
       workspaces: {
         "repo-a": {
           ...createRepoConfig(),
@@ -615,6 +621,7 @@ describe("use-repo-settings-operations", () => {
     });
     const snapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
       workspaces: {
         "repo-a": {
           ...createRepoConfig(),
@@ -698,6 +705,7 @@ describe("use-repo-settings-operations", () => {
       autopilot: {
         rules: [],
       },
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
       workspaces: {
         "repo-a": {
           workspaceId: "repo-a",
@@ -727,6 +735,7 @@ describe("use-repo-settings-operations", () => {
       expect(forwardedSnapshot).toBeDefined();
       const parsedForwarded = forwardedSnapshot as {
         globalPromptOverrides: Record<string, unknown>;
+        agentRuntimes: unknown;
         workspaces: Record<string, { promptOverrides: Record<string, unknown> }>;
       };
       expect(Object.keys(parsedForwarded.globalPromptOverrides).sort()).toEqual(

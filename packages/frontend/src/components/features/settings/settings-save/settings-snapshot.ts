@@ -1,5 +1,4 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import { prepareReusablePromptsForSave } from "@/state/read-models/settings-read-model";
 import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
 import { prepareGlobalGitSettingsForSave } from "./global-git-settings";
@@ -22,7 +21,7 @@ export const prepareSettingsSnapshotForSave = (snapshot: SettingsSnapshot): Sett
     reusablePrompts: prepareReusablePromptsForSave(snapshot.reusablePrompts),
     kanban: snapshot.kanban,
     autopilot: prepareAutopilotSettingsForSave(snapshot.autopilot),
-    agentRuntimes: snapshot.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES,
+    agentRuntimes: snapshot.agentRuntimes,
     workspaces,
     globalPromptOverrides: preparePromptOverridesForSave(snapshot.globalPromptOverrides),
   };

@@ -25,8 +25,8 @@ import type { ComboboxGroup } from "@/components/ui/combobox";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import {
-  filterEnabledRuntimeDefinitions,
   findRuntimeDefinition,
+  getAvailableRuntimeDefinitions,
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
@@ -42,6 +42,7 @@ type RepositoryAgentsSectionProps = {
     isSaving: boolean;
   };
   runtimeDefinitionsError: string | null;
+  runtimeAvailabilityErrors: string[];
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
@@ -164,6 +165,7 @@ export function RepositoryAgentsSection({
   runtimeDefinitions,
   loadingState,
   runtimeDefinitionsError,
+  runtimeAvailabilityErrors,
   getCatalogForRuntime,
   getCatalogErrorForRuntime,
   isCatalogLoadingForRuntime,
@@ -181,10 +183,10 @@ export function RepositoryAgentsSection({
     );
   }
 
-  const enabledRuntimeDefinitions = filterEnabledRuntimeDefinitions(
+  const enabledRuntimeDefinitions = getAvailableRuntimeDefinitions({
     runtimeDefinitions,
     agentRuntimes,
-  );
+  });
   const runtimeOptions = toAgentRuntimeOptions(enabledRuntimeDefinitions);
   const runtimeDropdownClassName = "sm:min-w-[18rem]";
   const agentDropdownClassName = "sm:min-w-[18rem]";
@@ -240,6 +242,13 @@ export function RepositoryAgentsSection({
         <p className="text-xs text-warning-muted">
           Failed to load runtime definitions: {runtimeDefinitionsError}
         </p>
+      ) : null}
+      {runtimeAvailabilityErrors.length > 0 ? (
+        <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-xs text-warning-surface-foreground">
+          {runtimeAvailabilityErrors.map((error) => (
+            <p key={error}>{error}</p>
+          ))}
+        </div>
       ) : null}
       {missingRoleLabels.length > 0 ? (
         <p className="text-xs text-warning-muted">

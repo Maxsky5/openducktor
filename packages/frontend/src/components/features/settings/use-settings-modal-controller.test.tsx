@@ -47,6 +47,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
     emptyColumnDisplay: "show",
   },
   autopilot: createDefaultAutopilotSettings(),
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {
     repo: {
       workspaceId: "repo",
@@ -169,6 +170,8 @@ const createHookHarness = (
 
   const runtimeDefinitionsContext = {
     runtimeDefinitions,
+    availableRuntimeDefinitions: runtimeDefinitions,
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
     refreshRuntimeDefinitions: async () => runtimeDefinitions,

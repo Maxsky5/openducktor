@@ -1,4 +1,5 @@
 import {
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
   type TaskCard,
@@ -9,6 +10,7 @@ import {
   type PropsWithChildren,
   type ReactElement,
 } from "react";
+import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -101,11 +103,17 @@ export const createRuntimeDefinitionsContextValue = (
   overrides: Partial<RuntimeDefinitionsContextValue> = {},
 ): RuntimeDefinitionsContextValue => {
   const defaultRuntimeDefinitions = createDefaultRuntimeDefinitions();
+  const runtimeDefinitions = overrides.runtimeDefinitions
+    ? overrides.runtimeDefinitions.map(cloneRuntimeDescriptor)
+    : defaultRuntimeDefinitions;
+  const agentRuntimes = overrides.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES;
 
   return {
-    runtimeDefinitions: overrides.runtimeDefinitions
-      ? overrides.runtimeDefinitions.map(cloneRuntimeDescriptor)
-      : defaultRuntimeDefinitions,
+    runtimeDefinitions,
+    agentRuntimes,
+    availableRuntimeDefinitions:
+      overrides.availableRuntimeDefinitions ??
+      getAvailableRuntimeDefinitions({ runtimeDefinitions, agentRuntimes }),
     isLoadingRuntimeDefinitions: overrides.isLoadingRuntimeDefinitions ?? false,
     runtimeDefinitionsError: overrides.runtimeDefinitionsError ?? null,
     refreshRuntimeDefinitions:

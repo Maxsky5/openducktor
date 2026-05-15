@@ -1,4 +1,3 @@
-import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
@@ -72,6 +71,7 @@ export function SettingsModalContent({
     selectedRepoDevServerValidationErrors,
     promptValidationState,
     reusablePromptValidationState,
+    selectedRepoRuntimeAvailabilityErrors,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
@@ -155,10 +155,10 @@ export function SettingsModalContent({
   if (section === "runtimes") {
     return (
       <AgentRuntimesSection
-        agentRuntimes={snapshotDraft.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES}
+        agentRuntimes={snapshotDraft.agentRuntimes}
         runtimeDefinitions={runtimeDefinitions}
         disabled={isInteractionDisabled}
-        onUpdateAgentRuntimes={updateAgentRuntimes ?? (() => {})}
+        onUpdateAgentRuntimes={updateAgentRuntimes}
       />
     );
   }
@@ -260,7 +260,7 @@ export function SettingsModalContent({
         {repositorySection === "agents" ? (
           <RepositoryAgentsSection
             selectedRepoConfig={selectedRepoConfig}
-            agentRuntimes={snapshotDraft.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES}
+            agentRuntimes={snapshotDraft.agentRuntimes}
             runtimeDefinitions={runtimeDefinitions}
             loadingState={{
               isLoadingRuntimeDefinitions,
@@ -269,6 +269,7 @@ export function SettingsModalContent({
               isSaving,
             }}
             runtimeDefinitionsError={runtimeDefinitionsError}
+            runtimeAvailabilityErrors={selectedRepoRuntimeAvailabilityErrors}
             getCatalogForRuntime={getCatalogForRuntime}
             getCatalogErrorForRuntime={getCatalogErrorForRuntime}
             isCatalogLoadingForRuntime={isCatalogLoadingForRuntime}

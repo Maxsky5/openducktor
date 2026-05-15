@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { host } from "@/state/operations/host";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -119,6 +120,7 @@ beforeEach(() => {
     autopilot: {
       rules: [],
     },
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     workspaces: {},
     globalPromptOverrides: {},
   });

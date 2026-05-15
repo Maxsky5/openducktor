@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot, WorkspaceRecord } from "@openducktor/contracts";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type SettingsSnapshot,
+  type WorkspaceRecord,
+} from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { act, createElement, type PropsWithChildren, useEffect, useRef, useState } from "react";
@@ -289,6 +293,7 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot => ({
   autopilot: {
     rules: [],
   },
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: Object.fromEntries(
     repoPaths.map((repoPath) => [
       repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",

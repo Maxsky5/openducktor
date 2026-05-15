@@ -1,4 +1,5 @@
 import type {
+  AgentRuntimes,
   BeadsCheck,
   RuntimeCheck,
   RuntimeDescriptor,
@@ -44,6 +45,8 @@ export type ActiveWorkspaceContextValue = {
 
 export type RuntimeDefinitionsContextValue = {
   runtimeDefinitions: RuntimeDescriptor[];
+  availableRuntimeDefinitions: RuntimeDescriptor[];
+  agentRuntimes: AgentRuntimes;
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
   refreshRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
@@ -132,6 +135,19 @@ export const useChecksOperationsContext = (): ChecksOperationsContextValue =>
 
 export const useRuntimeDefinitionsContext = (): RuntimeDefinitionsContextValue =>
   useRequiredContext(RuntimeDefinitionsContext, "useRuntimeDefinitionsContext");
+
+export type RuntimeAvailabilityContextValue = RuntimeDefinitionsContextValue & {
+  allRuntimeDefinitions: RuntimeDescriptor[];
+};
+
+export const useRuntimeAvailabilityContext = (): RuntimeAvailabilityContextValue => {
+  const runtimeContext = useRuntimeDefinitionsContext();
+  return {
+    ...runtimeContext,
+    allRuntimeDefinitions: runtimeContext.runtimeDefinitions,
+    runtimeDefinitions: runtimeContext.availableRuntimeDefinitions,
+  };
+};
 
 export const useTaskDataContext = (): TaskDataContextValue =>
   useRequiredContext(TaskDataContext, "useTaskDataContext");

@@ -42,6 +42,11 @@ export const buildReusablePromptValidationSaveError = (totalErrorCount: number):
   return `Fix ${totalErrorCount} reusable prompt field error${suffix} before saving.`;
 };
 
+export const buildRuntimeAvailabilitySaveError = (totalErrorCount: number): string => {
+  const suffix = totalErrorCount > 1 ? "s" : "";
+  return `Fix ${totalErrorCount} disabled runtime selection${suffix} before saving.`;
+};
+
 export const buildRepoScriptValidationSaveError = ({
   invalidRepoPathsWithDevServerErrors,
   repoScriptValidationErrorCount,

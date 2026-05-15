@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  type RepoConfig,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import { chooseInitialSettingsWorkspaceId } from "./settings-workspace-selection";
 
 const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
@@ -43,6 +47,7 @@ const createSnapshot = (workspaces: SettingsSnapshot["workspaces"]): SettingsSna
   autopilot: {
     rules: [],
   },
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces,
   globalPromptOverrides: {},
 });

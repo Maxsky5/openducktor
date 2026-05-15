@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  type RepoConfig,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
@@ -35,6 +39,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
     defaultMergeMethod: "merge_commit",
   },
   general: { openAgentStudioTabOnBackgroundSessionStart: true },
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {},
   chat: { showThinkingMessages: false },
   reusablePrompts: [],

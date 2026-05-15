@@ -30,7 +30,7 @@ import { resolveActiveSessionChatComposerContext } from "@/features/agent-chat-c
 import { pickDefaultVisibleSelectionForCatalog } from "@/features/session-start";
 import { DEFAULT_RUNTIME_KIND, findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -113,7 +113,7 @@ export function useAgentStudioChatComposer({
     loadRepoRuntimeCatalog,
     loadRepoRuntimeSlashCommands,
     loadRepoRuntimeFileSearch,
-  } = useRuntimeDefinitionsContext();
+  } = useRuntimeAvailabilityContext();
   const queryClient = useQueryClient();
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
@@ -134,11 +134,19 @@ export function useAgentStudioChatComposer({
   const activeSessionMessages = activeSessionChatComposerContext.messages;
   const hasActiveSession = activeSessionChatComposerContext.hasActiveSession;
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
-    return toRoleDefaultModelSelection(
+    const selection = toRoleDefaultModelSelection(
       repoSettings?.agentDefaults[role],
       repoSettings?.defaultRuntimeKind,
     );
-  }, [repoSettings?.agentDefaults, repoSettings?.defaultRuntimeKind, role]);
+    if (!selection) {
+      return null;
+    }
+    const runtimeKind = selection.runtimeKind;
+    if (!runtimeKind) {
+      return null;
+    }
+    return findRuntimeDefinition(runtimeDefinitions, runtimeKind) ? selection : null;
+  }, [repoSettings?.agentDefaults, repoSettings?.defaultRuntimeKind, role, runtimeDefinitions]);
   const {
     draftSelection,
     isAwaitingRepoSettingsForWorkspaceRepoPath,
@@ -150,13 +158,18 @@ export function useAgentStudioChatComposer({
       activeSessionSelectedModel,
       draftSelection,
       roleDefaultSelection,
-      repoDefaultRuntimeKind: repoSettings?.defaultRuntimeKind ?? null,
+      repoDefaultRuntimeKind:
+        repoSettings?.defaultRuntimeKind &&
+        findRuntimeDefinition(runtimeDefinitions, repoSettings.defaultRuntimeKind)
+          ? repoSettings.defaultRuntimeKind
+          : null,
     });
   }, [
     activeSessionSelectedModel,
     draftSelection,
     repoSettings?.defaultRuntimeKind,
     roleDefaultSelection,
+    runtimeDefinitions,
   ]);
   const activeSessionRuntimeQueryState = useMemo(
     () =>

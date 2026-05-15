@@ -1,0 +1,85 @@
+import { describe, expect, test } from "bun:test";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  createDefaultAutopilotSettings,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
+import { buildRuntimeAvailabilityValidationState } from "./use-settings-modal-runtime-validation";
+
+const createSnapshot = (): SettingsSnapshot => ({
+  theme: "light",
+  git: {
+    defaultMergeMethod: "merge_commit",
+  },
+  general: {
+    openAgentStudioTabOnBackgroundSessionStart: true,
+  },
+  chat: {
+    showThinkingMessages: false,
+  },
+  reusablePrompts: [],
+  kanban: {
+    doneVisibleDays: 1,
+    emptyColumnDisplay: "show",
+  },
+  autopilot: createDefaultAutopilotSettings(),
+  agentRuntimes: {
+    opencode: { enabled: true },
+    codex: { enabled: false },
+  },
+  workspaces: {
+    repo: {
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      defaultRuntimeKind: "codex",
+      worktreeBasePath: undefined,
+      branchPrefix: "odt",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
+      hooks: { preStart: [], postComplete: [] },
+      devServers: [],
+      worktreeCopyPaths: [],
+      promptOverrides: {},
+      agentDefaults: {
+        build: {
+          runtimeKind: "codex",
+          providerId: "codex",
+          modelId: "gpt-5.4",
+          variant: "medium",
+          profileId: "",
+        },
+      },
+    },
+  },
+  globalPromptOverrides: {},
+});
+
+describe("settings runtime availability validation", () => {
+  test("reports disabled repo default and role runtimes", () => {
+    const validation = buildRuntimeAvailabilityValidationState({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      snapshotDraft: createSnapshot(),
+    });
+
+    expect(validation.totalErrorCount).toBe(2);
+    expect(validation.errorCountByWorkspaceId.repo).toBe(2);
+    expect(validation.errorsByWorkspaceId.repo).toEqual([
+      'Default agent runtime "Codex" is disabled.',
+      'Builder agent runtime "Codex" is disabled.',
+    ]);
+  });
+
+  test("does not report disabled runtimes while runtime definitions are unavailable", () => {
+    const validation = buildRuntimeAvailabilityValidationState({
+      runtimeDefinitions: [],
+      snapshotDraft: createSnapshot(),
+    });
+
+    expect(validation.totalErrorCount).toBe(0);
+    expect(validation.errorsByWorkspaceId).toEqual({});
+  });
+});

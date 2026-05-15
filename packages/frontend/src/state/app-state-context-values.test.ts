@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkspaceRecord } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, type WorkspaceRecord } from "@openducktor/contracts";
 import type {
   AgentStateContextValue,
   ChecksStateContextValue,
@@ -75,6 +75,7 @@ describe("app-state-context-values", () => {
         autopilot: {
           rules: [],
         },
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         workspaces: {},
         globalPromptOverrides: {},
       }),

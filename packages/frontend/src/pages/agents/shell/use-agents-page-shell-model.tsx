@@ -19,7 +19,7 @@ import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   useChecksOperationsContext,
-  useRuntimeDefinitionsContext,
+  useRuntimeAvailabilityContext,
 } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
@@ -140,7 +140,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { activeBranch, branches, activeWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
-    useRuntimeDefinitionsContext();
+    useRuntimeAvailabilityContext();
   const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
     useChecksOperationsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();

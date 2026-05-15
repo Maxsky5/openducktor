@@ -6,7 +6,6 @@ import type {
   ReusablePrompt,
   SettingsSnapshot,
 } from "@openducktor/contracts";
-import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback } from "react";
 import { ensureDraftAgentDefault } from "@/components/features/settings";
@@ -148,7 +147,7 @@ export const useSettingsModalDraftActions = ({
 
         return {
           ...current,
-          agentRuntimes: updater(current.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES),
+          agentRuntimes: updater(current.agentRuntimes),
         };
       });
     },

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type AgentPromptTemplateId,
   agentPromptTemplateIdValues,
+  DEFAULT_AGENT_RUNTIMES,
   type RepoConfig,
   type RepoPromptOverrides,
 } from "@openducktor/contracts";
@@ -339,6 +340,7 @@ describe("settings save transforms", () => {
       autopilot: {
         rules: [],
       },
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
       workspaces: {
         "repo-a": createRepoConfig(),
       },

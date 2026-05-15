@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -33,6 +33,7 @@ const createSnapshot = (): SettingsSnapshot => ({
     rules: [],
   },
   globalPromptOverrides: {},
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {},
 });
 
