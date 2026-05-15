@@ -113,40 +113,65 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Verify TypeScript host package
-        run: |
-          bun run --filter @openducktor/host lint
-          bun run --filter @openducktor/host typecheck
-          bun run --filter @openducktor/host test
-          bun run --filter @openducktor/host build
+      - name: Lint TypeScript host package
+        run: bun run --filter @openducktor/host lint
 
-      - name: Verify shared frontend package
-        run: |
-          bun run --filter @openducktor/frontend lint
-          bun run --filter @openducktor/frontend typecheck
-          bun run --filter @openducktor/frontend test
-          bun run --filter @openducktor/frontend build
+      - name: Typecheck TypeScript host package
+        run: bun run --filter @openducktor/host typecheck
 
-      - name: Verify MCP package
-        run: |
-          bun run --filter @openducktor/mcp lint
-          bun run --filter @openducktor/mcp typecheck
-          bun run --filter @openducktor/mcp test
-          bun run --filter @openducktor/mcp build
+      - name: Test TypeScript host package
+        run: bun run --filter @openducktor/host test
 
-      - name: Verify Web package
-        run: |
-          bun run --filter @openducktor/web lint
-          bun run --filter @openducktor/web typecheck
-          bun run --filter @openducktor/web test
-          bun run --filter @openducktor/web build
+      - name: Build TypeScript host package
+        run: bun run --filter @openducktor/host build
 
-      - name: Verify Electron package
-        run: |
-          bun run --filter @openducktor/electron lint
-          bun run --filter @openducktor/electron typecheck
-          bun run --filter @openducktor/electron test
-          bun run --filter @openducktor/electron build
+      - name: Lint shared frontend package
+        run: bun run --filter @openducktor/frontend lint
+
+      - name: Typecheck shared frontend package
+        run: bun run --filter @openducktor/frontend typecheck
+
+      - name: Test shared frontend package
+        run: bun run --filter @openducktor/frontend test
+
+      - name: Build shared frontend package
+        run: bun run --filter @openducktor/frontend build
+
+      - name: Lint MCP package
+        run: bun run --filter @openducktor/mcp lint
+
+      - name: Typecheck MCP package
+        run: bun run --filter @openducktor/mcp typecheck
+
+      - name: Test MCP package
+        run: bun run --filter @openducktor/mcp test
+
+      - name: Build MCP package
+        run: bun run --filter @openducktor/mcp build
+
+      - name: Lint Web package
+        run: bun run --filter @openducktor/web lint
+
+      - name: Typecheck Web package
+        run: bun run --filter @openducktor/web typecheck
+
+      - name: Test Web package
+        run: bun run --filter @openducktor/web test
+
+      - name: Build Web package
+        run: bun run --filter @openducktor/web build
+
+      - name: Lint Electron package
+        run: bun run --filter @openducktor/electron lint
+
+      - name: Typecheck Electron package
+        run: bun run --filter @openducktor/electron typecheck
+
+      - name: Test Electron package
+        run: bun run --filter @openducktor/electron test
+
+      - name: Build Electron package
+        run: bun run --filter @openducktor/electron build
 
   electron-package:
     name: Electron Package (${{ matrix.label }})
