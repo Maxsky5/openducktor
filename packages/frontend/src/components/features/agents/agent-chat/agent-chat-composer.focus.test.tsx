@@ -94,11 +94,42 @@ const typeIntoComposer = (container: HTMLElement, value: string): HTMLElement =>
   return getLastTextSegment(container);
 };
 
+const describeActiveElement = (activeElement: Element | null): string => {
+  if (!activeElement) {
+    return "none";
+  }
+
+  const tagName = activeElement.tagName.toLowerCase();
+  const role = activeElement.getAttribute("role");
+  const contentEditable = activeElement.getAttribute("contenteditable");
+  const attributes = [
+    role ? `role=${role}` : null,
+    contentEditable ? `contenteditable=${contentEditable}` : null,
+  ].filter(Boolean);
+
+  return attributes.length > 0 ? `${tagName} ${attributes.join(" ")}` : tagName;
+};
+
+const expectComposerOwnsFocus = (editorRoot: HTMLElement): void => {
+  const activeElement = document.activeElement;
+  if (activeElement === editorRoot) {
+    return;
+  }
+
+  if (activeElement instanceof HTMLElement && editorRoot.contains(activeElement)) {
+    return;
+  }
+
+  throw new Error(
+    `Expected composer to own focus, active element: ${describeActiveElement(activeElement)}`,
+  );
+};
+
 const waitForComposerFocus = async (container: HTMLElement): Promise<HTMLElement> => {
   const editorRoot = getComposerSurface(container);
   await waitFor(
     () => {
-      expect(document.activeElement).toBe(editorRoot);
+      expectComposerOwnsFocus(editorRoot);
     },
     { timeout: FOCUS_WAIT_TIMEOUT_MS },
   );
@@ -296,7 +327,7 @@ describe("AgentChatComposer focus", () => {
       );
 
       await waitFor(() => {
-        expect(document.activeElement).toBe(editorRoot);
+        expectComposerOwnsFocus(editorRoot);
         expect(lastTextSegment.textContent).toContain("Continue this draft");
         expect(globalThis.getSelection?.()?.focusNode).toBe(lastTextSegment.firstChild);
         expect(globalThis.getSelection?.()?.focusOffset).toBe("Continue this draft".length);

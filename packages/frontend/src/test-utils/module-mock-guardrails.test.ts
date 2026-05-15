@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import path from "node:path";
 
 const TEST_ROOT = path.resolve(import.meta.dir, "..");
+const SELF_TEST_PATH = path.join("test-utils", "module-mock-guardrails.test.ts");
 
 const FORBIDDEN_PATTERNS = [
   {
@@ -20,7 +21,7 @@ describe("desktop test module mock guardrails", () => {
     const glob = new Bun.Glob("**/*.test.{ts,tsx}");
 
     for await (const relativePath of glob.scan({ cwd: TEST_ROOT })) {
-      if (relativePath === "test-utils/module-mock-guardrails.test.ts") {
+      if (path.normalize(relativePath) === SELF_TEST_PATH) {
         continue;
       }
 
