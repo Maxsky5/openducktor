@@ -4,6 +4,7 @@ import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
+import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import type { RuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
@@ -224,7 +225,18 @@ export const rollbackFailedBuildWorktree = async (
   }
 
   try {
-    await dependencies.gitPort.removeWorktree(repoPath, worktreePath, true);
+    await removeWorktreeAndFilesystemPath(
+      {
+        gitPort: dependencies.gitPort,
+        settingsConfig: dependencies.settingsConfig,
+        worktreeFiles: dependencies.worktreeFiles,
+      },
+      {
+        repoPath,
+        worktreePath,
+        force: true,
+      },
+    );
   } catch (error) {
     cleanupErrors.push(
       `Also failed to remove worktree ${worktreePath}: ${

@@ -8,7 +8,23 @@ import {
   type TaskActivityGuardPort,
   type TaskStorePort,
   task,
+  type WorktreeFilePort,
 } from "./test-support/task-workflow-harness";
+
+const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort => ({
+  async copyConfiguredPaths() {
+    throw new Error("unexpected copy configured paths");
+  },
+  async removePathIfPresent(path) {
+    calls.push({ type: "removePathIfPresent", path });
+  },
+  resolveWorktreePath(repoPath, worktreePath) {
+    return worktreePath.startsWith("/") ? worktreePath : `${repoPath}/${worktreePath}`;
+  },
+  async pathIsWithinRoot(root, candidate) {
+    return candidate === root || candidate.startsWith(`${root}/`);
+  },
+});
 
 describe("createTaskService task mutations and reset", () => {
   test("creates a task after validating parent relationships and enriches the result", async () => {
@@ -264,6 +280,7 @@ describe("createTaskService task mutations and reset", () => {
         settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
         taskActivityGuard,
         taskStore,
+        worktreeFiles: createCleanupWorktreeFiles(calls),
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
@@ -295,10 +312,105 @@ describe("createTaskService task mutations and reset", () => {
         worktreePath: "/worktrees/repo/task-1",
         force: true,
       },
+      { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       {
         type: "delete",
         input: { repoPath: "/repo", taskId: "epic-1", deleteSubtasks: true },
+      },
+    ]);
+  });
+
+  test("deletes closed tasks with stranded managed worktree directories", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      async listTasks(input) {
+        calls.push({ type: "list", input });
+        return [
+          task({
+            id: "task-1",
+            status: "closed",
+            agentSessions: [
+              createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
+            ],
+          }),
+        ];
+      },
+      async deleteTask(input) {
+        calls.push({ type: "delete", input });
+        return true;
+      },
+      async createTask() {
+        throw new Error("unexpected create");
+      },
+      async updateTask() {
+        throw new Error("unexpected update");
+      },
+      async getTask() {
+        throw new Error("unexpected get");
+      },
+      async transitionTask() {
+        throw new Error("unexpected transition");
+      },
+    };
+    const taskActivityGuard: TaskActivityGuardPort = {
+      async ensureNoActiveTaskDeleteRuns(input) {
+        calls.push({ type: "activityGuard", input });
+      },
+      async ensureNoActiveTaskResetActivity() {
+        throw new Error("unexpected reset activity guard");
+      },
+    };
+
+    await expect(
+      createTaskService({
+        devServerService: createDirectMergeDevServerService(calls),
+        gitPort: createDirectMergeGitPort({
+          calls,
+          branches: {
+            "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+          },
+          removeWorktreeErrors: {
+            "/repo|/worktrees/repo/task-1|true": new Error(
+              "fatal: '/worktrees/repo/task-1' is not a working tree",
+            ),
+          },
+        }),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+        taskActivityGuard,
+        taskStore,
+        worktreeFiles: createCleanupWorktreeFiles(calls),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { preStart: [], postComplete: [] },
+        }),
+      }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(calls).toEqual([
+      { type: "list", input: { repoPath: "/repo" } },
+      {
+        type: "activityGuard",
+        input: {
+          repoPath: "/repo",
+          taskIds: ["task-1"],
+          tasks: [expect.objectContaining({ id: "task-1" })],
+        },
+      },
+      { type: "listBranches", workingDir: "/repo" },
+      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "removeWorktree",
+        repoPath: "/repo",
+        worktreePath: "/worktrees/repo/task-1",
+        force: true,
+      },
+      { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
+      { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
+      {
+        type: "delete",
+        input: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: false },
       },
     ]);
   });
@@ -444,6 +556,7 @@ describe("createTaskService task mutations and reset", () => {
         settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
         taskActivityGuard,
         taskStore,
+        worktreeFiles: createCleanupWorktreeFiles(calls),
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
@@ -473,6 +586,7 @@ describe("createTaskService task mutations and reset", () => {
         worktreePath: "/worktrees/repo/task-1",
         force: true,
       },
+      { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       {
         type: "clearAgentSessions",
@@ -579,6 +693,7 @@ describe("createTaskService task mutations and reset", () => {
         settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
         taskActivityGuard,
         taskStore,
+        worktreeFiles: createCleanupWorktreeFiles(calls),
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
@@ -608,6 +723,7 @@ describe("createTaskService task mutations and reset", () => {
         worktreePath: "/worktrees/repo/task-1",
         force: true,
       },
+      { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       {
         type: "clearWorkflowDocuments",

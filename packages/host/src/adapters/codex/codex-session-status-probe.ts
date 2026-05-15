@@ -1,14 +1,10 @@
 import type { RuntimeRoute } from "@openducktor/contracts";
 import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 
-type CodexSessionStatus = "active" | "idle" | "notLoaded" | "stale";
-
-type CodexLoadedThreadEntry = {
-  id: string;
-};
+type CodexSessionStatus = "active" | "idle" | "notLoaded" | "systemError";
 
 type CodexLoadedThreadListResponse = {
-  data: CodexLoadedThreadEntry[];
+  data: string[];
   nextCursor: string | null;
 };
 
@@ -21,6 +17,7 @@ type CodexThreadEntry = {
 type CodexThreadListResponse = {
   data: CodexThreadEntry[];
   nextCursor: string | null;
+  backwardsCursor: string | null;
 };
 
 export type CodexSessionStatusProbeInput = {
@@ -59,18 +56,24 @@ const parseLoadedThreadListResponse = (value: unknown): CodexLoadedThreadListRes
 
   return {
     data: payload.data.map((entry, index) => {
-      const record = requireRecord(entry, `Codex loaded thread entry ${index}`);
-      return { id: requireString(record.id, `Codex loaded thread entry ${index} id`) };
+      return requireString(entry, `Codex loaded thread entry ${index}`);
     }),
     nextCursor: parseCursor(payload.nextCursor, "Codex thread/loaded/list nextCursor"),
   };
 };
 
 const parseThreadStatus = (value: unknown, context: string): CodexSessionStatus => {
-  if (value === "active" || value === "idle" || value === "notLoaded" || value === "stale") {
-    return value;
+  const record = requireRecord(value, `${context} status`);
+  if (record.type === "idle" || record.type === "notLoaded" || record.type === "systemError") {
+    return record.type;
   }
-  throw new Error(`${context} has unsupported Codex thread status: ${String(value)}`);
+  if (record.type === "active") {
+    if (!Array.isArray(record.activeFlags)) {
+      throw new Error(`${context} active status activeFlags must be an array`);
+    }
+    return record.type;
+  }
+  throw new Error(`${context} has unsupported Codex thread status: ${String(record.type)}`);
 };
 
 const parseThreadListResponse = (value: unknown): CodexThreadListResponse => {
@@ -89,6 +92,7 @@ const parseThreadListResponse = (value: unknown): CodexThreadListResponse => {
       };
     }),
     nextCursor: parseCursor(payload.nextCursor, "Codex thread/list nextCursor"),
+    backwardsCursor: parseCursor(payload.backwardsCursor, "Codex thread/list backwardsCursor"),
   };
 };
 
@@ -118,8 +122,8 @@ const loadLoadedThreadIds = async (
         params: { cursor, limit: 100 },
       }),
     );
-    for (const entry of response.data) {
-      loadedThreadIds.add(entry.id);
+    for (const threadId of response.data) {
+      loadedThreadIds.add(threadId);
     }
 
     cursor = response.nextCursor;

@@ -1,4 +1,9 @@
-import { DEFAULT_BRANCH_PREFIX, type TaskCard, type TaskStatus } from "@openducktor/contracts";
+import {
+  DEFAULT_BRANCH_PREFIX,
+  type RepoConfig,
+  type TaskCard,
+  type TaskStatus,
+} from "@openducktor/contracts";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import { normalizePathForComparison } from "./builder-worktree-cleanup";
@@ -10,6 +15,14 @@ export const taskResetSessionRoles = new Set<string>(taskResetSessionRoleNames);
 
 export const taskHasImplementationSessions = (task: TaskCard): boolean =>
   (task.agentSessions ?? []).some((session) => implementationSessionRoles.has(session.role.trim()));
+
+export const managedWorktreeBaseForRepoConfig = (
+  settingsConfig: SettingsConfigPort,
+  repoConfig: RepoConfig,
+): string =>
+  repoConfig.worktreeBasePath !== undefined
+    ? settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
+    : settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
 
 export const collectTaskDeleteTargets = (
   tasks: TaskCard[],

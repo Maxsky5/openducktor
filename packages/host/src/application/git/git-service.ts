@@ -51,7 +51,6 @@ import {
   type GitScopeInput,
   type GitSwitchBranchInput,
   type GitWorktreeStatusInput,
-  isDefinitiveNonWorktreeGitError,
   normalizeCreateGitServiceInput,
   requireSettingsConfig,
   requireWorktreeFiles,
@@ -64,6 +63,7 @@ import {
   hashWorktreeStatusPayload,
   validateResetSnapshotMatches,
 } from "./git-worktree-snapshot";
+import { removeWorktreeAndFilesystemPath } from "./worktree-removal";
 
 export type GitService = {
   getBranches(input: GitScopeInput): Promise<GitBranch[]>;
@@ -240,42 +240,18 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
       const { repoPath, worktreePath, force } = input;
       const canonicalRepoPath = await resolveGitWorkingDirectory(gitPort, repoPath, undefined);
       const files = requireWorktreeFiles(worktreeFiles);
-      const effectiveWorktreePath = files.resolveWorktreePath(canonicalRepoPath, worktreePath);
-
-      if (await files.pathIsWithinRoot(effectiveWorktreePath, canonicalRepoPath)) {
-        throw new Error("worktree path cannot be the repository root");
-      }
-
-      try {
-        await gitPort.removeWorktree(canonicalRepoPath, worktreePath, force);
-      } catch (error) {
-        if (!force || !isDefinitiveNonWorktreeGitError(error)) {
-          throw error;
-        }
-
-        const config = requireSettingsConfig(settingsConfig);
-        const repoConfig = await findRepoConfigByPath(config, canonicalRepoPath);
-        const managedWorktreeBase =
-          repoConfig.worktreeBasePath !== undefined
-            ? config.resolveConfiguredPath(repoConfig.worktreeBasePath)
-            : config.defaultWorktreeBasePath(repoConfig.workspaceId);
-        const allowed =
-          (await files.pathIsWithinRoot(canonicalRepoPath, effectiveWorktreePath)) ||
-          (await files.pathIsWithinRoot(managedWorktreeBase, effectiveWorktreePath));
-        if (!allowed) {
-          throw new Error(
-            `Refusing forced worktree cleanup outside managed roots for ${effectiveWorktreePath}`,
-            { cause: error },
-          );
-        }
-      }
-
-      await files.removePathIfPresent(effectiveWorktreePath).catch((error: unknown) => {
-        throw new Error(
-          `git worktree removal left filesystem path cleanup incomplete for ${worktreePath}`,
-          { cause: error },
-        );
-      });
+      await removeWorktreeAndFilesystemPath(
+        {
+          gitPort,
+          settingsConfig: requireSettingsConfig(settingsConfig),
+          worktreeFiles: files,
+        },
+        {
+          repoPath: canonicalRepoPath,
+          worktreePath,
+          force,
+        },
+      );
       return { ok: true };
     },
     async resetWorktreeSelection(input) {

@@ -294,8 +294,8 @@ const createBuildStartWorktreeFiles = (calls: unknown[]): WorktreeFilePort => ({
   resolveWorktreePath(repoPath, worktreePath) {
     return worktreePath.startsWith("/") ? worktreePath : `${repoPath}/${worktreePath}`;
   },
-  async pathIsWithinRoot() {
-    return true;
+  async pathIsWithinRoot(root, candidate) {
+    return candidate === root || candidate.startsWith(`${root}/`);
   },
 });
 
@@ -438,12 +438,14 @@ const createDirectMergeGitPort = ({
   branches = {},
   aheadBehind = {},
   ancestorResults = {},
+  removeWorktreeErrors = {},
 }: {
   calls: unknown[];
   currentBranches?: Record<string, GitCurrentBranch>;
   branches?: Record<string, GitBranch[]>;
   aheadBehind?: Record<string, CommitsAheadBehind>;
   ancestorResults?: Record<string, boolean>;
+  removeWorktreeErrors?: Record<string, Error>;
 }): GitPort => ({
   async canonicalizePath(path) {
     return path;
@@ -482,6 +484,10 @@ const createDirectMergeGitPort = ({
   },
   async removeWorktree(repoPath, worktreePath, force) {
     calls.push({ type: "removeWorktree", repoPath, worktreePath, force });
+    const error = removeWorktreeErrors[`${repoPath}|${worktreePath}|${String(force)}`];
+    if (error) {
+      throw error;
+    }
   },
   async deleteLocalBranch(repoPath, branch, force) {
     calls.push({ type: "deleteLocalBranch", repoPath, branch, force });

@@ -1,10 +1,15 @@
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
-import { requireTaskDeleteDependencies } from "../support/required-task-dependencies";
+import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
+import {
+  requireTaskDeleteDependencies,
+  requireTaskWorktreeCleanupFiles,
+} from "../support/required-task-dependencies";
 import {
   appendDeleteCleanupProgress,
   collectDeleteWorktreePaths,
   collectRelatedTaskBranches,
   collectTaskDeleteTargets,
+  managedWorktreeBaseForRepoConfig,
   taskHasImplementationSessions,
 } from "../support/reset-cleanup";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -15,6 +20,7 @@ export const createTaskDeleteUseCase = ({
   taskStore,
   taskActivityGuard,
   settingsConfig,
+  worktreeFiles,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "deleteTask"> => ({
   async deleteTask(input) {
@@ -58,6 +64,10 @@ export const createTaskDeleteUseCase = ({
     const repoConfig =
       await dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
     const effectiveRepoPath = repoConfig.repoPath;
+    const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
+      dependencies.settingsConfig,
+      repoConfig,
+    );
     const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
     const worktreePaths = await collectDeleteWorktreePaths(
       dependencies,
@@ -82,7 +92,19 @@ export const createTaskDeleteUseCase = ({
         });
       }
       for (const worktreePath of worktreePaths) {
-        await dependencies.gitPort.removeWorktree(effectiveRepoPath, worktreePath, true);
+        await removeWorktreeAndFilesystemPath(
+          {
+            gitPort: dependencies.gitPort,
+            settingsConfig: dependencies.settingsConfig,
+            worktreeFiles: requireTaskWorktreeCleanupFiles(worktreeFiles, "task_delete"),
+          },
+          {
+            repoPath: effectiveRepoPath,
+            worktreePath,
+            force: true,
+            managedWorktreeBasePath,
+          },
+        );
         removedWorktrees.push(worktreePath);
       }
       for (const branchName of branchNames) {

@@ -422,6 +422,17 @@ export const requireTaskDeleteDependencies = (
   return { devServerService, gitPort, settingsConfig, workspaceSettingsService };
 };
 
+export const requireTaskWorktreeCleanupFiles = (
+  worktreeFiles: WorktreeFilePort | undefined,
+  operation: "task_delete" | "task_reset" | "task_reset_implementation",
+): WorktreeFilePort => {
+  if (!worktreeFiles) {
+    throw new Error(`Worktree file port is required for ${operation}.`);
+  }
+
+  return worktreeFiles;
+};
+
 export const requireImplementationResetStoreDependencies = (
   taskStore: TaskStorePort,
 ): {
