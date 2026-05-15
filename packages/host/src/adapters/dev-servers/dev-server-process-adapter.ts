@@ -17,11 +17,6 @@ export type CreateDevServerProcessAdapterInput = {
 const DEFAULT_START_GRACE_PERIOD_MS = 150;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 
-const shellCommand = (command: string): { file: string; args: string[] } =>
-  process.platform === "win32"
-    ? { file: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/c", command] }
-    : { file: "/bin/sh", args: ["-c", command] };
-
 export const createDevServerProcessAdapter = ({
   processEnv = process.env,
   startGracePeriodMs = DEFAULT_START_GRACE_PERIOD_MS,
@@ -32,11 +27,11 @@ export const createDevServerProcessAdapter = ({
       throw new Error("Dev server command is empty. Provide a command to run.");
     }
 
-    const shell = shellCommand(command);
-    const child = spawn(shell.file, shell.args, {
+    const child = spawn(command, {
       cwd,
       detached: shouldStartDetachedProcessGroup(),
       env: { ...processEnv, ...env },
+      shell: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
     const pid = child.pid;
