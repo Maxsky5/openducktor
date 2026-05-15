@@ -708,12 +708,6 @@ mod tests {
         let expected_workdir = fs::canonicalize(&repo)?.to_string_lossy().to_string();
         assert_eq!(raw_workdir, expected_workdir);
 
-        let stdin_lines = fs::read_to_string(&stdin_file)?;
-        assert!(stdin_lines.contains("\"method\":\"initialize\""));
-        assert!(stdin_lines.contains("\"clientInfo\""));
-        assert!(stdin_lines.contains("\"experimentalApi\":true"));
-        assert!(stdin_lines.contains("\"method\":\"initialized\""));
-
         let mut notifications = Vec::new();
         for _ in 0..50 {
             notifications = service.codex_app_server_notifications(runtime.runtime_id.as_str())?;
@@ -724,6 +718,12 @@ mod tests {
         }
         assert_eq!(notifications.len(), 1);
         assert_eq!(notifications[0]["method"], "codex/app-server/ready");
+
+        let stdin_lines = fs::read_to_string(&stdin_file)?;
+        assert!(stdin_lines.contains("\"method\":\"initialize\""));
+        assert!(stdin_lines.contains("\"clientInfo\""));
+        assert!(stdin_lines.contains("\"experimentalApi\":true"));
+        assert!(stdin_lines.contains("\"method\":\"initialized\""));
 
         let response = service.codex_app_server_request(
             runtime.runtime_id.as_str(),
