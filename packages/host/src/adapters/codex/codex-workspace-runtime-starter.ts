@@ -177,6 +177,10 @@ export const createCodexWorkspaceRuntimeStarter = ({
       resolveConfiguredMcpCommand(processEnv, mcpCommand) ??
       (await resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
     const binary = codexBinary ?? (await resolveCodexBinary(systemCommands, processEnv));
+    const lowerBinary = binary.toLowerCase();
+    const isWindowsCommandScript =
+      process.platform === "win32" &&
+      (lowerBinary.endsWith(".cmd") || lowerBinary.endsWith(".bat"));
     const nextRuntimeId = runtimeId();
     const child = spawn(binary, [...buildCodexMcpConfigArgs(resolvedMcpCommand), "app-server"], {
       cwd: input.workingDirectory,
@@ -189,6 +193,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
         ODT_FORBID_WORKSPACE_ID_INPUT: "true",
         ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
       },
+      shell: isWindowsCommandScript,
       stdio: ["pipe", "pipe", "pipe"],
     }) as CodexChildProcess;
     const pid = child.pid;
