@@ -62,7 +62,7 @@ describe("createDevServerProcessAdapter", () => {
         root,
         "dev-server",
         process.platform === "win32"
-          ? 'process.stdout.write("ready"); setInterval(function() {}, 5000);\n'
+          ? 'process.stdout.write("ready"); setTimeout(function() { process.exit(0); }, 5000);\n'
           : "#!/bin/sh\nprintf ready\nsleep 5\n",
       );
 
@@ -91,7 +91,7 @@ describe("createDevServerProcessAdapter", () => {
   test("rejects commands that exit during the start grace period", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-dev-server-adapter-exit-"));
     const port = createDevServerProcessAdapter({
-      startGracePeriodMs: 250,
+      startGracePeriodMs: 1_000,
       stopTimeoutMs: 100,
     });
 
