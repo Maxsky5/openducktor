@@ -11,8 +11,7 @@
     "lint": "biome check src"
   },
   "dependencies": {
-    "@openducktor/contracts": "workspace:*",
-    "@openducktor/core": "workspace:*"
+    "@openducktor/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

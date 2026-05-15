@@ -19,8 +19,8 @@
       "name": "@openducktor/desktop",
       "version": "0.3.1",
       "dependencies": {
-        "@openducktor/host-client": "workspace:*",
         "@openducktor/frontend": "workspace:*",
+        "@openducktor/host-client": "workspace:*",
         "@tauri-apps/api": "^2.0.0",
       },
       "devDependencies": {
@@ -36,11 +36,9 @@
       "name": "@openducktor/electron",
       "version": "0.3.1",
       "dependencies": {
-        "@openducktor/host-client": "workspace:*",
         "@openducktor/frontend": "workspace:*",
         "@openducktor/host": "workspace:*",
-        "react": "^19.2.5",
-        "react-dom": "^19.2.5",
+        "@openducktor/host-client": "workspace:*",
       },
       "devDependencies": {
         "@tailwindcss/vite": "^4.2.4",
@@ -69,15 +67,6 @@
         "@openducktor/core": "workspace:*",
       },
     },
-    "packages/host-client": {
-      "name": "@openducktor/host-client",
-      "version": "0.3.1",
-      "dependencies": {
-        "@openducktor/contracts": "workspace:*",
-        "@openducktor/core": "workspace:*",
-        "@openducktor/host": "workspace:*",
-      },
-    },
     "packages/contracts": {
       "name": "@openducktor/contracts",
       "version": "0.3.1",
@@ -102,9 +91,9 @@
         "@dnd-kit/utilities": "^3.2.2",
         "@openducktor/adapters-codex-app-server": "workspace:*",
         "@openducktor/adapters-opencode-sdk": "workspace:*",
-        "@openducktor/host-client": "workspace:*",
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
+        "@openducktor/host-client": "workspace:*",
         "@pierre/diffs": "^1.1.19",
         "@radix-ui/react-collapsible": "^1.1.12",
         "@radix-ui/react-dialog": "^1.1.14",
@@ -151,11 +140,19 @@
       "version": "0.3.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
-        "@openducktor/core": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^25.6.0",
         "bun-types": "^1.3.13",
+      },
+    },
+    "packages/host-client": {
+      "name": "@openducktor/host-client",
+      "version": "0.3.1",
+      "dependencies": {
+        "@openducktor/contracts": "workspace:*",
+        "@openducktor/core": "workspace:*",
+        "@openducktor/host": "workspace:*",
       },
     },
     "packages/openducktor-mcp": {
@@ -181,9 +178,9 @@
         "openducktor-web": "dist/cli.js",
       },
       "devDependencies": {
-        "@openducktor/host-client": "workspace:*",
         "@openducktor/frontend": "workspace:*",
         "@openducktor/host": "workspace:*",
+        "@openducktor/host-client": "workspace:*",
         "@tailwindcss/vite": "^4.2.4",
         "@types/node": "^25.6.0",
         "@vitejs/plugin-react": "^6.0.1",
@@ -389,8 +386,6 @@
 
     "@openducktor/adapters-opencode-sdk": ["@openducktor/adapters-opencode-sdk@workspace:packages/adapters-opencode-sdk"],
 
-    "@openducktor/host-client": ["@openducktor/host-client@workspace:packages/host-client"],
-
     "@openducktor/contracts": ["@openducktor/contracts@workspace:packages/contracts"],
 
     "@openducktor/core": ["@openducktor/core@workspace:packages/core"],
@@ -402,6 +397,8 @@
     "@openducktor/frontend": ["@openducktor/frontend@workspace:packages/frontend"],
 
     "@openducktor/host": ["@openducktor/host@workspace:packages/host"],
+
+    "@openducktor/host-client": ["@openducktor/host-client@workspace:packages/host-client"],
 
     "@openducktor/mcp": ["@openducktor/mcp@workspace:packages/openducktor-mcp"],
 

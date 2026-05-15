@@ -29,9 +29,7 @@
   "dependencies": {
     "@openducktor/host-client": "workspace:*",
     "@openducktor/frontend": "workspace:*",
-    "@openducktor/host": "workspace:*",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "@openducktor/host": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.4",
