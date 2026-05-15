@@ -63,9 +63,9 @@ describe("electron dev script", () => {
     expect(shouldRestartElectronForChange("/repo/packages/frontend/src/App.tsx", roots)).toBe(
       false,
     );
-    expect(
-      shouldRestartElectronForChange("/repo/packages/adapters-tauri-host/src/index.ts", roots),
-    ).toBe(false);
+    expect(shouldRestartElectronForChange("/repo/packages/host-client/src/index.ts", roots)).toBe(
+      false,
+    );
   });
 
   test("ignores unsupported file types inside restart roots", () => {

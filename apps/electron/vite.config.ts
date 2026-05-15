@@ -57,8 +57,8 @@ export default defineConfig({
         replacement: path.join(packagesRoot, "adapters-opencode-sdk/src/index.ts"),
       },
       {
-        find: "@openducktor/adapters-tauri-host",
-        replacement: path.join(packagesRoot, "adapters-tauri-host/src/index.ts"),
+        find: "@openducktor/host-client",
+        replacement: path.join(packagesRoot, "host-client/src/index.ts"),
       },
       {
         find: "@openducktor/contracts",

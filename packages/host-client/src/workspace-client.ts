@@ -213,7 +213,7 @@ const workspaceResolveLocalAttachmentPath = async (
   return parseResolvedLocalAttachment(payload);
 };
 
-export class TauriWorkspaceClient {
+export class HostWorkspaceClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
   async workspaceList(): Promise<WorkspaceRecord[]> {

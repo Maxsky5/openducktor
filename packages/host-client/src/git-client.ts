@@ -323,7 +323,7 @@ const gitAbortConflict = async (
   return gitConflictAbortResultSchema.parse(payload);
 };
 
-export class TauriGitClient {
+export class HostGitClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
   async gitGetBranches(repoPath: string): Promise<GitBranch[]> {

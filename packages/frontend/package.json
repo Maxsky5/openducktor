@@ -22,7 +22,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@openducktor/adapters-codex-app-server": "workspace:*",
     "@openducktor/adapters-opencode-sdk": "workspace:*",
-    "@openducktor/adapters-tauri-host": "workspace:*",
+    "@openducktor/host-client": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@pierre/diffs": "^1.1.19",

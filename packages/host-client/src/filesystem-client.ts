@@ -9,7 +9,7 @@ const filesystemListDirectory = async (
   return directoryListingSchema.parse(payload);
 };
 
-export class TauriFilesystemClient {
+export class HostFilesystemClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
   async filesystemListDirectory(path?: string): Promise<DirectoryListing> {

@@ -1,6 +1,6 @@
-import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import type { ShellBridge } from "@openducktor/frontend";
 import { isTauriRuntime } from "@openducktor/frontend/lib/runtime";
+import { createHostClient } from "@openducktor/host-client";
 
 type AsyncCleanup = (() => void | Promise<void>) | null | undefined;
 
@@ -55,10 +55,10 @@ const createSafeCleanup = (cleanup: AsyncCleanup): (() => void) => {
 
 const createHostCommands = (): ShellBridge["client"] => {
   if (!isTauriRuntime()) {
-    return createTauriHostClient(notAvailable);
+    return createHostClient(notAvailable);
   }
 
-  return createTauriHostClient(async <T>(command: string, args?: Record<string, unknown>) => {
+  return createHostClient(async <T>(command: string, args?: Record<string, unknown>) => {
     const api = await getTauriCoreModule();
     return api.invoke<T>(command, args);
   });

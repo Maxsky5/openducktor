@@ -31,7 +31,7 @@ const systemOpenDirectoryInTool = async (
   parseOkResult(payload, "system_open_directory_in_tool");
 };
 
-export class TauriSystemClient {
+export class HostSystemClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
   async systemListOpenInTools(forceRefresh = false): Promise<SystemOpenInToolInfo[]> {

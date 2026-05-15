@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import type { TaskApprovalContext, TaskApprovalContextLoadResult } from "@openducktor/contracts";
+import { createHostClient } from "@openducktor/host-client";
 import { waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act } from "react";
@@ -67,7 +67,7 @@ const originalToastSuccess = toast.success;
 const originalToastError = toast.error;
 
 const createUnavailableHostClient = () =>
-  createTauriHostClient(async () => {
+  createHostClient(async () => {
     throw new Error("Tauri runtime not available. Run inside the desktop shell.");
   });
 

@@ -1,12 +1,12 @@
 import type { PlannerTools } from "@openducktor/core";
-import { TauriAgentClient } from "./build-runtime-client";
-import { TauriFilesystemClient } from "./filesystem-client";
-import { TauriGitClient } from "./git-client";
+import { HostAgentClient } from "./build-runtime-client";
+import { HostFilesystemClient } from "./filesystem-client";
+import { HostGitClient } from "./git-client";
 import type { InvokeFn } from "./invoke-utils";
-import { TauriSystemClient } from "./system-client";
-import { TauriTaskClient } from "./task-client";
+import { HostSystemClient } from "./system-client";
+import { HostTaskClient } from "./task-client";
 import { TaskMetadataCache } from "./task-metadata-cache";
-import { TauriWorkspaceClient } from "./workspace-client";
+import { HostWorkspaceClient } from "./workspace-client";
 
 type MethodName<TClient extends object> = {
   [TKey in keyof TClient]: TClient[TKey] extends (...args: infer _TArgs) => infer _TReturn
@@ -30,16 +30,16 @@ const WORKSPACE_METHODS = [
   "workspaceStageLocalAttachment",
   "workspaceResolveLocalAttachmentPath",
   "setTheme",
-] as const satisfies readonly MethodName<TauriWorkspaceClient>[];
+] as const satisfies readonly MethodName<HostWorkspaceClient>[];
 
 const FILESYSTEM_METHODS = [
   "filesystemListDirectory",
-] as const satisfies readonly MethodName<TauriFilesystemClient>[];
+] as const satisfies readonly MethodName<HostFilesystemClient>[];
 
 const SYSTEM_METHODS = [
   "systemListOpenInTools",
   "systemOpenDirectoryInTool",
-] as const satisfies readonly MethodName<TauriSystemClient>[];
+] as const satisfies readonly MethodName<HostSystemClient>[];
 
 const TASK_METHODS = [
   "tasksList",
@@ -67,7 +67,7 @@ const TASK_METHODS = [
   "agentSessionsList",
   "agentSessionsListBulk",
   "agentSessionUpsert",
-] as const satisfies readonly MethodName<TauriTaskClient>[];
+] as const satisfies readonly MethodName<HostTaskClient>[];
 
 const AGENT_METHODS = [
   "systemCheck",
@@ -104,7 +104,7 @@ const AGENT_METHODS = [
   "humanRequestChanges",
   "humanApprove",
   "agentSessionStop",
-] as const satisfies readonly MethodName<TauriAgentClient>[];
+] as const satisfies readonly MethodName<HostAgentClient>[];
 
 const GIT_METHODS = [
   "gitGetBranches",
@@ -125,7 +125,7 @@ const GIT_METHODS = [
   "gitGetWorktreeStatus",
   "gitGetWorktreeStatusSummary",
   "gitResetWorktreeSelection",
-] as const satisfies readonly MethodName<TauriGitClient>[];
+] as const satisfies readonly MethodName<HostGitClient>[];
 
 type WorkspaceMethodName = (typeof WORKSPACE_METHODS)[number];
 type FilesystemMethodName = (typeof FILESYSTEM_METHODS)[number];
@@ -134,12 +134,12 @@ type TaskMethodName = (typeof TASK_METHODS)[number];
 type AgentMethodName = (typeof AGENT_METHODS)[number];
 type GitMethodName = (typeof GIT_METHODS)[number];
 
-type TauriHostClientApi = Pick<TauriWorkspaceClient, WorkspaceMethodName> &
-  Pick<TauriFilesystemClient, FilesystemMethodName> &
-  Pick<TauriSystemClient, SystemMethodName> &
-  Pick<TauriTaskClient, TaskMethodName> &
-  Pick<TauriAgentClient, AgentMethodName> &
-  Pick<TauriGitClient, GitMethodName>;
+type HostClientApi = Pick<HostWorkspaceClient, WorkspaceMethodName> &
+  Pick<HostFilesystemClient, FilesystemMethodName> &
+  Pick<HostSystemClient, SystemMethodName> &
+  Pick<HostTaskClient, TaskMethodName> &
+  Pick<HostAgentClient, AgentMethodName> &
+  Pick<HostGitClient, GitMethodName>;
 
 type MethodDelegate<TClient extends object, TMethodName extends MethodName<TClient>> = Extract<
   TClient[TMethodName],
@@ -172,17 +172,17 @@ const bindDelegates = <
   }
 };
 
-export type TauriHostClient = TauriHostClientApi & PlannerTools;
+export type HostClient = HostClientApi & PlannerTools;
 
-const createTauriHostClientApi = (invokeFn: InvokeFn): TauriHostClientApi => {
+const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const metadataCache = new TaskMetadataCache();
-  const workspaceClient = new TauriWorkspaceClient(invokeFn);
-  const filesystemClient = new TauriFilesystemClient(invokeFn);
-  const systemClient = new TauriSystemClient(invokeFn);
-  const taskClient = new TauriTaskClient(invokeFn, metadataCache);
-  const agentClient = new TauriAgentClient(invokeFn, metadataCache);
-  const gitClient = new TauriGitClient(invokeFn);
-  const hostClient = {} as TauriHostClientApi;
+  const workspaceClient = new HostWorkspaceClient(invokeFn);
+  const filesystemClient = new HostFilesystemClient(invokeFn);
+  const systemClient = new HostSystemClient(invokeFn);
+  const taskClient = new HostTaskClient(invokeFn, metadataCache);
+  const agentClient = new HostAgentClient(invokeFn, metadataCache);
+  const gitClient = new HostGitClient(invokeFn);
+  const hostClient = {} as HostClientApi;
 
   bindDelegates(hostClient, workspaceClient, WORKSPACE_METHODS);
   bindDelegates(hostClient, filesystemClient, FILESYSTEM_METHODS);
@@ -194,6 +194,6 @@ const createTauriHostClientApi = (invokeFn: InvokeFn): TauriHostClientApi => {
   return hostClient;
 };
 
-export function createTauriHostClient(invokeFn: InvokeFn): TauriHostClient {
-  return createTauriHostClientApi(invokeFn);
+export function createHostClient(invokeFn: InvokeFn): HostClient {
+  return createHostClientApi(invokeFn);
 }

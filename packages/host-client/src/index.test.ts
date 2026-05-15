@@ -1,7 +1,7 @@
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type {} from "./bun-test";
-import type { TauriHostClient as TauriHostClientType } from "./index";
-import { createTauriHostClient } from "./index";
+import type { HostClient as HostClientType } from "./index";
+import { createHostClient } from "./index";
 
 type InvokeCall = {
   command: string;
@@ -80,17 +80,17 @@ const createClient = (resolver: (command: string, args?: Record<string, unknown>
     calls.push({ command, args });
     return resolver(command, args);
   };
-  const client: TauriHostClientType = createTauriHostClient(invoke);
+  const client: HostClientType = createHostClient(invoke);
   return { client, calls };
 };
 
-const assertClientType = (client: TauriHostClientType): TauriHostClientType => client;
+const assertClientType = (client: HostClientType): HostClientType => client;
 
-describe("TauriHostClient", () => {
+describe("HostClient", () => {
   test("does not export a redundant runtime constructor alias", async () => {
     const module = await import("./index");
 
-    expect(Object.hasOwn(module, "TauriHostClient")).toBe(false);
+    expect(Object.hasOwn(module, "HostClient")).toBe(false);
   });
 
   test("exports a value and type-compatible host client", async () => {

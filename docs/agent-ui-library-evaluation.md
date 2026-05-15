@@ -25,7 +25,7 @@ What is the best React library strategy for OpenDucktor agent pages (Spec, Plann
 ## Decision
 Use **project-native shadcn + Tailwind composition** for the agent UI layer and pair it with:
 - `@openducktor/adapters-opencode-sdk` for OpenCode session/event orchestration.
-- `@openducktor/adapters-tauri-host` for task transitions and runtime control.
+- `@openducktor/host-client` for task transitions and runtime control.
 
 This keeps the UI fully aligned with OpenDucktor workflow semantics while preserving replaceable
 adapter boundaries (hexagonal architecture).

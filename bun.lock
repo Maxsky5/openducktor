@@ -19,7 +19,7 @@
       "name": "@openducktor/desktop",
       "version": "0.3.1",
       "dependencies": {
-        "@openducktor/adapters-tauri-host": "workspace:*",
+        "@openducktor/host-client": "workspace:*",
         "@openducktor/frontend": "workspace:*",
         "@tauri-apps/api": "^2.0.0",
       },
@@ -36,7 +36,7 @@
       "name": "@openducktor/electron",
       "version": "0.3.1",
       "dependencies": {
-        "@openducktor/adapters-tauri-host": "workspace:*",
+        "@openducktor/host-client": "workspace:*",
         "@openducktor/frontend": "workspace:*",
         "@openducktor/host": "workspace:*",
         "react": "^19.2.5",
@@ -69,8 +69,8 @@
         "@openducktor/core": "workspace:*",
       },
     },
-    "packages/adapters-tauri-host": {
-      "name": "@openducktor/adapters-tauri-host",
+    "packages/host-client": {
+      "name": "@openducktor/host-client",
       "version": "0.3.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
@@ -102,7 +102,7 @@
         "@dnd-kit/utilities": "^3.2.2",
         "@openducktor/adapters-codex-app-server": "workspace:*",
         "@openducktor/adapters-opencode-sdk": "workspace:*",
-        "@openducktor/adapters-tauri-host": "workspace:*",
+        "@openducktor/host-client": "workspace:*",
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
         "@pierre/diffs": "^1.1.19",
@@ -181,7 +181,7 @@
         "openducktor-web": "dist/cli.js",
       },
       "devDependencies": {
-        "@openducktor/adapters-tauri-host": "workspace:*",
+        "@openducktor/host-client": "workspace:*",
         "@openducktor/frontend": "workspace:*",
         "@openducktor/host": "workspace:*",
         "@tailwindcss/vite": "^4.2.4",
@@ -389,7 +389,7 @@
 
     "@openducktor/adapters-opencode-sdk": ["@openducktor/adapters-opencode-sdk@workspace:packages/adapters-opencode-sdk"],
 
-    "@openducktor/adapters-tauri-host": ["@openducktor/adapters-tauri-host@workspace:packages/adapters-tauri-host"],
+    "@openducktor/host-client": ["@openducktor/host-client@workspace:packages/host-client"],
 
     "@openducktor/contracts": ["@openducktor/contracts@workspace:packages/contracts"],
 

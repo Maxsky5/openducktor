@@ -511,7 +511,7 @@ const agentSessionStop = async (
   return parseOkResult(payload, "agent_session_stop");
 };
 
-export class TauriAgentClient {
+export class HostAgentClient {
   constructor(
     private readonly invokeFn: InvokeFn,
     private readonly metadataCache?: TaskMetadataCache,

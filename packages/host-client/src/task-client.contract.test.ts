@@ -1,15 +1,15 @@
 import type {} from "./bun-test";
 import type { SetPlanInput, SetSpecInput } from "./task-client";
 import * as taskClientModule from "./task-client";
-import { TauriTaskClient } from "./task-client";
+import { HostTaskClient } from "./task-client";
 
 const acceptSetSpecInput = (_input: SetSpecInput): void => {};
 const acceptSetPlanInput = (_input: SetPlanInput): void => {};
 
 describe("task-client exports contract", () => {
   test("keeps class export as the runtime surface", () => {
-    expect(Object.keys(taskClientModule)).toEqual(["TauriTaskClient"]);
-    expect(taskClientModule.TauriTaskClient).toBe(TauriTaskClient);
+    expect(Object.keys(taskClientModule)).toEqual(["HostTaskClient"]);
+    expect(taskClientModule.HostTaskClient).toBe(HostTaskClient);
   });
 
   test("keeps planner input types importable", () => {
@@ -26,6 +26,6 @@ describe("task-client exports contract", () => {
       subtasks: [{ title: "Subtask" }],
     });
 
-    expect(typeof TauriTaskClient).toBe("function");
+    expect(typeof HostTaskClient).toBe("function");
   });
 });

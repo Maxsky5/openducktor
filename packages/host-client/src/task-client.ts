@@ -52,7 +52,7 @@ export type TaskDocumentReadResult = {
   error?: string | null;
 };
 
-export class TauriTaskClient {
+export class HostTaskClient {
   constructor(
     private readonly invokeFn: InvokeFn,
     private readonly metadataCache: TaskMetadataCache,

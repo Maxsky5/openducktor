@@ -13,5 +13,5 @@ Electron desktop shell for OpenDucktor. It mounts the shared frontend, exposes a
 
 ## Integration Points
 - `@openducktor/frontend`
-- `@openducktor/adapters-tauri-host`
+- `@openducktor/host-client`
 - `@openducktor/host`

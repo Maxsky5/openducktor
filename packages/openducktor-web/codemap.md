@@ -15,5 +15,5 @@ Public local browser runner and browser shell bridge for OpenDucktor. It starts 
 
 ## Integration Points
 - `packages/frontend`
-- `packages/adapters-tauri-host`
+- `packages/host-client`
 - `packages/host`

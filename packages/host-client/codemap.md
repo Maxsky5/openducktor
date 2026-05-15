@@ -1,7 +1,7 @@
-# packages/adapters-tauri-host/
+# packages/host-client/
 
 ## Responsibility
-Typed Tauri IPC adapter exposing desktop host commands for workspace, task, filesystem, system, git, and runtime/build operations.
+Typed invoke-based host client exposing shell-provided host commands for workspace, task, filesystem, system, git, and runtime/build operations.
 
 ## Design Patterns
 - Thin `invoke` wrappers with schema-validated inputs/outputs.
@@ -16,4 +16,4 @@ Typed Tauri IPC adapter exposing desktop host commands for workspace, task, file
 ## Integration Points
 - `@openducktor/contracts` schemas and payload types
 - `@openducktor/core` planner/tool types
-- Tauri `invoke` bridge from the desktop shell/host
+- Shell-specific invoke bridges from Tauri, Electron, and Web hosts

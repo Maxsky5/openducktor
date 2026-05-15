@@ -1,4 +1,4 @@
-import type { TauriHostClient } from "@openducktor/adapters-tauri-host";
+import type { HostClient } from "@openducktor/host-client";
 import { getShellBridge, type HostBridge } from "./shell-bridge";
 
 const hostClientOverrides = new Map<PropertyKey, { value: unknown; restoreValue: unknown }>();
@@ -6,7 +6,7 @@ const shellClientMethodBindings = new WeakMap<object, Map<PropertyKey, unknown>>
 
 const readShellClientValue = (propertyKey: PropertyKey): unknown => {
   const client = getShellBridge().client;
-  const value = client[propertyKey as keyof TauriHostClient];
+  const value = client[propertyKey as keyof HostClient];
   if (typeof value !== "function") {
     return value;
   }
@@ -52,7 +52,7 @@ const hostClientProxy = new Proxy(
       return true;
     },
   },
-) as TauriHostClient;
+) as HostClient;
 
 export const createHostBridge = (): HostBridge => getShellBridge();
 

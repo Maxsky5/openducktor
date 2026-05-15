@@ -1,5 +1,5 @@
-import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import type { ShellBridge } from "@openducktor/frontend";
+import { createHostClient } from "@openducktor/host-client";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
@@ -25,7 +25,7 @@ const subscribeElectronEvent =
 
 export const createElectronShellBridge = (): ShellBridge => {
   const electronApi = getElectronApi();
-  const client = createTauriHostClient((command, args) => electronApi.invoke(command, args));
+  const client = createHostClient((command, args) => electronApi.invoke(command, args));
 
   return {
     client,

@@ -1,9 +1,9 @@
-import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapters-tauri-host";
+import { createHostClient, type HostClient } from "@openducktor/host-client";
 
 export type HostEventListener = (payload: unknown) => void;
 
 export type HostBridge = {
-  client: TauriHostClient;
+  client: HostClient;
   subscribeRunEvents: (listener: HostEventListener) => Promise<() => void>;
   subscribeDevServerEvents: (listener: HostEventListener) => Promise<() => void>;
   subscribeTaskEvents: (listener: HostEventListener) => Promise<() => void>;
@@ -33,7 +33,7 @@ const failUnavailable = async (): Promise<never> => {
 };
 
 export const createUnavailableShellBridge = (): ShellBridge => ({
-  client: createTauriHostClient(unavailable),
+  client: createHostClient(unavailable),
   subscribeRunEvents: failUnavailable,
   subscribeDevServerEvents: failUnavailable,
   subscribeTaskEvents: failUnavailable,

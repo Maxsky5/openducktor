@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createTauriHostClient } from "@openducktor/adapters-tauri-host";
 import type { BeadsCheck } from "@openducktor/contracts";
+import { createHostClient } from "@openducktor/host-client";
 import { CancelledError } from "@tanstack/react-query";
 import { act } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -105,7 +105,7 @@ beforeEach(() => {
   };
   mock.module("@/lib/host-client", () => ({
     createHostBridge: () => ({
-      client: createTauriHostClient(async () => {
+      client: createHostClient(async () => {
         throw new Error("Tauri runtime not available. Run inside the desktop shell.");
       }),
       subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
@@ -116,11 +116,11 @@ beforeEach(() => {
       },
     }),
     createHostClient: () =>
-      createTauriHostClient(async () => {
+      createHostClient(async () => {
         throw new Error("Tauri runtime not available. Run inside the desktop shell.");
       }),
     hostBridge: {
-      client: createTauriHostClient(async () => {
+      client: createHostClient(async () => {
         throw new Error("Tauri runtime not available. Run inside the desktop shell.");
       }),
       subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
@@ -130,7 +130,7 @@ beforeEach(() => {
         return subscribeTaskEventsImpl(listener);
       },
     },
-    hostClient: createTauriHostClient(async () => {
+    hostClient: createHostClient(async () => {
       throw new Error("Tauri runtime not available. Run inside the desktop shell.");
     }),
     subscribeTaskEvents: async (listener: (payload: unknown) => void) => {

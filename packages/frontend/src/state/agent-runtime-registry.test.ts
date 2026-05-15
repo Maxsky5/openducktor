@@ -1,11 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { TauriHostClient } from "@openducktor/adapters-tauri-host";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import type { HostClient } from "@openducktor/host-client";
 import {
   configureShellBridge,
   createUnavailableShellBridge,
@@ -103,7 +103,7 @@ describe("agent-runtime-registry", () => {
       return { thread: { id: "thread-codex" }, startedAt: "2026-02-22T09:00:00.000Z" };
     }) as typeof host.codexAppServerRequest;
     configureShellBridge({
-      client: {} as TauriHostClient,
+      client: {} as HostClient,
       subscribeRunEvents: async () => () => {},
       subscribeDevServerEvents: async () => () => {},
       subscribeTaskEvents: async () => () => {},
@@ -200,7 +200,7 @@ describe("agent-runtime-registry", () => {
       throw new Error(`Unexpected Codex request '${method}'.`);
     }) as typeof host.codexAppServerRequest;
     configureShellBridge({
-      client: {} as TauriHostClient,
+      client: {} as HostClient,
       subscribeRunEvents: async () => () => {},
       subscribeDevServerEvents: async () => () => {},
       subscribeTaskEvents: async () => () => {},

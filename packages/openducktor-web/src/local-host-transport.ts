@@ -1,9 +1,9 @@
-import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapters-tauri-host";
 import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@openducktor/frontend/lib/browser-live/constants";
 import { browserLiveControlEvent } from "@openducktor/frontend/lib/browser-live-control-events";
+import { createHostClient, type HostClient } from "@openducktor/host-client";
 import { getBrowserAuthToken, getBrowserBackendUrl } from "./browser-config";
 
 type BrowserSseListener = (payload: unknown) => void;
@@ -108,8 +108,7 @@ const createHttpInvoke = () => {
   };
 };
 
-export const createLocalHostClient = (): TauriHostClient =>
-  createTauriHostClient(createHttpInvoke());
+export const createLocalHostClient = (): HostClient => createHostClient(createHttpInvoke());
 
 const parseSsePayload = (raw: string): unknown => {
   try {
