@@ -20,7 +20,7 @@ const readBundleIconFile = async ({
   pathExists,
   runner,
 }: Omit<ResolveMacOsAppIconInput, "appLabel">): Promise<string | null> => {
-  const infoPlistPath = path.join(appPath, "Contents", "Info.plist");
+  const infoPlistPath = path.posix.join(appPath, "Contents", "Info.plist");
   if (!(await pathExists(infoPlistPath))) {
     return null;
   }
@@ -61,7 +61,7 @@ const resolveAppIconPath = async ({
     return null;
   }
 
-  const resourcesPath = path.join(appPath, "Contents", "Resources");
+  const resourcesPath = path.posix.join(appPath, "Contents", "Resources");
   const iconFile =
     (await readBundleIconFile({ appPath, pathExists, runner })) ??
     (await resolveMetadataIconFile({ appPath, runner })) ??
@@ -70,7 +70,7 @@ const resolveAppIconPath = async ({
     return null;
   }
 
-  const iconPath = path.join(resourcesPath, iconFile);
+  const iconPath = path.posix.join(resourcesPath, iconFile);
   return (await pathExists(iconPath)) ? iconPath : null;
 };
 

@@ -110,7 +110,7 @@ const candidateApplicationPaths = (appName: string, homeDirectory: () => string)
     `/System/Applications/${bundleName}`,
     `/System/Applications/Utilities/${bundleName}`,
     `/System/Library/CoreServices/${bundleName}`,
-    path.join(homeDirectory(), "Applications", bundleName),
+    path.posix.join(homeDirectory(), "Applications", bundleName),
   ];
 };
 
