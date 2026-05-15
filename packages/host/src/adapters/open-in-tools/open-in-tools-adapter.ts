@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
 import type { OpenInToolsPort } from "../../ports/open-in-tools-port";
+import { resolveMacOsAppIconDataUrl } from "./macos-open-in-icons";
 
 const execFileAsync = promisify(execFile);
 
@@ -171,11 +172,10 @@ export const createOpenInToolsAdapter = ({
     }
 
     const bundleName = bundleNameForApp(appName);
-    const output = await runner("mdfind", ["-name", bundleName]).catch((error: unknown) => {
-      throw new Error(`Failed to discover application path for ${bundleName}: ${String(error)}`, {
-        cause: error,
-      });
-    });
+    const output = await runner("mdfind", ["-name", bundleName]).catch(() => null);
+    if (!output) {
+      return null;
+    }
 
     for (const line of output.stdout.split(/\r?\n/)) {
       const candidate = line.trim();
@@ -202,6 +202,26 @@ export const createOpenInToolsAdapter = ({
     return null;
   };
 
+  const buildToolInfo = async (
+    metadata: OpenInToolMetadata,
+    appPath: string,
+  ): Promise<SystemOpenInToolInfo> => ({
+    toolId: metadata.id,
+    iconDataUrl: await resolveMacOsAppIconDataUrl({
+      appLabel: metadata.label,
+      appPath,
+      pathExists,
+      runner,
+    }),
+  });
+
+  const resolveDiscoveredTool = async (
+    metadata: OpenInToolMetadata,
+  ): Promise<SystemOpenInToolInfo | null> => {
+    const appPath = await resolveApplicationPath(metadata);
+    return appPath ? buildToolInfo(metadata, appPath) : null;
+  };
+
   return {
     canonicalizeDirectory(directoryPath) {
       return realpathFn(directoryPath);
@@ -212,14 +232,8 @@ export const createOpenInToolsAdapter = ({
     async discoverOpenInTools() {
       ensureMacOs(platform, "Open In tool discovery");
 
-      const tools: SystemOpenInToolInfo[] = [];
-      for (const metadata of OPEN_IN_TOOL_CATALOG) {
-        if (await resolveApplicationPath(metadata)) {
-          tools.push({ toolId: metadata.id, iconDataUrl: null });
-        }
-      }
-
-      return tools;
+      const discoveredTools = await Promise.all(OPEN_IN_TOOL_CATALOG.map(resolveDiscoveredTool));
+      return discoveredTools.filter((tool): tool is SystemOpenInToolInfo => tool !== null);
     },
     async openDirectoryInTool(directoryPath, toolId) {
       ensureMacOs(platform, "Opening directories in external tools");

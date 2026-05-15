@@ -1,3 +1,4 @@
+import { mkdir, writeFile } from "node:fs/promises";
 import type { OpenInCommandRunner } from "./open-in-tools-adapter";
 import { createOpenInToolsAdapter } from "./open-in-tools-adapter";
 
@@ -15,8 +16,68 @@ const createRunner = () => {
 };
 
 describe("createOpenInToolsAdapter", () => {
-  test("discovers installed macOS applications", async () => {
-    const { runner } = createRunner();
+  test("discovers installed macOS applications with bounded application icons", async () => {
+    const calls: Array<{ program: string; args: string[] }> = [];
+    const runner: OpenInCommandRunner = async (program, args) => {
+      calls.push({ program, args });
+
+      if (program === "mdfind" && args[1] === "Ghostty.app") {
+        return { stdout: "/Applications/Ghostty.app\n", stderr: "" };
+      }
+
+      if (program === "defaults" && args[1] === "/Applications/Finder.app/Contents/Info.plist") {
+        return { stdout: "FinderIcon\n", stderr: "" };
+      }
+
+      if (program === "iconutil") {
+        const outputDirectory = args.at(-1);
+        if (!outputDirectory) {
+          throw new Error("missing iconutil output directory");
+        }
+
+        await mkdir(outputDirectory, { recursive: true });
+        await writeFile(`${outputDirectory}/icon_16x16.png`, "small");
+        await writeFile(`${outputDirectory}/icon_128x128@2x.png`, "best");
+        await writeFile(`${outputDirectory}/icon_512x512@2x.png`, "too-large");
+        return { stdout: "", stderr: "" };
+      }
+
+      return { stdout: "", stderr: "" };
+    };
+    const port = createOpenInToolsAdapter({
+      platform: "darwin",
+      runner,
+      homeDirectory: () => "/Users/dev",
+      pathExists: async (inputPath) =>
+        inputPath === "/Applications/Finder.app" ||
+        inputPath === "/Applications/Finder.app/Contents/Info.plist" ||
+        inputPath === "/Applications/Finder.app/Contents/Resources/FinderIcon.icns" ||
+        inputPath === "/Applications/Ghostty.app",
+      pathIsDirectory: async (inputPath) => inputPath.endsWith(".app"),
+    });
+
+    await expect(port.discoverOpenInTools()).resolves.toEqual([
+      {
+        toolId: "finder",
+        iconDataUrl: `data:image/png;base64,${Buffer.from("best").toString("base64")}`,
+      },
+      { toolId: "ghostty", iconDataUrl: null },
+    ]);
+    expect(calls.some((call) => call.program === "sips")).toBe(false);
+  });
+
+  test("keeps catalog discovery available when Spotlight lookup fails", async () => {
+    const runner: OpenInCommandRunner = async (program) => {
+      if (program === "mdfind") {
+        throw new Error("Spotlight unavailable");
+      }
+
+      if (program === "mdls") {
+        return { stdout: "MissingIcon\n", stderr: "" };
+      }
+
+      return { stdout: "", stderr: "" };
+    };
     const port = createOpenInToolsAdapter({
       platform: "darwin",
       runner,
@@ -27,7 +88,6 @@ describe("createOpenInToolsAdapter", () => {
 
     await expect(port.discoverOpenInTools()).resolves.toEqual([
       { toolId: "finder", iconDataUrl: null },
-      { toolId: "ghostty", iconDataUrl: null },
     ]);
   });
 
