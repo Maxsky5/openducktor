@@ -577,6 +577,14 @@ export function AgentChatComposer({
     setDraft(nextDraft);
   }, []);
 
+  const handleRemoveAttachment = useCallback(
+    (attachmentId: string): void => {
+      handleDraftChange(removeAttachmentFromDraft(latestDraftRef.current, attachmentId));
+      onComposerEditorInput();
+    },
+    [handleDraftChange, onComposerEditorInput],
+  );
+
   const handleAddFiles = useCallback(
     (files: File[]): void => {
       if (attachmentIntakeDisabled) {
@@ -755,14 +763,7 @@ export function AgentChatComposer({
       onAddFiles={handleAddFiles}
       onDraftChange={handleDraftChange}
       onPickAttachments={openAttachmentPicker}
-      onRemoveAttachment={(attachmentId) => {
-        setDraft((currentDraft) => {
-          const nextDraft = removeAttachmentFromDraft(currentDraft, attachmentId);
-          latestDraftRef.current = nextDraft;
-          return nextDraft;
-        });
-        onComposerEditorInput();
-      }}
+      onRemoveAttachment={handleRemoveAttachment}
       onSend={handleSubmit}
       submitAction={submitComposerAction}
     />

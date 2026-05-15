@@ -31,7 +31,7 @@ const deleteDialogReducer = (
 ): DeleteDialogState => {
   switch (action.type) {
     case "sheetClosed":
-      return { isOpen: false, isDeleting: false, error: null };
+      return { isOpen: false, isDeleting: state.isDeleting, error: null };
     case "opened":
       return { ...state, isOpen: true, error: null };
     case "openChanged":
@@ -72,7 +72,6 @@ export function useTaskDeleteDialog({
   useEffect(() => {
     if (!sheetOpen) {
       dispatch({ type: "sheetClosed" });
-      deleteRequestInFlightRef.current = false;
     }
   }, [sheetOpen]);
 
