@@ -9,7 +9,7 @@ import {
   isReleaseArtifact,
   resolveElectronBuilderArgs,
   resolveElectronBuilderEnv,
-} from "./build-release-artifact";
+} from "./package-build";
 
 describe("build Electron release artifact", () => {
   it("maps host platform and architecture to Electron release targets", () => {
@@ -28,6 +28,7 @@ describe("build Electron release artifact", () => {
         arch: "arm64",
         platform: "macos",
         signed: true,
+        stageReleaseArtifacts: true,
       }),
     ).toEqual(["--config", "electron-builder.yml", "--mac", "--arm64", "--publish", "never"]);
   });
@@ -38,25 +39,37 @@ describe("build Electron release artifact", () => {
         arch: "x64",
         platform: "linux",
         signed: false,
+        stageReleaseArtifacts: false,
       }),
-    ).toEqual(["--config", "electron-builder.yml", "--linux", "--x64", "--publish", "never"]);
+    ).toEqual([
+      "--config",
+      "electron-builder.yml",
+      "--linux",
+      "AppImage",
+      "--x64",
+      "--publish",
+      "never",
+    ]);
   });
 
-  it("builds unsigned macOS artifacts with notarization disabled", () => {
+  it("builds local unsigned macOS packages without update metadata", () => {
     expect(
       resolveElectronBuilderArgs({
         arch: "x64",
         platform: "macos",
         signed: false,
+        stageReleaseArtifacts: false,
       }),
     ).toEqual([
       "--config",
       "electron-builder.yml",
       "--mac",
+      "dmg",
       "--x64",
       "--publish",
       "never",
       "-c.mac.notarize=false",
+      "-c.dmg.writeUpdateInfo=false",
     ]);
 
     const env = resolveElectronBuilderEnv(false, {
@@ -76,6 +89,9 @@ describe("build Electron release artifact", () => {
     expect(isReleaseArtifact("linux", "OpenDucktor-Electron-0.3.1-linux-x64.deb")).toBe(true);
     expect(isReleaseArtifact("linux", "OpenDucktor-Electron-0.3.1-linux-x64.dmg")).toBe(false);
     expect(isReleaseArtifact("macos", "OpenDucktor-Electron-0.3.1-mac-arm64.dmg")).toBe(true);
+    expect(isReleaseArtifact("macos", "OpenDucktor-Electron-0.3.1-mac-arm64.dmg.blockmap")).toBe(
+      true,
+    );
     expect(isReleaseArtifact("macos", "OpenDucktor-Electron-0.3.1-mac-arm64.zip")).toBe(true);
     expect(isReleaseArtifact("macos", "OpenDucktor.app")).toBe(false);
     expect(isReleaseArtifact("macos", "builder-debug.yml")).toBe(false);
@@ -93,6 +109,10 @@ describe("build Electron release artifact", () => {
     try {
       await mkdir(releaseDirectory, { recursive: true });
       await writeFile(join(releaseDirectory, "OpenDucktor-Electron-0.3.1-mac-arm64.dmg"), "dmg");
+      await writeFile(
+        join(releaseDirectory, "OpenDucktor-Electron-0.3.1-mac-arm64.dmg.blockmap"),
+        "blockmap",
+      );
       await writeFile(join(releaseDirectory, "OpenDucktor-Electron-0.3.1-mac-arm64.zip"), "zip");
       await writeFile(join(releaseDirectory, "OpenDucktor.app"), "app bundle marker");
       await writeFile(
@@ -108,6 +128,7 @@ describe("build Electron release artifact", () => {
 
       expect(artifacts.map((artifact) => artifact.split("/").at(-1)).sort()).toEqual([
         "OpenDucktor-Electron-0.3.1-mac-arm64.dmg",
+        "OpenDucktor-Electron-0.3.1-mac-arm64.dmg.blockmap",
         "OpenDucktor-Electron-0.3.1-mac-arm64.zip",
       ]);
       await expect(

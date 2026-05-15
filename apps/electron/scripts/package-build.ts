@@ -7,12 +7,13 @@ import { prepareMcpSidecar } from "./prepare-mcp-sidecar";
 export type ElectronReleasePlatform = "linux" | "macos" | "windows";
 export type ElectronReleaseArch = "arm64" | "x64";
 
-export type ElectronReleaseBuildOptions = {
+export type ElectronPackageBuildOptions = {
   arch: ElectronReleaseArch;
   electronPackageDirectory: string;
-  outputDirectory: string;
+  outputDirectory: string | undefined;
   platform: ElectronReleasePlatform;
   signed: boolean;
+  stageReleaseArtifacts: boolean;
   workspaceRoot: string;
 };
 
@@ -27,6 +28,12 @@ const platformFlags: Record<ElectronReleasePlatform, "--linux" | "--mac" | "--wi
   linux: "--linux",
   macos: "--mac",
   windows: "--win",
+};
+
+const localPackageTargets: Record<ElectronReleasePlatform, readonly string[]> = {
+  linux: ["AppImage"],
+  macos: ["dmg"],
+  windows: ["nsis"],
 };
 
 const artifactExtensions: Record<ElectronReleasePlatform, ReadonlySet<string>> = {
@@ -56,11 +63,16 @@ export const resolveElectronBuilderArgs = ({
   arch,
   platform,
   signed,
-}: Pick<ElectronReleaseBuildOptions, "arch" | "platform" | "signed">): string[] => {
+  stageReleaseArtifacts,
+}: Pick<
+  ElectronPackageBuildOptions,
+  "arch" | "platform" | "signed" | "stageReleaseArtifacts"
+>): string[] => {
   const args = [
     "--config",
     "electron-builder.yml",
     platformFlags[platform],
+    ...(stageReleaseArtifacts ? [] : localPackageTargets[platform]),
     `--${arch}`,
     "--publish",
     "never",
@@ -68,6 +80,10 @@ export const resolveElectronBuilderArgs = ({
 
   if (!signed && platform === "macos") {
     args.push("-c.mac.notarize=false");
+  }
+
+  if (!stageReleaseArtifacts && platform === "macos") {
+    args.push("-c.dmg.writeUpdateInfo=false");
   }
 
   return args;
@@ -169,18 +185,18 @@ export const collectReleaseArtifacts = async ({
   return copiedArtifacts;
 };
 
-export const buildElectronReleaseArtifact = async ({
+export const buildElectronPackage = async ({
   arch,
   electronPackageDirectory,
   outputDirectory,
   platform,
   signed,
+  stageReleaseArtifacts,
   workspaceRoot,
-}: ElectronReleaseBuildOptions): Promise<string[]> => {
+}: ElectronPackageBuildOptions): Promise<string[]> => {
   const releaseDirectory = join(electronPackageDirectory, "release");
 
   await rm(releaseDirectory, { force: true, recursive: true });
-  await rm(outputDirectory, { force: true, recursive: true });
   await prepareMcpSidecar({
     electronPackageDirectory,
     platform: process.platform,
@@ -193,11 +209,19 @@ export const buildElectronReleaseArtifact = async ({
     cwd: electronPackageDirectory,
   });
   await runCommand({
-    args: resolveElectronBuilderArgs({ arch, platform, signed }),
+    args: resolveElectronBuilderArgs({ arch, platform, signed, stageReleaseArtifacts }),
     command: "electron-builder",
     cwd: electronPackageDirectory,
     env: resolveElectronBuilderEnv(signed, process.env),
   });
+
+  if (!stageReleaseArtifacts) {
+    return [];
+  }
+
+  if (!outputDirectory) {
+    throw new Error("--output-dir is required when staging Electron release artifacts.");
+  }
 
   return collectReleaseArtifacts({
     outputDirectory,
@@ -238,21 +262,27 @@ const workspaceRoot = resolve(electronPackageDirectory, "../..");
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
-  const outputDirectory = resolve(
-    electronPackageDirectory,
-    readFlagValue(args, "--output-dir") ?? "release-publish",
-  );
-  const artifacts = await buildElectronReleaseArtifact({
+  const stageReleaseArtifacts = hasFlag(args, "--stage-release-artifacts");
+  const outputDirectoryValue = readFlagValue(args, "--output-dir");
+  const outputDirectory =
+    outputDirectoryValue || stageReleaseArtifacts
+      ? resolve(electronPackageDirectory, outputDirectoryValue ?? "release-publish")
+      : undefined;
+
+  const artifacts = await buildElectronPackage({
     arch: parseArch(readFlagValue(args, "--arch")),
     electronPackageDirectory,
     outputDirectory,
     platform: parsePlatform(readFlagValue(args, "--platform")),
     signed: hasFlag(args, "--signed"),
+    stageReleaseArtifacts,
     workspaceRoot,
   });
 
-  console.log("Electron release artifacts:");
-  for (const artifact of artifacts) {
-    console.log(`- ${artifact}`);
+  if (stageReleaseArtifacts) {
+    console.log("Staged Electron release artifacts:");
+    for (const artifact of artifacts) {
+      console.log(`- ${artifact}`);
+    }
   }
 }
