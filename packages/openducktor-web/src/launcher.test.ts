@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import path from "node:path";
 import { __launcherTestInternals } from "./launcher";
 
 const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
@@ -266,7 +267,7 @@ describe("launcher internals", () => {
 
   test("rejects static asset paths that escape the web shell root", () => {
     expect(__launcherTestInternals.resolveStaticAssetPath("/web-shell", "/assets/app.js")).toBe(
-      "/web-shell/assets/app.js",
+      path.join("/web-shell", "assets/app.js"),
     );
     expect(
       __launcherTestInternals.resolveStaticAssetPath("/web-shell", "/../secret.txt"),
