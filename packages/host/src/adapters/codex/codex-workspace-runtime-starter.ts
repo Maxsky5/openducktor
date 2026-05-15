@@ -12,7 +12,7 @@ import type {
 } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
-import { signalProcessTree } from "../process/process-tree";
+import { shouldStartDetachedProcessGroup, signalProcessTree } from "../process/process-tree";
 import { resolveCodexBinary } from "../runtimes/runtime-binaries";
 import {
   type CodexAppServerEventEmitter,
@@ -194,7 +194,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
     const nextRuntimeId = runtimeId();
     const child = spawn(command.file, command.args, {
       cwd: input.workingDirectory,
-      detached: true,
+      detached: shouldStartDetachedProcessGroup(),
       env: {
         ...processEnv,
         ODT_WORKSPACE_ID: requireBridgeValue(bridge.workspaceId, "workspaceId"),

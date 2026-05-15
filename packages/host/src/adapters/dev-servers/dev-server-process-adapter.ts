@@ -6,7 +6,7 @@ import {
   DevServerProcessStartExitError,
   type DevServerProcessStartInput,
 } from "../../ports/dev-server-process-port";
-import { signalProcessTree } from "../process/process-tree";
+import { shouldStartDetachedProcessGroup, signalProcessTree } from "../process/process-tree";
 
 export type CreateDevServerProcessAdapterInput = {
   processEnv?: NodeJS.ProcessEnv;
@@ -35,7 +35,7 @@ export const createDevServerProcessAdapter = ({
     const shell = shellCommand(command);
     const child = spawn(shell.file, shell.args, {
       cwd,
-      detached: true,
+      detached: shouldStartDetachedProcessGroup(),
       env: { ...processEnv, ...env },
       stdio: ["ignore", "pipe", "pipe"],
     });

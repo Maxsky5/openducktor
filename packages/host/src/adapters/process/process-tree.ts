@@ -32,3 +32,5 @@ export const signalProcessTree = (pid: number, signal: NodeJS.Signals): void => 
     throw error;
   }
 };
+
+export const shouldStartDetachedProcessGroup = (): boolean => process.platform !== "win32";

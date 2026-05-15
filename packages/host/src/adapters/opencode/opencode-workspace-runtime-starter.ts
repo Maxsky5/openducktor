@@ -11,7 +11,7 @@ import type {
 } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
-import { signalProcessTree } from "../process/process-tree";
+import { shouldStartDetachedProcessGroup, signalProcessTree } from "../process/process-tree";
 import { resolveOpencodeBinary } from "../runtimes/runtime-binaries";
 
 export type OpenCodeMcpBridgeConnection = {
@@ -233,7 +233,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
     const port = await pickFreePort();
     const child = spawn(binary, ["serve", "--hostname", "127.0.0.1", "--port", port.toString()], {
       cwd: input.workingDirectory,
-      detached: true,
+      detached: shouldStartDetachedProcessGroup(),
       env: {
         ...processEnv,
         OPENCODE_CONFIG_CONTENT: configContent,
