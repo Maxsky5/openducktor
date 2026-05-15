@@ -42,45 +42,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fail-on: warning
 
-  bun-quality:
-    name: Bun Quality (lint, typecheck, test, build)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Cache Bun download cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Lint workspaces
-        run: bun run lint
-
-      - name: Typecheck workspaces
-        run: bun run typecheck
-
-      - name: Test workspaces
-        run: bun run test
-
-      - name: Build workspaces
-        run: bun run build
-
-  typescript-cross-platform:
-    name: TypeScript Cross-platform (${{ matrix.label }})
+  typescript-workspace-quality:
+    name: TypeScript Workspace Quality (${{ matrix.label }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     strategy:
@@ -114,65 +77,17 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Lint TypeScript host package
-        run: bun run --filter @openducktor/host lint
+      - name: Lint workspaces
+        run: bun run lint
 
-      - name: Typecheck TypeScript host package
-        run: bun run --filter @openducktor/host typecheck
+      - name: Typecheck workspaces
+        run: bun run typecheck
 
-      - name: Test TypeScript host package
-        run: bun run --filter @openducktor/host test
+      - name: Test workspaces
+        run: bun run test
 
-      - name: Build TypeScript host package
-        run: bun run --filter @openducktor/host build
-
-      - name: Lint shared frontend package
-        run: bun run --filter @openducktor/frontend lint
-
-      - name: Typecheck shared frontend package
-        run: bun run --filter @openducktor/frontend typecheck
-
-      - name: Test shared frontend package
-        run: bun run --filter @openducktor/frontend test
-
-      - name: Build shared frontend package
-        run: bun run --filter @openducktor/frontend build
-
-      - name: Lint MCP package
-        run: bun run --filter @openducktor/mcp lint
-
-      - name: Typecheck MCP package
-        run: bun run --filter @openducktor/mcp typecheck
-
-      - name: Test MCP package
-        run: bun run --filter @openducktor/mcp test
-
-      - name: Build MCP package
-        run: bun run --filter @openducktor/mcp build
-
-      - name: Lint Web package
-        run: bun run --filter @openducktor/web lint
-
-      - name: Typecheck Web package
-        run: bun run --filter @openducktor/web typecheck
-
-      - name: Test Web package
-        run: bun run --filter @openducktor/web test
-
-      - name: Build Web package
-        run: bun run --filter @openducktor/web build
-
-      - name: Lint Electron package
-        run: bun run --filter @openducktor/electron lint
-
-      - name: Typecheck Electron package
-        run: bun run --filter @openducktor/electron typecheck
-
-      - name: Test Electron package
-        run: bun run --filter @openducktor/electron test
-
-      - name: Build Electron package
-        run: bun run --filter @openducktor/electron build
+      - name: Build workspaces
+        run: bun run build
 
   electron-package:
     name: Electron Package (${{ matrix.label }})
