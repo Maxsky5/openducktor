@@ -24,6 +24,10 @@ export type OpenCodeMcpBridgeConnectionResolver = (
   input: RuntimeEnsureWorkspaceInput,
 ) => Promise<OpenCodeMcpBridgeConnection>;
 
+type LocalPortAllocator = () => Promise<number>;
+
+type LocalPortProbe = (port: number, timeoutMs: number) => Promise<boolean>;
+
 export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   systemCommands: SystemCommandPort;
   resolveMcpBridgeConnection?: OpenCodeMcpBridgeConnectionResolver;
@@ -36,6 +40,8 @@ export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   stopTimeoutMs?: number;
   now?: () => Date;
   runtimeId?: () => string;
+  portAllocator?: LocalPortAllocator;
+  portProbe?: LocalPortProbe;
 };
 
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
@@ -213,6 +219,8 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
   now = () => new Date(),
   runtimeId = () => randomUUID(),
+  portAllocator = pickFreePort,
+  portProbe = canConnect,
 }: CreateOpenCodeWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
     if (input.runtimeKind !== "opencode") {
@@ -230,7 +238,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       (await resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
     const configContent = buildOpenCodeConfigContent(bridge, resolvedMcpCommand);
     const binary = opencodeBinary ?? (await resolveOpencodeBinary(systemCommands, processEnv));
-    const port = await pickFreePort();
+    const port = await portAllocator();
     const child = spawn(binary, ["serve", "--hostname", "127.0.0.1", "--port", port.toString()], {
       cwd: input.workingDirectory,
       detached: shouldStartDetachedProcessGroup(),
@@ -282,7 +290,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           )}`,
         );
       }
-      if (await canConnect(port, connectTimeoutMs)) {
+      if (await portProbe(port, connectTimeoutMs)) {
         const runtime = runtimeInstanceSummarySchema.parse({
           kind: "opencode",
           runtimeId: runtimeId(),

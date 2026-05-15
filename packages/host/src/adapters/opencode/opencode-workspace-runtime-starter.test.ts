@@ -26,18 +26,21 @@ const createFakeOpenCode = async (root: string): Promise<string> => {
   const executable = join(root, process.platform === "win32" ? "opencode.cmd" : "opencode");
   await writeFile(
     scriptPath,
-    `import { createServer } from "node:net";
-
-const args = process.argv.slice(2);
+    `const args = process.argv.slice(2);
 if (args[0] !== "serve") {
   console.error("expected serve command");
   process.exit(2);
 }
 const portFlagIndex = args.indexOf("--port");
-const port = Number(args[portFlagIndex + 1]);
-const server = createServer((socket) => socket.end());
-server.listen(port, "127.0.0.1");
-const stop = () => server.close(() => process.exit(0));
+if (Number(args[portFlagIndex + 1]) !== 43123) {
+  console.error("unexpected port");
+  process.exit(2);
+}
+const keepAlive = setInterval(() => {}, 1000);
+const stop = () => {
+  clearInterval(keepAlive);
+  process.exit(0);
+};
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
 `,
@@ -115,6 +118,8 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         }),
         startupTimeoutMs: 2_000,
         retryDelayMs: 20,
+        portAllocator: async () => 43123,
+        portProbe: async () => true,
         now: () => new Date("2026-05-10T10:00:00.000Z"),
         runtimeId: () => "runtime-1",
       });
@@ -134,7 +139,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         workingDirectory: repo,
         runtimeRoute: {
           type: "local_http",
-          endpoint: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
+          endpoint: "http://127.0.0.1:43123",
         },
         startedAt: "2026-05-10T10:00:00.000Z",
       });
