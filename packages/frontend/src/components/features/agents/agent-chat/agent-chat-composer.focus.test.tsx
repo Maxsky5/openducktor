@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef, type ReactElement } from "react";
 import type { AgentChatComposerModel } from "./agent-chat.types";
@@ -7,6 +7,7 @@ import { buildModelSelection } from "./agent-chat-test-fixtures";
 
 const FOCUS_WAIT_TIMEOUT_MS = 10_000;
 const FOCUS_TEST_TIMEOUT_MS = 25_000;
+const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 
 const buildModel = (): AgentChatComposerModel => ({
   taskId: "task-1",
@@ -149,7 +150,15 @@ const ComposerWithExternalButton = ({
   );
 };
 
+beforeEach(() => {
+  globalThis.requestAnimationFrame = (callback: FrameRequestCallback): number => {
+    callback(performance.now());
+    return 1;
+  };
+});
+
 afterEach(() => {
+  globalThis.requestAnimationFrame = originalRequestAnimationFrame;
   document.body.innerHTML = "";
 });
 
