@@ -148,6 +148,16 @@ const stopChildProcess = async (
   throw new Error(`Timed out waiting for Codex app-server process group ${pid} to stop.`);
 };
 
+const codexCommand = (binary: string, args: string[]): { file: string; args: string[] } => {
+  const lowerBinary = binary.toLowerCase();
+  const isWindowsCommandScript =
+    process.platform === "win32" && (lowerBinary.endsWith(".cmd") || lowerBinary.endsWith(".bat"));
+
+  return isWindowsCommandScript
+    ? { file: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/c", "call", binary, ...args] }
+    : { file: binary, args };
+};
+
 export const createCodexWorkspaceRuntimeStarter = ({
   systemCommands,
   codexAppServer,
@@ -177,12 +187,12 @@ export const createCodexWorkspaceRuntimeStarter = ({
       resolveConfiguredMcpCommand(processEnv, mcpCommand) ??
       (await resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
     const binary = codexBinary ?? (await resolveCodexBinary(systemCommands, processEnv));
-    const lowerBinary = binary.toLowerCase();
-    const isWindowsCommandScript =
-      process.platform === "win32" &&
-      (lowerBinary.endsWith(".cmd") || lowerBinary.endsWith(".bat"));
+    const command = codexCommand(binary, [
+      ...buildCodexMcpConfigArgs(resolvedMcpCommand),
+      "app-server",
+    ]);
     const nextRuntimeId = runtimeId();
-    const child = spawn(binary, [...buildCodexMcpConfigArgs(resolvedMcpCommand), "app-server"], {
+    const child = spawn(command.file, command.args, {
       cwd: input.workingDirectory,
       detached: true,
       env: {
@@ -193,7 +203,6 @@ export const createCodexWorkspaceRuntimeStarter = ({
         ODT_FORBID_WORKSPACE_ID_INPUT: "true",
         ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
       },
-      shell: isWindowsCommandScript,
       stdio: ["pipe", "pipe", "pipe"],
     }) as CodexChildProcess;
     const pid = child.pid;
