@@ -1,4 +1,4 @@
-name: Release Desktop
+name: Release Desktop Tauri
 
 on:
   workflow_dispatch:

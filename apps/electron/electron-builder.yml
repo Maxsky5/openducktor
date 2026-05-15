@@ -19,19 +19,26 @@ extraMetadata:
   dependencies: {}
 
 mac:
+  artifactName: OpenDucktor-Electron-${version}-${os}-${arch}.${ext}
+  binaries:
+    - Contents/Resources/bin/openducktor-mcp
   category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  notarize: true
   target:
     - dmg
     - zip
 
 win:
+  artifactName: OpenDucktor-Electron-${version}-${os}-${arch}.${ext}
   target:
     - nsis
     - zip
 
 linux:
   category: Development
-  artifactName: OpenDucktor-${version}-${os}-${arch}.${ext}
+  artifactName: OpenDucktor-Electron-${version}-${os}-${arch}.${ext}
   target:
     - AppImage
     - deb
