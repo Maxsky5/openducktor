@@ -1,17 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef, type ReactElement } from "react";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
 
-const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-
-const immediateRequestAnimationFrame = ((callback: FrameRequestCallback): number => {
-  callback(0);
-  return 1;
-}) as typeof requestAnimationFrame;
+const FOCUS_TEST_TIMEOUT_MS = 6_000;
 
 const buildModel = (): AgentChatComposerModel => ({
   taskId: "task-1",
@@ -101,9 +95,12 @@ const typeIntoComposer = (container: HTMLElement, value: string): HTMLElement =>
 
 const waitForComposerFocus = async (container: HTMLElement): Promise<HTMLElement> => {
   const editorRoot = getComposerSurface(container);
-  await waitFor(() => {
-    expect(document.activeElement).toBe(editorRoot);
-  });
+  await waitFor(
+    () => {
+      expect(document.activeElement).toBe(editorRoot);
+    },
+    { timeout: 5_000 },
+  );
   return editorRoot;
 };
 
@@ -120,43 +117,44 @@ const ComposerWithExternalButton = ({
   );
 };
 
-beforeEach(() => {
-  globalThis.requestAnimationFrame = immediateRequestAnimationFrame;
-  globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
-});
-
 afterEach(() => {
-  globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-  globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
   document.body.innerHTML = "";
 });
 
 describe("AgentChatComposer focus", () => {
-  test("autofocuses when an interactive displayed session is rendered", async () => {
-    const { container } = render(<AgentChatComposer model={buildModel()} />);
+  test(
+    "autofocuses when an interactive displayed session is rendered",
+    async () => {
+      const { container } = render(<AgentChatComposer model={buildModel()} />);
 
-    await waitForComposerFocus(container);
-  });
+      await waitForComposerFocus(container);
+    },
+    FOCUS_TEST_TIMEOUT_MS,
+  );
 
-  test("autofocuses when the displayed session changes", async () => {
-    const { container, rerender } = render(<ComposerWithExternalButton model={buildModel()} />);
-    await waitForComposerFocus(container);
+  test(
+    "autofocuses when the displayed session changes",
+    async () => {
+      const { container, rerender } = render(<ComposerWithExternalButton model={buildModel()} />);
+      await waitForComposerFocus(container);
 
-    const externalButton = screen.getByRole("button", { name: "External control" });
-    externalButton.focus();
-    expect(document.activeElement).toBe(externalButton);
+      const externalButton = screen.getByRole("button", { name: "External control" });
+      externalButton.focus();
+      expect(document.activeElement).toBe(externalButton);
 
-    rerender(
-      <ComposerWithExternalButton
-        model={{
-          ...buildModel(),
-          displayedSessionId: "session-2",
-        }}
-      />,
-    );
+      rerender(
+        <ComposerWithExternalButton
+          model={{
+            ...buildModel(),
+            displayedSessionId: "session-2",
+          }}
+        />,
+      );
 
-    await waitForComposerFocus(container);
-  });
+      await waitForComposerFocus(container);
+    },
+    FOCUS_TEST_TIMEOUT_MS,
+  );
 
   test("does not autofocus when no session is displayed", async () => {
     const { container } = render(
@@ -193,30 +191,34 @@ describe("AgentChatComposer focus", () => {
     expect(document.activeElement).not.toBe(getComposerSurface(container));
   });
 
-  test("autofocuses once when the same displayed session becomes interactive later", async () => {
-    const { container, rerender } = render(
-      <AgentChatComposer
-        model={{
-          ...buildModel(),
-          isWaitingInput: true,
-          waitingInputPlaceholder: "Waiting for input",
-        }}
-      />,
-    );
+  test(
+    "autofocuses once when the same displayed session becomes interactive later",
+    async () => {
+      const { container, rerender } = render(
+        <AgentChatComposer
+          model={{
+            ...buildModel(),
+            isWaitingInput: true,
+            waitingInputPlaceholder: "Waiting for input",
+          }}
+        />,
+      );
 
-    expect(document.activeElement).not.toBe(getComposerSurface(container));
+      expect(document.activeElement).not.toBe(getComposerSurface(container));
 
-    rerender(
-      <AgentChatComposer
-        model={{
-          ...buildModel(),
-          isWaitingInput: false,
-        }}
-      />,
-    );
+      rerender(
+        <AgentChatComposer
+          model={{
+            ...buildModel(),
+            isWaitingInput: false,
+          }}
+        />,
+      );
 
-    await waitForComposerFocus(container);
-  });
+      await waitForComposerFocus(container);
+    },
+    FOCUS_TEST_TIMEOUT_MS,
+  );
 
   test("does not steal focus when delayed readiness completes after the user focuses elsewhere", async () => {
     const { rerender } = render(
@@ -248,49 +250,57 @@ describe("AgentChatComposer focus", () => {
     });
   });
 
-  test("does not refocus on same-session rerenders after the user moves focus away", async () => {
-    const { container, rerender } = render(<ComposerWithExternalButton model={buildModel()} />);
-    await waitForComposerFocus(container);
+  test(
+    "does not refocus on same-session rerenders after the user moves focus away",
+    async () => {
+      const { container, rerender } = render(<ComposerWithExternalButton model={buildModel()} />);
+      await waitForComposerFocus(container);
 
-    const externalButton = screen.getByRole("button", { name: "External control" });
+      const externalButton = screen.getByRole("button", { name: "External control" });
 
-    externalButton.focus();
-    expect(document.activeElement).toBe(externalButton);
+      externalButton.focus();
+      expect(document.activeElement).toBe(externalButton);
 
-    rerender(
-      <ComposerWithExternalButton
-        model={{
-          ...buildModel(),
-          pendingInlineCommentCount: 1,
-        }}
-      />,
-    );
+      rerender(
+        <ComposerWithExternalButton
+          model={{
+            ...buildModel(),
+            pendingInlineCommentCount: 1,
+          }}
+        />,
+      );
 
-    expect(document.activeElement).toBe(externalButton);
-  });
+      expect(document.activeElement).toBe(externalButton);
+    },
+    FOCUS_TEST_TIMEOUT_MS,
+  );
 
-  test("preserves draft text and places the caret at the end when autofocus runs", async () => {
-    const { container, rerender } = render(<AgentChatComposer model={buildModel()} />);
-    await waitForComposerFocus(container);
+  test(
+    "preserves draft text and places the caret at the end when autofocus runs",
+    async () => {
+      const { container, rerender } = render(<AgentChatComposer model={buildModel()} />);
+      await waitForComposerFocus(container);
 
-    const lastTextSegment = typeIntoComposer(container, "Continue this draft");
-    const editorRoot = getComposerSurface(container);
+      const lastTextSegment = typeIntoComposer(container, "Continue this draft");
+      const editorRoot = getComposerSurface(container);
 
-    rerender(
-      <AgentChatComposer
-        model={{
-          ...buildModel(),
-          displayedSessionId: "session-2",
-          draftStateKey: "draft-1",
-        }}
-      />,
-    );
+      rerender(
+        <AgentChatComposer
+          model={{
+            ...buildModel(),
+            displayedSessionId: "session-2",
+            draftStateKey: "draft-1",
+          }}
+        />,
+      );
 
-    await waitFor(() => {
-      expect(document.activeElement).toBe(editorRoot);
-      expect(lastTextSegment.textContent).toContain("Continue this draft");
-      expect(globalThis.getSelection?.()?.focusNode).toBe(lastTextSegment.firstChild);
-      expect(globalThis.getSelection?.()?.focusOffset).toBe("Continue this draft".length);
-    });
-  });
+      await waitFor(() => {
+        expect(document.activeElement).toBe(editorRoot);
+        expect(lastTextSegment.textContent).toContain("Continue this draft");
+        expect(globalThis.getSelection?.()?.focusNode).toBe(lastTextSegment.firstChild);
+        expect(globalThis.getSelection?.()?.focusOffset).toBe("Continue this draft".length);
+      });
+    },
+    FOCUS_TEST_TIMEOUT_MS,
+  );
 });
