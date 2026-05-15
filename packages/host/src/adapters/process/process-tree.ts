@@ -11,11 +11,9 @@ const processIsAlive = (pid: number): boolean => {
 
 export const signalProcessTree = (pid: number, signal: NodeJS.Signals): void => {
   if (process.platform === "win32") {
-    const result = spawnSync(
-      "taskkill",
-      signal === "SIGKILL" ? ["/pid", String(pid), "/t", "/f"] : ["/pid", String(pid), "/t"],
-      { stdio: "ignore" },
-    );
+    const result = spawnSync("taskkill", ["/pid", String(pid), "/t", "/f"], {
+      stdio: "ignore",
+    });
     if (result.status === 0 || !processIsAlive(pid)) {
       return;
     }

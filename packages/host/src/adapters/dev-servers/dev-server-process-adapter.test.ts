@@ -1,3 +1,7 @@
+import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createDevServerProcessAdapter } from "./dev-server-process-adapter";
 
 const waitFor = async (predicate: () => boolean, timeoutMs = 500): Promise<void> => {
@@ -10,11 +14,24 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 500): Promise<void>
   }
 };
 
-const bunEvalCommand = (source: string): string =>
-  `${JSON.stringify(process.execPath)} -e ${JSON.stringify(source)}`;
+const createCommandScript = async (
+  root: string,
+  name: string,
+  content: string,
+): Promise<string> => {
+  const scriptPath = join(root, process.platform === "win32" ? `${name}.cmd` : name);
+  await writeFile(scriptPath, content);
+  if (process.platform !== "win32") {
+    await chmod(scriptPath, 0o755);
+  }
+  return process.platform === "win32"
+    ? `"${scriptPath}"`
+    : `'${scriptPath.replaceAll("'", "'\\''")}'`;
+};
 
 describe("createDevServerProcessAdapter", () => {
   test("starts a shell command, streams output, and stops the process group", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-dev-server-adapter-"));
     const outputs: string[] = [];
     const exits: unknown[] = [];
     const port = createDevServerProcessAdapter({
@@ -22,38 +39,61 @@ describe("createDevServerProcessAdapter", () => {
       stopTimeoutMs: 200,
     });
 
-    const handle = await port.start({
-      command: bunEvalCommand("process.stdout.write('ready'); setInterval(function() {}, 5000);"),
-      cwd: process.cwd(),
-      onExit: (exit) => exits.push(exit),
-      onOutput: (output) => outputs.push(output.data),
-    });
-    await waitFor(() => outputs.join("").includes("ready"));
+    try {
+      const command = await createCommandScript(
+        root,
+        "dev-server",
+        process.platform === "win32"
+          ? "@echo off\r\necho ready\r\nping -n 6 127.0.0.1 > nul\r\n"
+          : "#!/bin/sh\nprintf ready\nsleep 5\n",
+      );
 
-    await handle.stop();
+      const handle = await port.start({
+        command,
+        cwd: process.cwd(),
+        onExit: (exit) => exits.push(exit),
+        onOutput: (output) => outputs.push(output.data),
+      });
+      await waitFor(() => outputs.join("").includes("ready"));
 
-    expect(handle.pid).toBeGreaterThan(0);
-    expect(outputs.join("")).toContain("ready");
-    expect(exits).toEqual([
-      expect.objectContaining({
-        pid: handle.pid,
-      }),
-    ]);
+      await handle.stop();
+
+      expect(handle.pid).toBeGreaterThan(0);
+      expect(outputs.join("")).toContain("ready");
+      expect(exits).toEqual([
+        expect.objectContaining({
+          pid: handle.pid,
+        }),
+      ]);
+    } finally {
+      await removeTestDirectory(root);
+    }
   });
 
   test("rejects commands that exit during the start grace period", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-dev-server-adapter-exit-"));
     const port = createDevServerProcessAdapter({
-      startGracePeriodMs: 30,
+      startGracePeriodMs: 250,
       stopTimeoutMs: 100,
     });
 
-    await expect(
-      port.start({
-        command: bunEvalCommand("process.exit(42);"),
-        cwd: process.cwd(),
-        onExit: () => {},
-        onOutput: () => {},
-      }),
-    ).rejects.toThrow("Dev server exited with code 42.");
+    try {
+      const command = await createCommandScript(
+        root,
+        "exit-server",
+        process.platform === "win32" ? "@echo off\r\nexit /b 42\r\n" : "#!/bin/sh\nexit 42\n",
+      );
+
+      await expect(
+        port.start({
+          command,
+          cwd: process.cwd(),
+          onExit: () => {},
+          onOutput: () => {},
+        }),
+      ).rejects.toThrow("Dev server exited with code 42.");
+    } finally {
+      await removeTestDirectory(root);
+    }
   });
 });
