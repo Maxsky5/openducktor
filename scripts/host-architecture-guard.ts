@@ -14,8 +14,12 @@ type Violation = {
 const isSourceFile = (filePath: string): boolean =>
   filePath.endsWith(".ts") && !filePath.endsWith(".test.ts") && !filePath.endsWith(".spec.ts");
 
+const toPosixPath = (filePath: string): string => filePath.replaceAll("\\", "/");
+
+const relativeHostPath = (filePath: string): string => toPosixPath(relative(HOST_ROOT, filePath));
+
 const isTestSupportFile = (filePath: string): boolean =>
-  relative(HOST_ROOT, filePath).split("/").includes("test-support");
+  relativeHostPath(filePath).split("/").includes("test-support");
 
 const walkFiles = (root: string): string[] => {
   if (!existsSync(root)) {
@@ -57,7 +61,7 @@ const lineCount = (filePath: string): number => {
 };
 
 const isInnerLayerFile = (filePath: string): boolean => {
-  const relativePath = relative(HOST_ROOT, filePath);
+  const relativePath = relativeHostPath(filePath);
   return (
     relativePath.startsWith("application/") ||
     relativePath.startsWith("domain/") ||
@@ -67,8 +71,8 @@ const isInnerLayerFile = (filePath: string): boolean => {
 };
 
 const isUseCaseFile = (filePath: string): boolean =>
-  relative(HOST_ROOT, filePath).includes("/use-cases/") ||
-  /(?:^|\/)[^/]*use-case[^/]*\.ts$/.test(filePath);
+  relativeHostPath(filePath).includes("/use-cases/") ||
+  /(?:^|\/)[^/]*use-case[^/]*\.ts$/.test(toPosixPath(filePath));
 
 const containsNodeImport = (source: string): boolean =>
   /(?:^|\n)\s*import(?:\s+type)?[\s\S]*?from\s+["']node:/.test(source);
@@ -79,21 +83,21 @@ const hasForbiddenInwardDependency = (source: string): boolean =>
   );
 
 const isDirectRootModuleFile = (filePath: string): boolean => {
-  const segments = relative(HOST_ROOT, filePath).split("/");
+  const segments = relativeHostPath(filePath).split("/");
   return ROOT_MODULE_DIRECTORIES.includes(segments[0] ?? "") && segments.length === 2;
 };
 
 const hasMigrationServiceName = (filePath: string): boolean =>
-  /(?:^|\/)task-service-[^/]+\.ts$/.test(filePath);
+  /(?:^|\/)task-service-[^/]+\.ts$/.test(toPosixPath(filePath));
 
 const isLegacyCommandRootFile = (filePath: string): boolean =>
-  relative(HOST_ROOT, filePath).startsWith("commands/");
+  relativeHostPath(filePath).startsWith("commands/");
 
 const isAdapterFile = (filePath: string): boolean =>
-  relative(HOST_ROOT, filePath).startsWith("adapters/");
+  relativeHostPath(filePath).startsWith("adapters/");
 
 const hasPlatformOrStorageAdapterFileName = (filePath: string): boolean =>
-  /^(?:node|in-memory)-/.test(basename(filePath));
+  /^(?:node|in-memory)-/.test(basename(toPosixPath(filePath)));
 
 const findViolations = (): Violation[] => {
   const violations: Violation[] = [];

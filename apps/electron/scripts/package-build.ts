@@ -209,8 +209,13 @@ export const buildElectronPackage = async ({
     cwd: electronPackageDirectory,
   });
   await runCommand({
-    args: resolveElectronBuilderArgs({ arch, platform, signed, stageReleaseArtifacts }),
-    command: "electron-builder",
+    args: [
+      "run",
+      "builder",
+      "--",
+      ...resolveElectronBuilderArgs({ arch, platform, signed, stageReleaseArtifacts }),
+    ],
+    command: "bun",
     cwd: electronPackageDirectory,
     env: resolveElectronBuilderEnv(signed, process.env),
   });
