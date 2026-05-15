@@ -29,31 +29,37 @@ const flush = async (): Promise<void> => {
 };
 
 const flushAnimationFrames = async (): Promise<void> => {
-  while (animationFrameCallbacks.size > 0) {
-    const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-    animationFrameCallbacks.clear();
-
-    await act(async () => {
-      for (const callback of queuedCallbacks) {
-        callback(16);
-      }
-      await flush();
-    });
+  if (animationFrameCallbacks.size === 0) {
+    return;
   }
+
+  const queuedCallbacks = Array.from(animationFrameCallbacks.values());
+  animationFrameCallbacks.clear();
+
+  await act(async () => {
+    for (const callback of queuedCallbacks) {
+      callback(16);
+    }
+    await flush();
+  });
+  await flushAnimationFrames();
 };
 
-const waitForTimers = async (): Promise<void> => {
+const waitForTimers = async (remainingTicks = 20): Promise<void> => {
+  if (remainingTicks <= 0) {
+    return;
+  }
+
   await act(async () => {
     await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
     await flush();
   });
+  await waitForTimers(remainingTicks - 1);
 };
 
 const flushTranscriptDerivation = async (): Promise<void> => {
   await flushAnimationFrames();
-  for (let index = 0; index < 20; index += 1) {
-    await waitForTimers();
-  }
+  await waitForTimers();
 };
 
 const createLargeSession = (externalSessionId: string, messageCount = 160): AgentSessionState => {

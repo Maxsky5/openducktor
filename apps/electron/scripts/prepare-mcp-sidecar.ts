@@ -56,6 +56,28 @@ const compileMcpSidecar = async (plan: McpSidecarBuildPlan): Promise<void> => {
   await $`bun build --compile --outfile ${plan.outputPath} ${plan.entrypoint}`;
 };
 
+const resetMcpSidecarOutput = async (plan: McpSidecarBuildPlan): Promise<void> => {
+  await Promise.all([
+    assertFileExists(plan.entrypoint, "OpenDucktor MCP entrypoint"),
+    rm(plan.outputDirectory, { force: true, recursive: true }),
+  ]);
+  await mkdir(plan.outputDirectory, { recursive: true });
+};
+
+const compileAndVerifyMcpSidecar = async (
+  plan: McpSidecarBuildPlan,
+  platform: NodeJS.Platform,
+  compile: (plan: McpSidecarBuildPlan) => Promise<void>,
+  chmodFile: (path: string, mode: number) => Promise<void>,
+): Promise<void> => {
+  await compile(plan);
+  await assertFileExists(plan.outputPath, "Compiled OpenDucktor MCP sidecar");
+
+  if (platform !== "win32") {
+    await chmodFile(plan.outputPath, 0o755);
+  }
+};
+
 export const prepareMcpSidecar = async ({
   chmodFile = chmod,
   compile = compileMcpSidecar,
@@ -63,15 +85,8 @@ export const prepareMcpSidecar = async ({
 }: PrepareMcpSidecarInput): Promise<McpSidecarBuildPlan> => {
   const plan = resolveMcpSidecarBuildPlan(input);
 
-  await assertFileExists(plan.entrypoint, "OpenDucktor MCP entrypoint");
-  await rm(plan.outputDirectory, { force: true, recursive: true });
-  await mkdir(plan.outputDirectory, { recursive: true });
-  await compile(plan);
-  await assertFileExists(plan.outputPath, "Compiled OpenDucktor MCP sidecar");
-
-  if (input.platform !== "win32") {
-    await chmodFile(plan.outputPath, 0o755);
-  }
+  await resetMcpSidecarOutput(plan);
+  await compileAndVerifyMcpSidecar(plan, input.platform, compile, chmodFile);
 
   return plan;
 };

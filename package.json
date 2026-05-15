@@ -43,7 +43,9 @@
     "deps:audit:high": "bun run scripts/audit-high-severity-guard.ts",
     "deps:audit:hono": "bun run scripts/audit-hono-guard.ts",
     "deps:outdated": "bun outdated",
-    "deps:check": "bun run deps:audit:high && bun run deps:audit:hono && bun run deps:unused:deps"
+    "deps:check": "bun run deps:audit:high && bun run deps:audit:hono && bun run deps:unused:deps",
+    "react-doctor:full": "npx -y react-doctor@latest . --full",
+    "react-doctor:diff": "npx -y react-doctor@latest . --diff main --yes"
   },
   "overrides": {
     "@hono/node-server": "^1.19.11",

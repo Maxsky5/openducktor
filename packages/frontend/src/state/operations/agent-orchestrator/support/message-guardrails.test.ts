@@ -21,15 +21,21 @@ const FORBIDDEN_PATTERNS = [
 describe("session message guardrails", () => {
   test("production code uses centralized message lookups", async () => {
     const violations: string[] = [];
+    const sourceFiles: string[] = [];
 
     for (const directory of SOURCE_DIRECTORIES) {
       const glob = new Bun.Glob("**/*.{ts,tsx}");
       for await (const relativePath of glob.scan({ cwd: directory })) {
-        if (relativePath.includes(".test.")) {
+        if (/\.test\./.test(relativePath)) {
           continue;
         }
 
-        const filePath = path.join(directory, relativePath);
+        sourceFiles.push(path.join(directory, relativePath));
+      }
+    }
+
+    await Promise.all(
+      sourceFiles.map(async (filePath) => {
         const content = await Bun.file(filePath).text();
         for (const pattern of FORBIDDEN_PATTERNS) {
           pattern.regex.lastIndex = 0;
@@ -38,8 +44,8 @@ describe("session message guardrails", () => {
           }
           violations.push(`${path.relative(process.cwd(), filePath)}: ${pattern.label}`);
         }
-      }
-    }
+      }),
+    );
 
     expect(violations).toEqual([]);
   });

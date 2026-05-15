@@ -77,9 +77,13 @@ export const toSubtasks = (task: TaskCard | null, taskById: Map<string, TaskCard
     return [];
   }
 
-  return task.subtaskIds
-    .map((subtaskId) => taskById.get(subtaskId))
-    .filter((entry): entry is TaskCard => Boolean(entry));
+  return task.subtaskIds.reduce<TaskCard[]>((subtasks, subtaskId) => {
+    const subtask = taskById.get(subtaskId);
+    if (subtask) {
+      subtasks.push(subtask);
+    }
+    return subtasks;
+  }, []);
 };
 
 export const collectDeleteImpactTaskIds = (

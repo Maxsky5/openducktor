@@ -151,15 +151,22 @@ export const buildSessionsByTaskIdWithCache = (
 
     let sortedSessions: AgentSessionSummary[];
     if (previous && previous.inputSignature === inputSignature) {
-      sortedSessions = previous.sortedSessionIds
-        .map((externalSessionId) => sessionsById.get(externalSessionId))
-        .filter((session): session is AgentSessionSummary => session !== undefined);
+      sortedSessions = previous.sortedSessionIds.reduce<AgentSessionSummary[]>(
+        (sessions, externalSessionId) => {
+          const session = sessionsById.get(externalSessionId);
+          if (session) {
+            sessions.push(session);
+          }
+          return sessions;
+        },
+        [],
+      );
 
       if (sortedSessions.length !== taskSessions.length) {
-        sortedSessions = [...taskSessions].sort(compareSessionsByRecency);
+        sortedSessions = taskSessions.toSorted(compareSessionsByRecency);
       }
     } else {
-      sortedSessions = [...taskSessions].sort(compareSessionsByRecency);
+      sortedSessions = taskSessions.toSorted(compareSessionsByRecency);
     }
 
     grouped.set(taskId, sortedSessions);
@@ -287,9 +294,13 @@ export function useAgentStudioSelectionController({
   const activeSessionByTaskId = useMemo(() => {
     const activeByTask = new Map<string, AgentSessionSummary>();
     for (const [taskKey, taskSessions] of sessionsByTaskId) {
-      const activeSession = taskSessions.find((session) =>
-        ACTIVE_SESSION_STATUS.has(session.status),
-      );
+      let activeSession: AgentSessionSummary | null = null;
+      for (const session of taskSessions) {
+        if (ACTIVE_SESSION_STATUS.has(session.status)) {
+          activeSession = session;
+          break;
+        }
+      }
       if (activeSession) {
         activeByTask.set(taskKey, activeSession);
       }

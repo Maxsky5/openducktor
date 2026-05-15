@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useReducer } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
@@ -28,6 +28,34 @@ type UseAgentStudioTaskHydrationResult = {
   isWaitingForRuntimeReadiness: boolean;
 };
 
+type RequestState = {
+  externalSessionId: string | null;
+  status: "idle" | "pending" | "failed";
+};
+
+type RequestAction =
+  | { type: "reset" }
+  | { type: "pending"; externalSessionId: string }
+  | { type: "idleIfCurrent"; externalSessionId: string }
+  | { type: "failedIfCurrent"; externalSessionId: string };
+
+const requestStateReducer = (state: RequestState, action: RequestAction): RequestState => {
+  switch (action.type) {
+    case "reset":
+      return { externalSessionId: null, status: "idle" };
+    case "pending":
+      return { externalSessionId: action.externalSessionId, status: "pending" };
+    case "idleIfCurrent":
+      return state.externalSessionId === action.externalSessionId
+        ? { externalSessionId: action.externalSessionId, status: "idle" }
+        : state;
+    case "failedIfCurrent":
+      return state.externalSessionId === action.externalSessionId
+        ? { externalSessionId: action.externalSessionId, status: "failed" }
+        : state;
+  }
+};
+
 export function useAgentStudioTaskHydration({
   activeWorkspace,
   activeTaskId,
@@ -36,10 +64,10 @@ export function useAgentStudioTaskHydration({
   ensureSessionReadyForView,
 }: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
   const activeExternalSessionId = activeSession?.externalSessionId ?? null;
-  const [requestState, setRequestState] = useState<{
-    externalSessionId: string | null;
-    status: "idle" | "pending" | "failed";
-  }>({ externalSessionId: null, status: "idle" });
+  const [requestState, dispatchRequestState] = useReducer(requestStateReducer, {
+    externalSessionId: null,
+    status: "idle",
+  });
   const lifecycle = deriveAgentStudioTaskHydrationState({
     activeSession,
     agentStudioReadinessState,
@@ -51,38 +79,29 @@ export function useAgentStudioTaskHydration({
 
   useEffect(() => {
     if (!activeExternalSessionId) {
-      setRequestState({ externalSessionId: null, status: "idle" });
+      dispatchRequestState({ type: "reset" });
       return;
     }
 
     if (!shouldEnsureSessionReady) {
-      setRequestState((current) =>
-        current.externalSessionId === activeExternalSessionId && current.status === "pending"
-          ? { externalSessionId: activeExternalSessionId, status: "idle" }
-          : current,
-      );
+      dispatchRequestState({ type: "idleIfCurrent", externalSessionId: activeExternalSessionId });
       return;
     }
 
-    setRequestState({ externalSessionId: activeExternalSessionId, status: "pending" });
+    dispatchRequestState({ type: "pending", externalSessionId: activeExternalSessionId });
     void ensureSessionReadyForView({
       taskId: activeTaskId,
       externalSessionId: activeExternalSessionId,
       repoReadinessState: agentStudioReadinessState,
     })
       .then(() => {
-        setRequestState((current) =>
-          current.externalSessionId === activeExternalSessionId
-            ? { externalSessionId: activeExternalSessionId, status: "idle" }
-            : current,
-        );
+        dispatchRequestState({ type: "idleIfCurrent", externalSessionId: activeExternalSessionId });
       })
       .catch(() => {
-        setRequestState((current) =>
-          current.externalSessionId === activeExternalSessionId
-            ? { externalSessionId: activeExternalSessionId, status: "failed" }
-            : current,
-        );
+        dispatchRequestState({
+          type: "failedIfCurrent",
+          externalSessionId: activeExternalSessionId,
+        });
       });
   }, [
     activeExternalSessionId,

@@ -1,18 +1,9 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TooltipProvider } from "@/components/ui/tooltip";
-
-let KanbanCollapsedColumn: typeof import("./kanban-collapsed-column").KanbanCollapsedColumn;
+import { KanbanCollapsedColumn } from "./kanban-collapsed-column";
 
 describe("KanbanCollapsedColumn", () => {
-  beforeAll(async () => {
-    const modulePath = `./kanban-collapsed-column?test=${Date.now()}`;
-    const kanbanCollapsedColumnModule = (await import(modulePath)) as {
-      KanbanCollapsedColumn: typeof import("./kanban-collapsed-column").KanbanCollapsedColumn;
-    };
-    KanbanCollapsedColumn = kanbanCollapsedColumnModule.KanbanCollapsedColumn;
-  });
-
   test("renders a keyboard-focusable tooltip trigger without a native title", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider delayDuration={120}>

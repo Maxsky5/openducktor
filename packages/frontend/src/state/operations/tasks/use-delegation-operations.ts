@@ -28,9 +28,7 @@ export function useDelegationOperations({
       if (!workspaceId) {
         throw new Error("Active workspace is required.");
       }
-      const runtimeKind = await loadRepoDefaultRuntimeKind(workspaceId, "build");
-
-      await host.buildStart(repo, taskId, runtimeKind);
+      await startDelegatedBuild(repo, taskId, workspaceId);
       await refreshTaskData(repo);
     },
     [activeWorkspace, refreshTaskData],
@@ -40,3 +38,12 @@ export function useDelegationOperations({
     delegateTask,
   };
 }
+
+const startDelegatedBuild = async (
+  repoPath: string,
+  taskId: string,
+  workspaceId: string,
+): Promise<void> => {
+  const runtimeKind = await loadRepoDefaultRuntimeKind(workspaceId, "build");
+  await host.buildStart(repoPath, taskId, runtimeKind);
+};

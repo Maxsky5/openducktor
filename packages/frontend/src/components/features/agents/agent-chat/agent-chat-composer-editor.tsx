@@ -157,54 +157,56 @@ const syncComposerDomInPlace = (root: HTMLDivElement, draft: AgentChatComposerDr
   const domNodes = Array.from(root.childNodes).filter(
     (node) => !(node instanceof Text && (node.textContent ?? "").length === 0),
   );
-  const renderableSegments = draft.segments.flatMap((segment, draftIndex) => {
+  const renderableSegments = draft.segments.reduce<
+    Array<{ segment: AgentChatComposerDraft["segments"][number]; draftIndex: number }>
+  >((segments, segment, draftIndex) => {
     if (segment.kind === "text" && !shouldRenderTextSegment(draft, draftIndex)) {
-      return [];
+      return segments;
     }
 
-    return [{ segment, draftIndex }];
-  });
+    segments.push({ segment, draftIndex });
+    return segments;
+  }, []);
 
-  if (domNodes.length !== renderableSegments.length) {
-    return false;
-  }
-
-  return renderableSegments.every(({ segment, draftIndex }, index) => {
-    const node = domNodes[index];
-    if (!(node instanceof HTMLElement)) {
-      return false;
-    }
-
-    if (segment.kind === "text") {
-      const expectedClassName = readExpectedTextSegmentClassName(draft, draftIndex);
-      if (!expectedClassName) {
+  return (
+    domNodes.length === renderableSegments.length &&
+    renderableSegments.every(({ segment, draftIndex }, index) => {
+      const node = domNodes[index];
+      if (!(node instanceof HTMLElement)) {
         return false;
       }
 
-      if (node.className !== expectedClassName) {
-        node.className = expectedClassName;
+      if (segment.kind === "text") {
+        const expectedClassName = readExpectedTextSegmentClassName(draft, draftIndex);
+        if (!expectedClassName) {
+          return false;
+        }
+
+        if (node.className !== expectedClassName) {
+          node.className = expectedClassName;
+        }
+
+        return (
+          node.dataset.textSegmentId === segment.id &&
+          readEditableTextContent(node) === segment.text &&
+          node.className === expectedClassName
+        );
+      }
+
+      if (segment.kind === "slash_command") {
+        return (
+          node.dataset.chipSegmentId === segment.id &&
+          node.textContent === `/${segment.command.trigger}`
+        );
       }
 
       return (
-        node.dataset.textSegmentId === segment.id &&
-        readEditableTextContent(node) === segment.text &&
-        node.className === expectedClassName
-      );
-    }
-
-    if (segment.kind === "slash_command") {
-      return (
         node.dataset.chipSegmentId === segment.id &&
-        node.textContent === `/${segment.command.trigger}`
+        node.dataset.fileReferencePath === segment.file.path &&
+        (node.textContent ?? "").includes(segment.file.name)
       );
-    }
-
-    return (
-      node.dataset.chipSegmentId === segment.id &&
-      node.dataset.fileReferencePath === segment.file.path &&
-      (node.textContent ?? "").includes(segment.file.name)
-    );
-  });
+    })
+  );
 };
 
 const shouldRedirectShellClickToComposer = (
@@ -371,9 +373,12 @@ export function AgentChatComposerEditor({
           onSelectCommand={selectSlashCommand}
         />
       ) : null}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: the contenteditable root is the editor surface. */}
+      {/* biome-ignore lint/a11y/useSemanticElements: the contenteditable root supports inline chips and file references. */}
       <div
         ref={editorRef}
+        role="textbox"
+        aria-multiline="true"
+        tabIndex={disabled ? -1 : 0}
         contentEditable={!disabled}
         suppressContentEditableWarning
         spellCheck={false}

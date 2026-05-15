@@ -30,16 +30,18 @@ describe("session-presence-cache", () => {
       ]),
     );
 
-    const first = await cache.load({
-      repoPath: "/tmp/repo",
-      runtimeKind: "opencode",
-      directories: ["/tmp/repo/worktree/"],
-    });
-    const second = await cache.load({
-      repoPath: "/tmp/repo",
-      runtimeKind: "opencode",
-      directories: ["/tmp/repo/worktree"],
-    });
+    const [first, second] = await Promise.all([
+      cache.load({
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        directories: ["/tmp/repo/worktree/"],
+      }),
+      cache.load({
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        directories: ["/tmp/repo/worktree"],
+      }),
+    ]);
 
     expect(first).toBe(preloadedSessions);
     expect(second).toBe(preloadedSessions);
@@ -51,16 +53,18 @@ describe("session-presence-cache", () => {
     const listSessionPresence = mock(async () => scannedSessions);
     const cache = new AgentSessionPresenceCache({ listSessionPresence });
 
-    const first = await cache.load({
-      repoPath: "/tmp/repo",
-      runtimeKind: "opencode",
-      directories: ["/tmp/repo/b/", "", " /tmp/repo/a ", "/tmp/repo/b"],
-    });
-    const second = await cache.load({
-      repoPath: "/tmp/repo",
-      runtimeKind: "opencode",
-      directories: ["/tmp/repo/a", "/tmp/repo/b"],
-    });
+    const [first, second] = await Promise.all([
+      cache.load({
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        directories: ["/tmp/repo/b/", "", " /tmp/repo/a ", "/tmp/repo/b"],
+      }),
+      cache.load({
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        directories: ["/tmp/repo/a", "/tmp/repo/b"],
+      }),
+    ]);
 
     expect(first).toBe(scannedSessions);
     expect(second).toBe(scannedSessions);
@@ -92,12 +96,15 @@ describe("session-presence-cache", () => {
     expect(listSessionPresence).toHaveBeenCalledTimes(1);
 
     scanDeferred.resolve(scannedSessions);
-    const [first, second] = await Promise.all([firstLoad, secondLoad]);
-    const third = await cache.load({
-      repoPath: "/tmp/repo",
-      runtimeKind: "opencode",
-      directories: ["/tmp/repo/worktree"],
-    });
+    const [first, second, third] = await Promise.all([
+      firstLoad,
+      secondLoad,
+      cache.load({
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        directories: ["/tmp/repo/worktree"],
+      }),
+    ]);
 
     expect(first).toBe(scannedSessions);
     expect(second).toBe(scannedSessions);

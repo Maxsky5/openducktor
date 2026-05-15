@@ -125,18 +125,26 @@ export const resolveAgentStudioSessionSelection = ({
   keepExplicitRoleSessionless?: boolean;
 }): { activeSession: AgentSessionSummary | null; role: AgentRole } => {
   const runningSession =
-    [...sessionsForTask]
-      .filter((session) => session.status === "running" || session.status === "starting")
-      .sort(compareAgentSessionRecency)[0] ?? null;
+    sessionsForTask.reduce<AgentSessionSummary | null>((latest, session) => {
+      if (session.status !== "running" && session.status !== "starting") {
+        return latest;
+      }
+      if (!latest || compareAgentSessionRecency(session, latest) < 0) {
+        return session;
+      }
+      return latest;
+    }, null) ?? null;
 
   const latestSessionByRole = (role: AgentRole): WorkflowAgentSessionSummary | null => {
-    const roleSessions = sessionsForTask
-      .filter(
-        (session): session is WorkflowAgentSessionSummary =>
-          isWorkflowAgentSessionSummary(session) && session.role === role,
-      )
-      .sort(compareAgentSessionRecency);
-    return roleSessions[0] ?? null;
+    return sessionsForTask.reduce<WorkflowAgentSessionSummary | null>((latest, session) => {
+      if (!isWorkflowAgentSessionSummary(session) || session.role !== role) {
+        return latest;
+      }
+      if (!latest || compareAgentSessionRecency(session, latest) < 0) {
+        return session;
+      }
+      return latest;
+    }, null);
   };
 
   const toSelection = (role: AgentRole, session: AgentSessionSummary | null) => {
@@ -171,9 +179,18 @@ export const resolveAgentStudioSessionSelection = ({
   }
 
   const defaultRole = resolveAgentStudioDefaultRoleForTask(selectedTask);
-  const mostRecentSession =
-    sessionsForTask.filter(isWorkflowAgentSessionSummary).sort(compareAgentSessionRecency)[0] ??
-    null;
+  const mostRecentSession = sessionsForTask.reduce<WorkflowAgentSessionSummary | null>(
+    (latest, session) => {
+      if (!isWorkflowAgentSessionSummary(session)) {
+        return latest;
+      }
+      if (!latest || compareAgentSessionRecency(session, latest) < 0) {
+        return session;
+      }
+      return latest;
+    },
+    null,
+  );
 
   const withRoleFallback = (session: WorkflowAgentSessionSummary | null) =>
     toSelection(session?.role ?? defaultRole ?? fallbackRole, session);

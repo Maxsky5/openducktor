@@ -59,6 +59,16 @@ export function normalizePatchCandidate(candidate: string, filePath: string): st
   return `${normalized}\n`;
 }
 
+function splitTrimmedNonEmpty(value: string, separator: RegExp): string[] {
+  return value.split(separator).reduce<string[]>((chunks, chunk) => {
+    const trimmed = chunk.trim();
+    if (trimmed.length > 0) {
+      chunks.push(trimmed);
+    }
+    return chunks;
+  }, []);
+}
+
 export function splitPatchCandidates(rawDiff: string): string[] {
   const trimmed = rawDiff.trim();
   if (trimmed.length === 0) {
@@ -66,33 +76,22 @@ export function splitPatchCandidates(rawDiff: string): string[] {
   }
 
   if (GIT_DIFF_HEADER.test(trimmed)) {
-    return trimmed
-      .split(/(?=^diff --git )/m)
-      .map((chunk) => chunk.trim())
-      .filter((chunk) => chunk.length > 0);
+    return splitTrimmedNonEmpty(trimmed, /(?=^diff --git )/m);
   }
 
   if (CLASSIC_DIFF_HEADER.test(trimmed)) {
-    return trimmed
-      .split(/(?=^Index: )/m)
-      .map((chunk) => chunk.trim())
-      .filter((chunk) => chunk.length > 0);
+    return splitTrimmedNonEmpty(trimmed, /(?=^Index: )/m);
   }
 
   if (UNIFIED_MULTI_FILE_HEADER.test(trimmed)) {
-    return trimmed
-      .split(/(?=^--- .+\n\+\+\+ .+)/m)
-      .map((chunk) => chunk.trim())
-      .filter((chunk) => chunk.length > 0);
+    return splitTrimmedNonEmpty(trimmed, /(?=^--- .+\n\+\+\+ .+)/m);
   }
 
   if (APPLY_PATCH_FILE_HEADER.test(trimmed)) {
-    return trimmed
+    const patchBody = trimmed
       .replace(/^\*\*\* Begin Patch\s*\n?/m, "")
-      .replace(/\n?\*\*\* End Patch\s*$/m, "")
-      .split(/(?=^\*\*\* (?:Add|Update|Delete) File: )/m)
-      .map((chunk) => chunk.trim())
-      .filter((chunk) => chunk.length > 0);
+      .replace(/\n?\*\*\* End Patch\s*$/m, "");
+    return splitTrimmedNonEmpty(patchBody, /(?=^\*\*\* (?:Add|Update|Delete) File: )/m);
   }
 
   return [trimmed];

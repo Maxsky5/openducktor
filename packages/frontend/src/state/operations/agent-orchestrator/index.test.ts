@@ -1,12 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import * as orchestrator from "./index";
+import { attachAgentSessionListener } from "./events/session-events";
+import { createAgentSessionActions } from "./handlers/session-actions";
+import { createLoadAgentSessions } from "./lifecycle/load-sessions";
+import { createEnsureRuntime } from "./runtime/runtime";
+import { upsertMessage } from "./support/utils";
 
 describe("agent-orchestrator/index", () => {
   test("exports orchestrator public internals", () => {
-    expect(typeof orchestrator.createAgentSessionActions).toBe("function");
-    expect(typeof orchestrator.createLoadAgentSessions).toBe("function");
-    expect(typeof orchestrator.attachAgentSessionListener).toBe("function");
-    expect(typeof orchestrator.createEnsureRuntime).toBe("function");
-    expect(typeof orchestrator.upsertMessage).toBe("function");
+    expect(typeof createAgentSessionActions).toBe("function");
+    expect(typeof createLoadAgentSessions).toBe("function");
+    expect(typeof attachAgentSessionListener).toBe("function");
+    expect(typeof createEnsureRuntime).toBe("function");
+    expect(typeof upsertMessage).toBe("function");
   });
 });

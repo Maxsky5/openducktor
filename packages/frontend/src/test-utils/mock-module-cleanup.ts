@@ -5,8 +5,14 @@ export type MockedModuleReset = readonly [moduleId: string, loadActual: () => Pr
 export const restoreMockedModules = async (
   entries: ReadonlyArray<MockedModuleReset>,
 ): Promise<void> => {
-  for (const [moduleId, loadActual] of entries) {
-    const actualModule = await loadActual();
+  const restoredModules = await Promise.all(
+    entries.map(async ([moduleId, loadActual]) => ({
+      moduleId,
+      actualModule: await loadActual(),
+    })),
+  );
+
+  for (const { moduleId, actualModule } of restoredModules) {
     mock.module(moduleId, () => ({ ...(actualModule as Record<string, unknown>) }));
   }
 };

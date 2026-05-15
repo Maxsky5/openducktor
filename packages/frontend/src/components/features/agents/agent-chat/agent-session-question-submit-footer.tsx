@@ -43,7 +43,7 @@ export const QuestionSubmitFooter = ({
           {isSubmitting ? (
             <>
               <LoaderCircle className="size-3.5 animate-spin" />
-              Submitting...
+              Submitting…
             </>
           ) : (
             <>

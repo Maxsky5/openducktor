@@ -25,6 +25,22 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
 };
 
+const drainAnimationFrames = async (
+  animationFrameCallbacks: Map<number, FrameRequestCallback>,
+): Promise<void> => {
+  if (animationFrameCallbacks.size === 0) {
+    return;
+  }
+
+  const queuedCallbacks = Array.from(animationFrameCallbacks.values());
+  animationFrameCallbacks.clear();
+  for (const callback of queuedCallbacks) {
+    callback(16);
+  }
+  await flush();
+  await drainAnimationFrames(animationFrameCallbacks);
+};
+
 describe("useAgentChatRowStaging", () => {
   const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
@@ -105,14 +121,7 @@ describe("useAgentChatRowStaging", () => {
     await harness.mount();
 
     await act(async () => {
-      while (animationFrameCallbacks.size > 0) {
-        const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-        animationFrameCallbacks.clear();
-        for (const callback of queuedCallbacks) {
-          callback(16);
-        }
-        await flush();
-      }
+      await drainAnimationFrames(animationFrameCallbacks);
     });
 
     await harness.update({
@@ -170,14 +179,7 @@ describe("useAgentChatRowStaging", () => {
     });
 
     await act(async () => {
-      while (animationFrameCallbacks.size > 0) {
-        const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-        animationFrameCallbacks.clear();
-        for (const callback of queuedCallbacks) {
-          callback(16);
-        }
-        await flush();
-      }
+      await drainAnimationFrames(animationFrameCallbacks);
     });
 
     expect(harness.getLatest().rows).toHaveLength(96);

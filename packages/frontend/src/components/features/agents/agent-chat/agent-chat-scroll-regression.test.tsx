@@ -2,11 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act, type ReactElement, useRef, useState } from "react";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
-import {
-  COMPOSER_EDITOR_MIN_HEIGHT_PX,
-  COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
-  useAgentChatLayout,
-} from "./use-agent-chat-layout";
+import { COMPOSER_EDITOR_MIN_HEIGHT_PX, useAgentChatLayout } from "./use-agent-chat-layout";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
 (
@@ -88,17 +84,20 @@ const triggerResizeObservers = (): void => {
 };
 
 const flushAnimationFrames = async (): Promise<void> => {
-  while (animationFrameCallbacks.size > 0) {
-    const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-    animationFrameCallbacks.clear();
-
-    await act(async () => {
-      for (const callback of queuedCallbacks) {
-        callback(16);
-      }
-      await Promise.resolve();
-    });
+  if (animationFrameCallbacks.size === 0) {
+    return;
   }
+
+  const queuedCallbacks = Array.from(animationFrameCallbacks.values());
+  animationFrameCallbacks.clear();
+
+  await act(async () => {
+    for (const callback of queuedCallbacks) {
+      callback(16);
+    }
+    await Promise.resolve();
+  });
+  await flushAnimationFrames();
 };
 
 function ChatScrollRegressionHarness(): ReactElement {
@@ -251,7 +250,7 @@ describe("agent chat scroll regression", () => {
     });
     Object.defineProperty(textarea, "scrollHeight", {
       configurable: true,
-      get: () => (textarea.dataset.multiline === "true" ? 120 : COMPOSER_TEXTAREA_MIN_HEIGHT_PX),
+      get: () => (textarea.dataset.multiline === "true" ? 120 : COMPOSER_EDITOR_MIN_HEIGHT_PX),
     });
 
     await act(async () => {

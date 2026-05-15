@@ -20,6 +20,22 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
 };
 
+const drainAnimationFrames = async (
+  animationFrameCallbacks: Map<number, FrameRequestCallback>,
+): Promise<void> => {
+  if (animationFrameCallbacks.size === 0) {
+    return;
+  }
+
+  const queuedCallbacks = Array.from(animationFrameCallbacks.values());
+  animationFrameCallbacks.clear();
+  for (const callback of queuedCallbacks) {
+    callback(16);
+  }
+  await flush();
+  await drainAnimationFrames(animationFrameCallbacks);
+};
+
 describe("useAgentChatTurnStaging", () => {
   const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
@@ -75,14 +91,7 @@ describe("useAgentChatTurnStaging", () => {
     expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual(["turn-5"]);
 
     await act(async () => {
-      while (animationFrameCallbacks.size > 0) {
-        const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-        animationFrameCallbacks.clear();
-        for (const callback of queuedCallbacks) {
-          callback(16);
-        }
-        await flush();
-      }
+      await drainAnimationFrames(animationFrameCallbacks);
     });
 
     expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual(
@@ -112,14 +121,7 @@ describe("useAgentChatTurnStaging", () => {
     await harness.mount();
 
     await act(async () => {
-      while (animationFrameCallbacks.size > 0) {
-        const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-        animationFrameCallbacks.clear();
-        for (const callback of queuedCallbacks) {
-          callback(16);
-        }
-        await flush();
-      }
+      await drainAnimationFrames(animationFrameCallbacks);
     });
 
     const expandedTurns = buildTurns(8);
@@ -156,14 +158,7 @@ describe("useAgentChatTurnStaging", () => {
     await harness.mount();
 
     await act(async () => {
-      while (animationFrameCallbacks.size > 0) {
-        const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-        animationFrameCallbacks.clear();
-        for (const callback of queuedCallbacks) {
-          callback(16);
-        }
-        await flush();
-      }
+      await drainAnimationFrames(animationFrameCallbacks);
     });
 
     const builderTurns = buildTurns(8);
@@ -219,14 +214,7 @@ describe("useAgentChatTurnStaging", () => {
     });
 
     await act(async () => {
-      while (animationFrameCallbacks.size > 0) {
-        const queuedCallbacks = Array.from(animationFrameCallbacks.values());
-        animationFrameCallbacks.clear();
-        for (const callback of queuedCallbacks) {
-          callback(16);
-        }
-        await flush();
-      }
+      await drainAnimationFrames(animationFrameCallbacks);
     });
 
     expect(harness.getLatest().map((turn: AgentChatWindowTurn) => turn.key)).toEqual(

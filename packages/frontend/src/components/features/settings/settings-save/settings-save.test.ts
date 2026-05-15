@@ -137,7 +137,7 @@ describe("settings save transforms", () => {
 
     const saveReady = preparePromptOverridesForSave(source);
     const saveReadyKeys = Object.keys(saveReady).sort();
-    expect(saveReadyKeys).toEqual([...agentPromptTemplateIdValues].sort());
+    expect(saveReadyKeys).toEqual(agentPromptTemplateIdValues.toSorted());
 
     for (const [index, templateId] of agentPromptTemplateIdValues.entries()) {
       const entry = saveReady[templateId as AgentPromptTemplateId];

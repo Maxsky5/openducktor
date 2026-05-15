@@ -154,12 +154,16 @@ const resolveHunkResetAnchor = (
 export const getHunkResetAnnotations = (
   fileDiff: FileDiffMetadata,
 ): DiffLineAnnotation<HunkResetAnnotationMetadata>[] => {
-  return fileDiff.hunks
-    .map((hunk, hunkIndex) => resolveHunkResetAnchor(hunk, hunkIndex))
-    .filter(
-      (annotation): annotation is DiffLineAnnotation<HunkResetAnnotationMetadata> =>
-        annotation != null,
-    );
+  return fileDiff.hunks.reduce<DiffLineAnnotation<HunkResetAnnotationMetadata>[]>(
+    (annotations, hunk, hunkIndex) => {
+      const annotation = resolveHunkResetAnchor(hunk, hunkIndex);
+      if (annotation) {
+        annotations.push(annotation);
+      }
+      return annotations;
+    },
+    [],
+  );
 };
 
 const tryGetSingularPatch = (patch: string) => {

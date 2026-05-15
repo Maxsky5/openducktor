@@ -106,7 +106,7 @@ export function TagSelector({
         setIsFocused(false);
       }}
     >
-      <div className="rounded-md border border-input bg-card px-2 py-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/40">
+      <div className="rounded-md border border-input bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/40">
         <div className="flex min-h-10 flex-wrap items-center gap-2">
           {value.map((label) => (
             <TaskLabelChip

@@ -14,7 +14,6 @@ const FORBIDDEN_PATTERNS = [
     regex: /\bmock\.restore\(/g,
   },
 ];
-
 describe("desktop test module mock guardrails", () => {
   test("desktop tests avoid fragile barrel mocks, process-wide restore, and leaked module mocks", async () => {
     const violations: string[] = [];
@@ -37,7 +36,11 @@ describe("desktop test module mock guardrails", () => {
         violations.push(`${path.relative(process.cwd(), filePath)}: ${pattern.label}`);
       }
 
-      if (content.includes("mock.module(") && !content.includes("restoreMockedModules(")) {
+      const usesModuleMock = /mock\.module\(/.test(content);
+      const restoresMockedModules = /restoreMockedModules\(/.test(content);
+      const hasMissingModuleRestore = usesModuleMock && !restoresMockedModules;
+
+      if (hasMissingModuleRestore) {
         violations.push(
           `${path.relative(process.cwd(), filePath)}: module mocks must restore exact modules with restoreMockedModules`,
         );

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
@@ -7,20 +7,11 @@ import type {
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
-
-let KanbanColumn: typeof import("./kanban-column").KanbanColumn;
+import { KanbanColumn } from "./kanban-column";
 
 const noop = (): void => {};
 
 describe("KanbanColumn", () => {
-  beforeAll(async () => {
-    const modulePath = `./kanban-column?test=${Date.now()}`;
-    const kanbanColumnModule = (await import(modulePath)) as {
-      KanbanColumn: typeof import("./kanban-column").KanbanColumn;
-    };
-    KanbanColumn = kanbanColumnModule.KanbanColumn;
-  });
-
   test("passes waiting-input ordering data through to rendered task cards", () => {
     const waitingTask = createTaskCardFixture({ id: "TASK-WAITING", title: "Need answer" });
     const activeTask = createTaskCardFixture({ id: "TASK-ACTIVE", title: "Still running" });

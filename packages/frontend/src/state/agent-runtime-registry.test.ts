@@ -27,6 +27,18 @@ const createDeferred = <T>() => {
   };
 };
 
+const waitForSessionIdleEvent = async (
+  events: Array<{ type?: string }>,
+  deadline = Date.now() + 1_000,
+): Promise<void> => {
+  if (events.some((event) => event.type === "session_idle") || Date.now() >= deadline) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await waitForSessionIdleEvent(events, deadline);
+};
+
 describe("agent-runtime-registry", () => {
   test("registers the shipped opencode and codex runtime adapters", () => {
     const registry = createAgentRuntimeRegistry();
@@ -249,10 +261,7 @@ describe("agent-runtime-registry", () => {
         },
       });
 
-      const deadline = Date.now() + 1_000;
-      while (!events.some((event) => event.type === "session_idle") && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
+      await waitForSessionIdleEvent(events);
       expect(events.some((event) => event.type === "session_idle")).toBe(true);
       unsubscribe();
     } finally {

@@ -30,8 +30,10 @@ export function useTaskResetOperations({
       const repoPath = requireActiveRepo(activeRepoPath);
       try {
         await host.taskResetImplementation(repoPath, taskId);
-        await invalidateTaskWorkflowQueries(queryClient, repoPath, taskId);
-        await refreshTaskData(repoPath, taskId);
+        await Promise.all([
+          invalidateTaskWorkflowQueries(queryClient, repoPath, taskId),
+          refreshTaskData(repoPath, taskId),
+        ]);
         toast.success("Implementation reset", { description: taskId });
       } catch (error) {
         toast.error("Failed to reset implementation", { description: errorMessage(error) });
@@ -46,8 +48,10 @@ export function useTaskResetOperations({
       const repoPath = requireActiveRepo(activeRepoPath);
       try {
         await host.taskReset(repoPath, taskId);
-        await invalidateTaskWorkflowQueries(queryClient, repoPath, taskId);
-        await refreshTaskData(repoPath, taskId);
+        await Promise.all([
+          invalidateTaskWorkflowQueries(queryClient, repoPath, taskId),
+          refreshTaskData(repoPath, taskId),
+        ]);
         toast.success("Task reset", { description: taskId });
       } catch (error) {
         toast.error("Failed to reset task", { description: errorMessage(error) });

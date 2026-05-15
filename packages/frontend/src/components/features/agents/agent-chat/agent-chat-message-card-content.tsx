@@ -13,8 +13,8 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useReducer,
   useRef,
-  useState,
 } from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { buildCopyPreview } from "@/lib/copy-preview";
@@ -66,7 +66,10 @@ const nextPacedBoundary = (text: string, start: number): number => {
 };
 
 const usePacedStreamingText = (text: string, streaming: boolean): string => {
-  const [visibleText, setVisibleText] = useState(text);
+  const [visibleText, dispatchVisibleText] = useReducer(
+    (_current: string, next: string) => next,
+    text,
+  );
   const shownRef = useRef(text);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -80,7 +83,7 @@ const usePacedStreamingText = (text: string, streaming: boolean): string => {
 
     const sync = (nextText: string) => {
       shownRef.current = nextText;
-      setVisibleText(nextText);
+      dispatchVisibleText(nextText);
     };
 
     const run = () => {
@@ -117,7 +120,12 @@ const usePacedStreamingText = (text: string, streaming: boolean): string => {
       timeoutRef.current = setTimeout(run, TEXT_RENDER_PACE_MS);
     }
 
-    return clearScheduled;
+    return () => {
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
   }, [streaming, text]);
 
   return visibleText;
@@ -177,7 +185,7 @@ const REASONING_MARKDOWN_CLASS_NAME = cn(
 );
 
 const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactElement => {
-  const sourceText = streaming ? content || "Thinking..." : content;
+  const sourceText = streaming ? content || "Thinking…" : content;
   const pacedContent = usePacedStreamingText(sourceText, streaming);
   const renderedContent = useDeferredValue(pacedContent);
   return (
@@ -278,13 +286,13 @@ type UserMessageInlineFileReferenceRange = {
 };
 
 const readVisibleUserMessageText = (parts: AgentUserMessageDisplayPart[]): string => {
-  return parts
-    .filter(
-      (part): part is Extract<AgentUserMessageDisplayPart, { kind: "text" }> =>
-        part.kind === "text" && !part.synthetic,
-    )
-    .map((part) => part.text)
-    .join("");
+  let text = "";
+  for (const part of parts) {
+    if (part.kind === "text" && !part.synthetic) {
+      text += part.text;
+    }
+  }
+  return text;
 };
 
 const readRenderableUserMessageText = (
@@ -302,22 +310,21 @@ const readInlineUserFileReferenceRanges = (
   rawText: string,
   parts: AgentUserMessageDisplayPart[],
 ): UserMessageInlineFileReferenceRange[] => {
-  return parts
-    .flatMap((part) => {
-      if (part.kind !== "file_reference" || !part.sourceText) {
-        return [];
-      }
-
-      return [
-        {
-          part,
-          start: part.sourceText.start,
-          end: part.sourceText.end,
-        } satisfies UserMessageInlineFileReferenceRange,
-      ];
-    })
-    .filter((range) => range.start >= 0 && range.end >= range.start && range.end <= rawText.length)
-    .sort((left, right) => left.start - right.start);
+  const ranges: UserMessageInlineFileReferenceRange[] = [];
+  for (const part of parts) {
+    if (part.kind !== "file_reference" || !part.sourceText) {
+      continue;
+    }
+    const range = {
+      part,
+      start: part.sourceText.start,
+      end: part.sourceText.end,
+    } satisfies UserMessageInlineFileReferenceRange;
+    if (range.start >= 0 && range.end >= range.start && range.end <= rawText.length) {
+      ranges.push(range);
+    }
+  }
+  return ranges.toSorted((left, right) => left.start - right.start);
 };
 
 const pushUserMessageTextNode = (nodes: ReactNode[], text: string, key: string): void => {
@@ -627,7 +634,7 @@ export const MessageBody = ({
         <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground">
           Show system prompt
         </summary>
-        <div className="border-t border-border px-2 py-2">
+        <div className="border-t border-border p-2">
           <AgentChatMarkdownRenderer markdown={systemPromptBody} variant="compact" />
         </div>
       </details>

@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
+  COMPOSER_EDITOR_MAX_HEIGHT_PX,
   COMPOSER_EDITOR_MIN_HEIGHT_PX,
-  COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
-  COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
-  computeComposerTextareaLayout,
+  computeComposerEditorLayout,
   resizeComposerEditorElement,
   resizeComposerTextareaElement,
   useAgentChatLayout,
@@ -25,15 +24,15 @@ type LayoutHookState = {
 
 describe("use-agent-chat-layout helpers", () => {
   test("clamps textarea layout to minimum height", () => {
-    expect(computeComposerTextareaLayout(10)).toEqual({
-      heightPx: COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
+    expect(computeComposerEditorLayout(10)).toEqual({
+      heightPx: COMPOSER_EDITOR_MIN_HEIGHT_PX,
       overflowY: "hidden",
     });
   });
 
   test("clamps textarea layout to maximum height and enables overflow", () => {
-    expect(computeComposerTextareaLayout(COMPOSER_TEXTAREA_MAX_HEIGHT_PX + 120)).toEqual({
-      heightPx: COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
+    expect(computeComposerEditorLayout(COMPOSER_EDITOR_MAX_HEIGHT_PX + 120)).toEqual({
+      heightPx: COMPOSER_EDITOR_MAX_HEIGHT_PX,
       overflowY: "auto",
     });
   });
@@ -166,7 +165,7 @@ describe("use-agent-chat-layout helpers", () => {
       style,
       value: "short",
       get scrollHeight() {
-        return styleState.height === "auto" ? COMPOSER_TEXTAREA_MIN_HEIGHT_PX : 120;
+        return styleState.height === "auto" ? COMPOSER_EDITOR_MIN_HEIGHT_PX : 120;
       },
     } as unknown as HTMLTextAreaElement;
 
@@ -176,7 +175,7 @@ describe("use-agent-chat-layout helpers", () => {
       didHeightChange: true,
       overflowY: "hidden",
     });
-    expect(styleState.height).toBe(`${COMPOSER_TEXTAREA_MIN_HEIGHT_PX}px`);
+    expect(styleState.height).toBe(`${COMPOSER_EDITOR_MIN_HEIGHT_PX}px`);
   });
 
   test("resizeComposerTextareaElement preserves height when the editor already reports the target size", () => {
@@ -188,7 +187,7 @@ describe("use-agent-chat-layout helpers", () => {
     const style = {} as CSSStyleDeclaration;
     const measurementClone = {
       style: {} as CSSStyleDeclaration,
-      scrollHeight: COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
+      scrollHeight: COMPOSER_EDITOR_MIN_HEIGHT_PX,
       value: "",
       rows: 1,
       setAttribute: () => {},
@@ -286,11 +285,11 @@ describe("use-agent-chat-layout helpers", () => {
     });
 
     const textarea = {
-      getBoundingClientRect: () => ({ height: COMPOSER_TEXTAREA_MIN_HEIGHT_PX }),
+      getBoundingClientRect: () => ({ height: COMPOSER_EDITOR_MIN_HEIGHT_PX }),
       style,
       value: "draft",
       get scrollHeight() {
-        return COMPOSER_TEXTAREA_MIN_HEIGHT_PX;
+        return COMPOSER_EDITOR_MIN_HEIGHT_PX;
       },
     } as unknown as HTMLTextAreaElement;
 

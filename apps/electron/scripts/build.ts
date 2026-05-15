@@ -7,21 +7,23 @@ const packageRoot = resolve(scriptDirectory, "..");
 
 export const buildElectronPackage = async (): Promise<void> => {
   await cleanDirectory(join(packageRoot, "dist"));
-  await runCommand({
-    command: ["bun", "run", "build:main"],
-    cwd: packageRoot,
-    label: "Electron main build",
-  });
-  await runCommand({
-    command: ["bun", "run", "build:preload"],
-    cwd: packageRoot,
-    label: "Electron preload build",
-  });
-  await runCommand({
-    command: ["bun", "run", "build:renderer"],
-    cwd: packageRoot,
-    label: "Electron renderer build",
-  });
+  await Promise.all([
+    runCommand({
+      command: ["bun", "run", "build:main"],
+      cwd: packageRoot,
+      label: "Electron main build",
+    }),
+    runCommand({
+      command: ["bun", "run", "build:preload"],
+      cwd: packageRoot,
+      label: "Electron preload build",
+    }),
+    runCommand({
+      command: ["bun", "run", "build:renderer"],
+      cwd: packageRoot,
+      label: "Electron renderer build",
+    }),
+  ]);
 };
 
 if (import.meta.main) {

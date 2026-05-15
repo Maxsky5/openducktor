@@ -391,39 +391,41 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
       return;
     }
 
-    void (async () => {
-      for (const observedEvent of observedEvents) {
+    void Promise.all(
+      observedEvents.map(async (observedEvent) => {
         const rule = getAutopilotRule(autopilotSettings, observedEvent.eventId);
-        for (const actionId of rule.actionIds) {
-          try {
-            const outcome = await executeAutopilotAction({
-              activeWorkspace,
-              task: observedEvent.task,
-              actionId,
-              queryClient,
-              loadRepoRuntimeCatalog,
-              resolveTaskWorktree: loadTaskWorktree,
-              startSessionWorkflow,
-              startAgentSession,
-              settleStartedAgentSession,
-              sendAgentMessage,
-            });
+        await Promise.all(
+          rule.actionIds.map(async (actionId) => {
+            try {
+              const outcome = await executeAutopilotAction({
+                activeWorkspace,
+                task: observedEvent.task,
+                actionId,
+                queryClient,
+                loadRepoRuntimeCatalog,
+                resolveTaskWorktree: loadTaskWorktree,
+                startSessionWorkflow,
+                startAgentSession,
+                settleStartedAgentSession,
+                sendAgentMessage,
+              });
 
-            if (outcome.kind === "started") {
-              toast.success(`Autopilot: ${outcome.message}`);
-            } else {
-              toast.info(`Autopilot skipped ${observedEvent.task.id}.`, {
-                description: outcome.message,
+              if (outcome.kind === "started") {
+                toast.success(`Autopilot: ${outcome.message}`);
+              } else {
+                toast.info(`Autopilot skipped ${observedEvent.task.id}.`, {
+                  description: outcome.message,
+                });
+              }
+            } catch (error) {
+              toast.error(`Autopilot failed for ${observedEvent.task.id}.`, {
+                description: errorMessage(error),
               });
             }
-          } catch (error) {
-            toast.error(`Autopilot failed for ${observedEvent.task.id}.`, {
-              description: errorMessage(error),
-            });
-          }
-        }
-      }
-    })();
+          }),
+        );
+      }),
+    );
   }, [
     workspaceRepoPath,
     activeWorkspace,

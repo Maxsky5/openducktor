@@ -11,16 +11,18 @@ type MergedPullRequestConfirmDialogProps = {
   onConfirm: () => void;
 };
 
+const MERGED_AT_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 function formatMergedAt(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return value;
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(parsed);
+  return MERGED_AT_FORMATTER.format(parsed);
 }
 
 export const MergedPullRequestConfirmDialog = memo(function MergedPullRequestConfirmDialog({

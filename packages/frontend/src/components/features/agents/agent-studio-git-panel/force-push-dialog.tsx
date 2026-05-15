@@ -41,7 +41,7 @@ export const ForcePushDialog = memo(function ForcePushDialog({
       onClose={onCancel}
       closeTestId="agent-studio-git-cancel-force-push-button"
       confirmLabel="Force push with lease"
-      confirmPendingLabel="Force pushing..."
+      confirmPendingLabel="Force pushing…"
       confirmPending={isPushing}
       confirmDisabled={isPushing}
       onConfirm={onConfirm}
@@ -50,7 +50,7 @@ export const ForcePushDialog = memo(function ForcePushDialog({
       contentTestId="agent-studio-git-force-push-modal"
     >
       <div className="space-y-4" data-testid="agent-studio-git-force-push-body">
-        <div className="rounded-xl border border-border bg-muted/35 px-4 py-4">
+        <div className="rounded-xl border border-border bg-muted/35 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Branch
           </p>
@@ -60,7 +60,7 @@ export const ForcePushDialog = memo(function ForcePushDialog({
         </div>
 
         <div
-          className="rounded-xl border border-info-border bg-info-surface px-4 py-4 text-info-surface-foreground"
+          className="rounded-xl border border-info-border bg-info-surface p-4 text-info-surface-foreground"
           data-testid="agent-studio-git-force-push-safety-note"
         >
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em]">Retry mode</p>
@@ -73,7 +73,7 @@ export const ForcePushDialog = memo(function ForcePushDialog({
         </div>
 
         {pendingForcePush ? (
-          <div className="rounded-xl border border-border bg-muted/40 px-4 py-4">
+          <div className="rounded-xl border border-border bg-muted/40 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Git output
             </p>

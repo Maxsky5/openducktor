@@ -68,22 +68,21 @@ const collectQuestionDetails = (value: unknown): QuestionToolDetail[] => {
   if (!Array.isArray(value)) {
     return [];
   }
-  return value
-    .map((entry) => {
-      const prompt = readQuestionPrompt(entry);
-      if (!prompt) {
-        return null;
-      }
-      const record = entry as Record<string, unknown>;
-      const answers = normalizeAnswerValues(
-        record.answers ?? record.answer ?? record.response ?? record.responses,
-      );
-      return {
-        prompt,
-        answers,
-      };
-    })
-    .filter((entry): entry is QuestionToolDetail => entry !== null);
+  return value.reduce<QuestionToolDetail[]>((details, entry) => {
+    const prompt = readQuestionPrompt(entry);
+    if (!prompt) {
+      return details;
+    }
+    const record = entry as Record<string, unknown>;
+    const answers = normalizeAnswerValues(
+      record.answers ?? record.answer ?? record.response ?? record.responses,
+    );
+    details.push({
+      prompt,
+      answers,
+    });
+    return details;
+  }, []);
 };
 
 const normalizeAnswerGroups = (value: unknown): string[][] => {
@@ -102,18 +101,26 @@ const normalizeAnswerGroups = (value: unknown): string[][] => {
     record.result ??
     record.value;
   if (nested === undefined) {
-    return Object.values(record)
-      .map((entry) => normalizeAnswerValues(entry))
-      .filter((entry) => entry.length > 0);
+    return Object.values(record).reduce<string[][]>((groups, entry) => {
+      const answers = normalizeAnswerValues(entry);
+      if (answers.length > 0) {
+        groups.push(answers);
+      }
+      return groups;
+    }, []);
   }
   return normalizeAnswerGroups(nested);
 };
 
 const firstNonEmptyAnswerGroups = (candidates: unknown[]): string[][] => {
   for (const candidate of candidates) {
-    const groups = normalizeAnswerGroups(candidate)
-      .map((entry) => entry.filter((value) => value.trim().length > 0))
-      .filter((entry) => entry.length > 0);
+    const groups = normalizeAnswerGroups(candidate).reduce<string[][]>((nextGroups, entry) => {
+      const answers = entry.filter((value) => value.trim().length > 0);
+      if (answers.length > 0) {
+        nextGroups.push(answers);
+      }
+      return nextGroups;
+    }, []);
     if (groups.length > 0) {
       return groups;
     }

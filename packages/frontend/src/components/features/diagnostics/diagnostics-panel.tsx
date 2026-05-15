@@ -1,5 +1,5 @@
 import { ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -66,22 +66,8 @@ export function DiagnosticsPanel(): ReactElement {
     ],
   );
 
-  useEffect(() => {
-    if (!workspaceRepoPath) {
-      return;
-    }
-    if (model.criticalReasons.length === 0) {
-      return;
-    }
-    if (autoOpenedByRepoRef.current.has(workspaceRepoPath)) {
-      return;
-    }
-    autoOpenedByRepoRef.current.add(workspaceRepoPath);
-    setOpen(true);
-  }, [workspaceRepoPath, model.criticalReasons.length]);
-
-  useEffect(() => {
-    if (!isOpen || !workspaceRepoPath || runtimeDefinitions.length === 0 || isLoadingChecks) {
+  const refreshRuntimeHealthIfNeeded = useCallback((): void => {
+    if (!workspaceRepoPath || runtimeDefinitions.length === 0 || isLoadingChecks) {
       return;
     }
     const runtimeKinds = runtimeDefinitions.map((definition) => definition.kind);
@@ -93,10 +79,30 @@ export function DiagnosticsPanel(): ReactElement {
     workspaceRepoPath,
     hasCachedRepoRuntimeHealth,
     isLoadingChecks,
-    isOpen,
     refreshRepoRuntimeHealthForRepo,
     runtimeDefinitions,
   ]);
+
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean): void => {
+      setOpen(nextOpen);
+      if (nextOpen) {
+        refreshRuntimeHealthIfNeeded();
+      }
+    },
+    [refreshRuntimeHealthIfNeeded],
+  );
+
+  useEffect(() => {
+    if (!workspaceRepoPath || model.criticalReasons.length === 0) {
+      return;
+    }
+    if (autoOpenedByRepoRef.current.has(workspaceRepoPath)) {
+      return;
+    }
+    autoOpenedByRepoRef.current.add(workspaceRepoPath);
+    handleOpenChange(true);
+  }, [handleOpenChange, workspaceRepoPath, model.criticalReasons.length]);
 
   return (
     <>
@@ -120,7 +126,7 @@ export function DiagnosticsPanel(): ReactElement {
             size="icon"
             variant="outline"
             className="size-8 border-input bg-card text-foreground shadow-sm hover:border-input hover:bg-muted"
-            onClick={() => setOpen(true)}
+            onClick={() => handleOpenChange(true)}
             aria-label="Open diagnostics"
             title="Open diagnostics"
           >
@@ -137,7 +143,7 @@ export function DiagnosticsPanel(): ReactElement {
         ) : null}
       </div>
 
-      <Sheet open={isOpen} onOpenChange={setOpen}>
+      <Sheet open={isOpen} onOpenChange={handleOpenChange}>
         <SheetContent side="right" className="overflow-y-auto">
           <SheetHeader className="space-y-3">
             <div className="flex items-center justify-between gap-3">

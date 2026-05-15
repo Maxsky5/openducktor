@@ -8,9 +8,13 @@ const rolesFromSubmenu = (submenu: unknown): string[] => {
   if (!Array.isArray(submenu)) {
     throw new Error("submenu must be an array");
   }
-  return submenu
-    .map((item) => (item && typeof item === "object" && "role" in item ? String(item.role) : null))
-    .filter((role): role is string => role !== null);
+  const roles: string[] = [];
+  for (const item of submenu) {
+    if (item && typeof item === "object" && "role" in item) {
+      roles.push(String(item.role));
+    }
+  }
+  return roles;
 };
 
 describe("main menu template", () => {

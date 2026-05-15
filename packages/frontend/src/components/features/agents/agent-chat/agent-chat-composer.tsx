@@ -8,9 +8,10 @@ import {
   Square,
 } from "lucide-react";
 import {
-  forwardRef,
   memo,
   type ReactElement,
+  type Ref,
+  type RefObject,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -53,6 +54,27 @@ import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
 
 export type AgentChatComposerHandle = {
   addFiles: (files: File[]) => void;
+};
+
+type AgentChatComposerFormViewProps = {
+  model: AgentChatComposerModel;
+  draft: AgentChatComposerDraft;
+  attachmentInputRef: RefObject<HTMLInputElement | null>;
+  attachmentErrors: Record<string, string>;
+  attachmentIntakeDisabled: boolean;
+  composerAccentColor: string | undefined;
+  composerPlaceholder: string;
+  hasSlashAttachmentConflict: boolean;
+  isComposerInputDisabled: boolean;
+  isSubmitting: boolean;
+  selectorDisabled: boolean;
+  sendDisabled: boolean;
+  onAddFiles: (files: File[]) => void;
+  onDraftChange: (draft: AgentChatComposerDraft) => void;
+  onPickAttachments: () => void;
+  onRemoveAttachment: (attachmentId: string) => void;
+  onSend: () => Promise<void>;
+  submitAction: () => void;
 };
 
 const truncateAttachmentDisplayName = (name: string, maxLength = 80): string => {
@@ -251,10 +273,260 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   );
 });
 
-export const AgentChatComposer = forwardRef<
-  AgentChatComposerHandle,
-  { model: AgentChatComposerModel }
->(function AgentChatComposer({ model }, ref): ReactElement {
+function AgentChatComposerFormView({
+  model,
+  draft,
+  attachmentInputRef,
+  attachmentErrors,
+  attachmentIntakeDisabled,
+  composerAccentColor,
+  composerPlaceholder,
+  hasSlashAttachmentConflict,
+  isComposerInputDisabled,
+  isSubmitting,
+  selectorDisabled,
+  sendDisabled,
+  onAddFiles,
+  onDraftChange,
+  onPickAttachments,
+  onRemoveAttachment,
+  onSend,
+  submitAction,
+}: AgentChatComposerFormViewProps): ReactElement {
+  const {
+    taskId,
+    isInteractionEnabled,
+    isReadOnly,
+    pendingInlineCommentCount,
+    isStarting,
+    isSessionWorking,
+    isWaitingInput,
+    isSelectionCatalogLoading,
+    selectedModelSelection,
+    supportsProfiles,
+    supportsSlashCommands,
+    supportsFileSearch,
+    slashCommands,
+    slashCommandsError,
+    isSlashCommandsLoading,
+    searchFiles,
+    agentOptions,
+    modelOptions,
+    modelGroups,
+    variantOptions,
+    onSelectAgent,
+    onSelectModel,
+    onSelectVariant,
+    contextUsage,
+    canStopSession,
+    onStopSession,
+    composerFormRef,
+    composerEditorRef,
+    onComposerEditorInput,
+  } = model;
+
+  return (
+    <form ref={composerFormRef} className="px-4 pb-4" action={submitAction}>
+      <input
+        ref={attachmentInputRef}
+        type="file"
+        multiple
+        accept={CHAT_ATTACHMENT_ACCEPT}
+        disabled={attachmentIntakeDisabled}
+        className="hidden"
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          if (files.length > 0) {
+            onAddFiles(files);
+          }
+          event.currentTarget.value = "";
+        }}
+      />
+      {(draft.attachments ?? []).length > 0 ? (
+        <section className="mb-0 border border-input border-b-0 border-l-0 bg-card shadow-md">
+          <div
+            className={composerAccentColor ? "border-l-4" : undefined}
+            style={composerAccentColor ? { borderLeftColor: composerAccentColor } : undefined}
+          >
+            <div className="px-3 pb-3 pt-3">
+              <div className="flex flex-wrap gap-3">
+                {(draft.attachments ?? []).map((attachment) => (
+                  <AgentChatAttachmentChip
+                    key={attachment.id}
+                    variant="draft"
+                    attachment={attachment}
+                    error={attachmentErrors[attachment.id] ?? null}
+                    onRemove={() => onRemoveAttachment(attachment.id)}
+                  />
+                ))}
+              </div>
+              {hasSlashAttachmentConflict ? (
+                <p className="mt-3 text-xs text-destructive">
+                  Remove attachments before running a slash command.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+      <div
+        className={
+          isWaitingInput
+            ? "odt-waiting-input-card relative border border-warning-border bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
+            : "relative border border-input border-l-0 bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
+        }
+      >
+        {isSessionWorking && !isWaitingInput ? (
+          <BorderRay
+            strokeWidth={2.6}
+            rayLengthRatio={0.12}
+            {...(composerAccentColor ? { color: composerAccentColor } : {})}
+          />
+        ) : null}
+        <div
+          className={isWaitingInput ? "relative z-10" : "relative z-10 border-l-4"}
+          style={
+            composerAccentColor && !isWaitingInput
+              ? { borderLeftColor: composerAccentColor }
+              : undefined
+          }
+        >
+          <AgentChatComposerEditor
+            draft={draft}
+            onDraftChange={onDraftChange}
+            onAddFiles={onAddFiles}
+            placeholder={composerPlaceholder}
+            disabled={isComposerInputDisabled || isSubmitting}
+            editorRef={composerEditorRef}
+            onEditorInput={onComposerEditorInput}
+            onSend={onSend}
+            supportsSlashCommands={supportsSlashCommands}
+            supportsFileSearch={supportsFileSearch}
+            slashCommands={slashCommands}
+            slashCommandsError={slashCommandsError}
+            isSlashCommandsLoading={isSlashCommandsLoading}
+            searchFiles={searchFiles}
+          />
+
+          <AgentChatComposerControls
+            onPickAttachments={onPickAttachments}
+            attachmentIntakeDisabled={attachmentIntakeDisabled}
+            selectedModelSelection={selectedModelSelection}
+            agentOptions={agentOptions}
+            modelOptions={modelOptions}
+            modelGroups={modelGroups}
+            variantOptions={variantOptions}
+            isSelectionCatalogLoading={isSelectionCatalogLoading}
+            supportsProfiles={supportsProfiles ?? true}
+            selectorDisabled={selectorDisabled}
+            taskId={taskId}
+            isInteractionEnabled={isInteractionEnabled}
+            isStarting={isStarting}
+            isReadOnly={isReadOnly}
+            onSelectAgent={onSelectAgent}
+            onSelectModel={onSelectModel}
+            onSelectVariant={onSelectVariant}
+            contextUsage={contextUsage}
+            canStopSession={canStopSession}
+            onStopSession={onStopSession}
+            showSubmittingState={isSubmitting}
+            sendDisabled={sendDisabled}
+            pendingInlineCommentCount={pendingInlineCommentCount}
+          />
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function useAgentChatComposerFocus({
+  composerEditorRef,
+  displayedSessionId,
+  isComposerInputDisabled,
+  isSubmitting,
+}: {
+  composerEditorRef: AgentChatComposerModel["composerEditorRef"];
+  displayedSessionId: string | null;
+  isComposerInputDisabled: boolean;
+  isSubmitting: boolean;
+}): () => void {
+  const composerAutofocusStateRef = useRef(createComposerAutofocusState());
+
+  const focusComposerEditor = useCallback(() => {
+    const editor = composerEditorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    const textSegments = editor.querySelectorAll<HTMLElement>("[data-segment-id]");
+    for (let index = textSegments.length - 1; index >= 0; index -= 1) {
+      const segment = textSegments[index];
+      if (!segment?.isContentEditable) {
+        continue;
+      }
+
+      setCaretOffsetWithinElement(segment, readEditableTextContent(segment).length);
+      return;
+    }
+
+    editor.focus();
+  }, [composerEditorRef]);
+
+  const scheduleComposerFocus = useCallback(() => {
+    const requestAnimationFrameFn = globalThis.requestAnimationFrame;
+    if (typeof requestAnimationFrameFn === "function") {
+      requestAnimationFrameFn(() => {
+        focusComposerEditor();
+      });
+      return;
+    }
+
+    focusComposerEditor();
+  }, [focusComposerEditor]);
+
+  const isFocusInsideComposer = useCallback(
+    (activeElement: Element | null): boolean => {
+      const editor = composerEditorRef.current;
+      return Boolean(
+        editor && activeElement && (editor === activeElement || editor.contains(activeElement)),
+      );
+    },
+    [composerEditorRef],
+  );
+
+  useEffect(() => {
+    const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
+    const activeElement = globalThis.document?.activeElement ?? null;
+    const focusInsideComposer = isFocusInsideComposer(activeElement);
+
+    const autofocusResult = resolveComposerAutofocus(composerAutofocusStateRef.current, {
+      displayedSessionId,
+      isComposerInteractive,
+      activeElement,
+      focusInsideComposer,
+    });
+    composerAutofocusStateRef.current = autofocusResult.nextState;
+    if (autofocusResult.shouldFocus) {
+      scheduleComposerFocus();
+    }
+  }, [
+    displayedSessionId,
+    isComposerInputDisabled,
+    isFocusInsideComposer,
+    isSubmitting,
+    scheduleComposerFocus,
+  ]);
+
+  return scheduleComposerFocus;
+}
+
+export function AgentChatComposer({
+  model,
+  ref,
+}: {
+  model: AgentChatComposerModel;
+  ref?: Ref<AgentChatComposerHandle>;
+}): ReactElement {
   const {
     taskId,
     displayedSessionId,
@@ -274,25 +546,7 @@ export const AgentChatComposer = forwardRef<
     selectedModelSelection,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
-    supportsProfiles,
-    supportsSlashCommands,
-    supportsFileSearch,
-    slashCommands,
-    slashCommandsError,
-    isSlashCommandsLoading,
-    searchFiles,
-    agentOptions,
-    modelOptions,
-    modelGroups,
-    variantOptions,
-    onSelectAgent,
-    onSelectModel,
-    onSelectVariant,
     sessionAgentColors,
-    contextUsage,
-    canStopSession,
-    onStopSession,
-    composerFormRef,
     composerEditorRef,
     onComposerEditorInput,
     syncBottomAfterComposerLayoutRef,
@@ -389,7 +643,6 @@ export const AgentChatComposer = forwardRef<
       .join("|");
   }, [attachmentErrors, draft.attachments]);
   const previousAttachmentLayoutKeyRef = useRef<string | null | undefined>(undefined);
-  const composerAutofocusStateRef = useRef(createComposerAutofocusState());
 
   const sendDisabled =
     (isSending && !isSessionWorking) ||
@@ -433,71 +686,12 @@ export const AgentChatComposer = forwardRef<
     return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
   }, [selectedModelSelection?.profileId, sessionAgentColors]);
 
-  const focusComposerEditor = useCallback(() => {
-    const editor = composerEditorRef.current;
-    if (!editor) {
-      return;
-    }
-
-    const textSegments = editor.querySelectorAll<HTMLElement>("[data-segment-id]");
-    for (let index = textSegments.length - 1; index >= 0; index -= 1) {
-      const segment = textSegments[index];
-      if (!segment?.isContentEditable) {
-        continue;
-      }
-
-      setCaretOffsetWithinElement(segment, readEditableTextContent(segment).length);
-      return;
-    }
-
-    editor.focus();
-  }, [composerEditorRef]);
-
-  const scheduleComposerFocus = useCallback(() => {
-    const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (typeof requestAnimationFrameFn === "function") {
-      requestAnimationFrameFn(() => {
-        focusComposerEditor();
-      });
-      return;
-    }
-
-    focusComposerEditor();
-  }, [focusComposerEditor]);
-
-  const isFocusInsideComposer = useCallback(
-    (activeElement: Element | null): boolean => {
-      const editor = composerEditorRef.current;
-      return Boolean(
-        editor && activeElement && (editor === activeElement || editor.contains(activeElement)),
-      );
-    },
-    [composerEditorRef],
-  );
-
-  useEffect(() => {
-    const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
-    const activeElement = globalThis.document?.activeElement ?? null;
-    const focusInsideComposer = isFocusInsideComposer(activeElement);
-
-    const autofocusResult = resolveComposerAutofocus(composerAutofocusStateRef.current, {
-      displayedSessionId,
-      isComposerInteractive,
-      activeElement,
-      focusInsideComposer,
-    });
-    composerAutofocusStateRef.current = autofocusResult.nextState;
-    if (autofocusResult.shouldFocus) {
-      scheduleComposerFocus();
-    }
-  }, [
+  const scheduleComposerFocus = useAgentChatComposerFocus({
+    composerEditorRef,
     displayedSessionId,
     isComposerInputDisabled,
-    // Stable helper over a stable ref; included so the effect deps stay explicit.
-    isFocusInsideComposer,
     isSubmitting,
-    scheduleComposerFocus,
-  ]);
+  });
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (latestSendDisabledRef.current) {
@@ -530,6 +724,9 @@ export const AgentChatComposer = forwardRef<
       scheduleComposerFocus();
     }
   }, [onComposerEditorInput, scheduleComposerFocus]);
+  const submitComposerAction = useCallback((): void => {
+    void handleSubmit();
+  }, [handleSubmit]);
   let composerPlaceholder = "@ for files; / for commands";
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
@@ -542,129 +739,32 @@ export const AgentChatComposer = forwardRef<
       waitingInputPlaceholder ?? "Resolve the pending request above to continue";
   }
   return (
-    <form
-      ref={composerFormRef}
-      className="px-4 pb-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void handleSubmit();
+    <AgentChatComposerFormView
+      model={model}
+      draft={draft}
+      attachmentInputRef={attachmentInputRef}
+      attachmentErrors={attachmentErrors}
+      attachmentIntakeDisabled={attachmentIntakeDisabled}
+      composerAccentColor={composerAccentColor}
+      composerPlaceholder={composerPlaceholder}
+      hasSlashAttachmentConflict={hasSlashAttachmentConflict}
+      isComposerInputDisabled={isComposerInputDisabled}
+      isSubmitting={isSubmitting}
+      selectorDisabled={selectorDisabled}
+      sendDisabled={sendDisabled}
+      onAddFiles={handleAddFiles}
+      onDraftChange={handleDraftChange}
+      onPickAttachments={openAttachmentPicker}
+      onRemoveAttachment={(attachmentId) => {
+        setDraft((currentDraft) => {
+          const nextDraft = removeAttachmentFromDraft(currentDraft, attachmentId);
+          latestDraftRef.current = nextDraft;
+          return nextDraft;
+        });
+        onComposerEditorInput();
       }}
-    >
-      <input
-        ref={attachmentInputRef}
-        type="file"
-        multiple
-        accept={CHAT_ATTACHMENT_ACCEPT}
-        disabled={attachmentIntakeDisabled}
-        className="hidden"
-        onChange={(event) => {
-          const files = Array.from(event.target.files ?? []);
-          if (files.length > 0) {
-            handleAddFiles(files);
-          }
-          event.currentTarget.value = "";
-        }}
-      />
-      {(draft.attachments ?? []).length > 0 ? (
-        <section className="mb-0 border border-input border-b-0 border-l-0 bg-card shadow-md">
-          <div
-            className={composerAccentColor ? "border-l-4" : undefined}
-            style={composerAccentColor ? { borderLeftColor: composerAccentColor } : undefined}
-          >
-            <div className="px-3 pb-3 pt-3">
-              <div className="flex flex-wrap gap-3">
-                {(draft.attachments ?? []).map((attachment) => (
-                  <AgentChatAttachmentChip
-                    key={attachment.id}
-                    variant="draft"
-                    attachment={attachment}
-                    error={attachmentErrors[attachment.id] ?? null}
-                    onRemove={() => {
-                      setDraft((currentDraft) => {
-                        const nextDraft = removeAttachmentFromDraft(currentDraft, attachment.id);
-                        latestDraftRef.current = nextDraft;
-                        return nextDraft;
-                      });
-                      onComposerEditorInput();
-                    }}
-                  />
-                ))}
-              </div>
-              {hasSlashAttachmentConflict ? (
-                <p className="mt-3 text-xs text-destructive">
-                  Remove attachments before running a slash command.
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </section>
-      ) : null}
-      <div
-        className={
-          isWaitingInput
-            ? "odt-waiting-input-card relative border border-warning-border bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
-            : "relative border border-input border-l-0 bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
-        }
-      >
-        {isSessionWorking && !isWaitingInput ? (
-          <BorderRay
-            strokeWidth={2.6}
-            rayLengthRatio={0.12}
-            {...(composerAccentColor ? { color: composerAccentColor } : {})}
-          />
-        ) : null}
-        <div
-          className={isWaitingInput ? "relative z-10" : "relative z-10 border-l-4"}
-          style={
-            composerAccentColor && !isWaitingInput
-              ? { borderLeftColor: composerAccentColor }
-              : undefined
-          }
-        >
-          <AgentChatComposerEditor
-            draft={draft}
-            onDraftChange={handleDraftChange}
-            onAddFiles={handleAddFiles}
-            placeholder={composerPlaceholder}
-            disabled={isComposerInputDisabled || isSubmitting}
-            editorRef={composerEditorRef}
-            onEditorInput={onComposerEditorInput}
-            onSend={handleSubmit}
-            supportsSlashCommands={supportsSlashCommands}
-            supportsFileSearch={supportsFileSearch}
-            slashCommands={slashCommands}
-            slashCommandsError={slashCommandsError}
-            isSlashCommandsLoading={isSlashCommandsLoading}
-            searchFiles={searchFiles}
-          />
-
-          <AgentChatComposerControls
-            onPickAttachments={openAttachmentPicker}
-            attachmentIntakeDisabled={attachmentIntakeDisabled}
-            selectedModelSelection={selectedModelSelection}
-            agentOptions={agentOptions}
-            modelOptions={modelOptions}
-            modelGroups={modelGroups}
-            variantOptions={variantOptions}
-            isSelectionCatalogLoading={isSelectionCatalogLoading}
-            supportsProfiles={supportsProfiles ?? true}
-            selectorDisabled={selectorDisabled}
-            taskId={taskId}
-            isInteractionEnabled={isInteractionEnabled}
-            isStarting={isStarting}
-            isReadOnly={isReadOnly}
-            onSelectAgent={onSelectAgent}
-            onSelectModel={onSelectModel}
-            onSelectVariant={onSelectVariant}
-            contextUsage={contextUsage}
-            canStopSession={canStopSession}
-            onStopSession={onStopSession}
-            showSubmittingState={isSubmitting}
-            sendDisabled={sendDisabled}
-            pendingInlineCommentCount={pendingInlineCommentCount}
-          />
-        </div>
-      </div>
-    </form>
+      onSend={handleSubmit}
+      submitAction={submitComposerAction}
+    />
   );
-});
+}

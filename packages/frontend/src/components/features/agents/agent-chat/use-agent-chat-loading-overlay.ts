@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef } from "react";
 
 const SAME_SESSION_LOADING_OVERLAY_DELAY_MS = 120;
 
@@ -7,14 +7,39 @@ type UseAgentChatLoadingOverlayArgs = {
   isSessionViewLoading: boolean;
 };
 
+type LoadingOverlayState = {
+  settledSessionId: string | null;
+  isSameSessionLoadingVisible: boolean;
+};
+
+type LoadingOverlayAction =
+  | { type: "sameSessionLoadingHidden" }
+  | { type: "sameSessionLoadingShown" }
+  | { type: "sessionSettled"; externalSessionId: string | null };
+
+const loadingOverlayReducer = (
+  state: LoadingOverlayState,
+  action: LoadingOverlayAction,
+): LoadingOverlayState => {
+  switch (action.type) {
+    case "sameSessionLoadingHidden":
+      return { ...state, isSameSessionLoadingVisible: false };
+    case "sameSessionLoadingShown":
+      return { ...state, isSameSessionLoadingVisible: true };
+    case "sessionSettled":
+      return { ...state, settledSessionId: action.externalSessionId };
+  }
+};
+
 export function useAgentChatLoadingOverlay({
   externalSessionId,
   isSessionViewLoading,
 }: UseAgentChatLoadingOverlayArgs): boolean {
-  const [settledSessionId, setSettledSessionId] = useState<string | null>(() =>
-    !isSessionViewLoading ? externalSessionId : null,
-  );
-  const [isSameSessionLoadingVisible, setIsSameSessionLoadingVisible] = useState(false);
+  const [state, dispatch] = useReducer(loadingOverlayReducer, {
+    settledSessionId: !isSessionViewLoading ? externalSessionId : null,
+    isSameSessionLoadingVisible: false,
+  });
+  const { settledSessionId, isSameSessionLoadingVisible } = state;
   const loadingDelayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -25,12 +50,12 @@ export function useAgentChatLoadingOverlay({
 
     const isSameSessionLoading = isSessionViewLoading && externalSessionId === settledSessionId;
     if (!isSameSessionLoading) {
-      setIsSameSessionLoadingVisible(false);
+      dispatch({ type: "sameSessionLoadingHidden" });
       return;
     }
 
     loadingDelayTimeoutRef.current = setTimeout(() => {
-      setIsSameSessionLoadingVisible(true);
+      dispatch({ type: "sameSessionLoadingShown" });
       loadingDelayTimeoutRef.current = null;
     }, SAME_SESSION_LOADING_OVERLAY_DELAY_MS);
 
@@ -49,7 +74,7 @@ export function useAgentChatLoadingOverlay({
     if (settledSessionId === externalSessionId) {
       return;
     }
-    setSettledSessionId(externalSessionId);
+    dispatch({ type: "sessionSettled", externalSessionId });
   }, [externalSessionId, isSessionViewLoading, settledSessionId]);
 
   const isCrossSessionLoading = isSessionViewLoading && externalSessionId !== settledSessionId;

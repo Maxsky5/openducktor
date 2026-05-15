@@ -104,8 +104,10 @@ describe("session-presence-source", () => {
       adapter: { listSessionPresence, readSessionPresence },
     });
 
-    const firstPresence = await source.read(firstRef);
-    const secondPresence = await source.read(secondRef);
+    const [firstPresence, secondPresence] = await Promise.all([
+      source.read(firstRef),
+      source.read(secondRef),
+    ]);
 
     expect(firstPresence.presence).toBe("stale");
     expect(firstPresence.runtimeId).toBeNull();

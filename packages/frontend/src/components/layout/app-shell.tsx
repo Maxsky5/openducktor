@@ -73,7 +73,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
                       type="button"
                       size="icon"
                       variant="ghost"
-                      className="mt-0.5 h-8 w-8 shrink-0 text-sidebar-muted-foreground hover:text-sidebar-foreground"
+                      className="mt-0.5 size-8 shrink-0 text-sidebar-muted-foreground hover:text-sidebar-foreground"
                       onClick={() => setSidebarOpen(false)}
                       aria-label="Hide sidebar"
                       title="Hide sidebar"
@@ -137,7 +137,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
                   type="button"
                   size="icon"
                   variant="ghost"
-                  className="h-8 w-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
+                  className="size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
                   onClick={() => setSidebarOpen(true)}
                   aria-label="Show sidebar"
                   title="Show sidebar"

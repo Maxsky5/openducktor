@@ -308,12 +308,12 @@ export const buildDiagnosticsToastIssues = ({
     getRuntimeCheckIssueCandidate(runtimeCheck, runtimeCheckError, runtimeCheckFailureKind),
     getBeadsCheckIssueCandidate(beadsCheck, beadsCheckError, beadsCheckFailureKind),
     ...getRuntimeHealthIssueCandidates(runtimeDefinitions, runtimeHealthByRuntime),
-  ]
-    .filter(
-      (issueCandidate): issueCandidate is DiagnosticsIssueCandidate =>
-        issueCandidate !== null && issueCandidate.failureKind === "error",
-    )
-    .map((issueCandidate) => buildDiagnosticsToastIssue(issueCandidate));
+  ].reduce<DiagnosticsToastIssue[]>((issues, issueCandidate) => {
+    if (issueCandidate !== null && issueCandidate.failureKind === "error") {
+      issues.push(buildDiagnosticsToastIssue(issueCandidate));
+    }
+    return issues;
+  }, []);
 };
 
 export const hasRuntimeHealthTimeoutIssue = (

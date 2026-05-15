@@ -9,7 +9,7 @@ const START_MODE_DISPLAY_ORDER: Record<AgentSessionStartMode, number> = {
 export const orderStartModesForDisplay = (
   startModes: readonly AgentSessionStartMode[],
 ): AgentSessionStartMode[] => {
-  return [...startModes].sort(
+  return startModes.toSorted(
     (left, right) => START_MODE_DISPLAY_ORDER[left] - START_MODE_DISPLAY_ORDER[right],
   );
 };

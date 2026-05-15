@@ -45,8 +45,8 @@ export function FatalErrorPage({
 
           <h1 className="text-xl font-semibold text-foreground">Something went wrong</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            An unexpected error caused the application to crash. You can try reloading — your data
-            is safe.
+            An unexpected error caused the application to crash. You can try reloading, your data is
+            safe.
           </p>
         </div>
 

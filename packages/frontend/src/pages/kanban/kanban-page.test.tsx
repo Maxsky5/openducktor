@@ -404,10 +404,21 @@ describe("KanbanPage session start modal flow", () => {
     }));
 
     mock.module("@/components/features/kanban/kanban-column", () => ({
-      KanbanColumn: (props: Record<string, unknown>): ReactElement | null => {
+      KanbanColumn: (props: Record<string, unknown>): ReactElement => {
         latestKanbanColumnProps = props;
         latestKanbanColumnPropsList.push(props);
-        return null;
+        const column = props.column as {
+          title: string;
+          tasks: Array<{ id: string; title?: string }>;
+        };
+        return (
+          <div data-testid="kanban-column">
+            <span>{column.title}</span>
+            {column.tasks.map((task) => (
+              <span key={task.id}>{task.title}</span>
+            ))}
+          </div>
+        );
       },
     }));
 

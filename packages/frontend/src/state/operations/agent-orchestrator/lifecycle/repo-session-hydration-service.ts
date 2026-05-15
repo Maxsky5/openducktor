@@ -126,26 +126,28 @@ export const createRepoSessionHydrationService = ({
         bootstrappedTasks.add(task.id);
       }
 
+      if (isCancelled() || !isCurrentRepo(repoPath)) {
+        return;
+      }
       const results = await Promise.allSettled(
         pendingTasks.map(async (task) => {
           await sessionHydration.bootstrapTaskSessions(task.id, getTaskRecords(task));
           return task.id;
         }),
       );
-      if (isCancelled() || !isCurrentRepo(repoPath)) {
-        return;
-      }
-      for (const [index, result] of results.entries()) {
-        const taskId = pendingTasks[index]?.id;
-        if (!taskId) {
-          continue;
+      if (!isCancelled() && isCurrentRepo(repoPath)) {
+        for (const [index, result] of results.entries()) {
+          const taskId = pendingTasks[index]?.id;
+          if (!taskId) {
+            continue;
+          }
+          if (result.status === "fulfilled") {
+            clearRetry("bootstrap", repoPath, taskId);
+            continue;
+          }
+          bootstrappedTasks.delete(taskId);
+          scheduleRetry("bootstrap", repoPath, taskId, result.reason);
         }
-        if (result.status === "fulfilled") {
-          clearRetry("bootstrap", repoPath, taskId);
-          continue;
-        }
-        bootstrappedTasks.delete(taskId);
-        scheduleRetry("bootstrap", repoPath, taskId, result.reason);
       }
     },
 
@@ -213,7 +215,9 @@ export const createRepoSessionHydrationService = ({
               taskId: task.id,
               persistedRecords: records,
               ...(preloads
-                ? { preloadedSessionPresenceByKey: preloads.preloadedSessionPresenceByKey }
+                ? {
+                    preloadedSessionPresenceByKey: preloads.preloadedSessionPresenceByKey,
+                  }
                 : {}),
             });
             return { taskId: task.id, recordKey };

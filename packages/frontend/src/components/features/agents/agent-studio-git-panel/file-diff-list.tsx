@@ -126,13 +126,17 @@ export const FileDiffList = memo(function FileDiffList({
           key={diff.file}
           diff={diff}
           diffScope={diffScope}
-          isConflicted={conflictedFiles.has(diff.file)}
-          reserveConflictSlot={reserveConflictSlot}
-          isExpanded={expandedFiles.has(diff.file)}
+          viewState={{
+            isConflicted: conflictedFiles.has(diff.file),
+            reserveConflictSlot,
+            isExpanded: expandedFiles.has(diff.file),
+          }}
           onToggle={onToggleFile}
           diffStyle={diffStyle}
-          canReset={canResetFiles}
-          isResetDisabled={isResetDisabled}
+          resetState={{
+            canReset: canResetFiles,
+            isResetDisabled,
+          }}
           resetDisabledReason={resetDisabledReason}
           onRequestFileReset={onRequestFileReset}
           onRequestHunkReset={onRequestHunkReset}

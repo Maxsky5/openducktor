@@ -1,6 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import { memo, type ReactElement, useContext } from "react";
+import { memo, type ReactElement, use } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
@@ -41,7 +41,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   subagentPendingQuestionCount,
   subagentPendingQuestionCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
 }: AgentChatMessageCardProps): ReactElement | null {
-  const runtimeDefinitionsContext = useContext(RuntimeDefinitionsContext);
+  const runtimeDefinitionsContext = use(RuntimeDefinitionsContext);
   const runtimeDefinitions = runtimeDefinitionsContext?.runtimeDefinitions ?? [];
   const workflowToolAliasesByCanonical = sessionRuntimeKind
     ? findRuntimeDefinition(runtimeDefinitions, sessionRuntimeKind)?.workflowToolAliasesByCanonical

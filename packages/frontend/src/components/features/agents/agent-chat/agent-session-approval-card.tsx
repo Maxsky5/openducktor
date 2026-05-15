@@ -48,11 +48,13 @@ export const resolveApprovalReplyOutcomes = ({
 
   const requestOutcomes = requestSupportedReplyOutcomes ?? runtimeSupportedReplyOutcomes;
   const runtimeOutcomeSet = new Set(runtimeSupportedReplyOutcomes);
+  const effectiveOutcomeSet = new Set<RuntimeApprovalReplyOutcome>();
   const effectiveOutcomes: RuntimeApprovalReplyOutcome[] = [];
   for (const outcome of requestOutcomes) {
-    if (!runtimeOutcomeSet.has(outcome) || effectiveOutcomes.includes(outcome)) {
+    if (!runtimeOutcomeSet.has(outcome) || effectiveOutcomeSet.has(outcome)) {
       continue;
     }
+    effectiveOutcomeSet.add(outcome);
     effectiveOutcomes.push(outcome);
   }
   return effectiveOutcomes;
@@ -164,7 +166,7 @@ export function AgentSessionApprovalCard({
         {isSubmitting ? (
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <CircleSlash2 className="size-3" />
-            Submitting approval choice...
+            Submitting approval choice…
           </p>
         ) : null}
       </div>

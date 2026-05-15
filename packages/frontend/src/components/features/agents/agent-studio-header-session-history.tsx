@@ -61,7 +61,7 @@ export function SessionHistoryMenu({
           type="button"
           variant="outline"
           size="icon"
-          className="h-9 w-9 rounded-md"
+          className="size-9 rounded-md"
           disabled={selector.disabled || !agentStudioReady}
           title={selectedOption ? `Session history · ${selectedOption.label}` : "Session history"}
           aria-label={

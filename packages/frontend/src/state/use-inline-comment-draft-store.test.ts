@@ -223,10 +223,12 @@ describe("use-inline-comment-draft-store", () => {
         .map((draft) => draft.id),
     ).toEqual([firstId]);
     expect(
-      useInlineCommentDraftStore
-        .getState()
-        .drafts.filter((draft) => draft.status === "submitting")
-        .map((draft) => draft.id),
+      useInlineCommentDraftStore.getState().drafts.reduce<string[]>((draftIds, draft) => {
+        if (draft.status === "submitting") {
+          draftIds.push(draft.id);
+        }
+        return draftIds;
+      }, []),
     ).toEqual([secondId]);
   });
 

@@ -172,13 +172,17 @@ export function useAgentChatRowStaging({
     const rowStart = Math.max(0, rows.length - effectiveRowCount);
     return {
       rows: rows.slice(rowStart),
-      turns: turns
-        .filter((turn) => turn.end >= rowStart)
-        .map((turn) => ({
+      turns: turns.reduce<AgentChatWindowTurn[]>((visibleTurns, turn) => {
+        if (turn.end < rowStart) {
+          return visibleTurns;
+        }
+        visibleTurns.push({
           key: turn.key,
           start: Math.max(turn.start, rowStart) - rowStart,
           end: turn.end - rowStart,
-        })),
+        });
+        return visibleTurns;
+      }, []),
     };
   }, [activeExternalSessionId, disabled, rowCount, rows, renderSwitchedSessions, turns]);
 }

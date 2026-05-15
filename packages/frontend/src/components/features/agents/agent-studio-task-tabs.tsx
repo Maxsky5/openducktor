@@ -403,7 +403,7 @@ export function AgentStudioTaskTabs({
             size="icon"
             variant="ghost"
             aria-label="Open new task tab"
-            className="h-10 w-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-studio-chrome-foreground shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            className="size-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-studio-chrome-foreground shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             disabled={!canOpenCreateDialog}
             onClick={() => setIsCreateDialogOpen(true)}
           >
@@ -434,8 +434,8 @@ export function AgentStudioTaskTabs({
                   tasks={[]}
                   value=""
                   includeEmptyOption
-                  emptyLabel="Loading tasks..."
-                  searchPlaceholder="Loading tasks..."
+                  emptyLabel="Loading tasks…"
+                  searchPlaceholder="Loading tasks…"
                   disabled
                   onValueChange={() => undefined}
                 />

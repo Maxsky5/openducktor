@@ -15,6 +15,13 @@ export type AgentStudioWorkspaceDocument = {
   document: TaskDocumentState;
 };
 
+const DOCUMENT_UPDATED_AT_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 const formatDocumentUpdatedAt = (iso: string | null): string | null => {
   if (!iso) {
     return null;
@@ -23,12 +30,7 @@ const formatDocumentUpdatedAt = (iso: string | null): string | null => {
   if (Number.isNaN(value.getTime())) {
     return null;
   }
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(value);
+  return DOCUMENT_UPDATED_AT_FORMATTER.format(value);
 };
 
 export type AgentStudioWorkspaceSidebarModel = {

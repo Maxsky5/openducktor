@@ -26,13 +26,17 @@ const createHarness = () => {
   };
 };
 
+const unmountHarnesses = async (
+  harnesses: Iterable<ReturnType<typeof createHarness>>,
+): Promise<void> => {
+  await Promise.all(Array.from(harnesses, (harness) => harness.unmount()));
+};
+
 describe("useAgentStudioDiffRequestController", () => {
   const mountedHarnesses = new Set<ReturnType<typeof createHarness>>();
 
   afterEach(async () => {
-    for (const harness of mountedHarnesses) {
-      await harness.unmount();
-    }
+    await unmountHarnesses(mountedHarnesses);
     mountedHarnesses.clear();
   });
 

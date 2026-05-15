@@ -4,7 +4,7 @@ import type {
   AgentModelSelection,
   AgentSessionStartMode,
 } from "@openducktor/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import {
   toModelGroupsByProvider,
@@ -130,9 +130,6 @@ export function useSessionStartModalState({
     setSelection,
   });
 
-  useEffect(() => {
-    setSelectedStartModeForRuntime(selectedStartMode);
-  }, [selectedStartMode]);
   const {
     resetSelection,
     initializeSelection,
@@ -218,6 +215,7 @@ export function useSessionStartModalState({
 
   const handleSelectedStartModeChange = useCallback(
     (startMode: AgentSessionStartMode): void => {
+      setSelectedStartModeForRuntime(startMode);
       handleSelectStartMode(startMode);
     },
     [handleSelectStartMode],

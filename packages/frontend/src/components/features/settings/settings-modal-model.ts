@@ -94,8 +94,6 @@ export const selectedModelKeyForRole = (
   return `${value.providerId}/${value.modelId}`;
 };
 
-export const ensureAgentDefault = ensureDraftAgentDefault;
-
 export const findCatalogModel = (
   catalog: AgentModelCatalog | null,
   modelKey: string,
@@ -123,15 +121,18 @@ export const toRoleVariantOptions = (
 };
 
 export const getMissingRequiredRoleLabels = (agentDefaults: RepoAgentDefaultsInput): string[] => {
-  return ROLE_DEFAULTS.filter(({ role }) => {
+  return ROLE_DEFAULTS.reduce<string[]>((labels, { role, label }) => {
     const value = agentDefaults[role];
-    return !(
+    const hasRequiredDefault =
       value &&
       value.providerId.trim().length > 0 &&
       value.modelId.trim().length > 0 &&
-      (value.profileId?.trim().length ?? 0) > 0
-    );
-  }).map(({ label }) => label);
+      (value.profileId?.trim().length ?? 0) > 0;
+    if (!hasRequiredDefault) {
+      labels.push(label);
+    }
+    return labels;
+  }, []);
 };
 
 export const resolveRepoAgentDefaultRuntimeKind = ({

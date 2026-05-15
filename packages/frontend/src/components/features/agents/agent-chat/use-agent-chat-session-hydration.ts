@@ -1,5 +1,5 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer } from "react";
 import {
   deriveAgentSessionViewLifecycle,
   type SessionRepoReadinessState,
@@ -35,6 +35,37 @@ export type AgentChatSessionHydrationResult = {
   isWaitingForRuntimeReadiness: boolean;
 };
 
+type HydrationRequestState = {
+  externalSessionId: string | null;
+  status: "idle" | "pending" | "failed";
+};
+
+type HydrationRequestAction =
+  | { type: "reset" }
+  | { type: "pending"; externalSessionId: string }
+  | { type: "idleIfCurrent"; externalSessionId: string }
+  | { type: "failedIfCurrent"; externalSessionId: string };
+
+const hydrationRequestReducer = (
+  state: HydrationRequestState,
+  action: HydrationRequestAction,
+): HydrationRequestState => {
+  switch (action.type) {
+    case "reset":
+      return { externalSessionId: null, status: "idle" };
+    case "pending":
+      return { externalSessionId: action.externalSessionId, status: "pending" };
+    case "idleIfCurrent":
+      return state.externalSessionId === action.externalSessionId
+        ? { externalSessionId: action.externalSessionId, status: "idle" }
+        : state;
+    case "failedIfCurrent":
+      return state.externalSessionId === action.externalSessionId
+        ? { externalSessionId: action.externalSessionId, status: "failed" }
+        : state;
+  }
+};
+
 export function useAgentChatSessionHydration({
   activeWorkspace,
   activeTaskId,
@@ -46,10 +77,10 @@ export function useAgentChatSessionHydration({
   ensureSessionReadyForView,
 }: UseAgentChatSessionHydrationParams): AgentChatSessionHydrationResult {
   const activeExternalSessionId = activeSession?.externalSessionId ?? null;
-  const [requestState, setRequestState] = useState<{
-    externalSessionId: string | null;
-    status: "idle" | "pending" | "failed";
-  }>({ externalSessionId: null, status: "idle" });
+  const [requestState, dispatchRequestState] = useReducer(hydrationRequestReducer, {
+    externalSessionId: null,
+    status: "idle",
+  });
   const lifecycle = deriveAgentSessionViewLifecycle({
     session: activeSession,
     repoReadinessState,
@@ -61,20 +92,16 @@ export function useAgentChatSessionHydration({
 
   useEffect(() => {
     if (!activeExternalSessionId) {
-      setRequestState({ externalSessionId: null, status: "idle" });
+      dispatchRequestState({ type: "reset" });
       return;
     }
 
     if (!shouldEnsureSessionReady) {
-      setRequestState((current) =>
-        current.externalSessionId === activeExternalSessionId && current.status === "pending"
-          ? { externalSessionId: activeExternalSessionId, status: "idle" }
-          : current,
-      );
+      dispatchRequestState({ type: "idleIfCurrent", externalSessionId: activeExternalSessionId });
       return;
     }
 
-    setRequestState({ externalSessionId: activeExternalSessionId, status: "pending" });
+    dispatchRequestState({ type: "pending", externalSessionId: activeExternalSessionId });
     void ensureSessionReadyForView({
       taskId: activeTaskId,
       externalSessionId: activeExternalSessionId,
@@ -84,18 +111,13 @@ export function useAgentChatSessionHydration({
       ...(persistedRecords ? { persistedRecords } : {}),
     })
       .then(() => {
-        setRequestState((current) =>
-          current.externalSessionId === activeExternalSessionId
-            ? { externalSessionId: activeExternalSessionId, status: "idle" }
-            : current,
-        );
+        dispatchRequestState({ type: "idleIfCurrent", externalSessionId: activeExternalSessionId });
       })
       .catch(() => {
-        setRequestState((current) =>
-          current.externalSessionId === activeExternalSessionId
-            ? { externalSessionId: activeExternalSessionId, status: "failed" }
-            : current,
-        );
+        dispatchRequestState({
+          type: "failedIfCurrent",
+          externalSessionId: activeExternalSessionId,
+        });
       });
   }, [
     activeExternalSessionId,
