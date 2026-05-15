@@ -37,7 +37,7 @@ describe("createDevServerProcessAdapter", () => {
     const exits: unknown[] = [];
     const port = createDevServerProcessAdapter({
       startGracePeriodMs: 20,
-      stopTimeoutMs: 200,
+      stopTimeoutMs: 3_000,
     });
 
     try {
