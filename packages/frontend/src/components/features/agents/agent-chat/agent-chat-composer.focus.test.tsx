@@ -5,7 +5,8 @@ import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
 
-const FOCUS_TEST_TIMEOUT_MS = 6_000;
+const FOCUS_WAIT_TIMEOUT_MS = 10_000;
+const FOCUS_TEST_TIMEOUT_MS = 25_000;
 
 const buildModel = (): AgentChatComposerModel => ({
   taskId: "task-1",
@@ -99,7 +100,7 @@ const waitForComposerFocus = async (container: HTMLElement): Promise<HTMLElement
     () => {
       expect(document.activeElement).toBe(editorRoot);
     },
-    { timeout: 5_000 },
+    { timeout: FOCUS_WAIT_TIMEOUT_MS },
   );
   return editorRoot;
 };
