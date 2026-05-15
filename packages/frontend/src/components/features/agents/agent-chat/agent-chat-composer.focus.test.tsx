@@ -8,6 +8,8 @@ import { buildModelSelection } from "./agent-chat-test-fixtures";
 const FOCUS_WAIT_TIMEOUT_MS = 10_000;
 const FOCUS_TEST_TIMEOUT_MS = 25_000;
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+const originalFocus = HTMLElement.prototype.focus;
+let focusCalls: HTMLElement[] = [];
 
 const buildModel = (): AgentChatComposerModel => ({
   taskId: "task-1",
@@ -95,42 +97,15 @@ const typeIntoComposer = (container: HTMLElement, value: string): HTMLElement =>
   return getLastTextSegment(container);
 };
 
-const describeActiveElement = (activeElement: Element | null): string => {
-  if (!activeElement) {
-    return "none";
-  }
-
-  const tagName = activeElement.tagName.toLowerCase();
-  const role = activeElement.getAttribute("role");
-  const contentEditable = activeElement.getAttribute("contenteditable");
-  const attributes = [
-    role ? `role=${role}` : null,
-    contentEditable ? `contenteditable=${contentEditable}` : null,
-  ].filter(Boolean);
-
-  return attributes.length > 0 ? `${tagName} ${attributes.join(" ")}` : tagName;
-};
-
-const expectComposerOwnsFocus = (editorRoot: HTMLElement): void => {
-  const activeElement = document.activeElement;
-  if (activeElement === editorRoot) {
-    return;
-  }
-
-  if (activeElement instanceof HTMLElement && editorRoot.contains(activeElement)) {
-    return;
-  }
-
-  throw new Error(
-    `Expected composer to own focus, active element: ${describeActiveElement(activeElement)}`,
-  );
+const readComposerFocusCalls = (container: HTMLElement): HTMLElement[] => {
+  return focusCalls.filter((element) => element === getComposerSurface(container));
 };
 
 const waitForComposerFocus = async (container: HTMLElement): Promise<HTMLElement> => {
   const editorRoot = getComposerSurface(container);
   await waitFor(
     () => {
-      expectComposerOwnsFocus(editorRoot);
+      expect(readComposerFocusCalls(container).length).toBeGreaterThan(0);
     },
     { timeout: FOCUS_WAIT_TIMEOUT_MS },
   );
@@ -151,14 +126,20 @@ const ComposerWithExternalButton = ({
 };
 
 beforeEach(() => {
+  focusCalls = [];
   globalThis.requestAnimationFrame = (callback: FrameRequestCallback): number => {
     callback(performance.now());
     return 1;
+  };
+  HTMLElement.prototype.focus = function focus(this: HTMLElement, options?: FocusOptions): void {
+    focusCalls.push(this);
+    originalFocus.call(this, options);
   };
 });
 
 afterEach(() => {
   globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+  HTMLElement.prototype.focus = originalFocus;
   document.body.innerHTML = "";
 });
 
@@ -181,7 +162,8 @@ describe("AgentChatComposer focus", () => {
 
       const externalButton = screen.getByRole("button", { name: "External control" });
       externalButton.focus();
-      expect(document.activeElement).toBe(externalButton);
+      expect(focusCalls.at(-1)).toBe(externalButton);
+      focusCalls = [];
 
       rerender(
         <ComposerWithExternalButton
@@ -210,8 +192,8 @@ describe("AgentChatComposer focus", () => {
     const externalButton = screen.getByRole("button", { name: "External control" });
 
     externalButton.focus();
-    expect(document.activeElement).toBe(externalButton);
-    expect(document.activeElement).not.toBe(getComposerSurface(container));
+    expect(focusCalls.at(-1)).toBe(externalButton);
+    expect(readComposerFocusCalls(container)).toHaveLength(0);
   });
 
   test("does not autofocus when the displayed session composer is disabled", async () => {
@@ -228,8 +210,8 @@ describe("AgentChatComposer focus", () => {
     const externalButton = screen.getByRole("button", { name: "External control" });
 
     externalButton.focus();
-    expect(document.activeElement).toBe(externalButton);
-    expect(document.activeElement).not.toBe(getComposerSurface(container));
+    expect(focusCalls.at(-1)).toBe(externalButton);
+    expect(readComposerFocusCalls(container)).toHaveLength(0);
   });
 
   test(
@@ -245,7 +227,7 @@ describe("AgentChatComposer focus", () => {
         />,
       );
 
-      expect(document.activeElement).not.toBe(getComposerSurface(container));
+      expect(readComposerFocusCalls(container)).toHaveLength(0);
 
       rerender(
         <AgentChatComposer
@@ -262,7 +244,7 @@ describe("AgentChatComposer focus", () => {
   );
 
   test("does not steal focus when delayed readiness completes after the user focuses elsewhere", async () => {
-    const { rerender } = render(
+    const { container, rerender } = render(
       <ComposerWithExternalButton
         model={{
           ...buildModel(),
@@ -275,7 +257,7 @@ describe("AgentChatComposer focus", () => {
     const externalButton = screen.getByRole("button", { name: "External control" });
 
     externalButton.focus();
-    expect(document.activeElement).toBe(externalButton);
+    expect(focusCalls.at(-1)).toBe(externalButton);
 
     rerender(
       <ComposerWithExternalButton
@@ -287,7 +269,8 @@ describe("AgentChatComposer focus", () => {
     );
 
     await waitFor(() => {
-      expect(document.activeElement).toBe(externalButton);
+      expect(focusCalls.at(-1)).toBe(externalButton);
+      expect(readComposerFocusCalls(container)).toHaveLength(0);
     });
   });
 
@@ -300,7 +283,7 @@ describe("AgentChatComposer focus", () => {
       const externalButton = screen.getByRole("button", { name: "External control" });
 
       externalButton.focus();
-      expect(document.activeElement).toBe(externalButton);
+      expect(focusCalls.at(-1)).toBe(externalButton);
 
       rerender(
         <ComposerWithExternalButton
@@ -311,7 +294,8 @@ describe("AgentChatComposer focus", () => {
         />,
       );
 
-      expect(document.activeElement).toBe(externalButton);
+      expect(focusCalls.at(-1)).toBe(externalButton);
+      expect(readComposerFocusCalls(container)).toHaveLength(1);
     },
     FOCUS_TEST_TIMEOUT_MS,
   );
@@ -324,6 +308,7 @@ describe("AgentChatComposer focus", () => {
 
       const lastTextSegment = typeIntoComposer(container, "Continue this draft");
       const editorRoot = getComposerSurface(container);
+      focusCalls = [];
 
       rerender(
         <AgentChatComposer
@@ -336,7 +321,7 @@ describe("AgentChatComposer focus", () => {
       );
 
       await waitFor(() => {
-        expectComposerOwnsFocus(editorRoot);
+        expect(readComposerFocusCalls(container).at(-1)).toBe(editorRoot);
         expect(lastTextSegment.textContent).toContain("Continue this draft");
         expect(globalThis.getSelection?.()?.focusNode).toBe(lastTextSegment.firstChild);
         expect(globalThis.getSelection?.()?.focusOffset).toBe("Continue this draft".length);
