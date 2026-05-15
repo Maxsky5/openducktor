@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionRecord,
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeInstanceSummary,
   type TaskCard,
@@ -363,6 +364,7 @@ describe("use-agent-orchestrator-operations", () => {
       autopilot: {
         rules: [],
       },
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
       workspaces: {},
       globalPromptOverrides: {},
     });

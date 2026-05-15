@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
-import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsModalContent } from "./settings-modal-content";
@@ -13,6 +17,7 @@ const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): Settings
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {},
   globalPromptOverrides: {},
   ...overrides,
@@ -53,6 +58,14 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   hasPromptValidationErrors: false,
   reusablePromptValidationState: { errorsById: {}, totalErrorCount: 0 },
   hasReusablePromptValidationErrors: false,
+  runtimeAvailabilityValidationState: {
+    errorsByWorkspaceId: {},
+    errorCountByWorkspaceId: {},
+    totalErrorCount: 0,
+  },
+  hasRuntimeAvailabilityErrors: false,
+  selectedRepoRuntimeAvailabilityErrors: [],
+  selectedRepoRuntimeAvailabilityErrorCount: 0,
   hasRepoScriptValidationErrors: false,
   repoScriptValidationErrorCount: 0,
   showRepoScriptValidationErrors: false,
@@ -80,6 +93,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateGlobalGitConfig: () => {},
   updateGlobalGeneralSettings: () => {},
   updateGlobalChatSettings: () => {},
+  updateAgentRuntimes: () => {},
   updateReusablePrompts: () => {},
   updateGlobalKanbanSettings: () => {},
   updateGlobalAutopilotSettings: () => {},

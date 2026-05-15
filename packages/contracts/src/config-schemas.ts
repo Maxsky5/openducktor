@@ -310,9 +310,7 @@ export const globalConfigSchema = z.object({
   recentWorkspaces: z.array(workspaceIdSchema).default([]),
 });
 type ParsedGlobalConfig = z.infer<typeof globalConfigSchema>;
-export type GlobalConfig = Omit<ParsedGlobalConfig, "agentRuntimes"> & {
-  agentRuntimes?: AgentRuntimes;
-};
+export type GlobalConfig = ParsedGlobalConfig;
 
 export const settingsSnapshotSchema = z.object({
   theme: themeValueSchema,
@@ -327,6 +325,4 @@ export const settingsSnapshotSchema = z.object({
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
 });
 type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
-export type SettingsSnapshot = Omit<ParsedSettingsSnapshot, "agentRuntimes"> & {
-  agentRuntimes?: AgentRuntimes;
-};
+export type SettingsSnapshot = ParsedSettingsSnapshot;

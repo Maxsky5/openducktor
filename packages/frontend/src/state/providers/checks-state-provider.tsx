@@ -1,7 +1,5 @@
-import { DEFAULT_AGENT_RUNTIMES, type RuntimeKind } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
+import type { RuntimeKind } from "@openducktor/contracts";
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
-import { filterEnabledRuntimeDefinitions } from "@/lib/agent-runtime";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { buildChecksStateValue } from "../app-state-context-values";
 import {
@@ -9,10 +7,9 @@ import {
   type ChecksOperationsContextValue,
   ChecksStateContext,
   useActiveWorkspaceContext,
-  useRuntimeDefinitionsContext,
+  useRuntimeAvailabilityContext,
 } from "../app-state-contexts";
 import { useChecks } from "../operations";
-import { settingsSnapshotQueryOptions } from "../queries/workspace";
 
 type ChecksStateProviderProps = PropsWithChildren<{
   checkRepoRuntimeHealth: (
@@ -26,18 +23,7 @@ export function ChecksStateProvider({
   children,
 }: ChecksStateProviderProps): ReactElement {
   const { activeWorkspace } = useActiveWorkspaceContext();
-  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
-  const { data: settingsSnapshot } = useQuery(settingsSnapshotQueryOptions());
-  const enabledRuntimeDefinitions = useMemo(
-    () =>
-      settingsSnapshot
-        ? filterEnabledRuntimeDefinitions(
-            runtimeDefinitions,
-            settingsSnapshot.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES,
-          )
-        : [],
-    [runtimeDefinitions, settingsSnapshot],
-  );
+  const { availableRuntimeDefinitions } = useRuntimeAvailabilityContext();
   const {
     runtimeCheck,
     runtimeCheckFailureKind,
@@ -57,7 +43,7 @@ export function ChecksStateProvider({
     clearActiveRepoRuntimeHealth,
   } = useChecks({
     activeWorkspace,
-    runtimeDefinitions: enabledRuntimeDefinitions,
+    runtimeDefinitions: availableRuntimeDefinitions,
     checkRepoRuntimeHealth,
   });
 

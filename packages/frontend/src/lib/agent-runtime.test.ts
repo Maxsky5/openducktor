@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
+  CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   requiredRuntimeSupportedScopes,
 } from "@openducktor/contracts";
@@ -8,6 +9,8 @@ import {
   filterRuntimeDefinitionsForDefaultSelection,
   filterRuntimeDefinitionsForRole,
   filterRuntimeDefinitionsForStartMode,
+  getAvailableRuntimeDefinitions,
+  getAvailableRuntimeDefinitionsForStartMode,
   getMissingMandatoryRuntimeCapabilities,
   getRuntimeDescriptorCapabilityConfigErrors,
   resolveRuntimeKindSelection,
@@ -353,6 +356,29 @@ describe("agent-runtime capability policies", () => {
     expect(filterRuntimeDefinitionsForStartMode([reuseRuntime, forkRuntime], "fork")).toEqual([
       forkRuntime,
     ]);
+  });
+
+  test("resolves available runtimes from enabled runtime settings", () => {
+    expect(
+      getAvailableRuntimeDefinitions({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        agentRuntimes: {
+          opencode: { enabled: false },
+          codex: { enabled: true },
+        },
+      }).map((definition) => definition.kind),
+    ).toEqual(["codex"]);
+
+    expect(
+      getAvailableRuntimeDefinitionsForStartMode({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        agentRuntimes: {
+          opencode: { enabled: true },
+          codex: { enabled: false },
+        },
+        startMode: "fresh",
+      }).map((definition) => definition.kind),
+    ).toEqual(["opencode"]);
   });
 
   test("reports incompatible runtime definitions with runtime-specific context", () => {

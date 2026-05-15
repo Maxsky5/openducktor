@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
 import {
   buildPromptValidationSaveError,
   buildRepoScriptValidationSaveError,
   buildReusablePromptValidationSaveError,
+  buildRuntimeAvailabilitySaveError,
   hasAnyDirtySections,
   hasSameSaveReadyGlobalGitConfig,
   isGlobalGitOnlySave,
@@ -30,6 +31,7 @@ const createSnapshot = (): SettingsSnapshot => ({
     rules: [],
   },
   globalPromptOverrides: {},
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {},
 });
 
@@ -78,6 +80,9 @@ describe("settings-modal-save-policy", () => {
     );
     expect(buildReusablePromptValidationSaveError(1)).toBe(
       "Fix 1 reusable prompt field error before saving.",
+    );
+    expect(buildRuntimeAvailabilitySaveError(2)).toBe(
+      "Fix 2 disabled runtime selections before saving.",
     );
     expect(
       buildRepoScriptValidationSaveError({

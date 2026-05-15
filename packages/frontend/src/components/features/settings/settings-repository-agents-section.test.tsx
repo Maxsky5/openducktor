@@ -62,6 +62,7 @@ describe("RepositoryAgentsSection", () => {
           isSaving: false,
         },
         runtimeDefinitionsError: null,
+        runtimeAvailabilityErrors: [],
         getCatalogForRuntime: () => codexCatalog,
         getCatalogErrorForRuntime: () => null,
         isCatalogLoadingForRuntime: () => false,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   agentPromptTemplateIdValues,
   type BuildSessionBootstrap,
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
   type RuntimeInstanceSummary,
@@ -70,6 +71,7 @@ const createPromptOverrideSettingsSnapshot = (
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
+  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {},
   globalPromptOverrides,
 });

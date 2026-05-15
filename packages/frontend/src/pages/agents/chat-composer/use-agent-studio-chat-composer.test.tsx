@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeDescriptor,
+} from "@openducktor/contracts";
 import type { AgentFileSearchResult, AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -148,11 +152,17 @@ const createActiveSession = (overrides = {}) =>
 
 const createHookHarness = (
   initialProps: HookArgs,
-  options: { runtimeDefinitions?: RuntimeDescriptor[] } = {},
+  options: {
+    runtimeDefinitions?: RuntimeDescriptor[];
+    availableRuntimeDefinitions?: RuntimeDescriptor[];
+  } = {},
 ) => {
   const runtimeDefinitions = options.runtimeDefinitions ?? [OPENCODE_RUNTIME_DESCRIPTOR];
+  const availableRuntimeDefinitions = options.availableRuntimeDefinitions ?? runtimeDefinitions;
   const runtimeDefinitionsContext = {
     runtimeDefinitions,
+    availableRuntimeDefinitions,
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
     refreshRuntimeDefinitions: async () => runtimeDefinitions,
@@ -465,6 +475,45 @@ describe("useAgentStudioChatComposer", () => {
         "opencode",
         "/repo/session-worktree",
         "",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps active session runtime capabilities when that runtime is disabled", async () => {
+    const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const activeSession = createActiveSession({
+      runtimeKind: "opencode",
+      runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
+      workingDirectory: "/repo/session-worktree",
+    });
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+        readSessionFileSearch,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [],
+      },
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().supportsFileSearch).toBe(true);
+
+      let results: AgentFileSearchResult[] = [];
+      await harness.run(async (state) => {
+        results = await state.searchFiles("src");
+      });
+
+      expect(results).toEqual(FILE_SEARCH_RESULTS);
+      expect(readSessionFileSearch).toHaveBeenCalledWith(
+        "/repo",
+        "opencode",
+        "/repo/session-worktree",
+        "src",
       );
     } finally {
       await harness.unmount();

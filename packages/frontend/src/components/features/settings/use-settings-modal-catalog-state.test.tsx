@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
   type RuntimeKind,
@@ -45,6 +46,8 @@ const createHookHarness = (
 ) => {
   const runtimeDefinitionsContext = {
     runtimeDefinitions: [OPENCODE_DESCRIPTOR],
+    availableRuntimeDefinitions: [OPENCODE_DESCRIPTOR],
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
     refreshRuntimeDefinitions: async () => [OPENCODE_DESCRIPTOR],

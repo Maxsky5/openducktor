@@ -1,4 +1,8 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  type RuntimeDescriptor,
+  type RuntimeKind,
+} from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -6,6 +10,7 @@ import type {
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, type ReactElement, useMemo, useState } from "react";
+import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import {
   ActiveWorkspaceContext,
@@ -14,6 +19,7 @@ import {
   type RuntimeDefinitionsContextValue,
 } from "../app-state-contexts";
 import { runtimeDefinitionsQueryOptions, runtimeQueryKeys } from "../queries/runtime";
+import { settingsSnapshotQueryOptions } from "../queries/workspace";
 
 type AppRuntimeProviderProps = PropsWithChildren<{
   loadRepoRuntimeCatalog: (
@@ -46,6 +52,11 @@ export function AppRuntimeProvider({
     isPending: isLoadingRuntimeDefinitions,
     refetch,
   } = useQuery(runtimeDefinitionsQueryOptions());
+  const {
+    data: settingsSnapshot,
+    error: settingsSnapshotError,
+    isPending: isLoadingSettingsSnapshot,
+  } = useQuery(settingsSnapshotQueryOptions());
 
   const activeWorkspaceValue = useMemo<ActiveWorkspaceContextValue>(
     () => ({
@@ -55,12 +66,24 @@ export function AppRuntimeProvider({
     [activeWorkspace],
   );
 
-  const runtimeDefinitionsError = error ? errorMessage(error) : null;
+  const runtimeDefinitionsError = error
+    ? errorMessage(error)
+    : settingsSnapshotError
+      ? `Failed to load runtime settings: ${errorMessage(settingsSnapshotError)}`
+      : null;
+  const agentRuntimes = settingsSnapshot?.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES;
+  const availableRuntimeDefinitions = useMemo(
+    () =>
+      settingsSnapshot ? getAvailableRuntimeDefinitions({ runtimeDefinitions, agentRuntimes }) : [],
+    [agentRuntimes, runtimeDefinitions, settingsSnapshot],
+  );
 
   const runtimeDefinitionsValue = useMemo<RuntimeDefinitionsContextValue>(
     () => ({
       runtimeDefinitions,
-      isLoadingRuntimeDefinitions,
+      availableRuntimeDefinitions,
+      agentRuntimes,
+      isLoadingRuntimeDefinitions: isLoadingRuntimeDefinitions || isLoadingSettingsSnapshot,
       runtimeDefinitionsError,
       refreshRuntimeDefinitions: async (): Promise<RuntimeDescriptor[]> => {
         await queryClient.invalidateQueries({
@@ -77,10 +100,13 @@ export function AppRuntimeProvider({
       loadRepoRuntimeFileSearch,
     }),
     [
+      agentRuntimes,
+      availableRuntimeDefinitions,
       loadRepoRuntimeCatalog,
       loadRepoRuntimeFileSearch,
       loadRepoRuntimeSlashCommands,
       isLoadingRuntimeDefinitions,
+      isLoadingSettingsSnapshot,
       queryClient,
       refetch,
       runtimeDefinitions,
