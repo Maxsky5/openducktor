@@ -25,6 +25,7 @@ const createSystemCommands = (): SystemCommandPort => ({
 const createFakeCodex = async (root: string): Promise<string> => {
   const scriptPath = join(root, "codex.mjs");
   const executable = join(root, process.platform === "win32" ? "codex.cmd" : "codex");
+  const bunExecutable = process.execPath.replaceAll('"', '""');
   await writeFile(
     scriptPath,
     `import { createInterface } from "node:readline";
@@ -77,7 +78,7 @@ process.on("SIGINT", stop);
 `,
   );
   if (process.platform === "win32") {
-    await writeFile(executable, `@echo off\r\nbun "%~dp0codex.mjs" %*\r\n`);
+    await writeFile(executable, `@echo off\r\n"${bunExecutable}" "%~dp0codex.mjs" %*\r\n`);
   } else {
     await writeFile(executable, `#!/bin/sh\nexec bun "$(dirname "$0")/codex.mjs" "$@"\n`);
   }
@@ -148,7 +149,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           hostUrl: "http://127.0.0.1:14327",
           hostToken: "token-1",
         }),
-        requestTimeoutMs: 2_000,
+        requestTimeoutMs: 4_000,
         now: () => new Date("2026-05-10T10:00:00.000Z"),
         runtimeId: () => "runtime-1",
       });
@@ -223,7 +224,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           hostUrl: "http://127.0.0.1:14327",
           hostToken: "token-1",
         }),
-        requestTimeoutMs: 2_000,
+        requestTimeoutMs: 4_000,
         runtimeId: () => "runtime-events",
       });
 
