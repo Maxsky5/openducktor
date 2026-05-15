@@ -175,9 +175,6 @@ export const createCodexAppServerTransport = (
   };
 
   const lines = createInterface({ input: child.stdout });
-  const waitForStdoutClose = new Promise<void>((resolve) => {
-    lines.once("close", () => resolve());
-  });
   lines.on("line", (line) => {
     const trimmed = line.trim();
     if (!trimmed) {
@@ -200,9 +197,6 @@ export const createCodexAppServerTransport = (
     }
   });
   const stderrLines = createInterface({ input: child.stderr });
-  const waitForStderrClose = new Promise<void>((resolve) => {
-    stderrLines.once("close", () => resolve());
-  });
   stderrLines.on("line", () => {});
   stderrLines.on("close", () => {
     stderrClosed = true;
@@ -284,12 +278,13 @@ export const createCodexAppServerTransport = (
         stderrLines.close();
       }
       child.stdin.destroy();
+      child.stdout.destroy();
+      child.stderr.destroy();
       for (const [id, request] of pending) {
         clearTimeout(request.timeout);
         request.reject(new Error(`Codex app-server transport for runtime ${runtimeId} is closed`));
         pending.delete(id);
       }
-      await Promise.all([waitForStdoutClose, waitForStderrClose]);
     },
   };
 };
