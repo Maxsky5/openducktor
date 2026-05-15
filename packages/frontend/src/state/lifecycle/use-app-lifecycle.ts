@@ -333,7 +333,10 @@ export function useAppLifecycle({
       });
 
     return () => {
-      clearBeadsPreparationTimer();
+      if (beadsPreparationTimer !== null) {
+        clearTimeout(beadsPreparationTimer);
+        beadsPreparationTimer = null;
+      }
       dismissBeadsPreparationToast();
     };
   }, [

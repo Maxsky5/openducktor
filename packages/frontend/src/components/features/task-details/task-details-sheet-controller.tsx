@@ -1,8 +1,8 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import {
-  forwardRef,
   type ReactElement,
+  type Ref,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -32,39 +32,35 @@ type TaskDetailsSheetControllerProps = Omit<
     role: AgentRole,
     options?: { externalSessionId?: string | null },
   ) => void;
+  ref?: Ref<TaskDetailsSheetControllerHandle>;
 };
 
-export const TaskDetailsSheetController = forwardRef<
-  TaskDetailsSheetControllerHandle,
-  TaskDetailsSheetControllerProps
->(function TaskDetailsSheetController(
-  {
-    activeWorkspace = null,
-    allTasks,
-    taskSessionsByTaskId,
-    activeTaskSessionContextByTaskId,
-    workflowActionsEnabled,
-    onOpenSession,
-    onPlan,
-    onQaStart,
-    onQaOpen,
-    onBuild,
-    onDelegate,
-    onEdit,
-    onDefer,
-    onResumeDeferred,
-    onHumanApprove,
-    onHumanRequestChanges,
-    onResetImplementation,
-    onResetTask,
-    onDetectPullRequest,
-    onUnlinkPullRequest,
-    detectingPullRequestTaskId,
-    unlinkingPullRequestTaskId,
-    onDelete,
-  },
+export function TaskDetailsSheetController({
+  activeWorkspace = null,
+  allTasks,
+  taskSessionsByTaskId,
+  activeTaskSessionContextByTaskId,
+  workflowActionsEnabled,
+  onOpenSession,
+  onPlan,
+  onQaStart,
+  onQaOpen,
+  onBuild,
+  onDelegate,
+  onEdit,
+  onDefer,
+  onResumeDeferred,
+  onHumanApprove,
+  onHumanRequestChanges,
+  onResetImplementation,
+  onResetTask,
+  onDetectPullRequest,
+  onUnlinkPullRequest,
+  detectingPullRequestTaskId,
+  unlinkingPullRequestTaskId,
+  onDelete,
   ref,
-): ReactElement {
+}: TaskDetailsSheetControllerProps): ReactElement {
   const [taskId, setTaskId] = useState<string | null>(null);
 
   const task = useMemo(
@@ -137,4 +133,4 @@ export const TaskDetailsSheetController = forwardRef<
       {...(onDelete ? { onDelete } : {})}
     />
   );
-});
+}

@@ -19,9 +19,13 @@ const uniqueNonEmpty = (values: string[]): string[] => {
 };
 
 const availableOptionLabels = (question: AgentQuestionRequest["questions"][number]): Set<string> =>
-  new Set(
-    question.options.map((option) => option.label.trim()).filter((label) => label.length > 0),
-  );
+  question.options.reduce<Set<string>>((labels, option) => {
+    const label = option.label.trim();
+    if (label.length > 0) {
+      labels.add(label);
+    }
+    return labels;
+  }, new Set());
 
 const normalizeSelectionForQuestion = (
   question: AgentQuestionRequest["questions"][number],
@@ -122,7 +126,8 @@ export const isAgentQuestionRequestComplete = (
   request: AgentQuestionRequest,
   draft: AgentQuestionDraftEntry[],
 ): boolean => {
-  return request.questions.every((question, index) =>
-    isAgentQuestionAnswered(question, draft[index]),
+  return (
+    request.questions.length === draft.length &&
+    request.questions.every((question, index) => isAgentQuestionAnswered(question, draft[index]))
   );
 };

@@ -75,7 +75,15 @@ export const withCapturedOutputStreams = async <Result>(
     originals.set(streamName, stream.write.bind(stream));
     stream.write = (chunk: unknown, ...args: unknown[]): boolean => {
       chunksByStream[streamName].push(String(chunk));
-      const callback = args.find((arg): arg is () => void => typeof arg === "function");
+      let callback: (() => void) | null = null;
+      for (const arg of args) {
+        if (typeof arg === "function") {
+          callback = () => {
+            arg();
+          };
+          break;
+        }
+      }
       callback?.();
       return true;
     };

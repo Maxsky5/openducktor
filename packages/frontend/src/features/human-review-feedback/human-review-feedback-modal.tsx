@@ -67,7 +67,7 @@ export function HumanReviewFeedbackModal({
             Cancel
           </Button>
           <Button type="button" disabled={confirmDisabled} onClick={() => void model.onConfirm()}>
-            Continue
+            Request Changes
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -27,6 +27,7 @@ import {
   type RefCallback,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from "react";
@@ -42,10 +43,13 @@ const deriveWorkspaceInitials = (workspaceName: string): string => {
     return "?";
   }
 
-  const segments = trimmedName
-    .split(/[^A-Za-z0-9]+/)
-    .map((segment) => segment.trim())
-    .filter((segment) => segment.length > 0);
+  const segments = trimmedName.split(/[^A-Za-z0-9]+/).reduce<string[]>((nextSegments, segment) => {
+    const trimmedSegment = segment.trim();
+    if (trimmedSegment.length > 0) {
+      nextSegments.push(trimmedSegment);
+    }
+    return nextSegments;
+  }, []);
 
   if (segments.length >= 2) {
     return `${segments[0]?.[0] ?? ""}${segments[1]?.[0] ?? ""}`.toUpperCase();
@@ -55,7 +59,10 @@ const deriveWorkspaceInitials = (workspaceName: string): string => {
 };
 
 function WorkspaceRailAvatar({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
-  const [failedIconDataUrl, setFailedIconDataUrl] = useState<string | null>(null);
+  const [failedIconDataUrl, markIconDataUrlFailed] = useReducer(
+    (_current: string | null, next: string) => next,
+    null,
+  );
   const iconDataUrl = workspace.iconDataUrl ?? null;
 
   if (iconDataUrl && failedIconDataUrl !== iconDataUrl) {
@@ -65,7 +72,9 @@ function WorkspaceRailAvatar({ workspace }: { workspace: WorkspaceRecord }): Rea
         alt=""
         aria-hidden="true"
         className="size-6 rounded-md object-cover"
-        onError={() => setFailedIconDataUrl(iconDataUrl)}
+        onError={() => {
+          markIconDataUrlFailed(iconDataUrl);
+        }}
       />
     );
   }
@@ -82,10 +91,14 @@ type WorkspaceRailButtonShellProps = {
   dragListeners?: ReturnType<typeof useSortable>["listeners"];
   shellRef?: RefCallback<HTMLDivElement>;
   style?: CSSProperties;
-  isDragSource?: boolean;
-  isDragOverlay?: boolean;
-  shouldSuppressSelection?: boolean;
-  isSwitchingWorkspace: boolean;
+  dragState: {
+    isSource?: boolean;
+    isOverlay?: boolean;
+    shouldSuppressSelection?: boolean;
+  };
+  interactionState: {
+    isSwitchingWorkspace: boolean;
+  };
   onSelectWorkspace?: (workspaceId: string) => void;
 };
 
@@ -94,12 +107,14 @@ function WorkspaceRailButtonShell({
   dragListeners,
   shellRef,
   style,
-  isDragSource = false,
-  isDragOverlay = false,
-  shouldSuppressSelection = false,
-  isSwitchingWorkspace,
+  dragState,
+  interactionState,
   onSelectWorkspace,
 }: WorkspaceRailButtonShellProps): ReactElement {
+  const isDragSource = dragState.isSource === true;
+  const isDragOverlay = dragState.isOverlay === true;
+  const shouldSuppressSelection = dragState.shouldSuppressSelection === true;
+  const { isSwitchingWorkspace } = interactionState;
   const isInteractionDisabled = isSwitchingWorkspace && !isDragOverlay;
 
   return (
@@ -179,9 +194,11 @@ function SortableWorkspaceRailButton({
       workspace={workspace}
       shellRef={setNodeRef}
       dragListeners={isSwitchingWorkspace ? undefined : listeners}
-      isDragSource={(isDragging || isActiveDrag) && !isSwitchingWorkspace}
-      shouldSuppressSelection={shouldSuppressSelection}
-      isSwitchingWorkspace={isSwitchingWorkspace}
+      dragState={{
+        isSource: (isDragging || isActiveDrag) && !isSwitchingWorkspace,
+        shouldSuppressSelection,
+      }}
+      interactionState={{ isSwitchingWorkspace }}
       onSelectWorkspace={onSelectWorkspace}
       style={{
         transform: CSS.Transform.toString(transform),
@@ -268,7 +285,7 @@ export function WorkspaceRail({
 
   return (
     <aside className="flex h-full w-14 shrink-0 flex-col border-r border-border bg-background">
-      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
+      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
         {workspaces.length > 0 ? (
           <DndContext
             sensors={sensors}
@@ -312,8 +329,8 @@ export function WorkspaceRail({
               {activeDragWorkspace ? (
                 <WorkspaceRailButtonShell
                   workspace={activeDragWorkspace}
-                  isDragOverlay
-                  isSwitchingWorkspace={isSwitchingWorkspace}
+                  dragState={{ isOverlay: true }}
+                  interactionState={{ isSwitchingWorkspace }}
                 />
               ) : null}
             </DragOverlay>

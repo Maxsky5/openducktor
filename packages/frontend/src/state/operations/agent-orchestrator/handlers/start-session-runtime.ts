@@ -37,6 +37,31 @@ export const resolvePromptContext = async ({
   };
 };
 
+const ensureRuntimeAfterPromptContext = async ({
+  ctx,
+  targetWorkingDirectory,
+  requestedRuntimeKind,
+  promptContext,
+  deps,
+}: {
+  ctx: StartSessionContext;
+  targetWorkingDirectory?: string | null;
+  requestedRuntimeKind?: AgentModelSelection["runtimeKind"] | null;
+  promptContext: Pick<ResolvedRuntimeAndModel, "systemPrompt" | "promptOverrides">;
+  deps: Pick<StartSessionExecutionDependencies, "runtime">;
+}): Promise<Omit<ResolvedRuntimeAndModel, "taskCard">> => {
+  const runtimeInfo = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
+    workspaceId: ctx.workspaceId,
+    ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
+    ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
+  });
+
+  return {
+    runtime: runtimeInfo,
+    ...promptContext,
+  };
+};
+
 export const resolveRuntimeAndModel = async ({
   ctx,
   targetWorkingDirectory,
@@ -55,17 +80,18 @@ export const resolveRuntimeAndModel = async ({
     taskCard,
     deps,
   });
-  const runtimeInfo = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
-    workspaceId: ctx.workspaceId,
+  const runtimeContext = await ensureRuntimeAfterPromptContext({
+    ctx,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
-    ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
+    requestedRuntimeKind,
+    promptContext,
+    deps,
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   return {
     taskCard,
-    runtime: runtimeInfo,
-    ...promptContext,
+    ...runtimeContext,
   };
 };
 

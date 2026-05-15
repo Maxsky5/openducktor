@@ -472,14 +472,16 @@ describe("load-sessions-stages", () => {
       taskRef: { current: [] },
     });
 
-    const prelude = await assembler.buildHydrationPreludeMessages({
-      record: createRecord({ role: "planner" }),
-      promptOverrides: {},
-    });
-    const systemPrompt = await assembler.buildHydrationSystemPrompt({
-      record: createRecord({ role: "planner" }),
-      promptOverrides: {},
-    });
+    const [prelude, systemPrompt] = await Promise.all([
+      assembler.buildHydrationPreludeMessages({
+        record: createRecord({ role: "planner" }),
+        promptOverrides: {},
+      }),
+      assembler.buildHydrationSystemPrompt({
+        record: createRecord({ role: "planner" }),
+        promptOverrides: {},
+      }),
+    ]);
 
     expect(systemPrompt).toBe("");
     expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(0);
@@ -495,14 +497,16 @@ describe("load-sessions-stages", () => {
       historyPreludeMode: "none",
     });
 
-    const prelude = await assembler.buildHydrationPreludeMessages({
-      record: createRecord({ role: "planner" }),
-      promptOverrides: {},
-    });
-    const systemPrompt = await assembler.buildHydrationSystemPrompt({
-      record: createRecord({ role: "planner" }),
-      promptOverrides: {},
-    });
+    const [prelude, systemPrompt] = await Promise.all([
+      assembler.buildHydrationPreludeMessages({
+        record: createRecord({ role: "planner" }),
+        promptOverrides: {},
+      }),
+      assembler.buildHydrationSystemPrompt({
+        record: createRecord({ role: "planner" }),
+        promptOverrides: {},
+      }),
+    ]);
 
     expect(systemPrompt).toBe("");
     expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(0);
@@ -514,14 +518,16 @@ describe("load-sessions-stages", () => {
       taskRef: { current: [createTaskFixture()] },
     });
 
-    const systemPrompt = await assembler.buildHydrationSystemPrompt({
-      record: createRecord({ role: "planner" }),
-      promptOverrides: {},
-    });
-    const prelude = await assembler.buildHydrationPreludeMessages({
-      record: createRecord({ role: "planner" }),
-      promptOverrides: {},
-    });
+    const [systemPrompt, prelude] = await Promise.all([
+      assembler.buildHydrationSystemPrompt({
+        record: createRecord({ role: "planner" }),
+        promptOverrides: {},
+      }),
+      assembler.buildHydrationPreludeMessages({
+        record: createRecord({ role: "planner" }),
+        promptOverrides: {},
+      }),
+    ]);
 
     expect(systemPrompt.length).toBeGreaterThan(0);
     expect(getSessionMessageCount({ externalSessionId: "external-1", messages: prelude })).toBe(1);

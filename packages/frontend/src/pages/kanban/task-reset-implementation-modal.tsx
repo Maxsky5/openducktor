@@ -33,9 +33,9 @@ export function TaskResetImplementationModal({
 
   const isBusy = model.isSubmitting || model.isLoadingImpact;
   const confirmLabel = model.isSubmitting
-    ? "Resetting implementation..."
+    ? "Resetting implementation…"
     : model.isLoadingImpact
-      ? "Checking impact..."
+      ? "Checking impact…"
       : "Reset implementation";
 
   return (
@@ -59,7 +59,7 @@ export function TaskResetImplementationModal({
         </DialogHeader>
 
         <DialogBody className="px-6 pb-6">
-          <div className="mt-5 space-y-3 rounded-xl border border-destructive-border bg-destructive-surface px-4 py-4 text-sm leading-6 text-destructive-surface-foreground">
+          <div className="mt-5 space-y-3 rounded-xl border border-destructive-border bg-destructive-surface p-4 text-sm leading-6 text-destructive-surface-foreground">
             <p className="font-medium">
               This action removes Builder and QA session history for this task.
             </p>

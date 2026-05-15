@@ -1,6 +1,5 @@
 import { Undo2 } from "lucide-react";
 import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -61,29 +60,27 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
   const canResetFiles = uiDiffScope === "uncommitted" && model.requestFileReset != null;
   const isResetDisabled = model.isResetDisabled ?? true;
   const resetDisabledReason = model.resetDisabledReason ?? null;
-  const conflictedFiles = useMemo(
-    () =>
-      new Set(
-        displayedFileStatuses
-          .filter((status) => status.status === "unmerged")
-          .map((status) => status.path),
-      ),
-    [displayedFileStatuses],
-  );
+  const conflictedFiles = useMemo(() => {
+    const paths = new Set<string>();
+    for (const status of displayedFileStatuses) {
+      if (status.status === "unmerged") {
+        paths.add(status.path);
+      }
+    }
+    return paths;
+  }, [displayedFileStatuses]);
 
   const preloadLimit = PRELOAD_DIFF_LIMIT;
 
   const toggleFile = useCallback((filePath: string): void => {
-    flushSync(() => {
-      setExpandedFiles((previous) => {
-        const next = new Set(previous);
-        if (next.has(filePath)) {
-          next.delete(filePath);
-        } else {
-          next.add(filePath);
-        }
-        return next;
-      });
+    setExpandedFiles((previous) => {
+      const next = new Set(previous);
+      if (next.has(filePath)) {
+        next.delete(filePath);
+      } else {
+        next.add(filePath);
+      }
+      return next;
     });
   }, []);
 
@@ -93,14 +90,12 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
         return;
       }
 
-      flushSync(() => {
-        setUiDiffScope(scope);
-        setExpandedFiles((previous) => {
-          if (previous.size === 0) {
-            return previous;
-          }
-          return new Set<string>();
-        });
+      setUiDiffScope(scope);
+      setExpandedFiles((previous) => {
+        if (previous.size === 0) {
+          return previous;
+        }
+        return new Set<string>();
       });
 
       if (pendingScopeUpdateTimeoutRef.current !== null) {
@@ -249,7 +244,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
     );
   const resetDialogBody = pendingReset ? (
     <div
-      className="rounded-xl border border-border bg-muted/50 px-4 py-4"
+      className="rounded-xl border border-border bg-muted/50 p-4"
       data-testid="agent-studio-git-reset-safety-note"
     >
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -403,7 +398,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           closeTestId="agent-studio-git-cancel-reset-button"
           confirmLabel={pendingReset?.kind === "hunk" ? "Reset hunk" : "Reset file"}
           confirmPendingLabel={
-            pendingReset?.kind === "hunk" ? "Resetting hunk..." : "Resetting file..."
+            pendingReset?.kind === "hunk" ? "Resetting hunk…" : "Resetting file…"
           }
           confirmPending={model.isResetting ?? false}
           confirmDisabled={model.isResetting ?? false}

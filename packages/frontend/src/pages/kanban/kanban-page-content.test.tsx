@@ -1,9 +1,17 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { ReactElement } from "react";
+import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { KanbanTaskActivityState } from "@/components/features/kanban/kanban-task-activity";
+import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
+import { KanbanPageContent } from "./kanban-page-content";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
+
+const visibleTask = createTaskCardFixture({
+  id: "TASK-1",
+  title: "Visible task",
+  status: "in_progress",
+});
+const visibleTaskActivityState = new Map<string, KanbanTaskActivityState>([["TASK-1", "idle"]]);
 
 const model: KanbanPageContentModel = {
   isLoadingTasks: false,
@@ -32,38 +40,6 @@ const model: KanbanPageContentModel = {
 };
 
 describe("KanbanPageContent", () => {
-  let KanbanPageContent: typeof import("./kanban-page-content").KanbanPageContent;
-
-  beforeEach(async () => {
-    mock.module("@/components/features/kanban/kanban-column", () => ({
-      KanbanColumn: ({ column }: { column: (typeof model.columns)[number] }): ReactElement => (
-        <div data-testid="kanban-column">{column.title}</div>
-      ),
-    }));
-    mock.module("@/components/features/kanban/kanban-collapsed-column", () => ({
-      KanbanCollapsedColumn: ({
-        column,
-      }: {
-        column: (typeof model.columns)[number];
-      }): ReactElement => <div data-testid="kanban-collapsed-column">{column.title}</div>,
-    }));
-
-    ({ KanbanPageContent } = await import("./kanban-page-content"));
-  });
-
-  afterEach(async () => {
-    await restoreMockedModules([
-      [
-        "@/components/features/kanban/kanban-column",
-        () => import("@/components/features/kanban/kanban-column"),
-      ],
-      [
-        "@/components/features/kanban/kanban-collapsed-column",
-        () => import("@/components/features/kanban/kanban-collapsed-column"),
-      ],
-    ]);
-  });
-
   test("keeps the horizontal scroll region stretched across the remaining page height", () => {
     const html = renderToStaticMarkup(createElement(KanbanPageContent, { model }));
 
@@ -100,9 +76,10 @@ describe("KanbanPageContent", () => {
             {
               id: "open",
               title: "Backlog",
-              tasks: [{ id: "TASK-1" }] as (typeof model.columns)[number]["tasks"],
+              tasks: [visibleTask],
             },
           ],
+          taskActivityStateByTaskId: visibleTaskActivityState,
         },
       }),
     );
@@ -115,9 +92,8 @@ describe("KanbanPageContent", () => {
   test("shows empty columns when the display mode is show", () => {
     const html = renderToStaticMarkup(createElement(KanbanPageContent, { model }));
 
-    expect(html.match(/data-testid="kanban-column"/g)?.length).toBe(1);
     expect(html).toContain("Backlog");
-    expect(html).not.toContain('data-testid="kanban-collapsed-column"');
+    expect(html).not.toContain("Backlog column is empty and collapsed");
   });
 
   test("hides empty columns when the display mode is hidden", () => {
@@ -130,8 +106,8 @@ describe("KanbanPageContent", () => {
       }),
     );
 
-    expect(html).not.toContain('data-testid="kanban-column"');
-    expect(html).not.toContain('data-testid="kanban-collapsed-column"');
+    expect(html).not.toContain("Backlog");
+    expect(html).not.toContain("Backlog column is empty and collapsed");
   });
 
   test("collapses empty columns without collapsing populated columns", () => {
@@ -145,16 +121,16 @@ describe("KanbanPageContent", () => {
             {
               id: "in_progress",
               title: "In progress",
-              tasks: [{ id: "TASK-1" }] as (typeof model.columns)[number]["tasks"],
+              tasks: [visibleTask],
             },
           ],
+          taskActivityStateByTaskId: visibleTaskActivityState,
         },
       }),
     );
 
-    expect(html.match(/data-testid="kanban-collapsed-column"/g)?.length).toBe(1);
-    expect(html.match(/data-testid="kanban-column"/g)?.length).toBe(1);
-    expect(html).toContain("Backlog");
+    expect(html).toContain("Backlog column is empty and collapsed");
     expect(html).toContain("In progress");
+    expect(html).toContain("Visible task");
   });
 });

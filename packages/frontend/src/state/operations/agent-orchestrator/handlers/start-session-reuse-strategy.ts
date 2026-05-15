@@ -115,8 +115,10 @@ const validateReusableSession = async ({
   matchesQaTarget: (workingDirectory: string) => Promise<boolean>;
   matchesBuildTarget: (workingDirectory: string) => Promise<boolean>;
 }): Promise<string | null> => {
-  const matchesQa = await matchesQaTarget(session.workingDirectory);
-  const matchesBuild = await matchesBuildTarget(session.workingDirectory);
+  const [matchesQa, matchesBuild] = await Promise.all([
+    matchesQaTarget(session.workingDirectory),
+    matchesBuildTarget(session.workingDirectory),
+  ]);
   const reuseError = resolveReuseValidationError({
     matchesQaTarget: matchesQa,
     matchesBuildTarget: matchesBuild,

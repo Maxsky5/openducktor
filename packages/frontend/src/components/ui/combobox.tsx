@@ -251,13 +251,21 @@ export function Combobox({
   const groupsToRender = useMemo<RenderGroup[]>(() => {
     if (matchAllSearchTerms) {
       if (resolvedGroups) {
-        return resolvedGroups
-          .map((group, groupIndex) => ({
+        return resolvedGroups.reduce<RenderGroup[]>((renderGroups, group, groupIndex) => {
+          const filteredOptions = group.options.filter((option) =>
+            matchesAllTerms(option, searchTerms),
+          );
+          if (filteredOptions.length === 0) {
+            return renderGroups;
+          }
+
+          renderGroups.push({
             key: `${group.label}:${groupIndex}`,
             label: group.label,
-            options: group.options.filter((option) => matchesAllTerms(option, searchTerms)),
-          }))
-          .filter((group) => group.options.length > 0);
+            options: filteredOptions,
+          });
+          return renderGroups;
+        }, []);
       }
 
       return [

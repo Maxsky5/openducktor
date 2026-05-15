@@ -65,7 +65,7 @@ export const resolvePreferredActiveSession = (
     return null;
   }
 
-  const [session] = [...matchingTaskSessions].sort(compareActiveSessionForPrimary);
+  const [session] = matchingTaskSessions.toSorted(compareActiveSessionForPrimary);
   return session ?? null;
 };
 
@@ -80,7 +80,7 @@ export const resolveLatestHistoricalSessionByRole = (
 };
 
 export const resolveHistoricalSessionRoles = (task: TaskCard): AgentRole[] => {
-  const sortedTaskAgentSessions = [...(task.agentSessions ?? [])].sort((left, right) =>
+  const sortedTaskAgentSessions = (task.agentSessions ?? []).toSorted((left, right) =>
     right.startedAt.localeCompare(left.startedAt),
   );
   const roles: AgentRole[] = [];

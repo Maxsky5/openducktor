@@ -70,9 +70,11 @@ test("RepositoryConfigurationSection applies the confirmed worktree base path", 
           selectedRepoEffectiveWorktreeBasePath={null}
           selectedRepoBranches={[]}
           selectedRepoBranchesError={null}
-          isLoadingSettings={false}
-          isSaving={false}
-          isLoadingSelectedRepoBranches={false}
+          loadingState={{
+            isLoadingSettings: false,
+            isSaving: false,
+            isLoadingSelectedRepoBranches: false,
+          }}
           onRetrySelectedRepoBranchesLoad={() => {}}
           onUpdateSelectedRepoConfig={(updater) => {
             setSelectedRepoConfig((current) => updater(current));
@@ -116,9 +118,11 @@ test("RepositoryConfigurationSection applies the confirmed repository rebind pat
           selectedRepoEffectiveWorktreeBasePath={null}
           selectedRepoBranches={[]}
           selectedRepoBranchesError={null}
-          isLoadingSettings={false}
-          isSaving={false}
-          isLoadingSelectedRepoBranches={false}
+          loadingState={{
+            isLoadingSettings: false,
+            isSaving: false,
+            isLoadingSelectedRepoBranches: false,
+          }}
           onRetrySelectedRepoBranchesLoad={() => {}}
           onUpdateSelectedRepoConfig={(updater) => {
             setSelectedRepoConfig((current) => updater(current));
@@ -137,7 +141,9 @@ test("RepositoryConfigurationSection applies the confirmed repository rebind pat
 
     const manualPathInput = await screen.findByLabelText("Open path");
     await act(async () => {
-      fireEvent.change(manualPathInput, { target: { value: "/tmp/rebound-repo" } });
+      fireEvent.change(manualPathInput, {
+        target: { value: "/tmp/rebound-repo" },
+      });
       fireEvent.click(screen.getByRole("button", { name: /load path/i }));
     });
 

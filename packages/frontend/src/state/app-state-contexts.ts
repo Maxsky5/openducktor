@@ -10,7 +10,7 @@ import type {
   AgentModelCatalog,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
-import { type Context, createContext, type Dispatch, type SetStateAction, useContext } from "react";
+import { type Context, createContext, type Dispatch, type SetStateAction, use } from "react";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type {
   ActiveWorkspace,
@@ -117,7 +117,7 @@ export const WorkspaceOperationsContext = createContext<WorkspaceOperationsConte
 );
 
 export const useRequiredContext = <T>(context: Context<T | null>, name: string): T => {
-  const value = useContext(context);
+  const value = use(context);
   if (!value) {
     throw new Error(`${name} must be used inside AppStateProvider`);
   }

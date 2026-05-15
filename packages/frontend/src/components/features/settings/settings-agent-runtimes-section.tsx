@@ -13,7 +13,7 @@ type AgentRuntimesSectionProps = {
 const sortRuntimeDefinitionsForSettings = (
   runtimeDefinitions: RuntimeDescriptor[],
 ): RuntimeDescriptor[] => {
-  return [...runtimeDefinitions].sort((left, right) => {
+  return runtimeDefinitions.toSorted((left, right) => {
     if (left.kind === "opencode") {
       return -1;
     }

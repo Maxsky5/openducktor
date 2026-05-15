@@ -102,7 +102,7 @@ export function SettingsModalContent({
   if (isLoadingSettings || !snapshotDraft) {
     return (
       <div className="rounded-md border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
-        Loading settings...
+        Loading settings…
       </div>
     );
   }
@@ -232,11 +232,15 @@ export function SettingsModalContent({
             selectedRepoEffectiveWorktreeBasePath={selectedRepoEffectiveWorktreeBasePath}
             selectedRepoBranches={selectedRepoBranches}
             selectedRepoBranchesError={selectedRepoBranchesError}
-            isLoadingSettings={isLoadingSettings}
-            isSaving={isSaving}
-            isLoadingSelectedRepoBranches={isLoadingSelectedRepoBranches}
+            loadingState={{
+              isLoadingSettings: isLoadingSettings,
+              isSaving: isSaving,
+              isLoadingSelectedRepoBranches: isLoadingSelectedRepoBranches,
+            }}
             onRetrySelectedRepoBranchesLoad={retrySelectedRepoBranchesLoad}
-            showDevServerValidationErrors={showRepoScriptValidationErrors}
+            validationState={{
+              showDevServerValidationErrors: showRepoScriptValidationErrors,
+            }}
             selectedRepoDevServerValidationErrors={selectedRepoDevServerValidationErrors}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
           />
@@ -258,10 +262,12 @@ export function SettingsModalContent({
             selectedRepoConfig={selectedRepoConfig}
             agentRuntimes={snapshotDraft.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES}
             runtimeDefinitions={runtimeDefinitions}
-            isLoadingRuntimeDefinitions={isLoadingRuntimeDefinitions}
-            isLoadingCatalog={isLoadingCatalog}
-            isLoadingSettings={isLoadingSettings}
-            isSaving={isSaving}
+            loadingState={{
+              isLoadingRuntimeDefinitions,
+              isLoadingCatalog,
+              isLoadingSettings,
+              isSaving,
+            }}
             runtimeDefinitionsError={runtimeDefinitionsError}
             getCatalogForRuntime={getCatalogForRuntime}
             getCatalogErrorForRuntime={getCatalogErrorForRuntime}

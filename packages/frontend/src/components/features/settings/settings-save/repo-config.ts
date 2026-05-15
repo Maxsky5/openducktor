@@ -31,7 +31,10 @@ export const prepareRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
     git: repo.git,
     hooks,
     devServers,
-    worktreeCopyPaths: repo.worktreeCopyPaths.map((entry) => entry.trim()).filter(Boolean),
+    worktreeCopyPaths: repo.worktreeCopyPaths.flatMap((entry) => {
+      const trimmed = entry.trim();
+      return trimmed ? [trimmed] : [];
+    }),
     promptOverrides: preparePromptOverridesForSave(repo.promptOverrides),
     agentDefaults: {
       ...(spec ? { spec } : {}),

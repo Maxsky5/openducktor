@@ -27,25 +27,23 @@ const createDocumentPayload = (
 const waitForCachedPlanMarkdown = async (
   queryClient: QueryClient,
   expectedMarkdown: string,
+  startedAt = Date.now(),
+  lastDocument?: TaskDocumentPayload,
 ): Promise<void> => {
-  const startedAt = Date.now();
-  let lastDocument: TaskDocumentPayload | undefined;
-
-  while (Date.now() - startedAt < 1000) {
-    const document = queryClient.getQueryData<TaskDocumentPayload>(
-      documentQueryKeys.plan("/repo", "task-1"),
-    );
-    lastDocument = document;
-
-    if (document?.markdown === expectedMarkdown) {
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 10));
+  const document = queryClient.getQueryData<TaskDocumentPayload>(
+    documentQueryKeys.plan("/repo", "task-1"),
+  );
+  if (document?.markdown === expectedMarkdown) {
+    return;
   }
 
-  const actual = lastDocument ? lastDocument.markdown : JSON.stringify(lastDocument);
-  throw new Error(`Expected cached plan markdown to be ${expectedMarkdown}, got ${actual}`);
+  if (Date.now() - startedAt >= 1000) {
+    const actual = lastDocument ? lastDocument.markdown : JSON.stringify(lastDocument);
+    throw new Error(`Expected cached plan markdown to be ${expectedMarkdown}, got ${actual}`);
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await waitForCachedPlanMarkdown(queryClient, expectedMarkdown, startedAt, document);
 };
 
 describe("resolveLoadedDocumentState", () => {

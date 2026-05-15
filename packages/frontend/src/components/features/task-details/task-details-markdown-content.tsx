@@ -5,7 +5,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
-  useState,
+  useReducer,
 } from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
@@ -59,7 +59,10 @@ function DeferredTaskDetailsMarkdown({
   copied,
   onCopy,
 }: DeferredTaskDetailsMarkdownProps): ReactElement {
-  const [isMarkdownReady, setIsMarkdownReady] = useState(false);
+  const [isMarkdownReady, setIsMarkdownReady] = useReducer(
+    (_current: boolean, next: boolean) => next,
+    false,
+  );
 
   useEffect(() => {
     if (!active || isMarkdownReady) {

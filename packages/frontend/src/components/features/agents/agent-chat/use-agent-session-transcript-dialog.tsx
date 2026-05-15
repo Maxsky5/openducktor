@@ -2,8 +2,8 @@ import {
   createContext,
   type PropsWithChildren,
   type ReactElement,
+  use,
   useCallback,
-  useContext,
   useMemo,
   useState,
 } from "react";
@@ -87,7 +87,7 @@ export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren
 
 export const useOptionalAgentSessionTranscriptDialog =
   (): AgentSessionTranscriptDialogContextValue | null => {
-    return useContext(AgentSessionTranscriptDialogContext);
+    return use(AgentSessionTranscriptDialogContext);
   };
 
 export const useAgentSessionTranscriptDialog = (): AgentSessionTranscriptDialogContextValue => {

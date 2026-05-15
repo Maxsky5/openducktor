@@ -35,10 +35,12 @@ type RepositoryAgentsSectionProps = {
   selectedRepoConfig: RepoConfig | null;
   agentRuntimes: AgentRuntimes;
   runtimeDefinitions: RuntimeDescriptor[];
-  isLoadingRuntimeDefinitions: boolean;
-  isLoadingCatalog: boolean;
-  isLoadingSettings: boolean;
-  isSaving: boolean;
+  loadingState: {
+    isLoadingRuntimeDefinitions: boolean;
+    isLoadingCatalog: boolean;
+    isLoadingSettings: boolean;
+    isSaving: boolean;
+  };
   runtimeDefinitionsError: string | null;
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
@@ -77,7 +79,7 @@ const agentPlaceholderFor = ({
     return "Runtime does not support agent profiles";
   }
   if (isCatalogLoading) {
-    return "Loading agents...";
+    return "Loading agents…";
   }
   return "Select agent";
 };
@@ -123,14 +125,44 @@ const buildRepositoryAgentRoleViewModel = ({
   };
 };
 
+const findMissingRoleLabels = ({
+  selectedRepoConfig,
+  runtimeDefinitions,
+}: {
+  selectedRepoConfig: RepoConfig;
+  runtimeDefinitions: RuntimeDescriptor[];
+}): string[] =>
+  ROLE_DEFAULTS.reduce<string[]>((labels, { role, label }) => {
+    const value = selectedRepoConfig.agentDefaults[role];
+    const runtimeKind = resolveRepoAgentDefaultRuntimeKind({
+      selectedRepoConfig,
+      runtimeDefinitions,
+      role,
+    });
+    const runtimeDefinition = runtimeKind
+      ? findRuntimeDefinition(runtimeDefinitions, runtimeKind)
+      : null;
+    const hasCompleteDefault = Boolean(
+      value &&
+        runtimeDefinition &&
+        value.providerId.trim().length > 0 &&
+        value.modelId.trim().length > 0 &&
+        (!runtimeDefinition.capabilities.optionalSurfaces.supportsProfiles ||
+          (value.profileId?.trim().length ?? 0) > 0),
+    );
+
+    if (!hasCompleteDefault) {
+      labels.push(label);
+    }
+
+    return labels;
+  }, []);
+
 export function RepositoryAgentsSection({
   selectedRepoConfig,
   agentRuntimes,
   runtimeDefinitions,
-  isLoadingRuntimeDefinitions,
-  isLoadingCatalog,
-  isLoadingSettings,
-  isSaving,
+  loadingState,
   runtimeDefinitionsError,
   getCatalogForRuntime,
   getCatalogErrorForRuntime,
@@ -139,6 +171,8 @@ export function RepositoryAgentsSection({
   onUpdateSelectedRepoAgentDefault,
   onClearSelectedRepoAgentDefault,
 }: RepositoryAgentsSectionProps): ReactElement {
+  const { isLoadingRuntimeDefinitions, isLoadingCatalog, isLoadingSettings, isSaving } =
+    loadingState;
   if (!selectedRepoConfig) {
     return (
       <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
@@ -161,29 +195,10 @@ export function RepositoryAgentsSection({
       runtimeDefinitions: enabledRuntimeDefinitions,
       requestedRuntimeKind: selectedRepoConfig.defaultRuntimeKind,
     }) ?? "";
-  const missingRoleLabels: string[] = [];
-  for (const { role, label } of ROLE_DEFAULTS) {
-    const value = selectedRepoConfig.agentDefaults[role];
-    const runtimeKind = resolveRepoAgentDefaultRuntimeKind({
-      selectedRepoConfig,
-      runtimeDefinitions: enabledRuntimeDefinitions,
-      role,
-    });
-    const runtimeDefinition = runtimeKind
-      ? findRuntimeDefinition(runtimeDefinitions, runtimeKind)
-      : null;
-    const hasCompleteDefault = Boolean(
-      value &&
-        runtimeDefinition &&
-        value.providerId.trim().length > 0 &&
-        value.modelId.trim().length > 0 &&
-        (!runtimeDefinition.capabilities.optionalSurfaces.supportsProfiles ||
-          (value.profileId?.trim().length ?? 0) > 0),
-    );
-    if (!hasCompleteDefault) {
-      missingRoleLabels.push(label);
-    }
-  }
+  const missingRoleLabels = findMissingRoleLabels({
+    selectedRepoConfig,
+    runtimeDefinitions: enabledRuntimeDefinitions,
+  });
 
   return (
     <div className="grid gap-4 p-4">
@@ -216,10 +231,10 @@ export function RepositoryAgentsSection({
       </div>
 
       {isLoadingCatalog ? (
-        <p className="text-xs text-muted-foreground">Loading available agents and models...</p>
+        <p className="text-xs text-muted-foreground">Loading available agents and models…</p>
       ) : null}
       {isLoadingRuntimeDefinitions ? (
-        <p className="text-xs text-muted-foreground">Loading available runtimes...</p>
+        <p className="text-xs text-muted-foreground">Loading available runtimes…</p>
       ) : null}
       {runtimeDefinitionsError ? (
         <p className="text-xs text-warning-muted">
@@ -331,7 +346,7 @@ export function RepositoryAgentsSection({
                     options={modelOptions}
                     groups={modelGroups}
                     matchAllSearchTerms
-                    placeholder={isRoleCatalogLoading ? "Loading models..." : "Select model"}
+                    placeholder={isRoleCatalogLoading ? "Loading models…" : "Select model"}
                     disabled={isRoleCatalogLoading || isSaving || modelOptions.length === 0}
                     className={modelDropdownClassName}
                     onValueChange={(selectedModelKey) => {

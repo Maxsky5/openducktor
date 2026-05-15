@@ -132,8 +132,10 @@ type HostLike = Record<HostMethodName, unknown>;
 let originalHostMethods: Partial<HostLike> | null = null;
 
 const applyHostMocks = async (): Promise<void> => {
-  const hostModule = await import("@/state/operations/host");
-  const hostClientModule = await import("@/lib/host-client");
+  const [hostModule, hostClientModule] = await Promise.all([
+    import("@/state/operations/host"),
+    import("@/lib/host-client"),
+  ]);
   const mockedHost = buildMockedHost();
   if (!originalHostMethods) {
     originalHostMethods = Object.fromEntries(
@@ -148,8 +150,10 @@ const restoreHostMocks = async (): Promise<void> => {
   if (!originalHostMethods) {
     return;
   }
-  const hostModule = await import("@/state/operations/host");
-  const hostClientModule = await import("@/lib/host-client");
+  const [hostModule, hostClientModule] = await Promise.all([
+    import("@/state/operations/host"),
+    import("@/lib/host-client"),
+  ]);
   Object.assign(hostClientModule.hostClient, originalHostMethods);
   Object.assign(hostModule.host, originalHostMethods);
 };

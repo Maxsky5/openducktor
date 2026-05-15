@@ -9,7 +9,12 @@ export const agentSessionQueryKeys = {
   list: (repoPath: string, taskId: string) =>
     [...agentSessionQueryKeys.all, "list", repoPath, taskId] as const,
   bulk: (repoPath: string, taskIds: string[]) =>
-    [...agentSessionQueryKeys.all, "bulk", repoPath, [...new Set(taskIds)].sort()] as const,
+    [
+      ...agentSessionQueryKeys.all,
+      "bulk",
+      repoPath,
+      ...Array.from(new Set(taskIds)).toSorted(),
+    ] as const,
 };
 
 export const agentSessionListQueryOptions = (repoPath: string, taskId: string) =>

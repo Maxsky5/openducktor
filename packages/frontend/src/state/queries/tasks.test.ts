@@ -46,6 +46,17 @@ const createDeferred = <T>() => {
   };
 };
 
+const waitForMockCall = async (hasCall: () => boolean, remainingAttempts = 10): Promise<void> => {
+  if (hasCall()) {
+    return;
+  }
+  if (remainingAttempts <= 0) {
+    throw new Error("Expected mock call did not happen.");
+  }
+  await Promise.resolve();
+  await waitForMockCall(hasCall, remainingAttempts - 1);
+};
+
 const taskFixture: TaskCard = {
   id: "task-1",
   title: "Task",
@@ -599,9 +610,7 @@ describe("tasks query cache helpers", () => {
       refreshInactiveViews: false,
       taskDocumentStrategy: "none",
     });
-    for (let attempts = 0; tasksList.mock.calls.length === 0 && attempts < 10; attempts += 1) {
-      await Promise.resolve();
-    }
+    await waitForMockCall(() => tasksList.mock.calls.length > 0);
     expect(tasksList).toHaveBeenCalledTimes(1);
 
     const secondRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {
@@ -647,9 +656,7 @@ describe("tasks query cache helpers", () => {
       taskDocumentStrategy: "invalidate",
       taskIds: ["task-1"],
     });
-    for (let attempts = 0; tasksList.mock.calls.length === 0 && attempts < 10; attempts += 1) {
-      await Promise.resolve();
-    }
+    await waitForMockCall(() => tasksList.mock.calls.length > 0);
     expect(tasksList).toHaveBeenCalledTimes(1);
 
     const secondRefresh = refreshRepoTaskViewsFromQuery(queryClient, "/repo", {

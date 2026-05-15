@@ -179,10 +179,7 @@ export function useKanbanVirtualization({
     () => buildVirtualColumnLayout(itemHeights, VIRTUAL_CARD_GAP_PX),
     [itemHeights],
   );
-  const virtualLayoutSyncToken = useMemo(
-    () => `${tasks.length}:${virtualLayout.totalHeight}:${itemHeights.join(",")}`,
-    [itemHeights, tasks.length, virtualLayout.totalHeight],
-  );
+  const virtualLayoutSyncToken = `${tasks.length}:${virtualLayout.totalHeight}:${itemHeights.join(",")}`;
 
   const layoutRef = useRef<VirtualLayoutSnapshot>({
     itemOffsets: virtualLayout.itemOffsets,

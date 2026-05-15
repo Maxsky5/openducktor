@@ -23,8 +23,8 @@ export const buildRoleSessionSequenceById = (
   sessions: AgentSessionOptionSummary[],
 ): Map<string, number> => {
   return new Map(
-    [...sessions]
-      .sort((a, b) => {
+    sessions
+      .toSorted((a, b) => {
         if (a.startedAt !== b.startedAt) {
           return a.startedAt < b.startedAt ? -1 : 1;
         }

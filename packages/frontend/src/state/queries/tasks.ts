@@ -84,15 +84,19 @@ const cachedKanbanQueryKeysForRepo = (
       queryKey: taskQueryKeys.repoDataPrefix(repoPath),
       exact: false,
     })
-    .map((query) => query.queryKey)
-    .filter(
-      (queryKey): queryKey is ReturnType<typeof taskQueryKeys.repoData> =>
+    .reduce<Array<ReturnType<typeof taskQueryKeys.repoData>>>((keys, query) => {
+      const queryKey = query.queryKey;
+      if (
         queryKey[0] === taskQueryKeys.all[0] &&
         queryKey[1] === "repo-data" &&
         queryKey[2] === repoPath &&
         typeof queryKey[3] === "number" &&
-        queryKey[3] >= 0,
-    );
+        queryKey[3] >= 0
+      ) {
+        keys.push(queryKey as ReturnType<typeof taskQueryKeys.repoData>);
+      }
+      return keys;
+    }, []);
 
 export const refreshCachedKanbanQueries = async (
   queryClient: QueryClient,

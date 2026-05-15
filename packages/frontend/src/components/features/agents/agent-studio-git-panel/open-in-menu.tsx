@@ -293,12 +293,12 @@ export function OpenInMenu({
           </div>
 
           {toolsQuery.isPending ? (
-            <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
               <LoaderCircle className="size-4 animate-spin" />
-              <span>Looking for supported apps...</span>
+              <span>Looking for supported apps…</span>
             </div>
           ) : toolsQuery.isError ? (
-            <div className="space-y-3 px-3 py-3" data-testid="agent-studio-git-open-in-error">
+            <div className="space-y-3 p-3" data-testid="agent-studio-git-open-in-error">
               <p className="text-sm text-foreground">Supported app discovery failed.</p>
               <p className="text-[11px] text-muted-foreground">{errorMessage(toolsQuery.error)}</p>
               <Button
@@ -330,7 +330,7 @@ export function OpenInMenu({
                       key={tool.toolId}
                       type="button"
                       variant="ghost"
-                      className="h-auto w-full justify-start px-2 py-2 text-left text-sm"
+                      className="h-auto w-full justify-start p-2 text-left text-sm"
                       onClick={() => {
                         void handleOpenInTool(tool.toolId);
                       }}
@@ -346,7 +346,7 @@ export function OpenInMenu({
                   );
                 })}
                 {toolsQuery.data?.length === 0 ? (
-                  <div className="px-3 py-3 text-sm text-muted-foreground">
+                  <div className="p-3 text-sm text-muted-foreground">
                     No supported apps are currently available on this Mac.
                   </div>
                 ) : null}

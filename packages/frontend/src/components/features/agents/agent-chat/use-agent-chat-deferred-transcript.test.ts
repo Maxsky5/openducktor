@@ -32,31 +32,35 @@ const flush = async (): Promise<void> => {
 };
 
 const flushDeferredWork = async (): Promise<void> => {
-  while (animationFrameCallbacks.size > 0 || timeoutCallbacks.size > 0) {
-    const queuedAnimationFrames = Array.from(animationFrameCallbacks.values());
-    animationFrameCallbacks.clear();
-
-    if (queuedAnimationFrames.length > 0) {
-      await act(async () => {
-        for (const callback of queuedAnimationFrames) {
-          callback(16);
-        }
-        await flush();
-      });
-    }
-
-    const queuedTimeouts = Array.from(timeoutCallbacks.values());
-    timeoutCallbacks.clear();
-
-    if (queuedTimeouts.length > 0) {
-      await act(async () => {
-        for (const callback of queuedTimeouts) {
-          callback();
-        }
-        await flush();
-      });
-    }
+  if (animationFrameCallbacks.size === 0 && timeoutCallbacks.size === 0) {
+    return;
   }
+
+  const queuedAnimationFrames = Array.from(animationFrameCallbacks.values());
+  animationFrameCallbacks.clear();
+
+  if (queuedAnimationFrames.length > 0) {
+    await act(async () => {
+      for (const callback of queuedAnimationFrames) {
+        callback(16);
+      }
+      await flush();
+    });
+  }
+
+  const queuedTimeouts = Array.from(timeoutCallbacks.values());
+  timeoutCallbacks.clear();
+
+  if (queuedTimeouts.length > 0) {
+    await act(async () => {
+      for (const callback of queuedTimeouts) {
+        callback();
+      }
+      await flush();
+    });
+  }
+
+  await flushDeferredWork();
 };
 
 describe("useAgentChatDeferredTranscript", () => {

@@ -1,4 +1,11 @@
-import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+} from "react";
 
 type UseAgentChatDeferredTranscriptArgs = {
   activeExternalSessionId: string | null;
@@ -13,7 +20,8 @@ export function useAgentChatDeferredTranscript({
   activeExternalSessionId,
   shouldDefer,
 }: UseAgentChatDeferredTranscriptArgs): UseAgentChatDeferredTranscriptResult {
-  const [renderedSessionId, setRenderedSessionId] = useState<string | null>(
+  const [renderedSessionId, dispatchRenderedSessionId] = useReducer(
+    (_current: string | null, next: string | null) => next,
     activeExternalSessionId,
   );
   const frameRef = useRef<number | null>(null);
@@ -40,7 +48,7 @@ export function useAgentChatDeferredTranscript({
       return;
     }
 
-    setRenderedSessionId(activeExternalSessionId);
+    dispatchRenderedSessionId(activeExternalSessionId);
   }, [activeExternalSessionId, cancelPendingDeferral, renderedSessionId, shouldDefer]);
 
   useEffect(() => {
@@ -56,7 +64,7 @@ export function useAgentChatDeferredTranscript({
 
     if (activeExternalSessionId === null) {
       startTransition(() => {
-        setRenderedSessionId(activeExternalSessionId);
+        dispatchRenderedSessionId(activeExternalSessionId);
       });
       return;
     }
@@ -67,10 +75,21 @@ export function useAgentChatDeferredTranscript({
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
         startTransition(() => {
-          setRenderedSessionId(nextSessionId);
+          dispatchRenderedSessionId(nextSessionId);
         });
       }, 0);
     });
+
+    return () => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (frameRef.current !== null) {
+        globalThis.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+    };
   }, [activeExternalSessionId, cancelPendingDeferral, renderedSessionId, shouldDefer]);
 
   useEffect(() => {

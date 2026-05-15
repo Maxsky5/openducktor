@@ -730,11 +730,11 @@ describe("use-repo-settings-operations", () => {
         workspaces: Record<string, { promptOverrides: Record<string, unknown> }>;
       };
       expect(Object.keys(parsedForwarded.globalPromptOverrides).sort()).toEqual(
-        [...agentPromptTemplateIdValues].sort(),
+        agentPromptTemplateIdValues.toSorted(),
       );
       expect(
         Object.keys(parsedForwarded.workspaces["repo-a"]?.promptOverrides ?? {}).sort(),
-      ).toEqual([...agentPromptTemplateIdValues].sort());
+      ).toEqual(agentPromptTemplateIdValues.toSorted());
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;

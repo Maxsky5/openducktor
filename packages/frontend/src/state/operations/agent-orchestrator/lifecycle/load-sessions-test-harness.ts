@@ -257,17 +257,20 @@ export const setupDefaultLoadSessionsHost = async (): Promise<{
 export const waitForHistoryCallCount = async (
   getHistoryCalls: () => number,
   expectedCalls: number,
+  remainingAttempts = 50,
 ): Promise<void> => {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (getHistoryCalls() >= expectedCalls) {
-      return;
-    }
-    await Promise.resolve();
+  if (getHistoryCalls() >= expectedCalls) {
+    return;
   }
 
-  throw new Error(
-    `Expected at least ${expectedCalls} history calls, received ${getHistoryCalls()}.`,
-  );
+  if (remainingAttempts <= 0) {
+    throw new Error(
+      `Expected at least ${expectedCalls} history calls, received ${getHistoryCalls()}.`,
+    );
+  }
+
+  await Promise.resolve();
+  await waitForHistoryCallCount(getHistoryCalls, expectedCalls, remainingAttempts - 1);
 };
 
 export type {

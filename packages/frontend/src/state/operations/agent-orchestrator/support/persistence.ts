@@ -366,18 +366,17 @@ export const historyToChatMessages = (
       const partMessage = historyPartToChatMessage(message, part);
       if (partMessage) {
         if (isSubagentMessage(partMessage)) {
+          const correlationKey = partMessage.meta.correlationKey;
           if (!partMessage.meta.externalSessionId) {
-            hiddenSubagentsByCorrelationKey.set(partMessage.meta.correlationKey, partMessage);
+            hiddenSubagentsByCorrelationKey.set(correlationKey, partMessage);
             continue;
           }
 
-          const hiddenSubagent = hiddenSubagentsByCorrelationKey.get(
-            partMessage.meta.correlationKey,
-          );
+          const hiddenSubagent = hiddenSubagentsByCorrelationKey.get(correlationKey);
           const visiblePartMessage = hiddenSubagent
             ? mergeHydratedSubagentMessages(hiddenSubagent, partMessage)
             : partMessage;
-          hiddenSubagentsByCorrelationKey.delete(partMessage.meta.correlationKey);
+          hiddenSubagentsByCorrelationKey.delete(correlationKey);
           const existingIndex = findLastMatchingHydratedSubagentIndex(visiblePartMessage);
           if (existingIndex >= 0) {
             const existingMessage = next[existingIndex];

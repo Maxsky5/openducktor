@@ -145,7 +145,7 @@ const buildSessionsByRole = (
 ): Record<AgentRole, WorkflowSessionSummary[]> => {
   const sessionsByRole = createRoleRecord<WorkflowSessionSummary[]>(() => []);
 
-  for (const session of [...sessionsForTask].sort(compareAgentSessionRecency)) {
+  for (const session of sessionsForTask.toSorted(compareAgentSessionRecency)) {
     if (!isWorkflowSessionSummary(session)) {
       continue;
     }
@@ -192,7 +192,7 @@ const deriveWorkflowToneForRole = (params: {
 export const buildLatestSessionByTaskMap = (
   sessions: AgentSessionWorkflowSummary[],
 ): Map<string, AgentSessionWorkflowSummary> => {
-  const sortedSessions = [...sessions].sort(compareAgentSessionRecency);
+  const sortedSessions = sessions.toSorted(compareAgentSessionRecency);
   const next = new Map<string, AgentSessionWorkflowSummary>();
   for (const entry of sortedSessions) {
     if (!next.has(entry.taskId)) {

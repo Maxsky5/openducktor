@@ -201,23 +201,35 @@ const wrapElement = (element: Element): DomTestNode => ({
     };
   },
   get children() {
-    return Array.from(element.childNodes)
-      .map((child) => child.textContent ?? "")
-      .filter((child) => child.length > 0);
+    return Array.from(element.childNodes).reduce<string[]>((children, child) => {
+      const textContent = child.textContent ?? "";
+      if (textContent.length > 0) {
+        children.push(textContent);
+      }
+      return children;
+    }, []);
   },
   findAll: (predicate) =>
-    Array.from(element.querySelectorAll("*"))
-      .map((node) => wrapElement(node))
-      .filter((node) => predicate(node)),
+    Array.from(element.querySelectorAll("*")).reduce<DomTestNode[]>((nodes, node) => {
+      const wrappedNode = wrapElement(node);
+      if (predicate(wrappedNode)) {
+        nodes.push(wrappedNode);
+      }
+      return nodes;
+    }, []),
 });
 
 const wrapRoot = (rendered: RenderResult): DomTestNode =>
   ({
     ...wrapElement(rendered.container),
     findAll: (predicate) =>
-      Array.from(rendered.container.querySelectorAll("*"))
-        .map((node) => wrapElement(node))
-        .filter((node) => predicate(node)),
+      Array.from(rendered.container.querySelectorAll("*")).reduce<DomTestNode[]>((nodes, node) => {
+        const wrappedNode = wrapElement(node);
+        if (predicate(wrappedNode)) {
+          nodes.push(wrappedNode);
+        }
+        return nodes;
+      }, []),
   }) satisfies DomTestNode;
 
 const findByTestId = (root: DomTestNode, testId: string): DomTestNode => {

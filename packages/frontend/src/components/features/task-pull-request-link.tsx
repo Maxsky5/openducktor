@@ -36,7 +36,7 @@ export function TaskPullRequestLink({
 }): ReactElement {
   const StatusIcon = PULL_REQUEST_STATUS_ICONS[pullRequest.state];
 
-  const handleClick = (): void => {
+  const openPullRequest = (): void => {
     void openExternalUrl(pullRequest.url).catch((error) => {
       toast.error("Failed to open pull request", {
         description: errorMessage(error),
@@ -47,7 +47,7 @@ export function TaskPullRequestLink({
   return (
     <button
       type="button"
-      onClick={handleClick}
+      onClick={openPullRequest}
       className={cn(
         badgeVariants({ variant: "outline" }),
         "inline-flex text-muted-foreground cursor-pointer items-center gap-1.5 rounded-full border-border bg-card px-2.5 py-1 text-[11px] font-semibold hover:bg-muted",

@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { errorMessage } from "@/lib/errors";
 
 type UseTaskDeleteDialogOptions = {
@@ -8,6 +8,43 @@ type UseTaskDeleteDialogOptions = {
   hasSubtasks: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete: ((taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>) | undefined;
+};
+
+type DeleteDialogState = {
+  isOpen: boolean;
+  isDeleting: boolean;
+  error: string | null;
+};
+
+type DeleteDialogAction =
+  | { type: "sheetClosed" }
+  | { type: "opened" }
+  | { type: "openChanged"; open: boolean }
+  | { type: "deleteStarted" }
+  | { type: "deleteSucceeded" }
+  | { type: "deleteFailed"; error: string }
+  | { type: "deleteFinished" };
+
+const deleteDialogReducer = (
+  state: DeleteDialogState,
+  action: DeleteDialogAction,
+): DeleteDialogState => {
+  switch (action.type) {
+    case "sheetClosed":
+      return { isOpen: false, isDeleting: state.isDeleting, error: null };
+    case "opened":
+      return { ...state, isOpen: true, error: null };
+    case "openChanged":
+      return { ...state, isOpen: action.open, error: action.open ? state.error : null };
+    case "deleteStarted":
+      return { ...state, isDeleting: true, error: null };
+    case "deleteSucceeded":
+      return { ...state, isOpen: false };
+    case "deleteFailed":
+      return { ...state, error: action.error };
+    case "deleteFinished":
+      return { ...state, isDeleting: false };
+  }
 };
 
 export function useTaskDeleteDialog({
@@ -25,31 +62,28 @@ export function useTaskDeleteDialog({
   handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
   confirmDelete: () => void;
 } {
-  const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(deleteDialogReducer, {
+    isOpen: false,
+    isDeleting: false,
+    error: null,
+  });
   const deleteRequestInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!sheetOpen) {
-      setDeleteDialogOpen(false);
-      setIsDeleting(false);
-      setDeleteError(null);
-      deleteRequestInFlightRef.current = false;
+      dispatch({ type: "sheetClosed" });
     }
   }, [sheetOpen]);
 
   const openDeleteDialog = useCallback((): void => {
-    setDeleteError(null);
-    setDeleteDialogOpen(true);
+    dispatch({ type: "opened" });
   }, []);
 
   const closeDeleteDialog = useCallback((): void => {
     if (deleteRequestInFlightRef.current) {
       return;
     }
-    setDeleteDialogOpen(false);
-    setDeleteError(null);
+    dispatch({ type: "openChanged", open: false });
   }, []);
 
   const handleDeleteDialogOpenChange = useCallback((nextOpen: boolean): void => {
@@ -57,10 +91,7 @@ export function useTaskDeleteDialog({
       return;
     }
 
-    setDeleteDialogOpen(nextOpen);
-    if (!nextOpen) {
-      setDeleteError(null);
-    }
+    dispatch({ type: "openChanged", open: nextOpen });
   }, []);
 
   const confirmDelete = useCallback((): void => {
@@ -69,27 +100,26 @@ export function useTaskDeleteDialog({
     }
 
     deleteRequestInFlightRef.current = true;
-    setIsDeleting(true);
-    setDeleteError(null);
+    dispatch({ type: "deleteStarted" });
 
     void onDelete(task.id, { deleteSubtasks: hasSubtasks })
       .then(() => {
-        setDeleteDialogOpen(false);
+        dispatch({ type: "deleteSucceeded" });
         onOpenChange(false);
       })
       .catch((error: unknown) => {
-        setDeleteError(errorMessage(error));
+        dispatch({ type: "deleteFailed", error: errorMessage(error) });
       })
       .finally(() => {
         deleteRequestInFlightRef.current = false;
-        setIsDeleting(false);
+        dispatch({ type: "deleteFinished" });
       });
   }, [hasSubtasks, onDelete, onOpenChange, task]);
 
   return {
-    isDeleteDialogOpen,
-    isDeletePending: isDeleting || deleteRequestInFlightRef.current,
-    deleteError,
+    isDeleteDialogOpen: state.isOpen,
+    isDeletePending: state.isDeleting || deleteRequestInFlightRef.current,
+    deleteError: state.error,
     openDeleteDialog,
     closeDeleteDialog,
     handleDeleteDialogOpenChange,

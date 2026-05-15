@@ -1,6 +1,6 @@
 import type { RuntimeApprovalReplyOutcome, RuntimeInstanceSummary } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import {
   useChecksOperationsContext,
@@ -28,6 +28,78 @@ type UseReadonlySessionTranscriptSurfaceModelArgs = {
   activeWorkspace: ActiveWorkspace | null;
   externalSessionId: string | null;
   source: RuntimeSessionTranscriptSource | null;
+};
+
+type RuntimeTranscriptLocalState = {
+  isAttachingLiveTranscript: boolean;
+  liveTranscriptAttachError: string | null;
+  repliedRuntimeApprovalRequestIds: Set<string>;
+  repliedRuntimeQuestionRequestIds: Set<string>;
+  isSubmittingQuestionByRequestId: Record<string, boolean>;
+};
+
+type RuntimeTranscriptLocalAction =
+  | { type: "transcriptIdentityReset"; clearAttachError: boolean }
+  | { type: "attachUnavailable" }
+  | { type: "attachStarted" }
+  | { type: "attachFailed"; error: string }
+  | { type: "attachFinished" }
+  | { type: "approvalReplied"; requestId: string }
+  | { type: "questionSubmitStarted"; requestId: string }
+  | { type: "questionReplied"; requestId: string }
+  | { type: "questionSubmitFinished"; requestId: string };
+
+const runtimeTranscriptLocalReducer = (
+  state: RuntimeTranscriptLocalState,
+  action: RuntimeTranscriptLocalAction,
+): RuntimeTranscriptLocalState => {
+  switch (action.type) {
+    case "transcriptIdentityReset":
+      return {
+        ...state,
+        repliedRuntimeApprovalRequestIds: new Set(),
+        repliedRuntimeQuestionRequestIds: new Set(),
+        isSubmittingQuestionByRequestId: {},
+        liveTranscriptAttachError: action.clearAttachError ? null : state.liveTranscriptAttachError,
+      };
+    case "attachUnavailable":
+      return { ...state, isAttachingLiveTranscript: false };
+    case "attachStarted":
+      return { ...state, isAttachingLiveTranscript: true, liveTranscriptAttachError: null };
+    case "attachFailed":
+      return { ...state, liveTranscriptAttachError: action.error };
+    case "attachFinished":
+      return { ...state, isAttachingLiveTranscript: false };
+    case "approvalReplied": {
+      if (state.repliedRuntimeApprovalRequestIds.has(action.requestId)) {
+        return state;
+      }
+      const repliedRuntimeApprovalRequestIds = new Set(state.repliedRuntimeApprovalRequestIds);
+      repliedRuntimeApprovalRequestIds.add(action.requestId);
+      return { ...state, repliedRuntimeApprovalRequestIds };
+    }
+    case "questionSubmitStarted":
+      return {
+        ...state,
+        isSubmittingQuestionByRequestId: {
+          ...state.isSubmittingQuestionByRequestId,
+          [action.requestId]: true,
+        },
+      };
+    case "questionReplied": {
+      if (state.repliedRuntimeQuestionRequestIds.has(action.requestId)) {
+        return state;
+      }
+      const repliedRuntimeQuestionRequestIds = new Set(state.repliedRuntimeQuestionRequestIds);
+      repliedRuntimeQuestionRequestIds.add(action.requestId);
+      return { ...state, repliedRuntimeQuestionRequestIds };
+    }
+    case "questionSubmitFinished": {
+      const isSubmittingQuestionByRequestId = { ...state.isSubmittingQuestionByRequestId };
+      delete isSubmittingQuestionByRequestId[action.requestId];
+      return { ...state, isSubmittingQuestionByRequestId };
+    }
+  }
 };
 
 const errorMessageFromUnknown = (error: unknown, fallback: string): string => {
@@ -75,17 +147,20 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const attachLiveTranscriptKeyRef = useRef<string | null>(null);
   const visiblePendingApprovalsRef = useRef<AgentApprovalRequest[]>([]);
   const visiblePendingQuestionsRef = useRef<AgentQuestionRequest[]>([]);
-  const [isAttachingLiveTranscript, setIsAttachingLiveTranscript] = useState(false);
-  const [liveTranscriptAttachError, setLiveTranscriptAttachError] = useState<string | null>(null);
-  const [repliedRuntimeApprovalRequestIds, setRepliedRuntimeApprovalRequestIds] = useState<
-    Set<string>
-  >(() => new Set());
-  const [repliedRuntimeQuestionRequestIds, setRepliedRuntimeQuestionRequestIds] = useState<
-    Set<string>
-  >(() => new Set());
-  const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
-    Record<string, boolean>
-  >({});
+  const [localState, dispatchLocalState] = useReducer(runtimeTranscriptLocalReducer, {
+    isAttachingLiveTranscript: false,
+    liveTranscriptAttachError: null,
+    repliedRuntimeApprovalRequestIds: new Set<string>(),
+    repliedRuntimeQuestionRequestIds: new Set<string>(),
+    isSubmittingQuestionByRequestId: {},
+  });
+  const {
+    isAttachingLiveTranscript,
+    liveTranscriptAttachError,
+    repliedRuntimeApprovalRequestIds,
+    repliedRuntimeQuestionRequestIds,
+    isSubmittingQuestionByRequestId,
+  } = localState;
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -180,15 +255,10 @@ export function useReadonlySessionTranscriptSurfaceModel({
   useEffect(() => {
     const hasTranscriptIdentity = Boolean(externalSessionId || source?.runtimeId);
     if (!hasTranscriptIdentity) {
-      setRepliedRuntimeApprovalRequestIds(new Set());
-      setRepliedRuntimeQuestionRequestIds(new Set());
-      setIsSubmittingQuestionByRequestId({});
+      dispatchLocalState({ type: "transcriptIdentityReset", clearAttachError: false });
       return;
     }
-    setRepliedRuntimeApprovalRequestIds(new Set());
-    setRepliedRuntimeQuestionRequestIds(new Set());
-    setIsSubmittingQuestionByRequestId({});
-    setLiveTranscriptAttachError(null);
+    dispatchLocalState({ type: "transcriptIdentityReset", clearAttachError: true });
   }, [externalSessionId, source?.runtimeId]);
 
   const visiblePendingApprovals = useMemo(() => {
@@ -262,7 +332,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       return;
     }
     attachLiveTranscriptKeyRef.current = null;
-    setIsAttachingLiveTranscript(false);
+    dispatchLocalState({ type: "attachUnavailable" });
   }, [liveTranscriptAttachKey]);
 
   useEffect(() => {
@@ -277,8 +347,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     }
 
     attachLiveTranscriptKeyRef.current = liveTranscriptAttachKey;
-    setIsAttachingLiveTranscript(true);
-    setLiveTranscriptAttachError(null);
+    dispatchLocalState({ type: "attachStarted" });
 
     void attachRuntimeTranscriptSession({
       repoPath: activeWorkspace.repoPath,
@@ -297,9 +366,10 @@ export function useReadonlySessionTranscriptSurfaceModel({
           return;
         }
         attachLiveTranscriptKeyRef.current = null;
-        setLiveTranscriptAttachError(
-          errorMessageFromUnknown(error, "Failed to attach live transcript."),
-        );
+        dispatchLocalState({
+          type: "attachFailed",
+          error: errorMessageFromUnknown(error, "Failed to attach live transcript."),
+        });
       })
       .finally(() => {
         if (
@@ -308,7 +378,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
         ) {
           return;
         }
-        setIsAttachingLiveTranscript(false);
+        dispatchLocalState({ type: "attachFinished" });
       });
   }, [
     activeWorkspace,
@@ -445,14 +515,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
         throw new Error("Runtime transcript approval target is unavailable.");
       }
       await replyAgentApproval(targetExternalSessionId, requestId, outcome);
-      setRepliedRuntimeApprovalRequestIds((current) => {
-        if (current.has(requestId)) {
-          return current;
-        }
-        const next = new Set(current);
-        next.add(requestId);
-        return next;
-      });
+      dispatchLocalState({ type: "approvalReplied", requestId });
     },
     [replyAgentApproval],
   );
@@ -469,23 +532,12 @@ export function useReadonlySessionTranscriptSurfaceModel({
       if (!activeQuestionSessionId) {
         throw new Error("Runtime transcript question target is unavailable.");
       }
-      setIsSubmittingQuestionByRequestId((current) => ({ ...current, [requestId]: true }));
+      dispatchLocalState({ type: "questionSubmitStarted", requestId });
       try {
         await answerAgentQuestion(activeQuestionSessionId, requestId, answers);
-        setRepliedRuntimeQuestionRequestIds((current) => {
-          if (current.has(requestId)) {
-            return current;
-          }
-          const next = new Set(current);
-          next.add(requestId);
-          return next;
-        });
+        dispatchLocalState({ type: "questionReplied", requestId });
       } finally {
-        setIsSubmittingQuestionByRequestId((current) => {
-          const next = { ...current };
-          delete next[requestId];
-          return next;
-        });
+        dispatchLocalState({ type: "questionSubmitFinished", requestId });
       }
     },
     [activeQuestionSessionId, answerAgentQuestion],

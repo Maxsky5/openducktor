@@ -18,7 +18,7 @@ const NotFoundPage = lazy(loadNotFoundPage);
 function RouteFallback(): ReactElement {
   return (
     <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
-      Loading page...
+      Loading page…
     </div>
   );
 }
@@ -33,7 +33,7 @@ function KanbanRouteFallback(): ReactElement {
         </div>
       </div>
       <section className="relative min-h-0 min-w-0 flex-1" aria-busy="true">
-        <KanbanBoardLoadingShell label="Loading tasks..." testId="kanban-route-loading-overlay" />
+        <KanbanBoardLoadingShell label="Loading tasks…" testId="kanban-route-loading-overlay" />
       </section>
     </div>
   );

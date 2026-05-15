@@ -35,11 +35,12 @@ jobs:
           fetch-depth: 0
 
       - name: Run React Doctor
-        uses: millionco/react-doctor@53fa4dffe837e0157fb850fef700fccaaec191ea # main
+        uses: millionco/react-doctor@bfaf9c9530a9f8761df6e2d69abcf44c1699ff77 # main
         with:
-          project: "@openducktor/frontend"
+          project: "@openducktor/frontend,@openducktor/electron"
           diff: ${{ github.base_ref }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          fail-on: warning
 
   bun-quality:
     name: Bun Quality (lint, typecheck, test, build)

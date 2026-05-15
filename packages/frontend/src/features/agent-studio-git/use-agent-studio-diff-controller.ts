@@ -132,6 +132,12 @@ export function useAgentStudioDiffController({
       version,
       workingDir: nextWorkingDir,
     }: InFlightRequestContext): Promise<void> => {
+      if (
+        hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) ||
+        !shouldApplyResult(scope, "summary", version)
+      ) {
+        return;
+      }
       const summary = await loadWorktreeStatusSummaryFromQuery(
         appQueryClient,
         activeRepoPath,
@@ -140,27 +146,24 @@ export function useAgentStudioDiffController({
         nextWorkingDir,
       );
 
-      if (hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir)) {
-        return;
-      }
-
-      if (!shouldApplyResult(scope, "summary", version)) {
-        return;
-      }
-
-      const summaryFields = toScopeSummaryFields(summary);
-      applySummaryResult({
-        loadContext: {
-          repoPath: activeRepoPath,
+      if (
+        !hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) &&
+        shouldApplyResult(scope, "summary", version)
+      ) {
+        const summaryFields = toScopeSummaryFields(summary);
+        applySummaryResult({
+          loadContext: {
+            repoPath: activeRepoPath,
+            scope,
+            targetBranch: activeTargetBranch,
+            workingDir: nextWorkingDir,
+          },
+          markScopeInvalidated,
+          requestSequence,
           scope,
-          targetBranch: activeTargetBranch,
-          workingDir: nextWorkingDir,
-        },
-        markScopeInvalidated,
-        requestSequence,
-        scope,
-        summaryFields,
-      });
+          summaryFields,
+        });
+      }
     },
     [applySummaryResult, hasLoadContextChanged, markScopeInvalidated, shouldApplyResult],
   );
@@ -175,6 +178,12 @@ export function useAgentStudioDiffController({
       version,
       workingDir: nextWorkingDir,
     }: InFlightRequestContext & { force?: boolean }): Promise<void> => {
+      if (
+        hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) ||
+        !shouldApplyResult(scope, "full", version)
+      ) {
+        return;
+      }
       const snapshot = await loadWorktreeStatusFromQuery(
         appQueryClient,
         activeRepoPath,
@@ -184,20 +193,17 @@ export function useAgentStudioDiffController({
         { force },
       );
 
-      if (hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir)) {
-        return;
+      if (
+        !hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) &&
+        shouldApplyResult(scope, "full", version)
+      ) {
+        applyFullResult({
+          clearScopeInvalidation,
+          requestSequence,
+          scope,
+          snapshot: toScopeSnapshot(snapshot),
+        });
       }
-
-      if (!shouldApplyResult(scope, "full", version)) {
-        return;
-      }
-
-      applyFullResult({
-        clearScopeInvalidation,
-        requestSequence,
-        scope,
-        snapshot: toScopeSnapshot(snapshot),
-      });
     },
     [applyFullResult, clearScopeInvalidation, hasLoadContextChanged, shouldApplyResult],
   );

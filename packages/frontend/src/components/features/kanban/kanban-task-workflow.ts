@@ -126,9 +126,12 @@ const filterEnabledActions = (
 
   const includeSet = options.include ? new Set(options.include) : null;
   let enabled: TaskWorkflowAction[] = dedupeActions(
-    task.availableActions
-      .filter(isWorkflowAction)
-      .filter((action) => (includeSet ? includeSet.has(action) : true)),
+    task.availableActions.reduce<TaskWorkflowAction[]>((actions, action) => {
+      if (isWorkflowAction(action) && (!includeSet || includeSet.has(action))) {
+        actions.push(action);
+      }
+      return actions;
+    }, []),
   );
 
   if (options.hasActiveSession) {
@@ -136,8 +139,14 @@ const filterEnabledActions = (
   }
 
   const historicalSessionViewActions: TaskWorkflowAction[] = dedupeActions(
-    (options.historicalSessionRoles ?? []).map(toRoleSessionViewAction),
-  ).filter((action) => (includeSet ? includeSet.has(action) : true));
+    (options.historicalSessionRoles ?? []).reduce<TaskWorkflowAction[]>((actions, role) => {
+      const action = toRoleSessionViewAction(role);
+      if (!includeSet || includeSet.has(action)) {
+        actions.push(action);
+      }
+      return actions;
+    }, []),
+  );
 
   enabled = dedupeActions([...enabled, ...historicalSessionViewActions]);
 

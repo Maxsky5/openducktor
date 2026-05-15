@@ -132,6 +132,11 @@ export function useRepoNavigationPersistence({
       return false;
     }
   }, [flushPendingContextPersist, surfacePersistenceWriteError]);
+  const tryFlushPendingContextPersistRef = useRef(tryFlushPendingContextPersist);
+
+  useEffect(() => {
+    tryFlushPendingContextPersistRef.current = tryFlushPendingContextPersist;
+  }, [tryFlushPendingContextPersist]);
 
   useEffect(() => {
     if (lastWorkspaceIdRef.current === activeWorkspaceId) {
@@ -274,18 +279,21 @@ export function useRepoNavigationPersistence({
 
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === "hidden") {
-        tryFlushPendingContextPersist();
+        tryFlushPendingContextPersistRef.current();
       }
     };
+    const handlePageHide = (): void => {
+      tryFlushPendingContextPersistRef.current();
+    };
 
-    window.addEventListener("pagehide", tryFlushPendingContextPersist);
+    window.addEventListener("pagehide", handlePageHide);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener("pagehide", tryFlushPendingContextPersist);
+      window.removeEventListener("pagehide", handlePageHide);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [tryFlushPendingContextPersist]);
+  }, []);
 
   return {
     isRepoNavigationBoundaryPending,

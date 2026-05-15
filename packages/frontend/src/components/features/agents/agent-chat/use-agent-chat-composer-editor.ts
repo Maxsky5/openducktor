@@ -9,7 +9,6 @@ import {
   useCallback,
   useRef,
 } from "react";
-import { flushSync } from "react-dom";
 import {
   type AgentChatComposerDraft,
   applyComposerDraftEdit,
@@ -120,10 +119,8 @@ export const useAgentChatComposerEditor = ({
       latestDraftRef.current = result.draft;
       rememberSelectionTarget(result.draft, result.focusTarget);
 
-      flushSync(() => {
-        onDraftChange(result.draft);
-        onEditorInput();
-      });
+      onDraftChange(result.draft);
+      onEditorInput();
 
       if (result.focusTarget) {
         const didFocus = focusTextSegment(result.focusTarget.segmentId, result.focusTarget.offset);

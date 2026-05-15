@@ -120,7 +120,7 @@ const orderQuickActions = (
   }
   const fallbackPriority = launchActionPriority.size + 1;
 
-  return [...options].sort((left, right) => {
+  return options.toSorted((left, right) => {
     if (left.launchActionId === "build_rebase_conflict_resolution") {
       return -1;
     }
@@ -190,9 +190,16 @@ export const buildAgentStudioQuickActions = (params: {
     ...(disabledReason ? { disabledReason } : {}),
   });
 
-  const options: AgentStudioQuickActionOption[] = workflowActionOrder
-    .map(createLifecycleOption)
-    .filter((option): option is AgentStudioQuickActionOption => option !== null);
+  const options = workflowActionOrder.reduce<AgentStudioQuickActionOption[]>(
+    (nextOptions, action) => {
+      const option = createLifecycleOption(action);
+      if (option) {
+        nextOptions.push(option);
+      }
+      return nextOptions;
+    },
+    [],
+  );
 
   if (params.hasActiveGitConflict && params.roleEnabledByTask.build) {
     options.push({

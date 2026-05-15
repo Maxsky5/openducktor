@@ -128,9 +128,15 @@ const createAssistantTurnTimingFieldBridge = <K extends keyof AssistantTurnTimin
           return true;
         },
         ownKeys: () =>
-          Object.entries(stateRef.current.assistantTurnTimingBySession)
-            .filter(([, timing]) => timing[field] !== undefined)
-            .map(([externalSessionId]) => externalSessionId),
+          Object.entries(stateRef.current.assistantTurnTimingBySession).reduce<string[]>(
+            (externalSessionIds, [externalSessionId, timing]) => {
+              if (timing[field] !== undefined) {
+                externalSessionIds.push(externalSessionId);
+              }
+              return externalSessionIds;
+            },
+            [],
+          ),
         getOwnPropertyDescriptor: (_target, property) => {
           if (typeof property !== "string") {
             return undefined;

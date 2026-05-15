@@ -49,8 +49,10 @@ describe("system queries", () => {
     );
     const hostClient = { systemListOpenInTools };
 
-    const first = await loadOpenInToolsFromQuery(queryClient, hostClient);
-    const refreshed = await refreshOpenInToolsFromQuery(queryClient, hostClient);
+    const [first, refreshed] = await Promise.all([
+      loadOpenInToolsFromQuery(queryClient, hostClient),
+      refreshOpenInToolsFromQuery(queryClient, hostClient),
+    ]);
 
     expect(first[0]?.toolId).toBe("finder");
     expect(refreshed[0]?.toolId).toBe("zed");
