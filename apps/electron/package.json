@@ -23,6 +23,7 @@
     "package": "bun run package:unsigned",
     "package:unsigned": "bun run prepare:sidecars && bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.yml -c.mac.notarize=false --publish never",
     "package:release": "bun run prepare:sidecars && bun run build && electron-builder --config electron-builder.yml --publish never",
+    "release:artifact": "bun run scripts/build-release-artifact.ts",
     "preview": "electron dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests --timeout 1000",
