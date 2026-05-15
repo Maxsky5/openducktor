@@ -1,8 +1,9 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import { removeTestDirectory } from "../../test-support/temp-directory";
 import {
   buildOpenCodeConfigContent,
   createOpenCodeWorkspaceRuntimeStarter,
@@ -140,7 +141,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
 
       await expect(handle.stop()).resolves.toBeUndefined();
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await removeTestDirectory(root);
     }
   });
 });

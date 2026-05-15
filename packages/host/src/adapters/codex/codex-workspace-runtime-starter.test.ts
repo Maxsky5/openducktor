@@ -1,8 +1,9 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 import {
   buildCodexMcpConfigArgs,
@@ -199,7 +200,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       } else {
         process.env.CODEX_CAPTURE_PATH = originalCapturePath;
       }
-      await rm(root, { recursive: true, force: true });
+      await removeTestDirectory(root);
     }
   });
 
@@ -260,7 +261,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
 
       await handle.stop();
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await removeTestDirectory(root);
     }
   });
 });

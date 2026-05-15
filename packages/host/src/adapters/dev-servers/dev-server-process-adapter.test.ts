@@ -23,7 +23,7 @@ describe("createDevServerProcessAdapter", () => {
     });
 
     const handle = await port.start({
-      command: bunEvalCommand("process.stdout.write('ready'); setTimeout(() => {}, 5000);"),
+      command: bunEvalCommand("process.stdout.write('ready'); setInterval(function() {}, 5000);"),
       cwd: process.cwd(),
       onExit: (exit) => exits.push(exit),
       onOutput: (output) => outputs.push(output.data),
