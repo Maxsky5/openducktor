@@ -11,7 +11,14 @@ import type {
   AgentModelCatalog,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
-import { type Context, createContext, type Dispatch, type SetStateAction, use } from "react";
+import {
+  type Context,
+  createContext,
+  type Dispatch,
+  type SetStateAction,
+  use,
+  useMemo,
+} from "react";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type {
   ActiveWorkspace,
@@ -136,17 +143,29 @@ export const useChecksOperationsContext = (): ChecksOperationsContextValue =>
 export const useRuntimeDefinitionsContext = (): RuntimeDefinitionsContextValue =>
   useRequiredContext(RuntimeDefinitionsContext, "useRuntimeDefinitionsContext");
 
-export type RuntimeAvailabilityContextValue = RuntimeDefinitionsContextValue & {
+export type RuntimeAvailabilityContextValue = Omit<
+  RuntimeDefinitionsContextValue,
+  "runtimeDefinitions"
+> & {
   allRuntimeDefinitions: RuntimeDescriptor[];
 };
 
 export const useRuntimeAvailabilityContext = (): RuntimeAvailabilityContextValue => {
   const runtimeContext = useRuntimeDefinitionsContext();
-  return {
-    ...runtimeContext,
-    allRuntimeDefinitions: runtimeContext.runtimeDefinitions,
-    runtimeDefinitions: runtimeContext.availableRuntimeDefinitions,
-  };
+  return useMemo(
+    () => ({
+      availableRuntimeDefinitions: runtimeContext.availableRuntimeDefinitions,
+      allRuntimeDefinitions: runtimeContext.runtimeDefinitions,
+      agentRuntimes: runtimeContext.agentRuntimes,
+      isLoadingRuntimeDefinitions: runtimeContext.isLoadingRuntimeDefinitions,
+      runtimeDefinitionsError: runtimeContext.runtimeDefinitionsError,
+      refreshRuntimeDefinitions: runtimeContext.refreshRuntimeDefinitions,
+      loadRepoRuntimeCatalog: runtimeContext.loadRepoRuntimeCatalog,
+      loadRepoRuntimeSlashCommands: runtimeContext.loadRepoRuntimeSlashCommands,
+      loadRepoRuntimeFileSearch: runtimeContext.loadRepoRuntimeFileSearch,
+    }),
+    [runtimeContext],
+  );
 };
 
 export const useTaskDataContext = (): TaskDataContextValue =>

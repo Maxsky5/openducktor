@@ -13,7 +13,6 @@ import {
   getAvailableRuntimeDefinitionsForStartMode,
   getMissingMandatoryRuntimeCapabilities,
   getRuntimeDescriptorCapabilityConfigErrors,
-  resolveAvailableRuntimeKindSelection,
   resolveRuntimeKindSelection,
   resolveRuntimeKindSelectionState,
   runtimeSupportsCapability,
@@ -369,17 +368,6 @@ describe("agent-runtime capability policies", () => {
         },
       }).map((definition) => definition.kind),
     ).toEqual(["codex"]);
-
-    expect(
-      resolveAvailableRuntimeKindSelection({
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
-        agentRuntimes: {
-          opencode: { enabled: true },
-          codex: { enabled: false },
-        },
-        requestedRuntimeKind: "codex",
-      }),
-    ).toBeNull();
 
     expect(
       getAvailableRuntimeDefinitionsForStartMode({

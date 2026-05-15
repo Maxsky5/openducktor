@@ -52,9 +52,11 @@ export function AppRuntimeProvider({
     isPending: isLoadingRuntimeDefinitions,
     refetch,
   } = useQuery(runtimeDefinitionsQueryOptions());
-  const { data: settingsSnapshot, isPending: isLoadingSettingsSnapshot } = useQuery(
-    settingsSnapshotQueryOptions(),
-  );
+  const {
+    data: settingsSnapshot,
+    error: settingsSnapshotError,
+    isPending: isLoadingSettingsSnapshot,
+  } = useQuery(settingsSnapshotQueryOptions());
 
   const activeWorkspaceValue = useMemo<ActiveWorkspaceContextValue>(
     () => ({
@@ -64,7 +66,11 @@ export function AppRuntimeProvider({
     [activeWorkspace],
   );
 
-  const runtimeDefinitionsError = error ? errorMessage(error) : null;
+  const runtimeDefinitionsError = error
+    ? errorMessage(error)
+    : settingsSnapshotError
+      ? `Failed to load runtime settings: ${errorMessage(settingsSnapshotError)}`
+      : null;
   const agentRuntimes = settingsSnapshot?.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES;
   const availableRuntimeDefinitions = useMemo(
     () =>

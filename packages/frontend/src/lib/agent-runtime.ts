@@ -119,25 +119,6 @@ export const resolveRuntimeKindSelection = (
   return resolveRuntimeKindSelectionState(input).runtimeKind;
 };
 
-export const resolveAvailableRuntimeKindSelection = ({
-  runtimeDefinitions,
-  agentRuntimes,
-  requestedRuntimeKind,
-}: {
-  runtimeDefinitions: RuntimeDescriptor[];
-  agentRuntimes: AgentRuntimes;
-  requestedRuntimeKind: RuntimeKind | null;
-}): RuntimeKind | null => {
-  const availableRuntimeDefinitions = getAvailableRuntimeDefinitions({
-    runtimeDefinitions,
-    agentRuntimes,
-  });
-  return resolveRuntimeKindSelection({
-    runtimeDefinitions: availableRuntimeDefinitions,
-    requestedRuntimeKind,
-  });
-};
-
 export const runtimeLabelFor = ({
   runtimeDefinitions,
   runtimeKind,

@@ -109,7 +109,8 @@ export function useAgentStudioChatComposer({
 }: UseAgentStudioChatComposerArgs): AgentStudioChatComposerState {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const {
-    runtimeDefinitions,
+    availableRuntimeDefinitions,
+    allRuntimeDefinitions,
     loadRepoRuntimeCatalog,
     loadRepoRuntimeSlashCommands,
     loadRepoRuntimeFileSearch,
@@ -145,8 +146,13 @@ export function useAgentStudioChatComposer({
     if (!runtimeKind) {
       return null;
     }
-    return findRuntimeDefinition(runtimeDefinitions, runtimeKind) ? selection : null;
-  }, [repoSettings?.agentDefaults, repoSettings?.defaultRuntimeKind, role, runtimeDefinitions]);
+    return findRuntimeDefinition(availableRuntimeDefinitions, runtimeKind) ? selection : null;
+  }, [
+    availableRuntimeDefinitions,
+    repoSettings?.agentDefaults,
+    repoSettings?.defaultRuntimeKind,
+    role,
+  ]);
   const {
     draftSelection,
     isAwaitingRepoSettingsForWorkspaceRepoPath,
@@ -160,7 +166,7 @@ export function useAgentStudioChatComposer({
       roleDefaultSelection,
       repoDefaultRuntimeKind:
         repoSettings?.defaultRuntimeKind &&
-        findRuntimeDefinition(runtimeDefinitions, repoSettings.defaultRuntimeKind)
+        findRuntimeDefinition(availableRuntimeDefinitions, repoSettings.defaultRuntimeKind)
           ? repoSettings.defaultRuntimeKind
           : null,
     });
@@ -169,7 +175,7 @@ export function useAgentStudioChatComposer({
     draftSelection,
     repoSettings?.defaultRuntimeKind,
     roleDefaultSelection,
-    runtimeDefinitions,
+    availableRuntimeDefinitions,
   ]);
   const activeSessionRuntimeQueryState = useMemo(
     () =>
@@ -194,20 +200,35 @@ export function useAgentStudioChatComposer({
   const { runtimeSupportsSlashCommands, supportsFileSearch } = useMemo(
     () =>
       resolveRuntimePromptInputSupport({
-        runtimeDefinitions,
+        runtimeDefinitions: hasActiveSession ? allRuntimeDefinitions : availableRuntimeDefinitions,
         readyActiveSessionRuntimeKind: activeSessionRuntimeQueryInput?.runtimeKind ?? null,
         selectedRuntimeKind,
       }),
-    [activeSessionRuntimeQueryInput?.runtimeKind, selectedRuntimeKind, runtimeDefinitions],
+    [
+      activeSessionRuntimeQueryInput?.runtimeKind,
+      allRuntimeDefinitions,
+      availableRuntimeDefinitions,
+      hasActiveSession,
+      selectedRuntimeKind,
+    ],
   );
   const supportsProfiles = useMemo(() => {
     const runtimeKind = hasActiveSession ? activeSessionRuntimeKind : selectedRuntimeKind;
     if (!runtimeKind) {
       return true;
     }
+    const runtimeDefinitions = hasActiveSession
+      ? allRuntimeDefinitions
+      : availableRuntimeDefinitions;
     const definition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
     return definition?.capabilities.optionalSurfaces.supportsProfiles ?? false;
-  }, [activeSessionRuntimeKind, hasActiveSession, runtimeDefinitions, selectedRuntimeKind]);
+  }, [
+    activeSessionRuntimeKind,
+    allRuntimeDefinitions,
+    availableRuntimeDefinitions,
+    hasActiveSession,
+    selectedRuntimeKind,
+  ]);
 
   const composerCatalogQuery = useQuery({
     ...repoRuntimeCatalogQueryOptions(

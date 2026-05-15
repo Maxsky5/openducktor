@@ -19,7 +19,7 @@ import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
   ChecksStateContext,
   useRequiredContext,
-  useRuntimeDefinitionsContext,
+  useRuntimeAvailabilityContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
@@ -138,8 +138,11 @@ export const useSettingsModalController = ({
   } = workspaceState;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeCheck } = checksState;
-  const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
-    useRuntimeDefinitionsContext();
+  const {
+    availableRuntimeDefinitions: runtimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+  } = useRuntimeAvailabilityContext();
 
   const {
     loadedSnapshot,

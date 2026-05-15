@@ -20,8 +20,11 @@ import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 export function DiagnosticsPanel(): ReactElement {
   const { activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
-    useRuntimeAvailabilityContext();
+  const {
+    availableRuntimeDefinitions: runtimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+  } = useRuntimeAvailabilityContext();
   const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
     useChecksOperationsContext();
   const {

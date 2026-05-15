@@ -6,8 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { useMemo } from "react";
 import { getAvailableRuntimeDefinitions, runtimeLabelFor } from "@/lib/agent-runtime";
-
-type RepoRuntimeRole = "spec" | "planner" | "build" | "qa";
+import { ROLE_DEFAULTS } from "./settings-modal-model";
 
 export type RuntimeAvailabilityValidationState = {
   errorsByWorkspaceId: Record<string, string[]>;
@@ -19,13 +18,6 @@ export const EMPTY_RUNTIME_AVAILABILITY_VALIDATION_STATE: RuntimeAvailabilityVal
   errorsByWorkspaceId: {},
   errorCountByWorkspaceId: {},
   totalErrorCount: 0,
-};
-
-const roleLabels: Record<RepoRuntimeRole, string> = {
-  spec: "Spec",
-  planner: "Planner",
-  build: "Builder",
-  qa: "QA",
 };
 
 const findAvailableRuntimeKind = (
@@ -59,7 +51,7 @@ const buildRepoRuntimeAvailabilityErrors = ({
     );
   }
 
-  for (const role of Object.keys(roleLabels) as RepoRuntimeRole[]) {
+  for (const { role, label } of ROLE_DEFAULTS) {
     const roleDefault = repoConfig.agentDefaults[role];
     const runtimeKind = roleDefault?.runtimeKind;
     if (!runtimeKind) {
@@ -69,7 +61,7 @@ const buildRepoRuntimeAvailabilityErrors = ({
       continue;
     }
     errors.push(
-      `${roleLabels[role]} agent runtime "${unavailableRuntimeLabel(allRuntimeDefinitions, runtimeKind)}" is disabled.`,
+      `${label} agent runtime "${unavailableRuntimeLabel(allRuntimeDefinitions, runtimeKind)}" is disabled.`,
     );
   }
 

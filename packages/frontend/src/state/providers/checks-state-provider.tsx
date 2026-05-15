@@ -23,8 +23,7 @@ export function ChecksStateProvider({
   children,
 }: ChecksStateProviderProps): ReactElement {
   const { activeWorkspace } = useActiveWorkspaceContext();
-  const { runtimeDefinitions } = useRuntimeAvailabilityContext();
-  const enabledRuntimeDefinitions = useMemo(() => runtimeDefinitions, [runtimeDefinitions]);
+  const { availableRuntimeDefinitions } = useRuntimeAvailabilityContext();
   const {
     runtimeCheck,
     runtimeCheckFailureKind,
@@ -44,7 +43,7 @@ export function ChecksStateProvider({
     clearActiveRepoRuntimeHealth,
   } = useChecks({
     activeWorkspace,
-    runtimeDefinitions: enabledRuntimeDefinitions,
+    runtimeDefinitions: availableRuntimeDefinitions,
     checkRepoRuntimeHealth,
   });
 

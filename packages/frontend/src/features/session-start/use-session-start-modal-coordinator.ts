@@ -76,7 +76,7 @@ export function useSessionStartModalCoordinator({
   repoSettings,
   initialCatalog,
 }: UseSessionStartModalCoordinatorArgs): UseSessionStartModalCoordinatorResult {
-  const { runtimeDefinitions } = useRuntimeAvailabilityContext();
+  const { availableRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
   const { openStartModal: openRawStartModal, ...modalState } = useSessionStartModalState({
     activeWorkspace,
     branches,
