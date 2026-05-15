@@ -22,6 +22,7 @@ import {
 
 enableReactActEnvironment();
 
+const actualHostClientModule = await import("@/lib/host-client");
 const originalConsoleError = console.error;
 
 const startAgentSessionMock = mock(async () => "session-1");
@@ -645,7 +646,7 @@ describe("KanbanPage session start modal flow", () => {
         "@/features/human-review-feedback/human-review-feedback-modal",
         () => import("@/features/human-review-feedback/human-review-feedback-modal"),
       ],
-      ["@/lib/host-client", () => import("@/lib/host-client")],
+      ["@/lib/host-client", async () => actualHostClientModule],
       ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
     ]);
   });
