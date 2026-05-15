@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   collectReleaseArtifacts,
   detectHostReleaseArch,
@@ -126,7 +126,7 @@ describe("build Electron release artifact", () => {
         releaseDirectory,
       });
 
-      expect(artifacts.map((artifact) => artifact.split("/").at(-1)).sort()).toEqual([
+      expect(artifacts.map((artifact) => basename(artifact)).sort()).toEqual([
         "OpenDucktor-Electron-0.3.1-mac-arm64.dmg",
         "OpenDucktor-Electron-0.3.1-mac-arm64.dmg.blockmap",
         "OpenDucktor-Electron-0.3.1-mac-arm64.zip",
