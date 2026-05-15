@@ -19,32 +19,15 @@ const quoteShellArg = (value: string): string =>
     ? `"${value.replaceAll('"', '""')}"`
     : `'${value.replaceAll("'", "'\\''")}'`;
 
-const createBunScriptCommand = async (
-  root: string,
-  name: string,
-  source: string,
-): Promise<string> => {
-  const scriptPath = join(root, `${name}.js`);
-  await writeFile(scriptPath, source);
-  return `${quoteShellArg(process.execPath)} ${quoteShellArg(scriptPath)}`;
-};
-
 const createShellScriptCommand = async (
   root: string,
   name: string,
   content: string,
 ): Promise<string> => {
-  const scriptPath = join(root, name);
+  const scriptPath = join(root, process.platform === "win32" ? `${name}.cmd` : name);
   await writeFile(scriptPath, content);
   await chmod(scriptPath, 0o755);
   return quoteShellArg(scriptPath);
-};
-
-const createCommandScript = async (root: string, name: string, source: string): Promise<string> => {
-  if (process.platform === "win32") {
-    return createBunScriptCommand(root, name, source);
-  }
-  return createShellScriptCommand(root, name, source);
 };
 
 describe("createDevServerProcessAdapter", () => {
@@ -58,11 +41,11 @@ describe("createDevServerProcessAdapter", () => {
     });
 
     try {
-      const command = await createCommandScript(
+      const command = await createShellScriptCommand(
         root,
         "dev-server",
         process.platform === "win32"
-          ? 'process.stdout.write("ready"); setTimeout(function() { process.exit(0); }, 5000);\n'
+          ? "@echo off\r\n<nul set /p=ready\r\nping -n 6 127.0.0.1 >nul\r\n"
           : "#!/bin/sh\nprintf ready\nsleep 5\n",
       );
 
@@ -96,10 +79,10 @@ describe("createDevServerProcessAdapter", () => {
     });
 
     try {
-      const command = await createCommandScript(
+      const command = await createShellScriptCommand(
         root,
         "exit-server",
-        process.platform === "win32" ? "process.exit(42);\n" : "#!/bin/sh\nexit 42\n",
+        process.platform === "win32" ? "@exit /b 42\r\n" : "#!/bin/sh\nexit 42\n",
       );
 
       await expect(

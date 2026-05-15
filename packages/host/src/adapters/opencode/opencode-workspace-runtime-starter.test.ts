@@ -43,7 +43,7 @@ process.on("SIGINT", stop);
 `,
   );
   if (process.platform === "win32") {
-    await writeFile(executable, `@echo off\r\nbun "%~dp0opencode.mjs" %*\r\n`);
+    await writeFile(executable, `@echo off\r\nnode "%~dp0opencode.mjs" %*\r\n`);
   } else {
     await writeFile(executable, `#!/bin/sh\nexec bun "$(dirname "$0")/opencode.mjs" "$@"\n`);
   }

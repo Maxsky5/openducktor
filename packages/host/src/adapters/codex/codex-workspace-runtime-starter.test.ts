@@ -25,7 +25,6 @@ const createSystemCommands = (): SystemCommandPort => ({
 const createFakeCodex = async (root: string): Promise<string> => {
   const scriptPath = join(root, "codex.mjs");
   const executable = join(root, process.platform === "win32" ? "codex.cmd" : "codex");
-  const bunExecutable = process.execPath.replaceAll('"', '""');
   await writeFile(
     scriptPath,
     `import { createInterface } from "node:readline";
@@ -78,7 +77,7 @@ process.on("SIGINT", stop);
 `,
   );
   if (process.platform === "win32") {
-    await writeFile(executable, `@echo off\r\n"${bunExecutable}" "%~dp0codex.mjs" %*\r\n`);
+    await writeFile(executable, `@echo off\r\nnode "%~dp0codex.mjs" %*\r\n`);
   } else {
     await writeFile(executable, `#!/bin/sh\nexec bun "$(dirname "$0")/codex.mjs" "$@"\n`);
   }
