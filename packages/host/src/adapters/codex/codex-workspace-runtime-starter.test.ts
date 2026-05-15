@@ -22,7 +22,10 @@ const createSystemCommands = (): SystemCommandPort => ({
   },
 });
 
-const createFakeCodex = async (root: string): Promise<string> => {
+const createFakeCodex = async (
+  root: string,
+  { emitStreamEvents = false }: { emitStreamEvents?: boolean } = {},
+): Promise<string> => {
   const scriptPath = join(root, "codex.mjs");
   const executable = join(root, process.platform === "win32" ? "codex.cmd" : "codex");
   await writeFile(
@@ -31,6 +34,7 @@ const createFakeCodex = async (root: string): Promise<string> => {
 import { writeFileSync } from "node:fs";
 
 const capturePath = process.env.CODEX_CAPTURE_PATH;
+const emitStreamEvents = ${JSON.stringify(emitStreamEvents)};
 const capture = {
   args: process.argv.slice(2),
   env: {
@@ -63,8 +67,10 @@ lines.on("line", (line) => {
     return;
   }
   if (message.method === "initialized") {
-    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "codex/app-server/ready", params: { threadId: "thread-1" } }) + "\\n");
-    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: 99, method: "item/tool/call", params: { threadId: "thread-1" } }) + "\\n");
+    if (emitStreamEvents) {
+      process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "codex/app-server/ready", params: { threadId: "thread-1" } }) + "\\n");
+      process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: 99, method: "item/tool/call", params: { threadId: "thread-1" } }) + "\\n");
+    }
     return;
   }
   if (message.id !== undefined) {
@@ -209,7 +215,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
-      const codexBinary = await createFakeCodex(root);
+      const codexBinary = await createFakeCodex(root, { emitStreamEvents: true });
       const codexAppServer = createCodexAppServerTransportRegistry();
       const events: unknown[] = [];
       const starter = createCodexWorkspaceRuntimeStarter({
