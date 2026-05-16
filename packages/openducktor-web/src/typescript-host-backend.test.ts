@@ -19,6 +19,13 @@ describe("TypeScript web host backend", () => {
       frontendOrigin: FRONTEND_ORIGIN,
       controlToken: CONTROL_TOKEN,
       appToken: APP_TOKEN,
+      hostCommandRouter: {
+        dispose: async () => {},
+        invoke: async (command) => {
+          expect(command).toBe("runtime_definitions_list");
+          return [{ kind: "opencode" }, { kind: "codex" }];
+        },
+      },
     });
     const backendUrl = `http://127.0.0.1:${backend.port}`;
 
@@ -54,7 +61,7 @@ describe("TypeScript web host backend", () => {
     } finally {
       await backend.stop();
     }
-  }, 5_000);
+  });
 
   test("rejects invalid browser frontend origins before opening a host port", () => {
     const { validateWebFrontendOrigin } = __typescriptHostBackendTestInternals;
