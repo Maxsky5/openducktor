@@ -394,7 +394,7 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
   const backendUrl = buildBackendUrl(options.backendPort);
   const controlToken = randomUUID();
   const appToken = randomUUID();
-  const hostBackend = startTypescriptHostBackend({
+  const hostBackend = await startTypescriptHostBackend({
     port: options.backendPort,
     frontendOrigin: frontendUrl,
     controlToken,

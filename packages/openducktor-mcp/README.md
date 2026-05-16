@@ -2,14 +2,14 @@
 
 OpenDucktor MCP server for local workspace task workflows.
 
-The MCP package is a thin client of the running Rust host.
+The MCP package is a thin client of the running OpenDucktor host.
 
 The published package is intentionally a standalone CLI/server package. It does not expose a supported JavaScript or TypeScript library API from `@openducktor/mcp`.
 
-Desktop-managed sessions launch this same package as a sidecar. In both desktop-managed and standalone use, the package validates `odt_*` inputs and forwards them to the Rust host bridge instead of talking to Beads or Dolt directly.
+Desktop-managed sessions launch this same package as a sidecar. In both desktop-managed and standalone use, the package validates `odt_*` inputs and forwards them to the host bridge instead of talking to Beads or Dolt directly.
 
 - Desktop-managed launches receive `ODT_HOST_URL` from the host automatically.
-- Standalone use auto-discovers a running host bridge from the local registry.
+- Standalone use auto-discovers the current host bridge from the local discovery file.
 - `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
 
 For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-lifecycle.md`.
@@ -59,15 +59,14 @@ Equivalent environment variables:
 
 Automatic discovery:
 
-- The MCP reads bridge ports from `runtime/mcp-bridge-ports.json` under the OpenDucktor config directory.
+- The MCP reads the current host bridge from `runtime/mcp-bridge.json` under the OpenDucktor config directory.
 - The default config directory is `~/.openducktor`.
-- If `OPENDUCKTOR_CONFIG_DIR` is set, discovery uses `<OPENDUCKTOR_CONFIG_DIR>/runtime/mcp-bridge-ports.json` instead.
+- If `OPENDUCKTOR_CONFIG_DIR` is set, discovery uses `<OPENDUCKTOR_CONFIG_DIR>/runtime/mcp-bridge.json` instead.
 
 Startup behavior:
 
 - The MCP uses `ODT_HOST_URL` or `--host-url` first when provided.
-- Otherwise it discovers host ports from the local registry and tries them in registry order.
-- The desktop host keeps the current bridge at the front of that registry so discovery prefers the freshest running host.
+- Otherwise it discovers the current host bridge from the local discovery file.
 - It checks the host bridge `/health` endpoint.
 - It calls `odt_mcp_ready` before serving requests.
 - Startup fails if the host does not expose the full ODT tool surface.
@@ -75,7 +74,7 @@ Startup behavior:
 - When both a startup default and a tool-input `workspaceId` are present, the tool input wins.
 - Workspace-scoped tools fail fast with an explicit error when neither a startup default nor a tool-input `workspaceId` is available.
 
-The Rust host owns Beads attachment verification, shared Dolt lifecycle, workflow transitions, and document persistence. This package owns MCP transport and schema validation only.
+The OpenDucktor host owns Beads attachment verification, shared Dolt lifecycle, workflow transitions, and document persistence. This package owns MCP transport and schema validation only.
 
 ## Public Tools
 
@@ -207,8 +206,8 @@ Use `odt_read_task_documents` only when you need document bodies:
 - Missing spec and plan return empty markdown with `updatedAt: null`.
 - Missing latest QA report returns empty markdown with `updatedAt: null` and `verdict: "not_reviewed"`.
 - Legacy markdown-only metadata remains readable.
-- New or updated workflow documents are stored by the Rust host as `encoding: "gzip-base64-v1"` plus a base64-gzip payload in `markdown`.
-- Successful MCP reads still return plain markdown because the Rust host owns the encode/decode translation.
+- New or updated workflow documents are stored by the OpenDucktor host as `encoding: "gzip-base64-v1"` plus a base64-gzip payload in `markdown`.
+- Successful MCP reads still return plain markdown because the OpenDucktor host owns the encode/decode translation.
 - When the latest stored document cannot be decoded, the returned document includes an optional `error` field with the host-supplied decode failure.
 - There is no automatic backfill migration for older markdown-only entries.
 

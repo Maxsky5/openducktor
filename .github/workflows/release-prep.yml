@@ -162,12 +162,19 @@ jobs:
           gh release create "$TAG" --draft --title "OpenDucktor v$VERSION" --generate-notes
           echo "status=created" >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch desktop publish workflow
+      - name: Dispatch Tauri desktop publish workflow
         env:
           DEFAULT_BRANCH: ${{ env.DEFAULT_BRANCH }}
           GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
           VERSION: ${{ inputs.version }}
-        run: gh workflow run release-desktop.yml --ref "$DEFAULT_BRANCH" -f tag="v$VERSION"
+        run: gh workflow run release-desktop-tauri.yml --ref "$DEFAULT_BRANCH" -f tag="v$VERSION"
+
+      - name: Dispatch Electron desktop publish workflow
+        env:
+          DEFAULT_BRANCH: ${{ env.DEFAULT_BRANCH }}
+          GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: gh workflow run release-desktop-electron.yml --ref "$DEFAULT_BRANCH" -f tag="v$VERSION"
 
       - name: Dispatch MCP publish workflow
         env:
@@ -194,5 +201,5 @@ jobs:
             echo "- Release commit created on default branch"
             echo "- Release tag pushed: v$VERSION"
             echo "- Draft GitHub release ${DRAFT_RELEASE_STATUS:-verified} with generated notes"
-            echo "- Dispatched workflows: Release Desktop, Publish MCP Package, Publish Web Package"
+            echo "- Dispatched workflows: Release Desktop Tauri, Release Desktop Electron, Publish MCP Package, Publish Web Package"
           } >> "$GITHUB_STEP_SUMMARY"

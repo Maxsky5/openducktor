@@ -29,6 +29,7 @@ impl Drop for TempPath {
 }
 
 pub(super) fn git_available() -> bool {
+    let _env_lock = host_test_support::lock_env();
     Command::new("git")
         .arg("--version")
         .stdout(Stdio::null())
@@ -39,6 +40,7 @@ pub(super) fn git_available() -> bool {
 }
 
 fn run_git(cwd: &Path, args: &[&str]) -> Output {
+    let _env_lock = host_test_support::lock_env();
     Command::new("git")
         .args(args)
         .current_dir(cwd)

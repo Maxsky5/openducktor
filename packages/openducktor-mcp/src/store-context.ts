@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { OdtHostBridgeClient } from "./host-bridge-client";
-import { normalizeOptionalInput, resolveMcpBridgeRegistryPath } from "./path-utils";
+import { normalizeOptionalInput, resolveMcpBridgeDiscoveryPath } from "./path-utils";
 
 const FORBID_WORKSPACE_ID_INPUT_ENV = "ODT_FORBID_WORKSPACE_ID_INPUT";
 const HOST_TOKEN_ENV = "ODT_HOST_TOKEN";
@@ -23,14 +23,9 @@ export type OdtStoreContext = {
   databaseName?: string;
 };
 
-type DiscoveredBridge = {
-  port: number;
-  hostToken?: string;
-};
-
 type DiscoveredHostConnection = {
   hostUrl: string;
-  hostToken?: string;
+  hostToken: string;
 };
 
 const rejectLegacyContract = (context: OdtStoreContext): void => {
@@ -65,7 +60,7 @@ const rejectLegacyContract = (context: OdtStoreContext): void => {
       .map(([name]) => name)
       .join(
         ", ",
-      )} and use the host bridge discovery path or ODT_HOST_URL instead. Metadata namespace is now owned by the Rust host.`,
+      )} and use the host bridge discovery path or ODT_HOST_URL instead. Metadata namespace is now owned by the OpenDucktor host.`,
   );
 };
 
@@ -116,121 +111,92 @@ const validateConfiguredWorkspace = async (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
-const parseDiscoveredBridges = (payload: string, registryPath: string): DiscoveredBridge[] => {
+const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredHostConnection => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(payload);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Failed parsing the OpenDucktor MCP discovery registry at ${registryPath}: ${reason}`,
+      `Failed parsing the OpenDucktor MCP discovery file at ${discoveryPath}: ${reason}`,
     );
   }
 
-  if (!isRecord(parsed) || !Array.isArray(parsed.ports)) {
+  if (!isRecord(parsed)) {
     throw new Error(
-      `Invalid OpenDucktor MCP discovery registry at ${registryPath}: expected a JSON object with a ports array.`,
+      `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: expected a JSON object.`,
     );
   }
+  const hostUrl =
+    typeof parsed.hostUrl === "string" ? normalizeOptionalInput(parsed.hostUrl) : undefined;
+  const hostToken =
+    typeof parsed.hostToken === "string" ? normalizeOptionalInput(parsed.hostToken) : undefined;
 
-  const bridgeTokens = parsed.bridgeTokens;
-  if (bridgeTokens !== undefined && !isRecord(bridgeTokens)) {
+  if (hostUrl === undefined) {
     throw new Error(
-      `Invalid OpenDucktor MCP discovery registry at ${registryPath}: bridgeTokens must be an object when present.`,
+      `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,
+    );
+  }
+  if (hostToken === undefined) {
+    throw new Error(
+      `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostToken must be a non-empty string.`,
+    );
+  }
+  const pid = parsed.pid;
+  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
+    throw new Error(
+      `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: pid must be a positive integer.`,
     );
   }
 
-  const ports = parsed.ports.map((port) => {
-    if (!Number.isInteger(port)) {
-      throw new Error(
-        `Invalid OpenDucktor MCP discovery registry at ${registryPath}: ports must be integers between 1 and 65535.`,
-      );
-    }
-
-    const numericPort = port as number;
-    if (numericPort < 1 || numericPort > 65535) {
-      throw new Error(
-        `Invalid OpenDucktor MCP discovery registry at ${registryPath}: ports must be integers between 1 and 65535.`,
-      );
-    }
-    return numericPort;
-  });
-
-  const discoveredBridges: DiscoveredBridge[] = [];
-  const seen = new Set<number>();
-  for (const port of ports) {
-    if (seen.has(port)) {
-      continue;
-    }
-    seen.add(port);
-    const token = bridgeTokens?.[String(port)];
-    if (token !== undefined && typeof token !== "string") {
-      throw new Error(
-        `Invalid OpenDucktor MCP discovery registry at ${registryPath}: bridgeTokens entries must be strings.`,
-      );
-    }
-    const normalizedToken = normalizeOptionalInput(token);
-    discoveredBridges.push({
-      port,
-      ...(normalizedToken ? { hostToken: normalizedToken } : {}),
-    });
-  }
-
-  return discoveredBridges;
+  return {
+    hostToken,
+    hostUrl,
+  };
 };
 
 const discoverHostConnection = async (
   workspaceId?: string,
   hostToken?: string,
 ): Promise<DiscoveredHostConnection> => {
-  const registryPath = resolveMcpBridgeRegistryPath();
+  const discoveryPath = resolveMcpBridgeDiscoveryPath();
 
-  let registryPayload: string;
+  let discoveryPayload: string;
   try {
-    registryPayload = await readFile(registryPath, "utf8");
+    discoveryPayload = await readFile(discoveryPath, "utf8");
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
       throw new Error(
-        `No running OpenDucktor host was discovered. Checked ${registryPath}. Start the OpenDucktor desktop app or provide ODT_HOST_URL to override discovery.`,
+        `No running OpenDucktor host was discovered. Checked ${discoveryPath}. Start the OpenDucktor desktop app or provide ODT_HOST_URL to override discovery.`,
       );
     }
 
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Failed reading the OpenDucktor MCP discovery registry at ${registryPath}: ${reason}`,
+      `Failed reading the OpenDucktor MCP discovery file at ${discoveryPath}: ${reason}`,
     );
   }
 
-  const discoveredBridges = parseDiscoveredBridges(registryPayload, registryPath);
-  if (discoveredBridges.length === 0) {
-    throw new Error(
-      `No running OpenDucktor host was discovered. ${registryPath} does not contain any bridge ports. Start the OpenDucktor desktop app or provide ODT_HOST_URL to override discovery.`,
-    );
-  }
-
-  const failures: string[] = [];
-  for (const bridge of discoveredBridges) {
-    const candidateHostToken = hostToken ?? bridge.hostToken;
-    const port = bridge.port;
-    const hostUrl = `http://127.0.0.1:${port}`;
-    try {
-      await new OdtHostBridgeClient({ baseUrl: hostUrl, appToken: candidateHostToken }).ready();
-      if (workspaceId) {
-        await validateConfiguredWorkspace(hostUrl, workspaceId, candidateHostToken);
-      }
-      return {
-        hostUrl,
-        ...(candidateHostToken ? { hostToken: candidateHostToken } : {}),
-      };
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      failures.push(`${hostUrl}: ${reason}`);
+  const discovered = parseDiscoveryFile(discoveryPayload, discoveryPath);
+  const candidateHostToken = hostToken ?? discovered.hostToken;
+  try {
+    await new OdtHostBridgeClient({
+      baseUrl: discovered.hostUrl,
+      appToken: candidateHostToken,
+    }).ready();
+    if (workspaceId) {
+      await validateConfiguredWorkspace(discovered.hostUrl, workspaceId, candidateHostToken);
     }
+    return {
+      hostToken: candidateHostToken,
+      hostUrl: discovered.hostUrl,
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `No healthy OpenDucktor host was discovered. Checked ${discoveryPath}. ${discovered.hostUrl}: ${reason} Provide ODT_HOST_URL to override discovery.`,
+    );
   }
-
-  throw new Error(
-    `No healthy OpenDucktor host was discovered. Checked ${registryPath}. ${failures.join(" | ")} Provide ODT_HOST_URL to override discovery.`,
-  );
 };
 
 export const resolveStoreContext = async (context: OdtStoreContext): Promise<OdtStoreOptions> => {

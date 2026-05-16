@@ -15,4 +15,4 @@ MCP server package that exposes OpenDucktor workflow tools over stdio and forwar
 ## Integration Points
 - `@openducktor/contracts`
 - `@modelcontextprotocol/sdk`
-- Desktop host bridge discovered via runtime registry or `ODT_HOST_URL`
+- Desktop host bridge discovered via current-host discovery file or `ODT_HOST_URL`

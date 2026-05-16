@@ -181,6 +181,7 @@ app
     installApplicationMenu({ isDevelopment, appName: app.name || APPLICATION_NAME });
     registerIpcHandlers();
     registerHostEventForwarding();
+    await hostCommandRouter.initialize();
     await createMainWindow();
 
     app.on("activate", () => {
@@ -194,7 +195,19 @@ app
   })
   .catch((error: unknown) => {
     electronMainLogger.error("OpenDucktor Electron startup failed", error);
-    process.exit(1);
+    hostShutdownStarted = true;
+    void hostCommandRouter
+      .dispose()
+      .catch((disposeError: unknown) => {
+        electronMainLogger.error(
+          "OpenDucktor host cleanup after startup failure failed",
+          disposeError,
+        );
+      })
+      .finally(() => {
+        hostShutdownComplete = true;
+        process.exit(1);
+      });
   });
 
 app.on("window-all-closed", () => {

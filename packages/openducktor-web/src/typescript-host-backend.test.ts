@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 const nativeResponse = await Bun.fetch("data:,");
 (globalThis as typeof globalThis & { Response: typeof Response }).Response =
@@ -14,15 +17,20 @@ const FRONTEND_ORIGIN = "http://127.0.0.1:1420";
 
 describe("TypeScript web host backend", () => {
   test("serves health, session, invoke, and shutdown through the browser HTTP contract", async () => {
-    const backend = startTypescriptHostBackend({
-      port: 0,
-      frontendOrigin: FRONTEND_ORIGIN,
-      controlToken: CONTROL_TOKEN,
-      appToken: APP_TOKEN,
-    });
-    const backendUrl = `http://127.0.0.1:${backend.port}`;
+    const previousConfigDir = process.env.OPENDUCKTOR_CONFIG_DIR;
+    const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-host-"));
+    process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
+    let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
 
     try {
+      backend = await startTypescriptHostBackend({
+        port: 0,
+        frontendOrigin: FRONTEND_ORIGIN,
+        controlToken: CONTROL_TOKEN,
+        appToken: APP_TOKEN,
+      });
+      const backendUrl = `http://127.0.0.1:${backend.port}`;
+
       const health = await Bun.fetch(`${backendUrl}/health`);
       expect(health.status).toBe(200);
       expect(await health.json()).toEqual({ ok: true });
@@ -52,7 +60,15 @@ describe("TypeScript web host backend", () => {
       expect(shutdown.status).toBe(202);
       await expect(backend.exited).resolves.toBe(0);
     } finally {
-      await backend.stop();
+      if (backend) {
+        await backend.stop();
+      }
+      if (previousConfigDir === undefined) {
+        delete process.env.OPENDUCKTOR_CONFIG_DIR;
+      } else {
+        process.env.OPENDUCKTOR_CONFIG_DIR = previousConfigDir;
+      }
+      await rm(tempConfigDir, { force: true, recursive: true });
     }
   });
 

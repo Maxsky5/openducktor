@@ -417,12 +417,12 @@ const localAttachmentPreviewResponse = async (
   });
 };
 
-export const startTypescriptHostBackend = ({
+export const startTypescriptHostBackend = async ({
   port,
   frontendOrigin,
   controlToken,
   appToken,
-}: TypescriptHostBackendOptions): TypescriptHostBackend => {
+}: TypescriptHostBackendOptions): Promise<TypescriptHostBackend> => {
   const validatedFrontendOrigin = validateWebFrontendOrigin(frontendOrigin);
   const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
   const eventBus = new BufferedHostEventBus();
@@ -580,6 +580,27 @@ export const startTypescriptHostBackend = ({
   if (server.port === undefined) {
     server.stop(true);
     throw new Error("OpenDucktor TypeScript host did not expose a listening port.");
+  }
+
+  try {
+    await hostCommandRouter.initialize();
+  } catch (error) {
+    server.stop(true);
+    try {
+      await hostCommandRouter.dispose();
+    } catch (disposeError) {
+      logError(
+        `Failed to dispose local OpenDucktor host after startup failure: ${
+          disposeError instanceof Error ? disposeError.message : String(disposeError)
+        }`,
+      );
+    }
+    throw new Error(
+      `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      { cause: error },
+    );
   }
 
   return {

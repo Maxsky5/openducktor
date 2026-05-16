@@ -14,4 +14,4 @@ OpenDucktor MCP entrypoint, task-store facade, host bridge client, store-context
 ## Integration Points
 - `@openducktor/contracts`
 - `@modelcontextprotocol/sdk/server/mcp.js`
-- Rust host bridge via runtime-registry discovery or `ODT_HOST_URL`
+- Host bridge via current-host discovery file or `ODT_HOST_URL`

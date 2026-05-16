@@ -8,6 +8,14 @@ import {
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import type { OpenCodeMcpBridgeConnection } from "../opencode/opencode-workspace-runtime-starter";
+import {
+  type McpBridgeDiscoveryFile,
+  removeMcpBridgeDiscoveryFile,
+  resolveMcpBridgeDiscoveryPath,
+  writeMcpBridgeDiscoveryFile,
+} from "./mcp-bridge-discovery-file";
+
+export { resolveMcpBridgeDiscoveryPath } from "./mcp-bridge-discovery-file";
 
 export type McpHostBridgeConnectionInput = {
   repoPath: string;
@@ -15,6 +23,7 @@ export type McpHostBridgeConnectionInput = {
 
 export type McpHostBridgeServer = {
   ensureConnection(input: McpHostBridgeConnectionInput): Promise<OpenCodeMcpBridgeConnection>;
+  ensureExternalDiscoveryReady(): Promise<void>;
   close(): Promise<McpHostBridgeCloseResult>;
 };
 
@@ -25,8 +34,16 @@ export type McpHostBridgeCloseResult = {
 
 export type CreateMcpHostBridgeServerInput = {
   bridgeService: OdtMcpBridgeService;
+  discoveryPath?: string;
   workspaceSettingsService: WorkspaceSettingsService;
   token?: string;
+};
+
+type StartedMcpHostBridge = {
+  baseUrl: string;
+  discovery: McpBridgeDiscoveryFile;
+  port: number;
+  server: Server;
 };
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
@@ -100,90 +117,154 @@ const closeServer = (server: Server): Promise<void> =>
     });
   });
 
+const createBridgeRequestHandler =
+  (bridgeService: OdtMcpBridgeService, token: string) =>
+  async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+    try {
+      if (request.method === "GET" && request.url === "/health") {
+        sendJson(response, 200, { ok: true });
+        return;
+      }
+
+      if (request.method !== "POST" || !request.url?.startsWith("/invoke/")) {
+        sendJson(response, 404, { error: "MCP host bridge endpoint not found." });
+        return;
+      }
+
+      const receivedToken = request.headers[APP_TOKEN_HEADER];
+      if (receivedToken !== token) {
+        sendJson(response, receivedToken === undefined ? 401 : 403, {
+          error:
+            receivedToken === undefined
+              ? "Missing OpenDucktor web host app token."
+              : "Invalid OpenDucktor web host app token.",
+        });
+        return;
+      }
+
+      const command = decodeURIComponent(request.url.slice("/invoke/".length));
+      const body = await readRequestBody(request);
+      if (command === "odt_mcp_ready") {
+        sendJson(response, 200, await bridgeService.ready(body));
+        return;
+      }
+      if (command === "odt_get_workspaces") {
+        sendJson(response, 200, await bridgeService.getWorkspaces(body));
+        return;
+      }
+
+      if (!workspaceScopedToolNames.has(command)) {
+        sendJson(response, 404, { error: `Unknown MCP host bridge command: ${command}` });
+        return;
+      }
+
+      sendJson(
+        response,
+        200,
+        await bridgeService.invoke(command as WorkspaceScopedOdtToolName, body),
+      );
+    } catch (error) {
+      sendJson(response, 400, { error: errorMessage(error) });
+    }
+  };
+
 export const createMcpHostBridgeServer = ({
   bridgeService,
+  discoveryPath = resolveMcpBridgeDiscoveryPath(),
   workspaceSettingsService,
   token = randomUUID(),
 }: CreateMcpHostBridgeServerInput): McpHostBridgeServer => {
   let server: Server | null = null;
   let baseUrl: string | null = null;
+  let publishedDiscovery: McpBridgeDiscoveryFile | null = null;
+  let startupPromise: Promise<{ baseUrl: string; port: number }> | null = null;
 
-  const ensureStarted = async (): Promise<string> => {
-    if (baseUrl) {
-      return baseUrl;
+  const startBridge = async (): Promise<StartedMcpHostBridge> => {
+    const nextServer = createServer(createBridgeRequestHandler(bridgeService, token));
+    const port = await listen(nextServer);
+    const nextBaseUrl = `http://127.0.0.1:${port}`;
+    const discovery: McpBridgeDiscoveryFile = {
+      hostToken: token,
+      hostUrl: nextBaseUrl,
+      pid: process.pid,
+    };
+
+    try {
+      await writeMcpBridgeDiscoveryFile(discoveryPath, discovery);
+    } catch (error) {
+      try {
+        await closeServer(nextServer);
+      } catch (closeError) {
+        throw new Error(
+          `Failed to publish MCP host bridge discovery file and close the unpublished bridge: ${
+            closeError instanceof Error ? closeError.message : String(closeError)
+          }`,
+          { cause: error },
+        );
+      }
+      throw error;
     }
 
-    const nextServer = createServer(async (request, response) => {
-      try {
-        if (request.method === "GET" && request.url === "/health") {
-          sendJson(response, 200, { ok: true });
-          return;
-        }
+    return {
+      baseUrl: nextBaseUrl,
+      discovery,
+      port,
+      server: nextServer,
+    };
+  };
 
-        if (request.method !== "POST" || !request.url?.startsWith("/invoke/")) {
-          sendJson(response, 404, { error: "MCP host bridge endpoint not found." });
-          return;
-        }
+  const ensureStarted = async (): Promise<{ baseUrl: string; port: number }> => {
+    if (baseUrl) {
+      return {
+        baseUrl,
+        port: Number(new URL(baseUrl).port),
+      };
+    }
+    if (startupPromise) {
+      return startupPromise;
+    }
 
-        const receivedToken = request.headers[APP_TOKEN_HEADER];
-        if (receivedToken !== token) {
-          sendJson(response, receivedToken === undefined ? 401 : 403, {
-            error:
-              receivedToken === undefined
-                ? "Missing OpenDucktor web host app token."
-                : "Invalid OpenDucktor web host app token.",
-          });
-          return;
-        }
-
-        const command = decodeURIComponent(request.url.slice("/invoke/".length));
-        const body = await readRequestBody(request);
-        if (command === "odt_mcp_ready") {
-          sendJson(response, 200, await bridgeService.ready(body));
-          return;
-        }
-        if (command === "odt_get_workspaces") {
-          sendJson(response, 200, await bridgeService.getWorkspaces(body));
-          return;
-        }
-
-        if (!workspaceScopedToolNames.has(command)) {
-          sendJson(response, 404, { error: `Unknown MCP host bridge command: ${command}` });
-          return;
-        }
-
-        sendJson(
-          response,
-          200,
-          await bridgeService.invoke(command as WorkspaceScopedOdtToolName, body),
-        );
-      } catch (error) {
-        sendJson(response, 400, { error: errorMessage(error) });
-      }
+    startupPromise = (async () => {
+      const started = await startBridge();
+      server = started.server;
+      baseUrl = started.baseUrl;
+      publishedDiscovery = started.discovery;
+      return { baseUrl: started.baseUrl, port: started.port };
+    })().finally(() => {
+      startupPromise = null;
     });
 
-    const port = await listen(nextServer);
-    server = nextServer;
-    baseUrl = `http://127.0.0.1:${port}`;
-    return baseUrl;
+    return startupPromise;
   };
 
   return {
     async ensureConnection(input) {
       const repoConfig = await workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath);
+      const connection = await ensureStarted();
       return {
         workspaceId: repoConfig.workspaceId,
-        hostUrl: await ensureStarted(),
+        hostUrl: connection.baseUrl,
         hostToken: token,
       };
     },
+    async ensureExternalDiscoveryReady() {
+      await ensureStarted();
+    },
     async close() {
+      if (startupPromise) {
+        await startupPromise.catch(() => undefined);
+      }
       const current = server;
       const currentBaseUrl = baseUrl;
+      const currentDiscovery = publishedDiscovery;
       server = null;
       baseUrl = null;
+      publishedDiscovery = null;
       if (current) {
         await closeServer(current);
+        if (currentDiscovery !== null) {
+          await removeMcpBridgeDiscoveryFile(discoveryPath, currentDiscovery);
+        }
         return { baseUrl: currentBaseUrl, closed: true };
       }
       return { baseUrl: null, closed: false };

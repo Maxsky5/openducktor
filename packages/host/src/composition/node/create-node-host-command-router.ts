@@ -15,6 +15,7 @@ import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import {
   createMcpHostBridgeServer,
   type McpHostBridgeServer,
+  resolveMcpBridgeDiscoveryPath,
 } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createOpenInToolsAdapter } from "../../adapters/open-in-tools/open-in-tools-adapter";
 import { createOpenCodeWorkspaceRuntimeStarter } from "../../adapters/opencode/opencode-workspace-runtime-starter";
@@ -268,6 +269,7 @@ export const createNodeHostCommandRouter = ({
   });
   resolvedMcpHostBridge ??= createMcpHostBridgeServer({
     bridgeService: odtMcpBridgeService,
+    discoveryPath: resolveMcpBridgeDiscoveryPath(processEnv),
     workspaceSettingsService,
   });
   const runtimeOrchestratorWithEffectiveRegistry = createRuntimeOrchestratorService({
@@ -291,6 +293,9 @@ export const createNodeHostCommandRouter = ({
   };
 
   return createHostCommandRouter({
+    initialize: async () => {
+      await resolvedMcpHostBridge?.ensureExternalDiscoveryReady();
+    },
     dispose: async () => {
       lifecycleLogger.info("Shutting down OpenDucktor host services");
       await runShutdownSteps(

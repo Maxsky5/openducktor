@@ -15,21 +15,29 @@ const jsonResponse = (payload: unknown, init: ResponseInit = {}): Response =>
     ...init,
   });
 
-const createDiscoveryRegistry = async (
-  ports: number[],
-  bridgeTokens?: Record<string, string>,
-): Promise<string> => {
+const createDiscoveryFile = async ({
+  hostToken = "discovery-token",
+  hostUrl = "http://127.0.0.1:14327",
+  pid = 12345,
+}: {
+  hostToken?: string;
+  hostUrl?: string;
+  pid?: number;
+} = {}): Promise<string> => {
   const dir = join(tmpdir(), `openducktor-mcp-store-context-${Date.now()}-${Math.random()}`);
   await mkdir(join(dir, "runtime"), { recursive: true });
-  const registryPayload = {
-    ports,
-    ...(bridgeTokens ? { bridgeTokens } : {}),
-  };
   await writeFile(
-    join(dir, "runtime", "mcp-bridge-ports.json"),
-    JSON.stringify(registryPayload, null, 2),
+    join(dir, "runtime", "mcp-bridge.json"),
+    JSON.stringify({ hostToken, hostUrl, pid }, null, 2),
     "utf8",
   );
+  tempDirs.push(dir);
+  return dir;
+};
+
+const createEmptyConfigDir = async (): Promise<string> => {
+  const dir = join(tmpdir(), `openducktor-mcp-store-context-${Date.now()}-${Math.random()}`);
+  await mkdir(join(dir, "runtime"), { recursive: true });
   tempDirs.push(dir);
   return dir;
 };
@@ -215,8 +223,11 @@ describe("resolveStoreContext", () => {
     await expect(resolveStoreContext({})).rejects.toThrow("host down");
   });
 
-  test("discovers a running host from the registry when no explicit host is provided", async () => {
-    const configDir = await createDiscoveryRegistry([14327], { 14327: "registry-token" });
+  test("discovers a running host from the discovery file when no explicit host is provided", async () => {
+    const configDir = await createDiscoveryFile({
+      hostToken: " discovery-token ",
+      hostUrl: " http://127.0.0.1:14327 ",
+    });
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
     process.env.ODT_WORKSPACE_ID = "repo";
     const observedHostTokens: Array<string | undefined> = [];
@@ -260,116 +271,9 @@ describe("resolveStoreContext", () => {
     await expect(resolveStoreContext({})).resolves.toEqual({
       workspaceId: "repo",
       hostUrl: "http://127.0.0.1:14327",
-      hostToken: "registry-token",
+      hostToken: "discovery-token",
     });
-    expect(observedHostTokens).toEqual(["registry-token", "registry-token"]);
-  });
-
-  test("tries discovered ports until one host becomes ready", async () => {
-    const configDir = await createDiscoveryRegistry([14327, 14328]);
-    process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
-    process.env.ODT_WORKSPACE_ID = "repo";
-
-    globalThis.fetch = (async (input) => {
-      const url = String(input);
-      if (url === "http://127.0.0.1:14327/health") {
-        return jsonResponse(
-          { error: "stale bridge" },
-          { status: 503, statusText: "Service Unavailable" },
-        );
-      }
-      if (url === "http://127.0.0.1:14328/health") {
-        return jsonResponse({ ok: true });
-      }
-      if (url === "http://127.0.0.1:14328/invoke/odt_mcp_ready") {
-        return jsonResponse({
-          bridgeVersion: 1,
-          toolNames: Object.keys(ODT_TOOL_SCHEMAS),
-        });
-      }
-      if (url === "http://127.0.0.1:14328/invoke/odt_get_workspaces") {
-        return jsonResponse({
-          workspaces: [
-            {
-              workspaceId: "repo",
-              workspaceName: "Repo",
-              repoPath: "/repo",
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: null,
-              defaultWorktreeBasePath: null,
-              effectiveWorktreeBasePath: null,
-            },
-          ],
-        });
-      }
-      throw new Error(`Unexpected URL: ${url}`);
-    }) as typeof fetch;
-
-    await expect(resolveStoreContext({})).resolves.toEqual({
-      workspaceId: "repo",
-      hostUrl: "http://127.0.0.1:14328",
-    });
-  });
-
-  test("skips healthy discovered hosts that do not contain the configured workspace", async () => {
-    const configDir = await createDiscoveryRegistry([14327, 14328]);
-    process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
-    process.env.ODT_WORKSPACE_ID = "repo";
-
-    globalThis.fetch = (async (input) => {
-      const url = String(input);
-      if (url === "http://127.0.0.1:14327/health" || url === "http://127.0.0.1:14328/health") {
-        return jsonResponse({ ok: true });
-      }
-      if (
-        url === "http://127.0.0.1:14327/invoke/odt_mcp_ready" ||
-        url === "http://127.0.0.1:14328/invoke/odt_mcp_ready"
-      ) {
-        return jsonResponse({
-          bridgeVersion: 1,
-          toolNames: Object.keys(ODT_TOOL_SCHEMAS),
-        });
-      }
-      if (url === "http://127.0.0.1:14327/invoke/odt_get_workspaces") {
-        return jsonResponse({
-          workspaces: [
-            {
-              workspaceId: "other-repo",
-              workspaceName: "Other Repo",
-              repoPath: "/other-repo",
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: null,
-              defaultWorktreeBasePath: null,
-              effectiveWorktreeBasePath: null,
-            },
-          ],
-        });
-      }
-      if (url === "http://127.0.0.1:14328/invoke/odt_get_workspaces") {
-        return jsonResponse({
-          workspaces: [
-            {
-              workspaceId: "repo",
-              workspaceName: "Repo",
-              repoPath: "/repo",
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: null,
-              defaultWorktreeBasePath: null,
-              effectiveWorktreeBasePath: null,
-            },
-          ],
-        });
-      }
-      throw new Error(`Unexpected URL: ${url}`);
-    }) as typeof fetch;
-
-    await expect(resolveStoreContext({})).resolves.toEqual({
-      workspaceId: "repo",
-      hostUrl: "http://127.0.0.1:14328",
-    });
+    expect(observedHostTokens).toEqual(["discovery-token", "discovery-token"]);
   });
 
   test("rejects legacy metadata namespace configuration", async () => {
@@ -378,12 +282,12 @@ describe("resolveStoreContext", () => {
     process.env.ODT_METADATA_NAMESPACE = "legacy-namespace";
 
     await expect(resolveStoreContext({})).rejects.toThrow(
-      "Metadata namespace is now owned by the Rust host",
+      "Metadata namespace is now owned by the OpenDucktor host",
     );
   });
 
   test("fails clearly when discovery cannot find any running host", async () => {
-    const configDir = await createDiscoveryRegistry([]);
+    const configDir = await createEmptyConfigDir();
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
     process.env.ODT_WORKSPACE_ID = "repo";
 
