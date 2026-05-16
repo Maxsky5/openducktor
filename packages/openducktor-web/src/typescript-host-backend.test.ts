@@ -19,13 +19,6 @@ describe("TypeScript web host backend", () => {
       frontendOrigin: FRONTEND_ORIGIN,
       controlToken: CONTROL_TOKEN,
       appToken: APP_TOKEN,
-      hostCommandRouter: {
-        dispose: async () => {},
-        invoke: async (command) => {
-          expect(command).toBe("runtime_definitions_list");
-          return [{ kind: "opencode" }, { kind: "codex" }];
-        },
-      },
     });
     const backendUrl = `http://127.0.0.1:${backend.port}`;
 

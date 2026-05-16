@@ -17,7 +17,6 @@ export type TypescriptHostBackendOptions = {
   frontendOrigin: string;
   controlToken: string;
   appToken: string;
-  hostCommandRouter?: HostCommandRouter;
 };
 
 export type TypescriptHostBackend = {
@@ -423,22 +422,19 @@ export const startTypescriptHostBackend = ({
   frontendOrigin,
   controlToken,
   appToken,
-  hostCommandRouter: providedHostCommandRouter,
 }: TypescriptHostBackendOptions): TypescriptHostBackend => {
   const validatedFrontendOrigin = validateWebFrontendOrigin(frontendOrigin);
   const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
   const eventBus = new BufferedHostEventBus();
   const localAttachments = createLocalAttachmentAdapter();
-  const hostCommandRouter =
-    providedHostCommandRouter ??
-    createNodeHostCommandRouter({
-      eventBus,
-      lifecycleLogger: {
-        error: logError,
-        info: logInfo,
-      },
-      localAttachments,
-    });
+  const hostCommandRouter: HostCommandRouter = createNodeHostCommandRouter({
+    eventBus,
+    lifecycleLogger: {
+      error: logError,
+      info: logInfo,
+    },
+    localAttachments,
+  });
   let shutdownStarted = false;
   let stopPromise: Promise<void> | null = null;
   let resolveExited: (exitCode: number) => void = () => {};
