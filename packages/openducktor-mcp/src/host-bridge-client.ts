@@ -131,7 +131,7 @@ const assertToolCoverage = (ready: OdtHostBridgeReady): void => {
   if (missing.length > 0) {
     throw new OdtToolError(
       "ODT_HOST_RESPONSE_INVALID",
-      `Rust host bridge is missing required MCP tools: ${missing.join(", ")}`,
+      `OpenDucktor host bridge is missing required MCP tools: ${missing.join(", ")}`,
       { missingToolNames: missing },
     );
   }

@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 const EMPTY_ENV_SENTINELS = new Set(["undefined", "null"]);
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 const DEFAULT_OPENDUCKTOR_CONFIG_DIR_NAME = ".openducktor";
-export const MCP_BRIDGE_REGISTRY_RELATIVE_PATH = "runtime/mcp-bridge-ports.json";
+export const MCP_BRIDGE_DISCOVERY_RELATIVE_PATH = "runtime/mcp-bridge.json";
 
 export const normalizeOptionalInput = (value: string | undefined): string | undefined => {
   if (typeof value !== "string") {
@@ -64,8 +64,8 @@ export const resolveOpenducktorBaseDir = (): string => {
   return join(home, DEFAULT_OPENDUCKTOR_CONFIG_DIR_NAME);
 };
 
-export const resolveMcpBridgeRegistryPath = (): string =>
-  join(resolveOpenducktorBaseDir(), MCP_BRIDGE_REGISTRY_RELATIVE_PATH);
+export const resolveMcpBridgeDiscoveryPath = (): string =>
+  join(resolveOpenducktorBaseDir(), MCP_BRIDGE_DISCOVERY_RELATIVE_PATH);
 
 export const resolveCanonicalPath = async (path: string): Promise<string> => {
   const resolved = resolve(path);

@@ -181,6 +181,7 @@ app
     installApplicationMenu({ isDevelopment, appName: app.name || APPLICATION_NAME });
     registerIpcHandlers();
     registerHostEventForwarding();
+    await hostCommandRouter.initialize();
     await createMainWindow();
 
     app.on("activate", () => {

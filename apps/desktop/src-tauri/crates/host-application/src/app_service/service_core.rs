@@ -169,7 +169,7 @@ pub struct AppService {
     pub(super) runtime_session_status_flights:
         Arc<Mutex<HashMap<RuntimeSessionStatusProbeTarget, Arc<RuntimeSessionStatusFlight>>>>,
     pub(super) runtime_session_status_probe_limiter: Arc<RuntimeSessionStatusProbeLimiter>,
-    pub(super) mcp_bridge_registry_path: PathBuf,
+    pub(super) mcp_bridge_discovery_path: PathBuf,
     pub(super) instance_pid: u32,
     pub(super) initialized_repos: Arc<Mutex<HashSet<String>>>,
     pub(super) runtime_check_cache: Arc<Mutex<Option<CachedRuntimeCheck>>>,
@@ -287,7 +287,7 @@ impl AppService {
                 &config_store,
                 runtime_registry.runtime_definitions().clone(),
             );
-        let mcp_bridge_registry_path = Self::mcp_bridge_registry_path(&config_store);
+        let mcp_bridge_discovery_path = Self::mcp_bridge_discovery_path(&config_store);
         let service = Self {
             task_store,
             git_port,
@@ -306,7 +306,7 @@ impl AppService {
             runtime_session_status_probe_limiter: Arc::new(RuntimeSessionStatusProbeLimiter::new(
                 4,
             )),
-            mcp_bridge_registry_path,
+            mcp_bridge_discovery_path,
             instance_pid,
             initialized_repos: Arc::new(Mutex::new(HashSet::new())),
             runtime_check_cache: Arc::new(Mutex::new(None)),
@@ -324,11 +324,6 @@ impl AppService {
                     runtime.definition().kind().as_str()
                 );
             }
-        }
-        if let Err(error) = service.reconcile_mcp_bridge_registry_on_startup() {
-            eprintln!(
-                "OpenDucktor warning: failed reconciling MCP bridge discovery registry at startup: {error:#}"
-            );
         }
         service
     }

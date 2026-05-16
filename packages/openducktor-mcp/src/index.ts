@@ -66,7 +66,7 @@ const parseCliArgs = (argv: string[]): OdtStoreContext => {
 
     if (current === "--metadata-namespace") {
       throw new Error(
-        "--metadata-namespace is no longer supported. Metadata namespace is owned by the Rust host.",
+        "--metadata-namespace is no longer supported. Metadata namespace is owned by the OpenDucktor host.",
       );
     }
   }

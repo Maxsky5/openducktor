@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Context, Result};
-use fs2::FileExt;
 use host_domain::{
     DevServerEvent, DevServerGroupState, GitPort, RuntimeCheck, RuntimeInstanceSummary,
     RuntimeRole, RuntimeRoute, TaskCard, TaskStore,
@@ -26,8 +25,8 @@ mod git_paths;
 mod git_provider;
 mod git_worktrees;
 mod hook_security;
+mod mcp_bridge_discovery;
 mod mcp_bridge_process;
-mod mcp_bridge_registry;
 mod odt_mcp;
 mod open_in_tools;
 mod opencode_runtime;

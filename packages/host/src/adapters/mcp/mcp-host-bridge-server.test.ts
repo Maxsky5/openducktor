@@ -1,4 +1,7 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { request } from "node:http";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { ODT_MCP_TOOL_NAMES, type RepoConfig } from "@openducktor/contracts";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -66,8 +69,52 @@ const requestJson = (
   });
 
 describe("createMcpHostBridgeServer", () => {
-  test("serves health and authenticated MCP invocations", async () => {
+  test("publishes and removes the external MCP discovery file", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    const discoveryPath = path.join(tempDir, "runtime", "mcp-bridge.json");
     const bridge = createMcpHostBridgeServer({
+      discoveryPath,
+      token: "token-1",
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      bridgeService: {
+        async ready() {
+          return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
+        },
+        async getWorkspaces() {
+          return { workspaces: [] };
+        },
+        async invoke() {
+          throw new Error("unexpected scoped tool invocation");
+        },
+      } as OdtMcpBridgeService,
+    });
+
+    try {
+      await bridge.ensureExternalDiscoveryReady();
+      const published = JSON.parse(await readFile(discoveryPath, "utf8")) as {
+        hostToken: string;
+        hostUrl: string;
+        pid: number;
+      };
+
+      expect(published).toMatchObject({
+        hostToken: "token-1",
+        pid: process.pid,
+      });
+      expect(published.hostUrl.startsWith("http://127.0.0.1:")).toBe(true);
+
+      await bridge.close();
+      await expect(readFile(discoveryPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await bridge.close();
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("serves health and authenticated MCP invocations", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    const bridge = createMcpHostBridgeServer({
+      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
       bridgeService: {
@@ -117,12 +164,15 @@ describe("createMcpHostBridgeServer", () => {
       expect(ready.status).toBe(200);
     } finally {
       await bridge.close();
+      await rm(tempDir, { force: true, recursive: true });
     }
   });
 
   test("forwards workspace-scoped commands to the bridge service", async () => {
     const calls: unknown[] = [];
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
     const bridge = createMcpHostBridgeServer({
+      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
       bridgeService: {
@@ -174,6 +224,7 @@ describe("createMcpHostBridgeServer", () => {
       ]);
     } finally {
       await bridge.close();
+      await rm(tempDir, { force: true, recursive: true });
     }
   });
 });

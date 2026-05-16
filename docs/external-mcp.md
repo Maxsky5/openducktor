@@ -4,16 +4,16 @@
 
 This document describes the public OpenDucktor MCP package that can be used outside the desktop app.
 
-Both desktop-managed and standalone MCP paths now route task operations through the Rust host. The TypeScript MCP package does not talk to Beads or Dolt directly.
+Both desktop-managed and standalone MCP paths now route task operations through the OpenDucktor host. The TypeScript MCP package does not talk to Beads or Dolt directly.
 
 - Desktop-managed launches receive `ODT_HOST_URL` from the desktop host automatically.
-- Standalone external use auto-discovers a running host bridge from the local registry.
+- Standalone external use auto-discovers the current host bridge from the local discovery file.
 - `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
 - Startup fails if the host bridge is unhealthy or does not expose the required ODT tool surface.
 
-The MCP package is transport and validation only. The Rust host remains the owner of Beads attachment readiness, shared Dolt lifecycle, workflow transitions, and metadata persistence.
+The MCP package is transport and validation only. The host remains the owner of Beads attachment readiness, shared Dolt lifecycle, workflow transitions, and metadata persistence.
 
-For the full Beads and shared Dolt lifecycle, including why the Rust host owns that lifecycle, see [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md).
+For the full Beads and shared Dolt lifecycle, including why the OpenDucktor host owns that lifecycle, see [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md).
 
 Package name:
 
@@ -68,16 +68,16 @@ Equivalent environment variables:
 
 Automatic discovery:
 
-- The MCP reads bridge ports from `runtime/mcp-bridge-ports.json` under the OpenDucktor config directory.
+- The MCP reads the current host bridge from `runtime/mcp-bridge.json` under the OpenDucktor config directory.
 - The default config directory is `~/.openducktor`.
-- If `OPENDUCKTOR_CONFIG_DIR` is set, discovery uses `<OPENDUCKTOR_CONFIG_DIR>/runtime/mcp-bridge-ports.json` instead.
+- If `OPENDUCKTOR_CONFIG_DIR` is set, discovery uses `<OPENDUCKTOR_CONFIG_DIR>/runtime/mcp-bridge.json` instead.
 
 Startup contract:
 
 1. Resolve an optional startup default workspace from `--workspace-id` or `ODT_WORKSPACE_ID`.
 2. Use `ODT_HOST_URL` or `--host-url` first when provided.
-3. Otherwise read the local discovery registry and try discovered bridge ports in registry order.
-4. The desktop host keeps the current bridge at the front of that registry so discovery prefers the freshest running host.
+3. Otherwise read the local discovery file for the current host bridge URL and token.
+4. Validate the discovered host bridge before serving tools.
 5. Call the host bridge `/health` endpoint.
 6. Call `odt_mcp_ready` through the loopback host API.
 7. Refuse startup if any required ODT tool name is missing.
@@ -322,7 +322,7 @@ Constraints:
 - Missing latest QA report returns `{ "markdown": "", "updatedAt": null, "verdict": "not_reviewed" }`.
 - Legacy markdown-only metadata remains readable.
 - New or updated workflow documents are stored as `encoding: "gzip-base64-v1"` plus a base64-gzip payload in `markdown`.
-- The Rust host owns that encode/decode translation. Successful MCP reads still return plain markdown.
+- The OpenDucktor host owns that encode/decode translation. Successful MCP reads still return plain markdown.
 - When the latest stored document cannot be decoded, the returned document includes an optional `error` field with an actionable host-supplied message.
 - There is no automatic migration of older markdown-only metadata.
 
@@ -352,7 +352,7 @@ Output:
 ## Architecture Notes
 
 - `packages/openducktor-mcp` owns MCP transport, request validation, response validation, and packaging.
-- The Rust host owns Beads attachment verification, shared Dolt lifecycle, task reads and writes, workflow transitions, recovery, and canonical metadata writes.
-- The Rust host also owns document compression and decompression for Beads metadata.
+- The OpenDucktor host owns Beads attachment verification, shared Dolt lifecycle, task reads and writes, workflow transitions, recovery, and canonical metadata writes.
+- The OpenDucktor host also owns document compression and decompression for Beads metadata.
 - The host bridge surface mirrors the MCP tool names so desktop-managed and standalone MCP clients use the same execution path.
 - Beads and Dolt stay modeled as storage infrastructure. They are not part of the MCP runtime contract beyond the host-owned bridge being healthy.

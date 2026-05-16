@@ -8,6 +8,14 @@ import {
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import type { OpenCodeMcpBridgeConnection } from "../opencode/opencode-workspace-runtime-starter";
+import {
+  type McpBridgeDiscoveryFile,
+  removeMcpBridgeDiscoveryFile,
+  resolveMcpBridgeDiscoveryPath,
+  writeMcpBridgeDiscoveryFile,
+} from "./mcp-bridge-discovery-file";
+
+export { resolveMcpBridgeDiscoveryPath } from "./mcp-bridge-discovery-file";
 
 export type McpHostBridgeConnectionInput = {
   repoPath: string;
@@ -15,6 +23,7 @@ export type McpHostBridgeConnectionInput = {
 
 export type McpHostBridgeServer = {
   ensureConnection(input: McpHostBridgeConnectionInput): Promise<OpenCodeMcpBridgeConnection>;
+  ensureExternalDiscoveryReady(): Promise<void>;
   close(): Promise<McpHostBridgeCloseResult>;
 };
 
@@ -25,6 +34,7 @@ export type McpHostBridgeCloseResult = {
 
 export type CreateMcpHostBridgeServerInput = {
   bridgeService: OdtMcpBridgeService;
+  discoveryPath?: string;
   workspaceSettingsService: WorkspaceSettingsService;
   token?: string;
 };
@@ -102,15 +112,20 @@ const closeServer = (server: Server): Promise<void> =>
 
 export const createMcpHostBridgeServer = ({
   bridgeService,
+  discoveryPath = resolveMcpBridgeDiscoveryPath(),
   workspaceSettingsService,
   token = randomUUID(),
 }: CreateMcpHostBridgeServerInput): McpHostBridgeServer => {
   let server: Server | null = null;
   let baseUrl: string | null = null;
+  let publishedDiscovery: McpBridgeDiscoveryFile | null = null;
 
-  const ensureStarted = async (): Promise<string> => {
+  const ensureStarted = async (): Promise<{ baseUrl: string; port: number }> => {
     if (baseUrl) {
-      return baseUrl;
+      return {
+        baseUrl,
+        port: Number(new URL(baseUrl).port),
+      };
     }
 
     const nextServer = createServer(async (request, response) => {
@@ -165,25 +180,57 @@ export const createMcpHostBridgeServer = ({
     const port = await listen(nextServer);
     server = nextServer;
     baseUrl = `http://127.0.0.1:${port}`;
-    return baseUrl;
+    const discovery: McpBridgeDiscoveryFile = {
+      hostToken: token,
+      hostUrl: baseUrl,
+      pid: process.pid,
+    };
+    try {
+      await writeMcpBridgeDiscoveryFile(discoveryPath, discovery);
+    } catch (error) {
+      server = null;
+      baseUrl = null;
+      try {
+        await closeServer(nextServer);
+      } catch (closeError) {
+        throw new Error(
+          `Failed to publish MCP host bridge discovery file and close the unpublished bridge: ${
+            closeError instanceof Error ? closeError.message : String(closeError)
+          }`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+    publishedDiscovery = discovery;
+    return { baseUrl, port };
   };
 
   return {
     async ensureConnection(input) {
       const repoConfig = await workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath);
+      const connection = await ensureStarted();
       return {
         workspaceId: repoConfig.workspaceId,
-        hostUrl: await ensureStarted(),
+        hostUrl: connection.baseUrl,
         hostToken: token,
       };
+    },
+    async ensureExternalDiscoveryReady() {
+      await ensureStarted();
     },
     async close() {
       const current = server;
       const currentBaseUrl = baseUrl;
+      const currentDiscovery = publishedDiscovery;
       server = null;
       baseUrl = null;
+      publishedDiscovery = null;
       if (current) {
         await closeServer(current);
+        if (currentDiscovery !== null) {
+          await removeMcpBridgeDiscoveryFile(discoveryPath, currentDiscovery);
+        }
         return { baseUrl: currentBaseUrl, closed: true };
       }
       return { baseUrl: null, closed: false };
