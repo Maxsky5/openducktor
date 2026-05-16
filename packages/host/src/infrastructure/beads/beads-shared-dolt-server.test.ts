@@ -147,8 +147,7 @@ describe("stopOwnedSharedDoltServer", () => {
     const statePath = path.join(root, "server.json");
     await writeFile(statePath, "state");
 
-    await expect(stopOwnedSharedDoltServer(createStopState(), statePath)).resolves
-      .toBeUndefined();
+    await expect(stopOwnedSharedDoltServer(createStopState(), statePath)).resolves.toBeUndefined();
     await expect(readFile(statePath, "utf8")).rejects.toThrow();
   });
 

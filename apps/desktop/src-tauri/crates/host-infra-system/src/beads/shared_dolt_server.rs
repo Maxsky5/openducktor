@@ -596,27 +596,23 @@ fn terminate_shared_dolt_process_tree(pid: u32) -> Result<()> {
             return Err(std::io::Error::last_os_error())
                 .with_context(|| format!("Failed sending SIGTERM to Dolt process group {pid}"));
         }
-        let terminated_after_term = wait_for_process_exit(pid, Duration::from_secs(3));
-        if is_process_alive(pid) {
-            let kill_status = unsafe { libc::kill(process_group_id, libc::SIGKILL) };
-            if kill_status != 0 {
-                return Err(std::io::Error::last_os_error()).with_context(|| {
-                    format!("Failed sending SIGKILL to Dolt process group {pid}")
-                });
-            }
-            if !wait_for_process_exit(pid, Duration::from_secs(2)) {
-                return Err(anyhow!(
-                    "Dolt process group {} is still alive after SIGKILL timeout",
-                    pid
-                ));
-            }
-        } else if !terminated_after_term {
-            return Err(anyhow!(
-                "Dolt process group {} is still alive after SIGTERM timeout",
-                pid
-            ));
+        if wait_for_process_exit(pid, Duration::from_secs(3)) {
+            return Ok(());
         }
-        Ok(())
+
+        let kill_status = unsafe { libc::kill(process_group_id, libc::SIGKILL) };
+        if kill_status != 0 {
+            return Err(std::io::Error::last_os_error())
+                .with_context(|| format!("Failed sending SIGKILL to Dolt process group {pid}"));
+        }
+        if wait_for_process_exit(pid, Duration::from_secs(2)) {
+            return Ok(());
+        }
+
+        Err(anyhow!(
+            "Dolt process group {} is still alive after SIGKILL timeout",
+            pid
+        ))
     }
 
     #[cfg(windows)]

@@ -1,7 +1,6 @@
-import { type ChildProcessByStdio, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createServer, Socket } from "node:net";
-import type { Readable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
 import type {
@@ -11,7 +10,11 @@ import type {
 } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
-import { shouldStartDetachedProcessGroup, terminateProcessTree } from "../process/process-tree";
+import {
+  shouldStartDetachedProcessGroup,
+  terminateProcessTree,
+  waitForChildProcessClose,
+} from "../process/process-tree";
 import { resolveOpencodeBinary } from "../runtimes/runtime-binaries";
 
 export type OpenCodeMcpBridgeConnection = {
@@ -52,8 +55,6 @@ const DEFAULT_CONNECT_TIMEOUT_MS = 250;
 const DEFAULT_RETRY_DELAY_MS = 100;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 const MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024;
-
-type OpenCodeChildProcess = ChildProcessByStdio<null, Readable, Readable>;
 
 const resolveConfiguredMcpCommand = (
   env: NodeJS.ProcessEnv,
@@ -165,28 +166,6 @@ const canConnect = (port: number, timeoutMs: number): Promise<boolean> =>
     socket.connect(port, "127.0.0.1");
   });
 
-const waitForClose = (
-  child: OpenCodeChildProcess,
-  isClosed: () => boolean,
-  timeoutMs: number,
-): Promise<boolean> => {
-  if (isClosed()) {
-    return Promise.resolve(true);
-  }
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      child.off("close", onClose);
-      resolve(false);
-    }, timeoutMs);
-    const onClose = () => {
-      clearTimeout(timeout);
-      resolve(true);
-    };
-    child.once("close", onClose);
-  });
-};
-
 export const createOpenCodeWorkspaceRuntimeStarter = ({
   systemCommands,
   resolveMcpBridgeConnection,
@@ -294,7 +273,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
               pid,
               label: `OpenCode runtime ${runtime.runtimeId}`,
               isClosed: () => closed,
-              waitForExit: (timeoutMs) => waitForClose(child, () => closed, timeoutMs),
+              waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
               stopTimeoutMs,
             });
           },
@@ -308,7 +287,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       pid,
       label: `OpenCode runtime on 127.0.0.1:${port}`,
       isClosed: () => closed,
-      waitForExit: (timeoutMs) => waitForClose(child, () => closed, timeoutMs),
+      waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
       stopTimeoutMs,
     });
     throw new Error(`Timed out waiting for OpenCode runtime on 127.0.0.1:${port}.`);

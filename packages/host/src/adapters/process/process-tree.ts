@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { type ChildProcess, spawnSync } from "node:child_process";
 
 export type ProcessTreePlatform = NodeJS.Platform;
 
@@ -95,6 +95,28 @@ export const terminateProcessTree = async ({
   throw new Error(
     `Timed out waiting ${stopTimeoutMs}ms for ${label} process tree ${pid} to stop after SIGTERM and SIGKILL.`,
   );
+};
+
+export const waitForChildProcessClose = (
+  child: Pick<ChildProcess, "once" | "off">,
+  isClosed: () => boolean,
+  timeoutMs: number,
+): Promise<boolean> => {
+  if (isClosed()) {
+    return Promise.resolve(true);
+  }
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      child.off("close", onClose);
+      resolve(false);
+    }, timeoutMs);
+    const onClose = () => {
+      clearTimeout(timeout);
+      resolve(true);
+    };
+    child.once("close", onClose);
+  });
 };
 
 export const shouldStartDetachedProcessGroup = (

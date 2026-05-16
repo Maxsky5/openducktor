@@ -16,6 +16,7 @@ import {
   type ProcessTreePlatform,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
+  waitForChildProcessClose,
 } from "../process/process-tree";
 import { resolveCodexBinary } from "../runtimes/runtime-binaries";
 import {
@@ -109,28 +110,6 @@ const requireBridgeValue = (value: string, label: keyof CodexMcpBridgeConnection
     throw new Error(`Codex MCP bridge ${label} is required.`);
   }
   return trimmed;
-};
-
-const waitForClose = (
-  child: CodexChildProcess,
-  isClosed: () => boolean,
-  timeoutMs: number,
-): Promise<boolean> => {
-  if (isClosed()) {
-    return Promise.resolve(true);
-  }
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      child.off("close", onClose);
-      resolve(false);
-    }, timeoutMs);
-    const onClose = () => {
-      clearTimeout(timeout);
-      resolve(true);
-    };
-    child.once("close", onClose);
-  });
 };
 
 export const codexCommand = (
@@ -232,7 +211,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
           pid,
           label: `Codex app-server runtime ${nextRuntimeId}`,
           isClosed: () => closed,
-          waitForExit: (timeoutMs) => waitForClose(child, () => closed, timeoutMs),
+          waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
           stopTimeoutMs,
         });
       } catch (error) {

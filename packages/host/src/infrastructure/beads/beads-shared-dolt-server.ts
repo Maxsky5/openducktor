@@ -13,8 +13,8 @@ import {
 import net from "node:net";
 import path from "node:path";
 import {
+  processIsAlive,
   shouldStartDetachedProcessGroup,
-  signalProcessTree,
   terminateProcessTree,
 } from "../../adapters/process/process-tree";
 import {
@@ -108,19 +108,6 @@ export const readSharedServerState = async (
   return { pid, host, port, user, ownerPid, acquisition, sharedServerRoot, doltDataDir, startedAt };
 };
 
-export const processIsAlive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-export const signalProcess = (pid: number, signal: NodeJS.Signals): void => {
-  signalProcessTree(pid, signal);
-};
-
 export const waitForProcessExit = async (pid: number, timeoutMs: number): Promise<boolean> => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -131,6 +118,19 @@ export const waitForProcessExit = async (pid: number, timeoutMs: number): Promis
   }
   return !processIsAlive(pid);
 };
+
+const terminateSharedDoltProcess = (
+  pid: number,
+  label: string,
+  stopTimeoutMs = 2_000,
+): Promise<void> =>
+  terminateProcessTree({
+    pid,
+    label,
+    isClosed: () => !processIsAlive(pid),
+    waitForExit: (timeoutMs) => waitForProcessExit(pid, timeoutMs),
+    stopTimeoutMs,
+  });
 
 export type StopSharedDoltServer = (
   state: BeadsSharedServerState,
@@ -144,13 +144,7 @@ export const stopOwnedSharedDoltServer: StopSharedDoltServer = async (state, ser
     );
   }
 
-  await terminateProcessTree({
-    pid: state.pid,
-    label: `shared Dolt server ${state.pid}`,
-    isClosed: () => !processIsAlive(state.pid),
-    waitForExit: (timeoutMs) => waitForProcessExit(state.pid, timeoutMs),
-    stopTimeoutMs: 2_000,
-  });
+  await terminateSharedDoltProcess(state.pid, `shared Dolt server ${state.pid}`);
 
   await unlink(serverStatePath).catch((error: unknown) => {
     if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
@@ -374,15 +368,10 @@ export const spawnSharedDoltServer = async (
   }
 
   const cleanupErrors: string[] = [];
-  if (child.pid && child.pid > 0) {
+  const childPid = child.pid;
+  if (childPid && childPid > 0) {
     try {
-      await terminateProcessTree({
-        pid: child.pid,
-        label: `shared Dolt server on port ${port}`,
-        isClosed: () => !processIsAlive(child.pid as number),
-        waitForExit: (timeoutMs) => waitForProcessExit(child.pid as number, timeoutMs),
-        stopTimeoutMs: 2_000,
-      });
+      await terminateSharedDoltProcess(childPid, `shared Dolt server on port ${port}`);
     } catch (error) {
       cleanupErrors.push(error instanceof Error ? error.message : String(error));
     }
