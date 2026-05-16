@@ -246,9 +246,9 @@ describe("MCP server tool results", () => {
 
       expect(readToolInputProperties(tools, "odt_read_task")).toMatchObject({
         taskId: expect.any(Object),
-        workspaceId: expect.any(Object),
       });
-      expect(readToolInputProperties(tools, "odt_set_plan")).toHaveProperty("workspaceId");
+      expect(readToolInputProperties(tools, "odt_read_task")).not.toHaveProperty("workspaceId");
+      expect(readToolInputProperties(tools, "odt_set_plan")).not.toHaveProperty("workspaceId");
       expect(readToolInputProperties(tools, "odt_get_workspaces")).not.toHaveProperty(
         "workspaceId",
       );

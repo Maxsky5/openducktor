@@ -1,12 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
-import { z } from "zod";
+import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import packageJson from "../package.json" with { type: "json" };
 import { ODT_MCP_TOOL_NAMES, ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
+import { getListedToolInputSchema, type RegisteredToolName } from "./listed-tool-schema";
 import { OdtTaskStore } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
-import { OdtToolError, toErrorMessage, toToolError, toToolResult } from "./tool-results";
+import {
+  OdtToolError,
+  type ToolResult,
+  toErrorMessage,
+  toToolError,
+  toToolResult,
+} from "./tool-results";
 
 const parseCliArgs = (argv: string[]): OdtStoreContext => {
   const next: OdtStoreContext = {};
@@ -74,7 +80,6 @@ const parseCliArgs = (argv: string[]): OdtStoreContext => {
   return next;
 };
 
-type RegisteredToolName = keyof typeof ODT_TOOL_SCHEMAS;
 type ToolInputByName<Name extends RegisteredToolName> = ReturnType<
   (typeof ODT_TOOL_SCHEMAS)[Name]["parse"]
 >;
@@ -92,12 +97,17 @@ type RegisteredToolSpecs = {
   };
 };
 
+type RegisterContractTool = (
+  name: string,
+  config: { description: string; inputSchema: unknown },
+  callback: (input: unknown) => Promise<ToolResult>,
+) => void;
+
 const WORKSPACE_SCOPED_TOOL_NAMES = new Set<RegisteredToolName>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
 const KNOWN_TOOL_NAMES = new Set<string>(ODT_MCP_TOOL_NAMES);
 const ALLOWED_TOOLS_ENV = "ODT_ALLOWED_TOOLS";
 // Deliberately allow workflow-scoped calls with workspaceId through schema validation so
 // rejectForbiddenWorkspaceIdInput can return the canonical structured ODT error envelope.
-const FORBIDDEN_WORKSPACE_ID_SCHEMA = z.unknown().optional().describe("Do not provide.");
 const SHARED_SERVER_INSTRUCTIONS =
   "Public task access uses odt_create_task, odt_search_tasks, odt_read_task, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans, then odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools.";
 
@@ -163,51 +173,6 @@ const rejectForbiddenWorkspaceIdInput = (
   }
 };
 
-const isSchemaLike = (value: unknown): value is ZodRawShapeCompat[string] => {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const candidate = value as { parse?: unknown; _def?: unknown; _zod?: unknown };
-  return (
-    typeof candidate.parse === "function" ||
-    candidate._def !== undefined ||
-    candidate._zod !== undefined
-  );
-};
-
-const isRegisterToolInputSchema = (value: unknown): value is ZodRawShapeCompat => {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  return Object.values(value as Record<string, unknown>).every((entry) => isSchemaLike(entry));
-};
-
-const assertRegisterToolInputSchema: (
-  toolName: RegisteredToolName,
-  value: unknown,
-) => asserts value is ZodRawShapeCompat = (toolName, value) => {
-  if (!isRegisterToolInputSchema(value)) {
-    throw new TypeError(`Invalid MCP input schema for tool '${toolName}'.`);
-  }
-};
-
-const toVisibleInputSchema = (
-  toolName: RegisteredToolName,
-  options: { forbidWorkspaceIdInput: boolean },
-): ZodRawShapeCompat => {
-  const inputSchema: unknown = ODT_TOOL_SCHEMAS[toolName].shape;
-  assertRegisterToolInputSchema(toolName, inputSchema);
-
-  if (!options.forbidWorkspaceIdInput || !WORKSPACE_SCOPED_TOOL_NAMES.has(toolName)) {
-    return inputSchema;
-  }
-
-  return {
-    ...inputSchema,
-    workspaceId: FORBIDDEN_WORKSPACE_ID_SCHEMA,
-  };
-};
-
 const registerOdtTool = <Name extends RegisteredToolName>(
   server: McpServer,
   store: OdtTaskStore,
@@ -215,13 +180,13 @@ const registerOdtTool = <Name extends RegisteredToolName>(
   options: { forbidWorkspaceIdInput: boolean },
 ): void => {
   const schema = ODT_TOOL_SCHEMAS[tool.name];
-  const inputSchema = toVisibleInputSchema(tool.name, options);
+  const registerContractTool = server.registerTool.bind(server) as RegisterContractTool;
 
-  server.registerTool(
+  registerContractTool(
     tool.name,
     {
       description: tool.description,
-      inputSchema,
+      inputSchema: schema,
     },
     async (input: unknown) => {
       try {
@@ -234,6 +199,32 @@ const registerOdtTool = <Name extends RegisteredToolName>(
       }
     },
   );
+};
+
+type ListedOdtTool = {
+  name: RegisteredToolName;
+  description: string;
+};
+
+const toListedToolDefinition = (
+  tool: ListedOdtTool,
+  options: { forbidWorkspaceIdInput: boolean },
+) => ({
+  name: tool.name,
+  description: tool.description,
+  inputSchema: getListedToolInputSchema(tool.name, {
+    hideWorkspaceId: options.forbidWorkspaceIdInput,
+  }),
+});
+
+const installVisibleToolListHandler = (
+  server: McpServer,
+  tools: readonly ListedOdtTool[],
+  options: { forbidWorkspaceIdInput: boolean },
+): void => {
+  server.server.setRequestHandler(ListToolsRequestSchema, () => ({
+    tools: tools.map((tool) => toListedToolDefinition(tool, options)),
+  }));
 };
 
 const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
@@ -304,6 +295,8 @@ const registerTools = (
   store: OdtTaskStore,
   options: { forbidWorkspaceIdInput: boolean; allowedToolNames: readonly RegisteredToolName[] },
 ): void => {
+  const registeredTools: ListedOdtTool[] = [];
+
   const registerOneTool = <Name extends RegisteredToolName>(toolName: Name): void => {
     const spec = ODT_REGISTERED_TOOL_SPECS[toolName];
     const tool: RegisteredTool<Name> = {
@@ -312,11 +305,14 @@ const registerTools = (
       execute: spec.execute,
     };
     registerOdtTool(server, store, tool, options);
+    registeredTools.push(tool);
   };
 
   for (const toolName of options.allowedToolNames) {
     registerOneTool(toolName);
   }
+
+  installVisibleToolListHandler(server, registeredTools, options);
 };
 
 const createMcpServer = async (context: OdtStoreContext = {}): Promise<McpServer> => {
