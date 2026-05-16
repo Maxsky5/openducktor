@@ -61,7 +61,9 @@ const createSystemCommandPort = ({
   const missing = new Set(missingCommands);
   return {
     requiredCommandError: async (command) =>
-      missing.has(command) ? `Required command \`${command}\` not found.` : null,
+      missing.has(command)
+        ? `Required command \`${command}\` not found. Install ${command} and ensure it is available on PATH.`
+        : null,
     versionCommand: async (command) => (missing.has(command) ? null : `${command} version 1.0.0`),
     runCommandAllowFailure: async (command) => {
       if (command === "gh") {
@@ -157,6 +159,29 @@ describe("createSystemDiagnosticsService", () => {
     expect(refreshed.gitVersion).toBe("git version 2.0.0");
   });
 
+  test("runtimeCheck reports actionable missing git and gh diagnostics", async () => {
+    const service = createSystemDiagnosticsService({
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort({ missingCommands: ["git", "gh"] }),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await service.runtimeCheck(true);
+
+    expect(check.gitOk).toBe(false);
+    expect(check.ghOk).toBe(false);
+    expect(check.ghAuthOk).toBe(false);
+    expect(check.ghAuthError).toBe(
+      "Required command `gh` not found. Install gh and ensure it is available on PATH.",
+    );
+    expect(check.errors).toEqual([
+      "Required command `git` not found. Install git and ensure it is available on PATH.",
+      "Required command `gh` not found. Install gh and ensure it is available on PATH.",
+    ]);
+  });
+
   test("beadsCheck returns structured blocking health when bd is missing", async () => {
     const service = createSystemDiagnosticsService({
       runtimeDefinitionsService: createRuntimeDefinitions(),
@@ -171,12 +196,12 @@ describe("createSystemDiagnosticsService", () => {
     expect(check).toEqual({
       beadsOk: false,
       beadsPath: null,
-      beadsError: "Required command `bd` not found.",
+      beadsError: "Required command `bd` not found. Install bd and ensure it is available on PATH.",
       repoStoreHealth: {
         category: "attachment_verification_failed",
         status: "blocking",
         isReady: false,
-        detail: "Required command `bd` not found.",
+        detail: "Required command `bd` not found. Install bd and ensure it is available on PATH.",
         attachment: { path: null, databaseName: null },
         sharedServer: { host: null, port: null, ownershipState: "unavailable" },
       },
@@ -197,12 +222,14 @@ describe("createSystemDiagnosticsService", () => {
     expect(check).toEqual({
       beadsOk: false,
       beadsPath: null,
-      beadsError: "Required command `dolt` not found.",
+      beadsError:
+        "Required command `dolt` not found. Install dolt and ensure it is available on PATH.",
       repoStoreHealth: {
         category: "attachment_verification_failed",
         status: "blocking",
         isReady: false,
-        detail: "Required command `dolt` not found.",
+        detail:
+          "Required command `dolt` not found. Install dolt and ensure it is available on PATH.",
         attachment: { path: null, databaseName: null },
         sharedServer: { host: null, port: null, ownershipState: "unavailable" },
       },
