@@ -54,7 +54,7 @@ describe("TypeScript web host backend", () => {
     } finally {
       await backend.stop();
     }
-  });
+  }, 5_000);
 
   test("rejects invalid browser frontend origins before opening a host port", () => {
     const { validateWebFrontendOrigin } = __typescriptHostBackendTestInternals;

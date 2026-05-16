@@ -1,10 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentSessionStartMode } from "@openducktor/core";
-import {
-  AGENT_STUDIO_SESSION_START_ACTIONS,
-  resolveTaskCardActions,
-  type TaskWorkflowAction,
-} from "@/components/features/kanban/kanban-task-workflow";
+import { resolveTaskCardActions } from "@/components/features/kanban/kanban-task-workflow";
 import { taskActionLabel } from "@/components/features/kanban/task-action-ui";
 import {
   buildReusableSessionOptions,
@@ -14,6 +10,11 @@ import {
   type SessionStartExistingSessionOption,
   type SessionStartPostAction,
 } from "@/features/session-start";
+import {
+  AGENT_STUDIO_SESSION_START_ACTIONS,
+  type AgentStudioWorkflowQuickAction,
+  type TaskWorkflowAction,
+} from "@/features/task-workflow/task-workflow-actions";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 
@@ -31,13 +32,6 @@ export type AgentStudioQuickActionOption = {
   initialSourceExternalSessionId?: string | null;
   requiresHumanFeedback?: boolean;
 };
-
-type AgentStudioWorkflowQuickAction =
-  | "set_spec"
-  | "set_plan"
-  | "build_start"
-  | "qa_start"
-  | "human_request_changes";
 
 type WorkflowQuickActionDefinition = {
   role: AgentRole;
@@ -79,9 +73,11 @@ const WORKFLOW_QUICK_ACTIONS: Record<
   },
 };
 
+const WORKFLOW_QUICK_ACTION_KEYS = new Set<string>(Object.keys(WORKFLOW_QUICK_ACTIONS));
+
 const isAgentStudioWorkflowQuickAction = (
   action: TaskWorkflowAction,
-): action is AgentStudioWorkflowQuickAction => action in WORKFLOW_QUICK_ACTIONS;
+): action is AgentStudioWorkflowQuickAction => WORKFLOW_QUICK_ACTION_KEYS.has(action);
 
 const assertAgentStudioWorkflowQuickAction = (
   action: TaskWorkflowAction,
