@@ -548,7 +548,7 @@ describe("createGitCliAdapter", () => {
               "rev-parse HEAD": "before\n",
               "config --get branch.feature/electron.remote": "origin\n",
               "config --get branch.feature/electron.merge": "refs/heads/main\n",
-              "status --porcelain=v1 --untracked-files=all": rebaseFailed ? "AA src/main.ts\n" : "",
+              "status --porcelain=v1 --untracked-files=all": rebaseFailed ? "UU src/main.ts\n" : "",
               "fetch --prune -- origin +refs/heads/main:refs/remotes/origin/main":
                 "Fetched origin\n",
               "rev-list --count --left-right --end-of-options refs/remotes/origin/main...HEAD":
