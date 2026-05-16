@@ -5,6 +5,7 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
+  AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionPresenceSnapshot,
   AgentSessionRef,
@@ -67,9 +68,11 @@ import {
 } from "./codex-app-server-threads";
 import {
   type CodexTokenUsageTotals,
+  type CodexTurnTiming,
   codexItemId,
   codexItemTypeMatches,
   codexTodosFromThreadRead,
+  codexTokenUsageHistoryFields,
   codexTurnItemsFromThreadRead,
   codexUserInputListToText,
   codexUserInputsFromItem,
@@ -108,6 +111,33 @@ import type {
 } from "./types";
 
 export { createCodexAppServerClient } from "./app-server-client";
+
+const isStopFinishPart = (part: import("@openducktor/core").AgentStreamPart): boolean =>
+  part.kind === "step" && part.phase === "finish" && part.reason === "stop";
+
+const applyFinalAssistantTurnMetadata = (
+  message: AgentSessionHistoryMessage,
+  turnTiming: CodexTurnTiming | null,
+  tokenUsage: CodexTokenUsageTotals | null,
+): AgentSessionHistoryMessage => {
+  if (message.role !== "assistant" || !message.parts.some(isStopFinishPart)) {
+    return message;
+  }
+
+  const tokenUsageFields = tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : null;
+  return {
+    ...message,
+    ...(turnTiming ? { durationMs: turnTiming.durationMs } : {}),
+    ...(tokenUsageFields ?? {}),
+    ...(tokenUsageFields
+      ? {
+          parts: message.parts.map((part) =>
+            isStopFinishPart(part) ? { ...part, ...tokenUsageFields } : part,
+          ),
+        }
+      : {}),
+  };
+};
 
 const requireCodexServerRequestId = (requestId: string, requestType: string): number => {
   const trimmed = requestId.trim();
@@ -503,20 +533,27 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = session
       ? { client: this.clientForRuntime(session.runtimeId), runtimeId: session.runtimeId }
       : await this.resolveRuntimeClient(input, "load Codex session history");
-    const responseWithoutTurns = await this.threadInventory.readLoadedThread(
-      client,
-      runtimeId,
-      input,
-    );
-    if (!responseWithoutTurns) {
+    const threadResponse = session
+      ? await this.threadInventory.readLoadedThread(client, runtimeId, input)
+      : await this.threadInventory.attachThreadForHistory(client, runtimeId, input);
+    if (!threadResponse) {
       return [];
     }
     const response = await this.threadInventory.readThreadWithTurns(
       client,
       input.externalSessionId,
     );
+    const tokenUsageByTurnId = await this.drainThreadReadTokenUsage(
+      runtimeId,
+      input.externalSessionId,
+    );
     return codexTurnItemsFromThreadRead(response)
-      .flatMap(({ item, timestamp, isFinalAgentMessage, turnTiming }, index) => {
+      .flatMap(({ item, turnId, timestamp, isFinalAgentMessage, turnTiming }, index) => {
+        const finalTokenUsage = isFinalAgentMessage
+          ? (tokenUsageByTurnId.get(turnId) ??
+            this.tokenUsageByTurnKey.get(codexTurnKey(input.externalSessionId, turnId)) ??
+            null)
+          : null;
         const canonicalEvents = this.eventMapperPipeline.runThreadItem(
           {
             item,
@@ -532,14 +569,9 @@ export class CodexAppServerAdapter
         );
         if (canonicalEvents.length > 0) {
           const history = projectCodexCanonicalEventsToHistory(canonicalEvents, session?.model);
-          if (isFinalAgentMessage && typeof turnTiming?.durationMs === "number") {
+          if (isFinalAgentMessage) {
             return history.map((message) =>
-              message.role === "assistant" &&
-              message.parts.some(
-                (part) => part.kind === "step" && part.phase === "finish" && part.reason === "stop",
-              )
-                ? { ...message, durationMs: turnTiming.durationMs }
-                : message,
+              applyFinalAssistantTurnMetadata(message, turnTiming, finalTokenUsage),
             );
           }
           return history;
@@ -548,15 +580,65 @@ export class CodexAppServerAdapter
           item,
           `codex-history-${index}`,
           session?.model,
-          timestamp,
+          timestamp ?? undefined,
           isFinalAgentMessage,
           turnTiming,
+          finalTokenUsage,
         );
         return message ? [message] : [];
       })
       .filter((message): message is import("@openducktor/core").AgentSessionHistoryMessage =>
         Boolean(message),
       );
+  }
+
+  private async drainThreadReadTokenUsage(
+    runtimeId: string,
+    threadId: string,
+  ): Promise<Map<string, CodexTokenUsageTotals>> {
+    const tokenUsageByTurnId = new Map<string, CodexTokenUsageTotals>();
+    const bufferedNotifications = this.bufferedNotificationsByThreadId.get(threadId) ?? [];
+    this.bufferedNotificationsByThreadId.delete(threadId);
+    const drainedNotifications = this.options.drainNotifications
+      ? (await this.options.drainNotifications(runtimeId)).map(parseNotificationRecord)
+      : [];
+    const notifications = [...bufferedNotifications, ...drainedNotifications];
+    for (const notification of notifications) {
+      const notificationThreadId = extractThreadIdFromParams(notification.params);
+      const notificationTurnId = extractTurnId(notification.params);
+      if (
+        notification.method === "thread/tokenUsage/updated" &&
+        notificationThreadId === threadId &&
+        notificationTurnId
+      ) {
+        const tokenUsage = extractCodexTokenUsageTotals(notification.params);
+        if (tokenUsage) {
+          tokenUsageByTurnId.set(notificationTurnId, tokenUsage);
+          this.tokenUsageByTurnKey.set(codexTurnKey(threadId, notificationTurnId), tokenUsage);
+        }
+        continue;
+      }
+      if (!this.options.subscribeEvents) {
+        this.bufferNotification(notification);
+      }
+    }
+
+    return tokenUsageByTurnId;
+  }
+
+  private bufferNotification(notification: CodexNotificationRecord): void {
+    const notificationThreadId = extractThreadIdFromParams(notification.params);
+    if (!notificationThreadId) {
+      return;
+    }
+
+    const buffered = this.bufferedNotificationsByThreadId.get(notificationThreadId) ?? [];
+    buffered.push(notification);
+    if (buffered.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
+      buffered.splice(0, buffered.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
+    }
+    this.bufferedNotificationsByThreadId.set(notificationThreadId, buffered);
+    trimOldestMapKeys(this.bufferedNotificationsByThreadId, MAX_CODEX_BUFFERED_THREAD_COUNT);
   }
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
@@ -1083,13 +1165,7 @@ export class CodexAppServerAdapter
     for (const notification of notifications) {
       const notificationThreadId = extractThreadIdFromParams(notification.params);
       if (notificationThreadId && notificationThreadId !== session.threadId) {
-        const buffered = this.bufferedNotificationsByThreadId.get(notificationThreadId) ?? [];
-        buffered.push(notification);
-        if (buffered.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
-          buffered.splice(0, buffered.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
-        }
-        this.bufferedNotificationsByThreadId.set(notificationThreadId, buffered);
-        trimOldestMapKeys(this.bufferedNotificationsByThreadId, MAX_CODEX_BUFFERED_THREAD_COUNT);
+        this.bufferNotification(notification);
         continue;
       }
       const timestamp = timestampFromCodexParams(notification.params);

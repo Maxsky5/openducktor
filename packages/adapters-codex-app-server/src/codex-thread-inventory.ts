@@ -86,6 +86,23 @@ export class CodexThreadInventoryReader {
     });
   }
 
+  async attachThreadForHistory(
+    client: CodexAppServerClient,
+    runtimeId: string,
+    input: { externalSessionId: string; workingDirectory: string },
+  ): Promise<unknown | null> {
+    const thread = await this.findThread(client, runtimeId, input.externalSessionId);
+    if (!thread || thread.cwd !== input.workingDirectory) {
+      return null;
+    }
+    const response = await client.threadResume({
+      threadId: input.externalSessionId,
+      cwd: input.workingDirectory,
+    });
+    this.clear(runtimeId);
+    return response;
+  }
+
   async readThreadWithTurns(client: CodexAppServerClient, threadId: string): Promise<unknown> {
     let response: unknown;
     try {

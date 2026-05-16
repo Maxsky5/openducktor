@@ -289,6 +289,44 @@ export class RecordingTransport implements CodexJsonRpcTransport {
   }
 }
 
+const defaultThreadResumeResponse = (request: CodexJsonRpcRequest) => {
+  const threadId = (request.params as { threadId: string }).threadId;
+  return {
+    thread: {
+      id: threadId,
+      cwd: "/repo",
+      createdAt: 1,
+      status: { type: "idle" },
+      turns: [],
+    },
+  };
+};
+
+const withDefaultThreadResume = (transport: CodexJsonRpcTransport): CodexJsonRpcTransport => ({
+  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+    if (request.method === "thread/resume") {
+      return defaultThreadResumeResponse(request) as Response;
+    }
+    return transport.request<Response>(request);
+  },
+});
+
+export const createAdapterWithTransport = (
+  transport: CodexJsonRpcTransport,
+  overrides: Partial<CodexAppServerAdapterOptions> = {},
+) =>
+  new CodexAppServerAdapter({
+    repoRuntimeResolver: {
+      ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
+      requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
+    },
+    transportFactory: () => withDefaultThreadResume(transport),
+    drainServerRequests: async () => [],
+    drainNotifications: async () => [],
+    respondServerRequest: async () => {},
+    ...overrides,
+  });
+
 export const createHarness = (
   overrides: Partial<CodexAppServerAdapterOptions> = {},
   options: { deferTurnStart?: boolean } = {},
@@ -333,6 +371,7 @@ export const createHarness = (
     },
     transportFactory,
     drainServerRequests,
+    drainNotifications,
     respondServerRequest,
     ...overrides,
   });

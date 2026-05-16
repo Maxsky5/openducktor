@@ -1,14 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createHarness, makeRuntimeSummary } from "./codex-app-server-adapter.test-harness";
-import {
-  CodexAppServerAdapter,
-  type CodexJsonRpcRequest,
-  type CodexJsonRpcTransport,
-} from "./index";
+import { createAdapterWithTransport, createHarness } from "./codex-app-server-adapter.test-harness";
+import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
 
 describe("CodexAppServerAdapter history hydration", () => {
   test("hydrates Codex history and diff from App Server reads", async () => {
-    const { adapter, transports } = createHarness();
+    const { adapter, drainNotifications, transports } = createHarness();
 
     await adapter.startSession({
       repoPath: "/repo",
@@ -19,6 +15,21 @@ describe("CodexAppServerAdapter history hydration", () => {
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
+
+    drainNotifications.mockImplementation(async () => [
+      {
+        method: "thread/tokenUsage/updated",
+        params: {
+          threadId: "thread/start-runtime-ensure",
+          turnId: "turn-1",
+          tokenUsage: {
+            total: { totalTokens: 42_000 },
+            last: { totalTokens: 1_000 },
+            modelContextWindow: 200_000,
+          },
+        },
+      },
+    ]);
 
     const history = await adapter.loadSessionHistory({
       repoPath: "/repo",
@@ -153,7 +164,17 @@ describe("CodexAppServerAdapter history hydration", () => {
         role: "assistant",
         timestamp: "2026-05-07T00:00:31.000Z",
         text: "Hello from history",
-        parts: [expect.objectContaining({ kind: "step", phase: "finish", reason: "stop" })],
+        totalTokens: 1_000,
+        contextWindow: 200_000,
+        parts: [
+          expect.objectContaining({
+            kind: "step",
+            phase: "finish",
+            reason: "stop",
+            totalTokens: 1_000,
+            contextWindow: 200_000,
+          }),
+        ],
       }),
       expect.objectContaining({
         messageId: "msg-commentary-1",
@@ -239,15 +260,7 @@ describe("CodexAppServerAdapter history hydration", () => {
         } as Response;
       },
     };
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
-      transportFactory: () => transport,
-      drainServerRequests: async () => [],
-      respondServerRequest: async () => {},
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     const history = await adapter.loadSessionHistory({
       repoPath: "/repo",
@@ -271,6 +284,55 @@ describe("CodexAppServerAdapter history hydration", () => {
         ],
       }),
     ]);
+  });
+
+  test("hydrates restored token usage replayed by Codex thread resume", async () => {
+    const { adapter, drainNotifications, transports } = createHarness();
+
+    drainNotifications.mockImplementation(async () => [
+      {
+        method: "thread/tokenUsage/updated",
+        params: {
+          threadId: "thread-idle",
+          turnId: "turn-1",
+          tokenUsage: {
+            total: { totalTokens: 42_000 },
+            last: { totalTokens: 1_000 },
+            modelContextWindow: 200_000,
+          },
+        },
+      },
+    ]);
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-idle",
+    });
+
+    expect(transports.get("runtime-ensure")?.calls).toContainEqual({
+      method: "thread/resume",
+      params: {
+        threadId: "thread-idle",
+        cwd: "/repo",
+      },
+    });
+    expect(history.find((message) => message.messageId === "msg-1")).toEqual(
+      expect.objectContaining({
+        role: "assistant",
+        totalTokens: 1_000,
+        contextWindow: 200_000,
+        parts: [
+          expect.objectContaining({
+            kind: "step",
+            phase: "finish",
+            totalTokens: 1_000,
+            contextWindow: 200_000,
+          }),
+        ],
+      }),
+    );
   });
 
   test("hydrates documented thread-read tool item shapes", async () => {
@@ -349,15 +411,7 @@ describe("CodexAppServerAdapter history hydration", () => {
         } as Response;
       },
     };
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
-      transportFactory: () => transport,
-      drainServerRequests: async () => [],
-      respondServerRequest: async () => {},
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     const history = await adapter.loadSessionHistory({
       repoPath: "/repo",
@@ -499,15 +553,7 @@ describe("CodexAppServerAdapter history hydration", () => {
         } as Response;
       },
     };
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
-      transportFactory: () => transport,
-      drainServerRequests: async () => [],
-      respondServerRequest: async () => {},
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     const history = await adapter.loadSessionHistory({
       repoPath: "/repo",
@@ -583,15 +629,7 @@ describe("CodexAppServerAdapter history hydration", () => {
         } as Response;
       },
     };
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
-      transportFactory: () => transport,
-      drainServerRequests: async () => [],
-      respondServerRequest: async () => {},
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     await expect(
       adapter.loadSessionHistory({
@@ -658,15 +696,7 @@ describe("CodexAppServerAdapter history hydration", () => {
         } as Response;
       },
     };
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
-      transportFactory: () => transport,
-      drainServerRequests: async () => [],
-      respondServerRequest: async () => {},
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     await expect(
       adapter.loadSessionTodos({
@@ -725,15 +755,7 @@ describe("CodexAppServerAdapter history hydration", () => {
         } as Response;
       },
     };
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
-      transportFactory: () => transport,
-      drainServerRequests: async () => [],
-      respondServerRequest: async () => {},
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     const history = await adapter.loadSessionHistory({
       repoPath: "/repo",
@@ -799,15 +821,7 @@ describe("CodexAppServerAdapter history hydration", () => {
         } as Response;
       },
     };
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
-      transportFactory: () => transport,
-      drainServerRequests: async () => [],
-      respondServerRequest: async () => {},
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     await expect(
       adapter.loadSessionTodos({
@@ -880,15 +894,7 @@ describe("CodexAppServerAdapter history hydration", () => {
         } as Response;
       },
     };
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
-      transportFactory: () => transport,
-      drainServerRequests: async () => [],
-      respondServerRequest: async () => {},
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     await expect(
       adapter.loadSessionTodos({
@@ -958,15 +964,7 @@ describe("CodexAppServerAdapter history hydration", () => {
         } as Response;
       },
     };
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
-      transportFactory: () => transport,
-      drainServerRequests: async () => [],
-      respondServerRequest: async () => {},
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     await expect(
       adapter.loadSessionTodos({
@@ -1035,15 +1033,7 @@ describe("CodexAppServerAdapter history hydration", () => {
         } as Response;
       },
     };
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
-      transportFactory: () => transport,
-      drainServerRequests: async () => [],
-      respondServerRequest: async () => {},
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     await expect(
       adapter.loadSessionTodos({
@@ -1115,15 +1105,7 @@ describe("CodexAppServerAdapter history hydration", () => {
         } as Response;
       },
     };
-    const adapter = new CodexAppServerAdapter({
-      repoRuntimeResolver: {
-        ensureRepoRuntime: async () => makeRuntimeSummary("runtime-ensure"),
-        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
-      },
-      transportFactory: () => transport,
-      drainServerRequests: async () => [],
-      respondServerRequest: async () => {},
-    });
+    const adapter = createAdapterWithTransport(transport);
 
     await expect(
       adapter.loadSessionTodos({

@@ -45,6 +45,10 @@ const writeLine = (stdin: Writable, payload: unknown): Promise<void> =>
     });
   });
 
+const resolveAfterQueuedMessages = (resolve: (value: unknown) => void, value: unknown): void => {
+  setImmediate(() => resolve(value));
+};
+
 const extractErrorMessage = (value: unknown): string => {
   if (typeof value === "string") {
     return value;
@@ -131,7 +135,7 @@ export const createCodexAppServerTransport = (
       );
       return;
     }
-    request.resolve(message.result);
+    resolveAfterQueuedMessages(request.resolve, message.result);
   };
 
   const handleMessage = (message: unknown): void => {
@@ -154,19 +158,17 @@ export const createCodexAppServerTransport = (
     }
 
     if (hasMethod && id === null) {
+      notifications.push(message);
       if (eventEmitter) {
         eventEmitter({ runtimeId, kind: "notification", message });
-      } else {
-        notifications.push(message);
       }
       return;
     }
 
     if (hasMethod && id !== null) {
+      serverRequests.push(message);
       if (eventEmitter) {
         eventEmitter({ runtimeId, kind: "server_request", message });
-      } else {
-        serverRequests.push(message);
       }
       return;
     }

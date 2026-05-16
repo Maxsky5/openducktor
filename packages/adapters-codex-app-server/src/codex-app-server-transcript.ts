@@ -63,7 +63,20 @@ const extractOptionalFiniteNumberField = (
 };
 
 export type CodexTurnTiming = {
-  durationMs?: number;
+  durationMs: number;
+};
+
+export type CodexThreadReadItem = {
+  item: Record<string, unknown>;
+  turnId: string;
+  timestamp: string | null;
+  isFinalAgentMessage: boolean;
+  turnTiming: CodexTurnTiming | null;
+};
+
+export type CodexHistoryTokenUsageFields = {
+  totalTokens: number;
+  contextWindow?: number;
 };
 
 export type { AgentToolStatus } from "./codex-tool-normalizer";
@@ -196,63 +209,49 @@ export const codexTurnTimestampSeconds = (
       : null;
 };
 
-export const codexTurnItemsFromThreadRead = (
-  value: unknown,
-): Array<{
-  item: Record<string, unknown>;
-  timestamp?: string;
-  isFinalAgentMessage?: boolean;
-  turnTiming?: CodexTurnTiming;
-}> => {
+export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadItem[] => {
   if (!isPlainObject(value) || !isPlainObject(value.thread)) {
     throw new Error("Codex thread/read response is missing thread data.");
   }
   if (!Array.isArray(value.thread.turns)) {
     throw new Error("Codex thread/read response is missing thread turns.");
   }
-  return value.thread.turns.flatMap(
-    (
-      turn,
-    ): Array<{
-      item: Record<string, unknown>;
-      timestamp?: string;
-      isFinalAgentMessage?: boolean;
-      turnTiming?: CodexTurnTiming;
-    }> => {
-      if (!isPlainObject(turn)) {
-        return [];
-      }
-      const items = arrayFromUnknown(turn.items).filter(isPlainObject);
-      const isCompletedTurn = extractStringField(turn, ["status"]) === "completed";
-      const finalAgentMessageId = isCompletedTurn ? selectCodexFinalAgentMessage(items) : null;
-      const startedAtSeconds = codexTurnTimestampSeconds(turn, ["startedAt", "started_at"]);
-      const completedAtSeconds = codexTurnTimestampSeconds(turn, ["completedAt", "completed_at"]);
-      const durationMs =
-        extractNumberField(turn, ["durationMs", "duration_ms"]) ??
-        (typeof startedAtSeconds === "number" && typeof completedAtSeconds === "number"
-          ? Math.max(0, (completedAtSeconds - startedAtSeconds) * 1000)
-          : null);
-      return items.map((item) => {
-        const itemIsFinalAgentMessage =
-          finalAgentMessageId !== null && item === finalAgentMessageId;
-        const timestampSeconds =
-          codexItemType(item) === "userMessage"
-            ? startedAtSeconds
-            : itemIsFinalAgentMessage
-              ? completedAtSeconds
-              : (completedAtSeconds ?? startedAtSeconds);
-        const timestamp = codexTimestampFromSeconds(timestampSeconds);
-        return {
-          item,
-          ...(timestamp ? { timestamp } : {}),
-          ...(itemIsFinalAgentMessage ? { isFinalAgentMessage: true } : {}),
-          ...(itemIsFinalAgentMessage && typeof durationMs === "number" && durationMs > 0
-            ? { turnTiming: { durationMs } }
-            : {}),
-        };
-      });
-    },
-  );
+  return value.thread.turns.flatMap((turn): CodexThreadReadItem[] => {
+    if (!isPlainObject(turn)) {
+      return [];
+    }
+    const items = arrayFromUnknown(turn.items).filter(isPlainObject);
+    const turnId = extractStringField(turn, ["id", "turnId", "turn_id"]) ?? "";
+    const isCompletedTurn = extractStringField(turn, ["status"]) === "completed";
+    const finalAgentMessageId = isCompletedTurn ? selectCodexFinalAgentMessage(items) : null;
+    const startedAtSeconds = codexTurnTimestampSeconds(turn, ["startedAt", "started_at"]);
+    const completedAtSeconds = codexTurnTimestampSeconds(turn, ["completedAt", "completed_at"]);
+    const durationMs =
+      extractNumberField(turn, ["durationMs", "duration_ms"]) ??
+      (typeof startedAtSeconds === "number" && typeof completedAtSeconds === "number"
+        ? Math.max(0, (completedAtSeconds - startedAtSeconds) * 1000)
+        : null);
+    return items.map((item) => {
+      const itemIsFinalAgentMessage = finalAgentMessageId !== null && item === finalAgentMessageId;
+      const timestampSeconds =
+        codexItemType(item) === "userMessage"
+          ? startedAtSeconds
+          : itemIsFinalAgentMessage
+            ? completedAtSeconds
+            : (completedAtSeconds ?? startedAtSeconds);
+      const timestamp = codexTimestampFromSeconds(timestampSeconds) ?? null;
+      return {
+        item,
+        turnId,
+        timestamp,
+        isFinalAgentMessage: itemIsFinalAgentMessage,
+        turnTiming:
+          itemIsFinalAgentMessage && typeof durationMs === "number" && durationMs > 0
+            ? { durationMs }
+            : null,
+      };
+    });
+  });
 };
 
 export const toHistoryMessage = (
@@ -261,7 +260,8 @@ export const toHistoryMessage = (
   model?: AgentModelSelection,
   timestamp?: string,
   isFinalAgentMessage?: boolean,
-  turnTiming?: CodexTurnTiming,
+  turnTiming?: CodexTurnTiming | null,
+  tokenUsage?: CodexTokenUsageTotals | null,
 ): import("@openducktor/core").AgentSessionHistoryMessage | null => {
   if (!isPlainObject(item)) {
     return null;
@@ -299,11 +299,11 @@ export const toHistoryMessage = (
       role: "assistant",
       timestamp: messageTimestamp,
       text,
-      ...(isFinalAgentMessage && typeof turnTiming?.durationMs === "number"
-        ? { durationMs: turnTiming.durationMs }
-        : {}),
+      ...(isFinalAgentMessage && turnTiming ? { durationMs: turnTiming.durationMs } : {}),
+      ...(isFinalAgentMessage && tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : {}),
       parts: toHistoryParts(item, messageId, text, {
         ...(isFinalAgentMessage ? { isFinalAgentMessage } : {}),
+        ...(tokenUsage ? { tokenUsage } : {}),
         includeTextFallback: false,
       }),
       ...(model ? { model } : {}),
@@ -323,11 +323,22 @@ export const toHistoryMessage = (
   return null;
 };
 
+export const codexTokenUsageHistoryFields = (
+  tokenUsage: CodexTokenUsageTotals,
+): CodexHistoryTokenUsageFields => ({
+  totalTokens: tokenUsage.totalTokens,
+  ...(tokenUsage.contextWindow ? { contextWindow: tokenUsage.contextWindow } : {}),
+});
+
 export const toHistoryParts = (
   item: Record<string, unknown>,
   messageId: string,
   fallbackText: string,
-  options: { isFinalAgentMessage?: boolean; includeTextFallback?: boolean } = {},
+  options: {
+    isFinalAgentMessage?: boolean;
+    includeTextFallback?: boolean;
+    tokenUsage?: CodexTokenUsageTotals | null;
+  } = {},
 ): import("@openducktor/core").AgentStreamPart[] => {
   const isFinalAgentMessage = options.isFinalAgentMessage === true;
   const includeTextFallback = options.includeTextFallback !== false;
@@ -339,10 +350,12 @@ export const toHistoryParts = (
     return toStreamPart(part, messageId, `codex-history-part-${index}`);
   });
   if (parts.length > 0) {
-    return isFinalAgentMessage ? [...parts, terminalHistoryPart(messageId)] : parts;
+    return isFinalAgentMessage
+      ? [...parts, terminalHistoryPart(messageId, options.tokenUsage)]
+      : parts;
   }
   if (fallbackText.length === 0 || !includeTextFallback) {
-    return isFinalAgentMessage ? [terminalHistoryPart(messageId)] : [];
+    return isFinalAgentMessage ? [terminalHistoryPart(messageId, options.tokenUsage)] : [];
   }
   const textParts: import("@openducktor/core").AgentStreamPart[] = [
     {
@@ -353,7 +366,9 @@ export const toHistoryParts = (
       completed: true,
     },
   ];
-  return isFinalAgentMessage ? [...textParts, terminalHistoryPart(messageId)] : textParts;
+  return isFinalAgentMessage
+    ? [...textParts, terminalHistoryPart(messageId, options.tokenUsage)]
+    : textParts;
 };
 
 export const terminalHistoryPart = (
@@ -365,10 +380,7 @@ export const terminalHistoryPart = (
   partId: `${messageId}-finish`,
   phase: "finish",
   reason: "stop",
-  ...(typeof tokenUsage?.totalTokens === "number" ? { totalTokens: tokenUsage.totalTokens } : {}),
-  ...(typeof tokenUsage?.contextWindow === "number"
-    ? { contextWindow: tokenUsage.contextWindow }
-    : {}),
+  ...(tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : {}),
 });
 
 export const firstPlainObject = (value: unknown): Record<string, unknown> | null => {
@@ -565,13 +577,12 @@ export const extractCodexTokenUsageTotals = (params: unknown): CodexTokenUsageTo
   if (!isPlainObject(params)) {
     return null;
   }
-  const usage = isPlainObject(params.tokenUsage ?? params.token_usage)
-    ? (params.tokenUsage ?? params.token_usage)
-    : null;
-  if (!usage || !isPlainObject(usage)) {
+
+  const usage = codexTokenUsagePayload(params);
+  if (!usage) {
     return null;
   }
-  const last = isPlainObject(usage.last) ? usage.last : null;
+  const last = firstPlainObject([usage.last, usage.lastTokenUsage, usage.last_token_usage]);
   const totalTokens =
     extractNumberField(last, ["totalTokens", "total_tokens"]) ??
     extractNumberField(usage, ["totalTokens", "total_tokens"]);
@@ -588,6 +599,17 @@ export const extractCodexTokenUsageTotals = (params: unknown): CodexTokenUsageTo
     totalTokens,
     ...(typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : {}),
   };
+};
+
+const codexTokenUsagePayload = (
+  params: Record<string, unknown>,
+): Record<string, unknown> | null => {
+  const directUsage = params.tokenUsage ?? params.token_usage;
+  if (isPlainObject(directUsage)) {
+    return directUsage;
+  }
+
+  return null;
 };
 
 export const syntheticToolPart = ({
