@@ -2,6 +2,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import { createSystemCommandRunner } from "../system/system-command-runner";
 import { resolveCodexBinary, resolveOpencodeBinary } from "./runtime-binaries";
 
 const createSystemCommands = ({
@@ -121,6 +122,25 @@ describe("resolveOpencodeBinary", () => {
     ).resolves.toBe("opencode");
   });
 
+  test("returns the resolved Windows PATHEXT OpenCode path for PATH fallback", async () => {
+    await withTempDir(async (root) => {
+      const opencode = join(root, "opencode.cmd");
+      await writeFile(opencode, "");
+      const systemCommands = createSystemCommandRunner({
+        env: { PATH: root, PATHEXT: ".cmd" },
+        platform: "win32",
+      });
+
+      await expect(
+        resolveOpencodeBinary(
+          systemCommands,
+          { PATH: root, PATHEXT: ".cmd" },
+          { platform: "win32" },
+        ),
+      ).resolves.toBe(opencode);
+    });
+  });
+
   test("reports considered OpenCode locations when missing", async () => {
     await expect(
       resolveOpencodeBinary(
@@ -214,6 +234,21 @@ describe("resolveCodexBinary", () => {
     await expect(
       resolveCodexBinary(createSystemCommands({ available: ["codex"] }), {}),
     ).resolves.toBe("codex");
+  });
+
+  test("returns the resolved Windows PATHEXT Codex path for PATH fallback", async () => {
+    await withTempDir(async (root) => {
+      const codex = join(root, "codex.bat");
+      await writeFile(codex, "");
+      const systemCommands = createSystemCommandRunner({
+        env: { PATH: root, PATHEXT: ".bat" },
+        platform: "win32",
+      });
+
+      await expect(
+        resolveCodexBinary(systemCommands, { PATH: root, PATHEXT: ".bat" }, { platform: "win32" }),
+      ).resolves.toBe(codex);
+    });
   });
 
   test("reports considered Codex locations when missing", async () => {

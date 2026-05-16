@@ -13,6 +13,7 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { shouldStartDetachedProcessGroup, signalProcessTree } from "../process/process-tree";
 import { resolveOpencodeBinary } from "../runtimes/runtime-binaries";
+import { createSystemCommandLaunch } from "../system/system-command-runner";
 
 export type OpenCodeMcpBridgeConnection = {
   workspaceId: string;
@@ -239,7 +240,13 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
     const configContent = buildOpenCodeConfigContent(bridge, resolvedMcpCommand);
     const binary = opencodeBinary ?? (await resolveOpencodeBinary(systemCommands, processEnv));
     const port = await portAllocator();
-    const child = spawn(binary, ["serve", "--hostname", "127.0.0.1", "--port", port.toString()], {
+    const command = createSystemCommandLaunch(
+      binary,
+      ["serve", "--hostname", "127.0.0.1", "--port", port.toString()],
+      processEnv,
+      process.platform,
+    );
+    const child = spawn(command.command, command.args, {
       cwd: input.workingDirectory,
       detached: shouldStartDetachedProcessGroup(),
       env: {

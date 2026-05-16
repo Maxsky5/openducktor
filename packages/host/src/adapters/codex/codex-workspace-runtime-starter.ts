@@ -14,6 +14,7 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { shouldStartDetachedProcessGroup, signalProcessTree } from "../process/process-tree";
 import { resolveCodexBinary } from "../runtimes/runtime-binaries";
+import { createSystemCommandLaunch } from "../system/system-command-runner";
 import {
   type CodexAppServerEventEmitter,
   createCodexAppServerTransport,
@@ -148,16 +149,6 @@ const stopChildProcess = async (
   throw new Error(`Timed out waiting for Codex app-server process group ${pid} to stop.`);
 };
 
-const codexCommand = (binary: string, args: string[]): { file: string; args: string[] } => {
-  const lowerBinary = binary.toLowerCase();
-  const isWindowsCommandScript =
-    process.platform === "win32" && (lowerBinary.endsWith(".cmd") || lowerBinary.endsWith(".bat"));
-
-  return isWindowsCommandScript
-    ? { file: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/c", "call", binary, ...args] }
-    : { file: binary, args };
-};
-
 export const createCodexWorkspaceRuntimeStarter = ({
   systemCommands,
   codexAppServer,
@@ -187,12 +178,14 @@ export const createCodexWorkspaceRuntimeStarter = ({
       resolveConfiguredMcpCommand(processEnv, mcpCommand) ??
       (await resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
     const binary = codexBinary ?? (await resolveCodexBinary(systemCommands, processEnv));
-    const command = codexCommand(binary, [
-      ...buildCodexMcpConfigArgs(resolvedMcpCommand),
-      "app-server",
-    ]);
+    const command = createSystemCommandLaunch(
+      binary,
+      [...buildCodexMcpConfigArgs(resolvedMcpCommand), "app-server"],
+      processEnv,
+      process.platform,
+    );
     const nextRuntimeId = runtimeId();
-    const child = spawn(command.file, command.args, {
+    const child = spawn(command.command, command.args, {
       cwd: input.workingDirectory,
       detached: shouldStartDetachedProcessGroup(),
       env: {

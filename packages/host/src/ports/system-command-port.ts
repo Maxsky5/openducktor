@@ -11,6 +11,7 @@ export type SystemCommandRunResult = {
 };
 
 export type SystemCommandPort = {
+  resolveCommandPath?(command: string, env?: NodeJS.ProcessEnv): Promise<string | null>;
   requiredCommandError(command: string): Promise<string | null>;
   versionCommand(
     command: string,
