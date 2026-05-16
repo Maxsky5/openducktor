@@ -256,7 +256,7 @@ describe("resolveCodexBinary", () => {
       resolveCodexBinary(
         createSystemCommands(),
         {},
-        { resourcesPath: "/opt/OpenDucktor/resources" },
+        { platform: "linux", resourcesPath: "/opt/OpenDucktor/resources" },
       ),
     ).rejects.toThrow(
       "codex not found. Checked OPENDUCKTOR_CODEX_BINARY, bundled locations (OPENDUCKTOR_BUNDLED_BIN_DIR, /opt/OpenDucktor/resources/bin/codex), and PATH. Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.",
