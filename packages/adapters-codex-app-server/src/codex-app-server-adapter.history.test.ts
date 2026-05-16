@@ -333,6 +333,22 @@ describe("CodexAppServerAdapter history hydration", () => {
         ],
       }),
     );
+
+    drainNotifications.mockImplementation(async () => []);
+
+    const historyWithoutReplay = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-idle",
+    });
+
+    expect(historyWithoutReplay.find((message) => message.messageId === "msg-1")).toEqual(
+      expect.not.objectContaining({
+        totalTokens: 1_000,
+        contextWindow: 200_000,
+      }),
+    );
   });
 
   test("hydrates documented thread-read tool item shapes", async () => {

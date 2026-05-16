@@ -30,6 +30,7 @@ export type CodexAppServerStreamEvent = {
 export type CodexAppServerEventEmitter = (event: CodexAppServerStreamEvent) => void;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+const MAX_BUFFERED_STREAM_MESSAGES = 1_000;
 
 const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -47,6 +48,13 @@ const writeLine = (stdin: Writable, payload: unknown): Promise<void> =>
 
 const resolveAfterQueuedMessages = (resolve: (value: unknown) => void, value: unknown): void => {
   setImmediate(() => resolve(value));
+};
+
+const pushBoundedMessage = (messages: unknown[], message: unknown): void => {
+  messages.push(message);
+  if (messages.length > MAX_BUFFERED_STREAM_MESSAGES) {
+    messages.splice(0, messages.length - MAX_BUFFERED_STREAM_MESSAGES);
+  }
 };
 
 const extractErrorMessage = (value: unknown): string => {
@@ -158,7 +166,7 @@ export const createCodexAppServerTransport = (
     }
 
     if (hasMethod && id === null) {
-      notifications.push(message);
+      pushBoundedMessage(notifications, message);
       if (eventEmitter) {
         eventEmitter({ runtimeId, kind: "notification", message });
       }
@@ -166,9 +174,10 @@ export const createCodexAppServerTransport = (
     }
 
     if (hasMethod && id !== null) {
-      serverRequests.push(message);
       if (eventEmitter) {
         eventEmitter({ runtimeId, kind: "server_request", message });
+      } else {
+        pushBoundedMessage(serverRequests, message);
       }
       return;
     }

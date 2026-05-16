@@ -68,7 +68,7 @@ export type CodexTurnTiming = {
 
 export type CodexThreadReadItem = {
   item: Record<string, unknown>;
-  turnId: string;
+  turnId: string | null;
   timestamp: string | null;
   isFinalAgentMessage: boolean;
   turnTiming: CodexTurnTiming | null;
@@ -221,7 +221,7 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
       return [];
     }
     const items = arrayFromUnknown(turn.items).filter(isPlainObject);
-    const turnId = extractStringField(turn, ["id", "turnId", "turn_id"]) ?? "";
+    const turnId = extractStringField(turn, ["id", "turnId", "turn_id"]) ?? null;
     const isCompletedTurn = extractStringField(turn, ["status"]) === "completed";
     const finalAgentMessageId = isCompletedTurn ? selectCodexFinalAgentMessage(items) : null;
     const startedAtSeconds = codexTurnTimestampSeconds(turn, ["startedAt", "started_at"]);
@@ -233,12 +233,14 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
         : null);
     return items.map((item) => {
       const itemIsFinalAgentMessage = finalAgentMessageId !== null && item === finalAgentMessageId;
-      const timestampSeconds =
-        codexItemType(item) === "userMessage"
-          ? startedAtSeconds
-          : itemIsFinalAgentMessage
-            ? completedAtSeconds
-            : (completedAtSeconds ?? startedAtSeconds);
+      let timestampSeconds: number | null;
+      if (codexItemType(item) === "userMessage") {
+        timestampSeconds = startedAtSeconds;
+      } else if (itemIsFinalAgentMessage) {
+        timestampSeconds = completedAtSeconds;
+      } else {
+        timestampSeconds = completedAtSeconds ?? startedAtSeconds;
+      }
       const timestamp = codexTimestampFromSeconds(timestampSeconds) ?? null;
       return {
         item,
@@ -327,7 +329,9 @@ export const codexTokenUsageHistoryFields = (
   tokenUsage: CodexTokenUsageTotals,
 ): CodexHistoryTokenUsageFields => ({
   totalTokens: tokenUsage.totalTokens,
-  ...(tokenUsage.contextWindow ? { contextWindow: tokenUsage.contextWindow } : {}),
+  ...(typeof tokenUsage.contextWindow === "number"
+    ? { contextWindow: tokenUsage.contextWindow }
+    : {}),
 });
 
 export const toHistoryParts = (

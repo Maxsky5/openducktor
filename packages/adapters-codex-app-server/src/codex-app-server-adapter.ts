@@ -549,11 +549,13 @@ export class CodexAppServerAdapter
     );
     return codexTurnItemsFromThreadRead(response)
       .flatMap(({ item, turnId, timestamp, isFinalAgentMessage, turnTiming }, index) => {
-        const finalTokenUsage = isFinalAgentMessage
-          ? (tokenUsageByTurnId.get(turnId) ??
+        let finalTokenUsage: CodexTokenUsageTotals | null = null;
+        if (isFinalAgentMessage && turnId) {
+          finalTokenUsage =
+            tokenUsageByTurnId.get(turnId) ??
             this.tokenUsageByTurnKey.get(codexTurnKey(input.externalSessionId, turnId)) ??
-            null)
-          : null;
+            null;
+        }
         const canonicalEvents = this.eventMapperPipeline.runThreadItem(
           {
             item,
@@ -614,7 +616,6 @@ export class CodexAppServerAdapter
         const tokenUsage = extractCodexTokenUsageTotals(notification.params);
         if (tokenUsage) {
           tokenUsageByTurnId.set(notificationTurnId, tokenUsage);
-          this.tokenUsageByTurnKey.set(codexTurnKey(threadId, notificationTurnId), tokenUsage);
         }
         continue;
       }

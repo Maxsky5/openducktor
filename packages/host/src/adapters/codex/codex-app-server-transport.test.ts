@@ -47,4 +47,25 @@ describe("createCodexAppServerTransport", () => {
 
     await transport.close();
   });
+
+  test("does not retain emitted server requests for later drain polling", async () => {
+    const child = createChild();
+    const emitted: unknown[] = [];
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
+      emitted.push(event),
+    );
+    const request = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "askForApproval",
+      params: { threadId: "thread-1" },
+    };
+
+    child.stdout.write(`${JSON.stringify(request)}\n`);
+
+    expect(emitted).toEqual([{ runtimeId: "runtime-1", kind: "server_request", message: request }]);
+    await expect(transport.drainServerRequests()).resolves.toEqual([]);
+
+    await transport.close();
+  });
 });
