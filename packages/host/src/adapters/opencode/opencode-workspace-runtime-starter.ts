@@ -254,6 +254,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         OPENCODE_CONFIG_CONTENT: configContent,
       },
       stdio: ["ignore", "pipe", "pipe"],
+      windowsVerbatimArguments: command.windowsVerbatimArguments === true,
     });
     const pid = child.pid;
     if (!pid || pid <= 0) {

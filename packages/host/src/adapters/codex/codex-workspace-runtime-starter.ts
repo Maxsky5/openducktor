@@ -197,6 +197,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
         ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
       },
       stdio: ["pipe", "pipe", "pipe"],
+      windowsVerbatimArguments: command.windowsVerbatimArguments === true,
     }) as CodexChildProcess;
     const pid = child.pid;
     if (!pid || pid <= 0) {
