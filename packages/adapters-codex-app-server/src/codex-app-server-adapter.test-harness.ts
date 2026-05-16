@@ -75,20 +75,23 @@ export class RecordingTransport implements CodexJsonRpcTransport {
         } as Response;
       case "thread/start":
       case "thread/resume":
-      case "thread/fork":
+      case "thread/fork": {
+        const threadId =
+          method === "thread/resume"
+            ? (params as { threadId: string }).threadId
+            : `${method}-${this.runtimeId}`;
         return {
           thread: {
-            id:
-              method === "thread/resume"
-                ? (params as { threadId: string }).threadId
-                : `${method}-${this.runtimeId}`,
+            id: threadId,
             cwd: "/repo",
             createdAt: 1_778_112_000,
             preview: "Live Codex session",
-            status: { type: "active", activeFlags: [] },
+            status:
+              threadId === "thread-idle" ? { type: "idle" } : { type: "active", activeFlags: [] },
           },
           startedAt: "2026-05-07T00:00:00.000Z",
         } as Response;
+      }
       case "turn/start":
         if (
           !Array.isArray((params as { input?: unknown })?.input) ||
