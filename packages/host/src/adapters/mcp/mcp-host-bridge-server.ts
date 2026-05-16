@@ -5,8 +5,10 @@ import {
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
+import { Effect } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import { HostOperationError } from "../../effect/host-errors";
 import type { OpenCodeMcpBridgeConnection } from "../opencode/opencode-workspace-runtime-starter";
 import {
   type McpBridgeDiscoveryFile,
@@ -59,7 +61,13 @@ const readRequestBody = (request: IncomingMessage): Promise<unknown> =>
     request.on("data", (chunk: string) => {
       receivedBytes += Buffer.byteLength(chunk);
       if (receivedBytes > MAX_BODY_BYTES) {
-        reject(new Error("MCP host bridge request body exceeds 1 MiB."));
+        reject(
+          new HostOperationError({
+            operation: "mcpHostBridge.readRequestBody",
+            message: "MCP host bridge request body exceeds 1 MiB.",
+            details: { maxBodyBytes: MAX_BODY_BYTES },
+          }),
+        );
         request.destroy();
         return;
       }
@@ -74,7 +82,11 @@ const readRequestBody = (request: IncomingMessage): Promise<unknown> =>
         resolve(JSON.parse(body) as unknown);
       } catch (error) {
         reject(
-          new Error(`Invalid JSON request body: ${error instanceof Error ? error.message : error}`),
+          new HostOperationError({
+            operation: "mcpHostBridge.readRequestBody",
+            message: `Invalid JSON request body: ${error instanceof Error ? error.message : error}`,
+            cause: error,
+          }),
         );
       }
     });
@@ -99,7 +111,12 @@ const listen = (server: Server): Promise<number> =>
       server.off("error", reject);
       const address = server.address();
       if (!address || typeof address === "string") {
-        reject(new Error("Failed to bind MCP host bridge on 127.0.0.1."));
+        reject(
+          new HostOperationError({
+            operation: "mcpHostBridge.listen",
+            message: "Failed to bind MCP host bridge on 127.0.0.1.",
+          }),
+        );
         return;
       }
       resolve((address as AddressInfo).port);
@@ -145,11 +162,11 @@ const createBridgeRequestHandler =
       const command = decodeURIComponent(request.url.slice("/invoke/".length));
       const body = await readRequestBody(request);
       if (command === "odt_mcp_ready") {
-        sendJson(response, 200, await bridgeService.ready(body));
+        sendJson(response, 200, await Effect.runPromise(bridgeService.ready(body)));
         return;
       }
       if (command === "odt_get_workspaces") {
-        sendJson(response, 200, await bridgeService.getWorkspaces(body));
+        sendJson(response, 200, await Effect.runPromise(bridgeService.getWorkspaces(body)));
         return;
       }
 
@@ -161,7 +178,7 @@ const createBridgeRequestHandler =
       sendJson(
         response,
         200,
-        await bridgeService.invoke(command as WorkspaceScopedOdtToolName, body),
+        await Effect.runPromise(bridgeService.invoke(command as WorkspaceScopedOdtToolName, body)),
       );
     } catch (error) {
       sendJson(response, 400, { error: errorMessage(error) });
@@ -195,12 +212,14 @@ export const createMcpHostBridgeServer = ({
       try {
         await closeServer(nextServer);
       } catch (closeError) {
-        throw new Error(
-          `Failed to publish MCP host bridge discovery file and close the unpublished bridge: ${
+        throw new HostOperationError({
+          operation: "mcpHostBridgeServer.ensureStarted",
+          message: `Failed to publish MCP host bridge discovery file and close the unpublished bridge: ${
             closeError instanceof Error ? closeError.message : String(closeError)
           }`,
-          { cause: error },
-        );
+          cause: error,
+          details: { discoveryPath },
+        });
       }
       throw error;
     }
@@ -239,7 +258,9 @@ export const createMcpHostBridgeServer = ({
 
   return {
     async ensureConnection(input) {
-      const repoConfig = await workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath);
+      const repoConfig = await Effect.runPromise(
+        workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath),
+      );
       const connection = await ensureStarted();
       return {
         workspaceId: repoConfig.workspaceId,

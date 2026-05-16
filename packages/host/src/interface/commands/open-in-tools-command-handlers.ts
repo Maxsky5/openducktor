@@ -2,6 +2,7 @@ import {
   systemListOpenInToolsRequestSchema,
   systemOpenDirectoryInToolRequestSchema,
 } from "@openducktor/contracts";
+import { Effect } from "effect";
 import type {
   OpenExternalUrlInput,
   OpenInToolsService,
@@ -21,12 +22,10 @@ export const createOpenInToolsCommandHandlers = (
 ): HostCommandHandlers => ({
   system_list_open_in_tools: (args) =>
     service.listOpenInTools(systemListOpenInToolsRequestSchema.parse(args ?? {})),
-  system_open_directory_in_tool: async (args) => {
-    await service.openDirectoryInTool(systemOpenDirectoryInToolRequestSchema.parse(args));
-    return { ok: true };
-  },
-  open_external_url: async (args) => {
-    await service.openExternalUrl(parseOpenExternalUrlInput(args));
-    return { ok: true };
-  },
+  system_open_directory_in_tool: (args) =>
+    service
+      .openDirectoryInTool(systemOpenDirectoryInToolRequestSchema.parse(args))
+      .pipe(Effect.as({ ok: true })),
+  open_external_url: (args) =>
+    service.openExternalUrl(parseOpenExternalUrlInput(args)).pipe(Effect.as({ ok: true })),
 });

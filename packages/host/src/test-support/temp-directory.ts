@@ -1,5 +1,4 @@
 import { rm } from "node:fs/promises";
-
 export const removeTestDirectory = async (path: string): Promise<void> => {
   for (let attempt = 1; attempt <= 20; attempt += 1) {
     try {

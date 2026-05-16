@@ -1,6 +1,7 @@
 import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Effect } from "effect";
 import { databaseNameForWorkspace } from "../../infrastructure/beads/beads-context-model";
 import { resolveBeadsCliContext } from "./beads-cli-context";
 
@@ -10,11 +11,13 @@ describe("resolveBeadsCliContext path identity", () => {
     const repoRoot = await mkdtemp(path.join(tmpdir(), "My Repo-"));
     const canonicalRepoRoot = await realpath(repoRoot);
 
-    const context = await resolveBeadsCliContext(repoRoot, {
-      processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot },
-      requireSharedServer: false,
-      workspaceId: "openducktor",
-    });
+    const context = await Effect.runPromise(
+      resolveBeadsCliContext(repoRoot, {
+        processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot },
+        requireSharedServer: false,
+        workspaceId: "openducktor",
+      }),
+    );
 
     expect(context.repoPath).toBe(canonicalRepoRoot);
     expect(context.repoId).toBe("openducktor");
@@ -39,11 +42,13 @@ describe("resolveBeadsCliContext path identity", () => {
 
     const contexts = await Promise.all(
       repoPaths.map((repoPath) =>
-        resolveBeadsCliContext(repoPath, {
-          processEnv,
-          requireSharedServer: false,
-          workspaceId,
-        }),
+        Effect.runPromise(
+          resolveBeadsCliContext(repoPath, {
+            processEnv,
+            requireSharedServer: false,
+            workspaceId,
+          }),
+        ),
       ),
     );
 
@@ -62,20 +67,24 @@ describe("resolveBeadsCliContext path identity", () => {
     const canonicalExistingRepo = await realpath(existingRepo);
     const processEnv = { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot };
 
-    const existingContext = await resolveBeadsCliContext(existingRepo, {
-      processEnv,
-      requireSharedServer: false,
-    });
+    const existingContext = await Effect.runPromise(
+      resolveBeadsCliContext(existingRepo, {
+        processEnv,
+        requireSharedServer: false,
+      }),
+    );
 
     expect(existingContext.repoPath).toBe(canonicalExistingRepo);
     expect(existingContext.repoId).toMatch(/^repo-with-spaces-[a-z0-9]+-[a-f0-9]{8}$/);
     expect(existingContext.databaseName).toMatch(/^odt_repo_with_spaces_[a-z0-9]+_[a-f0-9]{12}$/);
 
     const syntheticRepo = path.join(configRoot, "missing repos", "C-Users-Max Sky-Repo Name");
-    const syntheticContext = await resolveBeadsCliContext(syntheticRepo, {
-      processEnv,
-      requireSharedServer: false,
-    });
+    const syntheticContext = await Effect.runPromise(
+      resolveBeadsCliContext(syntheticRepo, {
+        processEnv,
+        requireSharedServer: false,
+      }),
+    );
 
     expect(syntheticContext.repoPath).toBe(syntheticRepo);
     expect(syntheticContext.repoId).toMatch(/^c-users-max-sky-repo-name-[a-f0-9]{8}$/);
@@ -89,8 +98,12 @@ describe("resolveBeadsCliContext path identity", () => {
     const upperRepo = path.join(configRoot, "missing repos", "Repo Name");
 
     const [lowerContext, upperContext] = await Promise.all([
-      resolveBeadsCliContext(lowerRepo, { processEnv, requireSharedServer: false }),
-      resolveBeadsCliContext(upperRepo, { processEnv, requireSharedServer: false }),
+      Effect.runPromise(
+        resolveBeadsCliContext(lowerRepo, { processEnv, requireSharedServer: false }),
+      ),
+      Effect.runPromise(
+        resolveBeadsCliContext(upperRepo, { processEnv, requireSharedServer: false }),
+      ),
     ]);
 
     expect(lowerContext.repoPath).toBe(lowerRepo);
@@ -105,11 +118,13 @@ describe("resolveBeadsCliContext path identity", () => {
     );
     const repoRoot = await mkdtemp(path.join(tmpdir(), "Repo With Spaces-"));
 
-    const context = await resolveBeadsCliContext(repoRoot, {
-      processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot },
-      requireSharedServer: false,
-      workspaceId: "workspace-id",
-    });
+    const context = await Effect.runPromise(
+      resolveBeadsCliContext(repoRoot, {
+        processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot },
+        requireSharedServer: false,
+        workspaceId: "workspace-id",
+      }),
+    );
 
     expect(context.attachmentRoot).toBe(path.join(configRoot, "beads", "workspace-id"));
     expect(context.beadsDir).toBe(path.join(configRoot, "beads", "workspace-id", ".beads"));
@@ -120,10 +135,12 @@ describe("resolveBeadsCliContext path identity", () => {
 
   test("rejects an empty configured OpenDucktor config dir", async () => {
     await expect(
-      resolveBeadsCliContext("/repo", {
-        processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: "" },
-        requireSharedServer: false,
-      }),
+      Effect.runPromise(
+        resolveBeadsCliContext("/repo", {
+          processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: "" },
+          requireSharedServer: false,
+        }),
+      ),
     ).rejects.toThrow("OPENDUCKTOR_CONFIG_DIR is set but empty");
   });
 });

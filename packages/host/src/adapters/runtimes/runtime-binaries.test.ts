@@ -1,6 +1,7 @@
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
+import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import { resolveCodexBinary, resolveOpencodeBinary } from "./runtime-binaries";
@@ -10,14 +11,19 @@ const createSystemCommands = ({
 }: {
   available?: string[];
 } = {}): SystemCommandPort => ({
-  async requiredCommandError(command) {
-    return available.includes(command) ? null : `Required command \`${command}\` not found.`;
+  resolveCommandPath(command) {
+    return Effect.succeed(available.includes(command) ? command : null);
   },
-  async versionCommand() {
-    return null;
+  requiredCommandError(command) {
+    return Effect.succeed(
+      available.includes(command) ? null : `Required command \`${command}\` not found.`,
+    );
   },
-  async runCommandAllowFailure() {
-    return { ok: false, stdout: "", stderr: "" };
+  versionCommand() {
+    return Effect.succeed(null);
+  },
+  runCommandAllowFailure() {
+    return Effect.succeed({ ok: false, stdout: "", stderr: "" });
   },
 });
 
@@ -42,26 +48,32 @@ describe("resolveOpencodeBinary", () => {
       await writeExecutable(opencode);
 
       await expect(
-        resolveOpencodeBinary(createSystemCommands(), {
-          OPENDUCKTOR_OPENCODE_BINARY: opencode,
-        }),
+        Effect.runPromise(
+          resolveOpencodeBinary(createSystemCommands(), {
+            OPENDUCKTOR_OPENCODE_BINARY: opencode,
+          }),
+        ),
       ).resolves.toBe(opencode);
     });
   });
 
   test("fails when an explicit OpenCode override is empty", async () => {
     await expect(
-      resolveOpencodeBinary(createSystemCommands(), {
-        OPENDUCKTOR_OPENCODE_BINARY: " ",
-      }),
+      Effect.runPromise(
+        resolveOpencodeBinary(createSystemCommands(), {
+          OPENDUCKTOR_OPENCODE_BINARY: " ",
+        }),
+      ),
     ).rejects.toThrow("Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY is empty");
   });
 
   test("fails when an explicit OpenCode override is not runnable", async () => {
     await expect(
-      resolveOpencodeBinary(createSystemCommands(), {
-        OPENDUCKTOR_OPENCODE_BINARY: "/missing/opencode",
-      }),
+      Effect.runPromise(
+        resolveOpencodeBinary(createSystemCommands(), {
+          OPENDUCKTOR_OPENCODE_BINARY: "/missing/opencode",
+        }),
+      ),
     ).rejects.toThrow(
       "Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY points to a missing or non-executable file: /missing/opencode",
     );
@@ -75,12 +87,14 @@ describe("resolveOpencodeBinary", () => {
       await writeExecutable(opencode);
 
       await expect(
-        resolveOpencodeBinary(
-          createSystemCommands(),
-          {
-            OPENDUCKTOR_OPENCODE_BINARY: `"~/bin/opencode"`,
-          },
-          { homeDir: root },
+        Effect.runPromise(
+          resolveOpencodeBinary(
+            createSystemCommands(),
+            {
+              OPENDUCKTOR_OPENCODE_BINARY: `"~/bin/opencode"`,
+            },
+            { homeDir: root },
+          ),
         ),
       ).resolves.toBe(opencode);
     });
@@ -95,10 +109,12 @@ describe("resolveOpencodeBinary", () => {
       const expectedResolvedPath = posix.join(root, ".opencode", "bin", "opencode");
 
       await expect(
-        resolveOpencodeBinary(
-          createSystemCommands({ available: ["opencode"] }),
-          {},
-          { homeDir: root, platform: "linux" },
+        Effect.runPromise(
+          resolveOpencodeBinary(
+            createSystemCommands({ available: ["opencode"] }),
+            {},
+            { homeDir: root, platform: "linux" },
+          ),
         ),
       ).resolves.toBe(expectedResolvedPath);
     });
@@ -112,14 +128,18 @@ describe("resolveOpencodeBinary", () => {
       await writeFile(opencode, "");
 
       await expect(
-        resolveOpencodeBinary(createSystemCommands(), {}, { homeDir: root, platform: "win32" }),
+        Effect.runPromise(
+          resolveOpencodeBinary(createSystemCommands(), {}, { homeDir: root, platform: "win32" }),
+        ),
       ).resolves.toBe(opencode);
     });
   });
 
   test("uses PATH fallback after OpenCode override and standard locations", async () => {
     await expect(
-      resolveOpencodeBinary(createSystemCommands({ available: ["opencode"] }), {}),
+      Effect.runPromise(
+        resolveOpencodeBinary(createSystemCommands({ available: ["opencode"] }), {}),
+      ),
     ).resolves.toBe("opencode");
   });
 
@@ -133,10 +153,12 @@ describe("resolveOpencodeBinary", () => {
       });
 
       await expect(
-        resolveOpencodeBinary(
-          systemCommands,
-          { PATH: root, PATHEXT: ".cmd" },
-          { platform: "win32" },
+        Effect.runPromise(
+          resolveOpencodeBinary(
+            systemCommands,
+            { PATH: root, PATHEXT: ".cmd" },
+            { platform: "win32" },
+          ),
         ),
       ).resolves.toBe(opencode);
     });
@@ -144,10 +166,12 @@ describe("resolveOpencodeBinary", () => {
 
   test("reports considered OpenCode locations when missing", async () => {
     await expect(
-      resolveOpencodeBinary(
-        createSystemCommands(),
-        {},
-        { homeDir: "/home/alice", platform: "linux" },
+      Effect.runPromise(
+        resolveOpencodeBinary(
+          createSystemCommands(),
+          {},
+          { homeDir: "/home/alice", platform: "linux" },
+        ),
       ),
     ).rejects.toThrow(
       "opencode not found. Checked OPENDUCKTOR_OPENCODE_BINARY, standard install location /home/alice/.opencode/bin/opencode, and PATH. Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.",
@@ -165,10 +189,12 @@ describe("resolveCodexBinary", () => {
       await writeExecutable(join(binDir, "codex"));
 
       await expect(
-        resolveCodexBinary(createSystemCommands({ available: ["codex"] }), {
-          OPENDUCKTOR_CODEX_BINARY: override,
-          OPENDUCKTOR_BUNDLED_BIN_DIR: binDir,
-        }),
+        Effect.runPromise(
+          resolveCodexBinary(createSystemCommands({ available: ["codex"] }), {
+            OPENDUCKTOR_CODEX_BINARY: override,
+            OPENDUCKTOR_BUNDLED_BIN_DIR: binDir,
+          }),
+        ),
       ).resolves.toBe(override);
     });
   });
@@ -181,9 +207,11 @@ describe("resolveCodexBinary", () => {
       await writeExecutable(codex);
 
       await expect(
-        resolveCodexBinary(createSystemCommands({ available: ["codex"] }), {
-          OPENDUCKTOR_BUNDLED_BIN_DIR: binDir,
-        }),
+        Effect.runPromise(
+          resolveCodexBinary(createSystemCommands({ available: ["codex"] }), {
+            OPENDUCKTOR_BUNDLED_BIN_DIR: binDir,
+          }),
+        ),
       ).resolves.toBe(codex);
     });
   });
@@ -196,10 +224,12 @@ describe("resolveCodexBinary", () => {
       await writeFile(codex, "");
 
       await expect(
-        resolveCodexBinary(
-          createSystemCommands({ available: ["codex"] }),
-          {},
-          { platform: "win32", resourcesPath: join(root, "resources") },
+        Effect.runPromise(
+          resolveCodexBinary(
+            createSystemCommands({ available: ["codex"] }),
+            {},
+            { platform: "win32", resourcesPath: join(root, "resources") },
+          ),
         ),
       ).resolves.toBe(codex);
     });
@@ -207,17 +237,21 @@ describe("resolveCodexBinary", () => {
 
   test("fails when an explicit Codex override is empty", async () => {
     await expect(
-      resolveCodexBinary(createSystemCommands(), {
-        OPENDUCKTOR_CODEX_BINARY: "",
-      }),
+      Effect.runPromise(
+        resolveCodexBinary(createSystemCommands(), {
+          OPENDUCKTOR_CODEX_BINARY: "",
+        }),
+      ),
     ).rejects.toThrow("Configured Codex override OPENDUCKTOR_CODEX_BINARY is empty");
   });
 
   test("fails when an explicit Codex override is not executable", async () => {
     await expect(
-      resolveCodexBinary(createSystemCommands(), {
-        OPENDUCKTOR_CODEX_BINARY: "/missing/codex",
-      }),
+      Effect.runPromise(
+        resolveCodexBinary(createSystemCommands(), {
+          OPENDUCKTOR_CODEX_BINARY: "/missing/codex",
+        }),
+      ),
     ).rejects.toThrow(
       "Configured Codex override OPENDUCKTOR_CODEX_BINARY points to a missing or non-executable file: /missing/codex",
     );
@@ -225,15 +259,17 @@ describe("resolveCodexBinary", () => {
 
   test("fails when the bundled bin directory env var is empty", async () => {
     await expect(
-      resolveCodexBinary(createSystemCommands(), {
-        OPENDUCKTOR_BUNDLED_BIN_DIR: " ",
-      }),
+      Effect.runPromise(
+        resolveCodexBinary(createSystemCommands(), {
+          OPENDUCKTOR_BUNDLED_BIN_DIR: " ",
+        }),
+      ),
     ).rejects.toThrow("Configured bundled binary directory OPENDUCKTOR_BUNDLED_BIN_DIR is empty");
   });
 
   test("uses PATH fallback after Codex override and bundled locations", async () => {
     await expect(
-      resolveCodexBinary(createSystemCommands({ available: ["codex"] }), {}),
+      Effect.runPromise(resolveCodexBinary(createSystemCommands({ available: ["codex"] }), {})),
     ).resolves.toBe("codex");
   });
 
@@ -247,17 +283,25 @@ describe("resolveCodexBinary", () => {
       });
 
       await expect(
-        resolveCodexBinary(systemCommands, { PATH: root, PATHEXT: ".bat" }, { platform: "win32" }),
+        Effect.runPromise(
+          resolveCodexBinary(
+            systemCommands,
+            { PATH: root, PATHEXT: ".bat" },
+            { platform: "win32" },
+          ),
+        ),
       ).resolves.toBe(codex);
     });
   });
 
   test("reports considered Codex locations when missing", async () => {
     await expect(
-      resolveCodexBinary(
-        createSystemCommands(),
-        {},
-        { platform: "linux", resourcesPath: "/opt/OpenDucktor/resources" },
+      Effect.runPromise(
+        resolveCodexBinary(
+          createSystemCommands(),
+          {},
+          { platform: "linux", resourcesPath: "/opt/OpenDucktor/resources" },
+        ),
       ),
     ).rejects.toThrow(
       "codex not found. Checked OPENDUCKTOR_CODEX_BINARY, bundled locations (OPENDUCKTOR_BUNDLED_BIN_DIR, /opt/OpenDucktor/resources/bin/codex), and PATH. Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.",

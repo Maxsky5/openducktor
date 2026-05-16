@@ -2,6 +2,12 @@ import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, posix } from "node:path";
+import { Effect } from "effect";
+import {
+  HostDependencyError,
+  HostValidationError,
+  toHostPathStatError,
+} from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 
 const BUNDLED_BIN_DIR_ENV = "OPENDUCKTOR_BUNDLED_BIN_DIR";
@@ -40,22 +46,19 @@ export const resolveUserPath = (rawPath: string, homeDir = homedir()): string =>
   return trimmed;
 };
 
-export const isExecutableFile = async (
-  candidate: string,
-  platform: NodeJS.Platform = process.platform,
-): Promise<boolean> => {
-  try {
-    if (platform === "win32") {
-      const file = await stat(candidate);
-      return file.isFile();
-    }
+export const isExecutableFile = (candidate: string, platform: NodeJS.Platform = process.platform) =>
+  Effect.tryPromise({
+    try: async () => {
+      if (platform === "win32") {
+        const file = await stat(candidate);
+        return file.isFile();
+      }
 
-    await access(candidate, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-};
+      await access(candidate, constants.X_OK);
+      return true;
+    },
+    catch: (cause) => toHostPathStatError(cause, "runtimeBinaries.isExecutableFile", candidate),
+  }).pipe(Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)));
 
 const executableName = (command: string, platform: NodeJS.Platform): string =>
   platform === "win32" ? `${command}.exe` : command;
@@ -79,61 +82,69 @@ const processResourcesPath = (configuredResourcesPath?: string | null): string |
     : null;
 };
 
-const resolveBundledCommand = async (
+const resolveBundledCommand = (
   command: string,
   env: NodeJS.ProcessEnv,
   options: RuntimeBinaryResolutionContext,
-): Promise<string | null> => {
-  const configuredBinDir = env[BUNDLED_BIN_DIR_ENV];
-  if (configuredBinDir !== undefined && configuredBinDir.trim().length === 0) {
-    throw new Error(`Configured bundled binary directory ${BUNDLED_BIN_DIR_ENV} is empty`);
-  }
-  const resourcesPath = processResourcesPath(options.resourcesPath);
-  const candidateDirs: Array<{ directory: string; joinPlatform: NodeJS.Platform }> = [
-    ...(configuredBinDir && configuredBinDir.trim().length > 0
-      ? [
-          {
-            directory: resolveUserPath(configuredBinDir, options.homeDir),
-            joinPlatform: process.platform,
-          },
-        ]
-      : []),
-    ...(resourcesPath
-      ? [
-          {
-            directory: joinRuntimePath(options.platform, resourcesPath, "bin"),
-            joinPlatform: options.platform,
-          },
-        ]
-      : []),
-  ];
-
-  for (const { directory, joinPlatform } of candidateDirs) {
-    const candidate = joinRuntimePath(
-      joinPlatform,
-      directory,
-      executableName(command, options.platform),
-    );
-    if (await isExecutableFile(candidate, options.platform)) {
-      return candidate;
+) =>
+  Effect.gen(function* () {
+    const configuredBinDir = env[BUNDLED_BIN_DIR_ENV];
+    if (configuredBinDir !== undefined && configuredBinDir.trim().length === 0) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: BUNDLED_BIN_DIR_ENV,
+          message: `Configured bundled binary directory ${BUNDLED_BIN_DIR_ENV} is empty`,
+        }),
+      );
     }
-  }
 
-  return null;
-};
+    const resourcesPath = processResourcesPath(options.resourcesPath);
+    const candidateDirs: Array<{ directory: string; joinPlatform: NodeJS.Platform }> = [
+      ...(configuredBinDir && configuredBinDir.trim().length > 0
+        ? [
+            {
+              directory: resolveUserPath(configuredBinDir, options.homeDir),
+              joinPlatform: process.platform,
+            },
+          ]
+        : []),
+      ...(resourcesPath
+        ? [
+            {
+              directory: joinRuntimePath(options.platform, resourcesPath, "bin"),
+              joinPlatform: options.platform,
+            },
+          ]
+        : []),
+    ];
 
-const resolvePathCommand = async (
+    for (const { directory, joinPlatform } of candidateDirs) {
+      const candidate = joinRuntimePath(
+        joinPlatform,
+        directory,
+        executableName(command, options.platform),
+      );
+      if (yield* isExecutableFile(candidate, options.platform)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  });
+
+const resolvePathCommand = (
   command: string,
   systemCommands: SystemCommandPort,
   env: NodeJS.ProcessEnv,
-): Promise<string | null> => {
-  const resolved = await systemCommands.resolveCommandPath?.(command, env);
-  if (resolved !== undefined) {
-    return resolved;
-  }
+) =>
+  Effect.gen(function* () {
+    const resolveCommandPathEffect = systemCommands.resolveCommandPath?.(command, env);
+    if (resolveCommandPathEffect !== undefined) {
+      return yield* resolveCommandPathEffect;
+    }
 
-  return (await systemCommands.requiredCommandError(command)) === null ? command : null;
-};
+    return (yield* systemCommands.requiredCommandError(command)) === null ? command : null;
+  });
 
 const runtimeBinaryResolutionContext = (
   options: RuntimeBinaryResolutionOptions,
@@ -143,88 +154,114 @@ const runtimeBinaryResolutionContext = (
   resourcesPath: options.resourcesPath,
 });
 
-export const resolveOpencodeBinary = async (
+export const resolveOpencodeBinary = (
   systemCommands: SystemCommandPort,
   env: NodeJS.ProcessEnv = process.env,
   options: RuntimeBinaryResolutionOptions = {},
-): Promise<string> => {
-  const { platform, homeDir } = runtimeBinaryResolutionContext(options);
-  const overrideBinary = env.OPENDUCKTOR_OPENCODE_BINARY;
-  if (overrideBinary !== undefined) {
-    if (overrideBinary.trim().length === 0) {
-      throw new Error("Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY is empty");
+) =>
+  Effect.gen(function* () {
+    const { platform, homeDir } = runtimeBinaryResolutionContext(options);
+    const overrideBinary = env.OPENDUCKTOR_OPENCODE_BINARY;
+    if (overrideBinary !== undefined) {
+      if (overrideBinary.trim().length === 0) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "OPENDUCKTOR_OPENCODE_BINARY",
+            message: "Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY is empty",
+          }),
+        );
+      }
+      const resolvedOverride = resolveUserPath(overrideBinary, homeDir);
+      if (yield* isExecutableFile(resolvedOverride, platform)) {
+        return resolvedOverride;
+      }
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "OPENDUCKTOR_OPENCODE_BINARY",
+          message: `Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY points to a missing or non-executable file: ${resolvedOverride}`,
+          details: { resolvedOverride },
+        }),
+      );
     }
-    const resolvedOverride = resolveUserPath(overrideBinary, homeDir);
-    if (await isExecutableFile(resolvedOverride, platform)) {
-      return resolvedOverride;
-    }
-    throw new Error(
-      `Configured OpenCode override OPENDUCKTOR_OPENCODE_BINARY points to a missing or non-executable file: ${resolvedOverride}`,
+
+    const homeCandidate = joinRuntimePath(
+      platform,
+      homeDir,
+      ".opencode",
+      "bin",
+      executableName("opencode", platform),
     );
-  }
-
-  const homeCandidate = joinRuntimePath(
-    platform,
-    homeDir,
-    ".opencode",
-    "bin",
-    platform === "win32" ? "opencode.exe" : "opencode",
-  );
-  if (await isExecutableFile(homeCandidate, platform)) {
-    return homeCandidate;
-  }
-
-  const pathCommand = await resolvePathCommand("opencode", systemCommands, env);
-  if (pathCommand !== null) {
-    return pathCommand;
-  }
-
-  throw new Error(
-    `opencode not found. Checked OPENDUCKTOR_OPENCODE_BINARY, standard install location ${homeCandidate}, and PATH. Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.`,
-  );
-};
-
-export const resolveCodexBinary = async (
-  systemCommands: SystemCommandPort,
-  env: NodeJS.ProcessEnv = process.env,
-  options: RuntimeBinaryResolutionOptions = {},
-): Promise<string> => {
-  const context = runtimeBinaryResolutionContext(options);
-  const { platform, homeDir } = context;
-  const overrideBinary = env.OPENDUCKTOR_CODEX_BINARY;
-  if (overrideBinary !== undefined) {
-    if (overrideBinary.trim().length === 0) {
-      throw new Error("Configured Codex override OPENDUCKTOR_CODEX_BINARY is empty");
+    if (yield* isExecutableFile(homeCandidate, platform)) {
+      return homeCandidate;
     }
-    const resolvedOverride = resolveUserPath(overrideBinary, homeDir);
-    if (await isExecutableFile(resolvedOverride, platform)) {
-      return resolvedOverride;
+
+    const pathCommand = yield* resolvePathCommand("opencode", systemCommands, env);
+    if (pathCommand !== null) {
+      return pathCommand;
     }
-    throw new Error(
-      `Configured Codex override OPENDUCKTOR_CODEX_BINARY points to a missing or non-executable file: ${resolvedOverride}`,
+
+    return yield* Effect.fail(
+      new HostDependencyError({
+        dependency: "opencode",
+        operation: "runtimeBinaries.resolveOpencodeBinary",
+        message: `opencode not found. Checked OPENDUCKTOR_OPENCODE_BINARY, standard install location ${homeCandidate}, and PATH. Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.`,
+      }),
     );
-  }
-
-  const bundled = await resolveBundledCommand("codex", env, {
-    ...context,
   });
-  if (bundled !== null) {
-    return bundled;
-  }
 
-  const pathCommand = await resolvePathCommand("codex", systemCommands, env);
-  if (pathCommand !== null) {
-    return pathCommand;
-  }
+export const resolveCodexBinary = (
+  systemCommands: SystemCommandPort,
+  env: NodeJS.ProcessEnv = process.env,
+  options: RuntimeBinaryResolutionOptions = {},
+) =>
+  Effect.gen(function* () {
+    const context = runtimeBinaryResolutionContext(options);
+    const { platform, homeDir } = context;
+    const overrideBinary = env.OPENDUCKTOR_CODEX_BINARY;
+    if (overrideBinary !== undefined) {
+      if (overrideBinary.trim().length === 0) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "OPENDUCKTOR_CODEX_BINARY",
+            message: "Configured Codex override OPENDUCKTOR_CODEX_BINARY is empty",
+          }),
+        );
+      }
+      const resolvedOverride = resolveUserPath(overrideBinary, homeDir);
+      if (yield* isExecutableFile(resolvedOverride, platform)) {
+        return resolvedOverride;
+      }
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "OPENDUCKTOR_CODEX_BINARY",
+          message: `Configured Codex override OPENDUCKTOR_CODEX_BINARY points to a missing or non-executable file: ${resolvedOverride}`,
+          details: { resolvedOverride },
+        }),
+      );
+    }
 
-  const resourcesPath = processResourcesPath(context.resourcesPath);
-  const bundledLocations = [
-    `${BUNDLED_BIN_DIR_ENV}`,
-    ...(resourcesPath
-      ? [joinRuntimePath(platform, resourcesPath, "bin", executableName("codex", platform))]
-      : []),
-  ].join(", ");
-  throw new Error(
-    `codex not found. Checked OPENDUCKTOR_CODEX_BINARY, bundled locations (${bundledLocations}), and PATH. Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.`,
-  );
-};
+    const bundled = yield* resolveBundledCommand("codex", env, context);
+    if (bundled !== null) {
+      return bundled;
+    }
+
+    const pathCommand = yield* resolvePathCommand("codex", systemCommands, env);
+    if (pathCommand !== null) {
+      return pathCommand;
+    }
+
+    const resourcesPath = processResourcesPath(context.resourcesPath);
+    const bundledLocations = [
+      `${BUNDLED_BIN_DIR_ENV}`,
+      ...(resourcesPath
+        ? [joinRuntimePath(platform, resourcesPath, "bin", executableName("codex", platform))]
+        : []),
+    ].join(", ");
+    return yield* Effect.fail(
+      new HostDependencyError({
+        dependency: "codex",
+        operation: "runtimeBinaries.resolveCodexBinary",
+        message: `codex not found. Checked OPENDUCKTOR_CODEX_BINARY, bundled locations (${bundledLocations}), and PATH. Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.`,
+      }),
+    );
+  });

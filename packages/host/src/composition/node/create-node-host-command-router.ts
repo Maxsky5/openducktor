@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { createLocalAttachmentAdapter } from "../../adapters/attachments/local-attachment-adapter";
 import {
   type BeadsTaskRepository,
@@ -43,6 +44,7 @@ import { createTaskSyncService } from "../../application/tasks/sync/task-sync-se
 import { createTaskService } from "../../application/tasks/task-service";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import { createCodexAppServerCommandHandlers } from "../../interface/commands/codex-app-server-command-handlers";
 import { createDevServerCommandHandlers } from "../../interface/commands/dev-server-command-handlers";
@@ -163,10 +165,11 @@ export const createNodeHostCommandRouter = ({
       ownedTaskStore = createBeadsTaskRepository({
         processEnv,
         systemCommands,
-        async resolveWorkspaceIdForRepoPath(repoPath) {
-          const repoConfig = await workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-          return repoConfig.workspaceId;
-        },
+        resolveWorkspaceIdForRepoPath: (repoPath) =>
+          Effect.map(
+            workspaceSettingsService.getRepoConfigByRepoPath(repoPath),
+            (repoConfig) => repoConfig.workspaceId,
+          ),
       });
       return ownedTaskStore;
     })();
@@ -179,7 +182,7 @@ export const createNodeHostCommandRouter = ({
   });
   let resolvedMcpHostBridge = mcpHostBridge;
   const workspaceStarter: RuntimeWorkspaceStarterPort = {
-    async startWorkspaceRuntime(input) {
+    startWorkspaceRuntime(input) {
       if (input.runtimeKind === "codex") {
         return createCodexWorkspaceRuntimeStarter({
           systemCommands,
@@ -201,24 +204,54 @@ export const createNodeHostCommandRouter = ({
                 },
               }
             : {}),
-          resolveMcpBridgeConnection: async () => {
-            if (!resolvedMcpHostBridge) {
-              throw new Error("Codex workspace startup requires an initialized MCP host bridge.");
-            }
-            return resolvedMcpHostBridge.ensureConnection({ repoPath: input.repoPath });
-          },
+          resolveMcpBridgeConnection: () =>
+            Effect.tryPromise({
+              try: () => {
+                if (!resolvedMcpHostBridge) {
+                  throw new HostResourceError({
+                    message: "Codex workspace startup requires an initialized MCP host bridge.",
+                    resource: "mcp-host-bridge",
+                    operation: "codex-workspace-runtime.start",
+                  });
+                }
+                return resolvedMcpHostBridge.ensureConnection({ repoPath: input.repoPath });
+              },
+              catch: (cause) =>
+                cause instanceof HostResourceError
+                  ? cause
+                  : new HostOperationError({
+                      operation: "codex-workspace-runtime.resolve-mcp-bridge",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause,
+                    }),
+            }),
         }).startWorkspaceRuntime(input);
       }
 
       return createOpenCodeWorkspaceRuntimeStarter({
         systemCommands,
         processEnv,
-        resolveMcpBridgeConnection: async (runtimeInput) => {
-          if (!resolvedMcpHostBridge) {
-            throw new Error("OpenCode workspace startup requires an initialized MCP host bridge.");
-          }
-          return resolvedMcpHostBridge.ensureConnection({ repoPath: runtimeInput.repoPath });
-        },
+        resolveMcpBridgeConnection: (runtimeInput) =>
+          Effect.tryPromise({
+            try: () => {
+              if (!resolvedMcpHostBridge) {
+                throw new HostResourceError({
+                  message: "OpenCode workspace startup requires an initialized MCP host bridge.",
+                  resource: "mcp-host-bridge",
+                  operation: "opencode-workspace-runtime.start",
+                });
+              }
+              return resolvedMcpHostBridge.ensureConnection({ repoPath: runtimeInput.repoPath });
+            },
+            catch: (cause) =>
+              cause instanceof HostResourceError
+                ? cause
+                : new HostOperationError({
+                    operation: "opencode-workspace-runtime.resolve-mcp-bridge",
+                    message: cause instanceof Error ? cause.message : String(cause),
+                    cause,
+                  }),
+          }),
       }).startWorkspaceRuntime(input);
     },
   };
@@ -282,15 +315,16 @@ export const createNodeHostCommandRouter = ({
 
   const pullRequestSyncLoop = taskSyncService?.startPullRequestSyncLoop();
 
-  const stopPullRequestSyncLoop = async (): Promise<void> => {
-    if (!pullRequestSyncLoop) {
-      lifecycleLogger.info("No pull request sync loop is running");
-      return;
-    }
+  const stopPullRequestSyncLoop = () =>
+    Effect.gen(function* () {
+      if (!pullRequestSyncLoop) {
+        lifecycleLogger.info("No pull request sync loop is running");
+        return;
+      }
 
-    await pullRequestSyncLoop.stop();
-    lifecycleLogger.info("Pull request sync loop stopped");
-  };
+      yield* pullRequestSyncLoop.stop();
+      lifecycleLogger.info("Pull request sync loop stopped");
+    });
 
   return createHostCommandRouter({
     initialize: async () => {
@@ -298,15 +332,17 @@ export const createNodeHostCommandRouter = ({
     },
     dispose: async () => {
       lifecycleLogger.info("Shutting down OpenDucktor host services");
-      await runShutdownSteps(
-        [
-          { label: "pull request sync loop", run: stopPullRequestSyncLoop },
-          createStopDevServersStep(devServerService, lifecycleLogger),
-          createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
-          createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
-          createStopSharedDoltServerStep(ownedTaskStore, lifecycleLogger),
-        ],
-        lifecycleLogger,
+      await Effect.runPromise(
+        runShutdownSteps(
+          [
+            { label: "pull request sync loop", run: stopPullRequestSyncLoop },
+            createStopDevServersStep(devServerService, lifecycleLogger),
+            createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
+            createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
+            createStopSharedDoltServerStep(ownedTaskStore, lifecycleLogger),
+          ],
+          lifecycleLogger,
+        ),
       );
       lifecycleLogger.info("OpenDucktor host services stopped");
     },

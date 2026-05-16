@@ -1,6 +1,7 @@
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { HostValidationError } from "../../effect/host-errors";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
@@ -32,7 +33,10 @@ const isFsErrorCode = (error: unknown, code: string): boolean =>
 const resolveHomeDirectory = (): string => {
   const home = homedir();
   if (home.trim().length === 0) {
-    throw new Error("Unable to resolve user home directory");
+    throw new HostValidationError({
+      message: "Unable to resolve user home directory",
+      field: "home",
+    });
   }
   return home;
 };
@@ -40,7 +44,10 @@ const resolveHomeDirectory = (): string => {
 const resolveUserPath = (rawPath: string): string => {
   const unquoted = stripMatchingQuotes(rawPath.trim());
   if (unquoted.length === 0) {
-    throw new Error("Path is empty; provide a valid path");
+    throw new HostValidationError({
+      message: "Path is empty; provide a valid path",
+      field: "path",
+    });
   }
   if (unquoted === "~") {
     return resolveHomeDirectory();
@@ -63,25 +70,35 @@ export const resolveMcpBridgeDiscoveryPath = (env: NodeJS.ProcessEnv = process.e
 const parseDiscoveryFile = (payload: string, discoveryPath: string): McpBridgeDiscoveryFile => {
   const parsed = JSON.parse(payload) as unknown;
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`Invalid MCP bridge discovery file at ${discoveryPath}: expected object.`);
+    throw new HostValidationError({
+      message: `Invalid MCP bridge discovery file at ${discoveryPath}: expected object.`,
+      field: "discoveryFile",
+      details: { discoveryPath },
+    });
   }
 
   const record = parsed as Record<string, unknown>;
   if (typeof record.hostUrl !== "string" || record.hostUrl.trim().length === 0) {
-    throw new Error(
-      `Invalid MCP bridge discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,
-    );
+    throw new HostValidationError({
+      message: `Invalid MCP bridge discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,
+      field: "hostUrl",
+      details: { discoveryPath },
+    });
   }
   if (typeof record.hostToken !== "string" || record.hostToken.trim().length === 0) {
-    throw new Error(
-      `Invalid MCP bridge discovery file at ${discoveryPath}: hostToken must be a non-empty string.`,
-    );
+    throw new HostValidationError({
+      message: `Invalid MCP bridge discovery file at ${discoveryPath}: hostToken must be a non-empty string.`,
+      field: "hostToken",
+      details: { discoveryPath },
+    });
   }
   const pid = record.pid;
   if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
-    throw new Error(
-      `Invalid MCP bridge discovery file at ${discoveryPath}: pid must be a positive integer.`,
-    );
+    throw new HostValidationError({
+      message: `Invalid MCP bridge discovery file at ${discoveryPath}: pid must be a positive integer.`,
+      field: "pid",
+      details: { discoveryPath },
+    });
   }
 
   return {

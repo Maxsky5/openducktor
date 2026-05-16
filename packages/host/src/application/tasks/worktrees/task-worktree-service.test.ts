@@ -1,8 +1,12 @@
 import type { RepoConfig } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { HostOperationError } from "../../../effect/host-errors";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
-import { createTaskWorktreeService } from "./task-worktree-service";
+import { createTaskWorktreeService as createEffectTaskWorktreeService } from "./task-worktree-service";
 
+const createTaskWorktreeService = (...args: Parameters<typeof createEffectTaskWorktreeService>) =>
+  createEffectTaskWorktreeService(...args);
 const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
@@ -18,18 +22,24 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   agentDefaults: {},
   ...overrides,
 });
-
 const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsService =>
   ({
-    async getRepoConfigByRepoPath(repoPath: unknown) {
+    getRepoConfigByRepoPath(repoPath: unknown) {
       if (repoPath !== "/repo") {
-        throw new Error(`Workspace is not configured for repository: ${String(repoPath)}`);
+        return Effect.fail(
+          new HostOperationError({
+            operation: "test.getRepoConfigByRepoPath",
+            message: `Workspace is not configured for repository: ${String(repoPath)}`,
+            details: { repoPath },
+          }),
+        );
       }
-
-      return config;
+      return Effect.succeed(config);
     },
-  }) as WorkspaceSettingsService;
-
+  }) as Pick<
+    WorkspaceSettingsService,
+    "getRepoConfigByRepoPath"
+  > as unknown as WorkspaceSettingsService;
 const createSettingsConfig = ({
   existingPaths = new Set<string>(),
   canonicalPaths = {},
@@ -47,17 +57,22 @@ const createSettingsConfig = ({
     resolveConfiguredPath(rawPath) {
       return rawPath === "~/worktrees" ? "/home/dev/worktrees" : rawPath;
     },
-    async canonicalizePath(path) {
-      return canonicalPaths[path] ?? path;
+    readConfig() {
+      return Effect.succeed(null);
     },
-    async pathExists(path) {
-      return existingPaths.has(path);
+    writeConfig() {
+      return Effect.succeed(undefined);
+    },
+    canonicalizePath(path) {
+      return Effect.succeed(canonicalPaths[path] ?? path);
+    },
+    pathExists(path) {
+      return Effect.succeed(existingPaths.has(path));
     },
     join(...paths) {
       return paths.join("/").replaceAll(/\/+/g, "/");
     },
-  }) as SettingsConfigPort;
-
+  }) as SettingsConfigPort as SettingsConfigPort;
 describe("createTaskWorktreeService", () => {
   test("returns a deterministic task worktree when the directory exists", async () => {
     const service = createTaskWorktreeService({
@@ -68,31 +83,31 @@ describe("createTaskWorktreeService", () => {
         repoConfig({ worktreeBasePath: "~/worktrees" }),
       ),
     });
-
     await expect(
-      service.getTaskWorktree({
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      Effect.runPromise(
+        service.getTaskWorktree({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toEqual({
       workingDirectory: "/home/dev/worktrees/task-1",
     });
   });
-
   test("returns null when the deterministic task worktree is absent", async () => {
     const service = createTaskWorktreeService({
       settingsConfig: createSettingsConfig(),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-
     await expect(
-      service.getTaskWorktree({
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      Effect.runPromise(
+        service.getTaskWorktree({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toBeNull();
   });
-
   test("rejects worktree paths that canonicalize to the repository root", async () => {
     const service = createTaskWorktreeService({
       settingsConfig: createSettingsConfig({
@@ -103,12 +118,13 @@ describe("createTaskWorktreeService", () => {
       }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-
     await expect(
-      service.getTaskWorktree({
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      Effect.runPromise(
+        service.getTaskWorktree({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).rejects.toThrow(
       "Builder continuation cannot start until a builder worktree exists for task task-1. The resolved worktree points to the repository root.",
     );

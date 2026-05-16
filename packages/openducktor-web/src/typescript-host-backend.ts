@@ -10,6 +10,7 @@ import {
   type HostEventListener,
   type HostEventUnsubscribe,
 } from "@openducktor/host";
+import { Effect } from "effect";
 import { logError, logInfo } from "./logger";
 
 export type TypescriptHostBackendOptions = {
@@ -395,10 +396,12 @@ const localAttachmentPreviewResponse = async (
     return errorResponse("Local attachment preview path must reference a file", 400, corsHeaders);
   }
 
-  const canonicalDirectory = await localAttachmentPort.canonicalizePath(
-    localAttachmentPort.stageDirectory(),
+  const canonicalDirectory = await Effect.runPromise(
+    localAttachmentPort.canonicalizePath(localAttachmentPort.stageDirectory()),
   );
-  const canonicalPath = await localAttachmentPort.canonicalizePath(requestedPath);
+  const canonicalPath = await Effect.runPromise(
+    localAttachmentPort.canonicalizePath(requestedPath),
+  );
   if (!isWithinDirectory(canonicalDirectory, canonicalPath)) {
     return errorResponse(
       "Local attachment preview is only available for staged attachment files.",

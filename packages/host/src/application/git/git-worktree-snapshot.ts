@@ -9,6 +9,7 @@ import type {
   GitUpstreamAheadBehind,
   GitWorktreeStatusSnapshot,
 } from "@openducktor/contracts";
+import { HostValidationError } from "../../effect/host-errors";
 import type { GitWorktreeStatusData } from "../../ports/git-port";
 
 export const gitWorktreeHashVersion = 1;
@@ -167,7 +168,7 @@ export const validateResetSnapshotMatches = (
   statusData: GitWorktreeStatusData,
 ): void => {
   if (snapshot.hashVersion !== gitWorktreeHashVersion) {
-    throw new Error(staleDiffMessage);
+    throw new HostValidationError({ message: staleDiffMessage });
   }
 
   const statusHash = hashWorktreeStatusPayload(
@@ -178,6 +179,6 @@ export const validateResetSnapshotMatches = (
   );
   const diffHash = hashWorktreeDiffPayload(statusData.fileDiffs);
   if (snapshot.statusHash !== statusHash || snapshot.diffHash !== diffHash) {
-    throw new Error(staleDiffMessage);
+    throw new HostValidationError({ message: staleDiffMessage });
   }
 };

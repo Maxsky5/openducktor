@@ -1,4 +1,6 @@
+import { Effect } from "effect";
 import { canonicalTargetBranch, checkoutBranch, validateTransition } from "../../../domain/task";
+import { HostValidationError } from "../../../effect/host-errors";
 import { cleanupDirectMergeBuilderState } from "../support/builder-worktree-cleanup";
 import { requireDirectMergeCompleteDependencies } from "../support/required-task-dependencies";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
@@ -11,53 +13,83 @@ export const createTaskCompleteDirectMergeUseCase = ({
   settingsConfig,
   taskWorktreeService,
 }: CreateTaskServiceInput): Pick<TaskService, "completeDirectMerge"> => ({
-  async completeDirectMerge(input) {
-    const { repoPath, taskId } = input;
-    const dependencies = requireDirectMergeCompleteDependencies(
-      devServerService,
-      gitPort,
-      settingsConfig,
-      taskWorktreeService,
-    );
-    const { current, currentTasks } = await taskListWithCurrent(taskStore, repoPath, taskId);
-    const metadata = await taskStore.getTaskMetadata({ repoPath, taskId });
-    const directMerge = metadata.directMerge;
-    if (directMerge === undefined) {
-      throw new Error(`Task ${taskId} does not have a locally applied direct merge to complete.`);
-    }
-
-    if (directMerge.targetBranch.remote !== undefined) {
-      const currentBranch = await dependencies.gitPort.getCurrentBranch(repoPath);
-      const currentBranchName = currentBranch.name?.trim();
-      if (!currentBranchName) {
-        throw new Error(
-          `Cannot finish the direct merge for task ${taskId} because the target branch checkout is not active.`,
-        );
-      }
-      const expectedBranch = checkoutBranch(directMerge.targetBranch);
-      if (currentBranchName !== expectedBranch) {
-        throw new Error(
-          `Cannot finish the direct merge for task ${taskId} until branch ${expectedBranch} is checked out locally.`,
+  completeDirectMerge(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId } = input;
+      const dependencies = requireDirectMergeCompleteDependencies(
+        devServerService,
+        gitPort,
+        settingsConfig,
+        taskWorktreeService,
+      );
+      const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
+      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+      const directMerge = metadata.directMerge;
+      if (directMerge === undefined) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `Task ${taskId} does not have a locally applied direct merge to complete.`,
+            details: { repoPath, taskId },
+          }),
         );
       }
 
-      const publishTargetRef = canonicalTargetBranch(directMerge.targetBranch);
-      const publishSync = await dependencies.gitPort.commitsAheadBehind(repoPath, publishTargetRef);
-      if (publishSync.ahead !== 0 || publishSync.behind !== 0) {
-        throw new Error(
-          `Cannot finish the direct merge for task ${taskId} until ${publishTargetRef} is fully published and synchronized.`,
+      if (directMerge.targetBranch.remote !== undefined) {
+        const currentBranch = yield* dependencies.gitPort.getCurrentBranch(repoPath);
+        const currentBranchName = currentBranch.name?.trim();
+        if (!currentBranchName) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message: `Cannot finish the direct merge for task ${taskId} because the target branch checkout is not active.`,
+              details: { repoPath, taskId },
+            }),
+          );
+        }
+        const expectedBranch = checkoutBranch(directMerge.targetBranch);
+        if (currentBranchName !== expectedBranch) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message: `Cannot finish the direct merge for task ${taskId} until branch ${expectedBranch} is checked out locally.`,
+              details: { repoPath, taskId, expectedBranch, currentBranchName },
+            }),
+          );
+        }
+
+        const publishTargetRef = canonicalTargetBranch(directMerge.targetBranch);
+        const publishSync = yield* dependencies.gitPort.commitsAheadBehind(
+          repoPath,
+          publishTargetRef,
         );
+        if (publishSync.ahead !== 0 || publishSync.behind !== 0) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message: `Cannot finish the direct merge for task ${taskId} until ${publishTargetRef} is fully published and synchronized.`,
+              details: { repoPath, taskId, publishTargetRef },
+            }),
+          );
+        }
       }
-    }
 
-    let task = current;
-    if (current.status !== "closed") {
-      validateTransition(current, currentTasks, current.status, "closed");
-      task = await taskStore.transitionTask({ repoPath, taskId, status: "closed" });
-    }
-    await cleanupDirectMergeBuilderState(dependencies, taskStore, repoPath, taskId, directMerge);
-    const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
+      let task = current;
+      if (current.status !== "closed") {
+        yield* Effect.try({
+          try: () => validateTransition(current, currentTasks, current.status, "closed"),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+        task = yield* taskStore.transitionTask({ repoPath, taskId, status: "closed" });
+      }
+      yield* cleanupDirectMergeBuilderState(dependencies, taskStore, repoPath, taskId, directMerge);
+      const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
 
-    return enrichTask(task, nextTasks);
+      return enrichTask(task, nextTasks);
+    });
   },
 });

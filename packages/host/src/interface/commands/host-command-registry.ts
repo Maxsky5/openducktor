@@ -1,3 +1,5 @@
+import { HostValidationError } from "../../effect/host-errors";
+
 export const HOST_COMMAND_NAMES = [
   "agent_session_stop",
   "agent_session_upsert",
@@ -106,5 +108,9 @@ export const parseHostCommandName = (value: string): HostCommandName => {
     return value;
   }
 
-  throw new Error(`Unknown OpenDucktor host command: ${value}`);
+  throw new HostValidationError({
+    message: `Unknown OpenDucktor host command: ${value}`,
+    field: "command",
+    details: { value },
+  });
 };

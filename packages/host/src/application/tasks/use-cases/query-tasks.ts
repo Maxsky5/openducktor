@@ -1,4 +1,6 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { HostValidationError } from "../../../effect/host-errors";
 import { requireAgentSessionDependencies } from "../support/required-task-dependencies";
 import {
   enrichTasks,
@@ -18,60 +20,74 @@ export const createTaskQueryUseCases = ({
   | "agentSessionsListBulk"
   | "agentSessionUpsert"
 > => ({
-  async listTasks(input) {
-    const tasks = await taskStore.listTasks(input);
+  listTasks(input) {
+    return Effect.gen(function* () {
+      const tasks = yield* taskStore.listTasks(input);
 
-    return enrichTasks(tasks);
+      return enrichTasks(tasks);
+    });
   },
 
-  async getTaskMetadata(input) {
+  getTaskMetadata(input) {
     return taskStore.getTaskMetadata(input);
   },
 
-  async agentSessionsList(input) {
-    const metadata = await taskStore.getTaskMetadata(input);
+  agentSessionsList(input) {
+    return Effect.gen(function* () {
+      const metadata = yield* taskStore.getTaskMetadata(input);
 
-    return metadata.agentSessions;
+      return metadata.agentSessions;
+    });
   },
 
-  async agentSessionsListBulk(input) {
-    const { repoPath, taskIds } = input;
-    if (taskIds.length === 0) {
-      return {};
-    }
-
-    const currentTasks = await taskStore.listTasks({ repoPath });
-    const sessionsByAvailableTask = new Map(
-      currentTasks.map((task) => [task.id, task.agentSessions ?? []]),
-    );
-    const sessionsByTask: Record<string, AgentSessionRecord[]> = {};
-    for (const taskId of taskIds) {
-      const sessions = sessionsByAvailableTask.get(taskId);
-      if (sessions === undefined) {
-        throw new Error(`Task not found: ${taskId}`);
+  agentSessionsListBulk(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskIds } = input;
+      if (taskIds.length === 0) {
+        return {};
       }
-      sessionsByTask[taskId] = sessions;
-    }
 
-    return sessionsByTask;
+      const currentTasks = yield* taskStore.listTasks({ repoPath });
+      const sessionsByAvailableTask = new Map(
+        currentTasks.map((task) => [task.id, task.agentSessions ?? []]),
+      );
+      const sessionsByTask: Record<string, AgentSessionRecord[]> = {};
+      for (const taskId of taskIds) {
+        const sessions = sessionsByAvailableTask.get(taskId);
+        if (sessions === undefined) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskIds",
+              message: `Task not found: ${taskId}`,
+              details: { repoPath, taskId },
+            }),
+          );
+        }
+        sessionsByTask[taskId] = sessions;
+      }
+
+      return sessionsByTask;
+    });
   },
 
-  async agentSessionUpsert(input) {
-    const { repoPath, taskId, session } = input;
-    const dependencies = requireAgentSessionDependencies(
-      taskStore,
-      settingsConfig,
-      workspaceSettingsService,
-    );
+  agentSessionUpsert(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId, session } = input;
+      const dependencies = requireAgentSessionDependencies(
+        taskStore,
+        settingsConfig,
+        workspaceSettingsService,
+      );
 
-    await validateAgentSessionWorkingDirectory(
-      dependencies.settingsConfig,
-      dependencies.workspaceSettingsService,
-      repoPath,
-      session,
-    );
-    await dependencies.upsertAgentSession({ repoPath, taskId, session });
+      yield* validateAgentSessionWorkingDirectory(
+        dependencies.settingsConfig,
+        dependencies.workspaceSettingsService,
+        repoPath,
+        session,
+      );
+      yield* dependencies.upsertAgentSession({ repoPath, taskId, session });
 
-    return true;
+      return true;
+    });
   },
 });

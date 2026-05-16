@@ -1,10 +1,12 @@
 import type { DirectMergeRecord } from "@openducktor/contracts";
+import { Effect } from "effect";
 import {
   canonicalTargetBranch,
   directMergeConflict,
   ensureCleanBuilderWorktree,
   validateTransition,
 } from "../../../domain/task";
+import { HostValidationError } from "../../../effect/host-errors";
 import { loadOpenApprovalContext } from "../support/approval-readiness";
 import { cleanupDirectMergeBuilderState } from "../support/builder-worktree-cleanup";
 import { requireDirectMergeDependencies } from "../support/required-task-dependencies";
@@ -20,124 +22,151 @@ export const createTaskDirectMergeUseCase = ({
   taskWorktreeService,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "directMerge"> => ({
-  async directMerge(input) {
-    const { repoPath, taskId } = input;
-    const mergeInput = input.input;
-    const dependencies = requireDirectMergeDependencies(
-      devServerService,
-      gitPort,
-      settingsConfig,
-      systemCommands,
-      taskWorktreeService,
-      workspaceSettingsService,
-    );
-    const repoConfig =
-      await dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-    const effectiveRepoPath = repoConfig.repoPath;
-    const { current, currentTasks } = await taskListWithCurrent(
-      taskStore,
-      effectiveRepoPath,
-      taskId,
-    );
-    const metadata = await taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
-    if (metadata.directMerge !== undefined) {
-      throw new Error(
-        `A local direct merge is already recorded for task ${taskId}. Finish the direct merge workflow before trying again.`,
+  directMerge(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId } = input;
+      const mergeInput = input.input;
+      const dependencies = requireDirectMergeDependencies(
+        devServerService,
+        gitPort,
+        settingsConfig,
+        systemCommands,
+        taskWorktreeService,
+        workspaceSettingsService,
       );
-    }
+      const repoConfig =
+        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const effectiveRepoPath = repoConfig.repoPath;
+      const { current, currentTasks } = yield* taskListWithCurrent(
+        taskStore,
+        effectiveRepoPath,
+        taskId,
+      );
+      const metadata = yield* taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
+      if (metadata.directMerge !== undefined) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `A local direct merge is already recorded for task ${taskId}. Finish the direct merge workflow before trying again.`,
+            details: { repoPath: effectiveRepoPath, taskId },
+          }),
+        );
+      }
 
-    const approval = await loadOpenApprovalContext(
-      dependencies,
-      taskId,
-      current,
-      metadata,
-      repoConfig,
-    );
-    ensureCleanBuilderWorktree(approval);
-    const mergeRequest =
-      approval.workingDirectory === undefined
-        ? {
-            sourceBranch: approval.sourceBranch,
-            targetBranch: canonicalTargetBranch(approval.targetBranch),
-            method: mergeInput.mergeMethod,
-            ...(mergeInput.squashCommitMessage === undefined
-              ? {}
-              : { squashCommitMessage: mergeInput.squashCommitMessage }),
-          }
-        : {
-            sourceBranch: approval.sourceBranch,
-            targetBranch: canonicalTargetBranch(approval.targetBranch),
-            sourceWorkingDirectory: approval.workingDirectory,
-            method: mergeInput.mergeMethod,
-            ...(mergeInput.squashCommitMessage === undefined
-              ? {}
-              : { squashCommitMessage: mergeInput.squashCommitMessage }),
-          };
-    const mergeResult = await dependencies.gitPort.mergeBranch(effectiveRepoPath, mergeRequest);
-    if (mergeResult.outcome === "conflicts") {
-      return {
-        outcome: "conflicts",
-        conflict: directMergeConflict(
-          effectiveRepoPath,
-          approval,
-          mergeInput.mergeMethod,
-          mergeResult.conflictedFiles,
-          mergeResult.output,
-        ),
-      };
-    }
-
-    const directMerge: DirectMergeRecord = {
-      method: mergeInput.mergeMethod,
-      sourceBranch: approval.sourceBranch,
-      targetBranch: approval.targetBranch,
-      mergedAt: new Date().toISOString(),
-    };
-    await taskStore.setDirectMerge({
-      repoPath: effectiveRepoPath,
-      taskId,
-      directMerge,
-    });
-
-    if (approval.publishTarget !== undefined) {
-      if (current.status === "ai_review") {
-        validateTransition(current, currentTasks, current.status, "human_review");
-        const task = await taskStore.transitionTask({
-          repoPath: effectiveRepoPath,
-          taskId,
-          status: "human_review",
-        });
-        const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
+      const approval = yield* loadOpenApprovalContext(
+        dependencies,
+        taskId,
+        current,
+        metadata,
+        repoConfig,
+      );
+      yield* Effect.try({
+        try: () => ensureCleanBuilderWorktree(approval),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      const mergeRequest =
+        approval.workingDirectory === undefined
+          ? {
+              sourceBranch: approval.sourceBranch,
+              targetBranch: canonicalTargetBranch(approval.targetBranch),
+              method: mergeInput.mergeMethod,
+              ...(mergeInput.squashCommitMessage === undefined
+                ? {}
+                : { squashCommitMessage: mergeInput.squashCommitMessage }),
+            }
+          : {
+              sourceBranch: approval.sourceBranch,
+              targetBranch: canonicalTargetBranch(approval.targetBranch),
+              sourceWorkingDirectory: approval.workingDirectory,
+              method: mergeInput.mergeMethod,
+              ...(mergeInput.squashCommitMessage === undefined
+                ? {}
+                : { squashCommitMessage: mergeInput.squashCommitMessage }),
+            };
+      const mergeResult = yield* dependencies.gitPort.mergeBranch(effectiveRepoPath, mergeRequest);
+      if (mergeResult.outcome === "conflicts") {
         return {
-          outcome: "completed",
-          task: enrichTask(task, nextTasks),
+          outcome: "conflicts",
+          conflict: directMergeConflict(
+            effectiveRepoPath,
+            approval,
+            mergeInput.mergeMethod,
+            mergeResult.conflictedFiles,
+            mergeResult.output,
+          ),
         };
       }
 
+      const directMerge: DirectMergeRecord = {
+        method: mergeInput.mergeMethod,
+        sourceBranch: approval.sourceBranch,
+        targetBranch: approval.targetBranch,
+        mergedAt: new Date().toISOString(),
+      };
+      yield* taskStore.setDirectMerge({
+        repoPath: effectiveRepoPath,
+        taskId,
+        directMerge,
+      });
+
+      if (approval.publishTarget !== undefined) {
+        if (current.status === "ai_review") {
+          yield* Effect.try({
+            try: () => validateTransition(current, currentTasks, current.status, "human_review"),
+            catch: (cause) =>
+              new HostValidationError({
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+              }),
+          });
+          const task = yield* taskStore.transitionTask({
+            repoPath: effectiveRepoPath,
+            taskId,
+            status: "human_review",
+          });
+          const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
+          return {
+            outcome: "completed",
+            task: enrichTask(task, nextTasks),
+          };
+        }
+
+        return {
+          outcome: "completed",
+          task: enrichTask(current, currentTasks),
+        };
+      }
+
+      yield* Effect.try({
+        try: () => validateTransition(current, currentTasks, current.status, "closed"),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      const task = yield* taskStore.transitionTask({
+        repoPath: effectiveRepoPath,
+        taskId,
+        status: "closed",
+      });
+      yield* cleanupDirectMergeBuilderState(
+        dependencies,
+        taskStore,
+        effectiveRepoPath,
+        taskId,
+        directMerge,
+      );
+      const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
+
       return {
         outcome: "completed",
-        task: enrichTask(current, currentTasks),
+        task: enrichTask(task, nextTasks),
       };
-    }
-
-    validateTransition(current, currentTasks, current.status, "closed");
-    const task = await taskStore.transitionTask({
-      repoPath: effectiveRepoPath,
-      taskId,
-      status: "closed",
     });
-    await cleanupDirectMergeBuilderState(
-      dependencies,
-      taskStore,
-      effectiveRepoPath,
-      taskId,
-      directMerge,
-    );
-    const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
-
-    return {
-      outcome: "completed",
-      task: enrichTask(task, nextTasks),
-    };
   },
 });

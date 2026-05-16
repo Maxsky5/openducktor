@@ -3,7 +3,14 @@ import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/pr
 import { homedir } from "node:os";
 import path from "node:path";
 import type { GlobalConfig } from "@openducktor/contracts";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import { Effect, Layer } from "effect";
+import {
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+  toHostPathStatError,
+} from "../../effect/host-errors";
+import { type SettingsConfigPort, SettingsConfigPortTag } from "../../ports/settings-config-port";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
@@ -29,18 +36,18 @@ const resolveHomeDirectory = (): string => {
     return home;
   }
 
-  throw new Error("Unable to resolve user home directory");
+  throw new HostValidationError({ message: "Unable to resolve user home directory" });
 };
 
 const resolveUserPath = (rawPath: string): string => {
   const trimmed = rawPath.trim();
   if (!trimmed) {
-    throw new Error("Path is empty; provide a valid path");
+    throw new HostValidationError({ message: "Path is empty; provide a valid path" });
   }
 
   const unquoted = stripMatchingQuotes(trimmed);
   if (!unquoted) {
-    throw new Error("Path is empty; provide a valid path");
+    throw new HostValidationError({ message: "Path is empty; provide a valid path" });
   }
 
   if (unquoted === "~") {
@@ -64,7 +71,9 @@ const resolveOpenDucktorBaseDir = (): string => {
   const envDir = process.env[OPENDUCKTOR_CONFIG_DIR_ENV];
   if (envDir !== undefined) {
     if (envDir.length === 0) {
-      throw new Error("OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path");
+      throw new HostValidationError({
+        message: "OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path",
+      });
     }
 
     return resolveUserPath(envDir);
@@ -114,54 +123,95 @@ export const createSettingsConfigAdapter = ({
   const baseDir = path.dirname(resolvedConfigPath);
 
   return {
-    async readConfig() {
-      let payload: string;
-      try {
-        payload = await readFile(resolvedConfigPath, "utf8");
-      } catch (error) {
-        if (
-          typeof error === "object" &&
-          error !== null &&
-          "code" in error &&
-          error.code === "ENOENT"
-        ) {
+    readConfig() {
+      return Effect.gen(function* () {
+        const payload = yield* Effect.tryPromise({
+          try: () => readFile(resolvedConfigPath, "utf8"),
+          catch: (cause) =>
+            toHostOperationError(cause, "settingsConfig.readConfig", { path: resolvedConfigPath }),
+        }).pipe(
+          Effect.catchTag("HostOperationError", (error) => {
+            if (
+              typeof error.cause === "object" &&
+              error.cause !== null &&
+              "code" in error.cause &&
+              error.cause.code === "ENOENT"
+            ) {
+              return Effect.succeed(null);
+            }
+
+            return Effect.fail(error);
+          }),
+        );
+        if (payload === null) {
           return null;
         }
 
-        throw new Error(`Failed reading config file ${resolvedConfigPath}: ${String(error)}`, {
-          cause: error,
-        });
-      }
-
-      try {
-        return JSON.parse(payload) as unknown;
-      } catch (error) {
-        throw new Error(`Failed parsing config file ${resolvedConfigPath}: ${String(error)}`, {
-          cause: error,
-        });
-      }
-    },
-    async writeConfig(config: GlobalConfig) {
-      await mkdir(baseDir, { recursive: true }).catch((error: unknown) => {
-        throw new Error(`Failed creating config directory ${baseDir}: ${String(error)}`, {
-          cause: error,
-        });
+        return yield* Effect.try({
+          try: () => JSON.parse(payload) as unknown,
+          catch: (cause) =>
+            toHostOperationError(cause, "settingsConfig.parseConfig", {
+              path: resolvedConfigPath,
+            }),
+        }).pipe(
+          Effect.mapError(
+            (error) =>
+              new HostOperationError({
+                operation: "settingsConfig.parseConfig",
+                message: `Failed parsing config file ${resolvedConfigPath}: ${error.message}`,
+                cause: error,
+                details: { path: resolvedConfigPath },
+              }),
+          ),
+        );
       });
+    },
+    writeConfig(config: GlobalConfig) {
+      return Effect.gen(function* () {
+        yield* Effect.tryPromise({
+          try: () => mkdir(baseDir, { recursive: true }).then(() => undefined),
+          catch: (cause) =>
+            toHostOperationError(cause, "settingsConfig.createConfigDirectory", { path: baseDir }),
+        }).pipe(
+          Effect.mapError(
+            (error) =>
+              new HostOperationError({
+                operation: "settingsConfig.createConfigDirectory",
+                message: `Failed creating config directory ${baseDir}: ${error.message}`,
+                cause: error,
+                details: { path: baseDir },
+              }),
+          ),
+        );
 
-      const tempPath = path.join(
-        baseDir,
-        `.${path.basename(resolvedConfigPath)}.tmp-${process.pid}-${Date.now()}`,
-      );
-      const payload = `${JSON.stringify(config, null, 2)}\n`;
+        const tempPath = path.join(
+          baseDir,
+          `.${path.basename(resolvedConfigPath)}.tmp-${process.pid}-${Date.now()}`,
+        );
+        const payload = `${JSON.stringify(config, null, 2)}\n`;
 
-      try {
-        await writeFile(tempPath, payload, { mode: 0o600 });
-        await rename(tempPath, resolvedConfigPath);
-      } catch (error) {
-        throw new Error(`Failed writing config file ${resolvedConfigPath}: ${String(error)}`, {
-          cause: error,
-        });
-      }
+        yield* Effect.tryPromise({
+          try: async () => {
+            await writeFile(tempPath, payload, { mode: 0o600 });
+            await rename(tempPath, resolvedConfigPath);
+          },
+          catch: (cause) =>
+            toHostOperationError(cause, "settingsConfig.writeConfig", {
+              path: resolvedConfigPath,
+              tempPath,
+            }),
+        }).pipe(
+          Effect.mapError(
+            (error) =>
+              new HostOperationError({
+                operation: "settingsConfig.writeConfig",
+                message: `Failed writing config file ${resolvedConfigPath}: ${error.message}`,
+                cause: error,
+                details: { path: resolvedConfigPath, tempPath },
+              }),
+          ),
+        );
+      });
     },
     defaultWorktreeBasePath(workspaceId) {
       return path.join(baseDir, "worktrees", workspaceId.trim());
@@ -173,18 +223,30 @@ export const createSettingsConfigAdapter = ({
       return resolveUserPath(rawPath);
     },
     canonicalizePath(rawPath) {
-      return realpath(rawPath);
+      return Effect.tryPromise({
+        try: () => realpath(rawPath),
+        catch: (cause) =>
+          toHostOperationError(cause, "settingsConfig.canonicalizePath", {
+            path: rawPath,
+          }),
+      });
     },
-    async pathExists(inputPath) {
-      try {
-        await access(inputPath);
-        return true;
-      } catch {
-        return false;
-      }
+    pathExists(inputPath) {
+      return Effect.tryPromise({
+        try: () => access(inputPath),
+        catch: (cause) => toHostPathStatError(cause, "settingsConfig.pathExists", inputPath),
+      }).pipe(
+        Effect.as(true),
+        Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)),
+      );
     },
     join(...paths) {
       return path.join(...paths);
     },
   };
 };
+
+export const SettingsConfigPortLive = Layer.succeed(
+  SettingsConfigPortTag,
+  createSettingsConfigAdapter(),
+);

@@ -1,326 +1,31 @@
+import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
+import { Effect } from "effect";
 import {
-  ODT_WORKFLOW_AGENT_TOOL_NAMES,
-  type RuntimeInstanceSummary,
-  type RuntimeRoute,
-  runtimeInstanceSummarySchema,
-} from "@openducktor/contracts";
+  HostOperationError,
+  HostResourceError,
+  HostValidationError,
+} from "../../effect/host-errors";
 import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 import type {
-  RuntimeEnsureWorkspaceInput,
-  RuntimeMcpStatusProbeInput,
-  RuntimeMcpStatusProbeResult,
+  RuntimeRegistryError,
   RuntimeRegistryPort,
-  RuntimeSessionStatusProbeInput,
-  RuntimeSessionStopInput,
   RuntimeWorkspaceHandle,
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
 import { probeCodexSessionStatus } from "../codex/codex-session-status-probe";
-
+import {
+  findWorkspaceRuntime,
+  probeCodexMcpStatus,
+  probeOpenCodeMcpStatus,
+  probeOpenCodeSessionStatus,
+  runtimeEnsureFlightKey,
+  stopOpenCodeSession,
+} from "./runtime-registry-probes";
 export type CreateRuntimeRegistryInput = {
   runtimes?: RuntimeInstanceSummary[];
   workspaceStarter?: RuntimeWorkspaceStarterPort;
   codexAppServer?: Pick<CodexAppServerPort, "request">;
 };
-
-const SESSION_REQUEST_TIMEOUT_MS = 2_000;
-const MCP_REQUEST_TIMEOUT_MS = 2_000;
-const MAX_ABORT_ERROR_BODY_BYTES = 64 * 1024;
-const CODEX_ODT_TOOL_IDS = [...ODT_WORKFLOW_AGENT_TOOL_NAMES];
-
-const requireOpenCodeLocalHttpEndpoint = (runtimeRoute: RuntimeRoute, operation: string): URL => {
-  if (runtimeRoute.type !== "local_http") {
-    throw new Error(`OpenCode ${operation} requires a local_http runtime route.`);
-  }
-
-  const endpoint = new URL(runtimeRoute.endpoint);
-  const host = endpoint.hostname.toLowerCase();
-  const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "::1";
-  if (!isLoopback) {
-    throw new Error(`OpenCode ${operation} requires a loopback runtime endpoint.`);
-  }
-
-  return endpoint;
-};
-
-const sessionEndpoint = (endpoint: URL, path: string, workingDirectory: string): URL => {
-  const url = new URL(path, endpoint);
-  url.searchParams.set("directory", workingDirectory);
-  return url;
-};
-
-const mcpEndpoint = (endpoint: URL, path: string, workingDirectory: string): URL => {
-  const url = new URL(path, endpoint);
-  url.searchParams.set("directory", workingDirectory);
-  return url;
-};
-
-const isLiveSessionStatus = (value: unknown): boolean => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  const status = (value as Record<string, unknown>).type;
-  return status === "busy" || status === "retry";
-};
-
-const runtimeEnsureFlightKey = (runtimeKind: string, repoPath: string): string =>
-  `${runtimeKind}::${repoPath}`;
-
-const requireObjectPayload = (value: unknown, context: string): Record<string, unknown> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${context} must be an object`);
-  }
-  return value as Record<string, unknown>;
-};
-
-const readStringProperty = (value: Record<string, unknown>, property: string): string | null => {
-  const raw = value[property];
-  return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : null;
-};
-
-const parseToolIds = (payload: unknown): string[] => {
-  if (!Array.isArray(payload)) {
-    throw new Error("OpenCode tool id payload must be an array");
-  }
-  return Array.from(
-    new Set(
-      payload.map((entry) => (typeof entry === "string" ? entry.trim() : "")).filter(Boolean),
-    ),
-  );
-};
-
-const findWorkspaceRuntime = (
-  runtimes: Iterable<RuntimeInstanceSummary>,
-  input: RuntimeEnsureWorkspaceInput,
-): RuntimeInstanceSummary | undefined => {
-  for (const runtime of runtimes) {
-    if (
-      runtime.kind === input.runtimeKind &&
-      runtime.repoPath === input.repoPath &&
-      runtime.role === "workspace"
-    ) {
-      return runtime;
-    }
-  }
-  return undefined;
-};
-
-const readBoundedResponseText = async (response: Response): Promise<string> => {
-  const text = await response.text();
-  if (text.length > MAX_ABORT_ERROR_BODY_BYTES) {
-    return text.slice(0, MAX_ABORT_ERROR_BODY_BYTES);
-  }
-  return text;
-};
-
-const stopOpenCodeSession = async ({
-  runtimeRoute,
-  externalSessionId,
-  workingDirectory,
-}: RuntimeSessionStopInput): Promise<void> => {
-  const endpoint = requireOpenCodeLocalHttpEndpoint(runtimeRoute, "session abort");
-  const url = sessionEndpoint(
-    endpoint,
-    `/session/${encodeURIComponent(externalSessionId)}/abort`,
-    workingDirectory,
-  );
-  const response = await fetch(url, {
-    method: "POST",
-    signal: AbortSignal.timeout(SESSION_REQUEST_TIMEOUT_MS),
-  }).catch((error: unknown) => {
-    throw new Error(`Failed to abort OpenCode session ${externalSessionId}`, { cause: error });
-  });
-
-  if (response.ok) {
-    return;
-  }
-
-  const detail = (await readBoundedResponseText(response)).trim();
-  if (!detail) {
-    throw new Error(
-      `OpenCode runtime rejected abort for session ${externalSessionId} with status ${response.status}`,
-    );
-  }
-  throw new Error(
-    `OpenCode runtime rejected abort for session ${externalSessionId} with status ${response.status}: ${detail}`,
-  );
-};
-
-const probeOpenCodeSessionStatus = async ({
-  runtimeRoute,
-  externalSessionId,
-  workingDirectory,
-}: RuntimeSessionStatusProbeInput): Promise<{ supported: boolean; hasLiveSession: boolean }> => {
-  if (runtimeRoute.type !== "local_http") {
-    return { supported: false, hasLiveSession: false };
-  }
-  const endpoint = requireOpenCodeLocalHttpEndpoint(runtimeRoute, "session status probe");
-  const url = sessionEndpoint(endpoint, "/session/status", workingDirectory);
-  const response = await fetch(url, {
-    method: "GET",
-    signal: AbortSignal.timeout(SESSION_REQUEST_TIMEOUT_MS),
-  }).catch((error: unknown) => {
-    throw new Error(`Failed to inspect OpenCode session status for ${workingDirectory}`, {
-      cause: error,
-    });
-  });
-  const body = await response.text();
-  if (!response.ok) {
-    const detail = body.trim();
-    throw new Error(
-      detail
-        ? `OpenCode session status probe failed with status ${response.status}: ${detail}`
-        : `OpenCode session status probe failed with status ${response.status}`,
-    );
-  }
-
-  const statuses = JSON.parse(body) as Record<string, unknown>;
-  return {
-    supported: true,
-    hasLiveSession: isLiveSessionStatus(statuses[externalSessionId]),
-  };
-};
-
-const fetchOpenCodeJson = async (
-  runtimeRoute: RuntimeRoute,
-  operation: string,
-  method: "GET" | "POST",
-  path: string,
-  workingDirectory: string,
-): Promise<unknown> => {
-  const endpoint = requireOpenCodeLocalHttpEndpoint(runtimeRoute, operation);
-  const url = mcpEndpoint(endpoint, path, workingDirectory);
-  const response = await fetch(url, {
-    method,
-    signal: AbortSignal.timeout(MCP_REQUEST_TIMEOUT_MS),
-  }).catch((error: unknown) => {
-    throw new Error(`Failed to ${operation}`, { cause: error });
-  });
-  const body = await response.text();
-  if (!response.ok) {
-    const detail = body.trim();
-    throw new Error(
-      detail
-        ? `OpenCode ${operation} failed with status ${response.status}: ${detail}`
-        : `OpenCode ${operation} failed with status ${response.status}`,
-    );
-  }
-  if (body.trim().length === 0) {
-    return null;
-  }
-  return JSON.parse(body) as unknown;
-};
-
-const probeOpenCodeMcpStatus = async ({
-  runtimeRoute,
-  workingDirectory,
-  serverName,
-}: {
-  runtimeRoute: RuntimeRoute;
-  workingDirectory: string;
-  serverName: string;
-}) => {
-  if (runtimeRoute.type !== "local_http") {
-    return {
-      supported: false,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: null,
-      failureKind: null,
-    };
-  }
-
-  const statusPayload = requireObjectPayload(
-    await fetchOpenCodeJson(runtimeRoute, "load MCP status", "GET", "/mcp", workingDirectory),
-    "OpenCode MCP status payload",
-  );
-  const rawServer = statusPayload[serverName];
-  if (!rawServer) {
-    return {
-      supported: true,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: `MCP server ${serverName} was not reported by the runtime.`,
-      failureKind: "error" as const,
-    };
-  }
-
-  const server = requireObjectPayload(rawServer, `OpenCode MCP status for ${serverName}`);
-  const status = readStringProperty(server, "status");
-  if (!status) {
-    throw new Error(`OpenCode MCP status for ${serverName} is missing status`);
-  }
-  const error = readStringProperty(server, "error");
-
-  if (status !== "connected") {
-    return {
-      supported: true,
-      connected: false,
-      serverStatus: status,
-      toolIds: [],
-      detail: error ?? `MCP server ${serverName} status is ${status}.`,
-      failureKind: "error" as const,
-    };
-  }
-
-  const toolIds = parseToolIds(
-    await fetchOpenCodeJson(
-      runtimeRoute,
-      "load tool ids",
-      "GET",
-      "/experimental/tool/ids",
-      workingDirectory,
-    ),
-  );
-
-  return {
-    supported: true,
-    connected: true,
-    serverStatus: status,
-    toolIds,
-    detail: null,
-    failureKind: null,
-  };
-};
-
-const probeCodexMcpStatus = ({
-  runtimeRoute,
-  serverName,
-}: RuntimeMcpStatusProbeInput): RuntimeMcpStatusProbeResult => {
-  if (runtimeRoute.type !== "stdio") {
-    return {
-      supported: false,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: "Codex MCP status probing requires a host-managed stdio app-server runtime.",
-      failureKind: "error",
-    };
-  }
-
-  if (serverName !== "openducktor") {
-    return {
-      supported: true,
-      connected: false,
-      serverStatus: null,
-      toolIds: [],
-      detail: `MCP server ${serverName} is not configured for Codex app-server runtimes.`,
-      failureKind: "error",
-    };
-  }
-
-  return {
-    supported: true,
-    connected: true,
-    serverStatus: "connected",
-    toolIds: CODEX_ODT_TOOL_IDS,
-    detail: null,
-    failureKind: null,
-  };
-};
-
 export const createRuntimeRegistry = ({
   runtimes = [],
   workspaceStarter,
@@ -328,123 +33,170 @@ export const createRuntimeRegistry = ({
 }: CreateRuntimeRegistryInput = {}): RuntimeRegistryPort => {
   const entries = new Map(runtimes.map((runtime) => [runtime.runtimeId, runtime]));
   const handles = new Map<string, RuntimeWorkspaceHandle>();
-  const ensureFlights = new Map<string, Promise<RuntimeInstanceSummary>>();
-
-  const stopRegisteredRuntime = async (runtimeId: string): Promise<RuntimeInstanceSummary> => {
-    const runtime = entries.get(runtimeId);
-    if (!runtime) {
-      throw new Error(`Runtime not found: ${runtimeId}`);
-    }
-    const handle = handles.get(runtimeId);
-    if (handle) {
-      await handle.stop();
-      handles.delete(runtimeId);
-    }
-    entries.delete(runtimeId);
-    return runtime;
-  };
-
-  const waitForStartingRuntimes = async (): Promise<void> => {
-    const flights = [...ensureFlights.values()];
-    if (flights.length === 0) {
-      return;
-    }
-    await Promise.allSettled(flights);
-  };
-
-  return {
-    async ensureWorkspaceRuntime(input) {
-      const existingRuntime = findWorkspaceRuntime(entries.values(), input);
-      if (existingRuntime) {
-        return runtimeInstanceSummarySchema.parse(existingRuntime);
-      }
-
-      if (!workspaceStarter) {
-        throw new Error(
-          `Runtime kind ${input.runtimeKind} workspace startup is not configured in the TypeScript host.`,
+  const ensureFlights = new Map<
+    string,
+    Effect.Effect<RuntimeInstanceSummary, RuntimeRegistryError>
+  >();
+  const stopRegisteredRuntime = (runtimeId: string) =>
+    Effect.gen(function* () {
+      const runtime = entries.get(runtimeId);
+      if (!runtime) {
+        return yield* Effect.fail(
+          new HostResourceError({
+            resource: "runtime",
+            operation: "runtimeRegistry.stopRuntime",
+            message: `Runtime not found: ${runtimeId}`,
+            details: { runtimeId },
+          }),
         );
       }
-
-      const flightKey = runtimeEnsureFlightKey(input.runtimeKind, input.repoPath);
-      const existingFlight = ensureFlights.get(flightKey);
-      if (existingFlight) {
-        return existingFlight;
+      const handle = handles.get(runtimeId);
+      if (handle) {
+        yield* handle.stop();
+        handles.delete(runtimeId);
       }
-
-      const flight = workspaceStarter
-        .startWorkspaceRuntime(input)
-        .then((handle) => {
-          const parsed = runtimeInstanceSummarySchema.parse(handle.runtime);
+      entries.delete(runtimeId);
+      return runtime;
+    });
+  const waitForStartingRuntimes = () => {
+    const flights = [...ensureFlights.values()];
+    if (flights.length === 0) {
+      return Effect.succeed(undefined);
+    }
+    return Effect.asVoid(
+      Effect.forEach(flights, (flight) => Effect.either(flight), { concurrency: "unbounded" }),
+    );
+  };
+  const registry: RuntimeRegistryPort = {
+    ensureWorkspaceRuntime(input) {
+      return Effect.gen(function* () {
+        const existingRuntime = findWorkspaceRuntime(entries.values(), input);
+        if (existingRuntime) {
+          return yield* Effect.try({
+            try: () => runtimeInstanceSummarySchema.parse(existingRuntime),
+            catch: (cause) =>
+              new HostValidationError({
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+                details: {
+                  runtimeId: existingRuntime.runtimeId,
+                },
+              }),
+          });
+        }
+        if (!workspaceStarter) {
+          return yield* Effect.fail(
+            new HostResourceError({
+              resource: "runtimeWorkspaceStarter",
+              operation: "runtimeRegistry.ensureWorkspaceRuntime",
+              message: `Runtime kind ${input.runtimeKind} workspace startup is not configured in the TypeScript host.`,
+              details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
+            }),
+          );
+        }
+        const flightKey = runtimeEnsureFlightKey(input.runtimeKind, input.repoPath);
+        const existingFlight = ensureFlights.get(flightKey);
+        if (existingFlight) {
+          return yield* existingFlight;
+        }
+        const startEffect = Effect.gen(function* () {
+          const handle = yield* workspaceStarter.startWorkspaceRuntime(input);
+          const parsed = yield* Effect.try({
+            try: () => runtimeInstanceSummarySchema.parse(handle.runtime),
+            catch: (cause) =>
+              new HostValidationError({
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+                details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
+              }),
+          });
           entries.set(parsed.runtimeId, parsed);
           handles.set(parsed.runtimeId, handle);
           return parsed;
-        })
-        .finally(() => {
-          ensureFlights.delete(flightKey);
-        });
-      ensureFlights.set(flightKey, flight);
-      return flight;
+        }).pipe(Effect.ensuring(Effect.sync(() => ensureFlights.delete(flightKey))));
+        const cachedStartEffect = yield* Effect.cached(startEffect);
+        ensureFlights.set(flightKey, cachedStartEffect);
+        return yield* cachedStartEffect;
+      });
     },
-    async listRuntimes() {
-      return [...entries.values()];
+    listRuntimes() {
+      return Effect.succeed([...entries.values()]);
     },
-    async stopRuntime(runtimeId) {
-      await stopRegisteredRuntime(runtimeId);
-      return true;
+    stopRuntime(runtimeId) {
+      return Effect.as(stopRegisteredRuntime(runtimeId), true);
     },
-    async stopAllRuntimes() {
-      await waitForStartingRuntimes();
-      const stopped: RuntimeInstanceSummary[] = [];
-      const errors: string[] = [];
-      for (const runtime of [...entries.values()]) {
-        try {
-          stopped.push(await stopRegisteredRuntime(runtime.runtimeId));
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          errors.push(`Failed stopping runtime ${runtime.runtimeId}: ${message}`);
+    stopAllRuntimes() {
+      return Effect.gen(function* () {
+        yield* waitForStartingRuntimes();
+        const stopped: RuntimeInstanceSummary[] = [];
+        const errors: string[] = [];
+        for (const runtime of [...entries.values()]) {
+          const exit = yield* Effect.exit(stopRegisteredRuntime(runtime.runtimeId));
+          if (exit._tag === "Success") {
+            stopped.push(exit.value);
+          } else {
+            const message = `${exit.cause}`;
+            errors.push(`Failed stopping runtime ${runtime.runtimeId}: ${message}`);
+          }
         }
-      }
-      if (errors.length > 0) {
-        throw new Error(errors.join("\n"));
-      }
-      return stopped;
+        if (errors.length > 0) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "runtimeRegistry.stopAllRuntimes",
+              message: errors.join("\n"),
+              details: { failures: errors },
+            }),
+          );
+        }
+        return stopped;
+      });
     },
-    async stopSession(input) {
+    stopSession(input) {
       if (input.runtimeKind === "opencode") {
-        await stopOpenCodeSession(input);
-        return;
+        return stopOpenCodeSession(input);
       }
-      throw new Error(
-        `Runtime kind ${input.runtimeKind} does not support session stop in the TypeScript host.`,
+      return Effect.fail(
+        new HostValidationError({
+          message: `Runtime kind ${input.runtimeKind} does not support session stop in the TypeScript host.`,
+          field: "runtimeKind",
+          details: { runtimeKind: input.runtimeKind },
+        }),
       );
     },
-    async probeSessionStatus(input) {
+    probeSessionStatus(input) {
       if (input.runtimeKind === "opencode") {
         return probeOpenCodeSessionStatus(input);
       }
       if (input.runtimeKind === "codex") {
         if (!codexAppServer) {
-          throw new Error("Codex session status probing requires the Codex app-server port.");
+          return Effect.fail(
+            new HostResourceError({
+              resource: "codexAppServer",
+              operation: "runtimeRegistry.probeSessionStatus",
+              message: "Codex session status probing requires the Codex app-server port.",
+            }),
+          );
         }
         return probeCodexSessionStatus({ ...input, codexAppServer });
       }
-      return { supported: false, hasLiveSession: false };
+      return Effect.succeed({ supported: false, hasLiveSession: false });
     },
-    async probeMcpStatus(input) {
+    probeMcpStatus(input) {
       if (input.runtimeKind === "opencode") {
         return probeOpenCodeMcpStatus(input);
       }
       if (input.runtimeKind === "codex") {
-        return probeCodexMcpStatus(input);
+        return Effect.succeed(probeCodexMcpStatus(input));
       }
-      return {
+      return Effect.succeed({
         supported: false,
         connected: false,
         serverStatus: null,
         toolIds: [],
         detail: null,
         failureKind: null,
-      };
+      });
     },
   };
+  return registry;
 };

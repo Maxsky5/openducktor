@@ -1,13 +1,19 @@
-import { createGitCliAdapter, type GitCommandRunner } from "./git-cli-adapter";
+import { Effect } from "effect";
+import {
+  createGitCliAdapter as createEffectGitCliAdapter,
+  type GitCommandRunner,
+} from "./git-cli-adapter";
 
+const createGitCliAdapter = (...args: Parameters<typeof createEffectGitCliAdapter>) =>
+  createEffectGitCliAdapter(...args);
 const createRunner =
   (outputs: Record<string, string>): GitCommandRunner =>
-  async (_workingDirectory, args) => ({
-    ok: true,
-    stdout: outputs[args.join(" ")] ?? "",
-    stderr: "",
-  });
-
+  (_workingDirectory, args) =>
+    Effect.succeed({
+      ok: true,
+      stdout: outputs[args.join(" ")] ?? "",
+      stderr: "",
+    });
 describe("createGitCliAdapter", () => {
   test("lists branches with current local branches first and skips remote HEAD refs", async () => {
     const git = createGitCliAdapter({
@@ -21,14 +27,12 @@ describe("createGitCliAdapter", () => {
           ].join("\n"),
       }),
     });
-
-    await expect(git.listBranches("/repo")).resolves.toEqual([
+    await expect(Effect.runPromise(git.listBranches("/repo"))).resolves.toEqual([
       { name: "feature/a", isCurrent: true, isRemote: false },
       { name: "feature/b", isCurrent: false, isRemote: false },
       { name: "origin/main", isCurrent: false, isRemote: true },
     ]);
   });
-
   test("returns current branch and revision", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
@@ -36,14 +40,12 @@ describe("createGitCliAdapter", () => {
         "rev-parse HEAD": "abc123\n",
       }),
     });
-
-    await expect(git.getCurrentBranch("/repo")).resolves.toEqual({
+    await expect(Effect.runPromise(git.getCurrentBranch("/repo"))).resolves.toEqual({
       name: "main",
       detached: false,
       revision: "abc123",
     });
   });
-
   test("lists remotes with resolved URLs", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
@@ -52,13 +54,11 @@ describe("createGitCliAdapter", () => {
         "remote get-url backup": "https://github.com/openai/openducktor.git\n",
       }),
     });
-
-    await expect(git.listRemotes("/repo")).resolves.toEqual([
+    await expect(Effect.runPromise(git.listRemotes("/repo"))).resolves.toEqual([
       { name: "origin", url: "git@github.com:openai/openducktor.git" },
       { name: "backup", url: "https://github.com/openai/openducktor.git" },
     ]);
   });
-
   test("parses porcelain status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
@@ -72,8 +72,7 @@ describe("createGitCliAdapter", () => {
         ].join("\n"),
       }),
     });
-
-    await expect(git.getStatus("/repo")).resolves.toEqual([
+    await expect(Effect.runPromise(git.getStatus("/repo"))).resolves.toEqual([
       { path: "src/unstaged.ts", status: "modified", staged: false },
       { path: "src/staged.ts", status: "added", staged: true },
       { path: "src/new.ts", status: "untracked", staged: false },
@@ -82,7 +81,6 @@ describe("createGitCliAdapter", () => {
       { path: "src/add-add-conflict.ts", status: "unmerged", staged: true },
     ]);
   });
-
   test("returns sorted file diffs with additions and deletions", async () => {
     const fullDiff = [
       "diff --git a/src/b.ts b/src/b.ts",
@@ -102,7 +100,6 @@ describe("createGitCliAdapter", () => {
       "+first",
       "",
     ].join("\n");
-
     const git = createGitCliAdapter({
       runner: createRunner({
         "diff --numstat --end-of-options HEAD": "2\t0\tsrc/b.ts\n1\t0\tsrc/a.ts\n",
@@ -110,8 +107,7 @@ describe("createGitCliAdapter", () => {
         "status --porcelain=v1 --untracked-files=all": "",
       }),
     });
-
-    await expect(git.getDiff("/repo")).resolves.toEqual([
+    await expect(Effect.runPromise(git.getDiff("/repo"))).resolves.toEqual([
       {
         file: "src/a.ts",
         type: "added",
@@ -128,7 +124,6 @@ describe("createGitCliAdapter", () => {
       },
     ]);
   });
-
   test("builds target-scoped worktree status from the branch diff base", async () => {
     const fullDiff = [
       "diff --git a/src/main.ts b/src/main.ts",
@@ -153,8 +148,9 @@ describe("createGitCliAdapter", () => {
         "rev-list --count --left-right --end-of-options origin/main...HEAD": "1 2\n",
       }),
     });
-
-    await expect(git.getWorktreeStatusData("/repo", "origin/main", "target")).resolves.toEqual(
+    await expect(
+      Effect.runPromise(git.getWorktreeStatusData("/repo", "origin/main", "target")),
+    ).resolves.toEqual(
       expect.objectContaining({
         currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
         fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
@@ -172,44 +168,45 @@ describe("createGitCliAdapter", () => {
       }),
     );
   });
-
   test("returns commit counts ahead and behind a target branch", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
         "rev-list --count --left-right --end-of-options origin/main...HEAD": "2\t3\n",
       }),
     });
-
-    await expect(git.commitsAheadBehind("/repo", "origin/main")).resolves.toEqual({
+    await expect(
+      Effect.runPromise(git.commitsAheadBehind("/repo", "origin/main")),
+    ).resolves.toEqual({
       ahead: 3,
       behind: 2,
     });
   });
-
   test("checks branch ancestry with merge-base", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
         const isMerged =
           command === "merge-base --is-ancestor --end-of-options feature/merged main";
-        return {
+        return Effect.succeed({
           ok: isMerged,
           stdout: "",
           stderr: "",
-        };
+        });
       },
     });
-
-    await expect(git.isAncestor("/repo", "feature/merged", "main")).resolves.toBe(true);
-    await expect(git.isAncestor("/repo", "feature/unmerged", "main")).resolves.toBe(false);
+    await expect(
+      Effect.runPromise(git.isAncestor("/repo", "feature/merged", "main")),
+    ).resolves.toBe(true);
+    await expect(
+      Effect.runPromise(git.isAncestor("/repo", "feature/unmerged", "main")),
+    ).resolves.toBe(false);
     expect(calls).toEqual([
       "merge-base --is-ancestor --end-of-options feature/merged main",
       "merge-base --is-ancestor --end-of-options feature/unmerged main",
     ]);
   });
-
   test("suggests the oldest branch commit message for squash merges", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
@@ -217,19 +214,19 @@ describe("createGitCliAdapter", () => {
         "show -s --format=%B abc123": "Ship Electron host\n\nDetails\n",
       }),
     });
-
     await expect(
-      git.suggestedSquashCommitMessage("/repo", "feature/electron", "origin/main"),
+      Effect.runPromise(
+        git.suggestedSquashCommitMessage("/repo", "feature/electron", "origin/main"),
+      ),
     ).resolves.toBe("Ship Electron host\n\nDetails");
   });
-
   test("switches to an existing branch and returns the new current branch", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -238,11 +235,12 @@ describe("createGitCliAdapter", () => {
               "rev-parse HEAD": "def456\n",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
-    await expect(git.switchBranch("/repo", " feature/electron ", false)).resolves.toEqual({
+    await expect(
+      Effect.runPromise(git.switchBranch("/repo", " feature/electron ", false)),
+    ).resolves.toEqual({
       name: "feature/electron",
       detached: false,
       revision: "def456",
@@ -253,14 +251,13 @@ describe("createGitCliAdapter", () => {
       "rev-parse HEAD",
     ]);
   });
-
   test("creates and switches to a new branch", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -269,79 +266,82 @@ describe("createGitCliAdapter", () => {
               "rev-parse HEAD": "abc123\n",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
-    await expect(git.switchBranch("/repo", "feature/new", true)).resolves.toEqual({
+    await expect(
+      Effect.runPromise(git.switchBranch("/repo", "feature/new", true)),
+    ).resolves.toEqual({
       name: "feature/new",
       detached: false,
       revision: "abc123",
     });
     expect(calls).toEqual(["switch -c feature/new", "branch --show-current", "rev-parse HEAD"]);
   });
-
   test("creates worktrees for new and existing branches", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         calls.push(args.join(" "));
-        return { ok: true, stdout: "", stderr: "" };
+        return Effect.succeed({ ok: true, stdout: "", stderr: "" });
       },
     });
-
     await expect(
-      git.createWorktree("/repo", "/worktrees/new", " feature/new ", true),
+      Effect.runPromise(git.createWorktree("/repo", "/worktrees/new", " feature/new ", true)),
     ).resolves.toBeUndefined();
     await expect(
-      git.createWorktree("/repo", "/worktrees/existing", "feature/existing", false),
+      Effect.runPromise(
+        git.createWorktree("/repo", "/worktrees/existing", "feature/existing", false),
+      ),
     ).resolves.toBeUndefined();
     expect(calls).toEqual([
       "worktree add -b feature/new --end-of-options /worktrees/new",
       "worktree add --end-of-options /worktrees/existing feature/existing",
     ]);
   });
-
   test("removes worktrees and deletes local branches with end-of-options", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         calls.push(args.join(" "));
-        return { ok: true, stdout: "", stderr: "" };
+        return Effect.succeed({ ok: true, stdout: "", stderr: "" });
       },
     });
-
-    await expect(git.removeWorktree("/repo", "/worktrees/task", true)).resolves.toBeUndefined();
-    await expect(git.deleteLocalBranch("/repo", "feature/task", true)).resolves.toBeUndefined();
+    await expect(
+      Effect.runPromise(git.removeWorktree("/repo", "/worktrees/task", true)),
+    ).resolves.toBeUndefined();
+    await expect(
+      Effect.runPromise(git.deleteLocalBranch("/repo", "feature/task", true)),
+    ).resolves.toBeUndefined();
     expect(calls).toEqual([
       "worktree remove --force --end-of-options /worktrees/task",
       "branch -D --end-of-options feature/task",
     ]);
   });
-
   test("resets a tracked file selection with git restore", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
-        return { ok: true, stdout: "", stderr: "" };
+        return Effect.succeed({ ok: true, stdout: "", stderr: "" });
       },
     });
-
     await expect(
-      git.resetWorktreeSelection(
-        "/repo",
-        [
-          {
-            file: "src/main.ts",
-            type: "modified",
-            additions: 1,
-            deletions: 1,
-            diff: "@@ -1 +1 @@\n-old\n+new\n",
-          },
-        ],
-        { kind: "file", filePath: " src/main.ts " },
+      Effect.runPromise(
+        git.resetWorktreeSelection(
+          "/repo",
+          [
+            {
+              file: "src/main.ts",
+              type: "modified",
+              additions: 1,
+              deletions: 1,
+              diff: "@@ -1 +1 @@\n-old\n+new\n",
+            },
+          ],
+          { kind: "file", filePath: " src/main.ts " },
+        ),
       ),
     ).resolves.toEqual({ affectedPaths: ["src/main.ts"] });
     expect(calls).toEqual([
@@ -349,45 +349,46 @@ describe("createGitCliAdapter", () => {
       "restore --source=HEAD --staged --worktree -- src/main.ts",
     ]);
   });
-
   test("resets an untracked file selection with git clean", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
         if (command === "ls-files --error-unmatch -- src/new.ts") {
-          return {
+          return Effect.succeed({
             ok: false,
             stdout: "",
             stderr: "error: pathspec 'src/new.ts' did not match any file(s) known to git\n",
-          };
+          });
         }
-
-        return { ok: true, stdout: "", stderr: "" };
+        return Effect.succeed({ ok: true, stdout: "", stderr: "" });
       },
     });
-
     await expect(
-      git.resetWorktreeSelection(
-        "/repo",
-        [
-          {
-            file: "src/new.ts",
-            type: "added",
-            additions: 1,
-            deletions: 0,
-            diff: "@@ -0,0 +1 @@\n+new\n",
-          },
-        ],
-        { kind: "file", filePath: "src/new.ts" },
+      Effect.runPromise(
+        git.resetWorktreeSelection(
+          "/repo",
+          [
+            {
+              file: "src/new.ts",
+              type: "added",
+              additions: 1,
+              deletions: 0,
+              diff: "@@ -0,0 +1 @@\n+new\n",
+            },
+          ],
+          { kind: "file", filePath: "src/new.ts" },
+        ),
       ),
     ).resolves.toEqual({ affectedPaths: ["src/new.ts"] });
     expect(calls).toEqual(["ls-files --error-unmatch -- src/new.ts", "clean -f -- src/new.ts"]);
   });
-
   test("resets a hunk selection with reverse patch application", async () => {
-    const calls: Array<{ command: string; stdin?: string }> = [];
+    const calls: Array<{
+      command: string;
+      stdin?: string;
+    }> = [];
     const diff = [
       "diff --git a/src/main.ts b/src/main.ts",
       "index 123..456 100644",
@@ -399,10 +400,10 @@ describe("createGitCliAdapter", () => {
       "",
     ].join("\n");
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args, options) => {
+      runner: (_workingDirectory, args, options) => {
         const command = args.join(" ");
         calls.push({ command, ...(options?.stdin === undefined ? {} : { stdin: options.stdin }) });
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -410,23 +411,24 @@ describe("createGitCliAdapter", () => {
               "diff -- src/main.ts": diff,
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
     await expect(
-      git.resetWorktreeSelection(
-        "/repo",
-        [
-          {
-            file: "src/main.ts",
-            type: "modified",
-            additions: 1,
-            deletions: 1,
-            diff,
-          },
-        ],
-        { kind: "hunk", filePath: "src/main.ts", hunkIndex: 0 },
+      Effect.runPromise(
+        git.resetWorktreeSelection(
+          "/repo",
+          [
+            {
+              file: "src/main.ts",
+              type: "modified",
+              additions: 1,
+              deletions: 1,
+              diff,
+            },
+          ],
+          { kind: "hunk", filePath: "src/main.ts", hunkIndex: 0 },
+        ),
       ),
     ).resolves.toEqual({ affectedPaths: ["src/main.ts"] });
     expect(calls.map((call) => call.command)).toEqual([
@@ -438,14 +440,13 @@ describe("createGitCliAdapter", () => {
     expect(calls[0]?.stdin).toContain("@@ -1 +1 @@");
     expect(calls[3]?.stdin).toContain("@@ -1 +1 @@");
   });
-
   test("fetches the current branch upstream remote and compare target remote once each", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -458,18 +459,16 @@ describe("createGitCliAdapter", () => {
               "fetch --prune -- backup": "Fetched backup\n",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
-    await expect(git.fetchRemote("/repo", "backup/main")).resolves.toEqual({
+    await expect(Effect.runPromise(git.fetchRemote("/repo", "backup/main"))).resolves.toEqual({
       outcome: "fetched",
       output: "Fetched origin\nFetched backup",
     });
     expect(calls).toContain("fetch --prune -- origin");
     expect(calls).toContain("fetch --prune -- backup");
   });
-
   test("skips fetch when no applicable remote can be resolved", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
@@ -480,21 +479,19 @@ describe("createGitCliAdapter", () => {
         "for-each-ref --format=%(refname) refs/remotes": "",
       }),
     });
-
-    await expect(git.fetchRemote("/repo", "main")).resolves.toEqual({
+    await expect(Effect.runPromise(git.fetchRemote("/repo", "main"))).resolves.toEqual({
       outcome: "skipped_no_remote",
       output:
         "Skipped git fetch because no applicable remote is configured for this repo or branch.",
     });
   });
-
   test("pulls upstream commits with a fast-forward merge after fetching the configured upstream", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -513,11 +510,10 @@ describe("createGitCliAdapter", () => {
               "merge --ff-only refs/remotes/origin/feature/electron": "Fast-forward\n",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
-    await expect(git.pullBranch("/repo")).resolves.toEqual({
+    await expect(Effect.runPromise(git.pullBranch("/repo"))).resolves.toEqual({
       outcome: "pulled",
       output: "Fast-forward",
     });
@@ -526,21 +522,20 @@ describe("createGitCliAdapter", () => {
     );
     expect(calls).toContain("merge --ff-only refs/remotes/origin/feature/electron");
   });
-
   test("reports pull conflicts from a failed rebase", async () => {
     let rebaseFailed = false;
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         if (command === "rebase --no-fork-point refs/remotes/origin/main") {
           rebaseFailed = true;
-          return {
+          return Effect.succeed({
             ok: false,
             stdout: "",
             stderr: "CONFLICT (content): Merge conflict in src/main.ts\n",
-          };
+          });
         }
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -555,24 +550,22 @@ describe("createGitCliAdapter", () => {
                 "1 2\n",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
-    await expect(git.pullBranch("/repo")).resolves.toEqual({
+    await expect(Effect.runPromise(git.pullBranch("/repo"))).resolves.toEqual({
       outcome: "conflicts",
       conflictedFiles: ["src/main.ts"],
       output: "CONFLICT (content): Merge conflict in src/main.ts",
     });
   });
-
   test("commits all staged and unstaged changes", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -582,11 +575,12 @@ describe("createGitCliAdapter", () => {
               "rev-parse HEAD": "abc123\n",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
-    await expect(git.commitAll("/repo", "  Ship Electron host  ")).resolves.toEqual({
+    await expect(
+      Effect.runPromise(git.commitAll("/repo", "  Ship Electron host  ")),
+    ).resolves.toEqual({
       outcome: "committed",
       commitHash: "abc123",
       output: "[feature abc123] Ship Electron host",
@@ -598,7 +592,6 @@ describe("createGitCliAdapter", () => {
       "rev-parse HEAD",
     ]);
   });
-
   test("returns no_changes when commit all has nothing staged after add", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
@@ -606,20 +599,18 @@ describe("createGitCliAdapter", () => {
         "diff --cached --name-only": "\n",
       }),
     });
-
-    await expect(git.commitAll("/repo", "No changes")).resolves.toEqual({
+    await expect(Effect.runPromise(git.commitAll("/repo", "No changes"))).resolves.toEqual({
       outcome: "no_changes",
       output: "No staged changes to commit",
     });
   });
-
   test("pushes a branch and syncs the remote tracking ref", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -629,16 +620,17 @@ describe("createGitCliAdapter", () => {
               "update-ref refs/remotes/origin/feature/electron abc123": "",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
     await expect(
-      git.pushBranch("/repo", " feature/electron ", {
-        remote: " origin ",
-        setUpstream: true,
-        forceWithLease: true,
-      }),
+      Effect.runPromise(
+        git.pushBranch("/repo", " feature/electron ", {
+          remote: " origin ",
+          setUpstream: true,
+          forceWithLease: true,
+        }),
+      ),
     ).resolves.toEqual({
       outcome: "pushed",
       remote: "origin",
@@ -651,39 +643,36 @@ describe("createGitCliAdapter", () => {
       "update-ref refs/remotes/origin/feature/electron abc123",
     ]);
   });
-
   test("returns a typed non-fast-forward push rejection", async () => {
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         if (args.join(" ") === "push --porcelain -- origin feature/electron") {
-          return {
+          return Effect.succeed({
             ok: false,
             stdout: "",
             stderr: "! [rejected] feature/electron -> feature/electron (non-fast-forward)\n",
-          };
+          });
         }
-        return { ok: true, stdout: "", stderr: "" };
+        return Effect.succeed({ ok: true, stdout: "", stderr: "" });
       },
     });
-
-    await expect(git.pushBranch("/repo", "feature/electron")).resolves.toEqual({
+    await expect(Effect.runPromise(git.pushBranch("/repo", "feature/electron"))).resolves.toEqual({
       outcome: "rejected_non_fast_forward",
       remote: "origin",
       branch: "feature/electron",
       output: "! [rejected] feature/electron -> feature/electron (non-fast-forward)",
     });
   });
-
   test("rebases a clean branch onto a target branch", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
         if (command === "merge-base --is-ancestor origin/main HEAD") {
-          return { ok: false, stdout: "", stderr: "" };
+          return Effect.succeed({ ok: false, stdout: "", stderr: "" });
         }
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -694,11 +683,10 @@ describe("createGitCliAdapter", () => {
               "rebase --end-of-options origin/main": "Successfully rebased\n",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
-    await expect(git.rebaseBranch("/repo", " origin/main ")).resolves.toEqual({
+    await expect(Effect.runPromise(git.rebaseBranch("/repo", " origin/main "))).resolves.toEqual({
       outcome: "rebased",
       output: "Successfully rebased",
     });
@@ -710,7 +698,6 @@ describe("createGitCliAdapter", () => {
       "rebase --end-of-options origin/main",
     ]);
   });
-
   test("returns up_to_date when the branch already contains target history", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
@@ -720,29 +707,27 @@ describe("createGitCliAdapter", () => {
         "merge-base --is-ancestor origin/main HEAD": "",
       }),
     });
-
-    await expect(git.rebaseBranch("/repo", "origin/main")).resolves.toEqual({
+    await expect(Effect.runPromise(git.rebaseBranch("/repo", "origin/main"))).resolves.toEqual({
       outcome: "up_to_date",
       output: "Branch already contains target history",
     });
   });
-
   test("mergeBranch checks out a local target for remote target refs and merges", async () => {
     const calls: string[] = [];
     let revParseCount = 0;
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
         if (command === "rev-parse HEAD") {
           revParseCount += 1;
-          return {
+          return Effect.succeed({
             ok: true,
             stdout: revParseCount === 3 ? "after\n" : "before\n",
             stderr: "",
-          };
+          });
         }
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -754,16 +739,17 @@ describe("createGitCliAdapter", () => {
               "merge --no-ff --end-of-options odt/task-1": "Merge made by recursive.\n",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
     await expect(
-      git.mergeBranch("/repo", {
-        sourceBranch: "odt/task-1",
-        targetBranch: "origin/main",
-        method: "merge_commit",
-      }),
+      Effect.runPromise(
+        git.mergeBranch("/repo", {
+          sourceBranch: "odt/task-1",
+          targetBranch: "origin/main",
+          method: "merge_commit",
+        }),
+      ),
     ).resolves.toEqual({
       outcome: "merged",
       output: "Merge made by recursive.",
@@ -779,21 +765,20 @@ describe("createGitCliAdapter", () => {
       "rev-parse HEAD",
     ]);
   });
-
   test("mergeBranch returns conflicts from merge status entries", async () => {
     let mergeFailed = false;
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         if (command === "merge --squash --end-of-options odt/task-1") {
           mergeFailed = true;
-          return {
+          return Effect.succeed({
             ok: false,
             stdout: "",
             stderr: "CONFLICT (content): Merge conflict in src/main.ts\n",
-          };
+          });
         }
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -805,41 +790,41 @@ describe("createGitCliAdapter", () => {
               "rev-parse HEAD": "before\n",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
     await expect(
-      git.mergeBranch("/repo", {
-        sourceBranch: "odt/task-1",
-        targetBranch: "main",
-        method: "squash",
-        squashCommitMessage: "Task 1",
-      }),
+      Effect.runPromise(
+        git.mergeBranch("/repo", {
+          sourceBranch: "odt/task-1",
+          targetBranch: "main",
+          method: "squash",
+          squashCommitMessage: "Task 1",
+        }),
+      ),
     ).resolves.toEqual({
       outcome: "conflicts",
       conflictedFiles: ["src/main.ts"],
       output: "CONFLICT (content): Merge conflict in src/main.ts",
     });
   });
-
   test("returns rebase conflicts from unmerged status entries", async () => {
     let rebaseFailed = false;
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         if (command === "merge-base --is-ancestor origin/main HEAD") {
-          return { ok: false, stdout: "", stderr: "" };
+          return Effect.succeed({ ok: false, stdout: "", stderr: "" });
         }
         if (command === "rebase --end-of-options origin/main") {
           rebaseFailed = true;
-          return {
+          return Effect.succeed({
             ok: false,
             stdout: "",
             stderr: "CONFLICT (content): Merge conflict in src/main.ts\n",
-          };
+          });
         }
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -848,24 +833,22 @@ describe("createGitCliAdapter", () => {
               "status --porcelain=v1 --untracked-files=all": rebaseFailed ? "AA src/main.ts\n" : "",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
-    await expect(git.rebaseBranch("/repo", "origin/main")).resolves.toEqual({
+    await expect(Effect.runPromise(git.rebaseBranch("/repo", "origin/main"))).resolves.toEqual({
       outcome: "conflicts",
       conflictedFiles: ["src/main.ts"],
       output: "CONFLICT (content): Merge conflict in src/main.ts",
     });
   });
-
   test("aborts rebase and conflict operations with the operation-specific git command", async () => {
     const calls: string[] = [];
     const git = createGitCliAdapter({
-      runner: async (_workingDirectory, args) => {
+      runner: (_workingDirectory, args) => {
         const command = args.join(" ");
         calls.push(command);
-        return {
+        return Effect.succeed({
           ok: true,
           stdout:
             {
@@ -874,21 +857,24 @@ describe("createGitCliAdapter", () => {
               "reset --hard HEAD": "HEAD is now at abc123 feature\n",
             }[command] ?? "",
           stderr: "",
-        };
+        });
       },
     });
-
-    await expect(git.rebaseAbort("/repo")).resolves.toEqual({
+    await expect(Effect.runPromise(git.rebaseAbort("/repo"))).resolves.toEqual({
       outcome: "aborted",
       output: "rebase aborted",
     });
-    await expect(git.abortConflict("/repo", "direct_merge_merge_commit")).resolves.toEqual({
+    await expect(
+      Effect.runPromise(git.abortConflict("/repo", "direct_merge_merge_commit")),
+    ).resolves.toEqual({
       output: "merge aborted",
     });
-    await expect(git.abortConflict("/repo", "direct_merge_squash")).resolves.toEqual({
+    await expect(
+      Effect.runPromise(git.abortConflict("/repo", "direct_merge_squash")),
+    ).resolves.toEqual({
       output: "HEAD is now at abc123 feature",
     });
-    await expect(git.abortConflict("/repo", "pull_rebase")).resolves.toEqual({
+    await expect(Effect.runPromise(git.abortConflict("/repo", "pull_rebase"))).resolves.toEqual({
       output: "rebase aborted",
     });
     expect(calls).toEqual([

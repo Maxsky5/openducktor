@@ -1,11 +1,17 @@
-import { spawn } from "node:child_process";
+import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createServer, Socket } from "node:net";
-import { setTimeout as delay } from "node:timers/promises";
+import type { Readable } from "node:stream";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
+import { Effect, Schedule } from "effect";
+import {
+  HostOperationError,
+  HostResourceError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type {
   RuntimeEnsureWorkspaceInput,
-  RuntimeWorkspaceHandle,
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
@@ -28,11 +34,14 @@ export type OpenCodeMcpBridgeConnection = {
 
 export type OpenCodeMcpBridgeConnectionResolver = (
   input: RuntimeEnsureWorkspaceInput,
-) => Promise<OpenCodeMcpBridgeConnection>;
+) => Effect.Effect<OpenCodeMcpBridgeConnection, HostOperationError | HostResourceError>;
 
-type LocalPortAllocator = () => Promise<number>;
+type LocalPortAllocator = () => Effect.Effect<number, HostOperationError>;
 
-type LocalPortProbe = (port: number, timeoutMs: number) => Promise<boolean>;
+type LocalPortProbe = (
+  port: number,
+  timeoutMs: number,
+) => Effect.Effect<boolean, HostOperationError>;
 
 export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   systemCommands: SystemCommandPort;
@@ -58,6 +67,8 @@ const DEFAULT_RETRY_DELAY_MS = 100;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 const MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024;
 
+type OpenCodeChildProcess = ChildProcessByStdio<null, Readable, Readable>;
+
 const resolveConfiguredMcpCommand = (
   env: NodeJS.ProcessEnv,
   configuredCommand?: string[],
@@ -65,7 +76,10 @@ const resolveConfiguredMcpCommand = (
   if (configuredCommand) {
     const command = configuredCommand.map((entry) => entry.trim());
     if (command.length === 0 || command.some((entry) => entry.length === 0)) {
-      throw new Error("OpenCode MCP command must contain only non-empty strings.");
+      throw new HostValidationError({
+        message: "OpenCode MCP command must contain only non-empty strings.",
+        field: "mcpCommand",
+      });
     }
     return command;
   }
@@ -81,7 +95,10 @@ const resolveConfiguredMcpCommand = (
 const requireBridgeValue = (value: string, label: keyof OpenCodeMcpBridgeConnection): string => {
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new Error(`OpenCode MCP bridge ${label} is required.`);
+    throw new HostValidationError({
+      message: `OpenCode MCP bridge ${label} is required.`,
+      field: label,
+    });
   }
   return trimmed;
 };
@@ -115,7 +132,13 @@ const pickFreePort = (): Promise<number> =>
       const address = server.address();
       if (!address || typeof address === "string") {
         server.close(() => {
-          reject(new Error("Failed to allocate a local OpenCode runtime port."));
+          reject(
+            new HostResourceError({
+              resource: "localPort",
+              operation: "opencode.pickFreePort",
+              message: "Failed to allocate a local OpenCode runtime port.",
+            }),
+          );
         });
         return;
       }
@@ -146,6 +169,12 @@ const outputDetail = (stderr: string, stdout: string, fallback: string): string 
   const trimmedStdout = stdout.trim();
   return trimmedStdout || fallback;
 };
+
+const startupProbeSchedule = (startupTimeoutMs: number, retryDelayMs: number) =>
+  Schedule.addDelay(
+    Schedule.recurs(Math.max(1, Math.ceil(startupTimeoutMs / Math.max(1, retryDelayMs))) - 1),
+    () => `${retryDelayMs} millis`,
+  );
 
 const canConnect = (port: number, timeoutMs: number): Promise<boolean> =>
   new Promise((resolve) => {
@@ -180,132 +209,240 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
   now = () => new Date(),
   runtimeId = () => randomUUID(),
-  portAllocator = pickFreePort,
-  portProbe = canConnect,
+  portAllocator = () =>
+    Effect.tryPromise({
+      try: pickFreePort,
+      catch: (cause) => toHostOperationError(cause, "opencodeRuntime.pickFreePort"),
+    }),
+  portProbe = (port, timeoutMs) =>
+    Effect.tryPromise({
+      try: () => canConnect(port, timeoutMs),
+      catch: (cause) =>
+        toHostOperationError(cause, "opencodeRuntime.probePort", {
+          port,
+          timeoutMs,
+        }),
+    }),
   platform = process.platform,
   processTreeTerminator = terminateProcessTree,
 }: CreateOpenCodeWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
-  async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
-    if (input.runtimeKind !== "opencode") {
-      throw new Error(
-        `OpenCode workspace runtime starter does not support runtime kind ${input.runtimeKind}.`,
-      );
-    }
-    if (!resolveMcpBridgeConnection) {
-      throw new Error("OpenCode workspace startup requires an MCP host bridge connection.");
-    }
-
-    const bridge = await resolveMcpBridgeConnection(input);
-    const resolvedMcpCommand =
-      resolveConfiguredMcpCommand(processEnv, mcpCommand) ??
-      (await resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
-    const configContent = buildOpenCodeConfigContent(bridge, resolvedMcpCommand);
-    const binary = opencodeBinary ?? (await resolveOpencodeBinary(systemCommands, processEnv));
-    const port = await portAllocator();
-    const command = createSystemCommandLaunch(
-      binary,
-      ["serve", "--hostname", "127.0.0.1", "--port", port.toString()],
-      processEnv,
-      platform,
-    );
-    const child = spawn(command.command, command.args, {
-      cwd: input.workingDirectory,
-      detached: shouldStartDetachedProcessGroup(),
-      env: {
-        ...processEnv,
-        OPENCODE_CONFIG_CONTENT: configContent,
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsVerbatimArguments: command.windowsVerbatimArguments === true,
-    });
-    const pid = child.pid;
-    if (!pid || pid <= 0) {
-      throw new Error("Failed to start OpenCode runtime: child process has no valid pid.");
-    }
-
-    let closed = false;
-    let closeDescription: string | null = null;
-    let spawnError: Error | null = null;
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout = appendCapturedOutput(stdout, chunk);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr = appendCapturedOutput(stderr, chunk);
-    });
-    child.once("error", (error) => {
-      spawnError = error;
-    });
-    child.once("close", (exitCode, signal) => {
-      closed = true;
-      closeDescription =
-        signal === null
-          ? `process exited with code ${exitCode}`
-          : `process exited from signal ${signal}`;
-    });
-
-    const deadline = Date.now() + startupTimeoutMs;
-    while (Date.now() < deadline) {
-      if (spawnError) {
-        throw new Error(`Failed to start OpenCode runtime with ${binary}`, { cause: spawnError });
-      }
-      if (closed) {
-        throw new Error(
-          `OpenCode process exited before runtime became reachable: ${outputDetail(
-            stderr,
-            stdout,
-            closeDescription ?? "process exited",
-          )}`,
+  startWorkspaceRuntime(input) {
+    return Effect.gen(function* () {
+      if (input.runtimeKind !== "opencode") {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "runtimeKind",
+            message: `OpenCode workspace runtime starter does not support runtime kind ${input.runtimeKind}.`,
+            details: { runtimeKind: input.runtimeKind },
+          }),
         );
       }
-      if (await portProbe(port, connectTimeoutMs)) {
-        const runtime = runtimeInstanceSummarySchema.parse({
-          kind: "opencode",
-          runtimeId: runtimeId(),
-          repoPath: input.repoPath,
-          taskId: null,
-          role: "workspace",
-          workingDirectory: input.workingDirectory,
-          runtimeRoute: {
-            type: "local_http",
-            endpoint: `http://127.0.0.1:${port}`,
-          },
-          startedAt: now().toISOString(),
-          descriptor: input.descriptor,
-        } satisfies RuntimeInstanceSummary);
+      if (!resolveMcpBridgeConnection) {
+        return yield* Effect.fail(
+          new HostResourceError({
+            resource: "mcpBridgeConnection",
+            operation: "opencodeWorkspaceRuntime.startWorkspaceRuntime",
+            message: "OpenCode workspace startup requires an MCP host bridge connection.",
+          }),
+        );
+      }
 
-        return {
-          runtime,
-          async stop() {
-            await processTreeTerminator({
+      const bridge = yield* resolveMcpBridgeConnection(input).pipe(
+        Effect.mapError((cause) =>
+          toHostOperationError(cause, "opencodeWorkspaceRuntime.resolveMcpBridgeConnection"),
+        ),
+      );
+      const configuredMcpCommand = yield* Effect.try({
+        try: () => resolveConfiguredMcpCommand(processEnv, mcpCommand),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+            details: { runtimeKind: input.runtimeKind },
+          }),
+      });
+      const resolvedMcpCommand =
+        configuredMcpCommand ??
+        (yield* resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
+      const configContent = yield* Effect.try({
+        try: () => buildOpenCodeConfigContent(bridge, resolvedMcpCommand),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+            details: { runtimeKind: input.runtimeKind },
+          }),
+      });
+      const binary = opencodeBinary ?? (yield* resolveOpencodeBinary(systemCommands, processEnv));
+      const port = yield* portAllocator().pipe(
+        Effect.mapError((cause) =>
+          toHostOperationError(cause, "opencodeWorkspaceRuntime.pickFreePort"),
+        ),
+      );
+      const command = createSystemCommandLaunch(
+        binary,
+        ["serve", "--hostname", "127.0.0.1", "--port", port.toString()],
+        processEnv,
+        platform,
+      );
+      const child = yield* Effect.try({
+        try: () =>
+          spawn(command.command, command.args, {
+            cwd: input.workingDirectory,
+            detached: shouldStartDetachedProcessGroup(platform),
+            env: {
+              ...processEnv,
+              OPENCODE_CONFIG_CONTENT: configContent,
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+            windowsVerbatimArguments: command.windowsVerbatimArguments === true,
+          }) as OpenCodeChildProcess,
+        catch: (cause) =>
+          toHostOperationError(cause, "opencodeWorkspaceRuntime.spawn", {
+            binary,
+            workingDirectory: input.workingDirectory,
+          }),
+      });
+      const pid = child.pid;
+      if (!pid || pid <= 0) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "opencodeWorkspaceRuntime.startWorkspaceRuntime",
+            message: "Failed to start OpenCode runtime: child process has no valid pid.",
+          }),
+        );
+      }
+
+      let closed = false;
+      let closeDescription: string | null = null;
+      let spawnError: Error | null = null;
+      let stdout = "";
+      let stderr = "";
+
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout = appendCapturedOutput(stdout, chunk);
+      });
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr = appendCapturedOutput(stderr, chunk);
+      });
+      child.once("error", (error: Error) => {
+        spawnError = error;
+      });
+      child.once("close", (exitCode, signal) => {
+        closed = true;
+        closeDescription =
+          signal === null
+            ? `process exited with code ${exitCode}`
+            : `process exited from signal ${signal}`;
+      });
+
+      const stopRuntimeProcess = (operation: string) =>
+        Effect.tryPromise({
+          try: () =>
+            processTreeTerminator({
               pid,
-              label: `OpenCode runtime ${runtime.runtimeId}`,
+              label: `OpenCode runtime on 127.0.0.1:${port}`,
               isClosed: () => closed,
               waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
               stopTimeoutMs,
-            });
-          },
-        };
+            }),
+          catch: (cause) => toHostOperationError(cause, operation),
+        });
+
+      const startupProbeDriver = yield* Schedule.driver(
+        startupProbeSchedule(startupTimeoutMs, retryDelayMs),
+      );
+      while (true) {
+        if (spawnError) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "opencodeWorkspaceRuntime.startWorkspaceRuntime",
+              message: `Failed to start OpenCode runtime with ${binary}`,
+              cause: spawnError,
+              details: { binary },
+            }),
+          );
+        }
+        if (closed) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "opencodeWorkspaceRuntime.startWorkspaceRuntime",
+              message: `OpenCode process exited before runtime became reachable: ${outputDetail(
+                stderr,
+                stdout,
+                closeDescription ?? "process exited",
+              )}`,
+              details: { binary, stdout, stderr, closeDescription },
+            }),
+          );
+        }
+        if (
+          yield* portProbe(port, connectTimeoutMs).pipe(
+            Effect.mapError((cause) =>
+              toHostOperationError(cause, "opencodeWorkspaceRuntime.portProbe"),
+            ),
+          )
+        ) {
+          const nextRuntimeId = runtimeId();
+          const runtime = yield* Effect.try({
+            try: () =>
+              runtimeInstanceSummarySchema.parse({
+                kind: "opencode",
+                runtimeId: nextRuntimeId,
+                repoPath: input.repoPath,
+                taskId: null,
+                role: "workspace",
+                workingDirectory: input.workingDirectory,
+                runtimeRoute: {
+                  type: "local_http",
+                  endpoint: `http://127.0.0.1:${port}`,
+                },
+                startedAt: now().toISOString(),
+                descriptor: input.descriptor,
+              } satisfies RuntimeInstanceSummary),
+            catch: (cause) =>
+              new HostValidationError({
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+                details: { runtimeKind: input.runtimeKind, port },
+              }),
+          });
+
+          return {
+            runtime,
+            stop() {
+              return stopRuntimeProcess("opencodeWorkspaceRuntime.stop");
+            },
+          };
+        }
+
+        const nextProbe = yield* Effect.either(startupProbeDriver.next(undefined));
+        if (nextProbe._tag === "Left") {
+          break;
+        }
       }
 
-      await delay(retryDelayMs);
-    }
-
-    const timeoutMessage = `Timed out waiting for OpenCode runtime on 127.0.0.1:${port}.`;
-    try {
-      await processTreeTerminator({
-        pid,
-        label: `OpenCode runtime on 127.0.0.1:${port}`,
-        isClosed: () => closed,
-        waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
-        stopTimeoutMs,
-      });
-    } catch (error) {
-      const cleanupMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`${timeoutMessage} Cleanup failed: ${cleanupMessage}`, { cause: error });
-    }
-    throw new Error(timeoutMessage);
+      const cleanupExit = yield* Effect.either(
+        stopRuntimeProcess("opencodeWorkspaceRuntime.stopTimedOutProcess"),
+      );
+      const timeoutMessage = `Timed out waiting for OpenCode runtime on 127.0.0.1:${port}.`;
+      if (cleanupExit._tag === "Left") {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "opencodeWorkspaceRuntime.startWorkspaceRuntime",
+            message: `${timeoutMessage} Cleanup failed: ${cleanupExit.left.message}`,
+            cause: cleanupExit.left,
+            details: { port, startupTimeoutMs },
+          }),
+        );
+      }
+      return yield* Effect.fail(
+        new HostOperationError({
+          operation: "opencodeWorkspaceRuntime.startWorkspaceRuntime",
+          message: timeoutMessage,
+          details: { port, startupTimeoutMs },
+        }),
+      );
+    });
   },
 });

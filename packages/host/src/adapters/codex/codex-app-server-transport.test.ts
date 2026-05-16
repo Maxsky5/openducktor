@@ -1,6 +1,7 @@
 import type { ChildProcessByStdio } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+import { Effect } from "effect";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 
 const createChild = (): ChildProcessByStdio<PassThrough, PassThrough, PassThrough> => {
@@ -20,10 +21,12 @@ describe("createCodexAppServerTransport", () => {
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
       emitted.push(event),
     );
-    const response = transport.request({
-      method: "thread/read",
-      params: { threadId: "thread-1", includeTurns: true },
-    });
+    const response = Effect.runPromise(
+      transport.request({
+        method: "thread/read",
+        params: { threadId: "thread-1", includeTurns: true },
+      }),
+    );
     const notification = {
       jsonrpc: "2.0",
       method: "thread/tokenUsage/updated",
@@ -45,9 +48,11 @@ describe("createCodexAppServerTransport", () => {
     expect(emitted).toEqual([
       { runtimeId: "runtime-1", kind: "notification", message: notification },
     ]);
-    await expect(transport.drainNotifications()).resolves.toEqual([notification]);
+    await expect(Effect.runPromise(transport.drainNotifications())).resolves.toEqual([
+      notification,
+    ]);
 
-    await transport.close();
+    await Effect.runPromise(transport.close());
   });
 
   test("does not retain emitted server requests for later drain polling", async () => {
@@ -66,9 +71,9 @@ describe("createCodexAppServerTransport", () => {
     child.stdout.write(`${JSON.stringify(request)}\n`);
 
     expect(emitted).toEqual([{ runtimeId: "runtime-1", kind: "server_request", message: request }]);
-    await expect(transport.drainServerRequests()).resolves.toEqual([]);
+    await expect(Effect.runPromise(transport.drainServerRequests())).resolves.toEqual([]);
 
-    await transport.close();
+    await Effect.runPromise(transport.close());
   });
 
   test("bounds captured stderr bytes used in process-close diagnostics", async () => {
@@ -81,11 +86,11 @@ describe("createCodexAppServerTransport", () => {
     await waitForStreamEvents();
     child.emit("close", 1, null);
 
-    await expect(transport.request({ method: "thread/read" })).rejects.toThrow(
+    await expect(Effect.runPromise(transport.request({ method: "thread/read" }))).rejects.toThrow(
       /Codex app-server closed: process exited with code 1 for runtime runtime-1: .*latest-error-line/s,
     );
-    await expect(transport.request({ method: "thread/read" })).rejects.not.toThrow(
-      "first-error-line",
-    );
+    await expect(
+      Effect.runPromise(transport.request({ method: "thread/read" })),
+    ).rejects.not.toThrow("first-error-line");
   });
 });

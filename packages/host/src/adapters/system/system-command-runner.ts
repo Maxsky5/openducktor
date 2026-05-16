@@ -2,7 +2,17 @@ import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
-import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
+import { Effect, Layer } from "effect";
+import {
+  HostOperationError,
+  toHostOperationError,
+  toHostPathStatError,
+} from "../../effect/host-errors";
+import {
+  type SystemCommandPort,
+  SystemCommandPortTag,
+  type SystemCommandRunResult,
+} from "../../ports/system-command-port";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 10_000;
 const WINDOWS_DEFAULT_PATHEXT = [".EXE", ".CMD", ".BAT", ".COM"];
@@ -47,40 +57,37 @@ const commandFileNames = (
   return windowsPathExt(env).map((extension) => `${command}${extension}`);
 };
 
-const canExecute = async (candidate: string, platform: NodeJS.Platform): Promise<boolean> => {
-  try {
-    if (platform === "win32") {
-      return (await stat(candidate)).isFile();
+const canExecute = (candidate: string, platform: NodeJS.Platform) =>
+  Effect.tryPromise({
+    try: async () => {
+      if (platform === "win32") {
+        return (await stat(candidate)).isFile();
+      }
+
+      await access(candidate, constants.X_OK);
+      return true;
+    },
+    catch: (cause) => toHostPathStatError(cause, "systemCommand.canExecute", candidate),
+  }).pipe(Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)));
+
+const resolveCommandPath = (command: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform) =>
+  Effect.gen(function* () {
+    if (commandHasPath(command)) {
+      return (yield* canExecute(command, platform)) ? command : null;
     }
 
-    await access(candidate, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const resolveCommandPath = async (
-  command: string,
-  env: NodeJS.ProcessEnv,
-  platform: NodeJS.Platform,
-): Promise<string | null> => {
-  if (commandHasPath(command)) {
-    return (await canExecute(command, platform)) ? command : null;
-  }
-
-  const pathValue = env.PATH ?? "";
-  for (const directory of pathValue.split(pathDelimiterForPlatform(platform)).filter(Boolean)) {
-    for (const fileName of commandFileNames(command, platform, env)) {
-      const candidate = join(directory, fileName);
-      if (await canExecute(candidate, platform)) {
-        return candidate;
+    const pathValue = env.PATH ?? "";
+    for (const directory of pathValue.split(pathDelimiterForPlatform(platform)).filter(Boolean)) {
+      for (const fileName of commandFileNames(command, platform, env)) {
+        const candidate = join(directory, fileName);
+        if (yield* canExecute(candidate, platform)) {
+          return candidate;
+        }
       }
     }
-  }
 
-  return null;
-};
+    return null;
+  });
 
 const firstNonEmptyLine = (value: string): string | null =>
   value
@@ -127,80 +134,134 @@ export const createSystemCommandRunner = ({
   env = process.env,
   platform = process.platform,
 }: CreateSystemCommandRunnerInput = {}): SystemCommandPort => {
-  const port: SystemCommandPort = {
+  const runCommandAllowFailure: SystemCommandPort["runCommandAllowFailure"] = (
+    command,
+    args,
+    options = {},
+  ) =>
+    Effect.gen(function* () {
+      const commandEnv = { ...env, ...options.env };
+      const resolvedCommand = yield* resolveCommandPath(command, commandEnv, platform).pipe(
+        Effect.mapError((cause) =>
+          toHostOperationError(cause, "systemCommand.resolveCommandPath", {
+            command,
+            cwd: options.cwd,
+          }),
+        ),
+      );
+      const launch = createSystemCommandLaunch(
+        resolvedCommand ?? command,
+        args,
+        commandEnv,
+        platform,
+      );
+
+      return yield* Effect.tryPromise({
+        try: (signal) =>
+          new Promise<SystemCommandRunResult>((resolve, reject) => {
+            const child = spawn(launch.command, launch.args, {
+              cwd: options.cwd,
+              env: commandEnv,
+              stdio: ["ignore", "pipe", "pipe"],
+              windowsVerbatimArguments: launch.windowsVerbatimArguments === true,
+            });
+            const stdoutChunks: Buffer[] = [];
+            const stderrChunks: Buffer[] = [];
+            let settled = false;
+            const timeout = setTimeout(() => {
+              if (settled) {
+                return;
+              }
+              settled = true;
+              child.kill("SIGTERM");
+              reject(
+                new HostOperationError({
+                  operation: "systemCommand.runCommandAllowFailure",
+                  message: `Timed out running ${command} after ${options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS}ms`,
+                  details: {
+                    command,
+                    args,
+                    timeoutMs: options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
+                  },
+                }),
+              );
+            }, options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
+            signal.addEventListener(
+              "abort",
+              () => {
+                if (settled) {
+                  return;
+                }
+                settled = true;
+                clearTimeout(timeout);
+                child.kill("SIGTERM");
+                reject(
+                  new HostOperationError({
+                    operation: "systemCommand.runCommandAllowFailure",
+                    message: `Command ${command} was aborted.`,
+                    details: { command, args },
+                  }),
+                );
+              },
+              { once: true },
+            );
+            child.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+            child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+            child.on("error", (error) => {
+              if (settled) {
+                return;
+              }
+              settled = true;
+              clearTimeout(timeout);
+              reject(error);
+            });
+            child.on("close", (code) => {
+              if (settled) {
+                return;
+              }
+              settled = true;
+              clearTimeout(timeout);
+              resolve({
+                ok: code === 0,
+                stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+                stderr: Buffer.concat(stderrChunks).toString("utf8"),
+              });
+            });
+          }),
+        catch: (cause) =>
+          toHostOperationError(cause, "systemCommand.runCommandAllowFailure", {
+            command,
+            args,
+            cwd: options.cwd,
+          }),
+      });
+    });
+
+  return {
     resolveCommandPath(command, commandEnv = env) {
       return resolveCommandPath(command, commandEnv, platform);
     },
-
-    async requiredCommandError(command) {
-      const resolved = await resolveCommandPath(command, env, platform);
-      return resolved === null
-        ? `Required command \`${command}\` not found. Install ${command} and ensure it is available on PATH.`
-        : null;
-    },
-
-    async versionCommand(command, args, options) {
-      try {
-        const result = await port.runCommandAllowFailure(command, args, options);
-        return result.ok ? firstNonEmptyLine(result.stdout) : null;
-      } catch {
-        return null;
-      }
-    },
-
-    async runCommandAllowFailure(command, args, options = {}) {
-      const commandEnv = { ...env, ...options.env };
-      const resolvedCommand = (await resolveCommandPath(command, commandEnv, platform)) ?? command;
-      const launch = createSystemCommandLaunch(resolvedCommand, args, commandEnv, platform);
-      return new Promise<SystemCommandRunResult>((resolve, reject) => {
-        const child = spawn(launch.command, launch.args, {
-          cwd: options.cwd,
-          env: commandEnv,
-          stdio: ["ignore", "pipe", "pipe"],
-          windowsVerbatimArguments: launch.windowsVerbatimArguments === true,
-        });
-        const stdoutChunks: Buffer[] = [];
-        const stderrChunks: Buffer[] = [];
-        let settled = false;
-
-        const timeout = setTimeout(() => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          child.kill("SIGTERM");
-          reject(
-            new Error(
-              `Timed out running ${command} after ${options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS}ms`,
-            ),
-          );
-        }, options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
-
-        child.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
-        child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
-        child.on("error", (error) => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          clearTimeout(timeout);
-          reject(error);
-        });
-        child.on("close", (code) => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          clearTimeout(timeout);
-          resolve({
-            ok: code === 0,
-            stdout: Buffer.concat(stdoutChunks).toString("utf8"),
-            stderr: Buffer.concat(stderrChunks).toString("utf8"),
-          });
-        });
+    requiredCommandError(command) {
+      return Effect.gen(function* () {
+        const resolved = yield* resolveCommandPath(command, env, platform);
+        return resolved === null
+          ? `Required command \`${command}\` not found. Install ${command} and ensure it is available on PATH.`
+          : null;
       });
     },
+    versionCommand(command, args, options) {
+      return Effect.gen(function* () {
+        const result = yield* runCommandAllowFailure(command, args, options).pipe(
+          Effect.catchAll(() => Effect.succeed(null)),
+        );
+        return result?.ok ? firstNonEmptyLine(result.stdout) : null;
+      });
+    },
+    runCommandAllowFailure,
   };
-
-  return port;
 };
+
+export const SystemCommandPortLive = Layer.succeed(
+  SystemCommandPortTag,
+  createSystemCommandRunner(),
+);

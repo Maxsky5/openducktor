@@ -1,9 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import { Effect } from "effect";
+import { HostOperationError } from "../../../effect/host-errors";
 import type { HostEventBusPort } from "../../../events/host-event-bus";
+import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
+import type { TaskService } from "../task-service";
 import { createTaskSyncService } from "./task-sync-service";
 
+const createTaskSyncServiceForTest = (input: Parameters<typeof createTaskSyncService>[0]) =>
+  createTaskSyncService(input);
 const createEventBus = () => {
-  const events: Array<{ channel: string; payload: unknown }> = [];
+  const events: Array<{
+    channel: string;
+    payload: unknown;
+  }> = [];
   const eventBus: HostEventBusPort = {
     publish(channel, payload) {
       events.push({ channel, payload });
@@ -14,26 +23,49 @@ const createEventBus = () => {
   };
   return { eventBus, events };
 };
-
+const createTaskServiceFake = (
+  service: Pick<TaskService, "repoPullRequestSyncDetailed">,
+): TaskService => service as unknown as TaskService;
+const createWorkspaceSettingsServiceFake = (
+  service: Pick<WorkspaceSettingsService, "listWorkspaces">,
+): WorkspaceSettingsService => service as unknown as WorkspaceSettingsService;
 describe("createTaskSyncService", () => {
   test("publishes Tauri-compatible external task creation events", () => {
     const { eventBus, events } = createEventBus();
-    const service = createTaskSyncService({
+    const service = createTaskSyncServiceForTest({
       eventBus,
-      taskService: {
-        async repoPullRequestSyncDetailed() {
-          throw new Error("unexpected pull request sync");
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed() {
+          return Effect.tryPromise({
+            try: async () => {
+              throw new Error("unexpected pull request sync");
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
-      },
-      workspaceSettingsService: {
-        async listWorkspaces() {
-          return [];
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces() {
+          return Effect.tryPromise({
+            try: async () => {
+              return [];
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
-      },
+      }),
     });
-
     service.publishExternalTaskCreated("/repo", "task-1");
-
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       channel: "openducktor://task-event",
@@ -48,39 +80,56 @@ describe("createTaskSyncService", () => {
       emittedAt: expect.any(String),
     });
   });
-
   test("runs linked pull request sync for the active workspace and emits changed task ids", async () => {
     const { eventBus, events } = createEventBus();
     const calls: unknown[] = [];
-    const service = createTaskSyncService({
+    const service = createTaskSyncServiceForTest({
       eventBus,
-      intervalMs: 60_000,
-      taskService: {
-        async repoPullRequestSyncDetailed(input) {
-          calls.push(input);
-          return { ran: true, changedTaskIds: ["task-1", "task-2"] };
-        },
-      },
-      workspaceSettingsService: {
-        async listWorkspaces() {
-          return [
-            {
-              workspaceId: "repo",
-              workspaceName: "Repo",
-              repoPath: "/repo",
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: null,
-              defaultWorktreeBasePath: null,
-              effectiveWorktreeBasePath: null,
+      intervalMs: 60000,
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed(input) {
+          return Effect.tryPromise({
+            try: async () => {
+              calls.push(input);
+              return { ran: true, changedTaskIds: ["task-1", "task-2"] };
             },
-          ];
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
-      },
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces() {
+          return Effect.tryPromise({
+            try: async () => {
+              return [
+                {
+                  workspaceId: "repo",
+                  workspaceName: "Repo",
+                  repoPath: "/repo",
+                  isActive: true,
+                  hasConfig: true,
+                  configuredWorktreeBasePath: null,
+                  defaultWorktreeBasePath: null,
+                  effectiveWorktreeBasePath: null,
+                },
+              ];
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
+        },
+      }),
     });
-
-    await service.syncActiveWorkspacePullRequests();
-
+    await Effect.runPromise(service.syncActiveWorkspacePullRequests());
     expect(calls).toEqual([{ repoPath: "/repo" }]);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
@@ -92,29 +141,46 @@ describe("createTaskSyncService", () => {
       },
     });
   });
-
   test("does not run pull request sync during loop startup", async () => {
     const { eventBus } = createEventBus();
     const calls: unknown[] = [];
-    const service = createTaskSyncService({
+    const service = createTaskSyncServiceForTest({
       eventBus,
-      intervalMs: 60_000,
-      taskService: {
-        async repoPullRequestSyncDetailed(input) {
-          calls.push(input);
-          return { ran: true, changedTaskIds: [] };
+      intervalMs: 60000,
+      taskService: createTaskServiceFake({
+        repoPullRequestSyncDetailed(input) {
+          return Effect.tryPromise({
+            try: async () => {
+              calls.push(input);
+              return { ran: true, changedTaskIds: [] };
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
-      },
-      workspaceSettingsService: {
-        async listWorkspaces() {
-          throw new Error("unexpected workspace lookup before first interval");
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceFake({
+        listWorkspaces() {
+          return Effect.tryPromise({
+            try: async () => {
+              throw new Error("unexpected workspace lookup before first interval");
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
-      },
+      }),
     });
-
     const loop = service.startPullRequestSyncLoop();
-    await loop.stop();
-
+    await Effect.runPromise(loop.stop());
     expect(calls).toEqual([]);
   });
 });

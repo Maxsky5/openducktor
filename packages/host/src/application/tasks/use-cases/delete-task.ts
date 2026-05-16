@@ -1,9 +1,8 @@
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
-import {
-  requireTaskDeleteDependencies,
-  requireTaskWorktreeCleanupFiles,
-} from "../support/required-task-dependencies";
+import { requireDependencies } from "../support/required-task-dependencies";
 import {
   appendDeleteCleanupProgress,
   collectDeleteWorktreePaths,
@@ -12,6 +11,10 @@ import {
   managedWorktreeBaseForRepoConfig,
   taskHasImplementationSessions,
 } from "../support/reset-cleanup";
+import {
+  requireTaskDeleteDependencies,
+  requireTaskWorktreeCleanupFiles,
+} from "../support/task-reset-dependencies";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskDeleteUseCase = ({
@@ -23,103 +26,125 @@ export const createTaskDeleteUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "deleteTask"> => ({
-  async deleteTask(input) {
-    const { repoPath, taskId, deleteSubtasks } = input;
-    const dependencies = requireTaskDeleteDependencies(
-      devServerService,
-      gitPort,
-      settingsConfig,
-      workspaceSettingsService,
-    );
-    const currentTasks = await taskStore.listTasks({ repoPath });
-    const current = currentTasks.find((task) => task.id === taskId);
-    if (!current) {
-      throw new Error(`Task not found: ${taskId}`);
-    }
-
-    const directSubtaskIds = currentTasks
-      .filter((task) => task.parentId === taskId)
-      .map((task) => task.id);
-    if (directSubtaskIds.length > 0 && !deleteSubtasks) {
-      throw new Error(
-        `Task ${taskId} has ${directSubtaskIds.length} subtasks. Confirm subtask deletion to continue.`,
+  deleteTask(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId, deleteSubtasks } = input;
+      const dependencies = yield* requireDependencies(() =>
+        requireTaskDeleteDependencies(
+          devServerService,
+          gitPort,
+          settingsConfig,
+          workspaceSettingsService,
+        ),
       );
-    }
-
-    const targetTasks = collectTaskDeleteTargets(currentTasks, taskId, deleteSubtasks);
-    const targetTaskIds = targetTasks.map((task) => task.id);
-    if (targetTasks.some(taskHasImplementationSessions)) {
-      if (!taskActivityGuard) {
-        throw new Error(
-          "task_delete requires runtime session activity checks for tasks with build or QA sessions.",
+      const currentTasks = yield* taskStore.listTasks({ repoPath });
+      const current = currentTasks.find((task) => task.id === taskId);
+      if (!current) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `Task not found: ${taskId}`,
+            details: { repoPath, taskId },
+          }),
         );
       }
-      await taskActivityGuard.ensureNoActiveTaskDeleteRuns({
-        repoPath,
-        taskIds: targetTaskIds,
-        tasks: targetTasks,
-      });
-    }
 
-    const repoConfig =
-      await dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-    const effectiveRepoPath = repoConfig.repoPath;
-    const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
-      dependencies.settingsConfig,
-      repoConfig,
-    );
-    const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
-    const worktreePaths = await collectDeleteWorktreePaths(
-      dependencies,
-      effectiveRepoPath,
-      branchPrefix,
-      targetTasks,
-    );
-    const branchNames = await collectRelatedTaskBranches(
-      dependencies.gitPort,
-      effectiveRepoPath,
-      branchPrefix,
-      targetTaskIds,
-    );
-    const removedWorktrees: string[] = [];
-    const deletedBranches: string[] = [];
+      const directSubtaskIds = currentTasks
+        .filter((task) => task.parentId === taskId)
+        .map((task) => task.id);
+      if (directSubtaskIds.length > 0 && !deleteSubtasks) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "deleteSubtasks",
+            message: `Task ${taskId} has ${directSubtaskIds.length} subtasks. Confirm subtask deletion to continue.`,
+            details: { repoPath, taskId, directSubtaskIds },
+          }),
+        );
+      }
 
-    try {
-      for (const targetTaskId of targetTaskIds) {
-        await dependencies.devServerService.stop({
-          repoPath: effectiveRepoPath,
-          taskId: targetTaskId,
+      const targetTasks = collectTaskDeleteTargets(currentTasks, taskId, deleteSubtasks);
+      const targetTaskIds = targetTasks.map((task) => task.id);
+      if (targetTasks.some(taskHasImplementationSessions)) {
+        if (!taskActivityGuard) {
+          return yield* Effect.fail(
+            new HostDependencyError({
+              dependency: "taskActivityGuard",
+              operation: "task_delete",
+              message:
+                "task_delete requires runtime session activity checks for tasks with build or QA sessions.",
+              details: { repoPath, taskId },
+            }),
+          );
+        }
+        yield* taskActivityGuard.ensureNoActiveTaskDeleteRuns({
+          repoPath,
+          taskIds: targetTaskIds,
+          tasks: targetTasks,
         });
       }
-      for (const worktreePath of worktreePaths) {
-        await removeWorktreeAndFilesystemPath(
-          {
-            gitPort: dependencies.gitPort,
-            settingsConfig: dependencies.settingsConfig,
-            worktreeFiles: requireTaskWorktreeCleanupFiles(worktreeFiles, "task_delete"),
-          },
-          {
-            repoPath: effectiveRepoPath,
-            worktreePath,
-            force: true,
-            managedWorktreeBasePath,
-          },
-        );
-        removedWorktrees.push(worktreePath);
-      }
-      for (const branchName of branchNames) {
-        await dependencies.gitPort.deleteLocalBranch(effectiveRepoPath, branchName, true);
-        deletedBranches.push(branchName);
-      }
-      await taskStore.deleteTask({
-        repoPath: effectiveRepoPath,
-        taskId,
-        deleteSubtasks,
-      });
-    } catch (error) {
-      throw appendDeleteCleanupProgress(error, removedWorktrees, deletedBranches);
-    }
 
-    return { ok: true };
+      const repoConfig =
+        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const effectiveRepoPath = repoConfig.repoPath;
+      const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
+        dependencies.settingsConfig,
+        repoConfig,
+      );
+      const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
+      const worktreePaths = yield* collectDeleteWorktreePaths(
+        dependencies,
+        effectiveRepoPath,
+        branchPrefix,
+        targetTasks,
+      );
+      const branchNames = yield* collectRelatedTaskBranches(
+        dependencies.gitPort,
+        effectiveRepoPath,
+        branchPrefix,
+        targetTaskIds,
+      );
+      const removedWorktrees: string[] = [];
+      const deletedBranches: string[] = [];
+
+      return yield* Effect.gen(function* () {
+        for (const targetTaskId of targetTaskIds) {
+          yield* dependencies.devServerService.stop({
+            repoPath: effectiveRepoPath,
+            taskId: targetTaskId,
+          });
+        }
+        for (const worktreePath of worktreePaths) {
+          yield* removeWorktreeAndFilesystemPath(
+            {
+              gitPort: dependencies.gitPort,
+              settingsConfig: dependencies.settingsConfig,
+              worktreeFiles: requireTaskWorktreeCleanupFiles(worktreeFiles, "task_delete"),
+            },
+            {
+              repoPath: effectiveRepoPath,
+              worktreePath,
+              force: true,
+              managedWorktreeBasePath,
+            },
+          );
+          removedWorktrees.push(worktreePath);
+        }
+        for (const branchName of branchNames) {
+          yield* dependencies.gitPort.deleteLocalBranch(effectiveRepoPath, branchName, true);
+          deletedBranches.push(branchName);
+        }
+        yield* taskStore.deleteTask({
+          repoPath: effectiveRepoPath,
+          taskId,
+          deleteSubtasks,
+        });
+
+        return { ok: true };
+      }).pipe(
+        Effect.catchAll((error) =>
+          Effect.fail(appendDeleteCleanupProgress(error, removedWorktrees, deletedBranches)),
+        ),
+      );
+    });
   },
 });

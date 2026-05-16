@@ -2,6 +2,7 @@ import type {
   CodexAppServerRuntimeInput,
   CodexAppServerService,
 } from "../../application/runtimes/codex-app-server-service";
+import { HostValidationError } from "../../effect/host-errors";
 import type {
   CodexAppServerRequestInput,
   CodexAppServerRespondInput,
@@ -11,7 +12,11 @@ import { requireRecord, requireString } from "./command-inputs";
 
 const requireRequestId = (value: unknown): number => {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new Error("requestId must be a non-negative integer.");
+    throw new HostValidationError({
+      message: "requestId must be a non-negative integer.",
+      field: "requestId",
+      details: { value },
+    });
   }
 
   return value;

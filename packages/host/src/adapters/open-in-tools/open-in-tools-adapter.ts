@@ -4,6 +4,15 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
+import { Effect } from "effect";
+import {
+  HostOperationError,
+  type HostPathAccessError,
+  type HostPathNotFoundError,
+  HostValidationError,
+  toHostOperationError,
+  toHostPathStatError,
+} from "../../effect/host-errors";
 import type { OpenInToolsPort } from "../../ports/open-in-tools-port";
 import { resolveMacOsAppIconDataUrl } from "./macos-open-in-icons";
 
@@ -32,10 +41,12 @@ export type OpenInCommandRunner = (
 export type CreateOpenInToolsAdapterInput = {
   platform?: NodeJS.Platform;
   runner?: OpenInCommandRunner;
-  pathExists?: (inputPath: string) => Promise<boolean>;
-  pathIsDirectory?: (inputPath: string) => Promise<boolean>;
+  pathExists?: (inputPath: string) => Effect.Effect<boolean, HostPathAccessError>;
+  pathIsDirectory?: (inputPath: string) => Effect.Effect<boolean, HostPathAccessError>;
   homeDirectory?: () => string;
-  realpathFn?: (inputPath: string) => Promise<string>;
+  realpathFn?: (
+    inputPath: string,
+  ) => Effect.Effect<string, HostPathAccessError | HostPathNotFoundError>;
 };
 
 const OPEN_IN_TOOL_CATALOG: OpenInToolMetadata[] = [
@@ -80,25 +91,30 @@ const defaultRunner: OpenInCommandRunner = async (program, args, options) => {
     cwd: options?.cwd,
     maxBuffer: 16 * 1024 * 1024,
   });
+
   return {
     stdout: output.stdout,
     stderr: output.stderr,
   };
 };
 
-const defaultPathExists = async (inputPath: string): Promise<boolean> => {
-  try {
-    await access(inputPath);
-    return true;
-  } catch {
-    return false;
-  }
-};
+const defaultPathExists = (inputPath: string) =>
+  Effect.tryPromise({
+    try: () => access(inputPath),
+    catch: (cause) => toHostPathStatError(cause, "openInTools.pathExists", inputPath),
+  }).pipe(
+    Effect.as(true),
+    Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)),
+  );
 
-const defaultPathIsDirectory = async (inputPath: string): Promise<boolean> => {
-  const metadata = await stat(inputPath);
-  return metadata.isDirectory();
-};
+const defaultPathIsDirectory = (inputPath: string) =>
+  Effect.tryPromise({
+    try: async () => {
+      const metadata = await stat(inputPath);
+      return metadata.isDirectory();
+    },
+    catch: (cause) => toHostPathStatError(cause, "openInTools.pathIsDirectory", inputPath),
+  }).pipe(Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)));
 
 const bundleNameForApp = (appName: string): string =>
   appName.endsWith(".app") ? appName : `${appName}.app`;
@@ -117,14 +133,21 @@ const candidateApplicationPaths = (appName: string, homeDirectory: () => string)
 const metadataForTool = (toolId: SystemOpenInToolId): OpenInToolMetadata => {
   const metadata = OPEN_IN_TOOL_CATALOG.find((candidate) => candidate.id === toolId);
   if (!metadata) {
-    throw new Error(`Unsupported Open In tool: ${toolId}`);
+    throw new HostValidationError({
+      field: "toolId",
+      message: `Unsupported Open In tool: ${toolId}`,
+      details: { toolId },
+    });
   }
   return metadata;
 };
 
 const ensureMacOs = (platform: NodeJS.Platform, operation: string) => {
   if (platform !== "darwin") {
-    throw new Error(`${operation} is only supported on macOS.`);
+    throw new HostValidationError({
+      message: `${operation} is only supported on macOS.`,
+      details: { platform, operation },
+    });
   }
 };
 
@@ -152,7 +175,10 @@ const buildOpenExternalUrlCommand = (
     case "win32":
       return { program: "cmd", args: ["/C", "start", "", url] };
     default:
-      throw new Error(`Opening external URLs is not supported on ${platform}.`);
+      throw new HostValidationError({
+        message: `Opening external URLs is not supported on ${platform}.`,
+        details: { platform },
+      });
   }
 };
 
@@ -162,65 +188,91 @@ export const createOpenInToolsAdapter = ({
   pathExists = defaultPathExists,
   pathIsDirectory = defaultPathIsDirectory,
   homeDirectory = homedir,
-  realpathFn = realpath,
+  realpathFn = (inputPath) =>
+    Effect.tryPromise({
+      try: () => realpath(inputPath),
+      catch: (cause) => toHostPathStatError(cause, "openInTools.realpath", inputPath),
+    }),
 }: CreateOpenInToolsAdapterInput = {}): OpenInToolsPort => {
-  const resolveApplicationPathByName = async (appName: string): Promise<string | null> => {
-    for (const candidate of candidateApplicationPaths(appName, homeDirectory)) {
-      if (await pathExists(candidate)) {
-        return candidate;
+  const runOpenInCommand = (program: string, args: string[], options?: { cwd?: string }) =>
+    Effect.tryPromise({
+      try: () => runner(program, args, options),
+      catch: (cause) =>
+        toHostOperationError(cause, "openInTools.runCommand", { program, args, cwd: options?.cwd }),
+    });
+  const resolveApplicationPathByName = (
+    appName: string,
+  ): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
+    Effect.gen(function* () {
+      for (const candidate of candidateApplicationPaths(appName, homeDirectory)) {
+        if (yield* pathExists(candidate)) {
+          return candidate;
+        }
       }
-    }
 
-    const bundleName = bundleNameForApp(appName);
-    const output = await runner("mdfind", ["-name", bundleName]).catch(() => null);
-    if (!output) {
+      const bundleName = bundleNameForApp(appName);
+      const output = yield* runOpenInCommand("mdfind", ["-name", bundleName]).pipe(
+        Effect.catchAll(() => Effect.succeed(null)),
+      );
+      if (!output) {
+        return null;
+      }
+
+      for (const line of output.stdout.split(/\r?\n/)) {
+        const candidate = line.trim();
+        if (
+          candidate.length > 0 &&
+          candidate.toLowerCase().endsWith(".app") &&
+          (yield* pathIsDirectory(candidate))
+        ) {
+          return candidate;
+        }
+      }
+
       return null;
-    }
+    });
 
-    for (const line of output.stdout.split(/\r?\n/)) {
-      const candidate = line.trim();
-      if (
-        candidate.length > 0 &&
-        candidate.toLowerCase().endsWith(".app") &&
-        (await pathIsDirectory(candidate))
-      ) {
-        return candidate;
+  const resolveApplicationPath = (
+    metadata: OpenInToolMetadata,
+  ): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
+    Effect.gen(function* () {
+      for (const appName of metadata.appNames) {
+        const appPath = yield* resolveApplicationPathByName(appName);
+        if (appPath) {
+          return appPath;
+        }
       }
-    }
 
-    return null;
-  };
+      return null;
+    });
 
-  const resolveApplicationPath = async (metadata: OpenInToolMetadata): Promise<string | null> => {
-    for (const appName of metadata.appNames) {
-      const appPath = await resolveApplicationPathByName(appName);
-      if (appPath) {
-        return appPath;
-      }
-    }
-
-    return null;
-  };
-
-  const buildToolInfo = async (
+  const buildToolInfo = (
     metadata: OpenInToolMetadata,
     appPath: string,
-  ): Promise<SystemOpenInToolInfo> => ({
-    toolId: metadata.id,
-    iconDataUrl: await resolveMacOsAppIconDataUrl({
-      appLabel: metadata.label,
-      appPath,
-      pathExists,
-      runner,
-    }),
-  });
+  ): Effect.Effect<SystemOpenInToolInfo, HostOperationError | HostPathAccessError> =>
+    Effect.gen(function* () {
+      const iconDataUrl = yield* resolveMacOsAppIconDataUrl({
+        appLabel: metadata.label,
+        appPath,
+        pathExists,
+        runner,
+      });
+      return {
+        toolId: metadata.id,
+        iconDataUrl,
+      };
+    });
 
-  const resolveDiscoveredTool = async (
+  const resolveDiscoveredTool = (
     metadata: OpenInToolMetadata,
-  ): Promise<SystemOpenInToolInfo | null> => {
-    const appPath = await resolveApplicationPath(metadata);
-    return appPath ? buildToolInfo(metadata, appPath) : null;
-  };
+  ): Effect.Effect<SystemOpenInToolInfo | null, HostOperationError | HostPathAccessError> =>
+    Effect.gen(function* () {
+      const appPath = yield* resolveApplicationPath(metadata);
+      if (!appPath) {
+        return null;
+      }
+      return yield* buildToolInfo(metadata, appPath);
+    });
 
   return {
     canonicalizeDirectory(directoryPath) {
@@ -229,40 +281,87 @@ export const createOpenInToolsAdapter = ({
     isDirectory(directoryPath) {
       return pathIsDirectory(directoryPath);
     },
-    async discoverOpenInTools() {
-      ensureMacOs(platform, "Open In tool discovery");
-
-      const discoveredTools = await Promise.all(OPEN_IN_TOOL_CATALOG.map(resolveDiscoveredTool));
-      return discoveredTools.filter((tool): tool is SystemOpenInToolInfo => tool !== null);
-    },
-    async openDirectoryInTool(directoryPath, toolId) {
-      ensureMacOs(platform, "Opening directories in external tools");
-
-      const metadata = metadataForTool(toolId);
-      const appPath = await resolveApplicationPath(metadata);
-      if (!appPath) {
-        throw new Error(
-          `${metadata.label} is not installed or is no longer discoverable on this Mac.`,
-        );
-      }
-
-      await runner("open", buildLaunchArgs(metadata, appPath, directoryPath)).catch(
-        (error: unknown) => {
-          throw new Error(
-            `Failed to open ${directoryPath} in ${metadata.label}: ${String(error)}`,
-            {
-              cause: error,
-            },
-          );
-        },
-      );
-    },
-    async openExternalUrl(url) {
-      const command = buildOpenExternalUrlCommand(platform, url);
-      await runner(command.program, command.args).catch((error: unknown) => {
-        throw new Error(`Failed to open URL in the system browser: ${String(error)}`, {
-          cause: error,
+    discoverOpenInTools() {
+      return Effect.gen(function* () {
+        yield* Effect.try({
+          try: () => ensureMacOs(platform, "Open In tool discovery"),
+          catch: (cause) => toHostOperationError(cause, "openInTools.ensureMacOs"),
         });
+
+        const discoveredTools = yield* Effect.forEach(OPEN_IN_TOOL_CATALOG, resolveDiscoveredTool, {
+          concurrency: "unbounded",
+        });
+        return discoveredTools.filter((tool): tool is SystemOpenInToolInfo => tool !== null);
+      });
+    },
+    openDirectoryInTool(directoryPath, toolId) {
+      return Effect.gen(function* () {
+        yield* Effect.try({
+          try: () => ensureMacOs(platform, "Opening directories in external tools"),
+          catch: (cause) => toHostOperationError(cause, "openInTools.ensureMacOs"),
+        });
+
+        const metadata = yield* Effect.try({
+          try: () => metadataForTool(toolId),
+          catch: (cause) => toHostOperationError(cause, "openInTools.metadataForTool"),
+        });
+        const appPath = yield* resolveApplicationPath(metadata);
+        if (!appPath) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "toolId",
+              message: `${metadata.label} is not installed or is no longer discoverable on this Mac.`,
+              details: { toolId },
+            }),
+          );
+        }
+
+        yield* Effect.tryPromise({
+          try: () => runner("open", buildLaunchArgs(metadata, appPath, directoryPath)),
+          catch: (cause) =>
+            toHostOperationError(cause, "openInTools.openDirectoryInTool", {
+              directoryPath,
+              toolId,
+              appPath,
+            }),
+        }).pipe(
+          Effect.mapError(
+            (error) =>
+              new HostOperationError({
+                operation: "openInTools.openDirectoryInTool",
+                message: `Failed to open ${directoryPath} in ${metadata.label}: ${error.message}`,
+                details: { directoryPath, toolId, appPath },
+                cause: error,
+              }),
+          ),
+        );
+      });
+    },
+    openExternalUrl(url) {
+      return Effect.gen(function* () {
+        const command = yield* Effect.try({
+          try: () => buildOpenExternalUrlCommand(platform, url),
+          catch: (cause) => toHostOperationError(cause, "openInTools.buildOpenExternalUrlCommand"),
+        });
+        yield* Effect.tryPromise({
+          try: () => runner(command.program, command.args),
+          catch: (cause) =>
+            toHostOperationError(cause, "openInTools.openExternalUrl", {
+              url,
+              platform,
+              command: command.program,
+            }),
+        }).pipe(
+          Effect.mapError(
+            (error) =>
+              new HostOperationError({
+                operation: "openInTools.openExternalUrl",
+                message: `Failed to open URL in the system browser: ${error.message}`,
+                details: { url, platform, command: command.program },
+                cause: error,
+              }),
+          ),
+        );
       });
     },
   };

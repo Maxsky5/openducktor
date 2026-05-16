@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
@@ -11,59 +13,149 @@ import {
   type WorktreeFilePort,
 } from "./test-support/task-workflow-harness";
 
-const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort => ({
-  async copyConfiguredPaths() {
-    throw new Error("unexpected copy configured paths");
-  },
-  async removePathIfPresent(path) {
-    calls.push({ type: "removePathIfPresent", path });
-  },
-  resolveWorktreePath(repoPath, worktreePath) {
-    return worktreePath.startsWith("/") ? worktreePath : `${repoPath}/${worktreePath}`;
-  },
-  async pathIsWithinRoot(root, candidate) {
-    return candidate === root || candidate.startsWith(`${root}/`);
-  },
-});
-
+const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
+  ({
+    copyConfiguredPaths() {
+      return Effect.tryPromise({
+        try: async () => {
+          throw new Error("unexpected copy configured paths");
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    removePathIfPresent(path) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ type: "removePathIfPresent", path });
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    resolveWorktreePath(repoPath, worktreePath) {
+      return worktreePath.startsWith("/") ? worktreePath : `${repoPath}/${worktreePath}`;
+    },
+    pathIsWithinRoot(root, candidate) {
+      return Effect.tryPromise({
+        try: async () => {
+          return candidate === root || candidate.startsWith(`${root}/`);
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+  }) satisfies WorktreeFilePort as unknown as WorktreeFilePort;
 describe("createTaskService task mutations and reset", () => {
   test("creates a task after validating parent relationships and enriches the result", async () => {
     const calls: unknown[] = [];
     const createdTask = task({ id: "task-2", parentId: "epic-1", status: "open" });
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [task({ id: "epic-1", issueType: "epic", status: "open" })];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [task({ id: "epic-1", issueType: "epic", status: "open" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask(input) {
-        calls.push({ type: "create", input });
-        return createdTask;
+      createTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "create", input });
+            return createdTask;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
-    const created = await createTaskService({ taskStore }).createTask({
-      repoPath: "/repo",
-      task: {
-        title: "Child",
-        issueType: "task",
-        priority: 2,
-        parentId: " epic-1 ",
-        aiReviewEnabled: true,
-      },
-    });
-
+    const created = await Effect.runPromise(
+      createTaskService({ taskStore }).createTask({
+        repoPath: "/repo",
+        task: {
+          title: "Child",
+          issueType: "task",
+          priority: 2,
+          parentId: " epic-1 ",
+          aiReviewEnabled: true,
+        },
+      }),
+    );
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -86,82 +178,201 @@ describe("createTaskService task mutations and reset", () => {
     });
     expect(created.availableActions).not.toContain("defer_issue");
   });
-
   test("rejects subtasks under non-epic parents before creating", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [task({ id: "task-1", issueType: "task" })];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [task({ id: "task-1", issueType: "task" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("should not create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).createTask({
-        repoPath: "/repo",
-        task: {
-          title: "Child",
-          issueType: "task",
-          priority: 2,
-          parentId: "task-1",
-          aiReviewEnabled: true,
-        },
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).createTask({
+          repoPath: "/repo",
+          task: {
+            title: "Child",
+            issueType: "task",
+            priority: 2,
+            parentId: "task-1",
+            aiReviewEnabled: true,
+          },
+        }),
+      ),
     ).rejects.toThrow("Only epics can have subtasks.");
   });
-
   test("deletes a task without subtasks and stops task-scoped dev servers", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [task()];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [task()];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask(input) {
-        calls.push({ type: "delete", input });
-        return true;
+      deleteTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "delete", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        devServerService: createDirectMergeDevServerService(calls),
-        gitPort: createDirectMergeGitPort({ calls }),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-        taskStore,
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-        }),
-      }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService(calls),
+          gitPort: createDirectMergeGitPort({ calls }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+          taskStore,
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+      ),
     ).resolves.toEqual({ ok: true });
-
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "listBranches", workingDir: "/repo" },
@@ -172,123 +383,261 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
-
   test("requires confirmation before deleting a task with subtasks", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [
-          task({ id: "epic-1", issueType: "epic" }),
-          task({ id: "task-1", parentId: "epic-1" }),
-        ];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [
+              task({ id: "epic-1", issueType: "epic" }),
+              task({ id: "task-1", parentId: "epic-1" }),
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        devServerService: createDirectMergeDevServerService(calls),
-        gitPort: createDirectMergeGitPort({ calls }),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-        taskStore,
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-        }),
-      }).deleteTask({ repoPath: "/repo", taskId: "epic-1", deleteSubtasks: false }),
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService(calls),
+          gitPort: createDirectMergeGitPort({ calls }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+          taskStore,
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).deleteTask({ repoPath: "/repo", taskId: "epic-1", deleteSubtasks: false }),
+      ),
     ).rejects.toThrow("Task epic-1 has 1 subtasks. Confirm subtask deletion to continue.");
-
     expect(calls).toEqual([{ type: "list", input: { repoPath: "/repo" } }]);
   });
-
   test("deletes subtasks with inactive session guard and cleans related worktrees and branches", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [
-          task({ id: "epic-1", issueType: "epic", subtaskIds: ["task-1"] }),
-          task({
-            id: "task-1",
-            parentId: "epic-1",
-            agentSessions: [
-              createAgentSessionRecord({
-                workingDirectory: "/worktrees/repo/task-1",
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [
+              task({ id: "epic-1", issueType: "epic", subtaskIds: ["task-1"] }),
+              task({
+                id: "task-1",
+                parentId: "epic-1",
+                agentSessions: [
+                  createAgentSessionRecord({
+                    workingDirectory: "/worktrees/repo/task-1",
+                  }),
+                ],
               }),
-            ],
-          }),
-        ];
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask(input) {
-        calls.push({ type: "delete", input });
-        return true;
+      deleteTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "delete", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      async ensureNoActiveTaskDeleteRuns(input) {
-        calls.push({ type: "activityGuard", input });
+      ensureNoActiveTaskDeleteRuns(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "activityGuard", input });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async ensureNoActiveTaskResetActivity() {
-        throw new Error("unexpected reset activity guard");
+      ensureNoActiveTaskResetActivity() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected reset activity guard");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        devServerService: createDirectMergeDevServerService(calls),
-        gitPort: createDirectMergeGitPort({
-          calls,
-          currentBranches: {
-            "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-          },
-          branches: {
-            "/repo": [
-              { name: "main", isCurrent: true, isRemote: false },
-              { name: "odt/task-1", isCurrent: false, isRemote: false },
-              { name: "origin/odt/task-1", isCurrent: false, isRemote: true },
-            ],
-          },
-        }),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-        taskActivityGuard,
-        taskStore,
-        worktreeFiles: createCleanupWorktreeFiles(calls),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-        }),
-      }).deleteTask({ repoPath: "/repo", taskId: "epic-1", deleteSubtasks: true }),
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService(calls),
+          gitPort: createDirectMergeGitPort({
+            calls,
+            currentBranches: {
+              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+            },
+            branches: {
+              "/repo": [
+                { name: "main", isCurrent: true, isRemote: false },
+                { name: "odt/task-1", isCurrent: false, isRemote: false },
+                { name: "origin/odt/task-1", isCurrent: false, isRemote: true },
+              ],
+            },
+          }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          taskActivityGuard,
+          taskStore,
+          worktreeFiles: createCleanupWorktreeFiles(calls),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).deleteTask({ repoPath: "/repo", taskId: "epic-1", deleteSubtasks: true }),
+      ),
     ).resolves.toEqual({ ok: true });
-
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -320,74 +669,153 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
-
   test("deletes closed tasks with stranded managed worktree directories", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [
-          task({
-            id: "task-1",
-            status: "closed",
-            agentSessions: [
-              createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-            ],
-          }),
-        ];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [
+              task({
+                id: "task-1",
+                status: "closed",
+                agentSessions: [
+                  createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
+                ],
+              }),
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask(input) {
-        calls.push({ type: "delete", input });
-        return true;
+      deleteTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "delete", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      async ensureNoActiveTaskDeleteRuns(input) {
-        calls.push({ type: "activityGuard", input });
+      ensureNoActiveTaskDeleteRuns(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "activityGuard", input });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async ensureNoActiveTaskResetActivity() {
-        throw new Error("unexpected reset activity guard");
+      ensureNoActiveTaskResetActivity() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected reset activity guard");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        devServerService: createDirectMergeDevServerService(calls),
-        gitPort: createDirectMergeGitPort({
-          calls,
-          branches: {
-            "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-          },
-          removeWorktreeErrors: {
-            "/repo|/worktrees/repo/task-1|true": new Error(
-              "fatal: '/worktrees/repo/task-1' is not a working tree",
-            ),
-          },
-        }),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-        taskActivityGuard,
-        taskStore,
-        worktreeFiles: createCleanupWorktreeFiles(calls),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-        }),
-      }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService(calls),
+          gitPort: createDirectMergeGitPort({
+            calls,
+            branches: {
+              "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+            },
+            removeWorktreeErrors: {
+              "/repo|/worktrees/repo/task-1|true": new Error(
+                "fatal: '/worktrees/repo/task-1' is not a working tree",
+              ),
+            },
+          }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+          taskActivityGuard,
+          taskStore,
+          worktreeFiles: createCleanupWorktreeFiles(calls),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+      ),
     ).resolves.toEqual({ ok: true });
-
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -414,52 +842,111 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
-
   test("fails fast when task deletion needs live activity checks but no guard is configured", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [
-          task({
-            agentSessions: [
-              createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-            ],
-          }),
-        ];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [
+              task({
+                agentSessions: [
+                  createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
+                ],
+              }),
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        devServerService: createDirectMergeDevServerService([]),
-        gitPort: createDirectMergeGitPort({ calls: [] }),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-        taskStore,
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-        }),
-      }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService([]),
+          gitPort: createDirectMergeGitPort({ calls: [] }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          taskStore,
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+      ),
     ).rejects.toThrow(
       "task_delete requires runtime session activity checks for tasks with build or QA sessions.",
     );
   });
-
   test("resets implementation after activity guard and cleans builder state", async () => {
     const calls: unknown[] = [];
     const currentTask = task({
@@ -480,91 +967,251 @@ describe("createTaskService task mutations and reset", () => {
       ],
     });
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [currentTask];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [currentTask];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async clearAgentSessionsByRoles(input) {
-        calls.push({ type: "clearAgentSessions", input });
-        return true;
+      clearAgentSessionsByRoles(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "clearAgentSessions", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async clearQaReports(input) {
-        calls.push({ type: "clearQaReports", input });
-        return true;
+      clearQaReports(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "clearQaReports", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest(input) {
-        calls.push({ type: "setPullRequest", input });
-        return true;
+      setPullRequest(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPullRequest", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setDirectMerge(input) {
-        calls.push({ type: "setDirectMerge", input });
-        return true;
+      setDirectMerge(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setDirectMerge", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask(input) {
-        calls.push({ type: "transition", input });
-        return task({ id: "task-1", status: input.status });
+      transitionTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "transition", input });
+            return task({ id: "task-1", status: input.status });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        throw new Error("unexpected metadata");
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected metadata");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected qa");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected qa");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      async ensureNoActiveTaskDeleteRuns() {
-        throw new Error("unexpected delete activity guard");
+      ensureNoActiveTaskDeleteRuns() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete activity guard");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async ensureNoActiveTaskResetActivity(input) {
-        calls.push({ type: "resetActivityGuard", input });
+      ensureNoActiveTaskResetActivity(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "resetActivityGuard", input });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        devServerService: createDirectMergeDevServerService(calls),
-        gitPort: createDirectMergeGitPort({
-          calls,
-          currentBranches: {
-            "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-          },
-          branches: {
-            "/repo": [
-              { name: "main", isCurrent: true, isRemote: false },
-              { name: "odt/task-1", isCurrent: false, isRemote: false },
-            ],
-          },
-        }),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-        taskActivityGuard,
-        taskStore,
-        worktreeFiles: createCleanupWorktreeFiles(calls),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-        }),
-      }).resetImplementation({ repoPath: "/repo", taskId: "task-1" }),
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService(calls),
+          gitPort: createDirectMergeGitPort({
+            calls,
+            currentBranches: {
+              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+            },
+            branches: {
+              "/repo": [
+                { name: "main", isCurrent: true, isRemote: false },
+                { name: "odt/task-1", isCurrent: false, isRemote: false },
+              ],
+            },
+          }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          taskActivityGuard,
+          taskStore,
+          worktreeFiles: createCleanupWorktreeFiles(calls),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).resetImplementation({ repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).resolves.toMatchObject({ id: "task-1", status: "ready_for_dev" });
-
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -607,7 +1254,6 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
-
   test("resets a task by clearing workflow artifacts and rolling status back to open", async () => {
     const calls: unknown[] = [];
     const currentTask = task({
@@ -620,88 +1266,248 @@ describe("createTaskService task mutations and reset", () => {
       ],
     });
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [currentTask];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [currentTask];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async clearWorkflowDocuments(input) {
-        calls.push({ type: "clearWorkflowDocuments", input });
-        return true;
+      clearWorkflowDocuments(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "clearWorkflowDocuments", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async clearAgentSessionsByRoles(input) {
-        calls.push({ type: "clearAgentSessions", input });
-        return true;
+      clearAgentSessionsByRoles(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "clearAgentSessions", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest(input) {
-        calls.push({ type: "setPullRequest", input });
-        return true;
+      setPullRequest(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPullRequest", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setDirectMerge(input) {
-        calls.push({ type: "setDirectMerge", input });
-        return true;
+      setDirectMerge(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setDirectMerge", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask(input) {
-        calls.push({ type: "transition", input });
-        return task({ id: "task-1", status: input.status });
+      transitionTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "transition", input });
+            return task({ id: "task-1", status: input.status });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        throw new Error("unexpected metadata");
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected metadata");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected qa");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected qa");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      async ensureNoActiveTaskDeleteRuns() {
-        throw new Error("unexpected delete activity guard");
+      ensureNoActiveTaskDeleteRuns() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete activity guard");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async ensureNoActiveTaskResetActivity(input) {
-        calls.push({ type: "resetActivityGuard", input });
+      ensureNoActiveTaskResetActivity(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "resetActivityGuard", input });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        devServerService: createDirectMergeDevServerService(calls),
-        gitPort: createDirectMergeGitPort({
-          calls,
-          currentBranches: {
-            "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-          },
-          branches: {
-            "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
-          },
-        }),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-        taskActivityGuard,
-        taskStore,
-        worktreeFiles: createCleanupWorktreeFiles(calls),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-        }),
-      }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService(calls),
+          gitPort: createDirectMergeGitPort({
+            calls,
+            currentBranches: {
+              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+            },
+            branches: {
+              "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+            },
+          }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          taskActivityGuard,
+          taskStore,
+          worktreeFiles: createCleanupWorktreeFiles(calls),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).resolves.toMatchObject({ id: "task-1", status: "open" });
-
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -747,101 +1553,260 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
-
   test("fails fast when implementation reset needs live activity checks but no guard is configured", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [
-          task({
-            status: "blocked",
-            agentSessions: [
-              createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-            ],
-          }),
-        ];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [
+              task({
+                status: "blocked",
+                agentSessions: [
+                  createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
+                ],
+              }),
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async clearAgentSessionsByRoles() {
-        throw new Error("unexpected clear sessions");
+      clearAgentSessionsByRoles() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected clear sessions");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async clearQaReports() {
-        throw new Error("unexpected clear QA");
+      clearQaReports() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected clear QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest() {
-        throw new Error("unexpected set PR");
+      setPullRequest() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set PR");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setDirectMerge() {
-        throw new Error("unexpected set direct merge");
+      setDirectMerge() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set direct merge");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        devServerService: createDirectMergeDevServerService([]),
-        gitPort: createDirectMergeGitPort({ calls: [] }),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-        taskStore,
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-        }),
-      }).resetImplementation({ repoPath: "/repo", taskId: "task-1" }),
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService([]),
+          gitPort: createDirectMergeGitPort({ calls: [] }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          taskStore,
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).resetImplementation({ repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).rejects.toThrow(
       "task_reset_implementation requires runtime session activity checks for tasks with build or QA sessions.",
     );
   });
-
   test("updates a task after validating parent relationships and enriches the result", async () => {
     const calls: unknown[] = [];
     const updatedTask = task({ id: "task-1", status: "ready_for_dev", issueType: "feature" });
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [task({ id: "task-1", issueType: "task", status: "open" })];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [task({ id: "task-1", issueType: "task", status: "open" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask(input) {
-        calls.push({ type: "update", input });
-        return updatedTask;
+      updateTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "update", input });
+            return updatedTask;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
-    const updated = await createTaskService({ taskStore }).updateTask({
-      repoPath: "/repo",
-      taskId: "task-1",
-      patch: {
-        issueType: "feature",
-        title: "Updated",
-        targetBranch: { remote: "origin", branch: "main" },
-      },
-    });
-
+    const updated = await Effect.runPromise(
+      createTaskService({ taskStore }).updateTask({
+        repoPath: "/repo",
+        taskId: "task-1",
+        patch: {
+          issueType: "feature",
+          title: "Updated",
+          targetBranch: { remote: "origin", branch: "main" },
+        },
+      }),
+    );
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -865,74 +1830,193 @@ describe("createTaskService task mutations and reset", () => {
       },
     });
   });
-
   test("rejects update when converting a task with subtasks into a subtask", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [
-          task({ id: "task-1", issueType: "feature" }),
-          task({ id: "task-2", parentId: "task-1" }),
-          task({ id: "epic-2", issueType: "epic" }),
-        ];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [
+              task({ id: "task-1", issueType: "feature" }),
+              task({ id: "task-2", parentId: "task-1" }),
+              task({ id: "epic-2", issueType: "epic" }),
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("should not update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).updateTask({
-        repoPath: "/repo",
-        taskId: "task-1",
-        patch: { parentId: "epic-2" },
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).updateTask({
+          repoPath: "/repo",
+          taskId: "task-1",
+          patch: { parentId: "epic-2" },
+        }),
+      ),
     ).rejects.toThrow("Tasks with subtasks cannot become subtasks.");
   });
-
   test("transitions a task after validating workflow rules and enriches the result", async () => {
     const calls: unknown[] = [];
     const updatedTask = task({ id: "task-1", status: "in_progress", issueType: "bug" });
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [task({ id: "task-1", issueType: "bug", status: "open" })];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [task({ id: "task-1", issueType: "bug", status: "open" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask(input) {
-        calls.push({ type: "transition", input });
-        return updatedTask;
+      transitionTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "transition", input });
+            return updatedTask;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
-    const transitioned = await createTaskService({ taskStore }).transitionTask({
-      repoPath: "/repo",
-      taskId: "task-1",
-      status: "in_progress",
-    });
-
+    const transitioned = await Effect.runPromise(
+      createTaskService({ taskStore }).transitionTask({
+        repoPath: "/repo",
+        taskId: "task-1",
+        status: "in_progress",
+      }),
+    );
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       {
@@ -946,66 +2030,186 @@ describe("createTaskService task mutations and reset", () => {
       availableActions: expect.arrayContaining(["open_builder"]),
     });
   });
-
   test("returns the current task without store mutation when transition status is unchanged", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [task({ id: "task-1", issueType: "task", status: "open" })];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [task({ id: "task-1", issueType: "task", status: "open" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("should not transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).transitionTask({
-        repoPath: "/repo",
-        taskId: "task-1",
-        status: "open",
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).transitionTask({
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "open",
+        }),
+      ),
     ).resolves.toMatchObject({ id: "task-1", status: "open" });
   });
-
   test("rejects invalid task transitions before calling the store", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [task({ id: "feature-1", issueType: "feature", status: "open" })];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [task({ id: "feature-1", issueType: "feature", status: "open" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("should not transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).transitionTask({
-        repoPath: "/repo",
-        taskId: "feature-1",
-        status: "in_progress",
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).transitionTask({
+          repoPath: "/repo",
+          taskId: "feature-1",
+          status: "in_progress",
+        }),
+      ),
     ).rejects.toThrow("Transition not allowed for feature-1 (feature): open -> in_progress");
   });
 });

@@ -1,10 +1,15 @@
+import { Effect } from "effect";
 import { ensurePullRequestManagementStatus, validateTransition } from "../../../domain/task";
+import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import {
   canSkipRelinkedPullRequestCleanup,
   cleanupMergedBuilderState,
   loadBuilderBranchCleanup,
 } from "../support/builder-worktree-cleanup";
-import { requireLinkMergedPullRequestDependencies } from "../support/required-task-dependencies";
+import {
+  requireDependencies,
+  requireLinkMergedPullRequestDependencies,
+} from "../support/required-task-dependencies";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -16,80 +21,111 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   taskWorktreeService,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "linkMergedPullRequest"> => ({
-  async linkMergedPullRequest(input) {
-    const { repoPath, taskId, pullRequest } = input;
+  linkMergedPullRequest(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId, pullRequest } = input;
 
-    const { current, currentTasks } = await taskListWithCurrent(taskStore, repoPath, taskId);
-    const metadata = await taskStore.getTaskMetadata({ repoPath, taskId });
-    const sameExistingPullRequest =
-      metadata.pullRequest?.providerId === pullRequest.providerId &&
-      metadata.pullRequest.number === pullRequest.number &&
-      metadata.pullRequest.state === "merged";
-    if (current.status === "closed" && sameExistingPullRequest) {
-      return enrichTask(current, currentTasks);
-    }
+      const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
+      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+      const sameExistingPullRequest =
+        metadata.pullRequest?.providerId === pullRequest.providerId &&
+        metadata.pullRequest.number === pullRequest.number &&
+        metadata.pullRequest.state === "merged";
+      if (current.status === "closed" && sameExistingPullRequest) {
+        return enrichTask(current, currentTasks);
+      }
 
-    const dependencies = requireLinkMergedPullRequestDependencies(
-      devServerService,
-      gitPort,
-      settingsConfig,
-      taskWorktreeService,
-      workspaceSettingsService,
-    );
-    ensurePullRequestManagementStatus(current.status);
-    if (metadata.directMerge !== undefined) {
-      throw new Error(
-        `A local direct merge is already recorded for task ${taskId}. Finish the direct merge workflow before linking a merged pull request.`,
+      const dependencies = yield* requireDependencies(() =>
+        requireLinkMergedPullRequestDependencies(
+          devServerService,
+          gitPort,
+          settingsConfig,
+          taskWorktreeService,
+          workspaceSettingsService,
+        ),
       );
-    }
-    if (pullRequest.state !== "merged") {
-      throw new Error(`Task ${taskId} can only link a merged pull request from detection results.`);
-    }
-    if (metadata.pullRequest !== undefined && !sameExistingPullRequest) {
-      throw new Error(`Task ${taskId} already has a linked pull request.`);
-    }
+      yield* Effect.try({
+        try: () => ensurePullRequestManagementStatus(current.status),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      if (metadata.directMerge !== undefined) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `A local direct merge is already recorded for task ${taskId}. Finish the direct merge workflow before linking a merged pull request.`,
+            details: { repoPath, taskId },
+          }),
+        );
+      }
+      if (pullRequest.state !== "merged") {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "pullRequest",
+            message: `Task ${taskId} can only link a merged pull request from detection results.`,
+            details: { repoPath, taskId },
+          }),
+        );
+      }
+      if (metadata.pullRequest !== undefined && !sameExistingPullRequest) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `Task ${taskId} already has a linked pull request.`,
+            details: { repoPath, taskId },
+          }),
+        );
+      }
 
-    let cleanup: { sourceBranch: string; targetBranch: string } | null = null;
-    if (metadata.pullRequest === undefined) {
-      cleanup = await loadBuilderBranchCleanup(
-        dependencies,
-        current,
-        repoPath,
-        taskId,
-        "Pull request linking",
-      );
-    } else {
-      try {
-        cleanup = await loadBuilderBranchCleanup(
+      let cleanup: { sourceBranch: string; targetBranch: string } | null = null;
+      if (metadata.pullRequest === undefined) {
+        cleanup = yield* loadBuilderBranchCleanup(
           dependencies,
           current,
           repoPath,
           taskId,
           "Pull request linking",
         );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (!canSkipRelinkedPullRequestCleanup(message)) {
-          throw error;
+      } else {
+        const cleanupResult = yield* Effect.either(
+          loadBuilderBranchCleanup(dependencies, current, repoPath, taskId, "Pull request linking"),
+        );
+        if (cleanupResult._tag === "Right") {
+          cleanup = cleanupResult.right;
+        } else {
+          const message = errorMessage(cleanupResult.left);
+          if (!canSkipRelinkedPullRequestCleanup(message)) {
+            return yield* Effect.fail(cleanupResult.left);
+          }
         }
       }
-    }
 
-    await taskStore.setPullRequest({ repoPath, taskId, pullRequest });
-    if (cleanup) {
-      await cleanupMergedBuilderState(
-        dependencies,
-        taskStore,
-        repoPath,
-        taskId,
-        cleanup.sourceBranch,
-        cleanup.targetBranch,
-      );
-    }
-    validateTransition(current, currentTasks, current.status, "closed");
-    const task = await taskStore.transitionTask({ repoPath, taskId, status: "closed" });
-    const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
+      yield* taskStore.setPullRequest({ repoPath, taskId, pullRequest });
+      if (cleanup) {
+        yield* cleanupMergedBuilderState(
+          dependencies,
+          taskStore,
+          repoPath,
+          taskId,
+          cleanup.sourceBranch,
+          cleanup.targetBranch,
+        );
+      }
+      yield* Effect.try({
+        try: () => validateTransition(current, currentTasks, current.status, "closed"),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      const task = yield* taskStore.transitionTask({ repoPath, taskId, status: "closed" });
+      const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
 
-    return enrichTask(task, nextTasks);
+      return enrichTask(task, nextTasks);
+    });
   },
 });

@@ -5,6 +5,8 @@ import {
   type RuntimeRoute,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
@@ -36,7 +38,6 @@ export type {
   RuntimeRepoInput,
   RuntimeStopInput,
 } from "./runtime-orchestrator-model";
-
 export const createRuntimeOrchestratorService = ({
   gitPort,
   runtimeDefinitionsService,
@@ -55,136 +56,151 @@ export const createRuntimeOrchestratorService = ({
   const runtimeStartupStatuses = new Map<string, RepoRuntimeStartupStatus>();
   const startupStatusKey = (runtimeKind: string, repoPath: string): string =>
     `${runtimeKind}::${repoPath}`;
-
-  const resolveSessionStopRoute = async (
+  const resolveSessionStopRoute = (
     request: Parameters<RuntimeOrchestratorService["agentSessionStop"]>[0],
     repoPath: string,
     session: AgentSessionRecord,
-  ): Promise<RuntimeRoute> => {
-    const runtimes = (await runtimeRegistry.listRuntimes()).filter(
-      (runtime) => runtime.kind === request.runtimeKind && runtime.repoPath === repoPath,
-    );
-    const normalizedWorkingDirectory = normalizePathForComparison(request.workingDirectory);
-    const exactRoutes = uniqueRuntimeRoutes(
-      runtimes
-        .filter(
-          (runtime) =>
-            normalizePathForComparison(runtime.workingDirectory) === normalizedWorkingDirectory,
-        )
-        .map((runtime) => runtime.runtimeRoute),
-    );
-    if (exactRoutes.length === 1) {
-      return exactRoutes[0] as RuntimeRoute;
-    }
-    if (exactRoutes.length > 1) {
-      throw new Error(
-        `Multiple live runtime routes matched externalSessionId ${request.externalSessionId}`,
+  ) =>
+    Effect.gen(function* () {
+      const runtimes = (yield* runtimeRegistry.listRuntimes()).filter(
+        (runtime) => runtime.kind === request.runtimeKind && runtime.repoPath === repoPath,
       );
-    }
-
-    const repoRoutes = uniqueRuntimeRoutes(runtimes.map((runtime) => runtime.runtimeRoute));
-    if (repoRoutes.length === 1) {
-      return repoRoutes[0] as RuntimeRoute;
-    }
-    if (repoRoutes.length === 0) {
-      throw new Error(
-        `No live runtime route found for externalSessionId ${request.externalSessionId}`,
+      const normalizedWorkingDirectory = normalizePathForComparison(request.workingDirectory);
+      const exactRoutes = uniqueRuntimeRoutes(
+        runtimes
+          .filter(
+            (runtime) =>
+              normalizePathForComparison(runtime.workingDirectory) === normalizedWorkingDirectory,
+          )
+          .map((runtime) => runtime.runtimeRoute),
       );
-    }
-    if (!runtimeRegistry.probeSessionStatus) {
-      throw new Error(
-        `Multiple live runtime routes matched externalSessionId ${request.externalSessionId}; runtime session status probing is not configured.`,
-      );
-    }
-
-    const matchingRoutes: RuntimeRoute[] = [];
-    for (const runtimeRoute of repoRoutes) {
-      const probe = await runtimeRegistry.probeSessionStatus({
-        runtimeKind: request.runtimeKind,
-        runtimeRoute,
-        externalSessionId: session.externalSessionId,
-        workingDirectory: request.workingDirectory,
-      });
-      if (probe.supported && probe.hasLiveSession) {
-        matchingRoutes.push(runtimeRoute);
+      if (exactRoutes.length === 1) {
+        return exactRoutes[0] as RuntimeRoute;
       }
-    }
-
-    if (matchingRoutes.length === 1) {
-      return matchingRoutes[0] as RuntimeRoute;
-    }
-    if (matchingRoutes.length === 0) {
-      throw new Error(
-        `No live runtime route found for externalSessionId ${request.externalSessionId}`,
+      if (exactRoutes.length > 1) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "runtime_orchestrator.resolve_session_stop_route",
+            message: `Multiple live runtime routes matched externalSessionId ${request.externalSessionId}`,
+            details: { externalSessionId: request.externalSessionId },
+          }),
+        );
+      }
+      const repoRoutes = uniqueRuntimeRoutes(runtimes.map((runtime) => runtime.runtimeRoute));
+      if (repoRoutes.length === 1) {
+        return repoRoutes[0] as RuntimeRoute;
+      }
+      if (repoRoutes.length === 0) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "runtime_orchestrator.resolve_session_stop_route",
+            message: `No live runtime route found for externalSessionId ${request.externalSessionId}`,
+            details: { externalSessionId: request.externalSessionId },
+          }),
+        );
+      }
+      if (!runtimeRegistry.probeSessionStatus) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "runtime_orchestrator.resolve_session_stop_route",
+            message: `Multiple live runtime routes matched externalSessionId ${request.externalSessionId}; runtime session status probing is not configured.`,
+            details: { externalSessionId: request.externalSessionId },
+          }),
+        );
+      }
+      const matchingRoutes: RuntimeRoute[] = [];
+      for (const runtimeRoute of repoRoutes) {
+        const probe = yield* runtimeRegistry.probeSessionStatus({
+          runtimeKind: request.runtimeKind,
+          runtimeRoute,
+          externalSessionId: session.externalSessionId,
+          workingDirectory: request.workingDirectory,
+        });
+        if (probe.supported && probe.hasLiveSession) {
+          matchingRoutes.push(runtimeRoute);
+        }
+      }
+      if (matchingRoutes.length === 1) {
+        return matchingRoutes[0] as RuntimeRoute;
+      }
+      if (matchingRoutes.length === 0) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "runtime_orchestrator.resolve_session_stop_route",
+            message: `No live runtime route found for externalSessionId ${request.externalSessionId}`,
+            details: { externalSessionId: request.externalSessionId },
+          }),
+        );
+      }
+      return yield* Effect.fail(
+        new HostOperationError({
+          operation: "runtime_orchestrator.resolve_session_stop_route",
+          message: `Multiple live runtime routes matched externalSessionId ${request.externalSessionId}`,
+          details: { externalSessionId: request.externalSessionId },
+        }),
       );
-    }
-    throw new Error(
-      `Multiple live runtime routes matched externalSessionId ${request.externalSessionId}`,
-    );
-  };
-
-  const runtimeList: RuntimeOrchestratorService["runtimeList"] = async (input) => {
-    const { runtimeKind, repoPath } = input;
-    resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
-    const canonicalRepoPath = repoPath ? await resolveRepoPath(gitPort, repoPath) : undefined;
-    const runtimes = await runtimeRegistry.listRuntimes();
-    return runtimes
-      .filter((runtime) => runtime.kind === runtimeKind)
-      .filter((runtime) => !canonicalRepoPath || runtime.repoPath === canonicalRepoPath)
-      .map((runtime) => runtimeInstanceSummarySchema.parse(runtime));
-  };
-
-  const runtimeStartupStatus: RuntimeOrchestratorService["runtimeStartupStatus"] = async (
-    input,
-  ) => {
-    const { runtimeKind, repoPath } = input;
-    resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
-    const canonicalRepoPath = await resolveRepoPath(gitPort, repoPath);
-    const runtime = findWorkspaceRuntime(
-      await runtimeRegistry.listRuntimes(),
-      runtimeKind,
-      canonicalRepoPath,
-    );
-    if (runtime) {
-      const readyStatus = buildReadyStartupStatus(runtime);
-      runtimeStartupStatuses.set(startupStatusKey(runtimeKind, canonicalRepoPath), readyStatus);
-      return readyStatus;
-    }
-
-    return (
-      runtimeStartupStatuses.get(startupStatusKey(runtimeKind, canonicalRepoPath)) ??
-      buildIdleStartupStatus(runtimeKind, canonicalRepoPath)
-    );
-  };
-
-  const runtimeEnsure: RuntimeOrchestratorService["runtimeEnsure"] = async (input) => {
-    const { runtimeKind, repoPath } = input;
-    const descriptor = resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
-    const canonicalRepoPath = await resolveRepoPath(gitPort, repoPath);
-    const statusKey = startupStatusKey(runtimeKind, canonicalRepoPath);
-    const startedAt = new Date().toISOString();
-    runtimeStartupStatuses.set(
-      statusKey,
-      buildWaitingStartupStatus(runtimeKind, canonicalRepoPath, startedAt),
-    );
-    logger?.info(`Ensuring ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}`);
-    try {
-      const runtime = await runtimeRegistry.ensureWorkspaceRuntime({
+    });
+  const runtimeList: RuntimeOrchestratorService["runtimeList"] = (input) =>
+    Effect.gen(function* () {
+      const { runtimeKind, repoPath } = input;
+      yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
+      const canonicalRepoPath = repoPath ? yield* resolveRepoPath(gitPort, repoPath) : undefined;
+      const runtimes = yield* runtimeRegistry.listRuntimes();
+      return runtimes
+        .filter((runtime) => runtime.kind === runtimeKind)
+        .filter((runtime) => !canonicalRepoPath || runtime.repoPath === canonicalRepoPath)
+        .map((runtime) => runtimeInstanceSummarySchema.parse(runtime));
+    });
+  const runtimeStartupStatus: RuntimeOrchestratorService["runtimeStartupStatus"] = (input) =>
+    Effect.gen(function* () {
+      const { runtimeKind, repoPath } = input;
+      yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
+      const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
+      const runtime = findWorkspaceRuntime(
+        yield* runtimeRegistry.listRuntimes(),
         runtimeKind,
-        repoPath: canonicalRepoPath,
-        workingDirectory: canonicalRepoPath,
-        descriptor,
-      });
-      const parsed = runtimeInstanceSummarySchema.parse(runtime);
-      logger?.info(
-        `${parsed.kind} workspace runtime ${parsed.runtimeId} is ready at ${describeRuntimeRoute(
-          parsed.runtimeRoute,
-        )}`,
+        canonicalRepoPath,
       );
-      runtimeStartupStatuses.set(statusKey, buildReadyStartupStatus(parsed));
-      return parsed;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      if (runtime) {
+        const readyStatus = buildReadyStartupStatus(runtime);
+        runtimeStartupStatuses.set(startupStatusKey(runtimeKind, canonicalRepoPath), readyStatus);
+        return readyStatus;
+      }
+      return (
+        runtimeStartupStatuses.get(startupStatusKey(runtimeKind, canonicalRepoPath)) ??
+        buildIdleStartupStatus(runtimeKind, canonicalRepoPath)
+      );
+    });
+  const runtimeEnsure: RuntimeOrchestratorService["runtimeEnsure"] = (input) =>
+    Effect.gen(function* () {
+      const { runtimeKind, repoPath } = input;
+      const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
+      const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
+      const statusKey = startupStatusKey(runtimeKind, canonicalRepoPath);
+      const startedAt = new Date().toISOString();
+      runtimeStartupStatuses.set(
+        statusKey,
+        buildWaitingStartupStatus(runtimeKind, canonicalRepoPath, startedAt),
+      );
+      logger?.info(`Ensuring ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}`);
+      const ensureResult = yield* Effect.either(
+        runtimeRegistry.ensureWorkspaceRuntime({
+          runtimeKind,
+          repoPath: canonicalRepoPath,
+          workingDirectory: canonicalRepoPath,
+          descriptor,
+        }),
+      );
+      if (ensureResult._tag === "Right") {
+        const runtime = ensureResult.right;
+        const parsed = runtimeInstanceSummarySchema.parse(runtime);
+        logger?.info(
+          `${parsed.kind} workspace runtime ${parsed.runtimeId} is ready at ${describeRuntimeRoute(parsed.runtimeRoute)}`,
+        );
+        runtimeStartupStatuses.set(statusKey, buildReadyStartupStatus(parsed));
+        return parsed;
+      }
+      const message = errorMessage(ensureResult.left);
       runtimeStartupStatuses.set(
         statusKey,
         buildFailedStartupStatus(runtimeKind, canonicalRepoPath, startedAt, "error", message),
@@ -192,73 +208,87 @@ export const createRuntimeOrchestratorService = ({
       logger?.error(
         `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,
       );
-      throw error;
-    }
-  };
-
-  return {
-    async agentSessionStop(input) {
-      const request = input;
-      resolveRuntimeDescriptor(runtimeDefinitionsService, request.runtimeKind);
-      const repoPath = await resolveRepoPath(gitPort, request.repoPath);
-      const session = await loadTargetSession(
-        taskReader,
-        repoPath,
-        request.taskId,
-        request.externalSessionId,
-      );
-      validateSessionStopTarget(request, session);
-      const runtimeRoute = await resolveSessionStopRoute(request, repoPath, session);
-      await runtimeRegistry.stopSession({
-        runtimeKind: request.runtimeKind,
-        runtimeRoute,
-        externalSessionId: session.externalSessionId,
-        workingDirectory: session.workingDirectory,
+      return yield* Effect.fail(ensureResult.left);
+    });
+  const service: RuntimeOrchestratorService = {
+    agentSessionStop(input) {
+      return Effect.gen(function* () {
+        const request = input;
+        yield* resolveRuntimeDescriptor(runtimeDefinitionsService, request.runtimeKind);
+        const repoPath = yield* resolveRepoPath(gitPort, request.repoPath);
+        const session = yield* loadTargetSession(
+          taskReader,
+          repoPath,
+          request.taskId,
+          request.externalSessionId,
+        );
+        yield* validateSessionStopTarget(request, session);
+        const runtimeRoute = yield* resolveSessionStopRoute(request, repoPath, session);
+        yield* runtimeRegistry.stopSession({
+          runtimeKind: request.runtimeKind,
+          runtimeRoute,
+          externalSessionId: session.externalSessionId,
+          workingDirectory: session.workingDirectory,
+        });
+        return { ok: true };
       });
-      return { ok: true };
     },
     runtimeEnsure,
     runtimeList,
-    async runtimeStop(input) {
-      const { runtimeId } = input;
-      const runtime = (await runtimeRegistry.listRuntimes()).find(
-        (entry) => entry.runtimeId === runtimeId,
-      );
-      const ok = await runtimeRegistry.stopRuntime(runtimeId);
-      if (runtime) {
-        runtimeStartupStatuses.delete(startupStatusKey(runtime.kind, runtime.repoPath));
-      }
-      return { ok };
+    runtimeStop(input) {
+      return Effect.gen(function* () {
+        const { runtimeId } = input;
+        const runtime = (yield* runtimeRegistry.listRuntimes()).find(
+          (entry) => entry.runtimeId === runtimeId,
+        );
+        const ok = yield* runtimeRegistry.stopRuntime(runtimeId);
+        if (runtime) {
+          runtimeStartupStatuses.delete(startupStatusKey(runtime.kind, runtime.repoPath));
+        }
+        return { ok };
+      });
     },
     runtimeStartupStatus,
-    async repoRuntimeHealth(input) {
-      const { runtimeKind, repoPath } = input;
-      const descriptor = resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
-      logger?.info(`Checking ${runtimeKind} repo runtime health for repository ${repoPath}`);
-      let runtime: RuntimeInstanceSummary;
-      try {
-        runtime = await runtimeEnsure(input);
-      } catch {
-        return buildHealthStatus(descriptor, await runtimeStartupStatus(input), runtimeRegistry);
-      }
-      const health = await buildHealthStatus(
-        descriptor,
-        buildReadyStartupStatus(runtime),
-        runtimeRegistry,
-        {
-          mcpProbeAttempts: ACTIVE_MCP_PROBE_ATTEMPTS,
-          mcpProbeRetryDelayMs: activeMcpProbeRetryDelayMs,
-        },
-      );
-      logger?.info(
-        `${runtimeKind} repo runtime health is ${health.status} for repository ${runtime.repoPath}`,
-      );
-      return health;
+    repoRuntimeHealth(input) {
+      return Effect.gen(function* () {
+        const { runtimeKind, repoPath } = input;
+        const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
+        logger?.info(`Checking ${runtimeKind} repo runtime health for repository ${repoPath}`);
+        const runtimeResult = yield* Effect.either(runtimeEnsure(input));
+        if (runtimeResult._tag === "Left") {
+          return yield* buildHealthStatus(
+            descriptor,
+            yield* runtimeStartupStatus(input),
+            runtimeRegistry,
+          );
+        }
+        const runtime: RuntimeInstanceSummary = runtimeResult.right;
+        const health = yield* buildHealthStatus(
+          descriptor,
+          buildReadyStartupStatus(runtime),
+          runtimeRegistry,
+          {
+            mcpProbeAttempts: ACTIVE_MCP_PROBE_ATTEMPTS,
+            mcpProbeRetryDelayMs: activeMcpProbeRetryDelayMs,
+          },
+        );
+        logger?.info(
+          `${runtimeKind} repo runtime health is ${health.status} for repository ${runtime.repoPath}`,
+        );
+        return health;
+      });
     },
-    async repoRuntimeHealthStatus(input) {
-      const { runtimeKind } = input;
-      const descriptor = resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
-      return buildHealthStatus(descriptor, await runtimeStartupStatus(input), runtimeRegistry);
+    repoRuntimeHealthStatus(input) {
+      return Effect.gen(function* () {
+        const { runtimeKind } = input;
+        const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
+        return yield* buildHealthStatus(
+          descriptor,
+          yield* runtimeStartupStatus(input),
+          runtimeRegistry,
+        );
+      });
     },
   };
+  return service;
 };

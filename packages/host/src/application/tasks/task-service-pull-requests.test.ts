@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
@@ -8,7 +10,10 @@ import {
   createPullRequestDetectSystemCommands,
   createPullRequestSyncSystemCommands,
   createPullRequestUpsertSystemCommands,
+  createSystemCommandPort,
   createTaskService,
+  extendGitPort,
+  extendSettingsConfigPort,
   githubPullListPayload,
   githubPullResponsePayload,
   pullRequest,
@@ -20,60 +25,182 @@ describe("createTaskService pull requests", () => {
   test("detects and links an existing open pull request for the builder branch", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async getTask(input) {
-        calls.push({ type: "get", input });
-        return task({ status: "human_review" });
+      getTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "get", input });
+            return task({ status: "human_review" });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata(input) {
-        calls.push({ type: "metadata", input });
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          agentSessions: [],
-        };
+      getTaskMetadata(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "metadata", input });
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest(input) {
-        calls.push({ type: "setPullRequest", input });
-        return true;
+      setPullRequest(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPullRequest", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
     const service = createTaskService({
-      gitPort: {
-        ...createDirectMergeGitPort({
+      gitPort: extendGitPort(
+        createDirectMergeGitPort({
           calls,
           currentBranches: {
             "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
           },
         }),
-        async listRemotes(workingDir) {
-          calls.push({ type: "listRemotes", workingDir });
-          return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+        {
+          listRemotes(workingDir) {
+            return Effect.tryPromise({
+              try: async () => {
+                calls.push({ type: "listRemotes", workingDir });
+                return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+              },
+              catch: (cause) =>
+                new HostOperationError({
+                  operation: "test.effect",
+                  message: cause instanceof Error ? cause.message : String(cause),
+                  cause: cause,
+                }),
+            });
+          },
         },
-      },
+      ),
       systemCommands: createPullRequestDetectSystemCommands({
         calls,
         openPayload: githubPullListPayload([{ number: 42 }]),
@@ -95,9 +222,8 @@ describe("createTaskService pull requests", () => {
         },
       }),
     });
-
     await expect(
-      service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+      Effect.runPromise(service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toMatchObject({
       outcome: "linked",
       pullRequest: {
@@ -116,78 +242,210 @@ describe("createTaskService pull requests", () => {
       },
     });
   });
-
   test("links a pull request by number after fetching provider metadata", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async getTask(input) {
-        calls.push({ type: "get", input });
-        return task({ status: "human_review" });
+      getTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "get", input });
+            return task({ status: "human_review" });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata(input) {
-        calls.push({ type: "metadata", input });
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          agentSessions: [],
-        };
+      getTaskMetadata(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "metadata", input });
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest(input) {
-        calls.push({ type: "setPullRequest", input });
-        return true;
+      setPullRequest(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPullRequest", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
     const service = createTaskService({
-      gitPort: {
-        ...createDirectMergeGitPort({ calls }),
-        async listRemotes(workingDir) {
-          calls.push({ type: "listRemotes", workingDir });
-          return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+      gitPort: extendGitPort(createDirectMergeGitPort({ calls }), {
+        listRemotes(workingDir) {
+          return Effect.tryPromise({
+            try: async () => {
+              calls.push({ type: "listRemotes", workingDir });
+              return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
-      },
-      systemCommands: {
-        async requiredCommandError(command) {
+      }),
+      systemCommands: createSystemCommandPort({
+        requiredCommandError(command) {
           calls.push({ type: "requiredCommand", command });
-          return null;
+          return Effect.succeed(null);
         },
-        async versionCommand() {
-          throw new Error("unexpected version command");
+        versionCommand() {
+          return Effect.dieMessage("unexpected version command");
         },
-        async runCommandAllowFailure(command, args, options) {
-          calls.push({ type: "command", command, args, options });
-          if (args.includes("auth")) {
-            return { ok: true, stdout: "Logged in to github.com account octocat\n", stderr: "" };
-          }
-          if (args.some((arg) => arg.includes("pulls/77"))) {
-            return { ok: true, stdout: githubPullResponsePayload({ number: 77 }), stderr: "" };
-          }
-          throw new Error(`unexpected command args: ${args.join(" ")}`);
+        runCommandAllowFailure(command, args, options) {
+          return Effect.tryPromise({
+            try: async () => {
+              calls.push({ type: "command", command, args, options });
+              if (args.includes("auth")) {
+                return {
+                  ok: true,
+                  stdout: "Logged in to github.com account octocat\n",
+                  stderr: "",
+                };
+              }
+              if (args.some((arg) => arg.includes("pulls/77"))) {
+                return { ok: true, stdout: githubPullResponsePayload({ number: 77 }), stderr: "" };
+              }
+              throw new Error(`unexpected command args: ${args.join(" ")}`);
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
-      },
+      }),
       taskStore,
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
@@ -204,14 +462,15 @@ describe("createTaskService pull requests", () => {
         },
       }),
     });
-
     await expect(
-      service.linkPullRequest({
-        repoPath: "/repo",
-        taskId: "task-1",
-        providerId: "github",
-        number: 77,
-      }),
+      Effect.runPromise(
+        service.linkPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          providerId: "github",
+          number: 77,
+        }),
+      ),
     ).resolves.toMatchObject({
       providerId: "github",
       number: 77,
@@ -227,91 +486,213 @@ describe("createTaskService pull requests", () => {
       },
     });
   });
-
   test("detects a merged pull request without linking metadata", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async getTask() {
-        return task({ status: "human_review" });
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            return task({ status: "human_review" });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          agentSessions: [],
-        };
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest(input) {
-        calls.push({ type: "setPullRequest", input });
-        return true;
+      setPullRequest(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPullRequest", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        gitPort: {
-          ...createDirectMergeGitPort({
-            calls,
-            currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-            },
-          }),
-          async listRemotes() {
-            return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
-          },
-        },
-        systemCommands: createPullRequestDetectSystemCommands({
-          calls,
-          allPayload: githubPullListPayload([
+      Effect.runPromise(
+        createTaskService({
+          gitPort: extendGitPort(
+            createDirectMergeGitPort({
+              calls,
+              currentBranches: {
+                "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+              },
+            }),
             {
-              number: 12,
-              state: "closed",
-              mergedAt: "2026-05-10T11:00:00.000Z",
-              updatedAt: "2026-05-10T11:00:00.000Z",
-            },
-          ]),
-        }),
-        taskStore,
-        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-          git: {
-            providers: {
-              github: {
-                enabled: true,
-                repository: { host: "github.com", owner: "openai", name: "openducktor" },
-                autoDetected: false,
+              listRemotes() {
+                return Effect.tryPromise({
+                  try: async () => {
+                    return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+                  },
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: "test.effect",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause: cause,
+                    }),
+                });
               },
             },
-          },
-        }),
-      }).detectPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+          ),
+          systemCommands: createPullRequestDetectSystemCommands({
+            calls,
+            allPayload: githubPullListPayload([
+              {
+                number: 12,
+                state: "closed",
+                mergedAt: "2026-05-10T11:00:00.000Z",
+                updatedAt: "2026-05-10T11:00:00.000Z",
+              },
+            ]),
+          }),
+          taskStore,
+          taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+            git: {
+              providers: {
+                github: {
+                  enabled: true,
+                  repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                  autoDetected: false,
+                },
+              },
+            },
+          }),
+        }).detectPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).resolves.toMatchObject({
       outcome: "merged",
       pullRequest: {
@@ -322,165 +703,455 @@ describe("createTaskService pull requests", () => {
     });
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "setPullRequest" }));
   });
-
   test("reports not_found when no pull request matches the builder branch", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async getTask() {
-        return task({ status: "human_review" });
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            return task({ status: "human_review" });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          agentSessions: [],
-        };
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest() {
-        throw new Error("unexpected set pull request");
+      setPullRequest() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set pull request");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        gitPort: {
-          ...createDirectMergeGitPort({
-            calls,
-            currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-            },
-          }),
-          async listRemotes() {
-            return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
-          },
-        },
-        systemCommands: createPullRequestDetectSystemCommands({ calls }),
-        taskStore,
-        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-          git: {
-            providers: {
-              github: {
-                enabled: true,
-                repository: { host: "github.com", owner: "openai", name: "openducktor" },
-                autoDetected: false,
+      Effect.runPromise(
+        createTaskService({
+          gitPort: extendGitPort(
+            createDirectMergeGitPort({
+              calls,
+              currentBranches: {
+                "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+              },
+            }),
+            {
+              listRemotes() {
+                return Effect.tryPromise({
+                  try: async () => {
+                    return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+                  },
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: "test.effect",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause: cause,
+                    }),
+                });
               },
             },
-          },
-        }),
-      }).detectPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+          ),
+          systemCommands: createPullRequestDetectSystemCommands({ calls }),
+          taskStore,
+          taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+            git: {
+              providers: {
+                github: {
+                  enabled: true,
+                  repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                  autoDetected: false,
+                },
+              },
+            },
+          }),
+        }).detectPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).resolves.toEqual({
       outcome: "not_found",
       sourceBranch: "odt/task-1",
       targetBranch: "main",
     });
   });
-
   test("creates a pull request from a clean builder worktree", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async getTask() {
-        return task({ status: "human_review" });
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            return task({ status: "human_review" });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          agentSessions: [],
-        };
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest(input) {
-        calls.push({ type: "setPullRequest", input });
-        return true;
+      setPullRequest(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPullRequest", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
     const service = createTaskService({
-      gitPort: {
-        ...createDirectMergeGitPort({
+      gitPort: extendGitPort(
+        createDirectMergeGitPort({
           calls,
           currentBranches: {
             "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
           },
         }),
-        async listRemotes(workingDir) {
-          calls.push({ type: "listRemotes", workingDir });
-          return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+        {
+          listRemotes(workingDir) {
+            return Effect.tryPromise({
+              try: async () => {
+                calls.push({ type: "listRemotes", workingDir });
+                return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+              },
+              catch: (cause) =>
+                new HostOperationError({
+                  operation: "test.effect",
+                  message: cause instanceof Error ? cause.message : String(cause),
+                  cause: cause,
+                }),
+            });
+          },
+          getWorktreeStatusSummaryData(workingDir, targetBranch, diffScope) {
+            return Effect.tryPromise({
+              try: async () => {
+                calls.push({ type: "summary", workingDir, targetBranch, diffScope });
+                return {
+                  currentBranch: { name: "odt/task-1", detached: false },
+                  fileStatuses: [],
+                  fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+                  targetAheadBehind: { ahead: 1, behind: 0 },
+                  upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+                };
+              },
+              catch: (cause) =>
+                new HostOperationError({
+                  operation: "test.effect",
+                  message: cause instanceof Error ? cause.message : String(cause),
+                  cause: cause,
+                }),
+            });
+          },
+          suggestedSquashCommitMessage() {
+            return Effect.tryPromise({
+              try: async () => {
+                return undefined;
+              },
+              catch: (cause) =>
+                new HostOperationError({
+                  operation: "test.effect",
+                  message: cause instanceof Error ? cause.message : String(cause),
+                  cause: cause,
+                }),
+            });
+          },
+          pushBranch(workingDir, branch, options) {
+            return Effect.tryPromise({
+              try: async () => {
+                calls.push({ type: "push", workingDir, branch, options });
+                return {
+                  outcome: "pushed",
+                  remote: options?.remote ?? "origin",
+                  branch,
+                  output: "",
+                };
+              },
+              catch: (cause) =>
+                new HostOperationError({
+                  operation: "test.effect",
+                  message: cause instanceof Error ? cause.message : String(cause),
+                  cause: cause,
+                }),
+            });
+          },
         },
-        async getWorktreeStatusSummaryData(workingDir, targetBranch, diffScope) {
-          calls.push({ type: "summary", workingDir, targetBranch, diffScope });
-          return {
-            currentBranch: { name: "odt/task-1", detached: false },
-            fileStatuses: [],
-            fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-            targetAheadBehind: { ahead: 1, behind: 0 },
-            upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
-          };
+      ),
+      settingsConfig: extendSettingsConfigPort(
+        createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+        {
+          readConfig() {
+            return Effect.tryPromise({
+              try: async () => {
+                return null;
+              },
+              catch: (cause) =>
+                new HostOperationError({
+                  operation: "test.effect",
+                  message: cause instanceof Error ? cause.message : String(cause),
+                  cause: cause,
+                }),
+            });
+          },
         },
-        async suggestedSquashCommitMessage() {
-          return undefined;
-        },
-        async pushBranch(workingDir, branch, options) {
-          calls.push({ type: "push", workingDir, branch, options });
-          return { outcome: "pushed", remote: options?.remote ?? "origin", branch, output: "" };
-        },
-      },
-      settingsConfig: {
-        ...createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-        async readConfig() {
-          return null;
-        },
-      },
+      ),
       systemCommands: createPullRequestUpsertSystemCommands({
         calls,
         payload: githubPullResponsePayload({ number: 77 }),
@@ -502,19 +1173,19 @@ describe("createTaskService pull requests", () => {
         },
       }),
     });
-
     await expect(
-      service.upsertPullRequest({
-        repoPath: "/repo",
-        taskId: "task-1",
-        content: { title: "Create PR", body: "Body" },
-      }),
+      Effect.runPromise(
+        service.upsertPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          content: { title: "Create PR", body: "Body" },
+        }),
+      ),
     ).resolves.toMatchObject({
       providerId: "github",
       number: 77,
       state: "open",
     });
-
     expect(calls).toContainEqual({
       type: "push",
       workingDir: "/worktrees/repo/task-1",
@@ -543,7 +1214,6 @@ describe("createTaskService pull requests", () => {
       },
     });
   });
-
   test("updates an existing editable pull request", async () => {
     const calls: unknown[] = [];
     const existingPullRequest = {
@@ -555,113 +1225,282 @@ describe("createTaskService pull requests", () => {
       updatedAt: "2026-05-02T00:00:00.000Z",
     };
     const taskStore: TaskStorePort = {
-      async getTask() {
-        return task({ status: "human_review" });
-      },
-      async getTaskMetadata() {
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          pullRequest: existingPullRequest,
-          agentSessions: [],
-        };
-      },
-      async setPullRequest(input) {
-        calls.push({ type: "setPullRequest", input });
-        return true;
-      },
-      async createTask() {
-        throw new Error("unexpected create");
-      },
-      async updateTask() {
-        throw new Error("unexpected update");
-      },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
-      },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
-      },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
-      },
-      async transitionTask() {
-        throw new Error("unexpected transition");
-      },
-      async deleteTask() {
-        throw new Error("unexpected delete");
-      },
-      async listTasks() {
-        throw new Error("unexpected list");
-      },
-    };
-
-    await expect(
-      createTaskService({
-        gitPort: {
-          ...createDirectMergeGitPort({
-            calls,
-            currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-            },
-          }),
-          async listRemotes() {
-            return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            return task({ status: "human_review" });
           },
-          async getWorktreeStatusSummaryData() {
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
             return {
-              currentBranch: { name: "odt/task-1", detached: false },
-              fileStatuses: [],
-              fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-              targetAheadBehind: { ahead: 1, behind: 0 },
-              upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              pullRequest: existingPullRequest,
+              agentSessions: [],
             };
           },
-          async suggestedSquashCommitMessage() {
-            return undefined;
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      setPullRequest(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPullRequest", input });
+            return true;
           },
-          async pushBranch(workingDir, branch, options) {
-            calls.push({ type: "push", workingDir, branch, options });
-            return { outcome: "pushed", remote: options?.remote ?? "origin", branch, output: "" };
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
           },
-        },
-        settingsConfig: {
-          ...createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-          async readConfig() {
-            return null;
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
           },
-        },
-        systemCommands: createPullRequestUpsertSystemCommands({
-          calls,
-          payload: githubPullResponsePayload({ number: 42, draft: true }),
-        }),
-        taskStore,
-        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-          git: {
-            providers: {
-              github: {
-                enabled: true,
-                repository: { host: "github.com", owner: "openai", name: "openducktor" },
-                autoDetected: false,
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+    };
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          gitPort: extendGitPort(
+            createDirectMergeGitPort({
+              calls,
+              currentBranches: {
+                "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+              },
+            }),
+            {
+              listRemotes() {
+                return Effect.tryPromise({
+                  try: async () => {
+                    return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+                  },
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: "test.effect",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause: cause,
+                    }),
+                });
+              },
+              getWorktreeStatusSummaryData() {
+                return Effect.tryPromise({
+                  try: async () => {
+                    return {
+                      currentBranch: { name: "odt/task-1", detached: false },
+                      fileStatuses: [],
+                      fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+                      targetAheadBehind: { ahead: 1, behind: 0 },
+                      upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+                    };
+                  },
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: "test.effect",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause: cause,
+                    }),
+                });
+              },
+              suggestedSquashCommitMessage() {
+                return Effect.tryPromise({
+                  try: async () => {
+                    return undefined;
+                  },
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: "test.effect",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause: cause,
+                    }),
+                });
+              },
+              pushBranch(workingDir, branch, options) {
+                return Effect.tryPromise({
+                  try: async () => {
+                    calls.push({ type: "push", workingDir, branch, options });
+                    return {
+                      outcome: "pushed",
+                      remote: options?.remote ?? "origin",
+                      branch,
+                      output: "",
+                    };
+                  },
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: "test.effect",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause: cause,
+                    }),
+                });
               },
             },
-          },
+          ),
+          settingsConfig: extendSettingsConfigPort(
+            createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+            {
+              readConfig() {
+                return Effect.tryPromise({
+                  try: async () => {
+                    return null;
+                  },
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: "test.effect",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause: cause,
+                    }),
+                });
+              },
+            },
+          ),
+          systemCommands: createPullRequestUpsertSystemCommands({
+            calls,
+            payload: githubPullResponsePayload({ number: 42, draft: true }),
+          }),
+          taskStore,
+          taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+            git: {
+              providers: {
+                github: {
+                  enabled: true,
+                  repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                  autoDetected: false,
+                },
+              },
+            },
+          }),
+        }).upsertPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          content: { title: "Updated PR", body: "Body" },
         }),
-      }).upsertPullRequest({
-        repoPath: "/repo",
-        taskId: "task-1",
-        content: { title: "Updated PR", body: "Body" },
-      }),
+      ),
     ).resolves.toMatchObject({
       providerId: "github",
       number: 42,
       state: "draft",
     });
-
     expect(calls).toContainEqual(
       expect.objectContaining({
         type: "command",
@@ -674,189 +1513,461 @@ describe("createTaskService pull requests", () => {
       }),
     );
   });
-
   test("rejects pull request upsert from a dirty builder worktree", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async getTask() {
-        return task({ status: "human_review" });
-      },
-      async getTaskMetadata() {
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          agentSessions: [],
-        };
-      },
-      async setPullRequest() {
-        throw new Error("unexpected set pull request");
-      },
-      async createTask() {
-        throw new Error("unexpected create");
-      },
-      async updateTask() {
-        throw new Error("unexpected update");
-      },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
-      },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
-      },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
-      },
-      async transitionTask() {
-        throw new Error("unexpected transition");
-      },
-      async deleteTask() {
-        throw new Error("unexpected delete");
-      },
-      async listTasks() {
-        throw new Error("unexpected list");
-      },
-    };
-
-    await expect(
-      createTaskService({
-        gitPort: {
-          ...createDirectMergeGitPort({
-            calls,
-            currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-            },
-          }),
-          async listRemotes() {
-            return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            return task({ status: "human_review" });
           },
-          async getWorktreeStatusSummaryData() {
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
             return {
-              currentBranch: { name: "odt/task-1", detached: false },
-              fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
-              fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-              targetAheadBehind: { ahead: 1, behind: 0 },
-              upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              agentSessions: [],
             };
           },
-          async suggestedSquashCommitMessage() {
-            return undefined;
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      setPullRequest() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set pull request");
           },
-        },
-        settingsConfig: {
-          ...createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-          async readConfig() {
-            return null;
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
           },
-        },
-        systemCommands: createPullRequestUpsertSystemCommands({
-          calls,
-          payload: githubPullResponsePayload({ number: 77 }),
-        }),
-        taskStore,
-        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-          git: {
-            providers: {
-              github: {
-                enabled: true,
-                repository: { host: "github.com", owner: "openai", name: "openducktor" },
-                autoDetected: false,
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+    };
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          gitPort: extendGitPort(
+            createDirectMergeGitPort({
+              calls,
+              currentBranches: {
+                "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+              },
+            }),
+            {
+              listRemotes() {
+                return Effect.tryPromise({
+                  try: async () => {
+                    return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
+                  },
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: "test.effect",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause: cause,
+                    }),
+                });
+              },
+              getWorktreeStatusSummaryData() {
+                return Effect.tryPromise({
+                  try: async () => {
+                    return {
+                      currentBranch: { name: "odt/task-1", detached: false },
+                      fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
+                      fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
+                      targetAheadBehind: { ahead: 1, behind: 0 },
+                      upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+                    };
+                  },
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: "test.effect",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause: cause,
+                    }),
+                });
+              },
+              suggestedSquashCommitMessage() {
+                return Effect.tryPromise({
+                  try: async () => {
+                    return undefined;
+                  },
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: "test.effect",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause: cause,
+                    }),
+                });
               },
             },
-          },
+          ),
+          settingsConfig: extendSettingsConfigPort(
+            createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+            {
+              readConfig() {
+                return Effect.tryPromise({
+                  try: async () => {
+                    return null;
+                  },
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: "test.effect",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                      cause: cause,
+                    }),
+                });
+              },
+            },
+          ),
+          systemCommands: createPullRequestUpsertSystemCommands({
+            calls,
+            payload: githubPullResponsePayload({ number: 77 }),
+          }),
+          taskStore,
+          taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+            git: {
+              providers: {
+                github: {
+                  enabled: true,
+                  repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                  autoDetected: false,
+                },
+              },
+            },
+          }),
+        }).upsertPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          content: { title: "Create PR", body: "Body" },
         }),
-      }).upsertPullRequest({
-        repoPath: "/repo",
-        taskId: "task-1",
-        content: { title: "Create PR", body: "Body" },
-      }),
+      ),
     ).rejects.toThrow(
       "Human approval is blocked because the builder worktree has 1 uncommitted file. Commit or discard it before merging or opening a pull request.",
     );
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "push" }));
   });
-
   test("rejects pull request upsert when direct merge metadata exists", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async getTask() {
-        return task({ status: "human_review" });
-      },
-      async getTaskMetadata() {
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          directMerge: {
-            method: "squash",
-            sourceBranch: "odt/task-1",
-            targetBranch: { branch: "main" },
-            mergedAt: "2026-05-10T11:00:00.000Z",
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            return task({ status: "human_review" });
           },
-          agentSessions: [],
-        };
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest() {
-        throw new Error("unexpected set pull request");
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              directMerge: {
+                method: "squash",
+                sourceBranch: "odt/task-1",
+                targetBranch: { branch: "main" },
+                mergedAt: "2026-05-10T11:00:00.000Z",
+              },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      setPullRequest() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set pull request");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        gitPort: createDirectMergeGitPort({ calls }),
-        settingsConfig: {
-          ...createBuildSettingsConfig(new Set(["/repo"])),
-          async readConfig() {
-            return null;
-          },
-        },
-        systemCommands: createPullRequestUpsertSystemCommands({
-          calls,
-          payload: githubPullResponsePayload({ number: 77 }),
-        }),
-        taskStore,
-        taskWorktreeService: createDirectMergeTaskWorktreeService(null),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
+      Effect.runPromise(
+        createTaskService({
+          gitPort: createDirectMergeGitPort({ calls }),
+          settingsConfig: extendSettingsConfigPort(createBuildSettingsConfig(new Set(["/repo"])), {
+            readConfig() {
+              return Effect.tryPromise({
+                try: async () => {
+                  return null;
+                },
+                catch: (cause) =>
+                  new HostOperationError({
+                    operation: "test.effect",
+                    message: cause instanceof Error ? cause.message : String(cause),
+                    cause: cause,
+                  }),
+              });
+            },
+          }),
+          systemCommands: createPullRequestUpsertSystemCommands({
+            calls,
+            payload: githubPullResponsePayload({ number: 77 }),
+          }),
+          taskStore,
+          taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).upsertPullRequest({
           repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
+          taskId: "task-1",
+          content: { title: "Create PR", body: "Body" },
         }),
-      }).upsertPullRequest({
-        repoPath: "/repo",
-        taskId: "task-1",
-        content: { title: "Create PR", body: "Body" },
-      }),
+      ),
     ).rejects.toThrow(
       "A local direct merge is already recorded for task task-1. Finish or discard that direct merge workflow before opening a pull request.",
     );
   });
-
   test("syncs a merged linked pull request and closes the task", async () => {
     const calls: unknown[] = [];
     const linkedPullRequest = {
@@ -868,109 +1979,229 @@ describe("createTaskService pull requests", () => {
       updatedAt: "2026-05-02T00:00:00.000Z",
     };
     const taskStore: TaskStorePort = {
-      async listPullRequestSyncCandidates(input) {
-        calls.push({ type: "syncCandidates", input });
-        return [
-          task({
-            status: "human_review",
-            pullRequest: linkedPullRequest,
-            agentSessions: [
-              createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-            ],
-          }),
-        ];
+      listPullRequestSyncCandidates(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "syncCandidates", input });
+            return [
+              task({
+                status: "human_review",
+                pullRequest: linkedPullRequest,
+                agentSessions: [
+                  createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
+                ],
+              }),
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [
-          task({
-            status: "human_review",
-            pullRequest: linkedPullRequest,
-            agentSessions: [
-              createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-            ],
-          }),
-        ];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [
+              task({
+                status: "human_review",
+                pullRequest: linkedPullRequest,
+                agentSessions: [
+                  createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
+                ],
+              }),
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest(input) {
-        calls.push({ type: "setPullRequest", input });
-        return true;
+      setPullRequest(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPullRequest", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask(input) {
-        calls.push({ type: "transition", input });
-        return task({ status: input.status });
+      transitionTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "transition", input });
+            return task({ status: input.status });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        throw new Error("unexpected metadata");
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected metadata");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        devServerService: createDirectMergeDevServerService(calls),
-        gitPort: createDirectMergeGitPort({
-          calls,
-          currentBranches: {
-            "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-          },
-          branches: {
-            "/repo": [
-              { name: "main", isCurrent: true, isRemote: false },
-              { name: "odt/task-1", isCurrent: false, isRemote: false },
-            ],
-          },
-          ancestorResults: { "/repo|odt/task-1|main": true },
-        }),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-        systemCommands: createPullRequestSyncSystemCommands({
-          calls,
-          payload: githubPullResponsePayload({
-            number: 42,
-            state: "closed",
-            mergedAt: "2026-05-10T11:00:00.000Z",
-            updatedAt: "2026-05-10T11:00:00.000Z",
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService(calls),
+          gitPort: createDirectMergeGitPort({
+            calls,
+            currentBranches: {
+              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+            },
+            branches: {
+              "/repo": [
+                { name: "main", isCurrent: true, isRemote: false },
+                { name: "odt/task-1", isCurrent: false, isRemote: false },
+              ],
+            },
+            ancestorResults: { "/repo|odt/task-1|main": true },
           }),
-        }),
-        taskStore,
-        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-          git: {
-            providers: {
-              github: {
-                enabled: true,
-                repository: { host: "github.com", owner: "openai", name: "openducktor" },
-                autoDetected: false,
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          systemCommands: createPullRequestSyncSystemCommands({
+            calls,
+            payload: githubPullResponsePayload({
+              number: 42,
+              state: "closed",
+              mergedAt: "2026-05-10T11:00:00.000Z",
+              updatedAt: "2026-05-10T11:00:00.000Z",
+            }),
+          }),
+          taskStore,
+          taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+            git: {
+              providers: {
+                github: {
+                  enabled: true,
+                  repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                  autoDetected: false,
+                },
               },
             },
-          },
-        }),
-      }).repoPullRequestSync({ repoPath: "/repo" }),
+          }),
+        }).repoPullRequestSync({ repoPath: "/repo" }),
+      ),
     ).resolves.toEqual({ ok: true });
-
     expect(calls).toContainEqual({
       type: "setPullRequest",
       input: {
@@ -990,7 +2221,6 @@ describe("createTaskService pull requests", () => {
       force: false,
     });
   });
-
   test("syncs linked pull request metadata without closing open pull requests", async () => {
     const calls: unknown[] = [];
     const linkedPullRequest = {
@@ -1002,73 +2232,193 @@ describe("createTaskService pull requests", () => {
       updatedAt: "2026-05-02T00:00:00.000Z",
     };
     const taskStore: TaskStorePort = {
-      async listPullRequestSyncCandidates() {
-        return [task({ status: "human_review", pullRequest: linkedPullRequest })];
+      listPullRequestSyncCandidates() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [task({ status: "human_review", pullRequest: linkedPullRequest })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest(input) {
-        calls.push({ type: "setPullRequest", input });
-        return true;
+      setPullRequest(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPullRequest", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        throw new Error("unexpected metadata");
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected metadata");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        systemCommands: createPullRequestSyncSystemCommands({
-          calls,
-          payload: githubPullResponsePayload({
-            number: 42,
-            state: "open",
-            updatedAt: "2026-05-10T10:00:00.000Z",
+      Effect.runPromise(
+        createTaskService({
+          systemCommands: createPullRequestSyncSystemCommands({
+            calls,
+            payload: githubPullResponsePayload({
+              number: 42,
+              state: "open",
+              updatedAt: "2026-05-10T10:00:00.000Z",
+            }),
           }),
-        }),
-        taskStore,
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-          git: {
-            providers: {
-              github: {
-                enabled: true,
-                repository: { host: "github.com", owner: "openai", name: "openducktor" },
-                autoDetected: false,
+          taskStore,
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+            git: {
+              providers: {
+                github: {
+                  enabled: true,
+                  repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                  autoDetected: false,
+                },
               },
             },
-          },
-        }),
-      }).repoPullRequestSync({ repoPath: "/repo" }),
+          }),
+        }).repoPullRequestSync({ repoPath: "/repo" }),
+      ),
     ).resolves.toEqual({ ok: true });
-
     expect(calls).toContainEqual({
       type: "setPullRequest",
       input: {
@@ -1082,127 +2432,325 @@ describe("createTaskService pull requests", () => {
       },
     });
   });
-
   test("skips pull request sync before reading candidates when provider is unavailable", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async listPullRequestSyncCandidates() {
-        throw new Error("should not list candidates");
+      listPullRequestSyncCandidates() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not list candidates");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest() {
-        throw new Error("should not set pull request");
+      setPullRequest() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not set pull request");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        throw new Error("unexpected metadata");
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected metadata");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        systemCommands: createPullRequestSyncSystemCommands({
-          calls,
-          available: false,
-          payload: githubPullResponsePayload({ number: 42 }),
-        }),
-        taskStore,
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
-          git: {
-            providers: {
-              github: {
-                enabled: true,
-                repository: { host: "github.com", owner: "openai", name: "openducktor" },
-                autoDetected: false,
+      Effect.runPromise(
+        createTaskService({
+          systemCommands: createPullRequestSyncSystemCommands({
+            calls,
+            available: false,
+            payload: githubPullResponsePayload({ number: 42 }),
+          }),
+          taskStore,
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+            git: {
+              providers: {
+                github: {
+                  enabled: true,
+                  repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                  autoDetected: false,
+                },
               },
             },
-          },
-        }),
-      }).repoPullRequestSync({ repoPath: "/repo" }),
+          }),
+        }).repoPullRequestSync({ repoPath: "/repo" }),
+      ),
     ).resolves.toEqual({ ok: false });
-
     expect(calls).toEqual([{ type: "requiredCommand", command: "gh" }]);
   });
-
   test("unlinks a pull request after validating task state and metadata", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async getTask(input) {
-        calls.push({ type: "get", input });
-        return task({ status: "human_review" });
-      },
-      async getTaskMetadata(input) {
-        calls.push({ type: "metadata", input });
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          pullRequest: {
-            providerId: "github",
-            number: 42,
-            url: "https://github.com/openai/openducktor/pull/42",
-            state: "open",
-            createdAt: "2026-05-01T00:00:00.000Z",
-            updatedAt: "2026-05-02T00:00:00.000Z",
+      getTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "get", input });
+            return task({ status: "human_review" });
           },
-          agentSessions: [],
-        };
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest(input) {
-        calls.push({ type: "setPullRequest", input });
-        return true;
+      getTaskMetadata(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "metadata", input });
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              pullRequest: {
+                providerId: "github",
+                number: 42,
+                url: "https://github.com/openai/openducktor/pull/42",
+                state: "open",
+                createdAt: "2026-05-01T00:00:00.000Z",
+                updatedAt: "2026-05-02T00:00:00.000Z",
+              },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      setPullRequest(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPullRequest", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).unlinkPullRequest({
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).unlinkPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toBe(true);
-
     expect(calls).toEqual([
       { type: "get", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
@@ -1212,123 +2760,362 @@ describe("createTaskService pull requests", () => {
       },
     ]);
   });
-
   test("rejects pull request unlink outside PR management statuses", async () => {
     const taskStore: TaskStorePort = {
-      async getTask() {
-        return task({ status: "ready_for_dev" });
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            return task({ status: "ready_for_dev" });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest() {
-        throw new Error("unexpected set pull request");
+      setPullRequest() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set pull request");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        throw new Error("unexpected metadata");
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected metadata");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).unlinkPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).unlinkPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).rejects.toThrow(
       "Pull request management is only available from in_progress, ai_review, or human_review.",
     );
   });
-
   test("rejects pull request unlink when no linked pull request exists", async () => {
     const taskStore: TaskStorePort = {
-      async getTask() {
-        return task({ status: "in_progress" });
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            return task({ status: "in_progress" });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          agentSessions: [],
-        };
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest() {
-        throw new Error("unexpected set pull request");
+      setPullRequest() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set pull request");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).unlinkPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).unlinkPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).rejects.toThrow("Task task-1 does not have a linked pull request.");
   });
-
   test("links a merged pull request, closes the task, and cleans builder state", async () => {
     const calls: unknown[] = [];
     const closedTask = task({ status: "closed" });
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [
-          task({
-            status: "human_review",
-            agentSessions: [
-              createAgentSessionRecord({
-                workingDirectory: "/worktrees/repo/task-1",
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [
+              task({
+                status: "human_review",
+                agentSessions: [
+                  createAgentSessionRecord({
+                    workingDirectory: "/worktrees/repo/task-1",
+                  }),
+                ],
               }),
-            ],
-          }),
-        ];
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata(input) {
-        calls.push({ type: "metadata", input });
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          agentSessions: [],
-        };
+      getTaskMetadata(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "metadata", input });
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest(input) {
-        calls.push({ type: "setPullRequest", input });
-        return true;
+      setPullRequest(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPullRequest", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask(input) {
-        calls.push({ type: "transition", input });
-        return closedTask;
+      transitionTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "transition", input });
+            return closedTask;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
     const service = createTaskService({
@@ -1355,15 +3142,15 @@ describe("createTaskService pull requests", () => {
         hooks: { preStart: [], postComplete: [] },
       }),
     });
-
     await expect(
-      service.linkMergedPullRequest({
-        repoPath: "/repo",
-        taskId: "task-1",
-        pullRequest: pullRequest(),
-      }),
+      Effect.runPromise(
+        service.linkMergedPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          pullRequest: pullRequest(),
+        }),
+      ),
     ).resolves.toMatchObject({ id: "task-1", status: "closed" });
-
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
@@ -1390,117 +3177,276 @@ describe("createTaskService pull requests", () => {
       },
     ]);
   });
-
   test("returns a closed task unchanged when the same merged pull request is already linked", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [task({ status: "closed" })];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [task({ status: "closed" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata(input) {
-        calls.push({ type: "metadata", input });
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          pullRequest: pullRequest(),
-          agentSessions: [],
-        };
+      getTaskMetadata(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "metadata", input });
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              pullRequest: pullRequest(),
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest() {
-        throw new Error("should not set pull request");
+      setPullRequest() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not set pull request");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("should not transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        devServerService: createDirectMergeDevServerService(calls),
-        gitPort: createDirectMergeGitPort({ calls }),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-        taskStore,
-        taskWorktreeService: createDirectMergeTaskWorktreeService(null),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService(calls),
+          gitPort: createDirectMergeGitPort({ calls }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+          taskStore,
+          taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).linkMergedPullRequest({
           repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
+          taskId: "task-1",
+          pullRequest: pullRequest(),
         }),
-      }).linkMergedPullRequest({
-        repoPath: "/repo",
-        taskId: "task-1",
-        pullRequest: pullRequest(),
-      }),
+      ),
     ).resolves.toMatchObject({ id: "task-1", status: "closed" });
-
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
     ]);
   });
-
   test("rejects pull request link completion for unmerged pull requests", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [task({ status: "human_review" })];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [task({ status: "human_review" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        return {
-          spec: { markdown: "# Spec" },
-          plan: { markdown: "# Plan" },
-          agentSessions: [],
-        };
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            return {
+              spec: { markdown: "# Spec" },
+              plan: { markdown: "# Plan" },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPullRequest() {
-        throw new Error("should not set pull request");
+      setPullRequest() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not set pull request");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("should not transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({
-        devServerService: createDirectMergeDevServerService([]),
-        gitPort: createDirectMergeGitPort({ calls: [] }),
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-        taskStore,
-        taskWorktreeService: createDirectMergeTaskWorktreeService(null),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService([]),
+          gitPort: createDirectMergeGitPort({ calls: [] }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+          taskStore,
+          taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).linkMergedPullRequest({
           repoPath: "/repo",
-          hooks: { preStart: [], postComplete: [] },
+          taskId: "task-1",
+          pullRequest: { ...pullRequest(), state: "open" },
         }),
-      }).linkMergedPullRequest({
-        repoPath: "/repo",
-        taskId: "task-1",
-        pullRequest: { ...pullRequest(), state: "open" },
-      }),
+      ),
     ).rejects.toThrow("Task task-1 can only link a merged pull request from detection results.");
   });
 });

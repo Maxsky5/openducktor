@@ -2,6 +2,12 @@ import { randomUUID } from "node:crypto";
 import { readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Effect } from "effect";
+import {
+  type HostOperationError,
+  type HostPathAccessError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type { OpenInCommandRunner } from "./open-in-tools-adapter";
 
 const MAX_OPEN_IN_ICON_DIMENSION = 256;
@@ -9,70 +15,125 @@ const MAX_OPEN_IN_ICON_DIMENSION = 256;
 type ResolveMacOsAppIconInput = {
   appLabel: string;
   appPath: string;
-  pathExists: (inputPath: string) => Promise<boolean>;
+  pathExists: (inputPath: string) => Effect.Effect<boolean, HostPathAccessError>;
   runner: OpenInCommandRunner;
 };
 
 const iconFileName = (value: string): string => (value.endsWith(".icns") ? value : `${value}.icns`);
 
-const readBundleIconFile = async ({
+const runIconCommand = (
+  runner: OpenInCommandRunner,
+  program: string,
+  args: string[],
+  operation: string,
+) =>
+  Effect.tryPromise({
+    try: () => runner(program, args),
+    catch: (cause) => toHostOperationError(cause, operation, { program, args }),
+  });
+
+const readDirectoryEntries = (directoryPath: string, operation: string) =>
+  Effect.tryPromise({
+    try: () => readdir(directoryPath),
+    catch: (cause) => toHostOperationError(cause, operation, { directoryPath }),
+  });
+
+const readBinaryFile = (filePath: string, operation: string) =>
+  Effect.tryPromise({
+    try: () => readFile(filePath),
+    catch: (cause) => toHostOperationError(cause, operation, { filePath }),
+  });
+
+const removePath = (targetPath: string, recursive = false) =>
+  Effect.tryPromise({
+    try: () => rm(targetPath, { force: true, recursive }),
+    catch: (cause) => toHostOperationError(cause, "openInTools.icon.cleanup", { targetPath }),
+  });
+
+const readBundleIconFile = ({
   appPath,
   pathExists,
   runner,
-}: Omit<ResolveMacOsAppIconInput, "appLabel">): Promise<string | null> => {
-  const infoPlistPath = path.posix.join(appPath, "Contents", "Info.plist");
-  if (!(await pathExists(infoPlistPath))) {
-    return null;
-  }
+}: Omit<ResolveMacOsAppIconInput, "appLabel">): Effect.Effect<
+  string | null,
+  HostOperationError | HostPathAccessError
+> =>
+  Effect.gen(function* () {
+    const infoPlistPath = path.posix.join(appPath, "Contents", "Info.plist");
+    if (!(yield* pathExists(infoPlistPath))) {
+      return null;
+    }
 
-  const output = await runner("defaults", ["read", infoPlistPath, "CFBundleIconFile"]).catch(
-    () => null,
-  );
-  const iconName = output?.stdout.trim();
-  return iconName ? iconFileName(iconName) : null;
-};
+    const output = yield* runIconCommand(
+      runner,
+      "defaults",
+      ["read", infoPlistPath, "CFBundleIconFile"],
+      "openInTools.icon.readBundleIconFile",
+    ).pipe(Effect.catchAll(() => Effect.succeed(null)));
+    const iconName = output?.stdout.trim();
+    return iconName ? iconFileName(iconName) : null;
+  });
 
-const resolveMetadataIconFile = async ({
+const resolveMetadataIconFile = ({
   appPath,
   runner,
-}: Pick<ResolveMacOsAppIconInput, "appPath" | "runner">): Promise<string | null> => {
-  const output = await runner("mdls", ["-name", "kMDItemIconFile", "-raw", appPath]).catch(
-    () => null,
-  );
-  const iconName = output?.stdout.trim();
-  if (!iconName || iconName === "(null)") {
-    return null;
-  }
+}: Pick<ResolveMacOsAppIconInput, "appPath" | "runner">): Effect.Effect<
+  string | null,
+  HostOperationError
+> =>
+  Effect.gen(function* () {
+    const output = yield* runIconCommand(
+      runner,
+      "mdls",
+      ["-name", "kMDItemIconFile", "-raw", appPath],
+      "openInTools.icon.resolveMetadataIconFile",
+    ).pipe(Effect.catchAll(() => Effect.succeed(null)));
+    const iconName = output?.stdout.trim();
+    if (!iconName || iconName === "(null)") {
+      return null;
+    }
 
-  return iconFileName(iconName);
-};
+    return iconFileName(iconName);
+  });
 
-const findFirstResourceIcon = async (resourcesPath: string): Promise<string | null> => {
-  const entries = await readdir(resourcesPath).catch(() => []);
-  return entries.find((entry) => path.extname(entry).toLowerCase() === ".icns") ?? null;
-};
+const findFirstResourceIcon = (
+  resourcesPath: string,
+): Effect.Effect<string | null, HostOperationError> =>
+  Effect.gen(function* () {
+    const entries = yield* readDirectoryEntries(
+      resourcesPath,
+      "openInTools.icon.findFirstResourceIcon",
+    ).pipe(Effect.catchAll(() => Effect.succeed([])));
+    return entries.find((entry) => path.extname(entry).toLowerCase() === ".icns") ?? null;
+  });
 
-const resolveAppIconPath = async ({
+const resolveAppIconPath = ({
   appPath,
   pathExists,
   runner,
-}: Omit<ResolveMacOsAppIconInput, "appLabel">): Promise<string | null> => {
-  if (!(await pathExists(appPath))) {
-    return null;
-  }
+}: Omit<ResolveMacOsAppIconInput, "appLabel">): Effect.Effect<
+  string | null,
+  HostOperationError | HostPathAccessError
+> =>
+  Effect.gen(function* () {
+    if (!(yield* pathExists(appPath))) {
+      return null;
+    }
 
-  const resourcesPath = path.posix.join(appPath, "Contents", "Resources");
-  const iconFile =
-    (await readBundleIconFile({ appPath, pathExists, runner })) ??
-    (await resolveMetadataIconFile({ appPath, runner })) ??
-    (await findFirstResourceIcon(resourcesPath));
-  if (!iconFile) {
-    return null;
-  }
+    const resourcesPath = path.posix.join(appPath, "Contents", "Resources");
+    const bundleIconFile = yield* readBundleIconFile({ appPath, pathExists, runner });
+    const metadataIconFile = bundleIconFile
+      ? null
+      : yield* resolveMetadataIconFile({ appPath, runner });
+    const iconFile =
+      bundleIconFile ?? metadataIconFile ?? (yield* findFirstResourceIcon(resourcesPath));
+    if (!iconFile) {
+      return null;
+    }
 
-  const iconPath = path.posix.join(resourcesPath, iconFile);
-  return (await pathExists(iconPath)) ? iconPath : null;
-};
+    const iconPath = path.posix.join(resourcesPath, iconFile);
+    return (yield* pathExists(iconPath)) ? iconPath : null;
+  });
 
 const sanitizedTempName = (value: string): string => {
   const sanitized = value.replaceAll(/[^a-zA-Z0-9]/g, "_");
@@ -115,66 +176,80 @@ export const iconsetRepresentationScore = (iconName: string): number | null => {
   return effectiveWidth * effectiveHeight;
 };
 
-const resolveBestIconsetRepresentation = async (
+const resolveBestIconsetRepresentation = (
   iconsetDirectory: string,
-): Promise<string | null> => {
-  const entries = await readdir(iconsetDirectory).catch(() => []);
-  let bestMatch: { path: string; score: number } | null = null;
+): Effect.Effect<string | null, HostOperationError> =>
+  Effect.gen(function* () {
+    const entries = yield* readDirectoryEntries(
+      iconsetDirectory,
+      "openInTools.icon.resolveBestIconsetRepresentation",
+    ).pipe(Effect.catchAll(() => Effect.succeed([])));
+    let bestMatch: { path: string; score: number } | null = null;
 
-  for (const entry of entries) {
-    const score = iconsetRepresentationScore(entry);
-    if (score === null) {
-      continue;
+    for (const entry of entries) {
+      const score = iconsetRepresentationScore(entry);
+      if (score === null) {
+        continue;
+      }
+
+      if (!bestMatch || score > bestMatch.score) {
+        bestMatch = {
+          path: path.join(iconsetDirectory, entry),
+          score,
+        };
+      }
     }
 
-    if (!bestMatch || score > bestMatch.score) {
-      bestMatch = {
-        path: path.join(iconsetDirectory, entry),
-        score,
-      };
-    }
-  }
+    return bestMatch?.path ?? null;
+  });
 
-  return bestMatch?.path ?? null;
-};
-
-const extractBestPngFromIconset = async ({
+const extractBestPngFromIconset = ({
   appLabel,
   iconPath,
   runner,
 }: Pick<ResolveMacOsAppIconInput, "appLabel" | "runner"> & {
   iconPath: string;
-}): Promise<Buffer | null> => {
+}): Effect.Effect<Buffer | null, HostOperationError> => {
   const iconsetDirectory = tempIconOutputPath(appLabel, "iconset");
 
-  try {
-    await runner("iconutil", ["-c", "iconset", iconPath, "-o", iconsetDirectory]);
-    const bestIconPath = await resolveBestIconsetRepresentation(iconsetDirectory);
-    return bestIconPath ? await readFile(bestIconPath) : null;
-  } catch {
-    return null;
-  } finally {
-    await rm(iconsetDirectory, { force: true, recursive: true });
-  }
+  return Effect.gen(function* () {
+    yield* runIconCommand(
+      runner,
+      "iconutil",
+      ["-c", "iconset", iconPath, "-o", iconsetDirectory],
+      "openInTools.icon.extractIconset",
+    );
+    const bestIconPath = yield* resolveBestIconsetRepresentation(iconsetDirectory);
+    return bestIconPath
+      ? yield* readBinaryFile(bestIconPath, "openInTools.icon.readIconsetRepresentation")
+      : null;
+  }).pipe(
+    Effect.catchAll(() => Effect.succeed(null)),
+    Effect.ensuring(removePath(iconsetDirectory, true).pipe(Effect.ignore)),
+  );
 };
 
-const convertIconToPng = async ({
+const convertIconToPng = ({
   appLabel,
   iconPath,
   runner,
 }: Pick<ResolveMacOsAppIconInput, "appLabel" | "runner"> & {
   iconPath: string;
-}): Promise<Buffer | null> => {
+}): Effect.Effect<Buffer | null, HostOperationError> => {
   const outputPath = tempIconOutputPath(appLabel, "png");
 
-  try {
-    await runner("sips", ["-s", "format", "png", "-Z", "256", iconPath, "--out", outputPath]);
-    return await readFile(outputPath);
-  } catch {
-    return null;
-  } finally {
-    await rm(outputPath, { force: true });
-  }
+  return Effect.gen(function* () {
+    yield* runIconCommand(
+      runner,
+      "sips",
+      ["-s", "format", "png", "-Z", "256", iconPath, "--out", outputPath],
+      "openInTools.icon.convertIconToPng",
+    );
+    return yield* readBinaryFile(outputPath, "openInTools.icon.readConvertedPng");
+  }).pipe(
+    Effect.catchAll(() => Effect.succeed(null)),
+    Effect.ensuring(removePath(outputPath).pipe(Effect.ignore)),
+  );
 };
 
 const iconBytesToDataUrl = (bytes: Buffer): string | null => {
@@ -185,16 +260,16 @@ const iconBytesToDataUrl = (bytes: Buffer): string | null => {
   return `data:image/png;base64,${bytes.toString("base64")}`;
 };
 
-export const resolveMacOsAppIconDataUrl = async (
+export const resolveMacOsAppIconDataUrl = (
   input: ResolveMacOsAppIconInput,
-): Promise<string | null> => {
-  const iconPath = await resolveAppIconPath(input);
-  if (!iconPath) {
-    return null;
-  }
+): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
+  Effect.gen(function* () {
+    const iconPath = yield* resolveAppIconPath(input);
+    if (!iconPath) {
+      return null;
+    }
 
-  const bytes =
-    (await extractBestPngFromIconset({ ...input, iconPath })) ??
-    (await convertIconToPng({ ...input, iconPath }));
-  return bytes ? iconBytesToDataUrl(bytes) : null;
-};
+    const iconsetBytes = yield* extractBestPngFromIconset({ ...input, iconPath });
+    const bytes = iconsetBytes ?? (yield* convertIconToPng({ ...input, iconPath }));
+    return bytes ? iconBytesToDataUrl(bytes) : null;
+  });

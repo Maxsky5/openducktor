@@ -17,6 +17,7 @@ import type {
   GitSwitchBranchInput,
   GitWorktreeStatusInput,
 } from "../../application/git/git-service-inputs";
+import { HostValidationError } from "../../effect/host-errors";
 import { optionalBoolean, optionalString, requireRecord, requireString } from "./command-inputs";
 
 export const parseGitScopeInput = (input: unknown): GitScopeInput => {
@@ -131,9 +132,12 @@ export const parseGitWorktreeStatusInput = (input: unknown): GitWorktreeStatusIn
     record.diffScope === undefined || record.diffScope === null ? "target" : record.diffScope;
   const diffScope = gitDiffScopeSchema.safeParse(diffScopeValue);
   if (!diffScope.success) {
-    throw new Error(
-      `diffScope must be either 'target' or 'uncommitted', got: ${String(diffScopeValue)}`,
-    );
+    throw new HostValidationError({
+      message: `diffScope must be either 'target' or 'uncommitted', got: ${String(diffScopeValue)}`,
+      field: "diffScope",
+      cause: diffScope.error,
+      details: { value: diffScopeValue },
+    });
   }
   const workingDir = optionalString(record.workingDir, "workingDir");
 

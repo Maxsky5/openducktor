@@ -1,13 +1,14 @@
 import { DEFAULT_BRANCH_PREFIX, type GitTargetBranch } from "@openducktor/contracts";
+import { TaskPolicyError } from "./task-policy-error";
 
 export const normalizeApprovalTargetBranch = (targetBranch: GitTargetBranch): GitTargetBranch => {
   const remote = targetBranch.remote?.trim();
   const branch = targetBranch.branch.trim();
   if (!branch) {
-    throw new Error("Human approval requires a target branch.");
+    throw new TaskPolicyError("Human approval requires a target branch.");
   }
   if (branch === "@{upstream}") {
-    throw new Error(
+    throw new TaskPolicyError(
       "Human approval requires an explicit target branch. '@{upstream}' is not supported for direct merge or pull requests.",
     );
   }

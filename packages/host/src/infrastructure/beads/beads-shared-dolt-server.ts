@@ -1,22 +1,21 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import {
-  access,
-  mkdir,
-  open,
-  readFile,
-  realpath,
-  rename,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { access, mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
+
+import { Effect, Fiber } from "effect";
 import {
   processIsAlive,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
 } from "../../adapters/process/process-tree";
+import {
+  HostOperationError,
+  HostPathAccessError,
+  HostResourceError,
+  HostValidationError,
+  toHostPathStatError,
+} from "../../effect/host-errors";
 import {
   type BeadsCommandRunner,
   type BeadsSharedServerPaths,
@@ -32,6 +31,58 @@ import {
   SHARED_DOLT_TCP_TIMEOUT_MS,
   sharedDoltServerFlights,
 } from "./beads-context-model";
+import {
+  deterministicSharedDoltPortCandidate,
+  portIsAvailable,
+  wrapPortCandidate,
+  writeDoltConfigFile,
+} from "./beads-shared-dolt-startup";
+
+export { processIsAlive } from "../../adapters/process/process-tree";
+export {
+  deterministicSharedDoltPortCandidate,
+  portIsAvailable,
+  wrapPortCandidate,
+  writeDoltConfigFile,
+  yamlQuotePath,
+} from "./beads-shared-dolt-startup";
+
+const sharedDoltOperationError = (
+  message: string,
+  operation: string,
+  cause?: unknown,
+): HostOperationError => new HostOperationError({ message, operation, cause });
+
+const sharedDoltResourceError = (
+  message: string,
+  operation: string,
+  resource: string,
+): HostResourceError => new HostResourceError({ message, operation, resource });
+
+const sharedDoltValidationError = (
+  message: string,
+  field: string,
+  cause?: unknown,
+): HostValidationError => new HostValidationError({ message, field, cause });
+
+export type SharedDoltServerError =
+  | HostOperationError
+  | HostPathAccessError
+  | HostResourceError
+  | HostValidationError;
+
+const toSharedDoltServerError = (cause: unknown, operation: string): SharedDoltServerError => {
+  if (
+    cause instanceof HostOperationError ||
+    cause instanceof HostPathAccessError ||
+    cause instanceof HostResourceError ||
+    cause instanceof HostValidationError
+  ) {
+    return cause;
+  }
+
+  return sharedDoltOperationError(String(cause), operation, cause);
+};
 
 export const readSharedServerState = async (
   serverStatePath: string,
@@ -44,11 +95,10 @@ export const readSharedServerState = async (
       return null;
     }
 
-    throw new Error(
+    throw sharedDoltOperationError(
       `Failed reading shared Dolt server state ${serverStatePath}: ${String(error)}`,
-      {
-        cause: error,
-      },
+      "shared-dolt.read-state",
+      error,
     );
   }
 
@@ -56,16 +106,18 @@ export const readSharedServerState = async (
   try {
     parsed = JSON.parse(payload);
   } catch (error) {
-    throw new Error(
+    throw sharedDoltValidationError(
       `Failed parsing shared Dolt server state ${serverStatePath}: ${String(error)}`,
-      {
-        cause: error,
-      },
+      "serverState",
+      error,
     );
   }
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`Shared Dolt server state ${serverStatePath} must contain a JSON object`);
+    throw sharedDoltValidationError(
+      `Shared Dolt server state ${serverStatePath} must contain a JSON object`,
+      "serverState",
+    );
   }
 
   const record = parsed as Record<string, unknown>;
@@ -100,8 +152,9 @@ export const readSharedServerState = async (
     !doltDataDir ||
     !startedAt
   ) {
-    throw new Error(
+    throw sharedDoltValidationError(
       `Shared Dolt server state ${serverStatePath} is missing pid, host, user, port, ownerPid, sharedServerRoot, doltDataDir, or startedAt`,
+      "serverState",
     );
   }
 
@@ -135,33 +188,43 @@ const terminateSharedDoltProcess = (
 export type StopSharedDoltServer = (
   state: BeadsSharedServerState,
   serverStatePath: string,
-) => Promise<void>;
+) => Effect.Effect<void, SharedDoltServerError>;
 
-export const stopOwnedSharedDoltServer: StopSharedDoltServer = async (state, serverStatePath) => {
-  if (state.ownerPid !== process.pid) {
-    throw new Error(
-      `Refusing to stop shared Dolt server ${state.pid}; it is owned by pid ${state.ownerPid}`,
-    );
-  }
+export const stopOwnedSharedDoltServer: StopSharedDoltServer = (state, serverStatePath) =>
+  Effect.tryPromise({
+    try: async () => {
+      if (state.ownerPid !== process.pid) {
+        throw sharedDoltValidationError(
+          `Refusing to stop shared Dolt server ${state.pid}; it is owned by pid ${state.ownerPid}`,
+          "ownerPid",
+        );
+      }
 
-  await terminateSharedDoltProcess(state.pid, `shared Dolt server ${state.pid}`);
+      await terminateSharedDoltProcess(state.pid, `shared Dolt server ${state.pid}`);
 
-  await unlink(serverStatePath).catch((error: unknown) => {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
-      return;
-    }
-    throw error;
+      await unlink(serverStatePath).catch((error: unknown) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
+          return;
+        }
+        throw error;
+      });
+    },
+    catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.stop"),
   });
-};
 
-export const pathExists = async (inputPath: string): Promise<boolean> => {
-  try {
-    await access(inputPath);
-    return true;
-  } catch {
-    return false;
-  }
-};
+export const pathExists = (inputPath: string) =>
+  Effect.tryPromise({
+    try: () => access(inputPath),
+    catch: (cause) => toHostPathStatError(cause, "shared-dolt.path-exists", inputPath),
+  }).pipe(
+    Effect.as(true),
+    Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)),
+  );
 
 export const tcpProbe = (port: number): Promise<boolean> =>
   new Promise((resolve) => {
@@ -193,25 +256,29 @@ export const runDoltAllowFailure = async (
     child.once("close", (code) => resolve(code === 0));
   });
 
-export const runCommandAllowFailure: BeadsCommandRunner = async ({ command, args, cwd, env }) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    child.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
-    child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
-    child.once("error", reject);
-    child.once("close", (code) => {
-      resolve({
-        ok: code === 0,
-        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
-        stderr: Buffer.concat(stderrChunks).toString("utf8"),
-      });
-    });
+export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd, env }) =>
+  Effect.tryPromise({
+    try: () =>
+      new Promise((resolve, reject) => {
+        const child = spawn(command, args, {
+          cwd,
+          env,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        const stdoutChunks: Buffer[] = [];
+        const stderrChunks: Buffer[] = [];
+        child.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+        child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+        child.once("error", reject);
+        child.once("close", (code) => {
+          resolve({
+            ok: code === 0,
+            stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+            stderr: Buffer.concat(stderrChunks).toString("utf8"),
+          });
+        });
+      }),
+    catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.run-command"),
   });
 
 export const sqlProbe = (port: number, env: NodeJS.ProcessEnv): Promise<boolean> =>
@@ -247,58 +314,6 @@ export const serverStateIsHealthy = async (
     return false;
   }
   return processIsAlive(state.pid);
-};
-
-export const portIsAvailable = async (port: number): Promise<boolean> =>
-  new Promise((resolve) => {
-    const server = net.createServer();
-    server.once("error", () => resolve(false));
-    server.listen(port, SHARED_DOLT_SERVER_HOST, () => {
-      server.close(() => resolve(true));
-    });
-  });
-
-export const deterministicSharedDoltPortCandidate = async (baseDir: string): Promise<number> => {
-  let resolvedBaseDir = path.isAbsolute(baseDir) ? baseDir : path.resolve(baseDir);
-  try {
-    resolvedBaseDir = await realpath(resolvedBaseDir);
-  } catch {
-    // The config dir may not exist yet; use its absolute spelling, matching Rust's canonical-or-absolute behavior.
-  }
-  const digest = createHash("sha256").update(resolvedBaseDir).digest();
-  const offset = digest.readUInt16BE(0) % SHARED_DOLT_PORT_RANGE_LEN;
-  return SHARED_DOLT_PORT_RANGE_START + offset;
-};
-
-export const wrapPortCandidate = (base: number, offset: number): number => {
-  const normalizedBase = base - SHARED_DOLT_PORT_RANGE_START;
-  return SHARED_DOLT_PORT_RANGE_START + ((normalizedBase + offset) % SHARED_DOLT_PORT_RANGE_LEN);
-};
-
-export const yamlQuotePath = (inputPath: string): string => `'${inputPath.replaceAll("'", "''")}'`;
-
-export const writeDoltConfigFile = async (
-  paths: BeadsSharedServerPaths,
-  port: number,
-): Promise<void> => {
-  await mkdir(paths.sharedServerRoot, { recursive: true });
-  await mkdir(paths.cfgDir, { recursive: true });
-  const privilegeFile = path.join(paths.cfgDir, "privileges.db");
-  const branchControlFile = path.join(paths.cfgDir, "branch_control.db");
-  const config =
-    `log_level: info\n` +
-    `behavior:\n` +
-    `  autocommit: true\n` +
-    `listener:\n` +
-    `  host: ${SHARED_DOLT_SERVER_HOST}\n` +
-    `  port: ${port}\n` +
-    `data_dir: ${yamlQuotePath(paths.doltRoot)}\n` +
-    `cfg_dir: ${yamlQuotePath(paths.cfgDir)}\n` +
-    `privilege_file: ${yamlQuotePath(privilegeFile)}\n` +
-    `branch_control_file: ${yamlQuotePath(branchControlFile)}\n`;
-  const tempFile = `${paths.doltConfigFile}.tmp-${process.pid}`;
-  await writeFile(tempFile, config);
-  await rename(tempFile, paths.doltConfigFile);
 };
 
 export const waitForServerReady = async (
@@ -343,15 +358,21 @@ export const spawnSharedDoltServer = async (
   });
   await Promise.all([stdout.close(), stderr.close()]);
   if (spawnError) {
-    throw new Error(
+    throw sharedDoltOperationError(
       `Failed starting shared Dolt server with config ${paths.doltConfigFile}: ${spawnError.message}`,
+      "shared-dolt.start",
+      spawnError,
     );
   }
 
   if (await waitForServerReady(port, paths.env)) {
     if (!child.pid) {
       child.kill();
-      throw new Error(`Shared Dolt server on port ${port} started without a process id`);
+      throw sharedDoltResourceError(
+        `Shared Dolt server on port ${port} started without a process id`,
+        "shared-dolt.start",
+        "pid",
+      );
     }
     child.unref();
     return {
@@ -381,30 +402,36 @@ export const spawnSharedDoltServer = async (
   const startupError = detail
     ? `Shared Dolt server on port ${port} failed to become ready: ${detail}`
     : `Shared Dolt server on port ${port} failed to become ready within ${SHARED_DOLT_HEALTH_TIMEOUT_MS}ms`;
-  throw new Error(
+  throw sharedDoltOperationError(
     cleanupErrors.length > 0
       ? `${startupError}\nCleanup failed: ${cleanupErrors.join("\n")}`
       : startupError,
+    "shared-dolt.wait-ready",
   );
 };
 
 export const ensureSharedDoltServerRunning = (
   paths: BeadsSharedServerPaths,
   ensureSharedServer: EnsureSharedDoltServer,
-): Promise<BeadsSharedServerState> => {
-  const existing = sharedDoltServerFlights.get(paths.sharedServerRoot);
-  if (existing) {
-    return existing;
-  }
-
-  const flight = ensureSharedServer(paths).finally(() => {
-    if (sharedDoltServerFlights.get(paths.sharedServerRoot) === flight) {
-      sharedDoltServerFlights.delete(paths.sharedServerRoot);
+) =>
+  Effect.gen(function* () {
+    const existing = sharedDoltServerFlights.get(paths.sharedServerRoot);
+    if (existing) {
+      return yield* Fiber.join(existing);
     }
+
+    const flight = yield* Effect.forkDaemon(ensureSharedServer(paths));
+    sharedDoltServerFlights.set(paths.sharedServerRoot, flight);
+    return yield* Fiber.join(flight).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (sharedDoltServerFlights.get(paths.sharedServerRoot) === flight) {
+            sharedDoltServerFlights.delete(paths.sharedServerRoot);
+          }
+        }),
+      ),
+    );
   });
-  sharedDoltServerFlights.set(paths.sharedServerRoot, flight);
-  return flight;
-};
 
 export const writeSharedServerState = async (
   paths: BeadsSharedServerPaths,
@@ -419,58 +446,65 @@ export const writeSharedServerState = async (
   await rename(tempFile, paths.serverStatePath);
 };
 
-export const defaultEnsureSharedDoltServerRunning: EnsureSharedDoltServer = async (paths) => {
-  await mkdir(paths.sharedServerRoot, { recursive: true });
-  await mkdir(paths.doltRoot, { recursive: true });
-  await mkdir(paths.cfgDir, { recursive: true });
+export const defaultEnsureSharedDoltServerRunning: EnsureSharedDoltServer = (paths) =>
+  Effect.tryPromise({
+    try: async () => {
+      await mkdir(paths.sharedServerRoot, { recursive: true });
+      await mkdir(paths.doltRoot, { recursive: true });
+      await mkdir(paths.cfgDir, { recursive: true });
 
-  const existing = await readSharedServerState(paths.serverStatePath);
-  if (existing && (await serverStateIsHealthy(existing, paths))) {
-    if (existing.ownerPid !== process.pid && !processIsAlive(existing.ownerPid)) {
-      const adopted = {
-        ...existing,
-        ownerPid: process.pid,
-        acquisition: "adopted_orphaned_server" as const,
-      };
-      await writeSharedServerState(paths, adopted);
-      return adopted;
-    }
-    return existing;
-  }
-
-  if (existing && processIsAlive(existing.ownerPid) && existing.ownerPid !== process.pid) {
-    throw new Error(
-      `Shared Dolt server for ${paths.sharedServerRoot} is unhealthy but still owned by live pid ${existing.ownerPid}`,
-    );
-  }
-
-  const basePort = await deterministicSharedDoltPortCandidate(paths.baseDir);
-  for (let offset = 0; offset < SHARED_DOLT_PORT_RANGE_LEN; offset += 1) {
-    const port = wrapPortCandidate(basePort, offset);
-    if (!(await portIsAvailable(port))) {
-      continue;
-    }
-
-    await writeDoltConfigFile(paths, port);
-    try {
-      const state = await spawnSharedDoltServer(paths, port);
-      await writeSharedServerState(paths, state);
-      return state;
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-      if (
-        message.includes("address already in use") ||
-        message.includes("bind") ||
-        message.includes("listen tcp")
-      ) {
-        continue;
+      const existing = await readSharedServerState(paths.serverStatePath);
+      if (existing && (await serverStateIsHealthy(existing, paths))) {
+        if (existing.ownerPid !== process.pid && !processIsAlive(existing.ownerPid)) {
+          const adopted = {
+            ...existing,
+            ownerPid: process.pid,
+            acquisition: "adopted_orphaned_server" as const,
+          };
+          await writeSharedServerState(paths, adopted);
+          return adopted;
+        }
+        return existing;
       }
-      throw error;
-    }
-  }
 
-  throw new Error(
-    `Failed to start a shared Dolt server for ${paths.sharedServerRoot}; no available port in ${SHARED_DOLT_PORT_RANGE_START}-${SHARED_DOLT_PORT_RANGE_START + SHARED_DOLT_PORT_RANGE_LEN - 1}`,
-  );
-};
+      if (existing && processIsAlive(existing.ownerPid) && existing.ownerPid !== process.pid) {
+        throw sharedDoltValidationError(
+          `Shared Dolt server for ${paths.sharedServerRoot} is unhealthy but still owned by live pid ${existing.ownerPid}`,
+          "ownerPid",
+        );
+      }
+
+      const basePort = await deterministicSharedDoltPortCandidate(paths.baseDir);
+      for (let offset = 0; offset < SHARED_DOLT_PORT_RANGE_LEN; offset += 1) {
+        const port = wrapPortCandidate(basePort, offset);
+        if (!(await portIsAvailable(port))) {
+          continue;
+        }
+
+        await writeDoltConfigFile(paths, port);
+        try {
+          const state = await spawnSharedDoltServer(paths, port);
+          await writeSharedServerState(paths, state);
+          return state;
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+          if (
+            message.includes("address already in use") ||
+            message.includes("bind") ||
+            message.includes("listen tcp")
+          ) {
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      throw sharedDoltResourceError(
+        `Failed to start a shared Dolt server for ${paths.sharedServerRoot}; no available port in ${SHARED_DOLT_PORT_RANGE_START}-${SHARED_DOLT_PORT_RANGE_START + SHARED_DOLT_PORT_RANGE_LEN - 1}`,
+        "shared-dolt.start",
+        paths.sharedServerRoot,
+      );
+    },
+    catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.ensure-default"),
+  });

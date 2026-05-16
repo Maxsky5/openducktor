@@ -1,3 +1,4 @@
+import { HostValidationError } from "../../effect/host-errors";
 import { parseDiffGitHeaderToken } from "./git-diff";
 
 export type HunkSpec = {
@@ -23,16 +24,22 @@ export type ParsedPatch = {
   renamePaths?: RenamePaths;
 };
 
+const invalidPatch = (message: string, details?: Record<string, unknown>): HostValidationError =>
+  new HostValidationError({
+    message,
+    details,
+  });
+
 export const parseHunkRange = (input: string): { start: number; count: number } => {
   const trimmed = input.trim();
   const [startRaw, countRaw = "1"] = trimmed.split(",", 2);
   const start = Number.parseInt(startRaw ?? "", 10);
   const count = Number.parseInt(countRaw, 10);
   if (!Number.isFinite(start)) {
-    throw new Error(`Invalid hunk range start: ${trimmed}`);
+    throw invalidPatch(`Invalid hunk range start: ${trimmed}`, { range: trimmed });
   }
   if (!Number.isFinite(count)) {
-    throw new Error(`Invalid hunk range count: ${trimmed}`);
+    throw invalidPatch(`Invalid hunk range count: ${trimmed}`, { range: trimmed });
   }
 
   return { start, count };
@@ -41,18 +48,18 @@ export const parseHunkRange = (input: string): { start: number; count: number } 
 export const parseHunkSpec = (line: string): HunkSpec => {
   const rest = line.startsWith("@@ -") ? line.slice("@@ -".length) : undefined;
   if (rest === undefined) {
-    throw new Error(`Invalid hunk header: ${line}`);
+    throw invalidPatch(`Invalid hunk header: ${line}`, { line });
   }
 
   const splitIndex = rest.indexOf(" +");
   if (splitIndex < 0) {
-    throw new Error(`Invalid hunk header: ${line}`);
+    throw invalidPatch(`Invalid hunk header: ${line}`, { line });
   }
   const oldPart = rest.slice(0, splitIndex);
   const remaining = rest.slice(splitIndex + " +".length);
   const newEndIndex = remaining.indexOf(" @@");
   if (newEndIndex < 0) {
-    throw new Error(`Invalid hunk header: ${line}`);
+    throw invalidPatch(`Invalid hunk header: ${line}`, { line });
   }
 
   const oldRange = parseHunkRange(oldPart);
@@ -109,7 +116,7 @@ export const parsePatchHunks = (patch: string): ParsedPatch => {
     if (line.startsWith("@@ ")) {
       if (inHunk && currentHunk.length > 0) {
         if (!currentSpec) {
-          throw new Error("Patch hunk is missing parsed hunk metadata");
+          throw invalidPatch("Patch hunk is missing parsed hunk metadata");
         }
         hunks.push({ text: currentHunk, spec: currentSpec });
         currentHunk = "";
@@ -128,7 +135,7 @@ export const parsePatchHunks = (patch: string): ParsedPatch => {
 
   if (inHunk && currentHunk.length > 0) {
     if (!currentSpec) {
-      throw new Error("Patch hunk is missing parsed hunk metadata");
+      throw invalidPatch("Patch hunk is missing parsed hunk metadata");
     }
     hunks.push({ text: currentHunk, spec: currentSpec });
   }
@@ -184,7 +191,7 @@ export const findMatchingCachedHunk = (
   }
 
   if (cachedPatch.hunks.some((candidate) => hunkSpecsOverlap(candidate.spec, selectedHunk.spec))) {
-    throw new Error(
+    throw invalidPatch(
       "Cannot reset a hunk that mixes staged and unstaged changes. Unstage it or reset the whole file instead.",
     );
   }

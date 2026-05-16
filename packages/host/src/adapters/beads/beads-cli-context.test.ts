@@ -1,6 +1,8 @@
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import { initializeMissingAttachment } from "../../infrastructure/beads/beads-attachment-provisioning";
 import { ensureSharedDoltServerRunning } from "../../infrastructure/beads/beads-shared-dolt-server";
 import {
@@ -49,7 +51,6 @@ const withEnv = async <T>(
     }
   }
 };
-
 describe("resolveBeadsCliContext", () => {
   test("resolves repo-scoped managed Beads paths and server environment", async () => {
     const configRoot = await mkdtemp(path.join(tmpdir(), "odt-config-test-"));
@@ -60,20 +61,22 @@ describe("resolveBeadsCliContext", () => {
       path.join(serverRoot, "server.json"),
       JSON.stringify(createSharedServerRecord(serverRoot)),
     );
-
     const canonicalRepoRoot = await realpath(repoRoot);
     const context = await withEnv("OPENDUCKTOR_CONFIG_DIR", configRoot, () =>
-      resolveBeadsCliContext(repoRoot, {
-        requireSharedServer: true,
-        async ensureSharedServer(paths) {
-          return createSharedServerRecord(paths.sharedServerRoot, {
-            doltDataDir: paths.doltRoot,
-          });
-        },
-        ensureAttachment: async () => undefined,
-      }),
+      Effect.runPromise(
+        resolveBeadsCliContext(repoRoot, {
+          requireSharedServer: true,
+          ensureSharedServer(paths) {
+            return Effect.succeed(
+              createSharedServerRecord(paths.sharedServerRoot, {
+                doltDataDir: paths.doltRoot,
+              }),
+            );
+          },
+          ensureAttachment: () => Effect.succeed(undefined),
+        }),
+      ),
     );
-
     expect(context.repoPath).toBe(canonicalRepoRoot);
     expect(context.repoId).toMatch(/^my-repo-[a-z0-9]+-[a-f0-9]{8}$/);
     expect(context.databaseName).toMatch(/^odt_my_repo_[a-z0-9]+_[a-f0-9]{12}$/);
@@ -91,30 +94,53 @@ describe("resolveBeadsCliContext", () => {
       ownershipState: "owned_by_current_process",
     });
   });
+  test("resolves workspace-scoped managed Beads paths when workspace id is provided", async () => {
+    const configRoot = await mkdtemp(path.join(tmpdir(), "odt-config-workspace-test-"));
+    const repoRoot = await mkdtemp(path.join(tmpdir(), "My Repo-"));
+    const canonicalRepoRoot = await realpath(repoRoot);
+    const context = await withEnv("OPENDUCKTOR_CONFIG_DIR", configRoot, () =>
+      Effect.runPromise(
+        resolveBeadsCliContext(repoRoot, {
+          requireSharedServer: false,
+          workspaceId: "openducktor",
+        }),
+      ),
+    );
+    expect(context.repoPath).toBe(canonicalRepoRoot);
+    expect(context.repoId).toBe("openducktor");
+    expect(context.databaseName).toBe("odt_openducktor_14ecb05f675c");
+    expect(context.attachmentRoot).toBe(path.join(configRoot, "beads", "openducktor"));
+    expect(context.beadsDir).toBe(path.join(configRoot, "beads", "openducktor", ".beads"));
+    expect(context.workingDir).toBe(context.attachmentRoot);
+  });
 
   test("starts shared Dolt when task commands require a shared server", async () => {
     const configRoot = await mkdtemp(path.join(tmpdir(), "odt-config-missing-server-test-"));
     const repoRoot = await mkdtemp(path.join(tmpdir(), "Repo-"));
     const calls: string[] = [];
     const attachmentCalls: string[] = [];
-
     const context = await withEnv("OPENDUCKTOR_CONFIG_DIR", configRoot, () =>
-      resolveBeadsCliContext(repoRoot, {
-        requireSharedServer: true,
-        async ensureSharedServer(paths) {
-          calls.push(paths.sharedServerRoot);
-          return createSharedServerRecord(paths.sharedServerRoot, {
-            pid: process.pid,
-            port: 36002,
-            doltDataDir: paths.doltRoot,
-          });
-        },
-        async ensureAttachment(context) {
-          attachmentCalls.push(context.beadsDir);
-        },
-      }),
+      Effect.runPromise(
+        resolveBeadsCliContext(repoRoot, {
+          requireSharedServer: true,
+          ensureSharedServer(paths) {
+            return Effect.sync(() => {
+              calls.push(paths.sharedServerRoot);
+              return createSharedServerRecord(paths.sharedServerRoot, {
+                pid: process.pid,
+                port: 36002,
+                doltDataDir: paths.doltRoot,
+              });
+            });
+          },
+          ensureAttachment(context) {
+            return Effect.sync(() => {
+              attachmentCalls.push(context.beadsDir);
+            });
+          },
+        }),
+      ),
     );
-
     expect(calls).toEqual([path.join(configRoot, "beads", "shared-server")]);
     expect(attachmentCalls).toEqual([context.beadsDir]);
     expect(context.sharedServer).toMatchObject({
@@ -124,7 +150,6 @@ describe("resolveBeadsCliContext", () => {
     });
     expect(context.env.BEADS_DOLT_SERVER_PORT).toBe("36002");
   });
-
   test("builds Beads env and working directory from path-edge shared server state", async () => {
     const configRoot = await mkdtemp(path.join(tmpdir(), "odt config shared env-"));
     const repoRoot = await mkdtemp(path.join(tmpdir(), "Repo With Spaces-"));
@@ -137,11 +162,13 @@ describe("resolveBeadsCliContext", () => {
     await mkdir(serverRoot, { recursive: true });
     await writeFile(path.join(serverRoot, "server.json"), JSON.stringify(state));
 
-    const context = await resolveBeadsCliContext(repoRoot, {
-      processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot },
-      requireSharedServer: false,
-      workspaceId: "workspace with spaces",
-    });
+    const context = await Effect.runPromise(
+      resolveBeadsCliContext(repoRoot, {
+        processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot },
+        requireSharedServer: false,
+        workspaceId: "workspace with spaces",
+      }),
+    );
 
     expect(context.workingDir).toBe(context.attachmentRoot);
     expect(context.env.BEADS_DIR).toBe(context.beadsDir);
@@ -175,42 +202,50 @@ describe("resolveBeadsCliContext", () => {
     const startupGate = new Promise<void>((resolve) => {
       releaseStartup = resolve;
     });
-    const ensureSharedServer: EnsureSharedDoltServer = async (paths) => {
-      calls.push(paths.sharedServerRoot);
-      markStartupStarted();
-      await startupGate;
-      return {
-        pid: process.pid,
-        ownerPid: process.pid,
-        acquisition: "started_by_owner" as const,
-        host: "127.0.0.1",
-        user: "root",
-        port: 36004,
-        sharedServerRoot: paths.sharedServerRoot,
-        doltDataDir: paths.doltRoot,
-        startedAt: "2026-05-10T00:00:00Z",
-      };
-    };
-
-    const firstContextPromise = ensureSharedDoltServerRunning(paths, ensureSharedServer);
+    const ensureSharedServer: EnsureSharedDoltServer = (paths) =>
+      Effect.tryPromise({
+        try: async () => {
+          calls.push(paths.sharedServerRoot);
+          markStartupStarted();
+          await startupGate;
+          return {
+            pid: process.pid,
+            ownerPid: process.pid,
+            acquisition: "started_by_owner" as const,
+            host: "127.0.0.1",
+            user: "root",
+            port: 36004,
+            sharedServerRoot: paths.sharedServerRoot,
+            doltDataDir: paths.doltRoot,
+            startedAt: "2026-05-10T00:00:00Z",
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    const firstContextPromise = Effect.runPromise(
+      ensureSharedDoltServerRunning(paths, ensureSharedServer),
+    );
     await startupStarted;
-    const secondContextPromise = ensureSharedDoltServerRunning(paths, ensureSharedServer);
-
+    const secondContextPromise = Effect.runPromise(
+      ensureSharedDoltServerRunning(paths, ensureSharedServer),
+    );
     await Promise.resolve();
     expect(calls).toEqual([sharedServerRoot]);
     releaseStartup();
-
     const [firstState, secondState] = await Promise.all([
       firstContextPromise,
       secondContextPromise,
     ]);
-
     expect(calls).toEqual([sharedServerRoot]);
     expect(firstState.port).toBe(36004);
     expect(secondState.port).toBe(36004);
   });
 });
-
 describe("createBeadsAttachmentProvisioner", () => {
   const createContext = async (): Promise<BeadsCliContext> => {
     const attachmentRoot = await mkdtemp(path.join(tmpdir(), "odt-beads-attachment-test-"));
@@ -243,7 +278,6 @@ describe("createBeadsAttachmentProvisioner", () => {
       },
     };
   };
-
   const writeMetadata = async (context: BeadsCliContext): Promise<void> => {
     await writeFile(
       path.join(context.beadsDir, "metadata.json"),
@@ -257,33 +291,43 @@ describe("createBeadsAttachmentProvisioner", () => {
       }),
     );
   };
-
   test("initializes missing attachments and configures workflow statuses", async () => {
     const context = await createContext();
-    const calls: Array<{ command: string; args: string[]; cwd?: string; env?: NodeJS.ProcessEnv }> =
-      [];
-
-    const provision = createBeadsAttachmentProvisioner(async (input) => {
-      calls.push(input);
-      if (input.args[0] === "init") {
-        await mkdir(context.beadsDir, { recursive: true });
-        await writeMetadata(context);
-        await writeFile(
-          path.join(context.beadsDir, "config.yaml"),
-          "json: true\nno-git-ops: false # keep\n",
-        );
-      }
-      if (input.command === "dolt" && input.args.at(-1) === "show databases") {
-        return { ok: true, stdout: `| ${context.databaseName} |\n`, stderr: "" };
-      }
-      if (input.args[0] === "where") {
-        return { ok: true, stdout: JSON.stringify({ path: context.beadsDir }), stderr: "" };
-      }
-      return { ok: true, stdout: "", stderr: "" };
-    });
-
-    await provision(context);
-
+    const calls: Array<{
+      command: string;
+      args: string[];
+      cwd?: string;
+      env?: NodeJS.ProcessEnv;
+    }> = [];
+    const provision = createBeadsAttachmentProvisioner((input) =>
+      Effect.tryPromise({
+        try: async () => {
+          calls.push(input);
+          if (input.args[0] === "init") {
+            await mkdir(context.beadsDir, { recursive: true });
+            await writeMetadata(context);
+            await writeFile(
+              path.join(context.beadsDir, "config.yaml"),
+              "json: true\nno-git-ops: false # keep\n",
+            );
+          }
+          if (input.command === "dolt" && input.args.at(-1) === "show databases") {
+            return { ok: true, stdout: `| ${context.databaseName} |\n`, stderr: "" };
+          }
+          if (input.args[0] === "where") {
+            return { ok: true, stdout: JSON.stringify({ path: context.beadsDir }), stderr: "" };
+          }
+          return { ok: true, stdout: "", stderr: "" };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      }),
+    );
+    await Effect.runPromise(provision(context));
     expect(calls).toEqual([
       {
         command: "bd",
@@ -343,7 +387,6 @@ describe("createBeadsAttachmentProvisioner", () => {
       "json: true\nno-git-ops: true # keep\n",
     );
   });
-
   test("initializes missing path-edge attachments from the attachment root", async () => {
     const parent = await mkdtemp(path.join(tmpdir(), "odt provisioning C-Users-Max Sky-"));
     const attachmentRoot = path.join(parent, "Attachment Root With Spaces");
@@ -364,10 +407,16 @@ describe("createBeadsAttachmentProvisioner", () => {
     const calls: Array<{ command: string; args: string[]; cwd?: string; env?: NodeJS.ProcessEnv }> =
       [];
 
-    await initializeMissingAttachment(async (input) => {
-      calls.push(input);
-      return { ok: true, stdout: "", stderr: "" };
-    }, context);
+    await Effect.runPromise(
+      initializeMissingAttachment(
+        (input) =>
+          Effect.sync(() => {
+            calls.push(input);
+            return { ok: true, stdout: "", stderr: "" };
+          }),
+        context,
+      ),
+    );
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.command).toBe("bd");
@@ -382,29 +431,33 @@ describe("createBeadsAttachmentProvisioner", () => {
     await mkdir(path.join(context.beadsDir, "backup"), { recursive: true });
     await writeMetadata(context);
     let restored = false;
-    const calls: Array<{ command: string; args: string[]; cwd?: string; env?: NodeJS.ProcessEnv }> =
-      [];
-    const provision = createBeadsAttachmentProvisioner(async (input) => {
-      calls.push(input);
-      if (input.command === "dolt" && input.args.at(-1) === "show databases") {
-        return {
-          ok: true,
-          stdout: restored ? `| ${context.databaseName} |\n` : "| other_database |\n",
-          stderr: "",
-        };
-      }
-      if (input.command === "dolt" && input.args[0] === "backup") {
-        restored = true;
-        return { ok: true, stdout: "restored backup", stderr: "" };
-      }
-      if (input.args[0] === "where") {
-        return { ok: true, stdout: JSON.stringify({ path: context.beadsDir }), stderr: "" };
-      }
-      return { ok: true, stdout: "", stderr: "" };
-    });
-
-    await provision(context);
-
+    const calls: Array<{
+      command: string;
+      args: string[];
+      cwd?: string;
+      env?: NodeJS.ProcessEnv;
+    }> = [];
+    const provision = createBeadsAttachmentProvisioner((input) =>
+      Effect.sync(() => {
+        calls.push(input);
+        if (input.command === "dolt" && input.args.at(-1) === "show databases") {
+          return {
+            ok: true,
+            stdout: restored ? `| ${context.databaseName} |\n` : "| other_database |\n",
+            stderr: "",
+          };
+        }
+        if (input.command === "dolt" && input.args[0] === "backup") {
+          restored = true;
+          return { ok: true, stdout: "restored backup", stderr: "" };
+        }
+        if (input.args[0] === "where") {
+          return { ok: true, stdout: JSON.stringify({ path: context.beadsDir }), stderr: "" };
+        }
+        return { ok: true, stdout: "", stderr: "" };
+      }),
+    );
+    await Effect.runPromise(provision(context));
     expect(calls).toContainEqual({
       command: "dolt",
       cwd: context.sharedServer?.doltDataDir ?? "",
@@ -418,37 +471,40 @@ describe("createBeadsAttachmentProvisioner", () => {
     });
     expect(restored).toBe(true);
   });
-
   test("repairs attachment verification failures with bd doctor", async () => {
     const context = await createContext();
     await mkdir(context.beadsDir, { recursive: true });
     await writeMetadata(context);
     let repaired = false;
-    const calls: Array<{ command: string; args: string[]; cwd?: string; env?: NodeJS.ProcessEnv }> =
-      [];
-    const provision = createBeadsAttachmentProvisioner(async (input) => {
-      calls.push(input);
-      if (input.command === "dolt" && input.args.at(-1) === "show databases") {
-        return { ok: true, stdout: `| ${context.databaseName} |\n`, stderr: "" };
-      }
-      if (input.args[0] === "doctor") {
-        repaired = true;
-        return { ok: true, stdout: "fixed", stderr: "" };
-      }
-      if (input.args[0] === "where") {
-        return {
-          ok: true,
-          stdout: JSON.stringify(
-            repaired ? { path: context.beadsDir } : { error: "attachment mismatch" },
-          ),
-          stderr: "",
-        };
-      }
-      return { ok: true, stdout: "", stderr: "" };
-    });
-
-    await provision(context);
-
+    const calls: Array<{
+      command: string;
+      args: string[];
+      cwd?: string;
+      env?: NodeJS.ProcessEnv;
+    }> = [];
+    const provision = createBeadsAttachmentProvisioner((input) =>
+      Effect.sync(() => {
+        calls.push(input);
+        if (input.command === "dolt" && input.args.at(-1) === "show databases") {
+          return { ok: true, stdout: `| ${context.databaseName} |\n`, stderr: "" };
+        }
+        if (input.args[0] === "doctor") {
+          repaired = true;
+          return { ok: true, stdout: "fixed", stderr: "" };
+        }
+        if (input.args[0] === "where") {
+          return {
+            ok: true,
+            stdout: JSON.stringify(
+              repaired ? { path: context.beadsDir } : { error: "attachment mismatch" },
+            ),
+            stderr: "",
+          };
+        }
+        return { ok: true, stdout: "", stderr: "" };
+      }),
+    );
+    await Effect.runPromise(provision(context));
     expect(calls).toContainEqual({
       command: "bd",
       cwd: context.attachmentRoot,
@@ -456,7 +512,6 @@ describe("createBeadsAttachmentProvisioner", () => {
       args: ["doctor", "--fix", "--yes"],
     });
   });
-
   test("rejects invalid attachment contracts without repair", async () => {
     const context = await createContext();
     await mkdir(context.beadsDir, { recursive: true });
@@ -471,13 +526,17 @@ describe("createBeadsAttachmentProvisioner", () => {
         dolt_database: "wrong_database",
       }),
     );
-    const calls: Array<{ command: string; args: string[] }> = [];
-    const provision = createBeadsAttachmentProvisioner(async (input) => {
-      calls.push(input);
-      return { ok: true, stdout: "", stderr: "" };
-    });
-
-    await expect(provision(context)).rejects.toThrow(
+    const calls: Array<{
+      command: string;
+      args: string[];
+    }> = [];
+    const provision = createBeadsAttachmentProvisioner((input) =>
+      Effect.sync(() => {
+        calls.push(input);
+        return { ok: true, stdout: "", stderr: "" };
+      }),
+    );
+    await expect(Effect.runPromise(provision(context))).rejects.toThrow(
       `Beads attachment database is "wrong_database", expected ${context.databaseName}`,
     );
     expect(calls).toEqual([]);

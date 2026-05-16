@@ -1,47 +1,42 @@
+import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
 import type {
+  CodexAppServerError,
   CodexAppServerPort,
   CodexAppServerRequestInput,
   CodexAppServerRespondInput,
 } from "../../ports/codex-app-server-port";
 
-export type CodexAppServerService = {
-  request(input: CodexAppServerRequestInput): Promise<unknown>;
-  notifications(input: CodexAppServerRuntimeInput): Promise<unknown[]>;
-  requests(input: CodexAppServerRuntimeInput): Promise<unknown[]>;
-  respond(input: CodexAppServerRespondInput): Promise<void>;
-};
+export type CodexAppServerServiceError = CodexAppServerError | HostValidationError;
 
+export type CodexAppServerService = {
+  request(input: CodexAppServerRequestInput): Effect.Effect<unknown, CodexAppServerServiceError>;
+  notifications(
+    input: CodexAppServerRuntimeInput,
+  ): Effect.Effect<unknown[], CodexAppServerServiceError>;
+  requests(input: CodexAppServerRuntimeInput): Effect.Effect<unknown[], CodexAppServerServiceError>;
+  respond(input: CodexAppServerRespondInput): Effect.Effect<void, CodexAppServerServiceError>;
+};
 export type CodexAppServerRuntimeInput = {
   runtimeId: string;
 };
-
 const assertArray = (value: unknown, label: string): unknown[] => {
   if (!Array.isArray(value)) {
-    throw new Error(`${label} must return an array.`);
+    throw new HostValidationError({ message: `${label} must return an array.` });
   }
-
   return value;
 };
-
 export const createCodexAppServerService = (
   codexAppServerPort: CodexAppServerPort,
 ): CodexAppServerService => ({
-  async request(input) {
-    return codexAppServerPort.request(input);
-  },
-  async notifications(input) {
-    return assertArray(
-      await codexAppServerPort.drainNotifications(input.runtimeId),
-      "codex_app_server_notifications",
-    );
-  },
-  async requests(input) {
-    return assertArray(
-      await codexAppServerPort.drainServerRequests(input.runtimeId),
-      "codex_app_server_requests",
-    );
-  },
-  async respond(input) {
-    return codexAppServerPort.respond(input);
-  },
+  request: (input) => codexAppServerPort.request(input),
+  notifications: (input) =>
+    codexAppServerPort
+      .drainNotifications(input.runtimeId)
+      .pipe(Effect.map((value) => assertArray(value, "codex_app_server_notifications"))),
+  requests: (input) =>
+    codexAppServerPort
+      .drainServerRequests(input.runtimeId)
+      .pipe(Effect.map((value) => assertArray(value, "codex_app_server_requests"))),
+  respond: (input) => codexAppServerPort.respond(input),
 });

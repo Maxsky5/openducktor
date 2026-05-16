@@ -1,31 +1,77 @@
+import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
+import { HostOperationError } from "../../effect/host-errors";
 import { createHostCommandRouter } from "../router/host-command-router";
 import { createCodexAppServerCommandHandlers } from "./codex-app-server-command-handlers";
 
+const createCodexAppServerServiceFake = (service: CodexAppServerService): CodexAppServerService =>
+  service as CodexAppServerService;
 describe("createCodexAppServerCommandHandlers", () => {
   test("routes Codex app-server commands to the service", async () => {
-    const calls: Array<{ method: keyof CodexAppServerService; input: unknown }> = [];
-    const service: CodexAppServerService = {
-      async request(input) {
-        calls.push({ method: "request", input });
-        return { ok: true };
+    const calls: Array<{
+      method: keyof CodexAppServerService;
+      input: unknown;
+    }> = [];
+    const service = createCodexAppServerServiceFake({
+      request(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ method: "request", input });
+            return { ok: true };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async notifications(input) {
-        calls.push({ method: "notifications", input });
-        return [{ method: "codex/app-server/ready" }];
+      notifications(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ method: "notifications", input });
+            return [{ method: "codex/app-server/ready" }];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async requests(input) {
-        calls.push({ method: "requests", input });
-        return [];
+      requests(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ method: "requests", input });
+            return [];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async respond(input) {
-        calls.push({ method: "respond", input });
+      respond(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ method: "respond", input });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-    };
+    });
     const router = createHostCommandRouter({
       handlers: createCodexAppServerCommandHandlers(service),
     });
-
     await expect(
       router.invoke("codex_app_server_request", {
         runtimeId: "runtime-1",
@@ -45,7 +91,6 @@ describe("createCodexAppServerCommandHandlers", () => {
         result: { approved: true },
       }),
     ).resolves.toBeUndefined();
-
     expect(calls).toEqual([
       {
         method: "request",
@@ -69,30 +114,68 @@ describe("createCodexAppServerCommandHandlers", () => {
       },
     ]);
   });
-
   test("rejects malformed command inputs before calling the service", async () => {
     const calls: unknown[] = [];
-    const service: CodexAppServerService = {
-      async request(input) {
-        calls.push(input);
-        throw new Error("unexpected call");
+    const service = createCodexAppServerServiceFake({
+      request(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push(input);
+            throw new Error("unexpected call");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async notifications(input) {
-        calls.push(input);
-        throw new Error("unexpected call");
+      notifications(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push(input);
+            throw new Error("unexpected call");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async requests(input) {
-        calls.push(input);
-        throw new Error("unexpected call");
+      requests(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push(input);
+            throw new Error("unexpected call");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async respond(input) {
-        calls.push(input);
+      respond(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push(input);
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-    };
+    });
     const router = createHostCommandRouter({
       handlers: createCodexAppServerCommandHandlers(service),
     });
-
     await expect(
       router.invoke("codex_app_server_request", { runtimeId: "runtime-1", method: "" }),
     ).rejects.toThrow("method is required.");

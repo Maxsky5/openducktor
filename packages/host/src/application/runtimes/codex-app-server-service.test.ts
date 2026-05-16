@@ -1,56 +1,105 @@
+import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
-import { createCodexAppServerService } from "./codex-app-server-service";
+import { createCodexAppServerService as createEffectCodexAppServerService } from "./codex-app-server-service";
 
-const createPort = (): { calls: unknown[]; port: CodexAppServerPort } => {
+const createCodexAppServerService = (
+  ...args: Parameters<typeof createEffectCodexAppServerService>
+) => createEffectCodexAppServerService(...args);
+const createPort = (): {
+  calls: unknown[];
+  port: CodexAppServerPort;
+} => {
   const calls: unknown[] = [];
   return {
     calls,
     port: {
-      async request(input) {
-        calls.push({ method: "request", input });
-        return { ok: true };
+      request(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ method: "request", input });
+            return { ok: true };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async drainNotifications(runtimeId) {
-        calls.push({ method: "drainNotifications", runtimeId });
-        return [{ method: "codex/app-server/ready" }];
+      drainNotifications(runtimeId) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ method: "drainNotifications", runtimeId });
+            return [{ method: "codex/app-server/ready" }];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async drainServerRequests(runtimeId) {
-        calls.push({ method: "drainServerRequests", runtimeId });
-        return [{ id: 7, method: "approval/request" }];
+      drainServerRequests(runtimeId) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ method: "drainServerRequests", runtimeId });
+            return [{ id: 7, method: "approval/request" }];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async respond(input) {
-        calls.push({ method: "respond", input });
+      respond(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ method: "respond", input });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     },
   };
 };
-
 describe("createCodexAppServerService", () => {
   test("delegates Codex app-server operations", async () => {
     const { calls, port } = createPort();
     const service = createCodexAppServerService(port);
-
     await expect(
-      service.request({
-        runtimeId: "runtime-1",
-        method: "model/list",
-        params: { request: "catalog" },
-      }),
+      Effect.runPromise(
+        service.request({
+          runtimeId: "runtime-1",
+          method: "model/list",
+          params: { request: "catalog" },
+        }),
+      ),
     ).resolves.toEqual({ ok: true });
-    await expect(service.notifications({ runtimeId: "runtime-1" })).resolves.toEqual([
-      { method: "codex/app-server/ready" },
-    ]);
-    await expect(service.requests({ runtimeId: "runtime-1" })).resolves.toEqual([
+    await expect(
+      Effect.runPromise(service.notifications({ runtimeId: "runtime-1" })),
+    ).resolves.toEqual([{ method: "codex/app-server/ready" }]);
+    await expect(Effect.runPromise(service.requests({ runtimeId: "runtime-1" }))).resolves.toEqual([
       { id: 7, method: "approval/request" },
     ]);
     await expect(
-      service.respond({
-        runtimeId: "runtime-1",
-        requestId: 7,
-        error: { code: "denied" },
-      }),
+      Effect.runPromise(
+        service.respond({
+          runtimeId: "runtime-1",
+          requestId: 7,
+          error: { code: "denied" },
+        }),
+      ),
     ).resolves.toBeUndefined();
-
     expect(calls).toEqual([
       {
         method: "request",
@@ -72,25 +121,63 @@ describe("createCodexAppServerService", () => {
       },
     ]);
   });
-
   test("rejects non-array drain results", async () => {
     const service = createCodexAppServerService({
-      async request() {
-        return null;
+      request() {
+        return Effect.tryPromise({
+          try: async () => {
+            return null;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async drainNotifications() {
-        return null as unknown as unknown[];
+      drainNotifications() {
+        return Effect.tryPromise({
+          try: async () => {
+            return null as unknown as unknown[];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async drainServerRequests() {
-        return null as unknown as unknown[];
+      drainServerRequests() {
+        return Effect.tryPromise({
+          try: async () => {
+            return null as unknown as unknown[];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async respond() {},
+      respond() {
+        return Effect.tryPromise({
+          try: async () => {},
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
     });
-
-    await expect(service.notifications({ runtimeId: "runtime-1" })).rejects.toThrow(
-      "codex_app_server_notifications must return an array.",
-    );
-    await expect(service.requests({ runtimeId: "runtime-1" })).rejects.toThrow(
+    await expect(
+      Effect.runPromise(service.notifications({ runtimeId: "runtime-1" })),
+    ).rejects.toThrow("codex_app_server_notifications must return an array.");
+    await expect(Effect.runPromise(service.requests({ runtimeId: "runtime-1" }))).rejects.toThrow(
       "codex_app_server_requests must return an array.",
     );
   });

@@ -1,4 +1,6 @@
 import { ODT_MCP_TOOL_NAMES, type RepoConfig, type TaskCard } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import type { TaskService } from "../tasks/task-service";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import { createOdtMcpBridgeService } from "./odt-mcp-bridge-service";
@@ -17,7 +19,6 @@ const repoConfig: RepoConfig = {
   promptOverrides: {},
   agentDefaults: {},
 };
-
 const taskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
   title: "Add bridge",
@@ -45,84 +46,138 @@ const taskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   updatedAt: "2026-05-10T10:00:00.000Z",
   ...overrides,
 });
-
 const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
   ({
-    async listWorkspaces() {
-      return [
-        {
-          workspaceId: "repo",
-          workspaceName: "Repo",
-          repoPath: "/repo",
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: null,
-          defaultWorktreeBasePath: null,
-          effectiveWorktreeBasePath: null,
+    listWorkspaces() {
+      return Effect.tryPromise({
+        try: async () => {
+          return [
+            {
+              workspaceId: "repo",
+              workspaceName: "Repo",
+              repoPath: "/repo",
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: null,
+              effectiveWorktreeBasePath: null,
+            },
+          ];
         },
-      ];
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async getRepoConfig() {
-      return repoConfig;
+    getRepoConfig() {
+      return Effect.tryPromise({
+        try: async () => {
+          return repoConfig;
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async getRepoConfigByRepoPath() {
-      return repoConfig;
+    getRepoConfigByRepoPath() {
+      return Effect.tryPromise({
+        try: async () => {
+          return repoConfig;
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-  }) as unknown as WorkspaceSettingsService;
-
+  }) as Pick<
+    WorkspaceSettingsService,
+    "getRepoConfig" | "getRepoConfigByRepoPath" | "listWorkspaces"
+  > as unknown as WorkspaceSettingsService;
+const createTaskService = (service: Partial<TaskService>): TaskService =>
+  service as unknown as TaskService;
+const createOdtMcpBridgeServiceForTest = (input: Parameters<typeof createOdtMcpBridgeService>[0]) =>
+  createOdtMcpBridgeService(input);
 describe("createOdtMcpBridgeService", () => {
   test("reports MCP tool coverage and workspaces", async () => {
-    const service = createOdtMcpBridgeService({
+    const service = createOdtMcpBridgeServiceForTest({
       taskService: {} as TaskService,
       workspaceSettingsService: createWorkspaceSettingsService(),
     });
-
-    await expect(service.ready()).resolves.toEqual({
+    await expect(Effect.runPromise(service.ready())).resolves.toEqual({
       bridgeVersion: 1,
       toolNames: [...ODT_MCP_TOOL_NAMES],
     });
-    await expect(service.getWorkspaces({})).resolves.toMatchObject({
+    await expect(Effect.runPromise(service.getWorkspaces({}))).resolves.toMatchObject({
       workspaces: [{ workspaceId: "repo", repoPath: "/repo" }],
     });
   });
-
   test("sets a spec through repo-scoped task service calls", async () => {
     const calls: unknown[] = [];
     let currentTask = taskCard();
-    const taskService = {
-      async listTasks(input: unknown) {
-        calls.push({ type: "listTasks", input });
-        return [currentTask];
-      },
-      async setSpec(input: unknown) {
-        calls.push({ type: "setSpec", input });
-        currentTask = taskCard({
-          status: "spec_ready",
-          documentSummary: {
-            spec: { has: true },
-            plan: { has: false },
-            qaReport: { has: false, verdict: "not_reviewed" },
+    const taskService = createTaskService({
+      listTasks(input: unknown) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "listTasks", input });
+            return [currentTask];
           },
-          updatedAt: "2026-05-10T10:01:00.000Z",
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
         });
-        return {
-          markdown: "## Spec",
-          updatedAt: "2026-05-10T10:01:00.000Z",
-          revision: 1,
-        };
       },
-    } as unknown as TaskService;
-    const service = createOdtMcpBridgeService({
+      setSpec(input: unknown) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setSpec", input });
+            currentTask = taskCard({
+              status: "spec_ready",
+              documentSummary: {
+                spec: { has: true },
+                plan: { has: false },
+                qaReport: { has: false, verdict: "not_reviewed" },
+              },
+              updatedAt: "2026-05-10T10:01:00.000Z",
+            });
+            return {
+              markdown: "## Spec",
+              updatedAt: "2026-05-10T10:01:00.000Z",
+              revision: 1,
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+    });
+    const service = createOdtMcpBridgeServiceForTest({
       taskService,
       workspaceSettingsService: createWorkspaceSettingsService(),
     });
-
     await expect(
-      service.invoke("odt_set_spec", {
-        workspaceId: "repo",
-        taskId: "Add bridge",
-        markdown: "## Spec",
-      }),
+      Effect.runPromise(
+        service.invoke("odt_set_spec", {
+          workspaceId: "repo",
+          taskId: "Add bridge",
+          markdown: "## Spec",
+        }),
+      ),
     ).resolves.toEqual({
       task: {
         id: "task-1",
@@ -148,26 +203,35 @@ describe("createOdtMcpBridgeService", () => {
       { type: "listTasks", input: { repoPath: "/repo" } },
     ]);
   });
-
   test("publishes a Tauri-compatible task event after external task creation", async () => {
     const events: unknown[] = [];
-    const taskService = {
-      async createTask(input: unknown) {
-        expect(input).toEqual({
-          repoPath: "/repo",
-          task: {
-            title: "New task",
-            issueType: "task",
-            priority: 2,
-            description: "Created by MCP",
-            labels: ["mcp"],
-            aiReviewEnabled: true,
+    const taskService = createTaskService({
+      createTask(input: unknown) {
+        return Effect.tryPromise({
+          try: async () => {
+            expect(input).toEqual({
+              repoPath: "/repo",
+              task: {
+                title: "New task",
+                issueType: "task",
+                priority: 2,
+                description: "Created by MCP",
+                labels: ["mcp"],
+                aiReviewEnabled: true,
+              },
+            });
+            return taskCard({ id: "task-new", title: "New task", description: "Created by MCP" });
           },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
         });
-        return taskCard({ id: "task-new", title: "New task", description: "Created by MCP" });
       },
-    } as unknown as TaskService;
-    const service = createOdtMcpBridgeService({
+    });
+    const service = createOdtMcpBridgeServiceForTest({
       taskService,
       taskSyncService: {
         publishExternalTaskCreated(repoPath, taskId) {
@@ -176,53 +240,74 @@ describe("createOdtMcpBridgeService", () => {
       },
       workspaceSettingsService: createWorkspaceSettingsService(),
     });
-
     await expect(
-      service.invoke("odt_create_task", {
-        workspaceId: "repo",
-        title: "New task",
-        issueType: "task",
-        priority: 2,
-        description: "Created by MCP",
-        labels: ["mcp"],
-        aiReviewEnabled: true,
-      }),
+      Effect.runPromise(
+        service.invoke("odt_create_task", {
+          workspaceId: "repo",
+          title: "New task",
+          issueType: "task",
+          priority: 2,
+          description: "Created by MCP",
+          labels: ["mcp"],
+          aiReviewEnabled: true,
+        }),
+      ),
     ).resolves.toMatchObject({ task: { id: "task-new", title: "New task" } });
     expect(events).toEqual([{ repoPath: "/repo", taskId: "task-new" }]);
   });
-
   test("links pull requests through the task service provider lookup path", async () => {
     let currentTask = taskCard({ status: "human_review" });
     const linkPullRequestCalls: unknown[] = [];
-    const taskService = {
-      async listTasks() {
-        return [currentTask];
+    const taskService = createTaskService({
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [currentTask];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async linkPullRequest(input: unknown) {
-        linkPullRequestCalls.push(input);
-        currentTask = taskCard({ status: "human_review" });
-        return {
-          providerId: "github",
-          number: 42,
-          url: "https://github.com/open/ducktor/pull/42",
-          state: "open",
-          createdAt: "2026-05-10T10:02:00.000Z",
-          updatedAt: "2026-05-10T10:02:00.000Z",
-        };
+      linkPullRequest(input: unknown) {
+        return Effect.tryPromise({
+          try: async () => {
+            linkPullRequestCalls.push(input);
+            currentTask = taskCard({ status: "human_review" });
+            return {
+              providerId: "github",
+              number: 42,
+              url: "https://github.com/open/ducktor/pull/42",
+              state: "open",
+              createdAt: "2026-05-10T10:02:00.000Z",
+              updatedAt: "2026-05-10T10:02:00.000Z",
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-    } as unknown as TaskService;
-    const service = createOdtMcpBridgeService({
+    });
+    const service = createOdtMcpBridgeServiceForTest({
       taskService,
       workspaceSettingsService: createWorkspaceSettingsService(),
     });
-
     await expect(
-      service.invoke("odt_set_pull_request", {
-        workspaceId: "repo",
-        taskId: "task-1",
-        providerId: "github",
-        number: 42,
-      }),
+      Effect.runPromise(
+        service.invoke("odt_set_pull_request", {
+          workspaceId: "repo",
+          taskId: "task-1",
+          providerId: "github",
+          number: 42,
+        }),
+      ),
     ).resolves.toMatchObject({
       pullRequest: {
         providerId: "github",

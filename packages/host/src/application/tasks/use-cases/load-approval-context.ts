@@ -1,9 +1,11 @@
+import { Effect } from "effect";
 import {
   canonicalTargetBranch,
   ensureHumanApprovalStatus,
   normalizeApprovalTargetBranch,
   publishTargetFromTargetBranch,
 } from "../../../domain/task";
+import { HostValidationError } from "../../../effect/host-errors";
 import { providerStatuses } from "../support/approval-readiness";
 import {
   effectiveTargetBranchForTask,
@@ -21,123 +23,143 @@ export const createTaskApprovalContextUseCase = ({
   taskWorktreeService,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "getApprovalContext"> => ({
-  async getApprovalContext(input) {
-    const { repoPath, taskId } = input;
-    const dependencies = requireApprovalContextDependencies(
-      gitPort,
-      settingsConfig,
-      systemCommands,
-      taskWorktreeService,
-      workspaceSettingsService,
-    );
-
-    const current = await taskStore.getTask({ repoPath, taskId });
-    ensureHumanApprovalStatus(current.status);
-    const repoConfig =
-      await dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-    const effectiveRepoPath = repoConfig.repoPath;
-    const metadata = await taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
-    const defaultMergeMethod = await loadDefaultMergeMethod(dependencies.settingsConfig);
-    const providers = await providerStatuses(dependencies, effectiveRepoPath, repoConfig);
-
-    if (metadata.directMerge !== undefined) {
-      const directMerge = metadata.directMerge;
-      const targetBranch = normalizeApprovalTargetBranch(directMerge.targetBranch);
-      const cleanupTarget = await findLatestCleanupTarget(
-        dependencies,
-        taskStore,
-        effectiveRepoPath,
-        taskId,
-        directMerge.sourceBranch,
+  getApprovalContext(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId } = input;
+      const dependencies = requireApprovalContextDependencies(
+        gitPort,
+        settingsConfig,
+        systemCommands,
+        taskWorktreeService,
+        workspaceSettingsService,
       );
-      const workingDirectory =
-        cleanupTarget && (await dependencies.settingsConfig.pathExists(cleanupTarget))
-          ? cleanupTarget
-          : undefined;
+
+      const current = yield* taskStore.getTask({ repoPath, taskId });
+      yield* Effect.try({
+        try: () => ensureHumanApprovalStatus(current.status),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      const repoConfig =
+        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const effectiveRepoPath = repoConfig.repoPath;
+      const metadata = yield* taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
+      const defaultMergeMethod = yield* loadDefaultMergeMethod(dependencies.settingsConfig);
+      const providers = yield* providerStatuses(dependencies, effectiveRepoPath, repoConfig);
+
+      if (metadata.directMerge !== undefined) {
+        const directMerge = metadata.directMerge;
+        const targetBranch = normalizeApprovalTargetBranch(directMerge.targetBranch);
+        const cleanupTarget = yield* findLatestCleanupTarget(
+          dependencies,
+          taskStore,
+          effectiveRepoPath,
+          taskId,
+          directMerge.sourceBranch,
+        );
+        const workingDirectory =
+          cleanupTarget && (yield* dependencies.settingsConfig.pathExists(cleanupTarget))
+            ? cleanupTarget
+            : undefined;
+
+        return {
+          outcome: "ready",
+          approvalContext: {
+            taskId,
+            taskStatus: current.status,
+            workingDirectory,
+            sourceBranch: directMerge.sourceBranch,
+            targetBranch,
+            publishTarget: publishTargetFromTargetBranch(targetBranch),
+            defaultMergeMethod,
+            hasUncommittedChanges: false,
+            uncommittedFileCount: 0,
+            pullRequest: metadata.pullRequest,
+            directMerge,
+            providers,
+          },
+        };
+      }
+
+      const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
+        repoPath: effectiveRepoPath,
+        taskId,
+      });
+      if (!taskWorktree) {
+        return {
+          outcome: "missing_builder_worktree",
+          taskId,
+          taskStatus: current.status,
+        };
+      }
+
+      const currentBranch = yield* dependencies.gitPort.getCurrentBranch(
+        taskWorktree.workingDirectory,
+      );
+      if (currentBranch.detached) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "workingDirectory",
+            message:
+              "Human approval requires a builder branch, but the builder worktree is detached.",
+            details: { workingDirectory: taskWorktree.workingDirectory },
+          }),
+        );
+      }
+      const sourceBranch = currentBranch.name?.trim();
+      if (!sourceBranch) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "workingDirectory",
+            message: "Human approval requires a builder branch name.",
+            details: { workingDirectory: taskWorktree.workingDirectory },
+          }),
+        );
+      }
+
+      const targetBranch = normalizeApprovalTargetBranch(
+        yield* effectiveTargetBranchForTask(
+          dependencies.workspaceSettingsService,
+          current,
+          effectiveRepoPath,
+        ),
+      );
+      const publishTarget =
+        current.targetBranch === undefined
+          ? publishTargetFromTargetBranch(repoConfig.defaultTargetBranch)
+          : publishTargetFromTargetBranch(current.targetBranch);
+      const targetRef = canonicalTargetBranch(targetBranch);
+      const worktreeStatus = yield* dependencies.gitPort.getWorktreeStatusSummaryData(
+        taskWorktree.workingDirectory,
+        targetRef,
+        "uncommitted",
+      );
+      const suggestedSquashCommitMessage = yield* dependencies.gitPort.suggestedSquashCommitMessage(
+        effectiveRepoPath,
+        sourceBranch,
+        targetRef,
+      );
 
       return {
         outcome: "ready",
         approvalContext: {
           taskId,
           taskStatus: current.status,
-          workingDirectory,
-          sourceBranch: directMerge.sourceBranch,
+          workingDirectory: taskWorktree.workingDirectory,
+          sourceBranch,
           targetBranch,
-          publishTarget: publishTargetFromTargetBranch(targetBranch),
+          publishTarget,
           defaultMergeMethod,
-          hasUncommittedChanges: false,
-          uncommittedFileCount: 0,
+          hasUncommittedChanges: worktreeStatus.fileStatusCounts.total > 0,
+          uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
           pullRequest: metadata.pullRequest,
-          directMerge,
           providers,
+          suggestedSquashCommitMessage,
         },
       };
-    }
-
-    const taskWorktree = await dependencies.taskWorktreeService.getTaskWorktree({
-      repoPath: effectiveRepoPath,
-      taskId,
     });
-    if (!taskWorktree) {
-      return {
-        outcome: "missing_builder_worktree",
-        taskId,
-        taskStatus: current.status,
-      };
-    }
-
-    const currentBranch = await dependencies.gitPort.getCurrentBranch(
-      taskWorktree.workingDirectory,
-    );
-    if (currentBranch.detached) {
-      throw new Error(
-        "Human approval requires a builder branch, but the builder worktree is detached.",
-      );
-    }
-    const sourceBranch = currentBranch.name?.trim();
-    if (!sourceBranch) {
-      throw new Error("Human approval requires a builder branch name.");
-    }
-
-    const targetBranch = normalizeApprovalTargetBranch(
-      await effectiveTargetBranchForTask(
-        dependencies.workspaceSettingsService,
-        current,
-        effectiveRepoPath,
-      ),
-    );
-    const publishTarget =
-      current.targetBranch === undefined
-        ? publishTargetFromTargetBranch(repoConfig.defaultTargetBranch)
-        : publishTargetFromTargetBranch(current.targetBranch);
-    const targetRef = canonicalTargetBranch(targetBranch);
-    const worktreeStatus = await dependencies.gitPort.getWorktreeStatusSummaryData(
-      taskWorktree.workingDirectory,
-      targetRef,
-      "uncommitted",
-    );
-    const suggestedSquashCommitMessage = await dependencies.gitPort.suggestedSquashCommitMessage(
-      effectiveRepoPath,
-      sourceBranch,
-      targetRef,
-    );
-
-    return {
-      outcome: "ready",
-      approvalContext: {
-        taskId,
-        taskStatus: current.status,
-        workingDirectory: taskWorktree.workingDirectory,
-        sourceBranch,
-        targetBranch,
-        publishTarget,
-        defaultMergeMethod,
-        hasUncommittedChanges: worktreeStatus.fileStatusCounts.total > 0,
-        uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
-        pullRequest: metadata.pullRequest,
-        providers,
-        suggestedSquashCommitMessage,
-      },
-    };
   },
 });

@@ -1,5 +1,10 @@
+import { Effect } from "effect";
 import { validateTransition } from "../../../domain/task";
-import { requireBuildCompletedDependencies } from "../support/required-task-dependencies";
+import { HostValidationError } from "../../../effect/host-errors";
+import {
+  requireBuildCompletedDependencies,
+  requireDependencies,
+} from "../support/required-task-dependencies";
 import {
   blockBuildCompletionTask,
   buildCompletionWorktreePath,
@@ -18,99 +23,141 @@ export const createTaskBuildStateUseCases = ({
   TaskService,
   "buildBlocked" | "buildResumed" | "buildCompleted"
 > => ({
-  async buildBlocked(input) {
-    const { repoPath, taskId, reason } = input;
-    if (!reason.trim()) {
-      throw new Error("build_blocked requires a non-empty reason");
-    }
-    const currentTasks = await taskStore.listTasks({ repoPath });
-    const current = currentTasks.find((task) => task.id === taskId);
-    if (!current) {
-      throw new Error(`Task not found: ${taskId}`);
-    }
-    validateTransition(current, currentTasks, current.status, "blocked");
-
-    if (current.status === "blocked") {
-      return enrichTask(current, currentTasks);
-    }
-
-    const updated = await taskStore.transitionTask({ repoPath, taskId, status: "blocked" });
-    const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
-
-    return enrichTask(updated, nextTasks);
-  },
-
-  async buildResumed(input) {
-    const { repoPath, taskId } = input;
-    const current = await taskStore.getTask({ repoPath, taskId });
-    validateTransition(current, [current], current.status, "in_progress");
-
-    if (current.status === "in_progress") {
-      return enrichTask(current, [current]);
-    }
-
-    const updated = await taskStore.transitionTask({ repoPath, taskId, status: "in_progress" });
-    return enrichTask(updated, [updated]);
-  },
-
-  async buildCompleted(input) {
-    const { repoPath, taskId } = input;
-    const dependencies = requireBuildCompletedDependencies(
-      settingsConfig,
-      systemCommands,
-      workspaceSettingsService,
-    );
-    const { current, currentTasks } = await taskListWithCurrent(taskStore, repoPath, taskId);
-
-    if (current.status === "ai_review" || current.status === "human_review") {
-      return enrichTask(current, currentTasks);
-    }
-    if (current.status !== "in_progress" && current.status !== "blocked") {
-      throw new Error(
-        `build_completed is only allowed from in_progress, blocked, ai_review, or human_review. Task ${current.id} is ${current.status}.`,
-      );
-    }
-
-    const repoConfig =
-      await dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-    const nextStatus =
-      current.aiReviewEnabled && current.documentSummary.qaReport.verdict !== "approved"
-        ? "ai_review"
-        : "human_review";
-    validateTransition(current, currentTasks, current.status, nextStatus);
-
-    const postCompleteHooks = repoConfig.hooks.postComplete
-      .map((hook) => hook.trim())
-      .filter(Boolean);
-    if (postCompleteHooks.length > 0) {
-      let worktreePath: string;
-      try {
-        worktreePath = await buildCompletionWorktreePath(
-          dependencies.settingsConfig,
-          repoConfig,
-          taskId,
+  buildBlocked(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId, reason } = input;
+      if (!reason.trim()) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "reason",
+            message: "build_blocked requires a non-empty reason",
+          }),
         );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        await blockBuildCompletionTask(taskStore, repoPath, taskId, current, currentTasks);
-        throw new Error(message, { cause: error });
+      }
+      const currentTasks = yield* taskStore.listTasks({ repoPath });
+      const current = currentTasks.find((task) => task.id === taskId);
+      if (!current) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `Task not found: ${taskId}`,
+            details: { repoPath, taskId },
+          }),
+        );
+      }
+      yield* Effect.try({
+        try: () => validateTransition(current, currentTasks, current.status, "blocked"),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+
+      if (current.status === "blocked") {
+        return enrichTask(current, currentTasks);
       }
 
-      const failure = await runHookCommandsAllowFailure(
-        dependencies.systemCommands,
-        postCompleteHooks,
-        worktreePath,
+      const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: "blocked" });
+      const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
+
+      return enrichTask(updated, nextTasks);
+    });
+  },
+
+  buildResumed(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId } = input;
+      const current = yield* taskStore.getTask({ repoPath, taskId });
+      yield* Effect.try({
+        try: () => validateTransition(current, [current], current.status, "in_progress"),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+
+      if (current.status === "in_progress") {
+        return enrichTask(current, [current]);
+      }
+
+      const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: "in_progress" });
+      return enrichTask(updated, [updated]);
+    });
+  },
+
+  buildCompleted(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId } = input;
+      const dependencies = yield* requireDependencies(() =>
+        requireBuildCompletedDependencies(settingsConfig, systemCommands, workspaceSettingsService),
       );
-      if (failure !== null) {
-        const message = `Worktree cleanup script command failed: ${failure.hook}\n${failure.stderr}`;
-        await blockBuildCompletionTask(taskStore, repoPath, taskId, current, currentTasks);
-        throw new Error(message);
+      const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
+
+      if (current.status === "ai_review" || current.status === "human_review") {
+        return enrichTask(current, currentTasks);
       }
-    }
+      if (current.status !== "in_progress" && current.status !== "blocked") {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `build_completed is only allowed from in_progress, blocked, ai_review, or human_review. Task ${current.id} is ${current.status}.`,
+            details: { repoPath, taskId, status: current.status },
+          }),
+        );
+      }
 
-    const updated = await taskStore.transitionTask({ repoPath, taskId, status: nextStatus });
-    const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
+      const repoConfig =
+        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const nextStatus =
+        current.aiReviewEnabled && current.documentSummary.qaReport.verdict !== "approved"
+          ? "ai_review"
+          : "human_review";
+      yield* Effect.try({
+        try: () => validateTransition(current, currentTasks, current.status, nextStatus),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
 
-    return enrichTask(updated, nextTasks);
+      const postCompleteHooks = repoConfig.hooks.postComplete
+        .map((hook) => hook.trim())
+        .filter(Boolean);
+      if (postCompleteHooks.length > 0) {
+        const worktreePathResult = yield* Effect.either(
+          buildCompletionWorktreePath(dependencies.settingsConfig, repoConfig, taskId),
+        );
+        if (worktreePathResult._tag === "Left") {
+          yield* blockBuildCompletionTask(taskStore, repoPath, taskId, current, currentTasks);
+          return yield* Effect.fail(worktreePathResult.left);
+        }
+        const worktreePath = worktreePathResult.right;
+
+        const failure = yield* runHookCommandsAllowFailure(
+          dependencies.systemCommands,
+          postCompleteHooks,
+          worktreePath,
+        );
+        if (failure !== null) {
+          const message = `Worktree cleanup script command failed: ${failure.hook}\n${failure.stderr}`;
+          yield* blockBuildCompletionTask(taskStore, repoPath, taskId, current, currentTasks);
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message,
+              details: { repoPath, taskId, hook: failure.hook },
+            }),
+          );
+        }
+      }
+
+      const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: nextStatus });
+      const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
+
+      return enrichTask(updated, nextTasks);
+    });
   },
 });

@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import {
   canSetPlan,
   canSetSpecFromStatus,
@@ -6,6 +7,7 @@ import {
   validateEpicSubtasksReplaceable,
   validatePlanSubtaskRules,
 } from "../../../domain/task";
+import { HostValidationError } from "../../../effect/host-errors";
 import { replaceEpicPlanSubtasks } from "../support/planning-rules";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -21,116 +23,166 @@ export const createTaskDocumentUseCases = ({
   | "savePlanDocument"
   | "qaGetReport"
 > => ({
-  async specGet(input) {
-    const { repoPath, taskId } = input;
-    const metadata = await taskStore.getTaskMetadata({ repoPath, taskId });
+  specGet(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId } = input;
+      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
 
-    return metadata.spec;
+      return metadata.spec;
+    });
   },
 
-  async setSpec(input) {
-    const { repoPath, taskId, markdown } = input;
-    const currentTasks = await taskStore.listTasks({ repoPath });
-    const current = currentTasks.find((task) => task.id === taskId);
-    if (!current) {
-      throw new Error(`Task not found: ${taskId}`);
-    }
-    if (!canSetSpecFromStatus(current.status)) {
-      throw new Error(
-        `set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: ${current.status})`,
-      );
-    }
+  setSpec(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId, markdown } = input;
+      const currentTasks = yield* taskStore.listTasks({ repoPath });
+      const current = currentTasks.find((task) => task.id === taskId);
+      if (!current) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `Task not found: ${taskId}`,
+            details: { repoPath, taskId },
+          }),
+        );
+      }
+      if (!canSetSpecFromStatus(current.status)) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: ${current.status})`,
+            details: { repoPath, taskId, status: current.status },
+          }),
+        );
+      }
 
-    const document = await taskStore.setSpecDocument({ repoPath, taskId, markdown });
-    if (current.status === "open") {
-      await taskStore.transitionTask({ repoPath, taskId, status: "spec_ready" });
-    }
+      const document = yield* taskStore.setSpecDocument({ repoPath, taskId, markdown });
+      if (current.status === "open") {
+        yield* taskStore.transitionTask({ repoPath, taskId, status: "spec_ready" });
+      }
 
-    return document;
+      return document;
+    });
   },
 
-  async saveSpecDocument(input) {
-    const { repoPath, taskId, markdown } = input;
-    await taskStore.getTask({ repoPath, taskId });
+  saveSpecDocument(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId, markdown } = input;
+      yield* taskStore.getTask({ repoPath, taskId });
 
-    return taskStore.setSpecDocument({ repoPath, taskId, markdown });
+      return yield* taskStore.setSpecDocument({ repoPath, taskId, markdown });
+    });
   },
 
-  async planGet(input) {
-    const { repoPath, taskId } = input;
-    const metadata = await taskStore.getTaskMetadata({ repoPath, taskId });
+  planGet(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId } = input;
+      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
 
-    return metadata.plan;
+      return metadata.plan;
+    });
   },
 
-  async setPlan(input) {
-    const { repoPath, taskId, markdown, hasExplicitSubtasks } = input;
-    const subtaskCreates = normalizePlanSubtasks(input.subtasks);
-    const currentTasks = await taskStore.listTasks({ repoPath });
-    const current = currentTasks.find((task) => task.id === taskId);
-    if (!current) {
-      throw new Error(`Task not found: ${taskId}`);
-    }
-    if (!canSetPlan(current)) {
-      throw new Error(
-        `set_plan is not allowed for issue type ${current.issueType} from status ${current.status}. feature/epic allow spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review; task/bug also allow open.`,
-      );
-    }
+  setPlan(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId, markdown, hasExplicitSubtasks } = input;
+      const subtaskCreates = normalizePlanSubtasks(input.subtasks);
+      const currentTasks = yield* taskStore.listTasks({ repoPath });
+      const current = currentTasks.find((task) => task.id === taskId);
+      if (!current) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `Task not found: ${taskId}`,
+            details: { repoPath, taskId },
+          }),
+        );
+      }
+      if (!canSetPlan(current)) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `set_plan is not allowed for issue type ${current.issueType} from status ${current.status}. feature/epic allow spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review; task/bug also allow open.`,
+            details: { repoPath, taskId, issueType: current.issueType, status: current.status },
+          }),
+        );
+      }
 
-    const isActiveOrReview = isActiveOrReviewStatus(current.status);
-    const shouldValidateSubtaskRules =
-      current.issueType !== "epic" || !isActiveOrReview || hasExplicitSubtasks;
-    const effectiveSubtaskCreates = current.issueType === "epic" ? subtaskCreates : [];
-    if (shouldValidateSubtaskRules) {
-      validatePlanSubtaskRules(current, currentTasks, subtaskCreates);
-    }
+      const isActiveOrReview = isActiveOrReviewStatus(current.status);
+      const shouldValidateSubtaskRules =
+        current.issueType !== "epic" || !isActiveOrReview || hasExplicitSubtasks;
+      const effectiveSubtaskCreates = current.issueType === "epic" ? subtaskCreates : [];
+      if (shouldValidateSubtaskRules) {
+        yield* Effect.try({
+          try: () => validatePlanSubtaskRules(current, currentTasks, subtaskCreates),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      }
 
-    const shouldReplaceEpicSubtasks = current.issueType === "epic" && hasExplicitSubtasks;
-    if (shouldReplaceEpicSubtasks) {
-      validateEpicSubtasksReplaceable(current, currentTasks);
-    }
+      const shouldReplaceEpicSubtasks = current.issueType === "epic" && hasExplicitSubtasks;
+      if (shouldReplaceEpicSubtasks) {
+        yield* Effect.try({
+          try: () => validateEpicSubtasksReplaceable(current, currentTasks),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      }
 
-    const document = await taskStore.setPlanDocument({ repoPath, taskId, markdown });
+      const document = yield* taskStore.setPlanDocument({ repoPath, taskId, markdown });
 
-    if (shouldReplaceEpicSubtasks) {
-      await replaceEpicPlanSubtasks(
-        taskStore,
-        repoPath,
-        current,
-        currentTasks,
-        effectiveSubtaskCreates,
-      );
-    }
+      if (shouldReplaceEpicSubtasks) {
+        yield* replaceEpicPlanSubtasks(
+          taskStore,
+          repoPath,
+          current,
+          currentTasks,
+          effectiveSubtaskCreates,
+        );
+      }
 
-    if (current.status === "open" || current.status === "spec_ready") {
-      await taskStore.transitionTask({ repoPath, taskId, status: "ready_for_dev" });
-    }
+      if (current.status === "open" || current.status === "spec_ready") {
+        yield* taskStore.transitionTask({ repoPath, taskId, status: "ready_for_dev" });
+      }
 
-    return document;
+      return document;
+    });
   },
 
-  async savePlanDocument(input) {
-    const { repoPath, taskId, markdown } = input;
-    await taskStore.getTask({ repoPath, taskId });
+  savePlanDocument(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId, markdown } = input;
+      yield* taskStore.getTask({ repoPath, taskId });
 
-    return taskStore.setPlanDocument({ repoPath, taskId, markdown });
+      return yield* taskStore.setPlanDocument({ repoPath, taskId, markdown });
+    });
   },
 
-  async qaGetReport(input) {
-    const { repoPath, taskId } = input;
-    const metadata = await taskStore.getTaskMetadata({ repoPath, taskId });
+  qaGetReport(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId } = input;
+      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
 
-    if (!metadata.qaReport) {
-      return { markdown: "" };
-    }
+      if (!metadata.qaReport) {
+        return { markdown: "" };
+      }
 
-    return {
-      markdown: metadata.qaReport.markdown,
-      ...(metadata.qaReport.updatedAt !== undefined
-        ? { updatedAt: metadata.qaReport.updatedAt }
-        : {}),
-      ...(metadata.qaReport.revision !== undefined ? { revision: metadata.qaReport.revision } : {}),
-      ...(metadata.qaReport.error !== undefined ? { error: metadata.qaReport.error } : {}),
-    };
+      return {
+        markdown: metadata.qaReport.markdown,
+        ...(metadata.qaReport.updatedAt !== undefined
+          ? { updatedAt: metadata.qaReport.updatedAt }
+          : {}),
+        ...(metadata.qaReport.revision !== undefined
+          ? { revision: metadata.qaReport.revision }
+          : {}),
+        ...(metadata.qaReport.error !== undefined ? { error: metadata.qaReport.error } : {}),
+      };
+    });
   },
 });

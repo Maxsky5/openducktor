@@ -1,9 +1,14 @@
 import type { RuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
+import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
 
 const requireNoArgs = (command: string, args: Record<string, unknown> | undefined): void => {
   if (args !== undefined && Object.keys(args).length > 0) {
-    throw new Error(`${command} does not accept arguments.`);
+    throw new HostValidationError({
+      message: `${command} does not accept arguments.`,
+      field: "args",
+      details: { command },
+    });
   }
 };
 

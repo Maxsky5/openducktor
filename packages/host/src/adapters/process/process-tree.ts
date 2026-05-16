@@ -4,6 +4,7 @@ import {
   type SpawnSyncReturns,
   spawnSync,
 } from "node:child_process";
+import { HostOperationError } from "../../effect/host-errors";
 
 export type ProcessTreePlatform = NodeJS.Platform;
 export type KillProcess = (pid: number, signal?: NodeJS.Signals | 0) => boolean;
@@ -55,7 +56,11 @@ const isAlreadyExitedError = (error: unknown): boolean =>
 
 const assertValidPid = (pid: number, label: string): void => {
   if (!Number.isInteger(pid) || pid <= 0) {
-    throw new Error(`Cannot stop ${label}: invalid process pid ${pid}.`);
+    throw new HostOperationError({
+      message: `Cannot stop ${label}: invalid process pid ${pid}.`,
+      operation: "process-tree.stop",
+      details: { pid, label },
+    });
   }
 };
 
@@ -73,7 +78,11 @@ export const signalProcessTree = (
     if (result.status === 0 || !isAlive(pid)) {
       return;
     }
-    throw new Error(`Failed to stop Windows process tree ${pid} with taskkill for ${signal}.`);
+    throw new HostOperationError({
+      message: `Failed to stop Windows process tree ${pid} with taskkill for ${signal}.`,
+      operation: "process-tree.stop",
+      details: { pid, signal },
+    });
   }
 
   try {
@@ -112,9 +121,11 @@ export const terminateProcessTree = async ({
     return;
   }
 
-  throw new Error(
-    `Timed out waiting ${stopTimeoutMs}ms per signal for ${label} process tree ${pid} to stop after SIGTERM and SIGKILL.`,
-  );
+  throw new HostOperationError({
+    message: `Timed out waiting ${stopTimeoutMs}ms per signal for ${label} process tree ${pid} to stop after SIGTERM and SIGKILL.`,
+    operation: "process-tree.stop",
+    details: { pid, label, stopTimeoutMs },
+  });
 };
 
 export const waitForChildProcessClose = (

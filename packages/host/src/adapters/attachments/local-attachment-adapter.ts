@@ -1,7 +1,13 @@
 import { mkdir, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { LocalAttachmentEntry, LocalAttachmentPort } from "../../ports/local-attachment-port";
+import { Effect, Layer } from "effect";
+import { toHostOperationError, toHostPathStatError } from "../../effect/host-errors";
+import {
+  type LocalAttachmentEntry,
+  type LocalAttachmentPort,
+  LocalAttachmentPortTag,
+} from "../../ports/local-attachment-port";
 
 const localAttachmentStageDirName = "openducktor-local-attachments";
 
@@ -19,33 +25,66 @@ export const createLocalAttachmentAdapter = (): LocalAttachmentPort => ({
     return path.isAbsolute(inputPath);
   },
   canonicalizePath(inputPath) {
-    return realpath(inputPath);
+    return Effect.tryPromise({
+      try: () => realpath(inputPath),
+      catch: (cause) =>
+        toHostOperationError(cause, "localAttachment.canonicalizePath", {
+          path: inputPath,
+        }),
+    });
   },
-  async ensureDirectory(inputPath) {
-    await mkdir(inputPath, { recursive: true });
+  ensureDirectory(inputPath) {
+    return Effect.tryPromise({
+      try: () => mkdir(inputPath, { recursive: true }).then(() => undefined),
+      catch: (cause) =>
+        toHostOperationError(cause, "localAttachment.ensureDirectory", { path: inputPath }),
+    });
   },
   writeFile(inputPath, bytes) {
-    return writeFile(inputPath, bytes);
+    return Effect.tryPromise({
+      try: () => writeFile(inputPath, bytes),
+      catch: (cause) =>
+        toHostOperationError(cause, "localAttachment.writeFile", {
+          path: inputPath,
+        }),
+    });
   },
-  async readDirectory(inputPath) {
-    const entries = await readdir(inputPath, { withFileTypes: true });
-    return entries.map(
-      (entry): LocalAttachmentEntry => ({
-        path: path.join(inputPath, entry.name),
-        fileName: entry.name,
-      }),
+  readDirectory(inputPath) {
+    return Effect.gen(function* () {
+      const entries = yield* Effect.tryPromise({
+        try: () => readdir(inputPath, { withFileTypes: true }),
+        catch: (cause) =>
+          toHostOperationError(cause, "localAttachment.readDirectory", { path: inputPath }),
+      });
+      return entries.map(
+        (entry): LocalAttachmentEntry => ({
+          path: path.join(inputPath, entry.name),
+          fileName: entry.name,
+        }),
+      );
+    });
+  },
+  modifiedTimeMs(inputPath) {
+    return Effect.gen(function* () {
+      const metadata = yield* Effect.tryPromise({
+        try: () => stat(inputPath),
+        catch: (cause) => toHostOperationError(cause, "localAttachment.modifiedTimeMs"),
+      });
+      return metadata.mtimeMs;
+    });
+  },
+  exists(inputPath) {
+    return Effect.tryPromise({
+      try: () => stat(inputPath),
+      catch: (cause) => toHostPathStatError(cause, "localAttachment.exists", inputPath),
+    }).pipe(
+      Effect.as(true),
+      Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)),
     );
   },
-  async modifiedTimeMs(inputPath) {
-    const metadata = await stat(inputPath);
-    return metadata.mtimeMs;
-  },
-  async exists(inputPath) {
-    try {
-      await stat(inputPath);
-      return true;
-    } catch {
-      return false;
-    }
-  },
 });
+
+export const LocalAttachmentPortLive = Layer.succeed(
+  LocalAttachmentPortTag,
+  createLocalAttachmentAdapter(),
+);
