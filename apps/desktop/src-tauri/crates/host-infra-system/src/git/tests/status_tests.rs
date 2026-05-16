@@ -323,6 +323,63 @@ fn get_worktree_status_rehydrates_rebase_conflict_context() {
 }
 
 #[test]
+fn get_worktree_status_rehydrates_add_add_rebase_conflict_context() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-add-add-rebase-conflict");
+    let git = GitCliPort::new();
+
+    git.switch_branch(&repo.path, "feature/add-add-conflict", true)
+        .expect("feature branch should be created");
+    fs::write(repo.path.join("new-shared.txt"), "feature value\n")
+        .expect("feature file should write");
+    run_git_ok(&repo.path, &["add", "new-shared.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "feature adds shared file"]);
+
+    git.switch_branch(&repo.path, "main", false)
+        .expect("return to main");
+    fs::write(repo.path.join("new-shared.txt"), "main value\n").expect("main file should write");
+    run_git_ok(&repo.path, &["add", "new-shared.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "main adds shared file"]);
+
+    git.switch_branch(&repo.path, "feature/add-add-conflict", false)
+        .expect("return to feature branch");
+    let rebase_output = Command::new("git")
+        .args(["rebase", "main"])
+        .current_dir(&repo.path)
+        .output()
+        .expect("git rebase should execute");
+    assert!(
+        !rebase_output.status.success(),
+        "rebase should stop on add/add conflicts\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&rebase_output.stdout),
+        String::from_utf8_lossy(&rebase_output.stderr)
+    );
+
+    let status = git
+        .get_worktree_status(&repo.path, "main", GitDiffScope::Target)
+        .expect("worktree status should resolve during add/add rebase conflict");
+
+    assert!(status
+        .file_statuses
+        .iter()
+        .any(|file| file.path == "new-shared.txt" && file.status == "unmerged"));
+    let git_conflict = status
+        .git_conflict
+        .expect("add/add rebase conflict context should be available after reload");
+    assert_eq!(
+        git_conflict.operation,
+        host_domain::GitConflictOperation::Rebase
+    );
+    assert!(git_conflict
+        .conflicted_files
+        .iter()
+        .any(|file| file == "new-shared.txt"));
+}
+
+#[test]
 fn get_worktree_status_rehydrates_rebase_conflict_context_without_upstream() {
     if !git_available() {
         return;

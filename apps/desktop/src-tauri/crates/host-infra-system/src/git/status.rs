@@ -552,6 +552,7 @@ fn parse_status_porcelain(output: &str) -> Vec<GitFileStatus> {
             let (status, staged) = match (index, worktree) {
                 ('?', '?') => ("untracked".to_string(), false),
                 ('!', '!') => ("ignored".to_string(), false),
+                pair if is_unmerged_status_pair(pair) => ("unmerged".to_string(), true),
                 (i, ' ') if i != ' ' => (porcelain_char_to_status(i), true),
                 (' ', w) if w != ' ' => (porcelain_char_to_status(w), false),
                 (i, _w) => (porcelain_char_to_status(i), true),
@@ -564,6 +565,13 @@ fn parse_status_porcelain(output: &str) -> Vec<GitFileStatus> {
             })
         })
         .collect()
+}
+
+fn is_unmerged_status_pair((index, worktree): (char, char)) -> bool {
+    matches!(
+        (index, worktree),
+        ('D', 'D') | ('A', 'U') | ('U', 'D') | ('U', 'A') | ('D', 'U') | ('A', 'A') | ('U', 'U')
+    )
 }
 
 fn porcelain_char_to_status(ch: char) -> String {
