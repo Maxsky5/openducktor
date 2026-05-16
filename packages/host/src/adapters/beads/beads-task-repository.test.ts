@@ -193,7 +193,7 @@ describe("createBeadsTaskRepository", () => {
     const context = await createExistingBeadsCliContext();
     const repoPath = path.join(
       await mkdtemp(path.join(tmpdir(), "Repo With Spaces-")),
-      "C:\\Users\\Max Sky\\Repo Name",
+      "C-Users\\Max Sky\\Repo Name",
     );
     const workspaceResolverCalls: string[] = [];
     const contextRequests: Array<{

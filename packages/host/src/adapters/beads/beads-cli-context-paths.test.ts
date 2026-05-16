@@ -32,7 +32,7 @@ describe("resolveBeadsCliContext path identity", () => {
       path.join(await mkdtemp(path.join(tmpdir(), "Repo With Spaces-")), "Case Path"),
       path.join(
         await mkdtemp(path.join(tmpdir(), "Repo With Backslashes-")),
-        "C:\\Users\\Max Sky\\Repo Name",
+        "C-Users\\Max Sky\\Repo Name",
       ),
       path.join(await mkdtemp(path.join(tmpdir(), "repo-case-")), "Repo Name"),
     ];
@@ -71,7 +71,7 @@ describe("resolveBeadsCliContext path identity", () => {
     expect(existingContext.repoId).toMatch(/^repo-with-spaces-[a-z0-9]+-[a-f0-9]{8}$/);
     expect(existingContext.databaseName).toMatch(/^odt_repo_with_spaces_[a-z0-9]+_[a-f0-9]{12}$/);
 
-    const syntheticRepo = path.join(configRoot, "missing repos", "C:\\Users\\Max Sky\\Repo Name");
+    const syntheticRepo = path.join(configRoot, "missing repos", "C-Users-Max Sky-Repo Name");
     const syntheticContext = await resolveBeadsCliContext(syntheticRepo, {
       processEnv,
       requireSharedServer: false,
@@ -101,7 +101,7 @@ describe("resolveBeadsCliContext path identity", () => {
 
   test("keeps managed paths under config roots with path-edge names", async () => {
     const configRoot = await mkdtemp(
-      path.join(tmpdir(), "odt config C:\\Users\\Max Sky\\OpenDucktor-"),
+      path.join(tmpdir(), "odt config C-Users-Max Sky-OpenDucktor-"),
     );
     const repoRoot = await mkdtemp(path.join(tmpdir(), "Repo With Spaces-"));
 

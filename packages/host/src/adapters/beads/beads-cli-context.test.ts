@@ -131,8 +131,8 @@ describe("resolveBeadsCliContext", () => {
     const serverRoot = path.join(configRoot, "beads", "shared-server");
     const state = createSharedServerRecord(serverRoot, {
       port: 36123,
-      sharedServerRoot: path.join(serverRoot, "C:\\Users\\Max Sky\\server"),
-      doltDataDir: path.join(serverRoot, "C:\\Users\\Max Sky\\server", "dolt data"),
+      sharedServerRoot: path.join(serverRoot, "C-Users\\Max Sky\\server"),
+      doltDataDir: path.join(serverRoot, "C-Users\\Max Sky\\server", "dolt data"),
     });
     await mkdir(serverRoot, { recursive: true });
     await writeFile(path.join(serverRoot, "server.json"), JSON.stringify(state));
@@ -345,7 +345,7 @@ describe("createBeadsAttachmentProvisioner", () => {
   });
 
   test("initializes missing path-edge attachments from the attachment root", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "odt provisioning C:\\Users\\Max Sky-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "odt provisioning C-Users-Max Sky-"));
     const attachmentRoot = path.join(parent, "Attachment Root With Spaces");
     const beadsDir = path.join(attachmentRoot, ".beads");
     const context: BeadsCliContext = {

@@ -13,7 +13,7 @@ import {
 const createPaths = async (): Promise<BeadsSharedServerPaths> => {
   const baseDir = await mkdtemp(path.join(tmpdir(), "odt config shared dolt-"));
   const beadsRoot = path.join(baseDir, "beads");
-  const sharedServerRoot = path.join(beadsRoot, "shared server C:\\Users\\Max Sky");
+  const sharedServerRoot = path.join(beadsRoot, "shared server C-Users\\Max Sky");
   return {
     baseDir,
     beadsRoot,
