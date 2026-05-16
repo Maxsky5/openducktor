@@ -11,7 +11,7 @@ import type {
 } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
-import { shouldStartDetachedProcessGroup, signalProcessTree } from "../process/process-tree";
+import { shouldStartDetachedProcessGroup, terminateProcessTree } from "../process/process-tree";
 import { resolveOpencodeBinary } from "../runtimes/runtime-binaries";
 
 export type OpenCodeMcpBridgeConnection = {
@@ -184,29 +184,6 @@ const waitForClose = (
   });
 };
 
-const stopChildProcess = async (
-  child: OpenCodeChildProcess,
-  pid: number,
-  isClosed: () => boolean,
-  stopTimeoutMs: number,
-): Promise<void> => {
-  if (isClosed()) {
-    return;
-  }
-
-  signalProcessTree(pid, "SIGTERM");
-  if (await waitForClose(child, isClosed, stopTimeoutMs)) {
-    return;
-  }
-
-  signalProcessTree(pid, "SIGKILL");
-  if (await waitForClose(child, isClosed, stopTimeoutMs)) {
-    return;
-  }
-
-  throw new Error(`Timed out waiting for OpenCode process group ${pid} to stop.`);
-};
-
 export const createOpenCodeWorkspaceRuntimeStarter = ({
   systemCommands,
   resolveMcpBridgeConnection,
@@ -309,7 +286,13 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         return {
           runtime,
           async stop() {
-            await stopChildProcess(child, pid, () => closed, stopTimeoutMs);
+            await terminateProcessTree({
+              pid,
+              label: `OpenCode runtime ${runtime.runtimeId}`,
+              isClosed: () => closed,
+              waitForExit: (timeoutMs) => waitForClose(child, () => closed, timeoutMs),
+              stopTimeoutMs,
+            });
           },
         };
       }
@@ -317,7 +300,13 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       await delay(retryDelayMs);
     }
 
-    await stopChildProcess(child, pid, () => closed, stopTimeoutMs);
+    await terminateProcessTree({
+      pid,
+      label: `OpenCode runtime on 127.0.0.1:${port}`,
+      isClosed: () => closed,
+      waitForExit: (timeoutMs) => waitForClose(child, () => closed, timeoutMs),
+      stopTimeoutMs,
+    });
     throw new Error(`Timed out waiting for OpenCode runtime on 127.0.0.1:${port}.`);
   },
 });

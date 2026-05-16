@@ -123,13 +123,13 @@ const waitForHostExit = async (
   await Promise.race([child.exited, sleep(durationMs)]);
 };
 
-const waitForGracefulHostExit = async (
+const waitForGracefulHostExitCode = async (
   child: ManagedHost,
   sleep: HostTerminationDependencies["sleep"] = Bun.sleep,
-): Promise<boolean> => {
+): Promise<number | null> => {
   return Promise.race([
-    child.exited.then(() => true),
-    sleep(HOST_GRACEFUL_EXIT_TIMEOUT_MS).then(() => false),
+    child.exited.then((exitCode) => exitCode),
+    sleep(HOST_GRACEFUL_EXIT_TIMEOUT_MS).then(() => null),
   ]);
 };
 
@@ -285,7 +285,7 @@ export const __launcherTestInternals = {
   terminateHostProcess,
   verifyBackendReadiness,
   waitForBackend,
-  waitForGracefulHostExit,
+  waitForGracefulHostExitCode,
 };
 
 const startViteServer = async (
@@ -430,12 +430,19 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
             ? shutdownError.reason.message
             : shutdownError.reason,
         );
+        throw shutdownError.reason;
       }
 
-      const hostExited = await waitForGracefulHostExit(hostBackend);
-      if (!hostExited) {
+      let hostExitCode = await waitForGracefulHostExitCode(hostBackend);
+      if (hostExitCode === null) {
         logInfo("Ensuring OpenDucktor TypeScript host has stopped...");
         await hostBackend.stop();
+        hostExitCode = await hostBackend.exited;
+      }
+      if (hostExitCode !== 0) {
+        throw new Error(
+          `OpenDucktor TypeScript host shutdown failed with exit code ${hostExitCode}.`,
+        );
       }
       logSuccess("OpenDucktor web stopped.");
     })();

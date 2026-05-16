@@ -6,7 +6,7 @@ import {
   DevServerProcessStartExitError,
   type DevServerProcessStartInput,
 } from "../../ports/dev-server-process-port";
-import { shouldStartDetachedProcessGroup, signalProcessTree } from "../process/process-tree";
+import { shouldStartDetachedProcessGroup, terminateProcessTree } from "../process/process-tree";
 
 export type CreateDevServerProcessAdapterInput = {
   processEnv?: NodeJS.ProcessEnv;
@@ -116,23 +116,13 @@ export const createDevServerProcessAdapter = ({
     return {
       pid,
       async stop() {
-        if (closeResult !== null || spawnError !== null) {
-          return;
-        }
-
-        signalProcessTree(pid, "SIGTERM");
-        if (await waitForClose(stopTimeoutMs)) {
-          return;
-        }
-
-        signalProcessTree(pid, "SIGKILL");
-        if (await waitForClose(stopTimeoutMs)) {
-          return;
-        }
-
-        throw new Error(
-          `Timed out waiting for process group ${pid} to stop after SIGTERM and SIGKILL`,
-        );
+        await terminateProcessTree({
+          pid,
+          label: `dev server command "${command}"`,
+          isClosed: () => closeResult !== null || spawnError !== null,
+          waitForExit: waitForClose,
+          stopTimeoutMs,
+        });
       },
     };
   },

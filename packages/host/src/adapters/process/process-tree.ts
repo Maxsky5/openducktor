@@ -1,36 +1,102 @@
 import { spawnSync } from "node:child_process";
 
-const processIsAlive = (pid: number): boolean => {
+export type ProcessTreePlatform = NodeJS.Platform;
+
+type SignalProcessTreeDependencies = {
+  platform?: ProcessTreePlatform;
+  kill?: typeof process.kill;
+  spawnSync?: typeof spawnSync;
+  isAlive?: (pid: number) => boolean;
+};
+
+export type TerminateProcessTreeInput = {
+  pid: number;
+  label: string;
+  isClosed: () => boolean;
+  waitForExit: (timeoutMs: number) => Promise<boolean>;
+  stopTimeoutMs: number;
+  signalDependencies?: SignalProcessTreeDependencies;
+};
+
+export const processIsAlive = (pid: number, kill: typeof process.kill = process.kill): boolean => {
   try {
-    process.kill(pid, 0);
+    kill(pid, 0);
     return true;
   } catch {
     return false;
   }
 };
 
-export const signalProcessTree = (pid: number, signal: NodeJS.Signals): void => {
-  if (process.platform === "win32") {
-    const result = spawnSync("taskkill", ["/pid", String(pid), "/t", "/f"], {
+const isAlreadyExitedError = (error: unknown): boolean =>
+  error instanceof Error && "code" in error && error.code === "ESRCH";
+
+const assertValidPid = (pid: number, label: string): void => {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    throw new Error(`Cannot stop ${label}: invalid process pid ${pid}.`);
+  }
+};
+
+export const signalProcessTree = (
+  pid: number,
+  signal: NodeJS.Signals,
+  dependencies: SignalProcessTreeDependencies = {},
+): void => {
+  const platform = dependencies.platform ?? process.platform;
+  const kill = dependencies.kill ?? process.kill;
+  const spawnSyncCommand = dependencies.spawnSync ?? spawnSync;
+  const isAlive = dependencies.isAlive ?? ((targetPid: number) => processIsAlive(targetPid, kill));
+
+  if (platform === "win32") {
+    const result = spawnSyncCommand("taskkill", ["/pid", String(pid), "/t", "/f"], {
       stdio: "ignore",
     });
-    if (result.status === 0 || !processIsAlive(pid)) {
+    if (result.status === 0 || !isAlive(pid)) {
       return;
     }
-    throw new Error(`Failed to stop Windows process tree ${pid} with ${signal}.`);
+    throw new Error(`Failed to stop Windows process tree ${pid} with taskkill for ${signal}.`);
   }
 
   try {
-    process.kill(-pid, signal);
+    kill(-pid, signal);
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ESRCH") {
+    if (isAlreadyExitedError(error)) {
       return;
     }
-    if (!processIsAlive(pid)) {
+    if (!isAlive(pid)) {
       return;
     }
     throw error;
   }
 };
 
-export const shouldStartDetachedProcessGroup = (): boolean => process.platform !== "win32";
+export const terminateProcessTree = async ({
+  pid,
+  label,
+  isClosed,
+  waitForExit,
+  stopTimeoutMs,
+  signalDependencies,
+}: TerminateProcessTreeInput): Promise<void> => {
+  assertValidPid(pid, label);
+  if (isClosed()) {
+    return;
+  }
+
+  signalProcessTree(pid, "SIGTERM", signalDependencies);
+  if (isClosed() || (await waitForExit(stopTimeoutMs))) {
+    return;
+  }
+
+  signalProcessTree(pid, "SIGKILL", signalDependencies);
+  if (isClosed() || (await waitForExit(stopTimeoutMs))) {
+    return;
+  }
+
+  throw new Error(
+    `Timed out waiting ${stopTimeoutMs}ms for ${label} process tree ${pid} to stop after SIGTERM and SIGKILL.`,
+  );
+};
+
+export const shouldStartDetachedProcessGroup = (
+  platform: ProcessTreePlatform = process.platform,
+): boolean => platform !== "win32";

@@ -114,22 +114,22 @@ describe("launcher internals", () => {
     ]);
   });
 
-  test("detects when the host exits during the graceful shutdown wait", async () => {
-    const hostExited = await __launcherTestInternals.waitForGracefulHostExit(
+  test("detects the host exit code during the graceful shutdown wait", async () => {
+    const hostExitCode = await __launcherTestInternals.waitForGracefulHostExitCode(
       createHostProcess(Promise.resolve(0)),
       async () => new Promise(() => {}),
     );
 
-    expect(hostExited).toBe(true);
+    expect(hostExitCode).toBe(0);
   });
 
   test("detects when the host needs force termination after graceful shutdown wait", async () => {
-    const hostExited = await __launcherTestInternals.waitForGracefulHostExit(
+    const hostExitCode = await __launcherTestInternals.waitForGracefulHostExitCode(
       createHostProcess(new Promise<number>(() => {})),
       async () => {},
     );
 
-    expect(hostExited).toBe(false);
+    expect(hostExitCode).toBeNull();
   });
 
   test("uses process-group signals on non-Windows platforms", async () => {
