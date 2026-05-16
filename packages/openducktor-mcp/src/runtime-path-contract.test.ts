@@ -11,6 +11,7 @@ describe("runtime path contract", () => {
       "host-bridge-client.ts",
       "index.ts",
       "lib.ts",
+      "listed-tool-schema.ts",
       "odt-task-store.ts",
       "path-utils.ts",
       "store-context.ts",

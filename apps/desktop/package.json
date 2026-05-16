@@ -21,14 +21,14 @@
   "dependencies": {
     "@openducktor/host-client": "workspace:*",
     "@openducktor/frontend": "workspace:*",
-    "@tauri-apps/api": "^2.0.0"
+    "@tauri-apps/api": "^2.11.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.2.4",
-    "@tauri-apps/cli": "^2.10.1",
-    "@types/node": "^25.6.0",
-    "@vitejs/plugin-react": "^6.0.1",
-    "bun-types": "^1.3.13",
-    "vite": "^8.0.10"
+    "@tailwindcss/vite": "^4.3.0",
+    "@tauri-apps/cli": "^2.11.1",
+    "@types/node": "^25.8.0",
+    "@vitejs/plugin-react": "^6.0.2",
+    "bun-types": "^1.3.14",
+    "vite": "^8.0.13"
   }
 }
