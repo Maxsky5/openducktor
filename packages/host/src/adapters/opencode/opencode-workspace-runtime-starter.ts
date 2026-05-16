@@ -28,6 +28,8 @@ type LocalPortAllocator = () => Promise<number>;
 
 type LocalPortProbe = (port: number, timeoutMs: number) => Promise<boolean>;
 
+type ProcessTreeTerminator = typeof terminateProcessTree;
+
 export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   systemCommands: SystemCommandPort;
   resolveMcpBridgeConnection?: OpenCodeMcpBridgeConnectionResolver;
@@ -42,6 +44,7 @@ export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   runtimeId?: () => string;
   portAllocator?: LocalPortAllocator;
   portProbe?: LocalPortProbe;
+  processTreeTerminator?: ProcessTreeTerminator;
 };
 
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
@@ -198,6 +201,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
   runtimeId = () => randomUUID(),
   portAllocator = pickFreePort,
   portProbe = canConnect,
+  processTreeTerminator = terminateProcessTree,
 }: CreateOpenCodeWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
     if (input.runtimeKind !== "opencode") {
@@ -286,7 +290,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         return {
           runtime,
           async stop() {
-            await terminateProcessTree({
+            await processTreeTerminator({
               pid,
               label: `OpenCode runtime ${runtime.runtimeId}`,
               isClosed: () => closed,
@@ -300,7 +304,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       await delay(retryDelayMs);
     }
 
-    await terminateProcessTree({
+    await processTreeTerminator({
       pid,
       label: `OpenCode runtime on 127.0.0.1:${port}`,
       isClosed: () => closed,

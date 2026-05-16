@@ -159,6 +159,26 @@ fn shared_dolt_server_reports_invalid_dolt_override() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn shared_dolt_unix_cleanup_targets_process_group() {
+    assert_eq!(super::unix_process_tree_signal_target(1234), -1234);
+}
+
+#[cfg(windows)]
+#[test]
+fn shared_dolt_windows_cleanup_uses_taskkill_tree_args() {
+    assert_eq!(
+        super::windows_taskkill_args(1234),
+        vec![
+            "/PID".to_string(),
+            "1234".to_string(),
+            "/T".to_string(),
+            "/F".to_string(),
+        ]
+    );
+}
+
 #[test]
 fn repo_attachment_helpers_use_expected_layouts() {
     let _env_lock = lock_env();

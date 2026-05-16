@@ -6,7 +6,7 @@ const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
   return { exited } as Bun.Subprocess;
 };
 
-const createTerminableHostProcess = (pid?: number, exited = new Promise<number>(() => {})) => {
+const createTerminableHostProcess = (pid?: number, exited = Promise.resolve(0)) => {
   const killCalls: Array<number | NodeJS.Signals | undefined> = [];
   const child = {
     pid,
@@ -227,6 +227,38 @@ describe("launcher internals", () => {
     expect(processKillCalls).toEqual([]);
     expect(processTreeKills).toEqual([1234]);
     expect(killCalls).toEqual([]);
+  });
+
+  test("surfaces Windows process-tree termination failures", async () => {
+    const { child } = createTerminableHostProcess(1234);
+
+    await expect(
+      __launcherTestInternals.terminateHostProcess(child, {
+        platform: "win32",
+        killProcess() {
+          throw new Error("killProcess should not be called");
+        },
+        terminateWindowsProcessTree() {
+          return Promise.reject(new Error("taskkill failed"));
+        },
+        sleep: async () => {},
+      }),
+    ).rejects.toThrow("taskkill failed");
+  });
+
+  test("surfaces Unix process-group signal failures", async () => {
+    const { child } = createTerminableHostProcess(1234);
+
+    await expect(
+      __launcherTestInternals.terminateHostProcess(child, {
+        platform: "linux",
+        killProcess() {
+          throw new Error("SIGTERM failed");
+        },
+        terminateWindowsProcessTree: noopWindowsProcessTreeTerminator,
+        sleep: async () => {},
+      }),
+    ).rejects.toThrow("SIGTERM failed");
   });
 
   test("skips process-group signals when the host PID is invalid", async () => {

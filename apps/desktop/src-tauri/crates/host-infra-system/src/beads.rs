@@ -28,6 +28,12 @@ pub(crate) use shared_dolt_server::{
     SHARED_DOLT_PORT_RANGE_START,
 };
 
+#[cfg(all(test, unix))]
+pub(crate) use shared_dolt_server::unix_process_tree_signal_target;
+
+#[cfg(all(test, windows))]
+pub(crate) use shared_dolt_server::windows_taskkill_args;
+
 #[cfg(test)]
 #[path = "beads/tests.rs"]
 mod tests;

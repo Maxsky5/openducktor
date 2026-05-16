@@ -5,6 +5,7 @@ import type { BeadsSharedServerPaths, BeadsSharedServerState } from "./beads-con
 import {
   readSharedServerState,
   serverStateIsHealthy,
+  stopOwnedSharedDoltServer,
   writeDoltConfigFile,
   writeSharedServerState,
   yamlQuotePath,
@@ -26,7 +27,10 @@ const createPaths = async (): Promise<BeadsSharedServerPaths> => {
   };
 };
 
-const createState = (paths: BeadsSharedServerPaths): BeadsSharedServerState => ({
+const createState = (
+  paths: BeadsSharedServerPaths,
+  overrides: Partial<BeadsSharedServerState> = {},
+): BeadsSharedServerState => ({
   pid: process.pid,
   host: "127.0.0.1",
   port: 36111,
@@ -36,6 +40,22 @@ const createState = (paths: BeadsSharedServerPaths): BeadsSharedServerState => (
   sharedServerRoot: paths.sharedServerRoot,
   doltDataDir: paths.doltRoot,
   startedAt: "2026-05-10T00:00:00Z",
+  ...overrides,
+});
+
+const createStopState = (
+  overrides: Partial<BeadsSharedServerState> = {},
+): BeadsSharedServerState => ({
+  pid: 999_999_991,
+  ownerPid: process.pid,
+  acquisition: "started_by_owner",
+  host: "127.0.0.1",
+  user: "root",
+  port: 36_001,
+  sharedServerRoot: "/tmp/odt-shared-dolt",
+  doltDataDir: "/tmp/odt-shared-dolt/dolt",
+  startedAt: "2026-05-16T00:00:00.000Z",
+  ...overrides,
 });
 
 describe("readSharedServerState", () => {
@@ -106,6 +126,41 @@ describe("serverStateIsHealthy", () => {
     await expect(
       serverStateIsHealthy({ ...state, doltDataDir: `${paths.doltRoot}-other` }, paths),
     ).resolves.toBe(false);
+  });
+});
+
+describe("stopOwnedSharedDoltServer", () => {
+  test("refuses to stop another owner before touching the state file", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "odt-shared-dolt-stop-"));
+    const statePath = path.join(root, "server.json");
+    await writeFile(statePath, "state");
+
+    await expect(
+      stopOwnedSharedDoltServer(createStopState({ ownerPid: process.pid + 1 }), statePath),
+    ).rejects.toThrow("Refusing to stop shared Dolt server");
+
+    await expect(readFile(statePath, "utf8")).resolves.toBe("state");
+  });
+
+  test("removes state only after the owned process is confirmed gone", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "odt-shared-dolt-stop-"));
+    const statePath = path.join(root, "server.json");
+    await writeFile(statePath, "state");
+
+    await expect(stopOwnedSharedDoltServer(createStopState(), statePath)).resolves
+      .toBeUndefined();
+    await expect(readFile(statePath, "utf8")).rejects.toThrow();
+  });
+
+  test("keeps state visible when process cleanup fails before termination", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "odt-shared-dolt-stop-"));
+    const statePath = path.join(root, "server.json");
+    await writeFile(statePath, "state");
+
+    await expect(stopOwnedSharedDoltServer(createStopState({ pid: 0 }), statePath)).rejects.toThrow(
+      "invalid process pid 0",
+    );
+    await expect(readFile(statePath, "utf8")).resolves.toBe("state");
   });
 });
 

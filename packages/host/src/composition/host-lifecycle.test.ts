@@ -62,6 +62,9 @@ describe("host lifecycle shutdown", () => {
         async ensureConnection() {
           throw new Error("ensureConnection should not be called");
         },
+        async ensureExternalDiscoveryReady() {
+          throw new Error("ensureExternalDiscoveryReady should not be called");
+        },
         async close() {
           throw new Error("bridge close failed");
         },

@@ -119,8 +119,8 @@ const waitForHostExit = async (
   child: ManagedProcess,
   durationMs: number,
   sleep: HostTerminationDependencies["sleep"],
-): Promise<void> => {
-  await Promise.race([child.exited, sleep(durationMs)]);
+): Promise<number | null> => {
+  return Promise.race([child.exited, sleep(durationMs).then(() => null)]);
 };
 
 const waitForGracefulHostExitCode = async (
@@ -146,20 +146,19 @@ const terminateHostProcess = async (
 
   if (dependencies.platform === "win32") {
     if (hasProcessGroupPid) {
-      try {
-        await dependencies.terminateWindowsProcessTree(pid);
-      } catch {}
+      await dependencies.terminateWindowsProcessTree(pid);
     } else {
       child.kill();
     }
-    await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
+    const exitCode = await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
+    if (exitCode === null) {
+      throw new Error(`Timed out waiting for OpenDucktor web host process ${pid} to exit.`);
+    }
     return;
   }
 
   if (hasProcessGroupPid) {
-    try {
-      dependencies.killProcess(-pid, "SIGTERM");
-    } catch {}
+    dependencies.killProcess(-pid, "SIGTERM");
   }
 
   child.kill();
@@ -168,14 +167,24 @@ const terminateHostProcess = async (
   if (hasProcessGroupPid) {
     try {
       dependencies.killProcess(-pid, 0);
-      try {
-        dependencies.killProcess(-pid, "SIGKILL");
-      } catch {}
-    } catch {}
+    } catch {
+      child.kill(9);
+      const exitCode = await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
+      if (exitCode === null) {
+        throw new Error(`Timed out waiting for OpenDucktor web host process ${pid} to exit.`);
+      }
+      return;
+    }
+    dependencies.killProcess(-pid, "SIGKILL");
   }
 
   child.kill(9);
-  await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
+  const exitCode = await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
+  if (exitCode === null) {
+    throw new Error(
+      `Timed out waiting for OpenDucktor web host process ${pid ?? "unknown"} to exit.`,
+    );
+  }
 };
 
 const closeFrontendServer = async (server: FrontendServer | null): Promise<void> => {
