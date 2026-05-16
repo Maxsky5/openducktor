@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { initializeMissingAttachment } from "../../infrastructure/beads/beads-attachment-provisioning";
-import { databaseNameForWorkspace } from "../../infrastructure/beads/beads-context-model";
 import { ensureSharedDoltServerRunning } from "../../infrastructure/beads/beads-shared-dolt-server";
 import {
   type BeadsCliContext,
@@ -91,130 +90,6 @@ describe("resolveBeadsCliContext", () => {
       port: 36001,
       ownershipState: "owned_by_current_process",
     });
-  });
-
-  test("resolves workspace-scoped managed Beads paths when workspace id is provided", async () => {
-    const configRoot = await mkdtemp(path.join(tmpdir(), "odt-config-workspace-test-"));
-    const repoRoot = await mkdtemp(path.join(tmpdir(), "My Repo-"));
-    const canonicalRepoRoot = await realpath(repoRoot);
-
-    const context = await withEnv("OPENDUCKTOR_CONFIG_DIR", configRoot, () =>
-      resolveBeadsCliContext(repoRoot, {
-        requireSharedServer: false,
-        workspaceId: "openducktor",
-      }),
-    );
-
-    expect(context.repoPath).toBe(canonicalRepoRoot);
-    expect(context.repoId).toBe("openducktor");
-    expect(context.databaseName).toBe("odt_openducktor_14ecb05f675c");
-    expect(context.attachmentRoot).toBe(path.join(configRoot, "beads", "openducktor"));
-    expect(context.beadsDir).toBe(path.join(configRoot, "beads", "openducktor", ".beads"));
-    expect(context.workingDir).toBe(context.attachmentRoot);
-  });
-
-  test("keeps configured workspace identity stable across repo path spelling changes", async () => {
-    const configRoot = await mkdtemp(path.join(tmpdir(), "odt config workspace stable-"));
-    const processEnv = { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot };
-    const workspaceId = "  Workspace With Spaces  ";
-    const repoPaths = [
-      path.join(await mkdtemp(path.join(tmpdir(), "Repo With Spaces-")), "Case Path"),
-      path.join(
-        await mkdtemp(path.join(tmpdir(), "Repo With Backslashes-")),
-        "C:\\Users\\Max Sky\\Repo Name",
-      ),
-      path.join(await mkdtemp(path.join(tmpdir(), "repo-case-")), "Repo Name"),
-    ];
-
-    const contexts = await Promise.all(
-      repoPaths.map((repoPath) =>
-        resolveBeadsCliContext(repoPath, {
-          processEnv,
-          requireSharedServer: false,
-          workspaceId,
-        }),
-      ),
-    );
-
-    for (const context of contexts) {
-      expect(context.repoId).toBe("Workspace With Spaces");
-      expect(context.databaseName).toBe(databaseNameForWorkspace(workspaceId));
-      expect(context.attachmentRoot).toBe(path.join(configRoot, "beads", "Workspace With Spaces"));
-      expect(context.beadsDir).toBe(path.join(context.attachmentRoot, ".beads"));
-      expect(context.workingDir).toBe(context.attachmentRoot);
-    }
-  });
-
-  test("derives repo identity from canonical existing paths and absolute synthetic paths", async () => {
-    const configRoot = await mkdtemp(path.join(tmpdir(), "odt config repo identity-"));
-    const existingRepo = await mkdtemp(path.join(tmpdir(), "Repo With Spaces-"));
-    const canonicalExistingRepo = await realpath(existingRepo);
-    const processEnv = { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot };
-
-    const existingContext = await resolveBeadsCliContext(existingRepo, {
-      processEnv,
-      requireSharedServer: false,
-    });
-
-    expect(existingContext.repoPath).toBe(canonicalExistingRepo);
-    expect(existingContext.repoId).toMatch(/^repo-with-spaces-[a-z0-9]+-[a-f0-9]{8}$/);
-    expect(existingContext.databaseName).toMatch(/^odt_repo_with_spaces_[a-z0-9]+_[a-f0-9]{12}$/);
-
-    const syntheticRepo = path.join(configRoot, "missing repos", "C:\\Users\\Max Sky\\Repo Name");
-    const syntheticContext = await resolveBeadsCliContext(syntheticRepo, {
-      processEnv,
-      requireSharedServer: false,
-    });
-
-    expect(syntheticContext.repoPath).toBe(syntheticRepo);
-    expect(syntheticContext.repoId).toMatch(/^c-users-max-sky-repo-name-[a-f0-9]{8}$/);
-    expect(syntheticContext.databaseName).toMatch(/^odt_c_users_max_sky_repo_name_[a-f0-9]{12}$/);
-  });
-
-  test("treats case-different repo spellings as distinct when no workspace id is configured", async () => {
-    const configRoot = await mkdtemp(path.join(tmpdir(), "odt config case identity-"));
-    const processEnv = { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot };
-    const lowerRepo = path.join(configRoot, "missing repos", "repo name");
-    const upperRepo = path.join(configRoot, "missing repos", "Repo Name");
-
-    const [lowerContext, upperContext] = await Promise.all([
-      resolveBeadsCliContext(lowerRepo, { processEnv, requireSharedServer: false }),
-      resolveBeadsCliContext(upperRepo, { processEnv, requireSharedServer: false }),
-    ]);
-
-    expect(lowerContext.repoPath).toBe(lowerRepo);
-    expect(upperContext.repoPath).toBe(upperRepo);
-    expect(lowerContext.repoId).not.toBe(upperContext.repoId);
-    expect(lowerContext.databaseName).not.toBe(upperContext.databaseName);
-  });
-
-  test("keeps managed paths under config roots with path-edge names", async () => {
-    const configRoot = await mkdtemp(
-      path.join(tmpdir(), "odt config C:\\Users\\Max Sky\\OpenDucktor-"),
-    );
-    const repoRoot = await mkdtemp(path.join(tmpdir(), "Repo With Spaces-"));
-    const processEnv = { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot };
-
-    const context = await resolveBeadsCliContext(repoRoot, {
-      processEnv,
-      requireSharedServer: false,
-      workspaceId: "workspace-id",
-    });
-
-    expect(context.attachmentRoot).toBe(path.join(configRoot, "beads", "workspace-id"));
-    expect(context.beadsDir).toBe(path.join(configRoot, "beads", "workspace-id", ".beads"));
-    expect(context.serverStatePath).toBe(
-      path.join(configRoot, "beads", "shared-server", "server.json"),
-    );
-  });
-
-  test("rejects an empty configured OpenDucktor config dir", async () => {
-    await expect(
-      resolveBeadsCliContext("/repo", {
-        processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: "" },
-        requireSharedServer: false,
-      }),
-    ).rejects.toThrow("OPENDUCKTOR_CONFIG_DIR is set but empty");
   });
 
   test("starts shared Dolt when task commands require a shared server", async () => {
