@@ -97,6 +97,19 @@ const resolveBundledCommand = async (
   return null;
 };
 
+const resolvePathCommand = async (
+  command: string,
+  systemCommands: SystemCommandPort,
+  env: NodeJS.ProcessEnv,
+): Promise<string | null> => {
+  const resolved = await systemCommands.resolveCommandPath?.(command, env);
+  if (resolved !== undefined) {
+    return resolved;
+  }
+
+  return (await systemCommands.requiredCommandError(command)) === null ? command : null;
+};
+
 export const resolveOpencodeBinary = async (
   systemCommands: SystemCommandPort,
   env: NodeJS.ProcessEnv = process.env,
@@ -128,9 +141,9 @@ export const resolveOpencodeBinary = async (
     return homeCandidate;
   }
 
-  const missing = await systemCommands.requiredCommandError("opencode");
-  if (missing === null) {
-    return "opencode";
+  const pathCommand = await resolvePathCommand("opencode", systemCommands, env);
+  if (pathCommand !== null) {
+    return pathCommand;
   }
 
   throw new Error(
@@ -168,9 +181,9 @@ export const resolveCodexBinary = async (
     return bundled;
   }
 
-  const missing = await systemCommands.requiredCommandError("codex");
-  if (missing === null) {
-    return "codex";
+  const pathCommand = await resolvePathCommand("codex", systemCommands, env);
+  if (pathCommand !== null) {
+    return pathCommand;
   }
 
   const resourcesPath = processResourcesPath(options.resourcesPath);

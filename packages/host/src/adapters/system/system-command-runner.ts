@@ -98,7 +98,7 @@ const quoteWindowsCommandArgument = (value: string): string => {
   return `"${value.replaceAll(`"`, `\\"`)}"`;
 };
 
-const launchCommand = (
+export const createSystemCommandLaunch = (
   command: string,
   args: string[],
   env: NodeJS.ProcessEnv,
@@ -121,6 +121,10 @@ export const createSystemCommandRunner = ({
   platform = process.platform,
 }: CreateSystemCommandRunnerInput = {}): SystemCommandPort => {
   const port: SystemCommandPort = {
+    resolveCommandPath(command, commandEnv = env) {
+      return resolveCommandPath(command, commandEnv, platform);
+    },
+
     async requiredCommandError(command) {
       const resolved = await resolveCommandPath(command, env, platform);
       return resolved === null
@@ -140,7 +144,7 @@ export const createSystemCommandRunner = ({
     async runCommandAllowFailure(command, args, options = {}) {
       const commandEnv = { ...env, ...options.env };
       const resolvedCommand = (await resolveCommandPath(command, commandEnv, platform)) ?? command;
-      const launch = launchCommand(resolvedCommand, args, commandEnv, platform);
+      const launch = createSystemCommandLaunch(resolvedCommand, args, commandEnv, platform);
       return new Promise<SystemCommandRunResult>((resolve, reject) => {
         const child = spawn(launch.command, launch.args, {
           cwd: options.cwd,

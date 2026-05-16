@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { removeTestDirectory } from "../../test-support/temp-directory";
+import { createSystemCommandRunner } from "../system/system-command-runner";
 import {
   buildOpenCodeConfigContent,
   createOpenCodeWorkspaceRuntimeStarter,
@@ -350,6 +351,51 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       ).rejects.toThrow(
         "Timed out waiting for OpenCode runtime on 127.0.0.1:43123. Cleanup failed: process tree cleanup failed",
       );
+    } finally {
+      await removeTestDirectory(root);
+    }
+  });
+
+  test("starts a Windows PATH-discovered cmd OpenCode runtime", async () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+
+    const root = await mkdtemp(join(tmpdir(), "odt-opencode-path-starter-"));
+    try {
+      const repo = join(root, "repo");
+      await mkdir(repo);
+      const opencodeBinary = await createFakeOpenCode(root);
+      const pathWithFakeRuntime = `${root};${process.env.PATH ?? ""}`;
+      const starter = createOpenCodeWorkspaceRuntimeStarter({
+        systemCommands: createSystemCommandRunner({
+          env: { ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" },
+          platform: "win32",
+        }),
+        processEnv: { ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" },
+        mcpCommand: ["mcp-bin"],
+        resolveMcpBridgeConnection: async () => ({
+          workspaceId: "repo",
+          hostUrl: "http://127.0.0.1:14327",
+          hostToken: "token-1",
+        }),
+        startupTimeoutMs: 2_000,
+        retryDelayMs: 20,
+        portAllocator: async () => 43123,
+        portProbe: async () => true,
+        runtimeId: () => "runtime-path",
+      });
+
+      expect(opencodeBinary.endsWith(".cmd")).toBe(true);
+      const handle = await starter.startWorkspaceRuntime({
+        runtimeKind: "opencode",
+        repoPath: repo,
+        workingDirectory: repo,
+        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      });
+
+      expect(handle.runtime.runtimeId).toBe("runtime-path");
+      await expect(handle.stop()).resolves.toBeUndefined();
     } finally {
       await removeTestDirectory(root);
     }

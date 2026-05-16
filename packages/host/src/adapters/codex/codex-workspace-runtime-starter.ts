@@ -13,13 +13,13 @@ import type {
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import {
-  type ProcessTreePlatform,
   type ProcessTreeTerminator,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
   waitForChildProcessClose,
 } from "../process/process-tree";
 import { resolveCodexBinary } from "../runtimes/runtime-binaries";
+import { createSystemCommandLaunch } from "../system/system-command-runner";
 import {
   type CodexAppServerEventEmitter,
   createCodexAppServerTransport,
@@ -49,8 +49,6 @@ export type CreateCodexWorkspaceRuntimeStarterInput = {
   stopTimeoutMs?: number;
   now?: () => Date;
   runtimeId?: () => string;
-  platform?: ProcessTreePlatform;
-  commandShell?: string;
   processTreeTerminator?: ProcessTreeTerminator;
 };
 
@@ -112,21 +110,6 @@ const requireBridgeValue = (value: string, label: keyof CodexMcpBridgeConnection
   return trimmed;
 };
 
-export const codexCommand = (
-  binary: string,
-  args: string[],
-  platform: ProcessTreePlatform = process.platform,
-  commandShell = process.env.ComSpec ?? "cmd.exe",
-): { file: string; args: string[] } => {
-  const lowerBinary = binary.toLowerCase();
-  const isWindowsCommandScript =
-    platform === "win32" && (lowerBinary.endsWith(".cmd") || lowerBinary.endsWith(".bat"));
-
-  return isWindowsCommandScript
-    ? { file: commandShell, args: ["/d", "/c", "call", binary, ...args] }
-    : { file: binary, args };
-};
-
 const throwCleanupErrors = (errors: string[]): void => {
   if (errors.length > 0) {
     throw new Error(errors.join("\n"));
@@ -146,8 +129,6 @@ export const createCodexWorkspaceRuntimeStarter = ({
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
   now = () => new Date(),
   runtimeId = () => randomUUID(),
-  platform = process.platform,
-  commandShell,
   processTreeTerminator = terminateProcessTree,
 }: CreateCodexWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
@@ -165,14 +146,14 @@ export const createCodexWorkspaceRuntimeStarter = ({
       resolveConfiguredMcpCommand(processEnv, mcpCommand) ??
       (await resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
     const binary = codexBinary ?? (await resolveCodexBinary(systemCommands, processEnv));
-    const command = codexCommand(
+    const command = createSystemCommandLaunch(
       binary,
       [...buildCodexMcpConfigArgs(resolvedMcpCommand), "app-server"],
-      platform,
-      commandShell,
+      processEnv,
+      process.platform,
     );
     const nextRuntimeId = runtimeId();
-    const child = spawn(command.file, command.args, {
+    const child = spawn(command.command, command.args, {
       cwd: input.workingDirectory,
       detached: shouldStartDetachedProcessGroup(),
       env: {
