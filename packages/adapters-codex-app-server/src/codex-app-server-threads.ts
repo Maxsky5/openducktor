@@ -29,12 +29,13 @@ export const toSessionSummary = (input: {
   externalSessionId: string;
   startedAt: string;
   role: AgentRole | null;
+  status: AgentSessionSummary["status"];
 }): AgentSessionSummary => ({
   externalSessionId: input.externalSessionId,
   runtimeKind: "codex",
   role: input.role,
   startedAt: input.startedAt,
-  status: "running",
+  status: input.status,
 });
 
 export type CodexThreadStatusSnapshot = {
@@ -128,3 +129,17 @@ export const codexLoadedThreadIds = (response: unknown): Set<string> =>
 
 export const threadSnapshotFromReadResponse = (response: unknown): CodexThreadSnapshot | null =>
   isPlainObject(response) ? codexThreadSnapshot(response.thread) : null;
+
+export const requireThreadSnapshotFromReadResponse = (
+  response: unknown,
+  action: string,
+  externalSessionId: string,
+): CodexThreadSnapshot => {
+  const threadSnapshot = threadSnapshotFromReadResponse(response);
+  if (!threadSnapshot) {
+    throw new Error(
+      `Codex ${action} response for thread '${externalSessionId}' is missing thread status.`,
+    );
+  }
+  return threadSnapshot;
+};

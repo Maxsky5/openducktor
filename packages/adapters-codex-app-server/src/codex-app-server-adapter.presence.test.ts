@@ -1,5 +1,22 @@
 import { describe, expect, mock, test } from "bun:test";
-import { createHarness, waitForEvent } from "./codex-app-server-adapter.test-harness";
+import {
+  createHarness,
+  RecordingTransport,
+  waitForEvent,
+} from "./codex-app-server-adapter.test-harness";
+import type { CodexJsonRpcRequest } from "./index";
+
+class ThreadIdOnlyResumeTransport extends RecordingTransport {
+  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+    if (request.method === "thread/resume") {
+      return {
+        threadId: (request.params as { threadId: string }).threadId,
+        startedAt: "2026-05-07T00:00:00.000Z",
+      } as Response;
+    }
+    return super.request<Response>(request);
+  }
+}
 
 describe("CodexAppServerAdapter presence", () => {
   test("uses one Codex thread inventory during startup presence checks", async () => {
@@ -127,6 +144,99 @@ describe("CodexAppServerAdapter presence", () => {
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).not.toContain(
       "turn/start",
     );
+  });
+
+  test("attaches an idle Codex thread without marking it running", async () => {
+    const { adapter } = createHarness();
+
+    await expect(
+      adapter.attachSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        role: "build",
+        systemPrompt: "Use the repo rules.",
+        externalSessionId: "thread-idle",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    ).resolves.toMatchObject({
+      externalSessionId: "thread-idle",
+      status: "idle",
+    });
+
+    await expect(
+      adapter.readSessionPresence({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-idle",
+      }),
+    ).resolves.toMatchObject({ classification: "idle", agentSessionStatus: "idle" });
+  });
+
+  test("resumes an idle Codex thread without marking it running", async () => {
+    const { adapter } = createHarness();
+
+    await expect(
+      adapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        role: "build",
+        systemPrompt: "Use the repo rules.",
+        externalSessionId: "thread-idle",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    ).resolves.toMatchObject({
+      externalSessionId: "thread-idle",
+      status: "idle",
+    });
+
+    await expect(
+      adapter.readSessionPresence({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-idle",
+      }),
+    ).resolves.toMatchObject({ classification: "idle", agentSessionStatus: "idle" });
+  });
+
+  test("rejects Codex resume responses without a thread status", async () => {
+    const transport = new ThreadIdOnlyResumeTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      transportFactory: mock(() => transport),
+    });
+    const expectedMessage =
+      "Codex thread/resume response for thread 'thread-idle' is missing thread status.";
+
+    await expect(
+      adapter.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        role: "build",
+        systemPrompt: "Use the repo rules.",
+        externalSessionId: "thread-idle",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    ).rejects.toThrow(expectedMessage);
+
+    await expect(
+      adapter.attachSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        role: "build",
+        systemPrompt: "Use the repo rules.",
+        externalSessionId: "thread-idle",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    ).rejects.toThrow(expectedMessage);
   });
 
   test("streams messages and completion after refresh attach", async () => {

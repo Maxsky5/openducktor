@@ -62,7 +62,7 @@ import {
   type CodexThreadSnapshot,
   codexThreadStatusSnapshot,
   extractThreadId,
-  threadSnapshotFromReadResponse,
+  requireThreadSnapshotFromReadResponse,
   toSessionSummary,
 } from "./codex-app-server-threads";
 import {
@@ -209,6 +209,7 @@ export class CodexAppServerAdapter
       externalSessionId,
       startedAt: startedAt ?? new Date().toISOString(),
       role: input.role,
+      status: "running",
     });
 
     this.sessions.set(summary.externalSessionId, {
@@ -244,14 +245,19 @@ export class CodexAppServerAdapter
     });
     this.clearThreadInventory(runtimeId);
     const { externalSessionId, startedAt } = extractThreadId(response, "thread/resume");
-    const threadSnapshot = threadSnapshotFromReadResponse(response);
+    const threadSnapshot = requireThreadSnapshotFromReadResponse(
+      response,
+      "thread/resume",
+      externalSessionId,
+    );
 
     const summary = toSessionSummary({
       externalSessionId,
-      startedAt: startedAt ?? threadSnapshot?.startedAt ?? new Date().toISOString(),
+      startedAt: startedAt ?? threadSnapshot.startedAt,
       role: input.role,
+      status: threadSnapshot.status.agentSessionStatus,
     });
-    const liveStatus = threadSnapshot?.status;
+    const liveStatus = threadSnapshot.status;
 
     this.sessions.set(summary.externalSessionId, {
       summary,
@@ -292,6 +298,7 @@ export class CodexAppServerAdapter
       externalSessionId,
       startedAt: startedAt ?? new Date().toISOString(),
       role: input.role,
+      status: "running",
     });
 
     this.sessions.set(summary.externalSessionId, {
@@ -602,13 +609,18 @@ export class CodexAppServerAdapter
       ...(model ? { effort: toTransportModelSelection(model).effort } : {}),
     });
     const { externalSessionId, startedAt } = extractThreadId(response, "thread/resume");
-    const threadSnapshot = threadSnapshotFromReadResponse(response);
+    const threadSnapshot = requireThreadSnapshotFromReadResponse(
+      response,
+      "thread/resume",
+      externalSessionId,
+    );
     const summary = toSessionSummary({
       externalSessionId,
-      startedAt: startedAt ?? threadSnapshot?.startedAt ?? new Date().toISOString(),
+      startedAt: startedAt ?? threadSnapshot.startedAt,
       role: input.role,
+      status: threadSnapshot.status.agentSessionStatus,
     });
-    const liveStatus = threadSnapshot?.status;
+    const liveStatus = threadSnapshot.status;
     const sessionState: CodexSessionState = {
       summary,
       ...(model ? { model } : {}),
