@@ -73,7 +73,7 @@ fn discovery_temp_path(path: &Path) -> PathBuf {
     ))
 }
 
-fn discovery_removal_temp_path(path: &Path) -> PathBuf {
+fn discovery_claim_path(path: &Path) -> PathBuf {
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -144,8 +144,8 @@ fn write_discovery_payload_atomically(path: &Path, payload: &str) -> Result<()> 
     Ok(())
 }
 
-fn restore_discovery_payload(path: &Path, temp_path: &Path) -> Result<()> {
-    match fs::hard_link(temp_path, path) {
+fn restore_claimed_discovery_unless_replaced(path: &Path, claimed_path: &Path) -> Result<()> {
+    match fs::hard_link(claimed_path, path) {
         Ok(()) => {}
         Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
         Err(error) => {
@@ -153,18 +153,45 @@ fn restore_discovery_payload(path: &Path, temp_path: &Path) -> Result<()> {
                 format!(
                     "Failed restoring MCP bridge discovery file {} from {}",
                     path.display(),
-                    temp_path.display()
+                    claimed_path.display()
                 )
             });
         }
     }
-    match fs::remove_file(temp_path) {
+    match fs::remove_file(claimed_path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error).with_context(|| {
             format!(
                 "Failed removing temporary MCP bridge discovery file {}",
-                temp_path.display()
+                claimed_path.display()
+            )
+        }),
+    }
+}
+
+fn claim_discovery_for_removal(path: &Path) -> Result<Option<PathBuf>> {
+    let claimed_path = discovery_claim_path(path);
+    match fs::rename(path, &claimed_path) {
+        Ok(()) => Ok(Some(claimed_path)),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "Failed claiming MCP bridge discovery file {} for removal",
+                path.display()
+            )
+        }),
+    }
+}
+
+fn remove_claimed_discovery(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "Failed removing MCP bridge discovery file {}",
+                path.display()
             )
         }),
     }
@@ -174,35 +201,16 @@ fn remove_discovery_payload_if_current(
     path: &Path,
     expected: &McpBridgeDiscoveryFile,
 ) -> Result<()> {
-    let temp_path = discovery_removal_temp_path(path);
-    match fs::rename(path, &temp_path) {
-        Ok(()) => {}
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
-        Err(error) => {
-            return Err(error).with_context(|| {
-                format!(
-                    "Failed claiming MCP bridge discovery file {} for removal",
-                    path.display()
-                )
-            });
-        }
-    }
+    let Some(claimed_path) = claim_discovery_for_removal(path)? else {
+        return Ok(());
+    };
 
-    let current = read_mcp_bridge_discovery(temp_path.as_path());
+    let current = read_mcp_bridge_discovery(claimed_path.as_path());
     match current {
-        Ok(Some(current)) if current == *expected => match fs::remove_file(&temp_path) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(error).with_context(|| {
-                format!(
-                    "Failed removing MCP bridge discovery file {}",
-                    temp_path.display()
-                )
-            }),
-        },
-        Ok(_) => restore_discovery_payload(path, temp_path.as_path()),
+        Ok(Some(current)) if current == *expected => remove_claimed_discovery(&claimed_path),
+        Ok(_) => restore_claimed_discovery_unless_replaced(path, claimed_path.as_path()),
         Err(error) => {
-            restore_discovery_payload(path, temp_path.as_path())?;
+            restore_claimed_discovery_unless_replaced(path, claimed_path.as_path())?;
             Err(error)
         }
     }

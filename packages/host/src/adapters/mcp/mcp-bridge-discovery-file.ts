@@ -91,11 +91,32 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): McpBridgeDi
   };
 };
 
-const discoveryRemovalTempPath = (discoveryPath: string): string =>
+const discoveryClaimPath = (discoveryPath: string): string =>
   path.join(
     path.dirname(discoveryPath),
     `.${path.basename(discoveryPath)}.${process.pid}.${process.hrtime.bigint()}.remove`,
   );
+
+const discoveryMatches = (
+  discovery: McpBridgeDiscoveryFile,
+  expected: McpBridgeDiscoveryFile,
+): boolean =>
+  discovery.hostUrl === expected.hostUrl &&
+  discovery.hostToken === expected.hostToken &&
+  discovery.pid === expected.pid;
+
+const claimDiscoveryForRemoval = async (discoveryPath: string): Promise<string | null> => {
+  const claimedPath = discoveryClaimPath(discoveryPath);
+  try {
+    await rename(discoveryPath, claimedPath);
+  } catch (error) {
+    if (isFsErrorCode(error, "ENOENT")) {
+      return null;
+    }
+    throw error;
+  }
+  return claimedPath;
+};
 
 export const readMcpBridgeDiscoveryFile = async (
   discoveryPath: string,
@@ -127,47 +148,38 @@ export const removeMcpBridgeDiscoveryFile = async (
   discoveryPath: string,
   discovery: McpBridgeDiscoveryFile,
 ): Promise<void> => {
-  const tempPath = discoveryRemovalTempPath(discoveryPath);
-  try {
-    await rename(discoveryPath, tempPath);
-  } catch (error) {
-    if (isFsErrorCode(error, "ENOENT")) {
-      return;
-    }
-    throw error;
+  const claimedPath = await claimDiscoveryForRemoval(discoveryPath);
+  if (claimedPath === null) {
+    return;
   }
 
   let current: McpBridgeDiscoveryFile;
   try {
-    current = parseDiscoveryFile(await readFile(tempPath, "utf8"), tempPath);
+    current = parseDiscoveryFile(await readFile(claimedPath, "utf8"), claimedPath);
   } catch (error) {
-    await restoreClaimedDiscoveryFile(discoveryPath, tempPath);
+    await restoreClaimedDiscoveryUnlessReplaced(discoveryPath, claimedPath);
     throw error;
   }
 
-  if (
-    current.hostUrl === discovery.hostUrl &&
-    current.hostToken === discovery.hostToken &&
-    current.pid === discovery.pid
-  ) {
-    await rm(tempPath, { force: true });
+  if (discoveryMatches(current, discovery)) {
+    await rm(claimedPath, { force: true });
     return;
   }
 
-  await restoreClaimedDiscoveryFile(discoveryPath, tempPath);
+  await restoreClaimedDiscoveryUnlessReplaced(discoveryPath, claimedPath);
 };
 
-const restoreClaimedDiscoveryFile = async (
+const restoreClaimedDiscoveryUnlessReplaced = async (
   discoveryPath: string,
-  tempPath: string,
+  claimedPath: string,
 ): Promise<void> => {
   try {
-    await link(tempPath, discoveryPath);
+    await link(claimedPath, discoveryPath);
   } catch (error) {
     if (!isFsErrorCode(error, "EEXIST")) {
       throw error;
     }
   } finally {
-    await rm(tempPath, { force: true });
+    await rm(claimedPath, { force: true });
   }
 };
