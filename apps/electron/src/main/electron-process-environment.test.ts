@@ -32,6 +32,7 @@ describe("configureElectronProcessEnvironment", () => {
     });
 
     expect(env[OPENDUCKTOR_MCP_SIDECAR_PATH_ENV]).toBeUndefined();
+    expect(env[OPENDUCKTOR_BUNDLED_BIN_DIR_ENV]).toBeUndefined();
   });
 
   test("points packaged hosts at the Electron resources MCP sidecar", () => {
@@ -57,7 +58,38 @@ describe("configureElectronProcessEnvironment", () => {
     ).toBe(join("/Applications/OpenDucktor.app/Contents/Resources", "bin", "openducktor-mcp"));
   });
 
+  test("preserves explicit packaged environment overrides", () => {
+    const env: NodeJS.ProcessEnv = {
+      [OPENDUCKTOR_BUNDLED_BIN_DIR_ENV]: "/custom/bin",
+      [OPENDUCKTOR_MCP_SIDECAR_PATH_ENV]: "/custom/openducktor-mcp",
+    };
+
+    configureElectronProcessEnvironment({
+      env,
+      platform: "linux",
+      isPackaged: true,
+      resourcesPath: "/opt/OpenDucktor/resources",
+    });
+
+    expect(env[OPENDUCKTOR_BUNDLED_BIN_DIR_ENV]).toBe("/custom/bin");
+    expect(env[OPENDUCKTOR_MCP_SIDECAR_PATH_ENV]).toBe("/custom/openducktor-mcp");
+  });
+
   test("uses the Windows sidecar executable name on Windows", () => {
+    const env: NodeJS.ProcessEnv = {};
+    configureElectronProcessEnvironment({
+      env,
+      platform: "win32",
+      isPackaged: true,
+      resourcesPath: "C:\\Program Files\\OpenDucktor\\resources",
+    });
+
+    expect(env[OPENDUCKTOR_BUNDLED_BIN_DIR_ENV]).toBe(
+      join("C:\\Program Files\\OpenDucktor\\resources", "bin"),
+    );
+    expect(env[OPENDUCKTOR_MCP_SIDECAR_PATH_ENV]).toBe(
+      join("C:\\Program Files\\OpenDucktor\\resources", "bin", "openducktor-mcp.exe"),
+    );
     expect(
       resolveElectronMcpSidecarPath({
         platform: "win32",
