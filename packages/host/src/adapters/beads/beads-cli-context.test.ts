@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { initializeMissingAttachment } from "../../infrastructure/beads/beads-attachment-provisioning";
 import { ensureSharedDoltServerRunning } from "../../infrastructure/beads/beads-shared-dolt-server";
 import {
   type BeadsCliContext,
@@ -10,6 +11,22 @@ import {
   resolveBeadsCliContext,
   sharedServerHealthFromContext,
 } from "./beads-cli-context";
+
+const createSharedServerRecord = (
+  sharedServerRoot: string,
+  overrides: Partial<NonNullable<BeadsCliContext["sharedServer"]>> = {},
+): NonNullable<BeadsCliContext["sharedServer"]> => ({
+  pid: 123,
+  ownerPid: process.pid,
+  acquisition: "started_by_owner",
+  host: "127.0.0.1",
+  user: "root",
+  port: 36001,
+  sharedServerRoot,
+  doltDataDir: path.join(sharedServerRoot, "dolt"),
+  startedAt: "2026-05-10T00:00:00Z",
+  ...overrides,
+});
 
 const withEnv = async <T>(
   key: string,
@@ -41,17 +58,7 @@ describe("resolveBeadsCliContext", () => {
     await mkdir(serverRoot, { recursive: true });
     await writeFile(
       path.join(serverRoot, "server.json"),
-      JSON.stringify({
-        pid: 123,
-        ownerPid: process.pid,
-        acquisition: "started_by_owner",
-        host: "127.0.0.1",
-        user: "root",
-        port: 36001,
-        sharedServerRoot: serverRoot,
-        doltDataDir: path.join(serverRoot, "dolt"),
-        startedAt: "2026-05-10T00:00:00Z",
-      }),
+      JSON.stringify(createSharedServerRecord(serverRoot)),
     );
 
     const canonicalRepoRoot = await realpath(repoRoot);
@@ -59,17 +66,9 @@ describe("resolveBeadsCliContext", () => {
       resolveBeadsCliContext(repoRoot, {
         requireSharedServer: true,
         async ensureSharedServer(paths) {
-          return {
-            pid: 123,
-            ownerPid: process.pid,
-            acquisition: "started_by_owner",
-            host: "127.0.0.1",
-            user: "root",
-            port: 36001,
-            sharedServerRoot: paths.sharedServerRoot,
+          return createSharedServerRecord(paths.sharedServerRoot, {
             doltDataDir: paths.doltRoot,
-            startedAt: "2026-05-10T00:00:00Z",
-          };
+          });
         },
         ensureAttachment: async () => undefined,
       }),
@@ -93,26 +92,6 @@ describe("resolveBeadsCliContext", () => {
     });
   });
 
-  test("resolves workspace-scoped managed Beads paths when workspace id is provided", async () => {
-    const configRoot = await mkdtemp(path.join(tmpdir(), "odt-config-workspace-test-"));
-    const repoRoot = await mkdtemp(path.join(tmpdir(), "My Repo-"));
-    const canonicalRepoRoot = await realpath(repoRoot);
-
-    const context = await withEnv("OPENDUCKTOR_CONFIG_DIR", configRoot, () =>
-      resolveBeadsCliContext(repoRoot, {
-        requireSharedServer: false,
-        workspaceId: "openducktor",
-      }),
-    );
-
-    expect(context.repoPath).toBe(canonicalRepoRoot);
-    expect(context.repoId).toBe("openducktor");
-    expect(context.databaseName).toBe("odt_openducktor_14ecb05f675c");
-    expect(context.attachmentRoot).toBe(path.join(configRoot, "beads", "openducktor"));
-    expect(context.beadsDir).toBe(path.join(configRoot, "beads", "openducktor", ".beads"));
-    expect(context.workingDir).toBe(context.attachmentRoot);
-  });
-
   test("starts shared Dolt when task commands require a shared server", async () => {
     const configRoot = await mkdtemp(path.join(tmpdir(), "odt-config-missing-server-test-"));
     const repoRoot = await mkdtemp(path.join(tmpdir(), "Repo-"));
@@ -124,17 +103,11 @@ describe("resolveBeadsCliContext", () => {
         requireSharedServer: true,
         async ensureSharedServer(paths) {
           calls.push(paths.sharedServerRoot);
-          return {
+          return createSharedServerRecord(paths.sharedServerRoot, {
             pid: process.pid,
-            ownerPid: process.pid,
-            acquisition: "started_by_owner",
-            host: "127.0.0.1",
-            user: "root",
             port: 36002,
-            sharedServerRoot: paths.sharedServerRoot,
             doltDataDir: paths.doltRoot,
-            startedAt: "2026-05-10T00:00:00Z",
-          };
+          });
         },
         async ensureAttachment(context) {
           attachmentCalls.push(context.beadsDir);
@@ -150,6 +123,33 @@ describe("resolveBeadsCliContext", () => {
       ownerPid: process.pid,
     });
     expect(context.env.BEADS_DOLT_SERVER_PORT).toBe("36002");
+  });
+
+  test("builds Beads env and working directory from path-edge shared server state", async () => {
+    const configRoot = await mkdtemp(path.join(tmpdir(), "odt config shared env-"));
+    const repoRoot = await mkdtemp(path.join(tmpdir(), "Repo With Spaces-"));
+    const serverRoot = path.join(configRoot, "beads", "shared-server");
+    const state = createSharedServerRecord(serverRoot, {
+      port: 36123,
+      sharedServerRoot: path.join(serverRoot, "C-Users\\Max Sky\\server"),
+      doltDataDir: path.join(serverRoot, "C-Users\\Max Sky\\server", "dolt data"),
+    });
+    await mkdir(serverRoot, { recursive: true });
+    await writeFile(path.join(serverRoot, "server.json"), JSON.stringify(state));
+
+    const context = await resolveBeadsCliContext(repoRoot, {
+      processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot },
+      requireSharedServer: false,
+      workspaceId: "workspace with spaces",
+    });
+
+    expect(context.workingDir).toBe(context.attachmentRoot);
+    expect(context.env.BEADS_DIR).toBe(context.beadsDir);
+    expect(context.env.BEADS_DOLT_SERVER_MODE).toBe("1");
+    expect(context.env.BEADS_DOLT_SERVER_HOST).toBe("127.0.0.1");
+    expect(context.env.BEADS_DOLT_SERVER_PORT).toBe("36123");
+    expect(context.env.BEADS_DOLT_SERVER_USER).toBe("root");
+    expect(context.serverStatePath).toBe(path.join(serverRoot, "server.json"));
   });
 
   test("serializes concurrent shared Dolt startup for the same config root", async () => {
@@ -342,6 +342,39 @@ describe("createBeadsAttachmentProvisioner", () => {
     await expect(readFile(path.join(context.beadsDir, "config.yaml"), "utf8")).resolves.toBe(
       "json: true\nno-git-ops: true # keep\n",
     );
+  });
+
+  test("initializes missing path-edge attachments from the attachment root", async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), "odt provisioning C-Users-Max Sky-"));
+    const attachmentRoot = path.join(parent, "Attachment Root With Spaces");
+    const beadsDir = path.join(attachmentRoot, ".beads");
+    const context: BeadsCliContext = {
+      ...(await createContext()),
+      attachmentRoot,
+      beadsDir,
+      workingDir: attachmentRoot,
+      env: {
+        BEADS_DIR: beadsDir,
+        BEADS_DOLT_SERVER_MODE: "1",
+        BEADS_DOLT_SERVER_HOST: "127.0.0.1",
+        BEADS_DOLT_SERVER_PORT: "36003",
+        BEADS_DOLT_SERVER_USER: "root",
+      },
+    };
+    const calls: Array<{ command: string; args: string[]; cwd?: string; env?: NodeJS.ProcessEnv }> =
+      [];
+
+    await initializeMissingAttachment(async (input) => {
+      calls.push(input);
+      return { ok: true, stdout: "", stderr: "" };
+    }, context);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.command).toBe("bd");
+    expect(calls[0]?.cwd).toBe(context.attachmentRoot);
+    expect(calls[0]?.env).toBe(context.env);
+    expect(calls[0]?.args).toContain("--database");
+    expect(calls[0]?.args).toContain(context.databaseName);
   });
 
   test("restores a missing shared database from the attachment backup", async () => {

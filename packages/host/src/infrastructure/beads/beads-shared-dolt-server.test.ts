@@ -1,0 +1,145 @@
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import type { BeadsSharedServerPaths, BeadsSharedServerState } from "./beads-context-model";
+import {
+  readSharedServerState,
+  serverStateIsHealthy,
+  writeDoltConfigFile,
+  writeSharedServerState,
+  yamlQuotePath,
+} from "./beads-shared-dolt-server";
+
+const createPaths = async (): Promise<BeadsSharedServerPaths> => {
+  const baseDir = await mkdtemp(path.join(tmpdir(), "odt config shared dolt-"));
+  const beadsRoot = path.join(baseDir, "beads");
+  const sharedServerRoot = path.join(beadsRoot, "shared server C-Users\\Max Sky");
+  return {
+    baseDir,
+    beadsRoot,
+    sharedServerRoot,
+    doltRoot: path.join(sharedServerRoot, "dolt data"),
+    cfgDir: path.join(sharedServerRoot, ".doltcfg with spaces"),
+    doltConfigFile: path.join(sharedServerRoot, "dolt-config.yaml"),
+    env: { ...process.env, OPENDUCKTOR_CONFIG_DIR: baseDir },
+    serverStatePath: path.join(sharedServerRoot, "server.json"),
+  };
+};
+
+const createState = (paths: BeadsSharedServerPaths): BeadsSharedServerState => ({
+  pid: process.pid,
+  host: "127.0.0.1",
+  port: 36111,
+  user: "root",
+  ownerPid: process.pid,
+  acquisition: "started_by_owner",
+  sharedServerRoot: paths.sharedServerRoot,
+  doltDataDir: paths.doltRoot,
+  startedAt: "2026-05-10T00:00:00Z",
+});
+
+describe("readSharedServerState", () => {
+  test("preserves path-edge strings from valid server state", async () => {
+    const paths = await createPaths();
+    const state = createState(paths);
+    await writeSharedServerState(paths, state);
+
+    await expect(readSharedServerState(paths.serverStatePath)).resolves.toEqual(state);
+  });
+
+  test("returns null when server state is absent", async () => {
+    const paths = await createPaths();
+
+    await expect(readSharedServerState(paths.serverStatePath)).resolves.toBeNull();
+  });
+
+  test("rejects malformed and non-object server state", async () => {
+    const paths = await createPaths();
+    await mkdir(path.dirname(paths.serverStatePath), { recursive: true });
+    await writeFile(paths.serverStatePath, "{broken");
+
+    await expect(readSharedServerState(paths.serverStatePath)).rejects.toThrow(
+      `Failed parsing shared Dolt server state ${paths.serverStatePath}`,
+    );
+
+    await writeFile(paths.serverStatePath, "[]");
+    await expect(readSharedServerState(paths.serverStatePath)).rejects.toThrow(
+      `Shared Dolt server state ${paths.serverStatePath} must contain a JSON object`,
+    );
+  });
+
+  test.each([
+    "pid",
+    "host",
+    "user",
+    "port",
+    "ownerPid",
+    "sharedServerRoot",
+    "doltDataDir",
+    "startedAt",
+  ])("rejects server state missing %s", async (field) => {
+    const paths = await createPaths();
+    await mkdir(path.dirname(paths.serverStatePath), { recursive: true });
+    const state = createState(paths) as Record<string, unknown>;
+    delete state[field];
+    await writeFile(paths.serverStatePath, JSON.stringify(state));
+
+    await expect(readSharedServerState(paths.serverStatePath)).rejects.toThrow(
+      `Shared Dolt server state ${paths.serverStatePath} is missing pid, host, user, port, ownerPid, sharedServerRoot, doltDataDir, or startedAt`,
+    );
+  });
+});
+
+describe("serverStateIsHealthy", () => {
+  test("rejects mismatched host, user, shared root, and data dir before probing services", async () => {
+    const paths = await createPaths();
+    const state = createState(paths);
+
+    await expect(serverStateIsHealthy({ ...state, host: "127.0.0.2" }, paths)).resolves.toBe(false);
+    await expect(serverStateIsHealthy({ ...state, user: "other" }, paths)).resolves.toBe(false);
+    await expect(
+      serverStateIsHealthy(
+        { ...state, sharedServerRoot: `${paths.sharedServerRoot}-other` },
+        paths,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      serverStateIsHealthy({ ...state, doltDataDir: `${paths.doltRoot}-other` }, paths),
+    ).resolves.toBe(false);
+  });
+});
+
+describe("Dolt config YAML rendering", () => {
+  test("quotes filesystem paths with spaces, backslashes, drive-letter text, and single quotes", () => {
+    expect(yamlQuotePath("C:\\Users\\Max Sky\\Repo Name")).toBe("'C:\\Users\\Max Sky\\Repo Name'");
+    expect(yamlQuotePath("/tmp/OpenDucktor's Config")).toBe("'/tmp/OpenDucktor''s Config'");
+  });
+
+  test("writes deterministic quoted paths and leaves no successful temp file", async () => {
+    const paths = await createPaths();
+    const quotedPaths = {
+      doltRoot: yamlQuotePath(paths.doltRoot),
+      cfgDir: yamlQuotePath(paths.cfgDir),
+      privilegeFile: yamlQuotePath(path.join(paths.cfgDir, "privileges.db")),
+      branchControlFile: yamlQuotePath(path.join(paths.cfgDir, "branch_control.db")),
+    };
+
+    await writeDoltConfigFile(paths, 36112);
+
+    await expect(readFile(paths.doltConfigFile, "utf8")).resolves.toBe(
+      `log_level: info\n` +
+        `behavior:\n` +
+        `  autocommit: true\n` +
+        `listener:\n` +
+        `  host: 127.0.0.1\n` +
+        `  port: 36112\n` +
+        `data_dir: ${quotedPaths.doltRoot}\n` +
+        `cfg_dir: ${quotedPaths.cfgDir}\n` +
+        `privilege_file: ${quotedPaths.privilegeFile}\n` +
+        `branch_control_file: ${quotedPaths.branchControlFile}\n`,
+    );
+    await expect(readdir(paths.sharedServerRoot)).resolves.not.toContain(
+      `dolt-config.yaml.tmp-${process.pid}`,
+    );
+  });
+});
