@@ -168,6 +168,61 @@ describe("createMcpHostBridgeServer", () => {
     }
   });
 
+  test("deduplicates concurrent startup requests", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    const discoveryPath = path.join(tempDir, "runtime", "mcp-bridge.json");
+    const bridge = createMcpHostBridgeServer({
+      discoveryPath,
+      token: "token-1",
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      bridgeService: {
+        async ready() {
+          return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
+        },
+        async getWorkspaces() {
+          return { workspaces: [] };
+        },
+        async invoke() {
+          throw new Error("unexpected scoped tool invocation");
+        },
+      } as OdtMcpBridgeService,
+    });
+
+    try {
+      const connections = await Promise.all(
+        Array.from({ length: 8 }, () => bridge.ensureConnection({ repoPath: "/repo" })),
+      );
+      const [firstConnection] = connections;
+      if (!firstConnection) {
+        throw new Error("Expected at least one MCP bridge connection.");
+      }
+      const hostUrls = new Set(connections.map((connection) => connection.hostUrl));
+
+      expect(hostUrls.size).toBe(1);
+      expect(connections).toEqual(
+        Array.from({ length: 8 }, () => ({
+          workspaceId: "repo",
+          hostToken: "token-1",
+          hostUrl: firstConnection.hostUrl,
+        })),
+      );
+
+      const published = JSON.parse(await readFile(discoveryPath, "utf8")) as {
+        hostToken: string;
+        hostUrl: string;
+        pid: number;
+      };
+      expect(published).toEqual({
+        hostToken: "token-1",
+        hostUrl: firstConnection.hostUrl,
+        pid: process.pid,
+      });
+    } finally {
+      await bridge.close();
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
   test("forwards workspace-scoped commands to the bridge service", async () => {
     const calls: unknown[] = [];
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));

@@ -224,7 +224,10 @@ describe("resolveStoreContext", () => {
   });
 
   test("discovers a running host from the discovery file when no explicit host is provided", async () => {
-    const configDir = await createDiscoveryFile();
+    const configDir = await createDiscoveryFile({
+      hostToken: " discovery-token ",
+      hostUrl: " http://127.0.0.1:14327 ",
+    });
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
     process.env.ODT_WORKSPACE_ID = "repo";
     const observedHostTokens: Array<string | undefined> = [];

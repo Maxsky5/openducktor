@@ -586,6 +586,15 @@ export const startTypescriptHostBackend = async ({
     await hostCommandRouter.initialize();
   } catch (error) {
     server.stop(true);
+    try {
+      await hostCommandRouter.dispose();
+    } catch (disposeError) {
+      logError(
+        `Failed to dispose local OpenDucktor host after startup failure: ${
+          disposeError instanceof Error ? disposeError.message : String(disposeError)
+        }`,
+      );
+    }
     throw new Error(
       `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${
         error instanceof Error ? error.message : String(error)

@@ -2,7 +2,9 @@ use super::*;
 use anyhow::Context;
 use std::io::ErrorKind;
 use std::net::{SocketAddr, TcpStream};
-use std::time::Duration;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub(crate) const MCP_BRIDGE_DISCOVERY_RELATIVE_PATH: &str = "runtime/mcp-bridge.json";
 const MCP_BRIDGE_HEALTH_PATH: &str = "/health";
@@ -64,7 +66,30 @@ fn discovery_temp_path(path: &Path) -> PathBuf {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("mcp-bridge.json");
-    path.with_file_name(format!(".{file_name}.{}.tmp", std::process::id()))
+    path.with_file_name(format!(
+        ".{file_name}.{}.{}.tmp",
+        std::process::id(),
+        unique_temp_suffix()
+    ))
+}
+
+fn discovery_removal_temp_path(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("mcp-bridge.json");
+    path.with_file_name(format!(
+        ".{file_name}.{}.{}.remove",
+        std::process::id(),
+        unique_temp_suffix()
+    ))
+}
+
+fn unique_temp_suffix() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .expect("system clock should be after the Unix epoch")
 }
 
 fn write_discovery_payload_atomically(path: &Path, payload: &str) -> Result<()> {
@@ -78,17 +103,16 @@ fn write_discovery_payload_atomically(path: &Path, payload: &str) -> Result<()> 
     }
 
     let temp_path = discovery_temp_path(path);
-    let mut temp_file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(&temp_path)
-        .with_context(|| {
-            format!(
-                "Failed opening temporary MCP bridge discovery file {}",
-                temp_path.display()
-            )
-        })?;
+    let mut open_options = OpenOptions::new();
+    open_options.create_new(true).write(true);
+    #[cfg(unix)]
+    open_options.mode(0o600);
+    let mut temp_file = open_options.open(&temp_path).with_context(|| {
+        format!(
+            "Failed opening temporary MCP bridge discovery file {}",
+            temp_path.display()
+        )
+    })?;
     temp_file.write_all(payload.as_bytes()).with_context(|| {
         format!(
             "Failed writing temporary MCP bridge discovery file {}",
@@ -118,6 +142,70 @@ fn write_discovery_payload_atomically(path: &Path, payload: &str) -> Result<()> 
     })?;
 
     Ok(())
+}
+
+fn restore_discovery_payload(path: &Path, temp_path: &Path) -> Result<()> {
+    match fs::hard_link(temp_path, path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "Failed restoring MCP bridge discovery file {} from {}",
+                    path.display(),
+                    temp_path.display()
+                )
+            });
+        }
+    }
+    match fs::remove_file(temp_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "Failed removing temporary MCP bridge discovery file {}",
+                temp_path.display()
+            )
+        }),
+    }
+}
+
+fn remove_discovery_payload_if_current(
+    path: &Path,
+    expected: &McpBridgeDiscoveryFile,
+) -> Result<()> {
+    let temp_path = discovery_removal_temp_path(path);
+    match fs::rename(path, &temp_path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "Failed claiming MCP bridge discovery file {} for removal",
+                    path.display()
+                )
+            });
+        }
+    }
+
+    let current = read_mcp_bridge_discovery(temp_path.as_path());
+    match current {
+        Ok(Some(current)) if current == *expected => match fs::remove_file(&temp_path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error).with_context(|| {
+                format!(
+                    "Failed removing MCP bridge discovery file {}",
+                    temp_path.display()
+                )
+            }),
+        },
+        Ok(_) => restore_discovery_payload(path, temp_path.as_path()),
+        Err(error) => {
+            restore_discovery_payload(path, temp_path.as_path())?;
+            Err(error)
+        }
+    }
 }
 
 fn read_mcp_bridge_discovery(path: &Path) -> Result<Option<McpBridgeDiscoveryFile>> {
@@ -171,22 +259,12 @@ impl AppService {
         host_url: &str,
         host_token: &str,
     ) -> Result<()> {
-        let current = read_mcp_bridge_discovery(self.mcp_bridge_discovery_path.as_path())?;
-        if current
-            == Some(McpBridgeDiscoveryFile {
-                host_url: host_url.to_string(),
-                host_token: host_token.to_string(),
-                pid: self.instance_pid,
-            })
-        {
-            fs::remove_file(self.mcp_bridge_discovery_path.as_path()).with_context(|| {
-                format!(
-                    "Failed removing MCP bridge discovery file {}",
-                    self.mcp_bridge_discovery_path.display()
-                )
-            })?;
-        }
-        Ok(())
+        let expected = McpBridgeDiscoveryFile {
+            host_url: host_url.to_string(),
+            host_token: host_token.to_string(),
+            pid: self.instance_pid,
+        };
+        remove_discovery_payload_if_current(self.mcp_bridge_discovery_path.as_path(), &expected)
     }
 }
 
@@ -194,13 +272,11 @@ impl AppService {
 mod tests {
     use super::*;
     use host_infra_system::AppConfigStore;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     fn unique_temp_path(prefix: &str) -> PathBuf {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after UNIX_EPOCH")
-            .as_nanos();
+        let nanos = unique_temp_suffix();
         std::env::temp_dir().join(format!("openducktor-mcp-bridge-discovery-{prefix}-{nanos}"))
     }
 
@@ -231,6 +307,74 @@ mod tests {
                 host_token: "token".to_string(),
                 pid: 123,
             })
+        );
+        let _ = fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn writes_discovery_file_with_owner_only_permissions() {
+        let path = unique_temp_path("permissions").join("runtime/mcp-bridge.json");
+
+        write_discovery_payload_atomically(
+            path.as_path(),
+            r#"{"hostUrl":"http://127.0.0.1:4200","hostToken":"token","pid":123}"#,
+        )
+        .expect("discovery write should succeed");
+
+        let mode = fs::metadata(path.as_path())
+            .expect("discovery metadata should be readable")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
+        let _ = fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn removes_only_matching_bridge_discovery_file() {
+        let path = unique_temp_path("remove-current").join("runtime/mcp-bridge.json");
+        let current = McpBridgeDiscoveryFile {
+            host_url: "http://127.0.0.1:4200".to_string(),
+            host_token: "token".to_string(),
+            pid: 123,
+        };
+        let payload = serde_json::to_string(&current).expect("payload should serialize");
+        write_discovery_payload_atomically(path.as_path(), payload.as_str())
+            .expect("discovery write should succeed");
+
+        remove_discovery_payload_if_current(path.as_path(), &current)
+            .expect("matching discovery removal should succeed");
+
+        assert!(read_mcp_bridge_discovery(path.as_path())
+            .expect("discovery read should succeed")
+            .is_none());
+        let _ = fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn keeps_non_matching_bridge_discovery_file() {
+        let path = unique_temp_path("keep-newer").join("runtime/mcp-bridge.json");
+        let expected = McpBridgeDiscoveryFile {
+            host_url: "http://127.0.0.1:4200".to_string(),
+            host_token: "old-token".to_string(),
+            pid: 123,
+        };
+        let newer = McpBridgeDiscoveryFile {
+            host_url: "http://127.0.0.1:4300".to_string(),
+            host_token: "new-token".to_string(),
+            pid: 456,
+        };
+        let payload = serde_json::to_string(&newer).expect("payload should serialize");
+        write_discovery_payload_atomically(path.as_path(), payload.as_str())
+            .expect("discovery write should succeed");
+
+        remove_discovery_payload_if_current(path.as_path(), &expected)
+            .expect("non-matching discovery removal should preserve file");
+
+        assert_eq!(
+            read_mcp_bridge_discovery(path.as_path()).expect("discovery read should succeed"),
+            Some(newer)
         );
         let _ = fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
     }

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -91,6 +91,12 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): McpBridgeDi
   };
 };
 
+const discoveryRemovalTempPath = (discoveryPath: string): string =>
+  path.join(
+    path.dirname(discoveryPath),
+    `.${path.basename(discoveryPath)}.${process.pid}.${process.hrtime.bigint()}.remove`,
+  );
+
 export const readMcpBridgeDiscoveryFile = async (
   discoveryPath: string,
 ): Promise<McpBridgeDiscoveryFile | null> => {
@@ -111,7 +117,7 @@ export const writeMcpBridgeDiscoveryFile = async (
   await mkdir(path.dirname(discoveryPath), { recursive: true });
   const tempPath = path.join(
     path.dirname(discoveryPath),
-    `.${path.basename(discoveryPath)}.${process.pid}.${Date.now()}.tmp`,
+    `.${path.basename(discoveryPath)}.${process.pid}.${process.hrtime.bigint()}.tmp`,
   );
   await writeFile(tempPath, `${JSON.stringify(discovery, null, 2)}\n`, { mode: 0o600 });
   await rename(tempPath, discoveryPath);
@@ -121,13 +127,47 @@ export const removeMcpBridgeDiscoveryFile = async (
   discoveryPath: string,
   discovery: McpBridgeDiscoveryFile,
 ): Promise<void> => {
-  const current = await readMcpBridgeDiscoveryFile(discoveryPath);
+  const tempPath = discoveryRemovalTempPath(discoveryPath);
+  try {
+    await rename(discoveryPath, tempPath);
+  } catch (error) {
+    if (isFsErrorCode(error, "ENOENT")) {
+      return;
+    }
+    throw error;
+  }
+
+  let current: McpBridgeDiscoveryFile;
+  try {
+    current = parseDiscoveryFile(await readFile(tempPath, "utf8"), tempPath);
+  } catch (error) {
+    await restoreClaimedDiscoveryFile(discoveryPath, tempPath);
+    throw error;
+  }
+
   if (
-    current !== null &&
     current.hostUrl === discovery.hostUrl &&
     current.hostToken === discovery.hostToken &&
     current.pid === discovery.pid
   ) {
-    await rm(discoveryPath, { force: true });
+    await rm(tempPath, { force: true });
+    return;
+  }
+
+  await restoreClaimedDiscoveryFile(discoveryPath, tempPath);
+};
+
+const restoreClaimedDiscoveryFile = async (
+  discoveryPath: string,
+  tempPath: string,
+): Promise<void> => {
+  try {
+    await link(tempPath, discoveryPath);
+  } catch (error) {
+    if (!isFsErrorCode(error, "EEXIST")) {
+      throw error;
+    }
+  } finally {
+    await rm(tempPath, { force: true });
   }
 };

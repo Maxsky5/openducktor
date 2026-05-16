@@ -127,15 +127,17 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredH
       `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: expected a JSON object.`,
     );
   }
-  if (typeof parsed.hostUrl !== "string" || normalizeOptionalInput(parsed.hostUrl) === undefined) {
+  const hostUrl =
+    typeof parsed.hostUrl === "string" ? normalizeOptionalInput(parsed.hostUrl) : undefined;
+  const hostToken =
+    typeof parsed.hostToken === "string" ? normalizeOptionalInput(parsed.hostToken) : undefined;
+
+  if (hostUrl === undefined) {
     throw new Error(
       `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,
     );
   }
-  if (
-    typeof parsed.hostToken !== "string" ||
-    normalizeOptionalInput(parsed.hostToken) === undefined
-  ) {
+  if (hostToken === undefined) {
     throw new Error(
       `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: hostToken must be a non-empty string.`,
     );
@@ -148,8 +150,8 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredH
   }
 
   return {
-    hostToken: parsed.hostToken,
-    hostUrl: parsed.hostUrl,
+    hostToken,
+    hostUrl,
   };
 };
 
