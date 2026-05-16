@@ -306,7 +306,7 @@ describe("agent-orchestrator/support/persistence", () => {
     });
   });
 
-  test("extracts adapter-shaped hydrated context usage from final message metadata", () => {
+  test("extracts adapter-shaped hydrated context usage from latest message metadata", () => {
     const contextUsage = historyToSessionContextUsage(
       [
         {
@@ -314,7 +314,6 @@ describe("agent-orchestrator/support/persistence", () => {
           role: "assistant",
           timestamp: "2026-02-22T08:00:05.000Z",
           text: "Final answer",
-          isFinal: true,
           totalTokens: 2_450,
           model: {
             providerId: "openai",
@@ -384,7 +383,7 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(assistant.meta.contextWindow).toBe(200_000);
   });
 
-  test("maps adapter-shaped final message context usage into assistant message metadata", () => {
+  test("keeps adapter-shaped message-level context usage out of non-final message metadata", () => {
     const messages = historyToChatMessages(
       [
         {
@@ -392,7 +391,6 @@ describe("agent-orchestrator/support/persistence", () => {
           role: "assistant",
           timestamp: "2026-02-22T08:00:05.000Z",
           text: "Final answer",
-          isFinal: true,
           totalTokens: 2_450,
           parts: [
             {
@@ -419,8 +417,8 @@ describe("agent-orchestrator/support/persistence", () => {
     if (!assistant || assistant.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
-    expect(assistant.meta.isFinal).toBe(true);
-    expect(assistant.meta.totalTokens).toBe(2_450);
+    expect(assistant.meta.isFinal).toBe(false);
+    expect(assistant.meta.totalTokens).toBeUndefined();
   });
 
   test("maps history parts into chat timeline entries", () => {

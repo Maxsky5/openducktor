@@ -162,21 +162,25 @@ const isFinalAssistantHistoryMessage = (message: AgentSessionHistoryMessage): bo
     return false;
   }
 
-  return message.isFinal === true || message.parts.some(isStopStepFinishPart);
+  return message.parts.some(isStopStepFinishPart);
 };
 
-const readFinalAssistantUsageMetadata = (
+const readAssistantContextUsageMetadata = (
   message: AssistantHistoryMessage,
 ): Pick<AgentSessionContextUsage, "totalTokens" | "contextWindow"> | null => {
-  if (!isFinalAssistantHistoryMessage(message)) {
-    return null;
-  }
-
-  const finalStep = message.parts.find(isStopStepFinishPart);
+  const latestTokenStep = [...message.parts]
+    .reverse()
+    .find(
+      (part): part is Extract<HistoryPart, { kind: "step" }> =>
+        part.kind === "step" &&
+        part.phase === "finish" &&
+        typeof part.totalTokens === "number" &&
+        part.totalTokens > 0,
+    );
   const totalTokens =
     typeof message.totalTokens === "number" && message.totalTokens > 0
       ? message.totalTokens
-      : finalStep?.totalTokens;
+      : latestTokenStep?.totalTokens;
   if (typeof totalTokens !== "number" || totalTokens <= 0) {
     return null;
   }
@@ -184,7 +188,7 @@ const readFinalAssistantUsageMetadata = (
   const contextWindow =
     typeof message.contextWindow === "number" && message.contextWindow > 0
       ? message.contextWindow
-      : finalStep?.contextWindow;
+      : latestTokenStep?.contextWindow;
   return {
     totalTokens,
     ...(typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : {}),
@@ -457,7 +461,7 @@ export const historyToChatMessages = (
           : undefined;
       let meta: AgentChatMessage["meta"] | undefined;
       if (message.role === "assistant") {
-        const usageMetadata = readFinalAssistantUsageMetadata(message);
+        const usageMetadata = readAssistantContextUsageMetadata(message);
         meta = assistantMessageMeta(
           sessionContext.role,
           sessionContext.selectedModel,
@@ -505,7 +509,7 @@ export const historyToSessionContextUsage = (
     if (!message || message.role !== "assistant") {
       continue;
     }
-    const usageMetadata = readFinalAssistantUsageMetadata(message);
+    const usageMetadata = readAssistantContextUsageMetadata(message);
     if (usageMetadata === null) {
       continue;
     }
