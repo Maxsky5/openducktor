@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 
 const BUNDLED_BIN_DIR_ENV = "OPENDUCKTOR_BUNDLED_BIN_DIR";
@@ -54,6 +54,13 @@ export const isExecutableFile = async (
 const executableName = (command: string, platform: NodeJS.Platform): string =>
   platform === "win32" ? `${command}.exe` : command;
 
+const joinRuntimePath = (platform: NodeJS.Platform, ...segments: string[]): string => {
+  if (platform === "win32") {
+    return join(...segments);
+  }
+  return posix.join(...segments);
+};
+
 const processResourcesPath = (configuredResourcesPath?: string | null): string | null => {
   if (configuredResourcesPath !== undefined) {
     return typeof configuredResourcesPath === "string" && configuredResourcesPath.trim().length > 0
@@ -80,15 +87,31 @@ const resolveBundledCommand = async (
     throw new Error(`Configured bundled binary directory ${BUNDLED_BIN_DIR_ENV} is empty`);
   }
   const resourcesPath = processResourcesPath(options.resourcesPath);
-  const candidateDirs = [
+  const candidateDirs: Array<{ directory: string; joinPlatform: NodeJS.Platform }> = [
     ...(configuredBinDir && configuredBinDir.trim().length > 0
-      ? [resolveUserPath(configuredBinDir, options.homeDir)]
+      ? [
+          {
+            directory: resolveUserPath(configuredBinDir, options.homeDir),
+            joinPlatform: process.platform,
+          },
+        ]
       : []),
-    ...(resourcesPath ? [join(resourcesPath, "bin")] : []),
+    ...(resourcesPath
+      ? [
+          {
+            directory: joinRuntimePath(options.platform, resourcesPath, "bin"),
+            joinPlatform: options.platform,
+          },
+        ]
+      : []),
   ];
 
-  for (const directory of candidateDirs) {
-    const candidate = join(directory, executableName(command, options.platform));
+  for (const { directory, joinPlatform } of candidateDirs) {
+    const candidate = joinRuntimePath(
+      joinPlatform,
+      directory,
+      executableName(command, options.platform),
+    );
     if (await isExecutableFile(candidate, options.platform)) {
       return candidate;
     }
@@ -131,7 +154,8 @@ export const resolveOpencodeBinary = async (
     );
   }
 
-  const homeCandidate = join(
+  const homeCandidate = joinRuntimePath(
+    platform,
     homeDir,
     ".opencode",
     "bin",
@@ -189,7 +213,9 @@ export const resolveCodexBinary = async (
   const resourcesPath = processResourcesPath(options.resourcesPath);
   const bundledLocations = [
     `${BUNDLED_BIN_DIR_ENV}`,
-    ...(resourcesPath ? [join(resourcesPath, "bin", executableName("codex", platform))] : []),
+    ...(resourcesPath
+      ? [joinRuntimePath(platform, resourcesPath, "bin", executableName("codex", platform))]
+      : []),
   ].join(", ");
   throw new Error(
     `codex not found. Checked OPENDUCKTOR_CODEX_BINARY, bundled locations (${bundledLocations}), and PATH. Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.`,

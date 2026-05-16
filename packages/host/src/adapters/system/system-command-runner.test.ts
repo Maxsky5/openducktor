@@ -15,6 +15,10 @@ const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> 
 
 describe("createSystemCommandRunner", () => {
   test("resolves required commands from its explicit environment", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
     await withTempDir(async (root) => {
       const executable = join(root, "custom-tool");
       await writeFile(executable, "#!/bin/sh\nexit 0\n");
