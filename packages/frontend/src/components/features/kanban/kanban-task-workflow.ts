@@ -1,12 +1,14 @@
 import type { TaskAction, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
+import type {
+  BaseTaskWorkflowAction,
+  TaskWorkflowAction,
+} from "@/features/task-workflow/task-workflow-actions";
 import { isQaRejectedTask } from "@/lib/task-qa";
 
+export type { TaskWorkflowAction } from "@/features/task-workflow/task-workflow-actions";
+
 type SessionRoleViewAction = "open_spec" | "open_planner" | "open_builder" | "open_qa";
-
-type BaseTaskWorkflowAction = Exclude<TaskAction, "view_details">;
-
-export type TaskWorkflowAction = BaseTaskWorkflowAction | "open_spec" | "open_planner";
 
 type TaskCardActionState = {
   primaryAction: TaskWorkflowAction | null;
@@ -27,14 +29,6 @@ const SESSION_CREATING_ACTIONS: readonly TaskWorkflowAction[] = [
   "set_plan",
   "build_start",
   "qa_start",
-];
-
-export const AGENT_STUDIO_SESSION_START_ACTIONS: readonly TaskWorkflowAction[] = [
-  "set_spec",
-  "set_plan",
-  "build_start",
-  "qa_start",
-  "human_request_changes",
 ];
 
 const SESSION_VIEW_ACTION_BY_ROLE: Record<AgentRole, SessionRoleViewAction> = {

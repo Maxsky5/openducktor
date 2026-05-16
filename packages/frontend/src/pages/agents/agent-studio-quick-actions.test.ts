@@ -241,7 +241,7 @@ describe("agent-studio-quick-actions", () => {
         spec: { required: true, canSkip: false, available: false, completed: true },
         planner: { required: true, canSkip: false, available: false, completed: true },
         builder: { required: true, canSkip: false, available: true, completed: true },
-        qa: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: true, canSkip: false, available: true, completed: false },
       },
     });
     const aiReviewWithoutPullRequestOptions = buildAgentStudioQuickActions({
@@ -253,9 +253,13 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
     expect(selectPrimaryAgentStudioQuickAction(aiReviewWithoutPullRequestOptions)).toMatchObject({
-      launchActionId: "build_pull_request_generation",
-      label: "Generate Pull Request",
+      launchActionId: "qa_review",
     });
+    expect(
+      aiReviewWithoutPullRequestOptions.some(
+        (option) => option.launchActionId === "build_pull_request_generation",
+      ),
+    ).toBe(false);
 
     const aiReviewTaskWithPullRequest = buildTask({
       ...aiReviewTaskWithoutPullRequest,
@@ -270,9 +274,13 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
     expect(selectPrimaryAgentStudioQuickAction(aiReviewWithPullRequestOptions)).toMatchObject({
-      launchActionId: "build_after_human_request_changes",
-      label: "Request Changes",
+      launchActionId: "qa_review",
     });
+    expect(
+      aiReviewWithPullRequestOptions.some(
+        (option) => option.launchActionId === "build_pull_request_generation",
+      ),
+    ).toBe(false);
     expect(
       aiReviewWithPullRequestOptions.find(
         (option) => option.launchActionId === "build_after_human_request_changes",
@@ -378,7 +386,24 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
 
-    expect(aiReviewOptions).toContainEqual(
+    expect(
+      aiReviewOptions.some((option) => option.launchActionId === "build_pull_request_generation"),
+    ).toBe(false);
+
+    const humanReviewTask = buildTask({
+      ...aiReviewTask,
+      status: "human_review",
+    });
+    const humanReviewOptions = buildAgentStudioQuickActions({
+      selectedTask: humanReviewTask,
+      sessionsForTask: [
+        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+      ],
+      roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
+      createSessionDisabled: false,
+    });
+
+    expect(humanReviewOptions).toContainEqual(
       expect.objectContaining({
         launchActionId: "build_pull_request_generation",
         initialSourceExternalSessionId: "builder-1",

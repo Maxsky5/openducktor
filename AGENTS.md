@@ -208,6 +208,7 @@ Keep this contract stable. If you change any item below, update all related laye
 - All non-frontend code must be deeply tested (Rust crates, `packages/core`, adapters, MCP).
 - Frontend tests are required for touched behavior.
 - Always run relevant checks before finishing — see Commands section above.
+- NEVER change production APIs, constructors, options, or exported types only to make tests easier or faster. Test-only seams must come from narrower test helpers, local fakes around existing boundaries, or refactoring that improves production design on its own merits.
 - In Bun tests, NEVER mock shared re-export barrels such as `@/state`, `@/components`, or other `index.ts` aggregator modules. Mock the source module that owns the export instead (for example `@/state/app-state-provider`), otherwise Bun can bind an incomplete export surface and leak that mock across files.
 - In Bun tests, register `mock.module(...)` in scoped setup (`beforeAll`/`beforeEach`) only when you truly need a module seam. Prefer dependency injection, direct function parameters, or `spyOn`-style seams over module replacement whenever possible.
 - In Bun tests, NEVER keep `mock.module(...)` active for the lifetime of a whole file via `beforeAll`/`afterAll`. Bun can interleave files in one process, so file-lifetime module mocks can leak into unrelated suites. Prefer no module mock at all; if unavoidable, scope it to the smallest possible test surface and restore it immediately after that scope.

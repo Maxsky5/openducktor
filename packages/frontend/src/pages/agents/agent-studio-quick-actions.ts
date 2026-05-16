@@ -1,10 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentSessionStartMode } from "@openducktor/core";
-import {
-  AGENT_STUDIO_SESSION_START_ACTIONS,
-  resolveTaskCardActions,
-  type TaskWorkflowAction,
-} from "@/components/features/kanban/kanban-task-workflow";
+import { resolveTaskCardActions } from "@/components/features/kanban/kanban-task-workflow";
 import { taskActionLabel } from "@/components/features/kanban/task-action-ui";
 import {
   buildReusableSessionOptions,
@@ -14,6 +10,11 @@ import {
   type SessionStartExistingSessionOption,
   type SessionStartPostAction,
 } from "@/features/session-start";
+import {
+  AGENT_STUDIO_SESSION_START_ACTIONS,
+  type AgentStudioWorkflowQuickAction,
+  type TaskWorkflowAction,
+} from "@/features/task-workflow/task-workflow-actions";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 
@@ -32,14 +33,66 @@ export type AgentStudioQuickActionOption = {
   requiresHumanFeedback?: boolean;
 };
 
+type WorkflowQuickActionDefinition = {
+  role: AgentRole;
+  resolveLaunchActionId: (task: TaskCard) => SessionLaunchActionId;
+  description: string;
+  requiresHumanFeedback?: true;
+};
+
+const WORKFLOW_QUICK_ACTIONS: Record<
+  AgentStudioWorkflowQuickAction,
+  WorkflowQuickActionDefinition
+> = {
+  set_spec: {
+    role: "spec",
+    resolveLaunchActionId: () => "spec_initial",
+    description: "Open the start-session flow for the Spec workflow.",
+  },
+  set_plan: {
+    role: "planner",
+    resolveLaunchActionId: () => "planner_initial",
+    description: "Open the start-session flow for the Planner workflow.",
+  },
+  build_start: {
+    role: "build",
+    resolveLaunchActionId: (task) =>
+      isQaRejectedTask(task) ? "build_after_qa_rejected" : "build_implementation_start",
+    description: "Open the start-session flow for Builder implementation work.",
+  },
+  qa_start: {
+    role: "qa",
+    resolveLaunchActionId: () => "qa_review",
+    description: "Open the start-session flow for QA review.",
+  },
+  human_request_changes: {
+    role: "build",
+    resolveLaunchActionId: () => "build_after_human_request_changes",
+    description: "Collect human feedback, then open the Builder rework flow.",
+    requiresHumanFeedback: true,
+  },
+};
+
+const WORKFLOW_QUICK_ACTION_KEYS = new Set<string>(Object.keys(WORKFLOW_QUICK_ACTIONS));
+
+const isAgentStudioWorkflowQuickAction = (
+  action: TaskWorkflowAction,
+): action is AgentStudioWorkflowQuickAction => WORKFLOW_QUICK_ACTION_KEYS.has(action);
+
+const assertAgentStudioWorkflowQuickAction = (
+  action: TaskWorkflowAction,
+): AgentStudioWorkflowQuickAction => {
+  if (isAgentStudioWorkflowQuickAction(action)) {
+    return action;
+  }
+  throw new Error(`Unsupported Agent Studio quick action workflow action: ${action}`);
+};
+
 const createQuickActionDisabledReason = (createSessionDisabled: boolean): string | null => {
   return createSessionDisabled ? "Wait for the current session to finish." : null;
 };
 
-const PULL_REQUEST_QUICK_ACTION_STATUSES = new Set<TaskCard["status"]>([
-  "ai_review",
-  "human_review",
-]);
+const PULL_REQUEST_QUICK_ACTION_STATUSES = new Set<TaskCard["status"]>(["human_review"]);
 
 const canShowPullRequestQuickAction = (task: TaskCard): boolean => {
   return PULL_REQUEST_QUICK_ACTION_STATUSES.has(task.status);
@@ -50,60 +103,14 @@ const hasLinkedPullRequest = (task: TaskCard): boolean => {
 };
 
 const quickActionIdForWorkflowAction = (
-  action: TaskWorkflowAction,
+  action: AgentStudioWorkflowQuickAction,
   task: TaskCard,
-): SessionLaunchActionId => {
-  if (action === "set_spec") {
-    return "spec_initial";
-  }
-  if (action === "set_plan") {
-    return "planner_initial";
-  }
-  if (action === "build_start") {
-    return isQaRejectedTask(task) ? "build_after_qa_rejected" : "build_implementation_start";
-  }
-  if (action === "qa_start") {
-    return "qa_review";
-  }
-  if (action === "human_request_changes") {
-    return "build_after_human_request_changes";
-  }
-  throw new Error(`Unsupported Agent Studio quick action workflow action: ${action}`);
-};
-
-const quickActionRoleForWorkflowAction = (action: TaskWorkflowAction): AgentRole => {
-  if (action === "set_spec") {
-    return "spec";
-  }
-  if (action === "set_plan") {
-    return "planner";
-  }
-  if (action === "qa_start") {
-    return "qa";
-  }
-  return "build";
-};
-
-const quickActionDescriptionForWorkflowAction = (action: TaskWorkflowAction): string => {
-  if (action === "set_spec") {
-    return "Open the start-session flow for the Spec workflow.";
-  }
-  if (action === "set_plan") {
-    return "Open the start-session flow for the Planner workflow.";
-  }
-  if (action === "qa_start") {
-    return "Open the start-session flow for QA review.";
-  }
-  if (action === "human_request_changes") {
-    return "Collect human feedback, then open the Builder rework flow.";
-  }
-  return "Open the start-session flow for Builder implementation work.";
-};
+): SessionLaunchActionId => WORKFLOW_QUICK_ACTIONS[action].resolveLaunchActionId(task);
 
 const orderQuickActions = (
   task: TaskCard,
   options: AgentStudioQuickActionOption[],
-  workflowActionOrder: readonly TaskWorkflowAction[],
+  workflowActionOrder: readonly AgentStudioWorkflowQuickAction[],
 ): AgentStudioQuickActionOption[] => {
   const orderedWorkflowLaunchActions = workflowActionOrder.map((action) =>
     quickActionIdForWorkflowAction(action, task),
@@ -112,7 +119,7 @@ const orderQuickActions = (
   const launchActionPriority = new Map(
     orderedWorkflowLaunchActions.map((launchActionId, index) => [launchActionId, index]),
   );
-  if (task.status === "ai_review" || task.status === "human_review") {
+  if (task.status === "human_review") {
     const primaryReviewLaunchAction = hasLinkedPullRequest(task)
       ? "build_after_human_request_changes"
       : "build_pull_request_generation";
@@ -152,13 +159,14 @@ export const buildAgentStudioQuickActions = (params: {
   const workflowActionOrder = resolveTaskCardActions(task, {
     include: AGENT_STUDIO_SESSION_START_ACTIONS,
     surface: "agent_studio_quick_actions",
-  }).allActions;
+  }).allActions.map(assertAgentStudioWorkflowQuickAction);
   const disabledReason = createQuickActionDisabledReason(params.createSessionDisabled);
   const createLifecycleOption = (
-    action: TaskWorkflowAction,
+    action: AgentStudioWorkflowQuickAction,
   ): AgentStudioQuickActionOption | null => {
-    const launchActionId = quickActionIdForWorkflowAction(action, task);
-    const role = quickActionRoleForWorkflowAction(action);
+    const definition = WORKFLOW_QUICK_ACTIONS[action];
+    const launchActionId = definition.resolveLaunchActionId(task);
+    const role = definition.role;
     if (!params.roleEnabledByTask[role]) {
       return null;
     }
@@ -167,11 +175,11 @@ export const buildAgentStudioQuickActions = (params: {
       role,
       launchActionId,
       label: taskActionLabel(action, task, { surface: "agent_studio" }),
-      description: quickActionDescriptionForWorkflowAction(action),
+      description: definition.description,
       postStartAction: "kickoff",
       disabled: disabledReason !== null,
       ...(disabledReason ? { disabledReason } : {}),
-      ...(action === "human_request_changes" ? { requiresHumanFeedback: true } : {}),
+      ...(definition.requiresHumanFeedback ? { requiresHumanFeedback: true } : {}),
     };
   };
   const createSpecialOption = (
