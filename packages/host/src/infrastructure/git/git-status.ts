@@ -7,6 +7,8 @@ import type {
 } from "@openducktor/contracts";
 import { type GitCommandRunner, runGit, runGitAllowFailure } from "./git-command-runner";
 
+const unmergedStatusPairs = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
+
 export const parseBranchRows = (output: string): GitBranch[] => {
   const branches = output.split(/\r?\n/).flatMap((line): GitBranch[] => {
     const trimmed = line.trim();
@@ -85,6 +87,11 @@ export const porcelainCharToStatus = (value: string): string => {
   }
 };
 
+export const isUnmergedStatusPair = (index: string, worktree: string): boolean => {
+  const pair = `${index}${worktree}`;
+  return unmergedStatusPairs.has(pair);
+};
+
 export const parseStatusPorcelain = (output: string): FileStatus[] =>
   output.split(/\r?\n/).flatMap((line): FileStatus[] => {
     if (line.length < 4) {
@@ -100,6 +107,9 @@ export const parseStatusPorcelain = (output: string): FileStatus[] =>
     }
     if (index === "!" && worktree === "!") {
       return [{ path: filePath, status: "ignored", staged: false }];
+    }
+    if (isUnmergedStatusPair(index, worktree)) {
+      return [{ path: filePath, status: "unmerged", staged: true }];
     }
     if (index !== " " && worktree === " ") {
       return [{ path: filePath, status: porcelainCharToStatus(index), staged: true }];

@@ -68,6 +68,7 @@ describe("createGitCliAdapter", () => {
           "?? src/new.ts",
           "!! dist/ignored.js",
           "UU src/conflict.ts",
+          "AA src/add-add-conflict.ts",
         ].join("\n"),
       }),
     });
@@ -78,6 +79,7 @@ describe("createGitCliAdapter", () => {
       { path: "src/new.ts", status: "untracked", staged: false },
       { path: "dist/ignored.js", status: "ignored", staged: false },
       { path: "src/conflict.ts", status: "unmerged", staged: true },
+      { path: "src/add-add-conflict.ts", status: "unmerged", staged: true },
     ]);
   });
 
@@ -843,7 +845,7 @@ describe("createGitCliAdapter", () => {
             {
               "branch --show-current": "feature/electron\n",
               "rev-parse HEAD": "abc123\n",
-              "status --porcelain=v1 --untracked-files=all": rebaseFailed ? "UU src/main.ts\n" : "",
+              "status --porcelain=v1 --untracked-files=all": rebaseFailed ? "AA src/main.ts\n" : "",
             }[command] ?? "",
           stderr: "",
         };
