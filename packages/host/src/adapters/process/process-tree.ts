@@ -107,15 +107,20 @@ export const waitForChildProcessClose = (
   }
 
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      child.off("close", onClose);
-      resolve(false);
-    }, timeoutMs);
     const onClose = () => {
       clearTimeout(timeout);
       resolve(true);
     };
+    const timeout = setTimeout(() => {
+      child.off("close", onClose);
+      resolve(false);
+    }, timeoutMs);
     child.once("close", onClose);
+    if (isClosed()) {
+      child.off("close", onClose);
+      clearTimeout(timeout);
+      resolve(true);
+    }
   });
 };
 

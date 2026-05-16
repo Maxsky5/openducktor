@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { setTimeout as delay } from "node:timers/promises";
 import {
   type DevServerProcessExit,
   type DevServerProcessPort,
@@ -99,10 +98,7 @@ export const createDevServerProcessAdapter = ({
       }
     });
 
-    const exitedDuringGracePeriod = await Promise.race([
-      waitForClose(startGracePeriodMs),
-      delay(startGracePeriodMs).then(() => false),
-    ]);
+    const exitedDuringGracePeriod = await waitForClose(startGracePeriodMs);
     if (spawnError) {
       throw spawnError;
     }
