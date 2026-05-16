@@ -79,6 +79,7 @@ export const createCodexAppServerTransport = (
   const pending = new Map<number, PendingRequest>();
   const notifications: unknown[] = [];
   const serverRequests: unknown[] = [];
+  const stderrMessages: string[] = [];
   let stdoutClosed = false;
   let stderrClosed = false;
 
@@ -185,6 +186,15 @@ export const createCodexAppServerTransport = (
     failFast(new Error(`Codex app-server stdout message for ${runtimeId} is not valid JSON-RPC`));
   };
 
+  const processClosedError = (detail: string): Error => {
+    const stderr = stderrMessages.join("\n").trim();
+    return new Error(
+      stderr.length > 0
+        ? `Codex app-server ${detail} for runtime ${runtimeId}: ${stderr}`
+        : `Codex app-server ${detail} for runtime ${runtimeId}`,
+    );
+  };
+
   const lines = createInterface({ input: child.stdout });
   lines.on("line", (line) => {
     const trimmed = line.trim();
@@ -204,11 +214,15 @@ export const createCodexAppServerTransport = (
   lines.on("close", () => {
     stdoutClosed = true;
     if (!closed) {
-      failFast(new Error(`Codex app-server stdout closed unexpectedly for runtime ${runtimeId}`));
+      failFast(processClosedError("stdout closed unexpectedly"));
     }
   });
   const stderrLines = createInterface({ input: child.stderr });
-  stderrLines.on("line", () => {});
+  stderrLines.on("line", (line) => {
+    if (line.trim().length > 0) {
+      stderrMessages.push(line);
+    }
+  });
   stderrLines.on("close", () => {
     stderrClosed = true;
   });
@@ -220,7 +234,7 @@ export const createCodexAppServerTransport = (
         signal === null
           ? `process exited with code ${exitCode}`
           : `process exited from signal ${signal}`;
-      failFast(new Error(`Codex app-server closed for runtime ${runtimeId}: ${detail}`));
+      failFast(processClosedError(`closed: ${detail}`));
       return;
     }
     closed = true;

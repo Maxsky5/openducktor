@@ -109,10 +109,10 @@ export const createSystemCommandLaunch = (
   }
 
   const shell = env.ComSpec?.trim() || process.env.ComSpec || "cmd.exe";
-  const commandLine = ["call", command, ...args].map(quoteWindowsCommandArgument).join(" ");
+  const commandLine = `"${[command, ...args].map(quoteWindowsCommandArgument).join(" ")}"`;
   return {
     command: shell,
-    args: ["/d", "/c", commandLine],
+    args: ["/d", "/s", "/c", commandLine],
     windowsVerbatimArguments: true,
   };
 };

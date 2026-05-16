@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSystemCommandRunner } from "./system-command-runner";
+import { createSystemCommandLaunch, createSystemCommandRunner } from "./system-command-runner";
 
 const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> => {
   const root = await mkdtemp(join(tmpdir(), "odt-system-command-"));
@@ -129,6 +129,26 @@ describe("createSystemCommandRunner", () => {
 
     expect(result.ok).toBe(true);
     expect(result.stdout.trim()).toBe("from-host-env");
+  });
+
+  test("builds a Windows shell launch for cmd files with quoted config arguments", () => {
+    const launch = createSystemCommandLaunch(
+      String.raw`C:\Program Files\Codex\codex.cmd`,
+      ["--config", 'mcp_servers.openducktor.command="mcp-bin"', "app-server"],
+      { ComSpec: String.raw`C:\Windows\System32\cmd.exe` },
+      "win32",
+    );
+
+    expect(launch).toEqual({
+      command: String.raw`C:\Windows\System32\cmd.exe`,
+      args: [
+        "/d",
+        "/s",
+        "/c",
+        String.raw`""C:\Program Files\Codex\codex.cmd" --config "mcp_servers.openducktor.command=^"mcp-bin^"" app-server"`,
+      ],
+      windowsVerbatimArguments: true,
+    });
   });
 
   test("runs Windows cmd and bat launchers with arguments on native Windows", async () => {
