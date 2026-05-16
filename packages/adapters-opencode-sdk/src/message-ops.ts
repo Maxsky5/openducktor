@@ -158,6 +158,26 @@ const hasCompletedAssistantMessage = (value: unknown): boolean => {
   return typeof time?.completed === "number";
 };
 
+const hasStopSignalInRawParts = (parts: unknown[]): boolean =>
+  parts.some((part) => {
+    const record = asRecord(part);
+    return (
+      record !== null &&
+      readString(record, ["type"]) === "step-finish" &&
+      readString(record, ["reason"]) === "stop"
+    );
+  });
+
+const isFinalAssistantMessage = (info: unknown, rawParts: unknown[]): boolean => {
+  const record = asRecord(info);
+  const finish = record ? readString(record, ["finish"]) : undefined;
+  return (
+    finish === "stop" ||
+    hasStopSignalInRawParts(rawParts) ||
+    (finish === undefined && hasCompletedAssistantMessage(info))
+  );
+};
+
 type MappedSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 
 const buildSubagentSignature = (part: MappedSubagentPart): string | undefined => {
@@ -467,11 +487,13 @@ export const loadSessionHistory = async (
 
   return entries.map((item, index) => {
     if (item.entry.info.role === "assistant") {
+      const isFinal = isFinalAssistantMessage(item.entry.info, item.rawParts);
       return {
         messageId: item.entry.info.id,
         role: "assistant",
         timestamp: item.timestamp,
         text: item.text,
+        ...(isFinal ? { isFinal } : {}),
         ...(typeof item.totalTokens === "number" ? { totalTokens: item.totalTokens } : {}),
         ...(item.model ? { model: item.model } : {}),
         parts: item.parts,

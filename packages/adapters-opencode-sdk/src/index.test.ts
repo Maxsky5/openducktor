@@ -1451,6 +1451,7 @@ describe("OpencodeSdkAdapter", () => {
               input: 2_000,
               output: 450,
             },
+            finish: "stop",
             time: { created: Date.parse("2026-02-17T12:00:00Z") },
           },
           parts: [
@@ -1501,6 +1502,7 @@ describe("OpencodeSdkAdapter", () => {
       throw new Error("Expected second history entry to be an assistant message");
     }
     expect(history[0].state).toBe("read");
+    expect(history[1].isFinal).toBe(true);
     expect(history[1].totalTokens).toBe(2_450);
     expect(history[1]?.model).toEqual({
       providerId: "openai",

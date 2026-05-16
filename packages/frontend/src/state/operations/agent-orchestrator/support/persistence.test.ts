@@ -306,6 +306,45 @@ describe("agent-orchestrator/support/persistence", () => {
     });
   });
 
+  test("extracts adapter-shaped hydrated context usage from final message metadata", () => {
+    const contextUsage = historyToSessionContextUsage(
+      [
+        {
+          messageId: "m-assistant",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:05.000Z",
+          text: "Final answer",
+          isFinal: true,
+          totalTokens: 2_450,
+          model: {
+            providerId: "openai",
+            modelId: "gpt-5",
+            profileId: "Hephaestus",
+            variant: "high",
+          },
+          parts: [
+            {
+              kind: "reasoning",
+              messageId: "m-assistant",
+              partId: "reason-1",
+              text: "Reasoning block",
+              completed: true,
+            },
+          ],
+        },
+      ],
+      null,
+    );
+
+    expect(contextUsage).toEqual({
+      totalTokens: 2_450,
+      providerId: "openai",
+      modelId: "gpt-5",
+      profileId: "Hephaestus",
+      variant: "high",
+    });
+  });
+
   test("maps hydrated final step context usage into assistant message metadata", () => {
     const messages = historyToChatMessages(
       [
@@ -343,6 +382,45 @@ describe("agent-orchestrator/support/persistence", () => {
     }
     expect(assistant.meta.totalTokens).toBe(35_022);
     expect(assistant.meta.contextWindow).toBe(200_000);
+  });
+
+  test("maps adapter-shaped final message context usage into assistant message metadata", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-assistant",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:05.000Z",
+          text: "Final answer",
+          isFinal: true,
+          totalTokens: 2_450,
+          parts: [
+            {
+              kind: "reasoning",
+              messageId: "m-assistant",
+              partId: "reason-1",
+              text: "Reasoning block",
+              completed: true,
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+      },
+    );
+
+    const assistant = messages.find((entry) => entry.role === "assistant");
+    if (!assistant || assistant.meta?.kind !== "assistant") {
+      throw new Error("Expected assistant message with assistant meta");
+    }
+    expect(assistant.meta.isFinal).toBe(true);
+    expect(assistant.meta.totalTokens).toBe(2_450);
   });
 
   test("maps history parts into chat timeline entries", () => {

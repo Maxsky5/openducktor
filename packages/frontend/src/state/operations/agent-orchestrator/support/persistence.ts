@@ -162,7 +162,7 @@ const isFinalAssistantHistoryMessage = (message: AgentSessionHistoryMessage): bo
     return false;
   }
 
-  return message.parts.some(isStopStepFinishPart);
+  return message.isFinal === true || message.parts.some(isStopStepFinishPart);
 };
 
 const readFinalAssistantUsageMetadata = (

@@ -123,6 +123,7 @@ export type AgentSessionHistoryMessage =
       role: "assistant";
       timestamp: string;
       text: string;
+      isFinal?: boolean;
       durationMs?: number;
       totalTokens?: number;
       contextWindow?: number;
