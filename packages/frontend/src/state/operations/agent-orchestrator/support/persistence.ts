@@ -46,6 +46,11 @@ type LegacySubtaskHistoryPart = {
 type HydrationHistoryPart = HistoryPart | LegacySubtaskHistoryPart;
 
 type HydratedSubagentMessage = SubagentMessage;
+type AssistantHistoryMessage = Extract<AgentSessionHistoryMessage, { role: "assistant" }>;
+type StopStepFinishPart = Extract<HistoryPart, { kind: "step" }> & {
+  phase: "finish";
+  reason: "stop";
+};
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
   if (!isWorkflowAgentSession(session)) {
@@ -149,14 +154,41 @@ const assistantMessageMeta = (
   } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>;
 };
 
+const isStopStepFinishPart = (part: HistoryPart): part is StopStepFinishPart =>
+  part.kind === "step" && part.phase === "finish" && part.reason === "stop";
+
 const isFinalAssistantHistoryMessage = (message: AgentSessionHistoryMessage): boolean => {
   if (message.role !== "assistant") {
     return false;
   }
 
-  return message.parts.some(
-    (part) => part.kind === "step" && part.phase === "finish" && part.reason === "stop",
-  );
+  return message.parts.some(isStopStepFinishPart);
+};
+
+const readFinalAssistantUsageMetadata = (
+  message: AssistantHistoryMessage,
+): Pick<AgentSessionContextUsage, "totalTokens" | "contextWindow"> | null => {
+  if (!isFinalAssistantHistoryMessage(message)) {
+    return null;
+  }
+
+  const finalStep = message.parts.find(isStopStepFinishPart);
+  const totalTokens =
+    typeof message.totalTokens === "number" && message.totalTokens > 0
+      ? message.totalTokens
+      : finalStep?.totalTokens;
+  if (typeof totalTokens !== "number" || totalTokens <= 0) {
+    return null;
+  }
+
+  const contextWindow =
+    typeof message.contextWindow === "number" && message.contextWindow > 0
+      ? message.contextWindow
+      : finalStep?.contextWindow;
+  return {
+    totalTokens,
+    ...(typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : {}),
+  };
 };
 
 const userMessageMeta = (
@@ -425,14 +457,15 @@ export const historyToChatMessages = (
           : undefined;
       let meta: AgentChatMessage["meta"] | undefined;
       if (message.role === "assistant") {
+        const usageMetadata = readFinalAssistantUsageMetadata(message);
         meta = assistantMessageMeta(
           sessionContext.role,
           sessionContext.selectedModel,
           message.model,
           isFinalAssistantMessage,
           isFinalAssistantMessage ? assistantDurationMs : undefined,
-          isFinalAssistantMessage ? message.totalTokens : undefined,
-          isFinalAssistantMessage ? message.contextWindow : undefined,
+          usageMetadata?.totalTokens,
+          usageMetadata?.contextWindow,
         );
       } else if (message.role === "user") {
         meta = userMessageMeta(message.model, message.state, userDisplayParts);
@@ -472,18 +505,16 @@ export const historyToSessionContextUsage = (
     if (!message || message.role !== "assistant") {
       continue;
     }
-    if (!isFinalAssistantHistoryMessage(message)) {
-      continue;
-    }
-    if (typeof message.totalTokens !== "number" || message.totalTokens <= 0) {
+    const usageMetadata = readFinalAssistantUsageMetadata(message);
+    if (usageMetadata === null) {
       continue;
     }
 
     const effectiveModel = mergeModelSelection(selectedModel, message.model);
     return {
-      totalTokens: message.totalTokens,
-      ...(typeof message.contextWindow === "number"
-        ? { contextWindow: message.contextWindow }
+      totalTokens: usageMetadata.totalTokens,
+      ...(typeof usageMetadata.contextWindow === "number"
+        ? { contextWindow: usageMetadata.contextWindow }
         : {}),
       ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
       ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
