@@ -50,20 +50,6 @@ export const invalidateRepoTaskDataQueries = (
   });
 };
 
-export const invalidateKanbanTaskQueries = (
-  queryClient: QueryClient,
-  repoPath: string,
-  options?: {
-    refetchType?: "active" | "inactive" | "all" | "none";
-  },
-) => {
-  return queryClient.invalidateQueries({
-    queryKey: taskQueryKeys.repoDataPrefix(repoPath),
-    exact: false,
-    ...(options?.refetchType ? { refetchType: options.refetchType } : {}),
-  });
-};
-
 export const refetchActiveKanbanQueries = (
   queryClient: QueryClient,
   repoPath: string,
