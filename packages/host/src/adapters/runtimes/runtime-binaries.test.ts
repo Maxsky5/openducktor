@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import { resolveCodexBinary, resolveOpencodeBinary } from "./runtime-binaries";
@@ -92,6 +92,7 @@ describe("resolveOpencodeBinary", () => {
       await mkdir(binDir, { recursive: true });
       const opencode = join(binDir, "opencode");
       await writeExecutable(opencode);
+      const expectedResolvedPath = posix.join(root, ".opencode", "bin", "opencode");
 
       await expect(
         resolveOpencodeBinary(
@@ -99,7 +100,7 @@ describe("resolveOpencodeBinary", () => {
           {},
           { homeDir: root, platform: "linux" },
         ),
-      ).resolves.toBe(opencode);
+      ).resolves.toBe(expectedResolvedPath);
     });
   });
 

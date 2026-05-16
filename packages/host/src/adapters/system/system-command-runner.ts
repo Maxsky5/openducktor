@@ -103,7 +103,7 @@ export const createSystemCommandLaunch = (
   args: string[],
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
-): { command: string; args: string[] } => {
+): { command: string; args: string[]; windowsVerbatimArguments?: boolean } => {
   if (platform !== "win32" || !/\.(?:cmd|bat)$/iu.test(command)) {
     return { command, args };
   }
@@ -113,6 +113,7 @@ export const createSystemCommandLaunch = (
   return {
     command: shell,
     args: ["/d", "/c", commandLine],
+    windowsVerbatimArguments: true,
   };
 };
 
@@ -150,6 +151,7 @@ export const createSystemCommandRunner = ({
           cwd: options.cwd,
           env: commandEnv,
           stdio: ["ignore", "pipe", "pipe"],
+          windowsVerbatimArguments: launch.windowsVerbatimArguments === true,
         });
         const stdoutChunks: Buffer[] = [];
         const stderrChunks: Buffer[] = [];
