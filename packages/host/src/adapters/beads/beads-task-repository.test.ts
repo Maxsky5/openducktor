@@ -189,6 +189,52 @@ describe("createBeadsTaskRepository", () => {
     expect(requestedWorkspaceIds).toEqual(["openducktor"]);
   });
 
+  test("trims and forwards resolved workspace id for path-edge repo inputs", async () => {
+    const context = await createExistingBeadsCliContext();
+    const repoPath = path.join(
+      await mkdtemp(path.join(tmpdir(), "Repo With Spaces-")),
+      "C:\\Users\\Max Sky\\Repo Name",
+    );
+    const workspaceResolverCalls: string[] = [];
+    const contextRequests: Array<{
+      repoPath: string;
+      workspaceId: string | null | undefined;
+      requireSharedServer: boolean | undefined;
+    }> = [];
+    const port = createBeadsTaskRepository({
+      async resolveWorkspaceIdForRepoPath(requestedRepoPath) {
+        workspaceResolverCalls.push(requestedRepoPath);
+        return "  workspace-id-with-spaces  ";
+      },
+      async resolveCliContext(requestedRepoPath, options) {
+        contextRequests.push({
+          repoPath: requestedRepoPath,
+          workspaceId: options?.workspaceId,
+          requireSharedServer: options?.requireSharedServer,
+        });
+        return context;
+      },
+      async runBdJson(_repoPath, _args, callContext) {
+        expect(callContext).toBe(context);
+        return { path: context.beadsDir };
+      },
+    });
+
+    await expect(port.diagnoseRepoStore?.({ repoPath, prepare: true })).resolves.toMatchObject({
+      category: "healthy",
+      status: "ready",
+    });
+
+    expect(workspaceResolverCalls).toEqual([repoPath]);
+    expect(contextRequests).toEqual([
+      {
+        repoPath,
+        workspaceId: "workspace-id-with-spaces",
+        requireSharedServer: true,
+      },
+    ]);
+  });
+
   test("prepares the shared Dolt server when diagnostics request preparation", async () => {
     const context = await createExistingBeadsCliContext();
     const requestedSharedServerModes: Array<boolean | undefined> = [];
