@@ -141,8 +141,8 @@ describe("createSystemCommandRunner", () => {
       await mkdir(toolDir);
       const cmd = join(toolDir, "echo-tool.cmd");
       const bat = join(toolDir, "echo-bat.bat");
-      await writeFile(cmd, "@echo off\r\necho cmd:%1:%2\r\n");
-      await writeFile(bat, "@echo off\r\necho bat:%1:%2\r\n");
+      await writeFile(cmd, "@echo off\r\necho cmd:%~1:%~2\r\n");
+      await writeFile(bat, "@echo off\r\necho bat:%~1:%~2\r\n");
 
       const port = createSystemCommandRunner({
         env: { PATH: toolDir, PATHEXT: ".CMD;.BAT", ComSpec: process.env.ComSpec },
