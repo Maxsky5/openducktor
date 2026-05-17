@@ -34,13 +34,11 @@ export const createLocalAttachmentAdapter = (): LocalAttachmentPort => ({
     });
   },
   ensureDirectory(inputPath) {
-    return Effect.asVoid(
-      Effect.tryPromise({
-        try: () => mkdir(inputPath, { recursive: true }),
-        catch: (cause) =>
-          toHostOperationError(cause, "localAttachment.ensureDirectory", { path: inputPath }),
-      }),
-    );
+    return Effect.tryPromise({
+      try: () => mkdir(inputPath, { recursive: true }),
+      catch: (cause) =>
+        toHostOperationError(cause, "localAttachment.ensureDirectory", { path: inputPath }),
+    }).pipe(Effect.asVoid);
   },
   writeFile(inputPath, bytes) {
     return Effect.tryPromise({
