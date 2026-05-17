@@ -5,7 +5,7 @@ import {
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError } from "../../effect/host-errors";
@@ -24,9 +24,11 @@ export type McpHostBridgeConnectionInput = {
 };
 
 export type McpHostBridgeServer = {
-  ensureConnection(input: McpHostBridgeConnectionInput): Promise<OpenCodeMcpBridgeConnection>;
-  ensureExternalDiscoveryReady(): Promise<void>;
-  close(): Promise<McpHostBridgeCloseResult>;
+  ensureConnection(
+    input: McpHostBridgeConnectionInput,
+  ): Effect.Effect<OpenCodeMcpBridgeConnection, HostOperationError>;
+  ensureExternalDiscoveryReady(): Effect.Effect<void, HostOperationError>;
+  close(): Effect.Effect<McpHostBridgeCloseResult, HostOperationError>;
 };
 
 export type McpHostBridgeCloseResult = {
@@ -52,21 +54,31 @@ const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const MAX_BODY_BYTES = 1024 * 1024;
 const workspaceScopedToolNames = new Set<string>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
 
-const readRequestBody = (request: IncomingMessage): Promise<unknown> =>
-  new Promise((resolve, reject) => {
+const readRequestBody = (request: IncomingMessage): Effect.Effect<unknown, HostOperationError> =>
+  Effect.async<unknown, HostOperationError>((resume) => {
     let body = "";
     let receivedBytes = 0;
+    let settled = false;
+    const finish = (effect: Effect.Effect<unknown, HostOperationError>): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resume(effect);
+    };
 
     request.setEncoding("utf8");
     request.on("data", (chunk: string) => {
       receivedBytes += Buffer.byteLength(chunk);
       if (receivedBytes > MAX_BODY_BYTES) {
-        reject(
-          new HostOperationError({
-            operation: "mcpHostBridge.readRequestBody",
-            message: "MCP host bridge request body exceeds 1 MiB.",
-            details: { maxBodyBytes: MAX_BODY_BYTES },
-          }),
+        finish(
+          Effect.fail(
+            new HostOperationError({
+              operation: "mcpHostBridge.readRequestBody",
+              message: "MCP host bridge request body exceeds 1 MiB.",
+              details: { maxBodyBytes: MAX_BODY_BYTES },
+            }),
+          ),
         );
         request.destroy();
         return;
@@ -75,22 +87,34 @@ const readRequestBody = (request: IncomingMessage): Promise<unknown> =>
     });
     request.on("end", () => {
       if (!body.trim()) {
-        resolve({});
+        finish(Effect.succeed({}));
         return;
       }
       try {
-        resolve(JSON.parse(body) as unknown);
+        finish(Effect.succeed(JSON.parse(body) as unknown));
       } catch (error) {
-        reject(
-          new HostOperationError({
-            operation: "mcpHostBridge.readRequestBody",
-            message: `Invalid JSON request body: ${error instanceof Error ? error.message : error}`,
-            cause: error,
-          }),
+        finish(
+          Effect.fail(
+            new HostOperationError({
+              operation: "mcpHostBridge.readRequestBody",
+              message: `Invalid JSON request body: ${error instanceof Error ? error.message : error}`,
+              cause: error,
+            }),
+          ),
         );
       }
     });
-    request.on("error", reject);
+    request.on("error", (error) =>
+      finish(
+        Effect.fail(
+          new HostOperationError({
+            operation: "mcpHostBridge.readRequestBody",
+            message: errorMessage(error),
+            cause: error,
+          }),
+        ),
+      ),
+    );
   });
 
 const sendJson = (response: ServerResponse, statusCode: number, payload: unknown): void => {
@@ -104,40 +128,61 @@ const sendJson = (response: ServerResponse, statusCode: number, payload: unknown
 const errorMessage = (error: unknown): string =>
   error instanceof Error && error.message.trim() ? error.message : String(error);
 
-const listen = (server: Server): Promise<number> =>
-  new Promise((resolve, reject) => {
-    server.once("error", reject);
+const toMcpHostBridgeError = (cause: unknown, operation: string): HostOperationError =>
+  cause instanceof HostOperationError
+    ? cause
+    : new HostOperationError({
+        operation,
+        message: errorMessage(cause),
+        cause,
+      });
+
+const listen = (server: Server): Effect.Effect<number, HostOperationError> =>
+  Effect.async<number, HostOperationError>((resume) => {
+    let settled = false;
+    const finish = (effect: Effect.Effect<number, HostOperationError>): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      server.off("error", onError);
+      resume(effect);
+    };
+    const onError = (error: Error) =>
+      finish(Effect.fail(toMcpHostBridgeError(error, "mcpHostBridge.listen")));
+    server.once("error", onError);
     server.listen(0, "127.0.0.1", () => {
-      server.off("error", reject);
       const address = server.address();
       if (!address || typeof address === "string") {
-        reject(
-          new HostOperationError({
-            operation: "mcpHostBridge.listen",
-            message: "Failed to bind MCP host bridge on 127.0.0.1.",
-          }),
+        finish(
+          Effect.fail(
+            new HostOperationError({
+              operation: "mcpHostBridge.listen",
+              message: "Failed to bind MCP host bridge on 127.0.0.1.",
+            }),
+          ),
         );
         return;
       }
-      resolve((address as AddressInfo).port);
+      finish(Effect.succeed((address as AddressInfo).port));
     });
   });
 
-const closeServer = (server: Server): Promise<void> =>
-  new Promise((resolve, reject) => {
+const closeServer = (server: Server): Effect.Effect<void, HostOperationError> =>
+  Effect.async<void, HostOperationError>((resume) => {
     server.close((error) => {
       if (error) {
-        reject(error);
+        resume(Effect.fail(toMcpHostBridgeError(error, "mcpHostBridge.closeServer")));
         return;
       }
-      resolve();
+      resume(Effect.void);
     });
   });
 
 const createBridgeRequestHandler =
   (bridgeService: OdtMcpBridgeService, token: string) =>
-  async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
-    try {
+  (request: IncomingMessage, response: ServerResponse): void => {
+    const handle = Effect.gen(function* () {
       if (request.method === "GET" && request.url === "/health") {
         sendJson(response, 200, { ok: true });
         return;
@@ -160,13 +205,13 @@ const createBridgeRequestHandler =
       }
 
       const command = decodeURIComponent(request.url.slice("/invoke/".length));
-      const body = await readRequestBody(request);
+      const body = yield* readRequestBody(request);
       if (command === "odt_mcp_ready") {
-        sendJson(response, 200, await Effect.runPromise(bridgeService.ready(body)));
+        sendJson(response, 200, yield* bridgeService.ready(body));
         return;
       }
       if (command === "odt_get_workspaces") {
-        sendJson(response, 200, await Effect.runPromise(bridgeService.getWorkspaces(body)));
+        sendJson(response, 200, yield* bridgeService.getWorkspaces(body));
         return;
       }
 
@@ -178,11 +223,12 @@ const createBridgeRequestHandler =
       sendJson(
         response,
         200,
-        await Effect.runPromise(bridgeService.invoke(command as WorkspaceScopedOdtToolName, body)),
+        yield* bridgeService.invoke(command as WorkspaceScopedOdtToolName, body),
       );
-    } catch (error) {
+    });
+    Effect.runPromise(handle).catch((error) => {
       sendJson(response, 400, { error: errorMessage(error) });
-    }
+    });
   };
 
 export const createMcpHostBridgeServer = ({
@@ -194,101 +240,159 @@ export const createMcpHostBridgeServer = ({
   let server: Server | null = null;
   let baseUrl: string | null = null;
   let publishedDiscovery: McpBridgeDiscoveryFile | null = null;
-  let startupPromise: Promise<{ baseUrl: string; port: number }> | null = null;
+  let startupDeferred: Deferred.Deferred<
+    { baseUrl: string; port: number },
+    HostOperationError
+  > | null = null;
 
-  const startBridge = async (): Promise<StartedMcpHostBridge> => {
-    const nextServer = createServer(createBridgeRequestHandler(bridgeService, token));
-    const port = await listen(nextServer);
-    const nextBaseUrl = `http://127.0.0.1:${port}`;
-    const discovery: McpBridgeDiscoveryFile = {
-      hostToken: token,
-      hostUrl: nextBaseUrl,
-      pid: process.pid,
-    };
-
-    try {
-      await writeMcpBridgeDiscoveryFile(discoveryPath, discovery);
-    } catch (error) {
-      try {
-        await closeServer(nextServer);
-      } catch (closeError) {
-        throw new HostOperationError({
-          operation: "mcpHostBridgeServer.ensureStarted",
-          message: `Failed to publish MCP host bridge discovery file and close the unpublished bridge: ${
-            closeError instanceof Error ? closeError.message : String(closeError)
-          }`,
-          cause: error,
-          details: { discoveryPath },
-        });
-      }
-      throw error;
-    }
-
-    return {
-      baseUrl: nextBaseUrl,
-      discovery,
-      port,
-      server: nextServer,
-    };
-  };
-
-  const ensureStarted = async (): Promise<{ baseUrl: string; port: number }> => {
-    if (baseUrl) {
-      return {
-        baseUrl,
-        port: Number(new URL(baseUrl).port),
+  const startBridge = (): Effect.Effect<StartedMcpHostBridge, HostOperationError> =>
+    Effect.gen(function* () {
+      const nextServer = createServer(createBridgeRequestHandler(bridgeService, token));
+      const port = yield* listen(nextServer);
+      const nextBaseUrl = `http://127.0.0.1:${port}`;
+      const discovery: McpBridgeDiscoveryFile = {
+        hostToken: token,
+        hostUrl: nextBaseUrl,
+        pid: process.pid,
       };
-    }
-    if (startupPromise) {
-      return startupPromise;
-    }
 
-    startupPromise = (async () => {
-      const started = await startBridge();
-      server = started.server;
-      baseUrl = started.baseUrl;
-      publishedDiscovery = started.discovery;
-      return { baseUrl: started.baseUrl, port: started.port };
-    })().finally(() => {
-      startupPromise = null;
+      const publishResult = yield* Effect.either(
+        writeMcpBridgeDiscoveryFile(discoveryPath, discovery).pipe(
+          Effect.mapError((cause) =>
+            toMcpHostBridgeError(cause, "mcpHostBridge.writeDiscoveryFile"),
+          ),
+        ),
+      );
+      if (publishResult._tag === "Left") {
+        const closeResult = yield* Effect.either(
+          closeServer(nextServer).pipe(
+            Effect.mapError((cause) =>
+              toMcpHostBridgeError(cause, "mcpHostBridge.closeUnpublishedServer"),
+            ),
+          ),
+        );
+        if (closeResult._tag === "Left") {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "mcpHostBridgeServer.ensureStarted",
+              message: `Failed to publish MCP host bridge discovery file and close the unpublished bridge: ${closeResult.left.message}`,
+              cause: publishResult.left,
+              details: { discoveryPath },
+            }),
+          );
+        }
+        return yield* Effect.fail(publishResult.left);
+      }
+
+      return {
+        baseUrl: nextBaseUrl,
+        discovery,
+        port,
+        server: nextServer,
+      };
     });
 
-    return startupPromise;
+  const ensureStarted = (): Effect.Effect<
+    { baseUrl: string; port: number },
+    HostOperationError
+  > => {
+    if (baseUrl) {
+      return Effect.succeed({
+        baseUrl,
+        port: Number(new URL(baseUrl).port),
+      });
+    }
+    if (startupDeferred) {
+      return Deferred.await(startupDeferred);
+    }
+
+    return Effect.gen(function* () {
+      const deferred = yield* Deferred.make<
+        { baseUrl: string; port: number },
+        HostOperationError
+      >();
+      startupDeferred = deferred;
+      yield* Effect.forkDaemon(
+        Effect.gen(function* () {
+          const result = yield* Effect.either(
+            Effect.gen(function* () {
+              const started = yield* startBridge();
+              server = started.server;
+              baseUrl = started.baseUrl;
+              publishedDiscovery = started.discovery;
+              return { baseUrl: started.baseUrl, port: started.port };
+            }),
+          );
+          if (result._tag === "Left") {
+            yield* Deferred.fail(deferred, result.left);
+          } else {
+            yield* Deferred.succeed(deferred, result.right);
+          }
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (startupDeferred === deferred) {
+                startupDeferred = null;
+              }
+            }),
+          ),
+        ),
+      );
+      return yield* Deferred.await(deferred);
+    });
   };
 
   return {
-    async ensureConnection(input) {
-      const repoConfig = await Effect.runPromise(
-        workspaceSettingsService.getRepoConfigByRepoPath(input.repoPath),
-      );
-      const connection = await ensureStarted();
-      return {
-        workspaceId: repoConfig.workspaceId,
-        hostUrl: connection.baseUrl,
-        hostToken: token,
-      };
+    ensureConnection(input) {
+      return Effect.gen(function* () {
+        const repoConfig = yield* workspaceSettingsService
+          .getRepoConfigByRepoPath(input.repoPath)
+          .pipe(
+            Effect.mapError((cause) =>
+              toMcpHostBridgeError(cause, "mcpHostBridge.getRepoConfigByRepoPath"),
+            ),
+          );
+        const connection = yield* ensureStarted();
+        return {
+          workspaceId: repoConfig.workspaceId,
+          hostUrl: connection.baseUrl,
+          hostToken: token,
+        };
+      });
     },
-    async ensureExternalDiscoveryReady() {
-      await ensureStarted();
+    ensureExternalDiscoveryReady() {
+      return ensureStarted().pipe(Effect.asVoid);
     },
-    async close() {
-      if (startupPromise) {
-        await startupPromise.catch(() => undefined);
-      }
-      const current = server;
-      const currentBaseUrl = baseUrl;
-      const currentDiscovery = publishedDiscovery;
-      server = null;
-      baseUrl = null;
-      publishedDiscovery = null;
-      if (current) {
-        await closeServer(current);
-        if (currentDiscovery !== null) {
-          await removeMcpBridgeDiscoveryFile(discoveryPath, currentDiscovery);
+    close() {
+      return Effect.gen(function* () {
+        if (startupDeferred) {
+          yield* Effect.either(
+            Deferred.await(startupDeferred).pipe(
+              Effect.mapError((cause) =>
+                toMcpHostBridgeError(cause, "mcpHostBridge.awaitStartupBeforeClose"),
+              ),
+            ),
+          );
         }
-        return { baseUrl: currentBaseUrl, closed: true };
-      }
-      return { baseUrl: null, closed: false };
+        const current = server;
+        const currentBaseUrl = baseUrl;
+        const currentDiscovery = publishedDiscovery;
+        server = null;
+        baseUrl = null;
+        publishedDiscovery = null;
+        if (current) {
+          yield* closeServer(current);
+          if (currentDiscovery !== null) {
+            yield* removeMcpBridgeDiscoveryFile(discoveryPath, currentDiscovery).pipe(
+              Effect.mapError((cause) =>
+                toMcpHostBridgeError(cause, "mcpHostBridge.removeDiscoveryFile"),
+              ),
+            );
+          }
+          return { baseUrl: currentBaseUrl, closed: true };
+        }
+        return { baseUrl: null, closed: false };
+      });
     },
   };
 };

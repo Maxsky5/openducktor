@@ -12,7 +12,7 @@ import {
   combineOutput,
   type GitCommandResult,
   type GitCommandRunner,
-  requireNonEmpty,
+  requireNonEmptyEffect,
   runGit,
   runGitAllowFailure,
 } from "./git-command-runner";
@@ -417,7 +417,7 @@ export const resolveBranchDiffBase = (
   targetBranch: string,
 ): Effect.Effect<string, GitDiffError> =>
   Effect.gen(function* () {
-    const target = requireNonEmpty(targetBranch, "target branch");
+    const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
     const result = yield* runGitAllowFailure(runner, workingDirectory, [
       "merge-base",
       "--end-of-options",

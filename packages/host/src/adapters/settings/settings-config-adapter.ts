@@ -168,11 +168,15 @@ export const createSettingsConfigAdapter = ({
     },
     writeConfig(config: GlobalConfig) {
       return Effect.gen(function* () {
-        yield* Effect.tryPromise({
-          try: () => mkdir(baseDir, { recursive: true }).then(() => undefined),
-          catch: (cause) =>
-            toHostOperationError(cause, "settingsConfig.createConfigDirectory", { path: baseDir }),
-        }).pipe(
+        yield* Effect.asVoid(
+          Effect.tryPromise({
+            try: () => mkdir(baseDir, { recursive: true }),
+            catch: (cause) =>
+              toHostOperationError(cause, "settingsConfig.createConfigDirectory", {
+                path: baseDir,
+              }),
+          }),
+        ).pipe(
           Effect.mapError(
             (error) =>
               new HostOperationError({
@@ -190,17 +194,16 @@ export const createSettingsConfigAdapter = ({
         );
         const payload = `${JSON.stringify(config, null, 2)}\n`;
 
-        yield* Effect.tryPromise({
-          try: async () => {
-            await writeFile(tempPath, payload, { mode: 0o600 });
-            await rename(tempPath, resolvedConfigPath);
-          },
-          catch: (cause) =>
+        yield* Effect.gen(function* () {
+          yield* Effect.tryPromise(() => writeFile(tempPath, payload, { mode: 0o600 }));
+          yield* Effect.tryPromise(() => rename(tempPath, resolvedConfigPath));
+        }).pipe(
+          Effect.mapError((cause) =>
             toHostOperationError(cause, "settingsConfig.writeConfig", {
               path: resolvedConfigPath,
               tempPath,
             }),
-        }).pipe(
+          ),
           Effect.mapError(
             (error) =>
               new HostOperationError({

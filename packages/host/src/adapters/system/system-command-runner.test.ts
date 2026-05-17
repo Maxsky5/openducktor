@@ -124,10 +124,7 @@ describe("createSystemCommandRunner", () => {
     });
 
     const result = await Effect.runPromise(
-      port.runCommandAllowFailure("bun", [
-        "-e",
-        "console.log(process.env.OPENDUCKTOR_TEST_VALUE)",
-      ]),
+      port.runCommandAllowFailure("bun", ["-e", "console.log(process.env.OPENDUCKTOR_TEST_VALUE)"]),
     );
 
     expect(result.ok).toBe(true);

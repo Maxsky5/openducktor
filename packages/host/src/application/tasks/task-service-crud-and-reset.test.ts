@@ -15,6 +15,9 @@ import {
 
 const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
   ({
+    ensureDirectory() {
+      return Effect.dieMessage("unexpected ensure directory");
+    },
     copyConfiguredPaths() {
       return Effect.tryPromise({
         try: async () => {

@@ -119,7 +119,7 @@ export const createOdtMcpBridgeService = ({
               },
             });
             if (taskSyncService) {
-              taskSyncService.publishExternalTaskCreated(repoPath, created.id);
+              yield* taskSyncService.publishExternalTaskCreated(repoPath, created.id);
             }
             return (yield* parseResponse(toolName, mapTaskSummary(created))) as CreateTaskResult;
           }

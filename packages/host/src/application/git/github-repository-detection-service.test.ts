@@ -63,6 +63,9 @@ const createFakeGitPort = ({
           }),
       });
     },
+    referenceExists() {
+      return Effect.succeed(true);
+    },
     listRemotes(workingDir) {
       return Effect.tryPromise({
         try: async () => {
@@ -217,6 +220,12 @@ const createFakeGitPort = ({
             cause: cause,
           }),
       });
+    },
+    configureBranchUpstream() {
+      return Effect.succeed({ createdTrackingRef: null });
+    },
+    deleteReference() {
+      return Effect.void;
     },
     removeWorktree() {
       return Effect.tryPromise({

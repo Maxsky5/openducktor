@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import {
   type KillProcess,
   shouldStartDetachedProcessGroup,
@@ -46,25 +47,27 @@ describe("process-tree", () => {
     expect(shouldStartDetachedProcessGroup("darwin")).toBe(true);
     expect(shouldStartDetachedProcessGroup("win32")).toBe(false);
 
-    await terminateProcessTree({
-      pid: 1234,
-      label: "test runtime",
-      isClosed: () => false,
-      waitForExit: async () => signals.length >= 2,
-      stopTimeoutMs: 10,
-      signalDependencies: {
-        platform: "linux",
-        kill: (pid, signal) => {
-          if (signal === undefined || signal === 0) {
-            throw new Error("Expected a process signal.");
-          }
-          signals.push({ pid, signal });
-          return true;
+    await Effect.runPromise(
+      terminateProcessTree({
+        pid: 1234,
+        label: "test runtime",
+        isClosed: () => false,
+        waitForExit: () => Effect.succeed(signals.length >= 2),
+        stopTimeoutMs: 10,
+        signalDependencies: {
+          platform: "linux",
+          kill: (pid, signal) => {
+            if (signal === undefined || signal === 0) {
+              throw new Error("Expected a process signal.");
+            }
+            signals.push({ pid, signal });
+            return true;
+          },
+          spawnSync: noopSpawnSync,
+          isAlive: processIsAlive,
         },
-        spawnSync: noopSpawnSync,
-        isAlive: processIsAlive,
-      },
-    });
+      }),
+    );
 
     expect(signals).toEqual([
       { pid: -1234, signal: "SIGTERM" },
@@ -75,43 +78,45 @@ describe("process-tree", () => {
   test("accepts already-closed process trees without signaling", async () => {
     const signals: unknown[] = [];
 
-    await terminateProcessTree({
-      pid: 1234,
-      label: "already closed",
-      isClosed: () => true,
-      waitForExit: async () => {
-        throw new Error("wait should not be called");
-      },
-      stopTimeoutMs: 10,
-      signalDependencies: {
-        platform: "linux",
-        kill: (pid, signal) => {
-          signals.push({ pid, signal });
-          return true;
+    await Effect.runPromise(
+      terminateProcessTree({
+        pid: 1234,
+        label: "already closed",
+        isClosed: () => true,
+        waitForExit: () => Effect.dieMessage("wait should not be called"),
+        stopTimeoutMs: 10,
+        signalDependencies: {
+          platform: "linux",
+          kill: (pid, signal) => {
+            signals.push({ pid, signal });
+            return true;
+          },
+          spawnSync: noopSpawnSync,
+          isAlive: processIsAlive,
         },
-        spawnSync: noopSpawnSync,
-        isAlive: processIsAlive,
-      },
-    });
+      }),
+    );
 
     expect(signals).toEqual([]);
   });
 
   test("throws an actionable error when the target remains alive after force cleanup", async () => {
     await expect(
-      terminateProcessTree({
-        pid: 4321,
-        label: "stubborn child",
-        isClosed: () => false,
-        waitForExit: async () => false,
-        stopTimeoutMs: 5,
-        signalDependencies: {
-          platform: "linux",
-          kill: noopKill,
-          spawnSync: noopSpawnSync,
-          isAlive: processIsAlive,
-        },
-      }),
+      Effect.runPromise(
+        terminateProcessTree({
+          pid: 4321,
+          label: "stubborn child",
+          isClosed: () => false,
+          waitForExit: () => Effect.succeed(false),
+          stopTimeoutMs: 5,
+          signalDependencies: {
+            platform: "linux",
+            kill: noopKill,
+            spawnSync: noopSpawnSync,
+            isAlive: processIsAlive,
+          },
+        }),
+      ),
     ).rejects.toThrow(
       "Timed out waiting 5ms per signal for stubborn child process tree 4321 to stop after SIGTERM and SIGKILL.",
     );

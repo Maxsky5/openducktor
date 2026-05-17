@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import {
   HostOperationError,
   HostResourceError,
+  HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
 import {
@@ -70,9 +71,11 @@ export const resolveFallbackRemoteRefForBranch = (
       "refs/remotes",
     ]);
     if (!result.ok) {
-      throw gitOperationError(
-        `Failed to list remote refs while resolving upstream for branch ${branch}: ${combineOutput(result.stdout, result.stderr)}`,
-        "git.for-each-ref",
+      return yield* Effect.fail(
+        gitOperationError(
+          `Failed to list remote refs while resolving upstream for branch ${branch}: ${combineOutput(result.stdout, result.stderr)}`,
+          "git.for-each-ref",
+        ),
       );
     }
     const matches = result.stdout
@@ -185,7 +188,13 @@ export const commitsAgainstTargetOrDefault = (
       "--end-of-options",
       range,
     ]);
-    return parseAheadBehind(output);
+    return yield* Effect.try({
+      try: () => parseAheadBehind(output),
+      catch: (cause) =>
+        cause instanceof HostValidationError
+          ? cause
+          : gitOperationError(String(cause), "git.parse-ahead-behind"),
+    });
   });
 export const resolveUpstreamAheadBehind = (
   runner: GitCommandRunner,
@@ -236,10 +245,12 @@ export const resolveGitPath = (
       .map((line) => line.trim())
       .find(Boolean);
     if (!gitPath) {
-      throw gitResourceError(
-        `git rev-parse --git-path ${suffix} returned no path`,
-        "git.rev-parse.git-path",
-        suffix,
+      return yield* Effect.fail(
+        gitResourceError(
+          `git rev-parse --git-path ${suffix} returned no path`,
+          "git.rev-parse.git-path",
+          suffix,
+        ),
       );
     }
     return gitPath;

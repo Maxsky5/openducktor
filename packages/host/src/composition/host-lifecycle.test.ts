@@ -74,14 +74,29 @@ describe("host lifecycle shutdown", () => {
     const logger = createLogger();
     const step = createStopMcpHostBridgeStep(
       {
-        async ensureConnection() {
-          throw new Error("ensureConnection should not be called");
+        ensureConnection() {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.ensureConnection",
+              message: "ensureConnection should not be called",
+            }),
+          );
         },
-        async ensureExternalDiscoveryReady() {
-          throw new Error("ensureExternalDiscoveryReady should not be called");
+        ensureExternalDiscoveryReady() {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.ensureExternalDiscoveryReady",
+              message: "ensureExternalDiscoveryReady should not be called",
+            }),
+          );
         },
-        async close() {
-          throw new Error("bridge close failed");
+        close() {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.close",
+              message: "bridge close failed",
+            }),
+          );
         },
       },
       logger,

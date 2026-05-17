@@ -30,7 +30,7 @@ const createWorkspaceSettingsServiceFake = (
   service: Pick<WorkspaceSettingsService, "listWorkspaces">,
 ): WorkspaceSettingsService => service as unknown as WorkspaceSettingsService;
 describe("createTaskSyncService", () => {
-  test("publishes Tauri-compatible external task creation events", () => {
+  test("publishes Tauri-compatible external task creation events", async () => {
     const { eventBus, events } = createEventBus();
     const service = createTaskSyncServiceForTest({
       eventBus,
@@ -65,7 +65,7 @@ describe("createTaskSyncService", () => {
         },
       }),
     });
-    service.publishExternalTaskCreated("/repo", "task-1");
+    await Effect.runPromise(service.publishExternalTaskCreated("/repo", "task-1"));
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       channel: "openducktor://task-event",
@@ -179,7 +179,7 @@ describe("createTaskSyncService", () => {
         },
       }),
     });
-    const loop = service.startPullRequestSyncLoop();
+    const loop = await Effect.runPromise(service.startPullRequestSyncLoop());
     await Effect.runPromise(loop.stop());
     expect(calls).toEqual([]);
   });

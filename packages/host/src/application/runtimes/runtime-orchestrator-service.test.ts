@@ -147,6 +147,13 @@ const createRegistry = (
           }),
       });
     },
+    stopAllRuntimes() {
+      return Effect.sync(() => {
+        const stopped = [...entries.values()];
+        entries.clear();
+        return stopped;
+      });
+    },
     stopSession() {
       return Effect.tryPromise({
         try: async () => {},
@@ -156,6 +163,19 @@ const createRegistry = (
             message: cause instanceof Error ? cause.message : String(cause),
             cause: cause,
           }),
+      });
+    },
+    probeSessionStatus() {
+      return Effect.succeed({ supported: false, hasLiveSession: false });
+    },
+    probeMcpStatus() {
+      return Effect.succeed({
+        supported: false,
+        connected: false,
+        serverStatus: null,
+        toolIds: [],
+        detail: null,
+        failureKind: null,
       });
     },
     ...overrides,

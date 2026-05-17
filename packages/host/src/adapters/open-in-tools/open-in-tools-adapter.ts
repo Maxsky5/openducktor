@@ -36,7 +36,7 @@ export type OpenInCommandRunner = (
   program: string,
   args: string[],
   options?: { cwd?: string },
-) => Promise<CommandResult>;
+) => Effect.Effect<CommandResult, unknown>;
 
 export type CreateOpenInToolsAdapterInput = {
   platform?: NodeJS.Platform;
@@ -86,17 +86,16 @@ const OPEN_IN_TOOL_CATALOG: OpenInToolMetadata[] = [
   },
 ];
 
-const defaultRunner: OpenInCommandRunner = async (program, args, options) => {
-  const output = await execFileAsync(program, args, {
-    cwd: options?.cwd,
-    maxBuffer: 16 * 1024 * 1024,
-  });
-
-  return {
-    stdout: output.stdout,
-    stderr: output.stderr,
-  };
-};
+const defaultRunner: OpenInCommandRunner = (program, args, options) =>
+  Effect.tryPromise({
+    try: () =>
+      execFileAsync(program, args, {
+        cwd: options?.cwd,
+        maxBuffer: 16 * 1024 * 1024,
+      }),
+    catch: (cause) =>
+      toHostOperationError(cause, "openInTools.runCommand", { program, args, cwd: options?.cwd }),
+  }).pipe(Effect.map((output) => ({ stdout: output.stdout, stderr: output.stderr })));
 
 const defaultPathExists = (inputPath: string) =>
   Effect.tryPromise({
@@ -109,12 +108,12 @@ const defaultPathExists = (inputPath: string) =>
 
 const defaultPathIsDirectory = (inputPath: string) =>
   Effect.tryPromise({
-    try: async () => {
-      const metadata = await stat(inputPath);
-      return metadata.isDirectory();
-    },
+    try: () => stat(inputPath),
     catch: (cause) => toHostPathStatError(cause, "openInTools.pathIsDirectory", inputPath),
-  }).pipe(Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)));
+  }).pipe(
+    Effect.map((metadata) => metadata.isDirectory()),
+    Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)),
+  );
 
 const bundleNameForApp = (appName: string): string =>
   appName.endsWith(".app") ? appName : `${appName}.app`;
@@ -195,11 +194,11 @@ export const createOpenInToolsAdapter = ({
     }),
 }: CreateOpenInToolsAdapterInput = {}): OpenInToolsPort => {
   const runOpenInCommand = (program: string, args: string[], options?: { cwd?: string }) =>
-    Effect.tryPromise({
-      try: () => runner(program, args, options),
-      catch: (cause) =>
+    runner(program, args, options).pipe(
+      Effect.mapError((cause) =>
         toHostOperationError(cause, "openInTools.runCommand", { program, args, cwd: options?.cwd }),
-    });
+      ),
+    );
   const resolveApplicationPathByName = (
     appName: string,
   ): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
@@ -316,15 +315,14 @@ export const createOpenInToolsAdapter = ({
           );
         }
 
-        yield* Effect.tryPromise({
-          try: () => runner("open", buildLaunchArgs(metadata, appPath, directoryPath)),
-          catch: (cause) =>
+        yield* runner("open", buildLaunchArgs(metadata, appPath, directoryPath)).pipe(
+          Effect.mapError((cause) =>
             toHostOperationError(cause, "openInTools.openDirectoryInTool", {
               directoryPath,
               toolId,
               appPath,
             }),
-        }).pipe(
+          ),
           Effect.mapError(
             (error) =>
               new HostOperationError({
@@ -343,15 +341,14 @@ export const createOpenInToolsAdapter = ({
           try: () => buildOpenExternalUrlCommand(platform, url),
           catch: (cause) => toHostOperationError(cause, "openInTools.buildOpenExternalUrlCommand"),
         });
-        yield* Effect.tryPromise({
-          try: () => runner(command.program, command.args),
-          catch: (cause) =>
+        yield* runner(command.program, command.args).pipe(
+          Effect.mapError((cause) =>
             toHostOperationError(cause, "openInTools.openExternalUrl", {
               url,
               platform,
               command: command.program,
             }),
-        }).pipe(
+          ),
           Effect.mapError(
             (error) =>
               new HostOperationError({

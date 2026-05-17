@@ -43,10 +43,11 @@ export const resolveBeadsCliContext = (
 ) =>
   Effect.gen(function* () {
     const processEnv = options.processEnv ?? process.env;
-    const canonicalRepoPath = yield* Effect.tryPromise({
-      try: () => canonicalOrAbsolute(repoPath),
-      catch: (cause) => toHostOperationError(cause, "beads.resolveCanonicalPath", { repoPath }),
-    });
+    const canonicalRepoPath = yield* canonicalOrAbsolute(repoPath).pipe(
+      Effect.mapError((cause) =>
+        toHostOperationError(cause, "beads.resolveCanonicalPath", { repoPath }),
+      ),
+    );
     const baseDir = resolveOpenDucktorBaseDir(processEnv);
     const beadsRoot = path.join(baseDir, "beads");
     const sharedServerRoot = path.join(beadsRoot, "shared-server");
@@ -75,10 +76,11 @@ export const resolveBeadsCliContext = (
       env: processEnv,
       serverStatePath,
     };
-    let sharedServer = yield* Effect.tryPromise({
-      try: () => readSharedServerState(serverStatePath),
-      catch: (cause) => toHostOperationError(cause, "beads.readSharedServerState", { repoPath }),
-    });
+    let sharedServer = yield* readSharedServerState(serverStatePath).pipe(
+      Effect.mapError((cause) =>
+        toHostOperationError(cause, "beads.readSharedServerState", { repoPath }),
+      ),
+    );
 
     if (options.requireSharedServer === true) {
       yield* Effect.tryPromise({

@@ -28,10 +28,8 @@ export type CodexAppServerChildTransport = CodexAppServerTransport & {
   close(): Effect.Effect<void, never>;
 };
 
-export type CodexAppServerTransportError =
-  | HostOperationError
-  | HostResourceError
-  | HostValidationError;
+type CodexTransportBaseError = HostOperationError | HostResourceError;
+export type CodexAppServerTransportError = CodexTransportBaseError | HostValidationError;
 
 export type CodexAppServerStreamEvent = {
   runtimeId: string;
@@ -49,18 +47,14 @@ const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const writeLine = (stdin: Writable, payload: unknown) =>
-  Effect.tryPromise({
-    try: () =>
-      new Promise<void>((resolve, reject) => {
-        stdin.write(`${JSON.stringify(payload)}\n`, (error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      }),
-    catch: (cause) => toHostOperationError(cause, "codexAppServerTransport.writeLine"),
+  Effect.async<void, HostOperationError>((resume) => {
+    stdin.write(`${JSON.stringify(payload)}\n`, (error) => {
+      if (error) {
+        resume(Effect.fail(toHostOperationError(error, "codexAppServerTransport.writeLine")));
+        return;
+      }
+      resume(Effect.void);
+    });
   });
 
 const resolveAfterQueuedMessages = (resolve: (value: unknown) => void, value: unknown): void => {
@@ -158,25 +152,72 @@ export const createCodexAppServerTransport = (
       );
     });
 
-  const waitForResponse = (id: number, method: string) =>
-    Effect.async<unknown, HostOperationError | HostResourceError | HostValidationError>(
+  const waitForResponse = (id: number, method: string) => {
+    type ResponseEffect = Effect.Effect<
+      unknown,
+      HostOperationError | HostResourceError | HostValidationError
+    >;
+    let resumeEffect: ((effect: ResponseEffect) => void) | null = null;
+    let settledEffect: ResponseEffect | null = null;
+    let abortSignal: AbortSignal | null = null;
+    let abortHandler: (() => void) | null = null;
+
+    const finish = (effect: ResponseEffect): void => {
+      if (abortSignal && abortHandler) {
+        abortSignal.removeEventListener("abort", abortHandler);
+        abortSignal = null;
+        abortHandler = null;
+      }
+      if (resumeEffect) {
+        resumeEffect(effect);
+        return;
+      }
+      settledEffect = effect;
+    };
+
+    const timeout = setTimeout(() => {
+      pending.delete(id);
+      finish(
+        Effect.fail(
+          new HostOperationError({
+            operation: `codexAppServerTransport.request.${method}`,
+            message: `Timed out waiting for Codex app-server request ${method} on runtime ${runtimeId} after ${requestTimeoutMs}ms`,
+            details: { runtimeId, method, requestTimeoutMs },
+          }),
+        ),
+      );
+    }, requestTimeoutMs);
+
+    pending.set(id, {
+      method,
+      timeout,
+      resolve: (value) => {
+        resolveAfterQueuedMessages((resolvedValue) => finish(Effect.succeed(resolvedValue)), value);
+      },
+      reject: (error) => {
+        finish(
+          Effect.fail(
+            toHostOperationError(error, `codexAppServerTransport.request.${method}`, {
+              runtimeId,
+              method,
+            }),
+          ),
+        );
+      },
+    });
+
+    return Effect.async<unknown, HostOperationError | HostResourceError | HostValidationError>(
       (resume, signal) => {
-        const timeout = setTimeout(() => {
-          pending.delete(id);
-          resume(
-            Effect.fail(
-              new HostOperationError({
-                operation: `codexAppServerTransport.request.${method}`,
-                message: `Timed out waiting for Codex app-server request ${method} on runtime ${runtimeId} after ${requestTimeoutMs}ms`,
-                details: { runtimeId, method, requestTimeoutMs },
-              }),
-            ),
-          );
-        }, requestTimeoutMs);
-        const abort = () => {
+        if (settledEffect) {
+          resume(settledEffect);
+          return;
+        }
+        resumeEffect = resume;
+        abortSignal = signal;
+        abortHandler = () => {
           clearTimeout(timeout);
           pending.delete(id);
-          resume(
+          finish(
             Effect.fail(
               new HostOperationError({
                 operation: `codexAppServerTransport.request.${method}`,
@@ -186,31 +227,10 @@ export const createCodexAppServerTransport = (
             ),
           );
         };
-        signal.addEventListener("abort", abort, { once: true });
-        pending.set(id, {
-          method,
-          timeout,
-          resolve: (value) => {
-            signal.removeEventListener("abort", abort);
-            resolveAfterQueuedMessages(
-              (resolvedValue) => resume(Effect.succeed(resolvedValue)),
-              value,
-            );
-          },
-          reject: (error) => {
-            signal.removeEventListener("abort", abort);
-            resume(
-              Effect.fail(
-                toHostOperationError(error, `codexAppServerTransport.request.${method}`, {
-                  runtimeId,
-                  method,
-                }),
-              ),
-            );
-          },
-        });
+        signal.addEventListener("abort", abortHandler, { once: true });
       },
     );
+  };
 
   const resolveResponse = (id: number, message: Record<string, unknown>): void => {
     const request = pending.get(id);
@@ -249,6 +269,30 @@ export const createCodexAppServerTransport = (
     }
     request.resolve(message.result);
   };
+  const emitEvent = (
+    event: CodexAppServerStreamEvent,
+    pendingEvents: unknown[],
+    options: { bufferWhenEmitting: boolean },
+  ): void => {
+    if (!eventEmitter || options.bufferWhenEmitting) {
+      pushBoundedMessage(pendingEvents, event.message);
+    }
+    if (!eventEmitter) {
+      return;
+    }
+    try {
+      eventEmitter(event);
+    } catch (error) {
+      failFast(
+        new HostOperationError({
+          operation: "codexAppServerTransport.emitEvent",
+          message: `Failed emitting Codex app-server ${event.kind} event for runtime ${runtimeId}`,
+          cause: error,
+          details: { runtimeId, eventKind: event.kind },
+        }),
+      );
+    }
+  };
 
   const handleMessage = (message: unknown): void => {
     if (!isJsonRecord(message)) {
@@ -281,19 +325,16 @@ export const createCodexAppServerTransport = (
     }
 
     if (hasMethod && id === null) {
-      pushBoundedMessage(notifications, message);
-      if (eventEmitter) {
-        eventEmitter({ runtimeId, kind: "notification", message });
-      }
+      emitEvent({ runtimeId, kind: "notification", message }, notifications, {
+        bufferWhenEmitting: true,
+      });
       return;
     }
 
     if (hasMethod && id !== null) {
-      if (eventEmitter) {
-        eventEmitter({ runtimeId, kind: "server_request", message });
-      } else {
-        pushBoundedMessage(serverRequests, message);
-      }
+      emitEvent({ runtimeId, kind: "server_request", message }, serverRequests, {
+        bufferWhenEmitting: false,
+      });
       return;
     }
 
@@ -370,12 +411,22 @@ export const createCodexAppServerTransport = (
         yield* ensureOpenEffect();
         const id = nextRequestId++;
         const response = waitForResponse(id, method);
-        yield* sendMessage({
-          jsonrpc: "2.0",
-          id,
-          method,
-          ...(params !== undefined ? { params } : {}),
-        });
+        const sendResult = yield* Effect.either(
+          sendMessage({
+            jsonrpc: "2.0",
+            id,
+            method,
+            ...(params !== undefined ? { params } : {}),
+          }),
+        );
+        if (sendResult._tag === "Left") {
+          const pendingRequest = pending.get(id);
+          if (pendingRequest) {
+            clearTimeout(pendingRequest.timeout);
+            pending.delete(id);
+          }
+          return yield* Effect.fail(sendResult.left);
+        }
         return yield* response;
       });
     },

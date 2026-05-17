@@ -70,6 +70,16 @@ export type HostError =
   | HostResourceError
   | HostValidationError;
 
+export const isHostError = (cause: unknown): cause is HostError =>
+  cause instanceof HostCommandError ||
+  cause instanceof HostDependencyError ||
+  cause instanceof HostInvariantError ||
+  cause instanceof HostOperationError ||
+  cause instanceof HostPathAccessError ||
+  cause instanceof HostPathNotFoundError ||
+  cause instanceof HostResourceError ||
+  cause instanceof HostValidationError;
+
 export const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
@@ -116,16 +126,7 @@ export const toHostOperationError = (
   operation: string,
   details?: HostErrorDetails,
 ): HostOperationError => {
-  if (
-    cause instanceof HostCommandError ||
-    cause instanceof HostDependencyError ||
-    cause instanceof HostInvariantError ||
-    cause instanceof HostOperationError ||
-    cause instanceof HostPathAccessError ||
-    cause instanceof HostPathNotFoundError ||
-    cause instanceof HostResourceError ||
-    cause instanceof HostValidationError
-  ) {
+  if (isHostError(cause)) {
     return cause instanceof HostOperationError
       ? cause
       : new HostOperationError({

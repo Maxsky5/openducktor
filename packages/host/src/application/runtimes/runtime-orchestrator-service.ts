@@ -99,15 +99,6 @@ export const createRuntimeOrchestratorService = ({
           }),
         );
       }
-      if (!runtimeRegistry.probeSessionStatus) {
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "runtime_orchestrator.resolve_session_stop_route",
-            message: `Multiple live runtime routes matched externalSessionId ${request.externalSessionId}; runtime session status probing is not configured.`,
-            details: { externalSessionId: request.externalSessionId },
-          }),
-        );
-      }
       const matchingRoutes: RuntimeRoute[] = [];
       for (const runtimeRoute of repoRoutes) {
         const probe = yield* runtimeRegistry.probeSessionStatus({

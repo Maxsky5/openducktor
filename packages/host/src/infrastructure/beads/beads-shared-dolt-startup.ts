@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, realpath, rename, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
+import { Effect } from "effect";
 import type { BeadsSharedServerPaths } from "./beads-context-model";
 import {
   SHARED_DOLT_PORT_RANGE_LEN,
@@ -9,26 +10,33 @@ import {
   SHARED_DOLT_SERVER_HOST,
 } from "./beads-context-model";
 
-export const portIsAvailable = async (port: number): Promise<boolean> =>
-  new Promise((resolve) => {
+export const portIsAvailable = (port: number): Effect.Effect<boolean> =>
+  Effect.async<boolean>((resume) => {
     const server = net.createServer();
-    server.once("error", () => resolve(false));
+    let settled = false;
+    const finish = (available: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resume(Effect.succeed(available));
+    };
+    server.once("error", () => finish(false));
     server.listen(port, SHARED_DOLT_SERVER_HOST, () => {
-      server.close(() => resolve(true));
+      server.close(() => finish(true));
     });
   });
 
-export const deterministicSharedDoltPortCandidate = async (baseDir: string): Promise<number> => {
-  let resolvedBaseDir = path.isAbsolute(baseDir) ? baseDir : path.resolve(baseDir);
-  try {
-    resolvedBaseDir = await realpath(resolvedBaseDir);
-  } catch {
-    // The config dir may not exist yet; use its absolute spelling, matching Rust's canonical-or-absolute behavior.
-  }
-  const digest = createHash("sha256").update(resolvedBaseDir).digest();
-  const offset = digest.readUInt16BE(0) % SHARED_DOLT_PORT_RANGE_LEN;
-  return SHARED_DOLT_PORT_RANGE_START + offset;
-};
+export const deterministicSharedDoltPortCandidate = (baseDir: string): Effect.Effect<number> =>
+  Effect.gen(function* () {
+    const absoluteBaseDir = path.isAbsolute(baseDir) ? baseDir : path.resolve(baseDir);
+    const resolvedBaseDir = yield* Effect.tryPromise(() => realpath(absoluteBaseDir)).pipe(
+      Effect.catchAll(() => Effect.succeed(absoluteBaseDir)),
+    );
+    const digest = createHash("sha256").update(resolvedBaseDir).digest();
+    const offset = digest.readUInt16BE(0) % SHARED_DOLT_PORT_RANGE_LEN;
+    return SHARED_DOLT_PORT_RANGE_START + offset;
+  });
 
 export const wrapPortCandidate = (base: number, offset: number): number => {
   const normalizedBase = base - SHARED_DOLT_PORT_RANGE_START;
@@ -37,26 +45,27 @@ export const wrapPortCandidate = (base: number, offset: number): number => {
 
 export const yamlQuotePath = (inputPath: string): string => `'${inputPath.replaceAll("'", "''")}'`;
 
-export const writeDoltConfigFile = async (
+export const writeDoltConfigFile = (
   paths: BeadsSharedServerPaths,
   port: number,
-): Promise<void> => {
-  await mkdir(paths.sharedServerRoot, { recursive: true });
-  await mkdir(paths.cfgDir, { recursive: true });
-  const privilegeFile = path.join(paths.cfgDir, "privileges.db");
-  const branchControlFile = path.join(paths.cfgDir, "branch_control.db");
-  const config =
-    `log_level: info\n` +
-    `behavior:\n` +
-    `  autocommit: true\n` +
-    `listener:\n` +
-    `  host: ${SHARED_DOLT_SERVER_HOST}\n` +
-    `  port: ${port}\n` +
-    `data_dir: ${yamlQuotePath(paths.doltRoot)}\n` +
-    `cfg_dir: ${yamlQuotePath(paths.cfgDir)}\n` +
-    `privilege_file: ${yamlQuotePath(privilegeFile)}\n` +
-    `branch_control_file: ${yamlQuotePath(branchControlFile)}\n`;
-  const tempFile = `${paths.doltConfigFile}.tmp-${process.pid}`;
-  await writeFile(tempFile, config);
-  await rename(tempFile, paths.doltConfigFile);
-};
+): Effect.Effect<void, unknown> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => mkdir(paths.sharedServerRoot, { recursive: true }));
+    yield* Effect.tryPromise(() => mkdir(paths.cfgDir, { recursive: true }));
+    const privilegeFile = path.join(paths.cfgDir, "privileges.db");
+    const branchControlFile = path.join(paths.cfgDir, "branch_control.db");
+    const config =
+      `log_level: info\n` +
+      `behavior:\n` +
+      `  autocommit: true\n` +
+      `listener:\n` +
+      `  host: ${SHARED_DOLT_SERVER_HOST}\n` +
+      `  port: ${port}\n` +
+      `data_dir: ${yamlQuotePath(paths.doltRoot)}\n` +
+      `cfg_dir: ${yamlQuotePath(paths.cfgDir)}\n` +
+      `privilege_file: ${yamlQuotePath(privilegeFile)}\n` +
+      `branch_control_file: ${yamlQuotePath(branchControlFile)}\n`;
+    const tempFile = `${paths.doltConfigFile}.tmp-${process.pid}`;
+    yield* Effect.tryPromise(() => writeFile(tempFile, config));
+    yield* Effect.tryPromise(() => rename(tempFile, paths.doltConfigFile));
+  });

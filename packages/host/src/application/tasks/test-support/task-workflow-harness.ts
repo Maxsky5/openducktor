@@ -78,11 +78,75 @@ const createSettingsConfigPort = (port: SettingsConfigPort): SettingsConfigPort 
   port as unknown as SettingsConfigPort;
 const createSystemCommandPort = (port: SystemCommandPort): SystemCommandPort =>
   port as unknown as SystemCommandPort;
-const createWorktreeFilePort = (port: WorktreeFilePort): WorktreeFilePort =>
-  port as unknown as WorktreeFilePort;
-const createRuntimeRegistryPort = (port: RuntimeRegistryPort): RuntimeRegistryPort =>
-  port as unknown as RuntimeRegistryPort;
-const createGitPort = (port: GitPort): GitPort => port as unknown as GitPort;
+const createWorktreeFilePort = (port: Partial<WorktreeFilePort>): WorktreeFilePort =>
+  ({
+    ensureDirectory: () => Effect.dieMessage("unexpected ensure directory"),
+    copyConfiguredPaths: () => Effect.dieMessage("unexpected copy configured paths"),
+    removePathIfPresent: () => Effect.dieMessage("unexpected remove path"),
+    resolveWorktreePath: (_repoPath, worktreePath) => worktreePath,
+    pathIsWithinRoot: () => Effect.dieMessage("unexpected path root check"),
+    ...port,
+  }) as WorktreeFilePort;
+const unexpectedRuntimeRegistryCall = (operation: string) =>
+  Effect.fail(
+    new HostOperationError({
+      operation,
+      message: `Unexpected runtime registry call: ${operation}`,
+    }),
+  );
+const createRuntimeRegistryPort = (port: Partial<RuntimeRegistryPort>): RuntimeRegistryPort =>
+  ({
+    ensureWorkspaceRuntime: () =>
+      unexpectedRuntimeRegistryCall("runtimeRegistry.ensureWorkspaceRuntime"),
+    listRuntimes: () => Effect.succeed([]),
+    stopRuntime: () => unexpectedRuntimeRegistryCall("runtimeRegistry.stopRuntime"),
+    stopAllRuntimes: () => Effect.succeed([]),
+    stopSession: () => unexpectedRuntimeRegistryCall("runtimeRegistry.stopSession"),
+    probeSessionStatus: () => Effect.succeed({ supported: false, hasLiveSession: false }),
+    probeMcpStatus: () =>
+      Effect.succeed({
+        supported: false,
+        connected: false,
+        serverStatus: null,
+        toolIds: [],
+        detail: null,
+        failureKind: null,
+      }),
+    ...port,
+  }) as RuntimeRegistryPort;
+const createGitPort = (port: Partial<GitPort>): GitPort =>
+  ({
+    canonicalizePath: (path: string) => Effect.succeed(path),
+    isGitRepository: () => Effect.dieMessage("unexpected git repository check"),
+    shareGitCommonDirectory: () => Effect.dieMessage("unexpected git common directory check"),
+    referenceExists: () => Effect.dieMessage("unexpected reference exists"),
+    listRemotes: () => Effect.dieMessage("unexpected list remotes"),
+    listBranches: () => Effect.dieMessage("unexpected list branches"),
+    getCurrentBranch: () => Effect.dieMessage("unexpected current branch"),
+    getStatus: () => Effect.dieMessage("unexpected git status"),
+    getDiff: () => Effect.dieMessage("unexpected git diff"),
+    getWorktreeStatusData: () => Effect.dieMessage("unexpected worktree status data"),
+    getWorktreeStatusSummaryData: () => Effect.dieMessage("unexpected worktree status summary"),
+    createWorktree: () => Effect.dieMessage("unexpected create worktree"),
+    configureBranchUpstream: () => Effect.dieMessage("unexpected configure branch upstream"),
+    deleteReference: () => Effect.dieMessage("unexpected delete reference"),
+    removeWorktree: () => Effect.dieMessage("unexpected remove worktree"),
+    deleteLocalBranch: () => Effect.dieMessage("unexpected delete local branch"),
+    isAncestor: () => Effect.dieMessage("unexpected ancestor check"),
+    suggestedSquashCommitMessage: () => Effect.dieMessage("unexpected squash message"),
+    mergeBranch: () => Effect.dieMessage("unexpected merge branch"),
+    switchBranch: () => Effect.dieMessage("unexpected switch branch"),
+    resetWorktreeSelection: () => Effect.dieMessage("unexpected reset worktree selection"),
+    commitsAheadBehind: () => Effect.dieMessage("unexpected commits ahead behind"),
+    fetchRemote: () => Effect.dieMessage("unexpected fetch remote"),
+    pullBranch: () => Effect.dieMessage("unexpected pull branch"),
+    commitAll: () => Effect.dieMessage("unexpected commit all"),
+    pushBranch: () => Effect.dieMessage("unexpected push branch"),
+    rebaseBranch: () => Effect.dieMessage("unexpected rebase branch"),
+    rebaseAbort: () => Effect.dieMessage("unexpected rebase abort"),
+    abortConflict: () => Effect.dieMessage("unexpected abort conflict"),
+    ...port,
+  }) as GitPort;
 const createWorkspaceSettingsServicePort = (
   service: WorkspaceSettingsService | undefined,
 ): WorkspaceSettingsService | undefined =>

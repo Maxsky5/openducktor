@@ -67,19 +67,19 @@ export type RuntimeRegistryPort = {
   ): Effect.Effect<RuntimeInstanceSummary, RuntimeRegistryError>;
   listRuntimes(): Effect.Effect<RuntimeInstanceSummary[], never>;
   stopRuntime(runtimeId: string): Effect.Effect<boolean, HostOperationError | HostResourceError>;
-  stopAllRuntimes?(): Effect.Effect<
+  stopAllRuntimes(): Effect.Effect<
     RuntimeInstanceSummary[],
     HostOperationError | HostResourceError
   >;
   stopSession(input: RuntimeSessionStopInput): Effect.Effect<void, RuntimeRegistryError>;
-  probeSessionStatus?(input: RuntimeSessionStatusProbeInput): Effect.Effect<
+  probeSessionStatus(input: RuntimeSessionStatusProbeInput): Effect.Effect<
     {
       supported: boolean;
       hasLiveSession: boolean;
     },
     RuntimeRegistryError
   >;
-  probeMcpStatus?(
+  probeMcpStatus(
     input: RuntimeMcpStatusProbeInput,
   ): Effect.Effect<RuntimeMcpStatusProbeResult, RuntimeRegistryError>;
 };

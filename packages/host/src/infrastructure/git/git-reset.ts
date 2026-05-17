@@ -11,7 +11,7 @@ import {
 import {
   combineOutput,
   type GitCommandRunner,
-  requireNonEmpty,
+  requireNonEmptyEffect,
   runGitAllowFailure,
   runGitWithStdinAllowFailure,
 } from "./git-command-runner";
@@ -42,6 +42,42 @@ export const findFileDiff = (fileDiffs: FileDiff[], filePath: string): FileDiff 
   }
   return fileDiff;
 };
+const findFileDiffEffect = (
+  fileDiffs: FileDiff[],
+  filePath: string,
+): Effect.Effect<FileDiff, HostResourceError> =>
+  Effect.try({
+    try: () => findFileDiff(fileDiffs, filePath),
+    catch: (cause) =>
+      cause instanceof HostResourceError
+        ? cause
+        : gitResourceError(
+            "Displayed diff is stale. Refresh and try again.",
+            "git.reset",
+            filePath,
+          ),
+  });
+const parsePatchHunksEffect = (
+  patch: string,
+): Effect.Effect<ReturnType<typeof parsePatchHunks>, HostValidationError> =>
+  Effect.try({
+    try: () => parsePatchHunks(patch),
+    catch: (cause) =>
+      cause instanceof HostValidationError
+        ? cause
+        : gitValidationError(cause instanceof Error ? cause.message : String(cause), "patch"),
+  });
+const findMatchingCachedHunkEffect = (
+  cachedPatch: ReturnType<typeof parsePatchHunks>,
+  selectedHunk: ReturnType<typeof parsePatchHunks>["hunks"][number],
+): Effect.Effect<ReturnType<typeof findMatchingCachedHunk>, HostValidationError> =>
+  Effect.try({
+    try: () => findMatchingCachedHunk(cachedPatch, selectedHunk),
+    catch: (cause) =>
+      cause instanceof HostValidationError
+        ? cause
+        : gitValidationError(cause instanceof Error ? cause.message : String(cause), "patch"),
+  });
 export const isTrackedPath = (
   runner: GitCommandRunner,
   workingDirectory: string,
@@ -61,7 +97,7 @@ export const isTrackedPath = (
     if (output.includes("did not match any file") || output.includes("error: pathspec")) {
       return false;
     }
-    throw gitOperationError(output, "git.ls-files");
+    return yield* Effect.fail(gitOperationError(output, "git.ls-files"));
   });
 export const runGitApplyReverse = (
   runner: GitCommandRunner,
@@ -81,7 +117,9 @@ export const runGitApplyReverse = (
     args.push("-");
     const result = yield* runGitWithStdinAllowFailure(runner, workingDirectory, args, patch);
     if (!result.ok) {
-      throw gitOperationError(combineOutput(result.stdout, result.stderr), "git.apply-reverse");
+      return yield* Effect.fail(
+        gitOperationError(combineOutput(result.stdout, result.stderr), "git.apply-reverse"),
+      );
     }
   });
 export const loadCachedPatch = (
@@ -99,7 +137,9 @@ export const loadCachedPatch = (
     if (result.ok) {
       return result.stdout;
     }
-    throw gitOperationError(combineOutput(result.stdout, result.stderr), "git.diff.cached");
+    return yield* Effect.fail(
+      gitOperationError(combineOutput(result.stdout, result.stderr), "git.diff.cached"),
+    );
   });
 export const loadUnstagedPatch = (
   runner: GitCommandRunner,
@@ -111,7 +151,9 @@ export const loadUnstagedPatch = (
     if (result.ok) {
       return result.stdout;
     }
-    throw gitOperationError(combineOutput(result.stdout, result.stderr), "git.diff.unstaged");
+    return yield* Effect.fail(
+      gitOperationError(combineOutput(result.stdout, result.stderr), "git.diff.unstaged"),
+    );
   });
 export const resetRenamedFileSelection = (
   runner: GitCommandRunner,
@@ -128,9 +170,11 @@ export const resetRenamedFileSelection = (
       renamePaths.oldPath,
     ]);
     if (!restoreResult.ok) {
-      throw gitOperationError(
-        combineOutput(restoreResult.stdout, restoreResult.stderr),
-        "git.restore-renamed-file",
+      return yield* Effect.fail(
+        gitOperationError(
+          combineOutput(restoreResult.stdout, restoreResult.stderr),
+          "git.restore-renamed-file",
+        ),
       );
     }
     const removeResult = yield* runGitAllowFailure(runner, workingDirectory, [
@@ -142,9 +186,11 @@ export const resetRenamedFileSelection = (
       renamePaths.newPath,
     ]);
     if (!removeResult.ok) {
-      throw gitOperationError(
-        combineOutput(removeResult.stdout, removeResult.stderr),
-        "git.rm-renamed-file",
+      return yield* Effect.fail(
+        gitOperationError(
+          combineOutput(removeResult.stdout, removeResult.stderr),
+          "git.rm-renamed-file",
+        ),
       );
     }
     yield* Effect.tryPromise({
@@ -165,14 +211,16 @@ export const resetFileSelection = (
   filePath: string,
 ) =>
   Effect.gen(function* () {
-    const normalizedFile = requireNonEmpty(filePath, "file path");
-    const fileDiff = findFileDiff(fileDiffs, normalizedFile);
+    const normalizedFile = yield* requireNonEmptyEffect(filePath, "file path");
+    const fileDiff = yield* findFileDiffEffect(fileDiffs, normalizedFile);
     if (fileDiff.type === "renamed") {
-      const parsedPatch = parsePatchHunks(fileDiff.diff);
+      const parsedPatch = yield* parsePatchHunksEffect(fileDiff.diff);
       if (!parsedPatch.renamePaths) {
-        throw gitValidationError(
-          `Cannot reset renamed file ${normalizedFile} because rename metadata is unavailable.`,
-          "renamePaths",
+        return yield* Effect.fail(
+          gitValidationError(
+            `Cannot reset renamed file ${normalizedFile} because rename metadata is unavailable.`,
+            "renamePaths",
+          ),
         );
       }
       return yield* resetRenamedFileSelection(runner, workingDirectory, parsedPatch.renamePaths);
@@ -188,9 +236,8 @@ export const resetFileSelection = (
         ])
       : yield* runGitAllowFailure(runner, workingDirectory, ["clean", "-f", "--", normalizedFile]);
     if (!result.ok) {
-      throw gitOperationError(
-        combineOutput(result.stdout, result.stderr),
-        "git.reset-file-selection",
+      return yield* Effect.fail(
+        gitOperationError(combineOutput(result.stdout, result.stderr), "git.reset-file-selection"),
       );
     }
     return { affectedPaths: [normalizedFile] };
@@ -203,33 +250,41 @@ export const resetHunkSelection = (
   hunkIndex: number,
 ) =>
   Effect.gen(function* () {
-    const normalizedFile = requireNonEmpty(filePath, "file path");
-    const fileDiff = findFileDiff(fileDiffs, normalizedFile);
+    const normalizedFile = yield* requireNonEmptyEffect(filePath, "file path");
+    const fileDiff = yield* findFileDiffEffect(fileDiffs, normalizedFile);
     if (!fileDiff.diff.trim()) {
-      throw gitValidationError(
-        `Cannot reset hunk because diff content is unavailable for ${normalizedFile}.`,
-        "diff",
+      return yield* Effect.fail(
+        gitValidationError(
+          `Cannot reset hunk because diff content is unavailable for ${normalizedFile}.`,
+          "diff",
+        ),
       );
     }
     if (fileDiff.type === "renamed") {
-      throw gitValidationError(
-        "Cannot reset an individual hunk for a renamed file. Reset the whole file instead.",
-        "filePath",
+      return yield* Effect.fail(
+        gitValidationError(
+          "Cannot reset an individual hunk for a renamed file. Reset the whole file instead.",
+          "filePath",
+        ),
       );
     }
-    const parsedPatch = parsePatchHunks(fileDiff.diff);
+    const parsedPatch = yield* parsePatchHunksEffect(fileDiff.diff);
     if (parsedPatch.renamePaths) {
-      throw gitValidationError(
-        "Cannot reset an individual hunk for a renamed file. Reset the whole file instead.",
-        "filePath",
+      return yield* Effect.fail(
+        gitValidationError(
+          "Cannot reset an individual hunk for a renamed file. Reset the whole file instead.",
+          "filePath",
+        ),
       );
     }
     const selectedHunk = parsedPatch.hunks[hunkIndex];
     if (!selectedHunk) {
-      throw gitResourceError(
-        `Requested hunk ${hunkIndex} does not exist for ${normalizedFile}.`,
-        "git.reset-hunk-selection",
-        normalizedFile,
+      return yield* Effect.fail(
+        gitResourceError(
+          `Requested hunk ${hunkIndex} does not exist for ${normalizedFile}.`,
+          "git.reset-hunk-selection",
+          normalizedFile,
+        ),
       );
     }
     const worktreePatch = combinePatchHunk(parsedPatch.header, selectedHunk);
@@ -242,14 +297,16 @@ export const resetHunkSelection = (
         yield* runGitApplyReverse(runner, workingDirectory, worktreePatch, "cached", true);
         cachedReversePatch = worktreePatch;
       } else {
-        const cachedPatch = parsePatchHunks(cachedPatchText);
+        const cachedPatch = yield* parsePatchHunksEffect(cachedPatchText);
         if (cachedPatch.renamePaths) {
-          throw gitValidationError(
-            "Cannot reset an individual hunk for a renamed file while staged changes are present. Reset the whole file instead.",
-            "filePath",
+          return yield* Effect.fail(
+            gitValidationError(
+              "Cannot reset an individual hunk for a renamed file while staged changes are present. Reset the whole file instead.",
+              "filePath",
+            ),
           );
         }
-        const cachedHunk = findMatchingCachedHunk(cachedPatch, selectedHunk);
+        const cachedHunk = yield* findMatchingCachedHunkEffect(cachedPatch, selectedHunk);
         if (cachedHunk) {
           const patch = combinePatchHunk(cachedPatch.header, cachedHunk);
           yield* runGitApplyReverse(runner, workingDirectory, patch, "cached", true);

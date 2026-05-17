@@ -441,17 +441,7 @@ export const probeMcpStatusWithRetry = (
   const totalAttempts = Math.max(1, attempts);
   let lastProbe: RuntimeMcpStatusProbeResult | null = null;
   const probeOnce = Effect.gen(function* () {
-    const probeEffect = runtimeRegistry.probeMcpStatus?.(input);
-    if (!probeEffect) {
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "runtime_orchestrator.probe_mcp_status",
-          message: "Runtime MCP status probing is not configured.",
-          details: { runtimeKind: input.runtimeKind },
-        }),
-      );
-    }
-    const probe = yield* probeEffect;
+    const probe = yield* runtimeRegistry.probeMcpStatus(input);
     if (probe.connected || !probe.supported) {
       return probe;
     }

@@ -46,44 +46,82 @@ export const runSpawnedGit = (
   },
   HostOperationError
 > =>
-  Effect.tryPromise({
-    try: () =>
-      new Promise((resolve, reject) => {
-        const child = spawn("git", args, {
-          cwd: workingDirectory,
-          env: createGitEnvironment(env),
-        });
-        let stdout = "";
-        let stderr = "";
-        child.stdout.setEncoding("utf8");
-        child.stderr.setEncoding("utf8");
-        child.stdout.on("data", (chunk: string) => {
-          stdout += chunk;
-        });
-        child.stderr.on("data", (chunk: string) => {
-          stderr += chunk;
-        });
-        child.on("error", reject);
-        child.on("close", (code) => {
-          if (code === 0) {
-            resolve({ ok: true, stdout, stderr });
-            return;
-          }
-          if (options.allowFailure) {
-            resolve({ ok: false, stdout, stderr });
-            return;
-          }
-          reject(
-            new HostOperationError({
-              operation: "git.spawn",
-              message: combineOutput(stdout, stderr),
-              details: { args },
-            }),
-          );
-        });
-        child.stdin.end(options.stdin);
-      }),
-    catch: (cause) => toHostOperationError(cause, "git.spawn", { args, workingDirectory }),
+  Effect.async<
+    GitCommandResult & {
+      ok: boolean;
+    },
+    HostOperationError
+  >((resume) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn("git", args, {
+        cwd: workingDirectory,
+        env: createGitEnvironment(env),
+      });
+    } catch (cause) {
+      resume(Effect.fail(toHostOperationError(cause, "git.spawn", { args, workingDirectory })));
+      return;
+    }
+    if (!child.stdin || !child.stdout || !child.stderr) {
+      resume(
+        Effect.fail(
+          new HostOperationError({
+            operation: "git.spawn",
+            message: "Failed to start git with piped stdin, stdout, and stderr.",
+            details: { args, workingDirectory },
+          }),
+        ),
+      );
+      return;
+    }
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const finish = (
+      effect: Effect.Effect<
+        GitCommandResult & {
+          ok: boolean;
+        },
+        HostOperationError
+      >,
+    ): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resume(effect);
+    };
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on("error", (cause) =>
+      finish(Effect.fail(toHostOperationError(cause, "git.spawn", { args, workingDirectory }))),
+    );
+    child.on("close", (code) => {
+      if (code === 0) {
+        finish(Effect.succeed({ ok: true, stdout, stderr }));
+        return;
+      }
+      if (options.allowFailure) {
+        finish(Effect.succeed({ ok: false, stdout, stderr }));
+        return;
+      }
+      finish(
+        Effect.fail(
+          new HostOperationError({
+            operation: "git.spawn",
+            message: combineOutput(stdout, stderr),
+            details: { args },
+          }),
+        ),
+      );
+    });
+    child.stdin.end(options.stdin);
   });
 export const createDefaultGitRunner =
   (env: NodeJS.ProcessEnv): GitCommandRunner =>
@@ -99,29 +137,35 @@ export const createDefaultGitRunner =
         env,
       );
     }
-    return Effect.tryPromise({
-      try: () =>
-        execFileAsync("git", args, {
-          cwd: workingDirectory,
-          env: createGitEnvironment(env),
-          maxBuffer: 16 * 1024 * 1024,
-        })
-          .then((output) => ({ ok: true, stdout: output.stdout, stderr: output.stderr }))
-          .catch((error) => {
-            if (options?.allowFailure) {
-              const failed = error as {
-                stdout?: string;
-                stderr?: string;
-              };
-              return {
-                ok: false,
-                stdout: failed.stdout ?? "",
-                stderr: failed.stderr ?? String(error),
-              };
-            }
-            throw error;
-          }),
-      catch: (cause) => toHostOperationError(cause, "git.execFile", { args, workingDirectory }),
+    return Effect.gen(function* () {
+      const exit = yield* Effect.either(
+        Effect.tryPromise({
+          try: () =>
+            execFileAsync("git", args, {
+              cwd: workingDirectory,
+              env: createGitEnvironment(env),
+              maxBuffer: 16 * 1024 * 1024,
+            }),
+          catch: (cause) => cause,
+        }),
+      );
+      if (exit._tag === "Right") {
+        return { ok: true, stdout: exit.right.stdout, stderr: exit.right.stderr };
+      }
+      if (options?.allowFailure) {
+        const failed = exit.left as {
+          stdout?: string;
+          stderr?: string;
+        };
+        return {
+          ok: false,
+          stdout: failed.stdout ?? "",
+          stderr: failed.stderr ?? String(exit.left),
+        };
+      }
+      return yield* Effect.fail(
+        toHostOperationError(exit.left, "git.execFile", { args, workingDirectory }),
+      );
     });
   };
 export const requireNonEmpty = (value: string, label: string): string => {
@@ -133,6 +177,20 @@ export const requireNonEmpty = (value: string, label: string): string => {
     });
   }
   return trimmed;
+};
+export const requireNonEmptyEffect = (
+  value: string,
+  label: string,
+): Effect.Effect<string, HostValidationError> => {
+  const trimmed = value.trim();
+  return trimmed
+    ? Effect.succeed(trimmed)
+    : Effect.fail(
+        new HostValidationError({
+          message: `git ${label} cannot be empty`,
+          field: label,
+        }),
+      );
 };
 export const combineOutput = (stdout: string, stderr: string): string => {
   const output = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n");
@@ -172,7 +230,7 @@ export const referenceExists = (
   reference: string,
 ) =>
   Effect.gen(function* () {
-    const targetRef = requireNonEmpty(reference, "reference");
+    const targetRef = yield* requireNonEmptyEffect(reference, "reference");
     const result = yield* runGitAllowFailure(runner, workingDirectory, [
       "rev-parse",
       "--verify",
@@ -186,11 +244,13 @@ export const resolveGitCommonDirectory = (runner: GitCommandRunner, workingDirec
     const output = yield* runGit(runner, workingDirectory, ["rev-parse", "--git-common-dir"]);
     const commonDir = output.trim();
     if (!commonDir) {
-      throw new HostValidationError({
-        message: `Git common directory is empty for ${workingDirectory}`,
-        field: "gitCommonDir",
-        details: { workingDirectory },
-      });
+      return yield* Effect.fail(
+        new HostValidationError({
+          message: `Git common directory is empty for ${workingDirectory}`,
+          field: "gitCommonDir",
+          details: { workingDirectory },
+        }),
+      );
     }
     const absoluteCommonDir = path.isAbsolute(commonDir)
       ? commonDir

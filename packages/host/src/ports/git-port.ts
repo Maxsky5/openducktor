@@ -90,7 +90,7 @@ export type GitPort = {
     repoPath: string,
     workingDir: string,
   ): Effect.Effect<boolean, GitPortError>;
-  referenceExists?(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
+  referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;
   listBranches(workingDir: string): Effect.Effect<GitBranch[], GitPortError>;
   getCurrentBranch(workingDir: string): Effect.Effect<GitCurrentBranch, GitPortError>;
@@ -113,13 +113,13 @@ export type GitPort = {
     createBranch: boolean,
     startPoint?: string,
   ): Effect.Effect<void, GitPortError>;
-  configureBranchUpstream?(
+  configureBranchUpstream(
     repoPath: string,
     worktreePath: string,
     branch: string,
     upstreamRemote: string,
   ): Effect.Effect<GitBranchUpstreamSetup, GitPortError>;
-  deleteReference?(repoPath: string, reference: string): Effect.Effect<void, GitPortError>;
+  deleteReference(repoPath: string, reference: string): Effect.Effect<void, GitPortError>;
   removeWorktree(
     repoPath: string,
     worktreePath: string,

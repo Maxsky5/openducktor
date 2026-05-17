@@ -325,9 +325,13 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           }),
         requestTimeoutMs: 4_000,
         runtimeId: () => "runtime-cleanup-failure",
-        processTreeTerminator: async () => {
-          throw new Error("process tree stayed alive");
-        },
+        processTreeTerminator: () =>
+          Effect.fail(
+            new HostOperationError({
+              operation: "test.processTreeTerminator",
+              message: "process tree stayed alive",
+            }),
+          ),
       });
 
       const handle = await Effect.runPromise(

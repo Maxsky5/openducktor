@@ -61,6 +61,9 @@ const registry = ({
         }),
     });
   },
+  stopAllRuntimes() {
+    return Effect.succeed([]);
+  },
   stopSession() {
     return Effect.tryPromise({
       try: async () => {
@@ -88,6 +91,16 @@ const registry = ({
           message: cause instanceof Error ? cause.message : String(cause),
           cause: cause,
         }),
+    });
+  },
+  probeMcpStatus() {
+    return Effect.succeed({
+      supported: false,
+      connected: false,
+      serverStatus: null,
+      toolIds: [],
+      detail: null,
+      failureKind: null,
     });
   },
 });

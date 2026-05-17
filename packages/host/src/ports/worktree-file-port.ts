@@ -4,7 +4,7 @@ import type { HostOperationError, HostValidationError } from "../effect/host-err
 export type WorktreeFileError = HostOperationError | HostValidationError;
 
 export type WorktreeFilePort = {
-  ensureDirectory?(path: string): Effect.Effect<void, HostOperationError>;
+  ensureDirectory(path: string): Effect.Effect<void, HostOperationError>;
   copyConfiguredPaths(
     repoPath: string,
     worktreePath: string,

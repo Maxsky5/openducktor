@@ -6,7 +6,7 @@ import {
   combineOptionalOutput,
   combineOutput,
   type GitCommandRunner,
-  requireNonEmpty,
+  requireNonEmptyEffect,
   runGit,
   runGitAllowFailure,
 } from "./git-command-runner";
@@ -90,9 +90,11 @@ export const syncPushedRemoteTrackingRef = (
       refs.localBranchRef,
     ])).trim();
     if (!localBranchOid) {
-      throw gitValidationError(
-        `git rev-parse returned an empty revision for ${refs.localBranchRef}`,
-        "revision",
+      return yield* Effect.fail(
+        gitValidationError(
+          `git rev-parse returned an empty revision for ${refs.localBranchRef}`,
+          "revision",
+        ),
       );
     }
     yield* runGit(runner, workingDirectory, ["update-ref", refs.upstreamRef, localBranchOid]);
@@ -101,9 +103,11 @@ export const listRemoteNames = (runner: GitCommandRunner, workingDirectory: stri
   Effect.gen(function* () {
     const result = yield* runGitAllowFailure(runner, workingDirectory, ["remote"]);
     if (!result.ok) {
-      throw gitOperationError(
-        `Failed to list git remotes: ${combineOutput(result.stdout, result.stderr)}`,
-        "git.remote",
+      return yield* Effect.fail(
+        gitOperationError(
+          `Failed to list git remotes: ${combineOutput(result.stdout, result.stderr)}`,
+          "git.remote",
+        ),
       );
     }
     return new Set(parseRemoteNames(result.stdout));
@@ -154,9 +158,11 @@ export const resolveCurrentBranchFetchRemote = (
     if (upstreamTarget) {
       if (upstreamTarget.remote !== ".") {
         if (!availableRemotes.has(upstreamTarget.remote)) {
-          throw gitValidationError(
-            `Cannot refresh changes because the current branch upstream uses unknown remote \`${upstreamTarget.remote}\``,
-            "remote",
+          return yield* Effect.fail(
+            gitValidationError(
+              `Cannot refresh changes because the current branch upstream uses unknown remote \`${upstreamTarget.remote}\``,
+              "remote",
+            ),
           );
         }
         pushUniqueRemote(remotes, seen, upstreamTarget.remote);
@@ -217,7 +223,7 @@ export const resolveRefreshFetchRemotes = (
   targetBranch: string,
 ) =>
   Effect.gen(function* () {
-    const target = requireNonEmpty(targetBranch, "target branch");
+    const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
     const currentBranch = yield* getCurrentBranchUnchecked(runner, workingDirectory);
     const availableRemotes = yield* listRemoteNames(runner, workingDirectory);
     const remotes: string[] = [];
@@ -231,12 +237,20 @@ export const resolveRefreshFetchRemotes = (
       seen,
     );
     if (target === upstreamTargetBranch && !hasCurrentBranchRemote && availableRemotes.size > 0) {
-      throw gitValidationError(
-        "Cannot refresh changes because compare target `@{upstream}` requires an upstream remote for the current branch",
-        "targetBranch",
+      return yield* Effect.fail(
+        gitValidationError(
+          "Cannot refresh changes because compare target `@{upstream}` requires an upstream remote for the current branch",
+          "targetBranch",
+        ),
       );
     }
-    const targetRemote = resolveTargetRemoteName(target, availableRemotes);
+    const targetRemote = yield* Effect.try({
+      try: () => resolveTargetRemoteName(target, availableRemotes),
+      catch: (cause) =>
+        cause instanceof HostValidationError
+          ? cause
+          : gitOperationError(String(cause), "git.resolve-target-remote"),
+    });
     if (targetRemote) {
       pushUniqueRemote(remotes, seen, targetRemote);
     }
@@ -266,7 +280,9 @@ export const fetchRemote = (
       ]);
       const output = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n");
       if (!result.ok) {
-        throw gitOperationError(`git fetch --prune ${remote} failed: ${output}`, "git.fetch");
+        return yield* Effect.fail(
+          gitOperationError(`git fetch --prune ${remote} failed: ${output}`, "git.fetch"),
+        );
       }
       outputs.push(output.length === 0 ? `Fetched ${remote}` : output);
     }
@@ -282,8 +298,8 @@ export const pushBranch = (
   options: GitPushBranchOptions = {},
 ): Effect.Effect<GitPushBranchResult, GitRemoteSyncError> =>
   Effect.gen(function* () {
-    const remote = requireNonEmpty(options.remote ?? "origin", "remote");
-    const targetBranch = requireNonEmpty(branch, "branch");
+    const remote = yield* requireNonEmptyEffect(options.remote ?? "origin", "remote");
+    const targetBranch = yield* requireNonEmptyEffect(branch, "branch");
     const args = ["push", "--porcelain"];
     if (options.setUpstream) {
       args.push("-u");
@@ -304,9 +320,8 @@ export const pushBranch = (
           output: detail,
         };
       }
-      throw gitOperationError(
-        `git push failed for ${remote}/${targetBranch}: ${detail}`,
-        "git.push",
+      return yield* Effect.fail(
+        gitOperationError(`git push failed for ${remote}/${targetBranch}: ${detail}`, "git.push"),
       );
     }
     let pushedOutput = output;

@@ -1,16 +1,36 @@
-import { createHostCommandRouter } from "./host-command-router";
+import { Effect } from "effect";
+import { createEffectHostCommandRouter, createHostCommandRouter } from "./host-command-router";
 
 describe("createHostCommandRouter", () => {
   test("routes known commands to registered handlers", async () => {
     const router = createHostCommandRouter({
       handlers: {
-        workspace_list: (args, context) => ({
-          args,
-          command: context.command,
-        }),
+        workspace_list: (args, context) =>
+          Effect.succeed({
+            args,
+            command: context.command,
+          }),
       },
     });
     await expect(router.invoke("workspace_list", { repoPath: "/repo" })).resolves.toEqual({
+      args: { repoPath: "/repo" },
+      command: "workspace_list",
+    });
+  });
+  test("exposes an Effect-native router surface", async () => {
+    const router = createEffectHostCommandRouter({
+      handlers: {
+        workspace_list: (args, context) =>
+          Effect.succeed({
+            args,
+            command: context.command,
+          }),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(router.invoke("workspace_list", { repoPath: "/repo" })),
+    ).resolves.toEqual({
       args: { repoPath: "/repo" },
       command: "workspace_list",
     });
@@ -31,7 +51,9 @@ describe("createHostCommandRouter", () => {
     let disposed = false;
     const router = createHostCommandRouter({
       dispose() {
-        disposed = true;
+        return Effect.sync(() => {
+          disposed = true;
+        });
       },
       handlers: {},
     });

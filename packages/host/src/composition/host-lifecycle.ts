@@ -1,11 +1,15 @@
-import { Cause, Effect } from "effect";
+import { Effect } from "effect";
 import type { BeadsTaskRepository } from "../adapters/beads/beads-task-repository";
 import type { McpHostBridgeServer } from "../adapters/mcp/mcp-host-bridge-server";
 import type {
   DevServerServiceError,
   DisposableDevServerService,
 } from "../application/dev-servers/dev-server-service";
-import { type HostError, HostOperationError } from "../effect/host-errors";
+import {
+  causeToHostBoundaryError,
+  type HostError,
+  HostOperationError,
+} from "../effect/host-errors";
 import type { RuntimeRegistryPort } from "../ports/runtime-registry-port";
 
 export type HostLifecycleLogger = {
@@ -29,7 +33,8 @@ export const runShutdownSteps = (
     for (const step of steps) {
       const result = yield* Effect.exit(step.run());
       if (result._tag === "Failure") {
-        const message = Cause.pretty(result.cause);
+        const cause = causeToHostBoundaryError(result.cause);
+        const message = cause instanceof Error ? cause.message : String(cause);
         logger.error(`Failed to stop ${step.label}: ${message}`);
         errors.push(`${step.label}: ${message}`);
       }
@@ -74,50 +79,17 @@ export const createStopRuntimesStep = (
   label: "active agent runtimes",
   run() {
     return Effect.gen(function* () {
-      if (runtimeRegistry.stopAllRuntimes) {
-        logger.info("Stopping registered agent runtimes");
-        const stoppedRuntimes = yield* runtimeRegistry.stopAllRuntimes();
-        if (stoppedRuntimes.length === 0) {
-          logger.info("No active agent runtimes are registered");
-          return;
-        }
-        for (const runtime of stoppedRuntimes) {
-          logger.info(
-            `Stopped ${runtime.kind} runtime ${runtime.runtimeId} for task ${formatRuntimeTaskLabel(
-              runtime.taskId,
-            )} (${runtime.role})`,
-          );
-        }
-        return;
-      }
-
-      const runtimes = yield* runtimeRegistry.listRuntimes();
-      if (runtimes.length === 0) {
+      logger.info("Stopping registered agent runtimes");
+      const stoppedRuntimes = yield* runtimeRegistry.stopAllRuntimes();
+      if (stoppedRuntimes.length === 0) {
         logger.info("No active agent runtimes are registered");
         return;
       }
-
-      logger.info(`Stopping ${runtimes.length} active agent runtime(s)`);
-      const errors: string[] = [];
-      for (const runtime of runtimes) {
+      for (const runtime of stoppedRuntimes) {
         logger.info(
-          `Stopping ${runtime.kind} runtime ${runtime.runtimeId} for task ${formatRuntimeTaskLabel(
+          `Stopped ${runtime.kind} runtime ${runtime.runtimeId} for task ${formatRuntimeTaskLabel(
             runtime.taskId,
           )} (${runtime.role})`,
-        );
-        const result = yield* Effect.exit(runtimeRegistry.stopRuntime(runtime.runtimeId));
-        if (result._tag === "Failure") {
-          const message = Cause.pretty(result.cause);
-          errors.push(`Failed stopping runtime ${runtime.runtimeId}: ${message}`);
-        }
-      }
-      if (errors.length > 0) {
-        return yield* Effect.fail(
-          new HostOperationError({
-            message: errors.join("\n"),
-            operation: "runtime-registry.stop-all",
-            details: { failedRuntimes: errors },
-          }),
         );
       }
     });
@@ -132,15 +104,16 @@ export const createStopMcpHostBridgeStep = (
   run() {
     return Effect.gen(function* () {
       const result = yield* bridge
-        ? Effect.tryPromise({
-            try: () => bridge.close(),
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "mcp-host-bridge.close",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause,
-              }),
-          })
+        ? bridge.close().pipe(
+            Effect.mapError(
+              (cause) =>
+                new HostOperationError({
+                  operation: "mcp-host-bridge.close",
+                  message: cause.message,
+                  cause,
+                }),
+            ),
+          )
         : Effect.succeed(null);
       if (!result?.closed) {
         logger.info("No MCP host bridge server is running");

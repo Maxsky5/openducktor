@@ -20,12 +20,13 @@ export type CodexAppServerService = {
 export type CodexAppServerRuntimeInput = {
   runtimeId: string;
 };
-const assertArray = (value: unknown, label: string): unknown[] => {
-  if (!Array.isArray(value)) {
-    throw new HostValidationError({ message: `${label} must return an array.` });
-  }
-  return value;
-};
+const parseArrayResult = (
+  value: unknown,
+  label: string,
+): Effect.Effect<unknown[], HostValidationError> =>
+  Array.isArray(value)
+    ? Effect.succeed(value)
+    : Effect.fail(new HostValidationError({ message: `${label} must return an array.` }));
 export const createCodexAppServerService = (
   codexAppServerPort: CodexAppServerPort,
 ): CodexAppServerService => ({
@@ -33,10 +34,10 @@ export const createCodexAppServerService = (
   notifications: (input) =>
     codexAppServerPort
       .drainNotifications(input.runtimeId)
-      .pipe(Effect.map((value) => assertArray(value, "codex_app_server_notifications"))),
+      .pipe(Effect.flatMap((value) => parseArrayResult(value, "codex_app_server_notifications"))),
   requests: (input) =>
     codexAppServerPort
       .drainServerRequests(input.runtimeId)
-      .pipe(Effect.map((value) => assertArray(value, "codex_app_server_requests"))),
+      .pipe(Effect.flatMap((value) => parseArrayResult(value, "codex_app_server_requests"))),
   respond: (input) => codexAppServerPort.respond(input),
 });

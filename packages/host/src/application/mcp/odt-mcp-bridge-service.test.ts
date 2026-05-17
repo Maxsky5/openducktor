@@ -235,7 +235,9 @@ describe("createOdtMcpBridgeService", () => {
       taskService,
       taskSyncService: {
         publishExternalTaskCreated(repoPath, taskId) {
-          events.push({ repoPath, taskId });
+          return Effect.sync(() => {
+            events.push({ repoPath, taskId });
+          });
         },
       },
       workspaceSettingsService: createWorkspaceSettingsService(),

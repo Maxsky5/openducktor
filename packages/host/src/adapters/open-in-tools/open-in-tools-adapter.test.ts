@@ -10,12 +10,12 @@ const createRunner = () => {
     program: string;
     args: string[];
   }> = [];
-  const runner: OpenInCommandRunner = async (program, args) => {
+  const runner: OpenInCommandRunner = (program, args) => {
     calls.push({ program, args });
     if (program === "mdfind" && args[1] === "Ghostty.app") {
-      return { stdout: "/Applications/Ghostty.app\n", stderr: "" };
+      return Effect.succeed({ stdout: "/Applications/Ghostty.app\n", stderr: "" });
     }
-    return { stdout: "", stderr: "" };
+    return Effect.succeed({ stdout: "", stderr: "" });
   };
   return { calls, runner };
 };
@@ -25,27 +25,32 @@ describe("createOpenInToolsAdapter", () => {
       program: string;
       args: string[];
     }> = [];
-    const runner: OpenInCommandRunner = async (program, args) => {
-      calls.push({ program, args });
-      if (program === "mdfind" && args[1] === "Ghostty.app") {
-        return { stdout: "/Applications/Ghostty.app\n", stderr: "" };
-      }
-      if (program === "defaults" && args[1] === "/Applications/Finder.app/Contents/Info.plist") {
-        return { stdout: "FinderIcon\n", stderr: "" };
-      }
-      if (program === "iconutil") {
-        const outputDirectory = args.at(-1);
-        if (!outputDirectory) {
-          throw new Error("missing iconutil output directory");
+    const runner: OpenInCommandRunner = (program, args) =>
+      Effect.gen(function* () {
+        calls.push({ program, args });
+        if (program === "mdfind" && args[1] === "Ghostty.app") {
+          return { stdout: "/Applications/Ghostty.app\n", stderr: "" };
         }
-        await mkdir(outputDirectory, { recursive: true });
-        await writeFile(`${outputDirectory}/icon_16x16.png`, "small");
-        await writeFile(`${outputDirectory}/icon_128x128@2x.png`, "best");
-        await writeFile(`${outputDirectory}/icon_512x512@2x.png`, "too-large");
+        if (program === "defaults" && args[1] === "/Applications/Finder.app/Contents/Info.plist") {
+          return { stdout: "FinderIcon\n", stderr: "" };
+        }
+        if (program === "iconutil") {
+          const outputDirectory = args.at(-1);
+          if (!outputDirectory) {
+            return yield* Effect.fail(new Error("missing iconutil output directory"));
+          }
+          yield* Effect.tryPromise(() => mkdir(outputDirectory, { recursive: true }));
+          yield* Effect.tryPromise(() => writeFile(`${outputDirectory}/icon_16x16.png`, "small"));
+          yield* Effect.tryPromise(() =>
+            writeFile(`${outputDirectory}/icon_128x128@2x.png`, "best"),
+          );
+          yield* Effect.tryPromise(() =>
+            writeFile(`${outputDirectory}/icon_512x512@2x.png`, "too-large"),
+          );
+          return { stdout: "", stderr: "" };
+        }
         return { stdout: "", stderr: "" };
-      }
-      return { stdout: "", stderr: "" };
-    };
+      });
     const port = createOpenInToolsAdapter({
       platform: "darwin",
       runner,
@@ -69,14 +74,14 @@ describe("createOpenInToolsAdapter", () => {
     expect(calls.some((call) => call.program === "sips")).toBe(false);
   });
   test("keeps catalog discovery available when Spotlight lookup fails", async () => {
-    const runner: OpenInCommandRunner = async (program) => {
+    const runner: OpenInCommandRunner = (program) => {
       if (program === "mdfind") {
-        throw new Error("Spotlight unavailable");
+        return Effect.fail(new Error("Spotlight unavailable"));
       }
       if (program === "mdls") {
-        return { stdout: "MissingIcon\n", stderr: "" };
+        return Effect.succeed({ stdout: "MissingIcon\n", stderr: "" });
       }
-      return { stdout: "", stderr: "" };
+      return Effect.succeed({ stdout: "", stderr: "" });
     };
     const port = createOpenInToolsAdapter({
       platform: "darwin",

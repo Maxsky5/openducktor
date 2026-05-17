@@ -1,6 +1,6 @@
 import type { GitDiffScope } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { type GitCommandRunner, requireNonEmpty } from "./git-command-runner";
+import { type GitCommandRunner, requireNonEmptyEffect } from "./git-command-runner";
 import { buildFileDiffs, loadBranchChangesDiffPayload, loadDiffPayload } from "./git-diff";
 import { fileStatusCounts, getCurrentBranchUnchecked, getStatusUnchecked } from "./git-status";
 import {
@@ -17,7 +17,7 @@ export const buildWorktreeStatusData = (
   diffScope: GitDiffScope,
 ) =>
   Effect.gen(function* () {
-    const target = requireNonEmpty(targetBranch, "target branch");
+    const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
     const currentBranch = yield* getCurrentBranchUnchecked(runner, workingDirectory);
     const upstreamTarget = yield* resolveUpstreamTargetForBranch(
       runner,
@@ -75,7 +75,7 @@ export const buildWorktreeStatusSummaryData = (
   _diffScope: GitDiffScope,
 ) =>
   Effect.gen(function* () {
-    const target = requireNonEmpty(targetBranch, "target branch");
+    const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
     const currentBranch = yield* getCurrentBranchUnchecked(runner, workingDirectory);
     const upstreamTarget = yield* resolveUpstreamTargetForBranch(
       runner,

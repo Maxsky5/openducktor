@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { Effect, Fiber } from "effect";
+import { Effect, type Fiber } from "effect";
 import {
   type HostOperationError,
   type HostPathAccessError,
@@ -220,13 +220,11 @@ export const sanitizeDatabaseIdentifier = (input: string): string => {
   return trimmed.length > 0 ? trimmed : "repo";
 };
 
-export const canonicalOrAbsolute = async (repoPath: string): Promise<string> => {
+export const canonicalOrAbsolute = (repoPath: string): Effect.Effect<string> => {
   const absolute = path.isAbsolute(repoPath) ? repoPath : path.resolve(repoPath);
-  try {
-    return await realpath(absolute);
-  } catch {
-    return absolute;
-  }
+  return Effect.tryPromise(() => realpath(absolute)).pipe(
+    Effect.catchAll(() => Effect.succeed(absolute)),
+  );
 };
 
 export const databaseName = (canonicalRepoPath: string): string => {

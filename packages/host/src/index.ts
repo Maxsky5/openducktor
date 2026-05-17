@@ -3,6 +3,7 @@ export { createRuntimeRegistry } from "./adapters/runtimes/runtime-registry";
 export { createRuntimeDefinitionsService } from "./application/runtimes/runtime-definitions-service";
 export {
   type CreateNodeHostCommandRouterInput,
+  createNodeEffectHostCommandRouter,
   createNodeHostCommandRouter,
 } from "./composition/node/create-node-host-command-router";
 export {
@@ -21,7 +22,10 @@ export {
   isHostCommandName,
   parseHostCommandName,
 } from "./interface/commands/host-command-registry";
-export type { HostCommandRouter } from "./interface/router/host-command-router";
+export type {
+  EffectHostCommandRouter,
+  HostCommandRouter,
+} from "./interface/router/host-command-router";
 export type { CodexAppServerPort } from "./ports/codex-app-server-port";
 export type { DevServerProcessPort } from "./ports/dev-server-process-port";
 export type { FilesystemPort } from "./ports/filesystem-port";

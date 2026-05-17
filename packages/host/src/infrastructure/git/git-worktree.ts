@@ -4,7 +4,7 @@ import {
   combineOutput,
   type GitCommandRunner,
   referenceExists,
-  requireNonEmpty,
+  requireNonEmptyEffect,
   runGit,
   runGitAllowFailure,
 } from "./git-command-runner";
@@ -25,8 +25,11 @@ export const createWorktree = (
   startPoint?: string,
 ) =>
   Effect.gen(function* () {
-    const targetBranch = requireNonEmpty(branch, "branch");
-    const targetWorktreePath = requireNonEmpty(worktreePath, "worktree path");
+    const targetBranch = yield* requireNonEmptyEffect(branch, "branch");
+    const targetWorktreePath = yield* requireNonEmptyEffect(worktreePath, "worktree path");
+    const normalizedStartPoint = startPoint
+      ? yield* requireNonEmptyEffect(startPoint, "start point")
+      : undefined;
     const args = createBranch
       ? [
           "worktree",
@@ -35,14 +38,15 @@ export const createWorktree = (
           targetBranch,
           "--end-of-options",
           targetWorktreePath,
-          ...(startPoint ? [requireNonEmpty(startPoint, "start point")] : []),
+          ...(normalizedStartPoint ? [normalizedStartPoint] : []),
         ]
       : ["worktree", "add", "--end-of-options", targetWorktreePath, targetBranch];
     yield* runGit(runner, repoPath, args);
   });
 export const deleteReference = (runner: GitCommandRunner, repoPath: string, reference: string) =>
   Effect.gen(function* () {
-    yield* runGit(runner, repoPath, ["update-ref", "-d", requireNonEmpty(reference, "reference")]);
+    const targetReference = yield* requireNonEmptyEffect(reference, "reference");
+    yield* runGit(runner, repoPath, ["update-ref", "-d", targetReference]);
   });
 export const collectFailedBranchConfigCleanup = (
   runner: GitCommandRunner,
@@ -99,8 +103,8 @@ export const configureBranchUpstream = (
   upstreamRemote: string,
 ) =>
   Effect.gen(function* () {
-    const targetBranch = requireNonEmpty(branch, "branch");
-    const remote = requireNonEmpty(upstreamRemote, "upstream remote");
+    const targetBranch = yield* requireNonEmptyEffect(branch, "branch");
+    const remote = yield* requireNonEmptyEffect(upstreamRemote, "upstream remote");
     const branchRemoteKey = `branch.${targetBranch}.remote`;
     const branchMergeKey = `branch.${targetBranch}.merge`;
     const localBranchRef = `refs/heads/${targetBranch}`;
@@ -121,10 +125,12 @@ export const configureBranchUpstream = (
         null,
         null,
       );
-      throw gitOperationError(
-        `Failed configuring upstream merge for build worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
-        "git.config.upstream-merge",
-        error,
+      return yield* Effect.fail(
+        gitOperationError(
+          `Failed configuring upstream merge for build worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
+          "git.config.upstream-merge",
+          error,
+        ),
       );
     }
     const trackingRefAlreadyExists = yield* referenceExists(runner, repoPath, trackingRef);
@@ -136,9 +142,11 @@ export const configureBranchUpstream = (
           localBranchRef,
         ])).trim();
         if (!localBranchOid) {
-          throw gitValidationError(
-            `git rev-parse returned an empty revision for ${localBranchRef}`,
-            "revision",
+          return yield* Effect.fail(
+            gitValidationError(
+              `git rev-parse returned an empty revision for ${localBranchRef}`,
+              "revision",
+            ),
           );
         }
         yield* runGit(runner, repoPath, ["update-ref", trackingRef, localBranchOid]);
@@ -153,10 +161,12 @@ export const configureBranchUpstream = (
           branchMergeKey,
           null,
         );
-        throw gitOperationError(
-          `Failed creating upstream tracking ref ${trackingRef} for build worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
-          "git.update-ref.upstream-tracking",
-          error,
+        return yield* Effect.fail(
+          gitOperationError(
+            `Failed creating upstream tracking ref ${trackingRef} for build worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
+            "git.update-ref.upstream-tracking",
+            error,
+          ),
         );
       }
     }
@@ -175,16 +185,18 @@ export const configureBranchUpstream = (
           branchMergeKey,
           createdTrackingRef,
         );
-        throw gitValidationError(
-          `configured upstream resolved to ${resolvedUpstream}, expected ${expectedUpstream}${cleanupError}`,
-          "upstream",
+        return yield* Effect.fail(
+          gitValidationError(
+            `configured upstream resolved to ${resolvedUpstream}, expected ${expectedUpstream}${cleanupError}`,
+            "upstream",
+          ),
         );
       }
     }).pipe(Effect.either);
     if (verifyResult._tag === "Left") {
       const error = verifyResult.left;
       if (error instanceof Error && error.message.startsWith("configured upstream resolved to ")) {
-        throw error;
+        return yield* Effect.fail(error);
       }
       const cleanupError = yield* cleanupFailedUpstreamSetup(
         runner,
@@ -193,10 +205,12 @@ export const configureBranchUpstream = (
         branchMergeKey,
         createdTrackingRef,
       );
-      throw gitOperationError(
-        `Failed verifying upstream tracking for build worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
-        "git.verify-upstream-tracking",
-        error,
+      return yield* Effect.fail(
+        gitOperationError(
+          `Failed verifying upstream tracking for build worktree branch ${targetBranch}: ${String(error)}${cleanupError}`,
+          "git.verify-upstream-tracking",
+          error,
+        ),
       );
     }
     return { createdTrackingRef };
@@ -208,7 +222,7 @@ export const removeWorktree = (
   force: boolean,
 ) =>
   Effect.gen(function* () {
-    const targetWorktreePath = requireNonEmpty(worktreePath, "worktree path");
+    const targetWorktreePath = yield* requireNonEmptyEffect(worktreePath, "worktree path");
     const args = ["worktree", "remove"];
     if (force) {
       args.push("--force");
@@ -223,7 +237,7 @@ export const deleteLocalBranch = (
   force: boolean,
 ) =>
   Effect.gen(function* () {
-    const targetBranch = requireNonEmpty(branch, "branch");
+    const targetBranch = yield* requireNonEmptyEffect(branch, "branch");
     yield* runGit(runner, repoPath, [
       "branch",
       force ? "-D" : "-d",

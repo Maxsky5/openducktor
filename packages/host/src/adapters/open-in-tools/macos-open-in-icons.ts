@@ -27,10 +27,9 @@ const runIconCommand = (
   args: string[],
   operation: string,
 ) =>
-  Effect.tryPromise({
-    try: () => runner(program, args),
-    catch: (cause) => toHostOperationError(cause, operation, { program, args }),
-  });
+  runner(program, args).pipe(
+    Effect.mapError((cause) => toHostOperationError(cause, operation, { program, args })),
+  );
 
 const readDirectoryEntries = (directoryPath: string, operation: string) =>
   Effect.tryPromise({

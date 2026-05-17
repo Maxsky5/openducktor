@@ -334,9 +334,14 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         portAllocator: () => Effect.succeed(43123),
         portProbe: () => Effect.succeed(true),
         runtimeId: () => "runtime-failure",
-        processTreeTerminator: async ({ pid }) => {
+        processTreeTerminator: ({ pid }) => {
           runtimePid = pid;
-          throw new Error("process tree stayed alive");
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.processTreeTerminator",
+              message: "process tree stayed alive",
+            }),
+          );
         },
       });
 
@@ -378,9 +383,14 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         retryDelayMs: 5,
         portAllocator: () => Effect.succeed(43123),
         portProbe: () => Effect.succeed(false),
-        processTreeTerminator: async ({ pid }) => {
+        processTreeTerminator: ({ pid }) => {
           process.kill(pid, "SIGTERM");
-          throw new Error("process tree cleanup failed");
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.processTreeTerminator",
+              message: "process tree cleanup failed",
+            }),
+          );
         },
       });
 

@@ -47,77 +47,77 @@ export const spawnBd = (
           }),
         ),
       ));
-    return yield* Effect.tryPromise({
-      try: () =>
-        new Promise((resolve, reject) => {
-          const command = args[0] ?? "unknown";
-          const child = spawn("bd", args, {
-            cwd: cliContext.workingDir,
-            env: cliContext.env,
-            stdio: ["ignore", "pipe", "pipe"],
-          });
-          const stdoutChunks: Buffer[] = [];
-          const stderrChunks: Buffer[] = [];
-          let settled = false;
-          const timeout = setTimeout(() => {
-            if (settled) {
-              return;
-            }
-            settled = true;
-            child.kill("SIGTERM");
-            reject(
+    return yield* Effect.async<unknown, TaskStoreError>((resume) => {
+      const command = args[0] ?? "unknown";
+      let child: ReturnType<typeof spawn>;
+      try {
+        child = spawn("bd", args, {
+          cwd: cliContext.workingDir,
+          env: cliContext.env,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      } catch (cause) {
+        resume(Effect.fail(toBeadsSpawnError(cause, args, repoPath)));
+        return;
+      }
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
+      let settled = false;
+      const finish = (effect: Effect.Effect<unknown, TaskStoreError>): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        resume(effect);
+      };
+      const timeout = setTimeout(() => {
+        child.kill("SIGTERM");
+        finish(
+          Effect.fail(
+            new HostOperationError({
+              operation: "beads.spawn",
+              message: `Timed out running bd ${command} after ${BD_COMMAND_TIMEOUT_MS}ms`,
+              details: { args, command, timeoutMs: BD_COMMAND_TIMEOUT_MS },
+            }),
+          ),
+        );
+      }, BD_COMMAND_TIMEOUT_MS);
+      child.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+      child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+      child.once("error", (cause) => finish(Effect.fail(toBeadsSpawnError(cause, args, repoPath))));
+      child.once("close", (code) => {
+        const stdout = Buffer.concat(stdoutChunks).toString("utf8");
+        const stderr = Buffer.concat(stderrChunks).toString("utf8");
+        if (code !== 0) {
+          const output = stderr.trim() || stdout.trim() || "no output";
+          finish(
+            Effect.fail(
               new HostOperationError({
                 operation: "beads.spawn",
-                message: `Timed out running bd ${command} after ${BD_COMMAND_TIMEOUT_MS}ms`,
-                details: { args, command, timeoutMs: BD_COMMAND_TIMEOUT_MS },
+                message: `bd ${command} failed with code ${code}: ${output}`,
+                details: { args, command, exitCode: code },
               }),
-            );
-          }, BD_COMMAND_TIMEOUT_MS);
-          child.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
-          child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
-          child.once("error", (error) => {
-            if (settled) {
-              return;
-            }
-            settled = true;
-            clearTimeout(timeout);
-            reject(error);
-          });
-          child.once("close", (code) => {
-            if (settled) {
-              return;
-            }
-            settled = true;
-            clearTimeout(timeout);
-            const stdout = Buffer.concat(stdoutChunks).toString("utf8");
-            const stderr = Buffer.concat(stderrChunks).toString("utf8");
-            if (code !== 0) {
-              const output = stderr.trim() || stdout.trim() || "no output";
-              reject(
-                new HostOperationError({
-                  operation: "beads.spawn",
-                  message: `bd ${command} failed with code ${code}: ${output}`,
-                  details: { args, command, exitCode: code },
-                }),
-              );
-              return;
-            }
-            try {
-              resolve(onSuccess(stdout));
-            } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              reject(
-                new HostValidationError({
-                  field: "bdJsonOutput",
-                  message: `Failed to parse bd JSON output from \`bd ${command}\`: ${message}`,
-                  cause: error,
-                  details: { args, command },
-                }),
-              );
-            }
-          });
-        }),
-      catch: (cause) => toBeadsSpawnError(cause, args, repoPath),
+            ),
+          );
+          return;
+        }
+        try {
+          finish(Effect.succeed(onSuccess(stdout)));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          finish(
+            Effect.fail(
+              new HostValidationError({
+                field: "bdJsonOutput",
+                message: `Failed to parse bd JSON output from \`bd ${command}\`: ${message}`,
+                cause: error,
+                details: { args, command },
+              }),
+            ),
+          );
+        }
+      });
     });
   });
 export const defaultRunBd =

@@ -5,7 +5,7 @@ import {
   combineOptionalOutput,
   combineOutput,
   type GitCommandRunner,
-  requireNonEmpty,
+  requireNonEmptyEffect,
   runGit,
   runGitAllowFailure,
 } from "./git-command-runner";
@@ -22,8 +22,8 @@ export const isAncestor = (
   descendant: string,
 ) =>
   Effect.gen(function* () {
-    const ancestorRef = requireNonEmpty(ancestor, "ancestor ref");
-    const descendantRef = requireNonEmpty(descendant, "descendant ref");
+    const ancestorRef = yield* requireNonEmptyEffect(ancestor, "ancestor ref");
+    const descendantRef = yield* requireNonEmptyEffect(descendant, "descendant ref");
     const result = yield* runGitAllowFailure(runner, workingDirectory, [
       "merge-base",
       "--is-ancestor",
@@ -37,9 +37,11 @@ export const isAncestor = (
     if (!result.stdout.trim() && !result.stderr.trim()) {
       return false;
     }
-    throw gitOperationError(
-      `git merge-base --is-ancestor ${ancestorRef} ${descendantRef} failed: ${combineOutput(result.stdout, result.stderr)}`,
-      "git.merge-base.is-ancestor",
+    return yield* Effect.fail(
+      gitOperationError(
+        `git merge-base --is-ancestor ${ancestorRef} ${descendantRef} failed: ${combineOutput(result.stdout, result.stderr)}`,
+        "git.merge-base.is-ancestor",
+      ),
     );
   });
 export const suggestedSquashCommitMessage = (
@@ -49,8 +51,8 @@ export const suggestedSquashCommitMessage = (
   targetBranch: string,
 ) =>
   Effect.gen(function* () {
-    const sourceRef = requireNonEmpty(sourceBranch, "source branch");
-    const targetRef = requireNonEmpty(targetBranch, "target branch");
+    const sourceRef = yield* requireNonEmptyEffect(sourceBranch, "source branch");
+    const targetRef = yield* requireNonEmptyEffect(targetBranch, "target branch");
     const revListResult = yield* runGitAllowFailure(runner, workingDirectory, [
       "rev-list",
       "--reverse",
@@ -58,9 +60,11 @@ export const suggestedSquashCommitMessage = (
       `${targetRef}..${sourceRef}`,
     ]);
     if (!revListResult.ok) {
-      throw gitOperationError(
-        `git rev-list ${targetRef}..${sourceRef} failed: ${combineOutput(revListResult.stdout, revListResult.stderr)}`,
-        "git.rev-list",
+      return yield* Effect.fail(
+        gitOperationError(
+          `git rev-list ${targetRef}..${sourceRef} failed: ${combineOutput(revListResult.stdout, revListResult.stderr)}`,
+          "git.rev-list",
+        ),
       );
     }
     const oldestCommit = revListResult.stdout
@@ -119,7 +123,7 @@ export const mergeConflictOrError = (
         output: detail,
       };
     }
-    throw gitOperationError(`${commandName} failed: ${detail}`, commandName);
+    return yield* Effect.fail(gitOperationError(`${commandName} failed: ${detail}`, commandName));
   });
 export const mergeBranchWithCommit = (
   runner: GitCommandRunner,
@@ -148,7 +152,10 @@ export const mergeBranchWithSquash = (
   squashCommitMessage: string | undefined,
 ) =>
   Effect.gen(function* () {
-    const commitMessage = requireNonEmpty(squashCommitMessage ?? "", "squash commit message");
+    const commitMessage = yield* requireNonEmptyEffect(
+      squashCommitMessage ?? "",
+      "squash commit message",
+    );
     const result = yield* runGitAllowFailure(runner, workingDirectory, [
       "merge",
       "--squash",
@@ -177,9 +184,11 @@ export const mergeBranchWithSquash = (
     ]);
     const commitOutput = combineOptionalOutput(commit.stdout, commit.stderr);
     if (!commit.ok) {
-      throw gitOperationError(
-        `git commit failed after squash merge: ${commitOutput}`,
-        "git.commit.squash-merge",
+      return yield* Effect.fail(
+        gitOperationError(
+          `git commit failed after squash merge: ${commitOutput}`,
+          "git.commit.squash-merge",
+        ),
       );
     }
     const mergedOutput =
@@ -222,9 +231,11 @@ export const mergeBranchWithRebase = (
     ]);
     const fastForwardOutput = combineOptionalOutput(fastForward.stdout, fastForward.stderr);
     if (!fastForward.ok) {
-      throw gitOperationError(
-        `git merge --ff-only failed after rebase: ${fastForwardOutput}`,
-        "git.merge.ff-only",
+      return yield* Effect.fail(
+        gitOperationError(
+          `git merge --ff-only failed after rebase: ${fastForwardOutput}`,
+          "git.merge.ff-only",
+        ),
       );
     }
     const output =
@@ -241,8 +252,8 @@ export const mergeBranch = (
   request: GitMergeBranchRequest,
 ) =>
   Effect.gen(function* () {
-    const sourceBranch = requireNonEmpty(request.sourceBranch, "source branch");
-    const targetBranch = requireNonEmpty(request.targetBranch, "target branch");
+    const sourceBranch = yield* requireNonEmptyEffect(request.sourceBranch, "source branch");
+    const targetBranch = yield* requireNonEmptyEffect(request.targetBranch, "target branch");
     const branches = parseBranchRows(
       yield* runGit(runner, workingDirectory, [
         "for-each-ref",
@@ -263,7 +274,9 @@ export const mergeBranch = (
       };
     }
     if ((yield* getStatusUnchecked(runner, workingDirectory)).length > 0) {
-      throw gitValidationError("Cannot merge with uncommitted changes", "workingDirectory");
+      return yield* Effect.fail(
+        gitValidationError("Cannot merge with uncommitted changes", "workingDirectory"),
+      );
     }
     yield* switchBranch(runner, workingDirectory, checkoutTargetBranch, false);
     const beforeHead = yield* runGit(runner, workingDirectory, ["rev-parse", "HEAD"]);
@@ -295,7 +308,7 @@ export const switchBranch = (
   create: boolean,
 ) =>
   Effect.gen(function* () {
-    const targetBranch = requireNonEmpty(branch, "branch");
+    const targetBranch = yield* requireNonEmptyEffect(branch, "branch");
     const args = create
       ? ["switch", "-c", targetBranch]
       : ["switch", "--end-of-options", targetBranch];

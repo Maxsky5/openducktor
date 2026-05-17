@@ -145,16 +145,12 @@ export const repoStoreHealthFromBdWherePayload = (
 };
 export const pathExists = (inputPath: string) =>
   Effect.tryPromise({
-    try: async () => {
-      try {
-        await access(inputPath);
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    try: () => access(inputPath),
     catch: (cause) => toHostOperationError(cause, "beads.pathExists"),
-  });
+  }).pipe(
+    Effect.as(true),
+    Effect.catchAll(() => Effect.succeed(false)),
+  );
 export const diagnoseRepoStoreWithBd = (
   runBdJson: RunBdJson,
   repoPath: string,

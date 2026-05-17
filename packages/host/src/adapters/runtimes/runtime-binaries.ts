@@ -47,17 +47,20 @@ export const resolveUserPath = (rawPath: string, homeDir = homedir()): string =>
 };
 
 export const isExecutableFile = (candidate: string, platform: NodeJS.Platform = process.platform) =>
-  Effect.tryPromise({
-    try: async () => {
-      if (platform === "win32") {
-        const file = await stat(candidate);
-        return file.isFile();
-      }
+  Effect.gen(function* () {
+    if (platform === "win32") {
+      const file = yield* Effect.tryPromise({
+        try: () => stat(candidate),
+        catch: (cause) => toHostPathStatError(cause, "runtimeBinaries.isExecutableFile", candidate),
+      });
+      return file.isFile();
+    }
 
-      await access(candidate, constants.X_OK);
-      return true;
-    },
-    catch: (cause) => toHostPathStatError(cause, "runtimeBinaries.isExecutableFile", candidate),
+    yield* Effect.tryPromise({
+      try: () => access(candidate, constants.X_OK),
+      catch: (cause) => toHostPathStatError(cause, "runtimeBinaries.isExecutableFile", candidate),
+    });
+    return true;
   }).pipe(Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)));
 
 const executableName = (command: string, platform: NodeJS.Platform): string =>

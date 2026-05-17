@@ -11,7 +11,7 @@ import { HostOperationError, HostValidationError } from "../../effect/host-error
 import {
   combineOptionalOutput,
   type GitCommandRunner,
-  requireNonEmpty,
+  requireNonEmptyEffect,
   runGit,
   runGitAllowFailure,
 } from "./git-command-runner";
@@ -129,7 +129,7 @@ export const commitAll = (
   message: string,
 ): Effect.Effect<GitCommitAllResult, GitBranchSyncError> =>
   Effect.gen(function* () {
-    const commitMessage = requireNonEmpty(message, "commit message");
+    const commitMessage = yield* requireNonEmptyEffect(message, "commit message");
     const addResult = yield* runGitAllowFailure(runner, workingDirectory, ["add", "-A"]);
     if (!addResult.ok) {
       return yield* Effect.fail(
@@ -173,7 +173,7 @@ export const rebaseBranch = (
   targetBranch: string,
 ): Effect.Effect<GitRebaseBranchResult, GitBranchSyncError> =>
   Effect.gen(function* () {
-    const target = requireNonEmpty(targetBranch, "target branch");
+    const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
     const current = yield* getCurrentBranchUnchecked(runner, workingDirectory);
     if (current.detached) {
       return yield* Effect.fail(gitValidationError("Cannot rebase while detached", "git.rebase"));

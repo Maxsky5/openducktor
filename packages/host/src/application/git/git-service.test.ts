@@ -124,6 +124,9 @@ const createFakeGitPort = ({
           }),
       });
     },
+    referenceExists() {
+      return Effect.succeed(true);
+    },
     listRemotes(workingDir) {
       return Effect.tryPromise({
         try: async () => {
@@ -263,6 +266,12 @@ const createFakeGitPort = ({
             cause: cause,
           }),
       });
+    },
+    configureBranchUpstream() {
+      return Effect.succeed({ createdTrackingRef: null });
+    },
+    deleteReference() {
+      return Effect.void;
     },
     removeWorktree(repoPath, worktreePath, force) {
       return Effect.tryPromise({
@@ -545,6 +554,19 @@ const createFakeSettingsConfig = (config: GlobalConfig): SettingsConfigPort => (
   },
 });
 const createFakeWorktreeFiles = (calls: string[] = []): WorktreeFilePort => ({
+  ensureDirectory(path) {
+    return Effect.tryPromise({
+      try: async () => {
+        calls.push(`ensureDirectory:${path}`);
+      },
+      catch: (cause) =>
+        new HostOperationError({
+          operation: "test.effect",
+          message: cause instanceof Error ? cause.message : String(cause),
+          cause: cause,
+        }),
+    });
+  },
   copyConfiguredPaths(repoPath, worktreePath, relativePaths) {
     return Effect.tryPromise({
       try: async () => {

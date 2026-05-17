@@ -20,11 +20,8 @@ import type {
 } from "../../effect/host-errors";
 import {
   errorMessage,
-  HostDependencyError as HostDependencyErrorValue,
-  HostInvariantError as HostInvariantErrorValue,
   HostOperationError as HostOperationErrorValue,
-  HostResourceError as HostResourceErrorValue,
-  HostValidationError as HostValidationErrorValue,
+  isHostError,
 } from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { RuntimeRegistryError, RuntimeRegistryPort } from "../../ports/runtime-registry-port";
@@ -175,12 +172,7 @@ export type CreateTaskServiceInput = {
   worktreeFiles?: WorktreeFilePort;
 };
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
-  cause instanceof TaskPolicyError ||
-  cause instanceof HostDependencyErrorValue ||
-  cause instanceof HostInvariantErrorValue ||
-  cause instanceof HostOperationErrorValue ||
-  cause instanceof HostResourceErrorValue ||
-  cause instanceof HostValidationErrorValue;
+  cause instanceof TaskPolicyError || isHostError(cause);
 
 const toTaskServiceError = (cause: unknown): TaskServiceError => {
   if (isTaskServiceError(cause)) {

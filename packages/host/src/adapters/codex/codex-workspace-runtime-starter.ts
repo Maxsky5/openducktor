@@ -6,7 +6,7 @@ import {
   type RuntimeInstanceSummary,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Exit, Scope } from "effect";
 import {
   HostOperationError,
   HostResourceError,
@@ -152,17 +152,17 @@ const cleanupCodexRuntime = ({
     codexAppServer.unregisterTransport(nextRuntimeId);
 
     const processExit = yield* Effect.either(
-      Effect.tryPromise({
-        try: () =>
-          processTreeTerminator({
-            pid,
-            label: `Codex app-server runtime ${nextRuntimeId}`,
-            isClosed: closed,
-            waitForExit: (timeoutMs) => waitForChildProcessClose(child, closed, timeoutMs),
-            stopTimeoutMs,
-          }),
-        catch: (cause) => toHostOperationError(cause, "codexWorkspaceRuntime.stopProcess"),
-      }),
+      processTreeTerminator({
+        pid,
+        label: `Codex app-server runtime ${nextRuntimeId}`,
+        isClosed: closed,
+        waitForExit: (timeoutMs) => waitForChildProcessClose(child, closed, timeoutMs),
+        stopTimeoutMs,
+      }).pipe(
+        Effect.mapError((cause) =>
+          toHostOperationError(cause, "codexWorkspaceRuntime.stopProcess"),
+        ),
+      ),
     );
     if (processExit._tag === "Left") {
       errors.push(`process tree: ${processExit.left.message}`);
@@ -198,6 +198,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
   processTreeTerminator = terminateProcessTree,
 }: CreateCodexWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   startWorkspaceRuntime(input) {
+    let scope: Parameters<typeof Scope.close>[0] | null = null;
     return Effect.gen(function* () {
       if (input.runtimeKind !== "codex") {
         return yield* Effect.fail(
@@ -252,6 +253,8 @@ export const createCodexWorkspaceRuntimeStarter = ({
           }),
       });
       const nextRuntimeId = runtimeId();
+      const runtimeScope = yield* Scope.make();
+      scope = runtimeScope;
       const child = yield* Effect.try({
         try: () =>
           spawn(command.command, command.args, {
@@ -307,6 +310,15 @@ export const createCodexWorkspaceRuntimeStarter = ({
         stopTimeoutMs,
         transport,
       });
+      let released = false;
+      const closeRuntime = Effect.gen(function* () {
+        if (released) {
+          return;
+        }
+        released = true;
+        yield* cleanup;
+      });
+      yield* Scope.addFinalizer(runtimeScope, closeRuntime.pipe(Effect.ignore));
 
       const initialized = yield* Effect.either(
         Effect.gen(function* () {
@@ -328,7 +340,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
         }),
       );
       if (initialized._tag === "Left") {
-        const cleanupExit = yield* Effect.either(cleanup);
+        const cleanupExit = yield* Effect.either(closeRuntime);
         if (cleanupExit._tag === "Left") {
           return yield* Effect.fail(
             new HostOperationError({
@@ -369,9 +381,16 @@ export const createCodexWorkspaceRuntimeStarter = ({
       return {
         runtime,
         stop() {
-          return cleanup;
+          return closeRuntime.pipe(
+            Effect.zipRight(Scope.close(runtimeScope, Exit.succeed(undefined)).pipe(Effect.ignore)),
+            Effect.mapError((cause) => toHostOperationError(cause, "codexWorkspaceRuntime.stop")),
+          );
         },
       };
-    });
+    }).pipe(
+      Effect.onError(() =>
+        scope ? Scope.close(scope, Exit.fail("startup failed")).pipe(Effect.ignore) : Effect.void,
+      ),
+    );
   },
 });

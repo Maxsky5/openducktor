@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+
 export const processIsAlive = (pid: number): boolean => {
   try {
     process.kill(pid, 0);
@@ -20,13 +22,14 @@ export const signalProcess = (pid: number, signal: NodeJS.Signals): void => {
   }
 };
 
-export const waitForProcessExit = async (pid: number, timeoutMs: number): Promise<boolean> => {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (!processIsAlive(pid)) {
-      return true;
+export const waitForProcessExit = (pid: number, timeoutMs: number): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (!processIsAlive(pid)) {
+        return true;
+      }
+      yield* Effect.sleep("100 millis");
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  return !processIsAlive(pid);
-};
+    return !processIsAlive(pid);
+  });

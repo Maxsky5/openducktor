@@ -1,6 +1,6 @@
 import type { Effect } from "effect";
 import { Data } from "effect";
-import type { HostOperationError } from "../effect/host-errors";
+import type { HostOperationError, HostValidationError } from "../effect/host-errors";
 
 export type DevServerProcessExit = {
   pid: number;
@@ -25,7 +25,10 @@ export type DevServerProcessHandle = {
 export type DevServerProcessPort = {
   start(
     input: DevServerProcessStartInput,
-  ): Effect.Effect<DevServerProcessHandle, DevServerProcessStartExitError | HostOperationError>;
+  ): Effect.Effect<
+    DevServerProcessHandle,
+    DevServerProcessStartExitError | HostOperationError | HostValidationError
+  >;
 };
 export const devServerExitMessage = (exitCode: number | null, signal: string | null): string => {
   if (exitCode !== null) {

@@ -196,7 +196,13 @@ export const createGitCliAdapter = ({
         "--end-of-options",
         range,
       ]);
-      return parseAheadBehind(output);
+      return yield* Effect.try({
+        try: () => parseAheadBehind(output),
+        catch: (cause) =>
+          cause instanceof HostValidationError
+            ? cause
+            : toHostOperationError(cause, "git.parseAheadBehind"),
+      });
     });
   },
   fetchRemote(workingDirectory, targetBranch) {

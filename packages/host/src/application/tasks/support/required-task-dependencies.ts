@@ -79,30 +79,21 @@ export const requireBuildStartDependencies = (
   workspaceSettingsService: WorkspaceSettingsService | undefined,
 ): {
   gitPort: GitPort & {
-    configureBranchUpstream: NonNullable<GitPort["configureBranchUpstream"]>;
-    deleteReference: NonNullable<GitPort["deleteReference"]>;
-    referenceExists: NonNullable<GitPort["referenceExists"]>;
+    configureBranchUpstream: GitPort["configureBranchUpstream"];
+    deleteReference: GitPort["deleteReference"];
+    referenceExists: GitPort["referenceExists"];
   };
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeRegistry: RuntimeRegistryPort;
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
   worktreeFiles: WorktreeFilePort & {
-    ensureDirectory: NonNullable<WorktreeFilePort["ensureDirectory"]>;
+    ensureDirectory: WorktreeFilePort["ensureDirectory"];
   };
   workspaceSettingsService: WorkspaceSettingsService;
 } => {
   if (!gitPort) {
     throw missingTaskDependency("Git port is required for build_start.");
-  }
-  if (!gitPort.referenceExists) {
-    throw missingTaskDependency("Git port is required to support build_start reference checks.");
-  }
-  if (!gitPort.configureBranchUpstream) {
-    throw missingTaskDependency("Git port is required to support build_start upstream setup.");
-  }
-  if (!gitPort.deleteReference) {
-    throw missingTaskDependency("Git port is required to support build_start upstream cleanup.");
   }
   if (!runtimeDefinitionsService) {
     throw missingTaskDependency("Runtime definitions service is required for build_start.");
@@ -119,26 +110,21 @@ export const requireBuildStartDependencies = (
   if (!worktreeFiles) {
     throw missingTaskDependency("Worktree file port is required for build_start.");
   }
-  if (!worktreeFiles.ensureDirectory) {
-    throw missingTaskDependency(
-      "Worktree file port is required to support build_start directory creation.",
-    );
-  }
   if (!workspaceSettingsService) {
     throw missingTaskDependency("Workspace settings service is required for build_start.");
   }
   return {
     gitPort: gitPort as GitPort & {
-      configureBranchUpstream: NonNullable<GitPort["configureBranchUpstream"]>;
-      deleteReference: NonNullable<GitPort["deleteReference"]>;
-      referenceExists: NonNullable<GitPort["referenceExists"]>;
+      configureBranchUpstream: GitPort["configureBranchUpstream"];
+      deleteReference: GitPort["deleteReference"];
+      referenceExists: GitPort["referenceExists"];
     },
     runtimeDefinitionsService,
     runtimeRegistry,
     settingsConfig,
     systemCommands,
     worktreeFiles: worktreeFiles as WorktreeFilePort & {
-      ensureDirectory: NonNullable<WorktreeFilePort["ensureDirectory"]>;
+      ensureDirectory: WorktreeFilePort["ensureDirectory"];
     },
     workspaceSettingsService,
   };

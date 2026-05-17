@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createServer, Socket } from "node:net";
 import type { Readable } from "node:stream";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
-import { Effect, Schedule } from "effect";
+import { Effect, Exit, Schedule, Scope } from "effect";
 import {
   HostOperationError,
   HostResourceError,
@@ -124,20 +124,32 @@ export const buildOpenCodeConfigContent = (
     },
   });
 
-const pickFreePort = (): Promise<number> =>
-  new Promise((resolve, reject) => {
+const pickFreePort = (): Effect.Effect<number, HostOperationError | HostResourceError> =>
+  Effect.async<number, HostOperationError | HostResourceError>((resume) => {
     const server = createServer();
-    server.once("error", reject);
+    let settled = false;
+    const finish = (effect: Effect.Effect<number, HostOperationError | HostResourceError>) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resume(effect);
+    };
+    server.once("error", (error) =>
+      finish(Effect.fail(toHostOperationError(error, "opencode.pickFreePort"))),
+    );
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       if (!address || typeof address === "string") {
         server.close(() => {
-          reject(
-            new HostResourceError({
-              resource: "localPort",
-              operation: "opencode.pickFreePort",
-              message: "Failed to allocate a local OpenCode runtime port.",
-            }),
+          finish(
+            Effect.fail(
+              new HostResourceError({
+                resource: "localPort",
+                operation: "opencode.pickFreePort",
+                message: "Failed to allocate a local OpenCode runtime port.",
+              }),
+            ),
           );
         });
         return;
@@ -145,10 +157,10 @@ const pickFreePort = (): Promise<number> =>
       const port = address.port;
       server.close((error) => {
         if (error) {
-          reject(error);
+          finish(Effect.fail(toHostOperationError(error, "opencode.pickFreePort.close")));
           return;
         }
-        resolve(port);
+        finish(Effect.succeed(port));
       });
     });
   });
@@ -176,8 +188,8 @@ const startupProbeSchedule = (startupTimeoutMs: number, retryDelayMs: number) =>
     () => `${retryDelayMs} millis`,
   );
 
-const canConnect = (port: number, timeoutMs: number): Promise<boolean> =>
-  new Promise((resolve) => {
+const canConnect = (port: number, timeoutMs: number): Effect.Effect<boolean> =>
+  Effect.async<boolean>((resume) => {
     const socket = new Socket();
     let settled = false;
 
@@ -187,7 +199,7 @@ const canConnect = (port: number, timeoutMs: number): Promise<boolean> =>
       }
       settled = true;
       socket.destroy();
-      resolve(connected);
+      resume(Effect.succeed(connected));
     };
 
     socket.setTimeout(timeoutMs);
@@ -210,23 +222,23 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
   now = () => new Date(),
   runtimeId = () => randomUUID(),
   portAllocator = () =>
-    Effect.tryPromise({
-      try: pickFreePort,
-      catch: (cause) => toHostOperationError(cause, "opencodeRuntime.pickFreePort"),
-    }),
+    pickFreePort().pipe(
+      Effect.mapError((cause) => toHostOperationError(cause, "opencodeRuntime.pickFreePort")),
+    ),
   portProbe = (port, timeoutMs) =>
-    Effect.tryPromise({
-      try: () => canConnect(port, timeoutMs),
-      catch: (cause) =>
+    canConnect(port, timeoutMs).pipe(
+      Effect.mapError((cause) =>
         toHostOperationError(cause, "opencodeRuntime.probePort", {
           port,
           timeoutMs,
         }),
-    }),
+      ),
+    ),
   platform = process.platform,
   processTreeTerminator = terminateProcessTree,
 }: CreateOpenCodeWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   startWorkspaceRuntime(input) {
+    let scope: Parameters<typeof Scope.close>[0] | null = null;
     return Effect.gen(function* () {
       if (input.runtimeKind !== "opencode") {
         return yield* Effect.fail(
@@ -285,6 +297,8 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         processEnv,
         platform,
       );
+      const runtimeScope = yield* Scope.make();
+      scope = runtimeScope;
       const child = yield* Effect.try({
         try: () =>
           spawn(command.command, command.args, {
@@ -335,19 +349,23 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
             ? `process exited with code ${exitCode}`
             : `process exited from signal ${signal}`;
       });
-
       const stopRuntimeProcess = (operation: string) =>
-        Effect.tryPromise({
-          try: () =>
-            processTreeTerminator({
-              pid,
-              label: `OpenCode runtime on 127.0.0.1:${port}`,
-              isClosed: () => closed,
-              waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
-              stopTimeoutMs,
-            }),
-          catch: (cause) => toHostOperationError(cause, operation),
-        });
+        processTreeTerminator({
+          pid,
+          label: `OpenCode runtime on 127.0.0.1:${port}`,
+          isClosed: () => closed,
+          waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
+          stopTimeoutMs,
+        }).pipe(Effect.mapError((cause) => toHostOperationError(cause, operation)));
+      let released = false;
+      const closeRuntime = Effect.gen(function* () {
+        if (released) {
+          return;
+        }
+        released = true;
+        yield* stopRuntimeProcess("opencodeWorkspaceRuntime.stop");
+      });
+      yield* Scope.addFinalizer(runtimeScope, closeRuntime.pipe(Effect.ignore));
 
       const startupProbeDriver = yield* Schedule.driver(
         startupProbeSchedule(startupTimeoutMs, retryDelayMs),
@@ -411,7 +429,14 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           return {
             runtime,
             stop() {
-              return stopRuntimeProcess("opencodeWorkspaceRuntime.stop");
+              return closeRuntime.pipe(
+                Effect.zipRight(
+                  Scope.close(runtimeScope, Exit.succeed(undefined)).pipe(Effect.ignore),
+                ),
+                Effect.mapError((cause) =>
+                  toHostOperationError(cause, "opencodeWorkspaceRuntime.stop"),
+                ),
+              );
             },
           };
         }
@@ -422,10 +447,14 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         }
       }
 
-      const cleanupExit = yield* Effect.either(
-        stopRuntimeProcess("opencodeWorkspaceRuntime.stopTimedOutProcess"),
-      );
       const timeoutMessage = `Timed out waiting for OpenCode runtime on 127.0.0.1:${port}.`;
+      const cleanupExit = yield* Effect.either(
+        closeRuntime.pipe(
+          Effect.mapError((cause) =>
+            toHostOperationError(cause, "opencodeWorkspaceRuntime.stopTimedOutProcess"),
+          ),
+        ),
+      );
       if (cleanupExit._tag === "Left") {
         return yield* Effect.fail(
           new HostOperationError({
@@ -443,6 +472,10 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           details: { port, startupTimeoutMs },
         }),
       );
-    });
+    }).pipe(
+      Effect.onError(() =>
+        scope ? Scope.close(scope, Exit.fail("startup failed")).pipe(Effect.ignore) : Effect.void,
+      ),
+    );
   },
 });

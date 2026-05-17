@@ -144,7 +144,7 @@ describe("createMcpHostBridgeServer", () => {
       }),
     });
     try {
-      await bridge.ensureExternalDiscoveryReady();
+      await Effect.runPromise(bridge.ensureExternalDiscoveryReady());
       const published = JSON.parse(await readFile(discoveryPath, "utf8")) as {
         hostToken: string;
         hostUrl: string;
@@ -155,10 +155,10 @@ describe("createMcpHostBridgeServer", () => {
         pid: process.pid,
       });
       expect(published.hostUrl.startsWith("http://127.0.0.1:")).toBe(true);
-      await bridge.close();
+      await Effect.runPromise(bridge.close());
       await expect(readFile(discoveryPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
-      await bridge.close();
+      await Effect.runPromise(bridge.close());
       await rm(tempDir, { force: true, recursive: true });
     }
   });
@@ -211,7 +211,7 @@ describe("createMcpHostBridgeServer", () => {
       }),
     });
     try {
-      const connection = await bridge.ensureConnection({ repoPath: "/repo" });
+      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
       expect(connection).toMatchObject({
         workspaceId: "repo",
         hostToken: "token-1",
@@ -241,7 +241,7 @@ describe("createMcpHostBridgeServer", () => {
       });
       expect(ready.status).toBe(200);
     } finally {
-      await bridge.close();
+      await Effect.runPromise(bridge.close());
       await rm(tempDir, { force: true, recursive: true });
     }
   });
@@ -267,7 +267,9 @@ describe("createMcpHostBridgeServer", () => {
 
     try {
       const connections = await Promise.all(
-        Array.from({ length: 8 }, () => bridge.ensureConnection({ repoPath: "/repo" })),
+        Array.from({ length: 8 }, () =>
+          Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" })),
+        ),
       );
       const [firstConnection] = connections;
       if (!firstConnection) {
@@ -295,7 +297,7 @@ describe("createMcpHostBridgeServer", () => {
         pid: process.pid,
       });
     } finally {
-      await bridge.close();
+      await Effect.runPromise(bridge.close());
       await rm(tempDir, { force: true, recursive: true });
     }
   });
@@ -364,7 +366,7 @@ describe("createMcpHostBridgeServer", () => {
       }),
     });
     try {
-      const connection = await bridge.ensureConnection({ repoPath: "/repo" });
+      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
       const response = await requestJson(`${connection.hostUrl}/invoke/odt_build_resumed`, {
         method: "POST",
         headers: {
@@ -383,7 +385,7 @@ describe("createMcpHostBridgeServer", () => {
         },
       ]);
     } finally {
-      await bridge.close();
+      await Effect.runPromise(bridge.close());
       await rm(tempDir, { force: true, recursive: true });
     }
   });
