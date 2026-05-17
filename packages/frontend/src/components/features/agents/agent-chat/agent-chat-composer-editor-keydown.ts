@@ -200,6 +200,7 @@ const removeTrailingLineBreak = ({
 }): boolean => {
   if (
     event.key !== "Backspace" ||
+    event.metaKey ||
     repairedSelection.caretOffset !== repairedSelection.text.length ||
     !repairedSelection.text.endsWith("\n")
   ) {

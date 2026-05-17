@@ -116,9 +116,6 @@ const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
       }
 
       const className = readExpectedTextSegmentClassName(draft, index);
-      if (!className) {
-        return "";
-      }
 
       return `<span data-segment-id="${escapeHtml(segment.id)}" data-text-segment-id="${escapeHtml(segment.id)}" class="${escapeHtml(className)}">${escapeHtml(
         renderEditableTextContent(segment.text),
@@ -137,13 +134,10 @@ const shouldRenderTextSegment = (draft: AgentChatComposerDraft, index: number): 
   return !(segment.text.trim().length === 0 && nextSegment != null && nextSegment.kind !== "text");
 };
 
-const readExpectedTextSegmentClassName = (
-  draft: AgentChatComposerDraft,
-  index: number,
-): string | null => {
+const readExpectedTextSegmentClassName = (draft: AgentChatComposerDraft, index: number): string => {
   const segment = draft.segments[index];
   if (!segment || segment.kind !== "text") {
-    return null;
+    throw new Error("Expected composer text segment when reading class name.");
   }
 
   const segmentText = segment.text.trim();
@@ -182,9 +176,6 @@ const syncComposerDomInPlace = (root: HTMLDivElement, draft: AgentChatComposerDr
 
       if (segment.kind === "text") {
         const expectedClassName = readExpectedTextSegmentClassName(draft, draftIndex);
-        if (!expectedClassName) {
-          return false;
-        }
 
         if (node.className !== expectedClassName) {
           node.className = expectedClassName;

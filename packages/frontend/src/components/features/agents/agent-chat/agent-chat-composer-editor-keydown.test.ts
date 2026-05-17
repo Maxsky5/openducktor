@@ -287,6 +287,25 @@ describe("agent-chat-composer-editor-keydown", () => {
     expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
   });
 
+  test("does not remove a trailing line break on command backspace", () => {
+    const sourceDraft = createDraft("hello\n", "segment-1");
+    const repairedSelection = createActiveSelection({
+      segmentId: "segment-1",
+      text: "hello\n",
+      caretOffset: 6,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      metaKey: true,
+      sourceDraft,
+      repairedSelection,
+    });
+
+    expect(setup.handled()).toBe(false);
+    expect(setup.event.preventDefault).not.toHaveBeenCalled();
+    expect(setup.applyEditResult).not.toHaveBeenCalled();
+  });
+
   test("removes selected text before browser DOM mutation", () => {
     const sourceDraft = createDraft("hello\nworld", "segment-1");
     const selectedTextRange = createActiveSelectionRange({
