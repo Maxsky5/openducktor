@@ -3,6 +3,7 @@ import type { AgentSlashCommand } from "@openducktor/core";
 import {
   type AgentChatComposerDraft,
   createFileReferenceSegment,
+  createSlashCommandSegment,
   createTextSegment,
 } from "./agent-chat-composer-draft";
 import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
@@ -10,6 +11,7 @@ import { buildFileSearchResult } from "./agent-chat-test-fixtures";
 import type { FileMenuState } from "./use-agent-chat-composer-editor-autocomplete";
 import type {
   ActiveTextSelection,
+  ActiveTextSelectionRange,
   TextSelectionTarget,
 } from "./use-agent-chat-composer-editor-selection";
 
@@ -32,6 +34,7 @@ type KeyDownTestSetupOverrides = {
   metaKey?: boolean;
   ctrlKey?: boolean;
   repairedSelection?: ActiveTextSelection | null;
+  selectedTextRange?: ActiveTextSelectionRange | null;
   lineBreakTarget?: TextSelectionTarget | null;
   selectComposerContents?: boolean;
   isComposerContentFullySelected?: boolean;
@@ -64,6 +67,20 @@ const createActiveSelection = (
   ...overrides,
 });
 
+const createActiveSelectionRange = (
+  overrides: Partial<ActiveTextSelectionRange> = {},
+): ActiveTextSelectionRange => ({
+  start: {
+    segmentId: "segment-1",
+    offset: 0,
+  },
+  end: {
+    segmentId: "segment-1",
+    offset: 5,
+  },
+  ...overrides,
+});
+
 const createDraft = (text = "hello", segmentId = "segment-1"): AgentChatComposerDraft => ({
   segments: [createTextSegment(text, segmentId)],
   attachments: [],
@@ -84,6 +101,7 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
 
   const selection = {
     resolveActiveTextSelection: mock(() => repairedSelection),
+    resolveActiveTextSelectionRange: mock(() => overrides.selectedTextRange ?? null),
     resolveSelectionTargetForLineBreak: mock(() => lineBreakTarget),
     focusTextSegmentWithMemory: mock(() => true),
   };
@@ -238,6 +256,263 @@ describe("agent-chat-composer-editor-keydown", () => {
     );
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
     expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+  });
+
+  test("removes a newly inserted trailing line break before browser DOM mutation", () => {
+    const sourceDraft = createDraft("hello\n", "segment-1");
+    const repairedSelection = createActiveSelection({
+      segmentId: "segment-1",
+      text: "hello\n",
+      caretOffset: 6,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      sourceDraft,
+      repairedSelection,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "segment-1", kind: "text", text: "hello" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "segment-1",
+        offset: 5,
+      },
+    });
+    expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not remove a trailing line break on command backspace", () => {
+    const sourceDraft = createDraft("hello\n", "segment-1");
+    const repairedSelection = createActiveSelection({
+      segmentId: "segment-1",
+      text: "hello\n",
+      caretOffset: 6,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      metaKey: true,
+      sourceDraft,
+      repairedSelection,
+    });
+
+    expect(setup.handled()).toBe(false);
+    expect(setup.event.preventDefault).not.toHaveBeenCalled();
+    expect(setup.applyEditResult).not.toHaveBeenCalled();
+  });
+
+  test("removes selected text before browser DOM mutation", () => {
+    const sourceDraft = createDraft("hello\nworld", "segment-1");
+    const selectedTextRange = createActiveSelectionRange({
+      start: {
+        segmentId: "segment-1",
+        offset: 6,
+      },
+      end: {
+        segmentId: "segment-1",
+        offset: 11,
+      },
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      sourceDraft,
+      selectedTextRange,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "segment-1", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "segment-1",
+        offset: 6,
+      },
+    });
+    expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+  });
+
+  test("removes selected text with delete before browser DOM mutation", () => {
+    const sourceDraft = createDraft("hello\nworld", "segment-1");
+    const selectedTextRange = createActiveSelectionRange({
+      start: {
+        segmentId: "segment-1",
+        offset: 6,
+      },
+      end: {
+        segmentId: "segment-1",
+        offset: 11,
+      },
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Delete",
+      sourceDraft,
+      selectedTextRange,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "segment-1", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "segment-1",
+        offset: 6,
+      },
+    });
+  });
+
+  test("removes selected text and file chips before browser DOM mutation", () => {
+    const file = buildFileSearchResult({ path: "src/main.ts", name: "main.ts" });
+    const sourceDraft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("hello\n", "text-before"),
+        createFileReferenceSegment(file, "file-1"),
+        createTextSegment("world", "text-after"),
+      ],
+      attachments: [],
+    };
+    const selectedTextRange = createActiveSelectionRange({
+      start: {
+        segmentId: "text-before",
+        offset: 6,
+      },
+      end: {
+        segmentId: "text-after",
+        offset: 5,
+      },
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      sourceDraft,
+      selectedTextRange,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "text-before", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "text-before",
+        offset: 6,
+      },
+    });
+    expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+  });
+
+  test("removes current line text with command backspace before browser DOM mutation", () => {
+    const sourceDraft = createDraft("hello\nworld", "segment-1");
+    const repairedSelection = createActiveSelection({
+      segmentId: "segment-1",
+      text: "hello\nworld",
+      caretOffset: 11,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      metaKey: true,
+      sourceDraft,
+      repairedSelection,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "segment-1", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "segment-1",
+        offset: 6,
+      },
+    });
+    expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+  });
+
+  test("removes file chips on the current line with command backspace", () => {
+    const file = buildFileSearchResult({ path: "src/main.ts", name: "main.ts" });
+    const sourceDraft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("hello\n", "text-before"),
+        createFileReferenceSegment(file, "file-1"),
+        createTextSegment("world", "text-after"),
+      ],
+      attachments: [],
+    };
+    const repairedSelection = createActiveSelection({
+      segmentId: "text-after",
+      text: "world",
+      caretOffset: 5,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      metaKey: true,
+      sourceDraft,
+      repairedSelection,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "text-before", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "text-before",
+        offset: 6,
+      },
+    });
+  });
+
+  test("removes slash chips on the current line with command backspace", () => {
+    const sourceDraft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("hello\n", "text-before"),
+        createSlashCommandSegment(slashCommand, "slash-1"),
+        createTextSegment("world", "text-after"),
+      ],
+      attachments: [],
+    };
+    const repairedSelection = createActiveSelection({
+      segmentId: "text-after",
+      text: "world",
+      caretOffset: 5,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      metaKey: true,
+      sourceDraft,
+      repairedSelection,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "text-before", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "text-before",
+        offset: 6,
+      },
+    });
   });
 
   test("preserves focus on empty-composer backspace when nothing meaningful remains", () => {

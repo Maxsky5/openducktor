@@ -13,6 +13,7 @@ import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fi
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
 let actualComposerSelectionModule: typeof import("./agent-chat-composer-selection");
+const COMPOSER_WAIT_TIMEOUT_MS = 1000;
 const renderMockEditableTextContent = (text: string): string => {
   if (text.length === 0) {
     return "\u200B";
@@ -197,10 +198,13 @@ const collapseSelectionOnEditorRoot = (container: HTMLElement): HTMLElement => {
 };
 
 const expectComposerText = async (container: HTMLElement, text: string): Promise<void> => {
-  await waitFor(() => {
-    const contentRoot = container.querySelector("[data-composer-content-root]");
-    expect((contentRoot?.textContent ?? "").replace(/\u200B/g, "")).toBe(text);
-  });
+  await waitFor(
+    () => {
+      const contentRoot = container.querySelector("[data-composer-content-root]");
+      expect((contentRoot?.textContent ?? "").replace(/\u200B/g, "")).toBe(text);
+    },
+    { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+  );
 };
 
 const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
@@ -218,6 +222,24 @@ const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
 
   fireEvent.input(editable);
   return getLastTextSegment(container);
+};
+
+const selectTextSegmentRange = (
+  textSegment: HTMLElement,
+  startOffset: number,
+  endOffset: number,
+): void => {
+  const textNode = textSegment.firstChild;
+  if (!(textNode instanceof Text)) {
+    throw new Error("Expected text node in composer text segment");
+  }
+
+  const range = document.createRange();
+  range.setStart(textNode, startOffset);
+  range.setEnd(textNode, endOffset);
+  const selection = globalThis.getSelection?.();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
 };
 
 const selectAllComposerContents = (container: HTMLElement): HTMLElement => {
@@ -1105,9 +1127,82 @@ describe("AgentChatComposerEditor", () => {
     const editable = typeIntoEditor(rendered.container, "hello");
     fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
 
-    await waitFor(() => {
-      expect(getLastTextSegment(rendered.container).textContent).toBe("hello\n\u200B");
-    });
+    await waitFor(
+      () => {
+        expect(getLastTextSegment(rendered.container).textContent).toBe("hello\n\u200B");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+  });
+
+  test("anchors the trailing blank line after shift-enter with normal line geometry", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+
+    await waitFor(
+      () => {
+        const textSegment = getLastTextSegment(rendered.container);
+        expect(textSegment.textContent).toBe("hello\n\u200B");
+        expect(textSegment.className).toContain("after:inline-block");
+        expect(textSegment.className).toContain("after:h-6");
+        expect(textSegment.className).toContain("after:w-px");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+  });
+
+  test("removes a shift-enter trailing blank line with one backspace", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+
+    await expectComposerText(rendered.container, "hello\n");
+    const textSegment = getLastTextSegment(rendered.container);
+    setCaretOffsetWithinElementMock(textSegment, 6);
+    fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace" });
+
+    await expectComposerText(rendered.container, "hello");
+    expect(getLastTextSegment(rendered.container).className).not.toContain("after:w-px");
+  });
+
+  test("removes current line text with command backspace without adding an extra row", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+    await expectComposerText(rendered.container, "hello\n");
+
+    typeIntoEditor(rendered.container, "hello\nworld");
+    fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace", metaKey: true });
+
+    await expectComposerText(rendered.container, "hello\n");
+    const textSegment = getLastTextSegment(rendered.container);
+    expect(textSegment.textContent).toBe("hello\n\u200B");
+    expect(textSegment.className).toContain("after:w-px");
+  });
+
+  test("removes selected current-line text without adding an extra row", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+    await expectComposerText(rendered.container, "hello\n");
+
+    const textSegment = typeIntoEditor(rendered.container, "hello\nworld");
+    selectTextSegmentRange(textSegment, 6, 11);
+    fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace" });
+
+    await expectComposerText(rendered.container, "hello\n");
+    const updatedTextSegment = getLastTextSegment(rendered.container);
+    expect(updatedTextSegment.textContent).toBe("hello\n\u200B");
+    expect(updatedTextSegment.className).toContain("after:w-px");
   });
 
   test("renders empty trailing text segments as inline blocks for caret placement after slash chips", async () => {
@@ -1115,35 +1210,47 @@ describe("AgentChatComposerEditor", () => {
 
     const editable = typeIntoEditor(rendered.container, "/");
     fireEvent.keyUp(editable, { key: "/" });
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
     fireEvent.keyDown(editable, { key: "Enter" });
 
-    await waitFor(() => {
-      expect(rendered.container.querySelector("[data-chip-segment-id]")).toBeTruthy();
-      const editables = Array.from(rendered.container.querySelectorAll("[data-text-segment-id]"));
-      expect(editables).toHaveLength(1);
-      const trailingEditable = editables[0];
-      expect(trailingEditable?.className).toContain("inline-block");
-      expect(trailingEditable?.className).toContain("min-w-[1px]");
-    });
+    await waitFor(
+      () => {
+        expect(rendered.container.querySelector("[data-chip-segment-id]")).toBeTruthy();
+        const editables = Array.from(rendered.container.querySelectorAll("[data-text-segment-id]"));
+        expect(editables).toHaveLength(1);
+        const trailingEditable = editables[0];
+        expect(trailingEditable?.className).toContain("inline-block");
+        expect(trailingEditable?.className).toContain("min-w-[1px]");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
   });
 
   test("does not replace the trailing text segment after typing after a slash chip", async () => {
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
     const editable = typeIntoEditor(rendered.container, "/");
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
     fireEvent.keyDown(editable, { key: "Enter" });
 
-    await waitFor(() => {
-      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
-        "/compact",
-      );
-    });
+    await waitFor(
+      () => {
+        expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+          "/compact",
+        );
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
 
     const originalTrailingEditable =
       rendered.container.querySelectorAll("[data-text-segment-id]")[0];
@@ -1164,12 +1271,15 @@ describe("AgentChatComposerEditor", () => {
 
     fireEvent.input(originalTrailingEditable);
 
-    await waitFor(() => {
-      const updatedTrailingEditable =
-        rendered.container.querySelectorAll("[data-text-segment-id]")[0];
-      expect(updatedTrailingEditable).toBe(originalTrailingEditable);
-      expect(updatedTrailingEditable?.textContent).toBe(" after");
-    });
+    await waitFor(
+      () => {
+        const updatedTrailingEditable =
+          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        expect(updatedTrailingEditable).toBe(originalTrailingEditable);
+        expect(updatedTrailingEditable?.textContent).toBe(" after");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
   });
 
   test("does not refocus the caret on printable keyup after a slash chip when selection is transiently on the root", async () => {
@@ -1177,16 +1287,22 @@ describe("AgentChatComposerEditor", () => {
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
     const editable = typeIntoEditor(rendered.container, "/");
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /compact the current session/i })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
     fireEvent.keyDown(editable, { key: "Enter" });
 
-    await waitFor(() => {
-      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
-        "/compact",
-      );
-    });
+    await waitFor(
+      () => {
+        expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+          "/compact",
+        );
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
 
     const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
     if (!(trailingEditable instanceof HTMLElement)) {
@@ -1230,18 +1346,285 @@ describe("AgentChatComposerEditor", () => {
     );
 
     const editable = typeIntoEditor(rendered.container, "@");
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
     fireEvent.keyDown(editable, { key: "Enter" });
 
-    await waitFor(() => {
-      const editables = Array.from(rendered.container.querySelectorAll("[data-text-segment-id]"));
-      expect(editables).toHaveLength(1);
-      const trailingEditable = editables[0];
-      expect(trailingEditable?.className).toContain("inline-block");
-      expect(trailingEditable?.className).toContain("min-w-[1px]");
-    });
+    await waitFor(
+      () => {
+        const editables = Array.from(rendered.container.querySelectorAll("[data-text-segment-id]"));
+        expect(editables).toHaveLength(1);
+        const trailingEditable = editables[0];
+        expect(trailingEditable?.className).toContain("inline-block");
+        expect(trailingEditable?.className).toContain("min-w-[1px]");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+  });
+
+  test("keeps shift-enter newlines after file chips in normal inline flow", async () => {
+    resetSelectionMocks();
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "@");
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(
+      () => {
+        expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+          "main.ts",
+        );
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+
+    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    if (!(trailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    fireEvent.keyDown(trailingEditable, { key: "Enter", shiftKey: true });
+
+    await waitFor(
+      () => {
+        const updatedTrailingEditable =
+          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
+        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
+        const classNames = (updatedTrailingEditable as HTMLElement).className.split(/\s+/);
+        expect(classNames).toContain("inline");
+        expect(classNames).not.toContain("inline-block");
+        expect(classNames).not.toContain("min-w-[1px]");
+        expect(classNames).toContain("after:w-px");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+  });
+
+  test("removes a shift-enter trailing blank line after file chips with one backspace", async () => {
+    resetSelectionMocks();
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "@");
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(
+      () => {
+        expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+          "main.ts",
+        );
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+
+    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    if (!(trailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    fireEvent.keyDown(trailingEditable, { key: "Enter", shiftKey: true });
+    await waitFor(
+      () => {
+        const updatedTrailingEditable =
+          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+
+    const lineBreakEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    if (!(lineBreakEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment after line break");
+    }
+    setCaretOffsetWithinElementMock(lineBreakEditable, 1);
+    fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace" });
+
+    await waitFor(
+      () => {
+        const updatedTrailingEditable =
+          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
+        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\u200B");
+        expect((updatedTrailingEditable as HTMLElement).className).toContain("inline-block");
+        expect((updatedTrailingEditable as HTMLElement).className).not.toContain("after:w-px");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+  });
+
+  test("removes current line text after file chips with command backspace without adding an extra row", async () => {
+    resetSelectionMocks();
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "@");
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(
+      () => {
+        expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+          "main.ts",
+        );
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+
+    typeIntoEditor(rendered.container, "\nworld");
+    fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace", metaKey: true });
+
+    await waitFor(
+      () => {
+        const updatedTrailingEditable =
+          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
+        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
+        expect((updatedTrailingEditable as HTMLElement).className).toContain("after:w-px");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+  });
+
+  test("removes a current line containing a file reference with command backspace", async () => {
+    resetSelectionMocks();
+    const file = buildFileSearchResult({ path: "src/main.ts", name: "main.ts" });
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={{
+          segments: [
+            createTextSegment("hello\n", "text-before"),
+            createFileReferenceSegment(file, "file-chip"),
+            createTextSegment("world", "text-after"),
+          ],
+          attachments: [],
+        }}
+      />,
+    );
+
+    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[1];
+    if (!(trailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+    setCaretOffsetWithinElementMock(trailingEditable, 5);
+    fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace", metaKey: true });
+
+    await expectComposerText(rendered.container, "hello\n");
+    expect(rendered.container.querySelector("[data-chip-segment-id]")).toBeNull();
+    const textSegment = getLastTextSegment(rendered.container);
+    expect(textSegment.textContent).toBe("hello\n\u200B");
+    expect(textSegment.className).toContain("after:w-px");
+  });
+
+  test("removes selected current-line text after file chips without adding an extra row", async () => {
+    resetSelectionMocks();
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "@");
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(
+      () => {
+        expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+          "main.ts",
+        );
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+
+    const trailingEditable = typeIntoEditor(rendered.container, "\nworld");
+    selectTextSegmentRange(trailingEditable, 1, 6);
+    fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace" });
+
+    await waitFor(
+      () => {
+        const updatedTrailingEditable =
+          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
+        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
+        expect((updatedTrailingEditable as HTMLElement).className).toContain("after:w-px");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+  });
+
+  test("removes a selected line containing a file reference without adding an extra row", async () => {
+    resetSelectionMocks();
+    const file = buildFileSearchResult({ path: "src/main.ts", name: "main.ts" });
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={{
+          segments: [
+            createTextSegment("hello\n", "text-before"),
+            createFileReferenceSegment(file, "file-chip"),
+            createTextSegment("world", "text-after"),
+          ],
+          attachments: [],
+        }}
+      />,
+    );
+
+    const editorRoot = selectRangeAcrossTextSegments(rendered.container, 6, 5);
+    fireEvent.keyDown(editorRoot, { key: "Backspace" });
+
+    await expectComposerText(rendered.container, "hello\n");
+    expect(rendered.container.querySelector("[data-chip-segment-id]")).toBeNull();
+    const textSegment = getLastTextSegment(rendered.container);
+    expect(textSegment.textContent).toBe("hello\n\u200B");
+    expect(textSegment.className).toContain("after:w-px");
   });
 
   test("switches the trailing text segment back to inline after typing after a file chip", async () => {

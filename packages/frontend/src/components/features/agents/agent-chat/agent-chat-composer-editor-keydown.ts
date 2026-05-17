@@ -8,13 +8,17 @@ import {
 import type { FileMenuState, SlashMenuState } from "./use-agent-chat-composer-editor-autocomplete";
 import type {
   ActiveTextSelection,
+  ActiveTextSelectionRange,
   TextSelectionTarget,
   UseAgentChatComposerEditorSelectionResult,
 } from "./use-agent-chat-composer-editor-selection";
 
 type KeyDownSelection = Pick<
   UseAgentChatComposerEditorSelectionResult,
-  "resolveActiveTextSelection" | "resolveSelectionTargetForLineBreak" | "focusTextSegmentWithMemory"
+  | "resolveActiveTextSelection"
+  | "resolveActiveTextSelectionRange"
+  | "resolveSelectionTargetForLineBreak"
+  | "focusTextSegmentWithMemory"
 >;
 
 type HandleComposerEditorKeyDownArgs = {
@@ -179,6 +183,177 @@ const removeAdjacentChip = ({
   return true;
 };
 
+const removeTrailingLineBreak = ({
+  event,
+  sourceDraft,
+  repairedSelection,
+  applyEditResult,
+  closeSlashMenu,
+  closeFileMenu,
+}: {
+  event: ReactKeyboardEvent<HTMLDivElement>;
+  sourceDraft: AgentChatComposerDraft;
+  repairedSelection: ActiveTextSelection;
+  applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
+  closeSlashMenu: () => void;
+  closeFileMenu: () => void;
+}): boolean => {
+  if (
+    event.key !== "Backspace" ||
+    event.metaKey ||
+    repairedSelection.caretOffset !== repairedSelection.text.length ||
+    !repairedSelection.text.endsWith("\n")
+  ) {
+    return false;
+  }
+
+  event.preventDefault();
+  const nextText = repairedSelection.text.slice(0, -1);
+  const didApply = applyEditResult(
+    applyComposerDraftEdit(sourceDraft, {
+      type: "update_text",
+      segmentId: repairedSelection.segmentId,
+      text: nextText,
+      caretOffset: nextText.length,
+    }),
+  );
+  if (didApply) {
+    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu });
+  }
+  return true;
+};
+
+const resolveCurrentLineStart = (
+  sourceDraft: AgentChatComposerDraft,
+  repairedSelection: ActiveTextSelection,
+  boundedCaretOffset: number,
+): TextSelectionTarget | null => {
+  const currentIndex = sourceDraft.segments.findIndex(
+    (segment) => segment.id === repairedSelection.segmentId,
+  );
+  const currentSegment = sourceDraft.segments[currentIndex];
+  if (!currentSegment || currentSegment.kind !== "text") {
+    return null;
+  }
+
+  const segmentLineStart = currentSegment.text.lastIndexOf("\n", boundedCaretOffset - 1) + 1;
+  if (segmentLineStart > 0) {
+    return {
+      segmentId: currentSegment.id,
+      offset: segmentLineStart,
+    };
+  }
+
+  let lineStart: TextSelectionTarget = {
+    segmentId: currentSegment.id,
+    offset: 0,
+  };
+  for (let index = currentIndex - 1; index >= 0; index -= 1) {
+    const segment = sourceDraft.segments[index];
+    if (segment?.kind !== "text") {
+      continue;
+    }
+
+    const previousLineBreakOffset = segment.text.lastIndexOf("\n");
+    lineStart = {
+      segmentId: segment.id,
+      offset: previousLineBreakOffset + 1,
+    };
+    if (previousLineBreakOffset >= 0) {
+      return lineStart;
+    }
+  }
+
+  return lineStart;
+};
+
+const removeCurrentLineText = ({
+  event,
+  sourceDraft,
+  repairedSelection,
+  applyEditResult,
+  closeSlashMenu,
+  closeFileMenu,
+}: {
+  event: ReactKeyboardEvent<HTMLDivElement>;
+  sourceDraft: AgentChatComposerDraft;
+  repairedSelection: ActiveTextSelection;
+  applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
+  closeSlashMenu: () => void;
+  closeFileMenu: () => void;
+}): boolean => {
+  if (event.key !== "Backspace" || !event.metaKey || repairedSelection.caretOffset === null) {
+    return false;
+  }
+
+  const boundedCaretOffset = Math.max(
+    0,
+    Math.min(repairedSelection.caretOffset, repairedSelection.text.length),
+  );
+  const lineStart = resolveCurrentLineStart(sourceDraft, repairedSelection, boundedCaretOffset);
+  if (
+    !lineStart ||
+    (lineStart.segmentId === repairedSelection.segmentId && lineStart.offset >= boundedCaretOffset)
+  ) {
+    return false;
+  }
+
+  event.preventDefault();
+  const didApply = applyEditResult(
+    applyComposerDraftEdit(sourceDraft, {
+      type: "remove_segment_range",
+      startTextSegmentId: lineStart.segmentId,
+      startOffset: lineStart.offset,
+      endTextSegmentId: repairedSelection.segmentId,
+      endOffset: boundedCaretOffset,
+    }),
+  );
+  if (didApply) {
+    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu });
+  }
+  return true;
+};
+
+const removeSelectedTextRange = ({
+  event,
+  sourceDraft,
+  selectedRange,
+  applyEditResult,
+  closeSlashMenu,
+  closeFileMenu,
+}: {
+  event: ReactKeyboardEvent<HTMLDivElement>;
+  sourceDraft: AgentChatComposerDraft;
+  selectedRange: ActiveTextSelectionRange | null;
+  applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
+  closeSlashMenu: () => void;
+  closeFileMenu: () => void;
+}): boolean => {
+  if (
+    !selectedRange ||
+    (event.key !== "Backspace" && event.key !== "Delete") ||
+    (selectedRange.start.segmentId === selectedRange.end.segmentId &&
+      selectedRange.start.offset >= selectedRange.end.offset)
+  ) {
+    return false;
+  }
+
+  event.preventDefault();
+  const didApply = applyEditResult(
+    applyComposerDraftEdit(sourceDraft, {
+      type: "remove_segment_range",
+      startTextSegmentId: selectedRange.start.segmentId,
+      startOffset: selectedRange.start.offset,
+      endTextSegmentId: selectedRange.end.segmentId,
+      endOffset: selectedRange.end.offset,
+    }),
+  );
+  if (didApply) {
+    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu });
+  }
+  return true;
+};
+
 export const handleComposerEditorKeyDown = ({
   event,
   root,
@@ -273,6 +448,19 @@ export const handleComposerEditorKeyDown = ({
     return true;
   }
 
+  if (
+    removeSelectedTextRange({
+      event,
+      sourceDraft,
+      selectedRange: selection.resolveActiveTextSelectionRange(root, sourceDraft),
+      applyEditResult,
+      closeSlashMenu,
+      closeFileMenu,
+    })
+  ) {
+    return true;
+  }
+
   const repairedSelection =
     activeSelection ?? selection.resolveActiveTextSelection(root, sourceDraft);
   if (!repairedSelection) {
@@ -286,6 +474,32 @@ export const handleComposerEditorKeyDown = ({
   ) {
     event.preventDefault();
     selection.focusTextSegmentWithMemory(repairedSelection.segmentId, 0, sourceDraft);
+    return true;
+  }
+
+  if (
+    removeCurrentLineText({
+      event,
+      sourceDraft,
+      repairedSelection,
+      applyEditResult,
+      closeSlashMenu,
+      closeFileMenu,
+    })
+  ) {
+    return true;
+  }
+
+  if (
+    removeTrailingLineBreak({
+      event,
+      sourceDraft,
+      repairedSelection,
+      applyEditResult,
+      closeSlashMenu,
+      closeFileMenu,
+    })
+  ) {
     return true;
   }
 

@@ -25,6 +25,7 @@ const buildDraft = (text: string, segmentId = "segment-1") => ({
 
 const appendTextSegment = (root: HTMLElement, segmentId: string, text: string): HTMLDivElement => {
   const element = document.createElement("div");
+  element.dataset.segmentId = segmentId;
   element.dataset.textSegmentId = segmentId;
   element.textContent = text;
   root.append(element);

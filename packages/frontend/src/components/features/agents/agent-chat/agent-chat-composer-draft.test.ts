@@ -196,6 +196,36 @@ describe("applyComposerDraftEdit", () => {
     });
   });
 
+  test("removes a selected range spanning a file reference", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("hello\n", "text-before"),
+        createFileReferenceSegment(FILE, "file-1"),
+        createTextSegment("world", "text-after"),
+      ],
+      attachments: [],
+    };
+
+    const result = applyComposerDraftEdit(draft, {
+      type: "remove_segment_range",
+      startTextSegmentId: "text-before",
+      startOffset: 6,
+      endTextSegmentId: "text-after",
+      endOffset: 5,
+    });
+
+    expect(result).toEqual({
+      draft: {
+        segments: [expect.objectContaining({ id: "text-before", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "text-before",
+        offset: 6,
+      },
+    });
+  });
+
   test("preserves the existing trailing text segment id when normalizing text after a file chip", () => {
     const draft: AgentChatComposerDraft = {
       segments: [

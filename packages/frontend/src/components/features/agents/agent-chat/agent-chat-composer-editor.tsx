@@ -46,6 +46,10 @@ const buildComposerFileReferenceChipMarkup = (
 
 const COMPOSER_FILE_REFERENCE_TOOLTIP_OFFSET = 8;
 const COMPOSER_FILE_REFERENCE_TOOLTIP_TOP_MINIMUM = 40;
+const COMPOSER_TEXT_SEGMENT_BASE_CLASS_NAME =
+  "whitespace-pre-wrap break-words align-middle leading-6 outline-none";
+const COMPOSER_TEXT_SEGMENT_TRAILING_LINE_CLASS_NAME =
+  "after:inline-block after:h-6 after:w-px after:align-bottom after:content-['']";
 
 type ComposerFileReferenceTooltipState = {
   path: string;
@@ -111,12 +115,7 @@ const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
         return "";
       }
 
-      const className = cn(
-        "whitespace-pre-wrap break-words align-middle leading-6 outline-none",
-        segmentText.length === 0 && draft.segments[index - 1]?.kind !== "text"
-          ? "inline-block min-w-[1px]"
-          : "inline",
-      );
+      const className = readExpectedTextSegmentClassName(draft, index);
 
       return `<span data-segment-id="${escapeHtml(segment.id)}" data-text-segment-id="${escapeHtml(segment.id)}" class="${escapeHtml(className)}">${escapeHtml(
         renderEditableTextContent(segment.text),
@@ -135,21 +134,20 @@ const shouldRenderTextSegment = (draft: AgentChatComposerDraft, index: number): 
   return !(segment.text.trim().length === 0 && nextSegment != null && nextSegment.kind !== "text");
 };
 
-const readExpectedTextSegmentClassName = (
-  draft: AgentChatComposerDraft,
-  index: number,
-): string | null => {
+const readExpectedTextSegmentClassName = (draft: AgentChatComposerDraft, index: number): string => {
   const segment = draft.segments[index];
   if (!segment || segment.kind !== "text") {
-    return null;
+    throw new Error("Expected composer text segment when reading class name.");
   }
 
   const segmentText = segment.text.trim();
+  const hasTrailingBlankLine = segment.text.endsWith("\n");
+  const isEmptyAfterChip =
+    segmentText.length === 0 && !hasTrailingBlankLine && draft.segments[index - 1]?.kind !== "text";
   return cn(
-    "whitespace-pre-wrap break-words align-middle leading-6 outline-none",
-    segmentText.length === 0 && draft.segments[index - 1]?.kind !== "text"
-      ? "inline-block min-w-[1px]"
-      : "inline",
+    COMPOSER_TEXT_SEGMENT_BASE_CLASS_NAME,
+    isEmptyAfterChip ? "inline-block min-w-[1px]" : "inline",
+    hasTrailingBlankLine && COMPOSER_TEXT_SEGMENT_TRAILING_LINE_CLASS_NAME,
   );
 };
 
@@ -178,9 +176,6 @@ const syncComposerDomInPlace = (root: HTMLDivElement, draft: AgentChatComposerDr
 
       if (segment.kind === "text") {
         const expectedClassName = readExpectedTextSegmentClassName(draft, draftIndex);
-        if (!expectedClassName) {
-          return false;
-        }
 
         if (node.className !== expectedClassName) {
           node.className = expectedClassName;

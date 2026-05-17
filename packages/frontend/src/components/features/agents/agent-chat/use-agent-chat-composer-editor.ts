@@ -123,8 +123,8 @@ export const useAgentChatComposerEditor = ({
       onEditorInput();
 
       if (result.focusTarget) {
-        const didFocus = focusTextSegment(result.focusTarget.segmentId, result.focusTarget.offset);
-        setPendingFocusTarget(didFocus ? null : result.focusTarget);
+        focusTextSegment(result.focusTarget.segmentId, result.focusTarget.offset);
+        setPendingFocusTarget(result.focusTarget);
       } else {
         setPendingFocusTarget(null);
       }

@@ -9,21 +9,27 @@ import {
 } from "./agent-chat-composer-draft";
 import {
   getCaretOffsetWithinElement,
+  getClosestTextSegmentElement,
   getComposerContentRoot,
   readEditableTextContent,
   setCaretOffsetWithinElement,
 } from "./agent-chat-composer-selection";
+import {
+  type ActiveTextSelectionRange,
+  readComposerSelectionRange,
+  type TextSelectionTarget,
+} from "./agent-chat-composer-selection-range";
+
+export type {
+  ActiveTextSelectionRange,
+  TextSelectionTarget,
+} from "./agent-chat-composer-selection-range";
 
 export type ActiveTextSelection = {
   segmentId: string;
   element: HTMLElement;
   text: string;
   caretOffset: number | null;
-};
-
-export type TextSelectionTarget = {
-  segmentId: string;
-  offset: number;
 };
 
 export type PendingInputState = TextSelectionTarget & {
@@ -142,15 +148,6 @@ export const deriveTextSelectionTargetAfterInput = (
   return rememberedTarget;
 };
 
-const getClosestTextSegmentElement = (node: Node | null, root: HTMLElement): HTMLElement | null => {
-  const element = node instanceof HTMLElement ? node : (node?.parentElement ?? null);
-  const textSegment = element?.closest<HTMLElement>("[data-text-segment-id]") ?? null;
-  if (!textSegment || !root.contains(textSegment)) {
-    return null;
-  }
-  return textSegment;
-};
-
 export const readActiveTextSelection = (
   root: HTMLElement,
   eventTarget?: EventTarget | null,
@@ -253,6 +250,10 @@ export type UseAgentChatComposerEditorSelectionResult = {
     sourceDraft: AgentChatComposerDraft,
     eventTarget?: EventTarget | null,
   ) => ActiveTextSelection | null;
+  resolveActiveTextSelectionRange: (
+    root: HTMLDivElement,
+    sourceDraft: AgentChatComposerDraft,
+  ) => ActiveTextSelectionRange | null;
   resolveSelectionTargetForLineBreak: (
     root: HTMLDivElement,
     sourceDraft: AgentChatComposerDraft,
@@ -420,6 +421,13 @@ export const useAgentChatComposerEditorSelection = ({
     [repairCollapsedSelection],
   );
 
+  const resolveActiveTextSelectionRange = useCallback(
+    (root: HTMLDivElement, sourceDraft: AgentChatComposerDraft) => {
+      return readComposerSelectionRange(root, sourceDraft);
+    },
+    [],
+  );
+
   const resolveSelectionTargetForLineBreak = useCallback(
     (
       root: HTMLDivElement,
@@ -476,6 +484,7 @@ export const useAgentChatComposerEditorSelection = ({
     focusTextSegment,
     setPendingFocusTarget,
     resolveActiveTextSelection,
+    resolveActiveTextSelectionRange,
     resolveSelectionTargetForLineBreak,
     focusTextSegmentWithMemory,
     focusLastTextSegment,

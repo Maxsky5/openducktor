@@ -111,6 +111,13 @@ export type AgentChatComposerDraftEdit =
   | {
       type: "remove_file_reference";
       segmentId: string;
+    }
+  | {
+      type: "remove_segment_range";
+      startTextSegmentId: string;
+      startOffset: number;
+      endTextSegmentId: string;
+      endOffset: number;
     };
 
 export type AgentChatComposerDraftEditResult = {
@@ -313,6 +320,51 @@ export const removeFileReferenceSegmentFromDraft = (
   return removeNonTextSegmentFromDraft(draft, segmentId, "file_reference");
 };
 
+const removeSegmentRangeFromDraft = (
+  draft: AgentChatComposerDraft,
+  startTextSegmentId: string,
+  startOffset: number,
+  endTextSegmentId: string,
+  endOffset: number,
+): AgentChatComposerDraftEditResult | null => {
+  const startIndex = draft.segments.findIndex((segment) => segment.id === startTextSegmentId);
+  const endIndex = draft.segments.findIndex((segment) => segment.id === endTextSegmentId);
+  const startSegment = draft.segments[startIndex];
+  const endSegment = draft.segments[endIndex];
+  if (
+    startIndex < 0 ||
+    endIndex < startIndex ||
+    startSegment?.kind !== "text" ||
+    endSegment?.kind !== "text"
+  ) {
+    return null;
+  }
+
+  const boundedStartOffset = Math.max(0, Math.min(startOffset, startSegment.text.length));
+  const boundedEndOffset = Math.max(0, Math.min(endOffset, endSegment.text.length));
+  if (startIndex === endIndex && boundedStartOffset >= boundedEndOffset) {
+    return null;
+  }
+
+  const mergedText = `${startSegment.text.slice(0, boundedStartOffset)}${endSegment.text.slice(
+    boundedEndOffset,
+  )}`;
+  const segments = draft.segments.slice();
+  segments.splice(
+    startIndex,
+    endIndex - startIndex + 1,
+    createTextSegment(mergedText, startSegment.id),
+  );
+
+  return {
+    draft: withDraftSegments(draft, segments),
+    focusTarget: {
+      segmentId: startSegment.id,
+      offset: boundedStartOffset,
+    },
+  };
+};
+
 export const replaceTextRangeWithSlashCommand = (
   draft: AgentChatComposerDraft,
   textSegmentId: string,
@@ -427,6 +479,14 @@ export const applyComposerDraftEdit = (
       return removeSlashCommandSegmentFromDraft(draft, edit.segmentId);
     case "remove_file_reference":
       return removeFileReferenceSegmentFromDraft(draft, edit.segmentId);
+    case "remove_segment_range":
+      return removeSegmentRangeFromDraft(
+        draft,
+        edit.startTextSegmentId,
+        edit.startOffset,
+        edit.endTextSegmentId,
+        edit.endOffset,
+      );
   }
 };
 
