@@ -8,6 +8,7 @@ This folder contains the project documentation that explains how OpenDucktor is 
 - [architecture-overview.md](architecture-overview.md): high-level map of the system and how data moves across layers.
 - [runtime-integration-guide.md](runtime-integration-guide.md): how runtimes fit into OpenDucktor and what a new runtime integration requires.
 - [web-runner.md](web-runner.md): local browser runner architecture, command usage, and package/release expectations.
+- [adr/](adr/): architecture decision records explaining durable technical choices and rejected alternatives.
 
 ## Workflow Docs
 
