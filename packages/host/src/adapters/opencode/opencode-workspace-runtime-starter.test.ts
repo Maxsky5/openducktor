@@ -274,6 +274,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
 
   test("reports OpenCode process-tree cleanup failures", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-cleanup-failure-"));
+    let runtimePid: number | null = null;
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
@@ -292,7 +293,8 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         portAllocator: async () => 43123,
         portProbe: async () => true,
         runtimeId: () => "runtime-failure",
-        processTreeTerminator: async () => {
+        processTreeTerminator: async ({ pid }) => {
+          runtimePid = pid;
           throw new Error("process tree stayed alive");
         },
       });
@@ -306,6 +308,9 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
 
       await expect(handle.stop()).rejects.toThrow("process tree stayed alive");
     } finally {
+      if (runtimePid !== null && processIsAlive(runtimePid)) {
+        process.kill(runtimePid, "SIGKILL");
+      }
       await removeTestDirectory(root);
     }
   });
