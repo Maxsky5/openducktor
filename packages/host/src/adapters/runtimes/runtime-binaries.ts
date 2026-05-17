@@ -12,6 +12,12 @@ export type RuntimeBinaryResolutionOptions = {
   resourcesPath?: string | null;
 };
 
+type RuntimeBinaryResolutionContext = {
+  platform: NodeJS.Platform;
+  homeDir: string;
+  resourcesPath: string | null | undefined;
+};
+
 const stripMatchingQuotes = (value: string): string => {
   if (value.length < 2) {
     return value;
@@ -76,11 +82,7 @@ const processResourcesPath = (configuredResourcesPath?: string | null): string |
 const resolveBundledCommand = async (
   command: string,
   env: NodeJS.ProcessEnv,
-  options: {
-    platform: NodeJS.Platform;
-    homeDir: string;
-    resourcesPath: string | null | undefined;
-  },
+  options: RuntimeBinaryResolutionContext,
 ): Promise<string | null> => {
   const configuredBinDir = env[BUNDLED_BIN_DIR_ENV];
   if (configuredBinDir !== undefined && configuredBinDir.trim().length === 0) {
@@ -133,13 +135,20 @@ const resolvePathCommand = async (
   return (await systemCommands.requiredCommandError(command)) === null ? command : null;
 };
 
+const runtimeBinaryResolutionContext = (
+  options: RuntimeBinaryResolutionOptions,
+): RuntimeBinaryResolutionContext => ({
+  platform: options.platform ?? process.platform,
+  homeDir: options.homeDir ?? homedir(),
+  resourcesPath: options.resourcesPath,
+});
+
 export const resolveOpencodeBinary = async (
   systemCommands: SystemCommandPort,
   env: NodeJS.ProcessEnv = process.env,
   options: RuntimeBinaryResolutionOptions = {},
 ): Promise<string> => {
-  const platform = options.platform ?? process.platform;
-  const homeDir = options.homeDir ?? homedir();
+  const { platform, homeDir } = runtimeBinaryResolutionContext(options);
   const overrideBinary = env.OPENDUCKTOR_OPENCODE_BINARY;
   if (overrideBinary !== undefined) {
     if (overrideBinary.trim().length === 0) {
@@ -180,8 +189,8 @@ export const resolveCodexBinary = async (
   env: NodeJS.ProcessEnv = process.env,
   options: RuntimeBinaryResolutionOptions = {},
 ): Promise<string> => {
-  const platform = options.platform ?? process.platform;
-  const homeDir = options.homeDir ?? homedir();
+  const context = runtimeBinaryResolutionContext(options);
+  const { platform, homeDir } = context;
   const overrideBinary = env.OPENDUCKTOR_CODEX_BINARY;
   if (overrideBinary !== undefined) {
     if (overrideBinary.trim().length === 0) {
@@ -197,9 +206,7 @@ export const resolveCodexBinary = async (
   }
 
   const bundled = await resolveBundledCommand("codex", env, {
-    platform,
-    homeDir,
-    resourcesPath: options.resourcesPath,
+    ...context,
   });
   if (bundled !== null) {
     return bundled;
@@ -210,7 +217,7 @@ export const resolveCodexBinary = async (
     return pathCommand;
   }
 
-  const resourcesPath = processResourcesPath(options.resourcesPath);
+  const resourcesPath = processResourcesPath(context.resourcesPath);
   const bundledLocations = [
     `${BUNDLED_BIN_DIR_ENV}`,
     ...(resourcesPath

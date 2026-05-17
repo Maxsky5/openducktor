@@ -98,21 +98,27 @@ const quoteWindowsCommandArgument = (value: string): string => {
   return `"${value.replaceAll("^", "^^").replaceAll(`"`, `^"`)}"`;
 };
 
+const isWindowsCommandScript = (command: string, platform: NodeJS.Platform): boolean =>
+  platform === "win32" && /\.(?:cmd|bat)$/iu.test(command);
+
 export const createSystemCommandLaunch = (
   command: string,
   args: string[],
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
 ): { command: string; args: string[]; windowsVerbatimArguments?: boolean } => {
-  if (platform !== "win32" || !/\.(?:cmd|bat)$/iu.test(command)) {
+  if (!isWindowsCommandScript(command, platform)) {
     return { command, args };
   }
 
-  const shell = env.ComSpec?.trim() || process.env.ComSpec || "cmd.exe";
-  const commandLine = `"${[command, ...args].map(quoteWindowsCommandArgument).join(" ")}"`;
+  const windowsCommandShell = env.ComSpec?.trim() || process.env.ComSpec || "cmd.exe";
+  const shellOptions = ["/d", "/s", "/c"];
+  const quotedScriptInvocation = [command, ...args].map(quoteWindowsCommandArgument).join(" ");
+  const shellCommandLine = `"${quotedScriptInvocation}"`;
+
   return {
-    command: shell,
-    args: ["/d", "/s", "/c", commandLine],
+    command: windowsCommandShell,
+    args: [...shellOptions, shellCommandLine],
     windowsVerbatimArguments: true,
   };
 };

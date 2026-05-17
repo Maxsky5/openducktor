@@ -13,6 +13,7 @@ import type {
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import {
+  type ProcessTreePlatform,
   type ProcessTreeTerminator,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
@@ -49,6 +50,7 @@ export type CreateCodexWorkspaceRuntimeStarterInput = {
   stopTimeoutMs?: number;
   now?: () => Date;
   runtimeId?: () => string;
+  platform?: ProcessTreePlatform;
   processTreeTerminator?: ProcessTreeTerminator;
 };
 
@@ -129,6 +131,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
   now = () => new Date(),
   runtimeId = () => randomUUID(),
+  platform = process.platform,
   processTreeTerminator = terminateProcessTree,
 }: CreateCodexWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
@@ -150,7 +153,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
       binary,
       [...buildCodexMcpConfigArgs(resolvedMcpCommand), "app-server"],
       processEnv,
-      process.platform,
+      platform,
     );
     const nextRuntimeId = runtimeId();
     const child = spawn(command.command, command.args, {
