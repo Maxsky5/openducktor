@@ -31,6 +31,7 @@ export type CodexAppServerEventEmitter = (event: CodexAppServerStreamEvent) => v
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 const MAX_BUFFERED_STREAM_MESSAGES = 1_000;
+const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
 
 const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -57,6 +58,14 @@ const pushBoundedMessage = (messages: unknown[], message: unknown): void => {
   }
 };
 
+const appendCapturedStderr = (current: string, line: string): string => {
+  const next = current.length > 0 ? `${current}\n${line}` : line;
+  if (next.length <= MAX_CAPTURED_STDERR_BYTES) {
+    return next;
+  }
+  return next.slice(next.length - MAX_CAPTURED_STDERR_BYTES);
+};
+
 const extractErrorMessage = (value: unknown): string => {
   if (typeof value === "string") {
     return value;
@@ -79,7 +88,7 @@ export const createCodexAppServerTransport = (
   const pending = new Map<number, PendingRequest>();
   const notifications: unknown[] = [];
   const serverRequests: unknown[] = [];
-  const stderrMessages: string[] = [];
+  let stderrOutput = "";
   let stdoutClosed = false;
   let stderrClosed = false;
 
@@ -187,7 +196,7 @@ export const createCodexAppServerTransport = (
   };
 
   const processClosedError = (detail: string): Error => {
-    const stderr = stderrMessages.join("\n").trim();
+    const stderr = stderrOutput.trim();
     return new Error(
       stderr.length > 0
         ? `Codex app-server ${detail} for runtime ${runtimeId}: ${stderr}`
@@ -220,7 +229,7 @@ export const createCodexAppServerTransport = (
   const stderrLines = createInterface({ input: child.stderr });
   stderrLines.on("line", (line) => {
     if (line.trim().length > 0) {
-      stderrMessages.push(line);
+      stderrOutput = appendCapturedStderr(stderrOutput, line);
     }
   });
   stderrLines.on("close", () => {

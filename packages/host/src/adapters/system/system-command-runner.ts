@@ -92,10 +92,10 @@ const quoteWindowsCommandArgument = (value: string): string => {
   if (value.length === 0) {
     return `""`;
   }
-  if (!/[\s"]/u.test(value)) {
+  if (!/[\s"%]/u.test(value)) {
     return value;
   }
-  return `"${value.replaceAll("^", "^^").replaceAll(`"`, `^"`)}"`;
+  return `"${value.replaceAll("^", "^^").replaceAll("%", "%%").replaceAll(`"`, `^"`)}"`;
 };
 
 const isWindowsCommandScript = (command: string, platform: NodeJS.Platform): boolean =>

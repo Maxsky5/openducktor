@@ -11,6 +11,7 @@ import type {
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import {
+  type ProcessTreePlatform,
   type ProcessTreeTerminator,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
@@ -47,6 +48,7 @@ export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   runtimeId?: () => string;
   portAllocator?: LocalPortAllocator;
   portProbe?: LocalPortProbe;
+  platform?: ProcessTreePlatform;
   processTreeTerminator?: ProcessTreeTerminator;
 };
 
@@ -180,6 +182,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
   runtimeId = () => randomUUID(),
   portAllocator = pickFreePort,
   portProbe = canConnect,
+  platform = process.platform,
   processTreeTerminator = terminateProcessTree,
 }: CreateOpenCodeWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
@@ -203,7 +206,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       binary,
       ["serve", "--hostname", "127.0.0.1", "--port", port.toString()],
       processEnv,
-      process.platform,
+      platform,
     );
     const child = spawn(command.command, command.args, {
       cwd: input.workingDirectory,
