@@ -17,6 +17,21 @@ afterEach(() => {
 });
 
 describe("agent-chat-composer-selection", () => {
+  test("finds the nearest text segment element inside the composer root", () => {
+    const root = document.createElement("div");
+    const outside = document.createElement("span");
+    outside.dataset.textSegmentId = "outside";
+    const textSegment = document.createElement("span");
+    textSegment.dataset.textSegmentId = "segment-1";
+    const nested = document.createElement("strong");
+    textSegment.append(nested);
+    root.append(textSegment);
+    document.body.append(root, outside);
+
+    expect(selectionModule.getClosestTextSegmentElement(nested, root)).toBe(textSegment);
+    expect(selectionModule.getClosestTextSegmentElement(outside, root)).toBeNull();
+  });
+
   test("places the caret after the trailing sentinel for newline-terminated text", () => {
     const element = createSelectionHost();
     element.textContent = "hello\n";

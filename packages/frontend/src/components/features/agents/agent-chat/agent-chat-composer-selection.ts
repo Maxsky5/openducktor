@@ -58,6 +58,18 @@ export const getTextOffsetWithinElement = (
   return measurementRange.toString().split(EMPTY_TEXT_SEGMENT_SENTINEL).join("").length;
 };
 
+export const getClosestTextSegmentElement = (
+  node: Node | null,
+  root: HTMLElement,
+): HTMLElement | null => {
+  const element = node instanceof HTMLElement ? node : (node?.parentElement ?? null);
+  const textSegment = element?.closest<HTMLElement>("[data-text-segment-id]") ?? null;
+  if (!textSegment || !root.contains(textSegment)) {
+    return null;
+  }
+  return textSegment;
+};
+
 export const setCaretOffsetWithinElement = (element: HTMLElement, logicalOffset: number): void => {
   const ownerDocument = element.ownerDocument;
   const selection = ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
