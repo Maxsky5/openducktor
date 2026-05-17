@@ -144,7 +144,12 @@ export const readMcpBridgeDiscoveryFile = (
     try: () => readFile(discoveryPath, "utf8"),
     catch: (error) => error,
   }).pipe(
-    Effect.map((payload) => parseDiscoveryFile(payload, discoveryPath)),
+    Effect.flatMap((payload) =>
+      Effect.try({
+        try: () => parseDiscoveryFile(payload, discoveryPath),
+        catch: (error) => error,
+      }),
+    ),
     Effect.catchAll((error) =>
       isFsErrorCode(error, "ENOENT") ? Effect.succeed(null) : Effect.fail(error),
     ),

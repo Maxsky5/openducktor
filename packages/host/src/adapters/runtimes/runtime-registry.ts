@@ -1,5 +1,5 @@
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, FiberId } from "effect";
 import {
   HostOperationError,
   HostResourceError,
@@ -26,6 +26,11 @@ export type CreateRuntimeRegistryInput = {
   workspaceStarter?: RuntimeWorkspaceStarterPort;
   codexAppServer?: Pick<CodexAppServerPort, "request">;
 };
+
+type RuntimeEnsureFlight = {
+  deferred: Deferred.Deferred<RuntimeInstanceSummary, RuntimeRegistryError>;
+};
+
 export const createRuntimeRegistry = ({
   runtimes = [],
   workspaceStarter,
@@ -33,10 +38,7 @@ export const createRuntimeRegistry = ({
 }: CreateRuntimeRegistryInput = {}): RuntimeRegistryPort => {
   const entries = new Map(runtimes.map((runtime) => [runtime.runtimeId, runtime]));
   const handles = new Map<string, RuntimeWorkspaceHandle>();
-  const ensureFlights = new Map<
-    string,
-    Effect.Effect<RuntimeInstanceSummary, RuntimeRegistryError>
-  >();
+  const ensureFlights = new Map<string, RuntimeEnsureFlight>();
   const stopRegisteredRuntime = (runtimeId: string) =>
     Effect.gen(function* () {
       const runtime = entries.get(runtimeId);
@@ -63,10 +65,30 @@ export const createRuntimeRegistry = ({
     if (flights.length === 0) {
       return Effect.succeed(undefined);
     }
-    return Effect.forEach(flights, (flight) => Effect.either(flight), {
+    return Effect.forEach(flights, (flight) => Effect.either(Deferred.await(flight.deferred)), {
       concurrency: "unbounded",
     }).pipe(Effect.asVoid);
   };
+  const makeRuntimeEnsureFlight = (): RuntimeEnsureFlight => ({
+    deferred: Deferred.unsafeMake(FiberId.none),
+  });
+  const completeRuntimeEnsureFlight = (
+    flightKey: string,
+    flight: RuntimeEnsureFlight,
+    startEffect: Effect.Effect<RuntimeInstanceSummary, RuntimeRegistryError>,
+  ) =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(startEffect);
+      yield* Deferred.done(flight.deferred, exit);
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (ensureFlights.get(flightKey) === flight) {
+            ensureFlights.delete(flightKey);
+          }
+        }),
+      ),
+    );
   const registry: RuntimeRegistryPort = {
     ensureWorkspaceRuntime(input) {
       return Effect.gen(function* () {
@@ -95,28 +117,41 @@ export const createRuntimeRegistry = ({
           );
         }
         const flightKey = runtimeEnsureFlightKey(input.runtimeKind, input.repoPath);
-        const existingFlight = ensureFlights.get(flightKey);
-        if (existingFlight) {
-          return yield* existingFlight;
-        }
-        const startEffect = Effect.gen(function* () {
-          const handle = yield* workspaceStarter.startWorkspaceRuntime(input);
-          const parsed = yield* Effect.try({
-            try: () => runtimeInstanceSummarySchema.parse(handle.runtime),
-            catch: (cause) =>
-              new HostValidationError({
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause,
-                details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
-              }),
-          });
-          entries.set(parsed.runtimeId, parsed);
-          handles.set(parsed.runtimeId, handle);
-          return parsed;
-        }).pipe(Effect.ensuring(Effect.sync(() => ensureFlights.delete(flightKey))));
-        const cachedStartEffect = yield* Effect.cached(startEffect);
-        ensureFlights.set(flightKey, cachedStartEffect);
-        return yield* cachedStartEffect;
+        return yield* Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const reservation = yield* Effect.sync(() => {
+              const existingFlight = ensureFlights.get(flightKey);
+              if (existingFlight) {
+                return { _tag: "existing" as const, flight: existingFlight };
+              }
+              const flight = makeRuntimeEnsureFlight();
+              ensureFlights.set(flightKey, flight);
+              return { _tag: "created" as const, flight };
+            });
+            if (reservation._tag === "existing") {
+              return yield* restore(Deferred.await(reservation.flight.deferred));
+            }
+            const startEffect = Effect.gen(function* () {
+              const handle = yield* workspaceStarter.startWorkspaceRuntime(input);
+              const parsed = yield* Effect.try({
+                try: () => runtimeInstanceSummarySchema.parse(handle.runtime),
+                catch: (cause) =>
+                  new HostValidationError({
+                    message: cause instanceof Error ? cause.message : String(cause),
+                    cause,
+                    details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
+                  }),
+              });
+              entries.set(parsed.runtimeId, parsed);
+              handles.set(parsed.runtimeId, handle);
+              return parsed;
+            });
+            yield* Effect.forkDaemon(
+              completeRuntimeEnsureFlight(flightKey, reservation.flight, startEffect),
+            );
+            return yield* restore(Deferred.await(reservation.flight.deferred));
+          }),
+        );
       });
     },
     listRuntimes() {

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
@@ -54,6 +54,21 @@ describe("MCP bridge discovery file", () => {
 
       await expect(Effect.runPromise(readMcpBridgeDiscoveryFile(discoveryPath))).resolves.toEqual(
         newer,
+      );
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("fails through the Effect error channel when discovery JSON is invalid", async () => {
+    const { discoveryPath, tempDir } = await createTempDiscoveryPath();
+
+    try {
+      await mkdir(path.dirname(discoveryPath), { recursive: true });
+      await writeFile(discoveryPath, "{not-json");
+
+      await expect(Effect.runPromise(readMcpBridgeDiscoveryFile(discoveryPath))).rejects.toThrow(
+        "JSON Parse error",
       );
     } finally {
       await rm(tempDir, { force: true, recursive: true });

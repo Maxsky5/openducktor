@@ -5,7 +5,7 @@ import {
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, FiberId } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError } from "../../effect/host-errors";
@@ -49,6 +49,10 @@ type StartedMcpHostBridge = {
   discovery: McpBridgeDiscoveryFile;
   port: number;
   server: Server;
+};
+
+type McpHostBridgeStartup = {
+  deferred: Deferred.Deferred<{ baseUrl: string; port: number }, HostOperationError>;
 };
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
@@ -307,10 +311,7 @@ export const createMcpHostBridgeServer = ({
   let server: Server | null = null;
   let baseUrl: string | null = null;
   let publishedDiscovery: McpBridgeDiscoveryFile | null = null;
-  let startupDeferred: Deferred.Deferred<
-    { baseUrl: string; port: number },
-    HostOperationError
-  > | null = null;
+  let startupFlight: McpHostBridgeStartup | null = null;
 
   const startBridge = (): Effect.Effect<StartedMcpHostBridge, HostOperationError> =>
     Effect.gen(function* () {
@@ -359,55 +360,59 @@ export const createMcpHostBridgeServer = ({
       };
     });
 
-  const ensureStarted = (): Effect.Effect<
-    { baseUrl: string; port: number },
-    HostOperationError
-  > => {
-    if (baseUrl) {
-      return Effect.succeed({
-        baseUrl,
-        port: Number(new URL(baseUrl).port),
-      });
-    }
-    if (startupDeferred) {
-      return Deferred.await(startupDeferred);
-    }
-
-    return Effect.gen(function* () {
-      const deferred = yield* Deferred.make<
-        { baseUrl: string; port: number },
-        HostOperationError
-      >();
-      startupDeferred = deferred;
-      yield* Effect.forkDaemon(
-        Effect.gen(function* () {
-          const result = yield* Effect.either(
-            Effect.gen(function* () {
-              const started = yield* startBridge();
-              server = started.server;
-              baseUrl = started.baseUrl;
-              publishedDiscovery = started.discovery;
-              return { baseUrl: started.baseUrl, port: started.port };
-            }),
-          );
-          if (result._tag === "Left") {
-            yield* Deferred.fail(deferred, result.left);
-          } else {
-            yield* Deferred.succeed(deferred, result.right);
+  const ensureStarted = (): Effect.Effect<{ baseUrl: string; port: number }, HostOperationError> =>
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const reservation = yield* Effect.sync(() => {
+          if (baseUrl) {
+            return {
+              _tag: "ready" as const,
+              connection: { baseUrl, port: Number(new URL(baseUrl).port) },
+            };
           }
-        }).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              if (startupDeferred === deferred) {
-                startupDeferred = null;
-              }
-            }),
+          if (startupFlight) {
+            return { _tag: "existing" as const, flight: startupFlight };
+          }
+          const flight: McpHostBridgeStartup = {
+            deferred: Deferred.unsafeMake(FiberId.none),
+          };
+          startupFlight = flight;
+          return { _tag: "created" as const, flight };
+        });
+
+        if (reservation._tag === "ready") {
+          return reservation.connection;
+        }
+        if (reservation._tag === "existing") {
+          return yield* restore(Deferred.await(reservation.flight.deferred));
+        }
+
+        const { flight } = reservation;
+        yield* Effect.forkDaemon(
+          Effect.gen(function* () {
+            const exit = yield* Effect.exit(
+              Effect.gen(function* () {
+                const started = yield* startBridge();
+                server = started.server;
+                baseUrl = started.baseUrl;
+                publishedDiscovery = started.discovery;
+                return { baseUrl: started.baseUrl, port: started.port };
+              }),
+            );
+            yield* Deferred.done(flight.deferred, exit);
+          }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (startupFlight === flight) {
+                  startupFlight = null;
+                }
+              }),
+            ),
           ),
-        ),
-      );
-      return yield* Deferred.await(deferred);
-    });
-  };
+        );
+        return yield* restore(Deferred.await(flight.deferred));
+      }),
+    );
 
   return {
     ensureConnection(input) {
@@ -432,9 +437,9 @@ export const createMcpHostBridgeServer = ({
     },
     close() {
       return Effect.gen(function* () {
-        if (startupDeferred) {
+        if (startupFlight) {
           yield* Effect.either(
-            Deferred.await(startupDeferred).pipe(
+            Deferred.await(startupFlight.deferred).pipe(
               Effect.mapError((cause) =>
                 toMcpHostBridgeError(cause, "mcpHostBridge.awaitStartupBeforeClose"),
               ),

@@ -1,6 +1,5 @@
-import { Cause, Clock, Effect, Fiber } from "effect";
+import { Cause, Clock, Effect } from "effect";
 import {
-  HostDependencyError,
   HostOperationError,
   HostResourceError,
   toHostOperationError,
@@ -41,6 +40,13 @@ import {
   resolveBeadsCliContext,
   stopOwnedSharedDoltServer,
 } from "./beads-cli-context";
+import {
+  awaitBeadsCliContextFlight,
+  type BeadsCliContextFlight,
+  completeBeadsCliContextFlight,
+  makeBeadsCliContextFlight,
+} from "./beads-cli-context-flight";
+import { assertRequiredCommand } from "./beads-required-command";
 import { cloneTasks, createTaskListCache } from "./beads-task-list-cache";
 import { mapTaskStoreErrors } from "./beads-task-store-errors";
 
@@ -62,27 +68,10 @@ export const createBeadsTaskRepository = ({
   systemCommands,
 }: CreateBeadsTaskRepositoryInput = {}): BeadsTaskRepository => {
   const ownedSharedDoltServers = new Map<string, BeadsCliContext["sharedServer"]>();
-  const cliContextFlights = new Set<Fiber.RuntimeFiber<BeadsCliContext, TaskStoreError>>();
-  const readyCliContexts = new Map<string, Fiber.RuntimeFiber<BeadsCliContext, TaskStoreError>>();
+  const cliContextFlights = new Set<BeadsCliContextFlight>();
+  const readyCliContexts = new Map<string, BeadsCliContextFlight>();
   const taskListCache = createTaskListCache();
   let closing = false;
-  const assertRequiredCommand = (command: string) => {
-    if (!systemCommands) {
-      return Effect.succeed(undefined);
-    }
-    return Effect.gen(function* () {
-      const error = yield* systemCommands.requiredCommandError(command);
-      if (error !== null) {
-        return yield* Effect.fail(
-          new HostDependencyError({
-            dependency: command,
-            operation: "beadsTaskRepository.assertRequiredCommand",
-            message: error,
-          }),
-        );
-      }
-    });
-  };
   const trackOwnedSharedServer = (context: BeadsCliContext): BeadsCliContext => {
     if (context.sharedServer?.ownerPid === process.pid) {
       ownedSharedDoltServers.set(context.serverStatePath, context.sharedServer);
@@ -92,19 +81,24 @@ export const createBeadsTaskRepository = ({
   const trackCliContextResolution = (
     contextEffect: Effect.Effect<BeadsCliContext, TaskStoreError>,
   ): Effect.Effect<BeadsCliContext, TaskStoreError> =>
-    Effect.gen(function* () {
-      const flight = yield* Effect.forkDaemon(
-        contextEffect.pipe(Effect.map(trackOwnedSharedServer)),
-      );
-      cliContextFlights.add(flight);
-      return yield* Fiber.join(flight).pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
-            cliContextFlights.delete(flight);
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const flight = yield* Effect.sync(() => {
+          const nextFlight = makeBeadsCliContextFlight();
+          cliContextFlights.add(nextFlight);
+          return nextFlight;
+        });
+        yield* Effect.forkDaemon(
+          completeBeadsCliContextFlight({
+            contextEffect,
+            flight,
+            onComplete: Effect.sync(() => cliContextFlights.delete(flight)),
+            trackContext: trackOwnedSharedServer,
           }),
-        ),
-      );
-    });
+        );
+        return yield* restore(awaitBeadsCliContextFlight(flight));
+      }),
+    );
   const resolveContextRequest = (
     repoPath: string,
     options: Parameters<ResolveBeadsCliContext>[1] = {},
@@ -124,15 +118,6 @@ export const createBeadsTaskRepository = ({
           ? options.workspaceId.trim()
           : null;
       const cliOptions = { ...options, processEnv };
-      if (closing) {
-        return yield* Effect.fail(
-          new HostResourceError({
-            resource: "beadsTaskStore",
-            operation: "beadsTaskRepository.resolveContextRequest",
-            message: "Beads task store is closing.",
-          }),
-        );
-      }
       const workspaceId = configuredWorkspaceId
         ? configuredWorkspaceId
         : resolveWorkspaceIdForRepoPath
@@ -166,28 +151,36 @@ export const createBeadsTaskRepository = ({
       if (options.requireSharedServer !== true) {
         return yield* trackCliContextResolution(resolveCliContext(repoPath, request.options));
       }
-      const cached = readyCliContexts.get(request.cacheKey);
-      if (cached) {
-        return yield* Fiber.join(cached);
-      }
-      const tracked = yield* Effect.forkDaemon(
-        resolveCliContext(repoPath, request.options).pipe(Effect.map(trackOwnedSharedServer)),
-      );
-      cliContextFlights.add(tracked);
-      readyCliContexts.set(request.cacheKey, tracked);
-      return yield* Fiber.join(tracked).pipe(
-        Effect.tapError(() =>
-          Effect.sync(() => {
-            if (readyCliContexts.get(request.cacheKey) === tracked) {
-              readyCliContexts.delete(request.cacheKey);
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const reservation = yield* Effect.sync(() => {
+            const cached = readyCliContexts.get(request.cacheKey);
+            if (cached) {
+              return { _tag: "existing" as const, flight: cached };
             }
-          }),
-        ),
-        Effect.ensuring(
-          Effect.sync(() => {
-            cliContextFlights.delete(tracked);
-          }),
-        ),
+            const flight = makeBeadsCliContextFlight();
+            cliContextFlights.add(flight);
+            readyCliContexts.set(request.cacheKey, flight);
+            return { _tag: "created" as const, flight };
+          });
+          if (reservation._tag === "existing") {
+            return yield* restore(awaitBeadsCliContextFlight(reservation.flight));
+          }
+          yield* Effect.forkDaemon(
+            completeBeadsCliContextFlight({
+              contextEffect: resolveCliContext(repoPath, request.options),
+              flight: reservation.flight,
+              onComplete: Effect.sync(() => cliContextFlights.delete(reservation.flight)),
+              onFailure: Effect.sync(() => {
+                if (readyCliContexts.get(request.cacheKey) === reservation.flight) {
+                  readyCliContexts.delete(request.cacheKey);
+                }
+              }),
+              trackContext: trackOwnedSharedServer,
+            }),
+          );
+          return yield* restore(awaitBeadsCliContextFlight(reservation.flight));
+        }),
       );
     }).pipe(
       Effect.mapError((cause) =>
@@ -201,9 +194,9 @@ export const createBeadsTaskRepository = ({
   const effectiveRunBdJson = runBdJson ?? defaultRunBdJson(resolveEffectiveCliContext);
   const requireBdCommands = (requireSharedServer: boolean) =>
     Effect.gen(function* () {
-      yield* assertRequiredCommand("bd");
+      yield* assertRequiredCommand(systemCommands, "bd");
       if (requireSharedServer) {
-        yield* assertRequiredCommand("dolt");
+        yield* assertRequiredCommand(systemCommands, "dolt");
       }
     });
   const runBdJsonForRepo = (repoPath: string) =>
@@ -230,7 +223,11 @@ export const createBeadsTaskRepository = ({
     close() {
       return Effect.gen(function* () {
         closing = true;
-        yield* Effect.forEach([...cliContextFlights], Fiber.await, { concurrency: "unbounded" });
+        yield* Effect.forEach(
+          [...cliContextFlights],
+          (flight) => Effect.either(awaitBeadsCliContextFlight(flight)),
+          { concurrency: "unbounded" },
+        );
         const errors: string[] = [];
         let stoppedSharedDoltServers = 0;
         for (const [serverStatePath, sharedServer] of ownedSharedDoltServers) {

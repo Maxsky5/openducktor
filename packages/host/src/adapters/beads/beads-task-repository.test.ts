@@ -190,6 +190,67 @@ describe("createBeadsTaskRepository", () => {
       },
     ]);
   });
+  test("deduplicates concurrent shared Dolt server context resolution", async () => {
+    const context = await createExistingBeadsCliContext();
+    let resolveContextRequested: () => void = () => {};
+    const contextRequested = new Promise<void>((resolve) => {
+      resolveContextRequested = resolve;
+    });
+    let resolveContext: (context: BeadsCliContext) => void = () => {};
+    const contextResolution = new Promise<BeadsCliContext>((resolve) => {
+      resolveContext = resolve;
+    });
+    let contextResolutionAttempts = 0;
+    const port = createBeadsTaskRepository({
+      resolveCliContext() {
+        return Effect.tryPromise({
+          try: async () => {
+            contextResolutionAttempts += 1;
+            resolveContextRequested();
+            return contextResolution;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      runBdJson() {
+        return Effect.succeed({ path: context.beadsDir });
+      },
+    });
+
+    const first = Effect.runPromise(port.diagnoseRepoStore?.({ repoPath: "/repo", prepare: true }));
+    const second = Effect.runPromise(
+      port.diagnoseRepoStore?.({ repoPath: "/repo", prepare: true }),
+    );
+
+    await contextRequested;
+    resolveContext(context);
+
+    const expectedDiagnosis = {
+      category: "healthy",
+      status: "ready",
+      isReady: true,
+      detail: "Beads attachment and shared Dolt server are healthy.",
+      attachment: {
+        path: context.beadsDir,
+        databaseName: "odt_repo_123456789abc",
+      },
+      sharedServer: {
+        host: "127.0.0.1",
+        port: 36000,
+        ownershipState: "owned_by_current_process",
+      },
+    } as const;
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      expectedDiagnosis,
+      expectedDiagnosis,
+    ]);
+    expect(contextResolutionAttempts).toBe(1);
+  });
   test("diagnoses a ready Beads repo store from bd where", async () => {
     const context = await createExistingBeadsCliContext();
     const calls: Array<{
