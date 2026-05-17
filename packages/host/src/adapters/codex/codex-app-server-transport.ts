@@ -31,6 +31,7 @@ export type CodexAppServerEventEmitter = (event: CodexAppServerStreamEvent) => v
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 const MAX_BUFFERED_STREAM_MESSAGES = 1_000;
+const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
 
 const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -57,6 +58,15 @@ const pushBoundedMessage = (messages: unknown[], message: unknown): void => {
   }
 };
 
+const appendCapturedStderr = (current: string, line: string): string => {
+  const next = current.length > 0 ? `${current}\n${line}` : line;
+  const encoded = Buffer.from(next, "utf8");
+  if (encoded.byteLength <= MAX_CAPTURED_STDERR_BYTES) {
+    return next;
+  }
+  return encoded.subarray(encoded.byteLength - MAX_CAPTURED_STDERR_BYTES).toString("utf8");
+};
+
 const extractErrorMessage = (value: unknown): string => {
   if (typeof value === "string") {
     return value;
@@ -79,6 +89,7 @@ export const createCodexAppServerTransport = (
   const pending = new Map<number, PendingRequest>();
   const notifications: unknown[] = [];
   const serverRequests: unknown[] = [];
+  let stderrOutput = "";
   let stdoutClosed = false;
   let stderrClosed = false;
 
@@ -185,6 +196,15 @@ export const createCodexAppServerTransport = (
     failFast(new Error(`Codex app-server stdout message for ${runtimeId} is not valid JSON-RPC`));
   };
 
+  const processClosedError = (detail: string): Error => {
+    const stderr = stderrOutput.trim();
+    return new Error(
+      stderr.length > 0
+        ? `Codex app-server ${detail} for runtime ${runtimeId}: ${stderr}`
+        : `Codex app-server ${detail} for runtime ${runtimeId}`,
+    );
+  };
+
   const lines = createInterface({ input: child.stdout });
   lines.on("line", (line) => {
     const trimmed = line.trim();
@@ -204,11 +224,15 @@ export const createCodexAppServerTransport = (
   lines.on("close", () => {
     stdoutClosed = true;
     if (!closed) {
-      failFast(new Error(`Codex app-server stdout closed unexpectedly for runtime ${runtimeId}`));
+      failFast(processClosedError("stdout closed unexpectedly"));
     }
   });
   const stderrLines = createInterface({ input: child.stderr });
-  stderrLines.on("line", () => {});
+  stderrLines.on("line", (line) => {
+    if (line.trim().length > 0) {
+      stderrOutput = appendCapturedStderr(stderrOutput, line);
+    }
+  });
   stderrLines.on("close", () => {
     stderrClosed = true;
   });
@@ -220,7 +244,7 @@ export const createCodexAppServerTransport = (
         signal === null
           ? `process exited with code ${exitCode}`
           : `process exited from signal ${signal}`;
-      failFast(new Error(`Codex app-server closed for runtime ${runtimeId}: ${detail}`));
+      failFast(processClosedError(`closed: ${detail}`));
       return;
     }
     closed = true;

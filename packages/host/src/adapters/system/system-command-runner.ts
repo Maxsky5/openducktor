@@ -1,14 +1,38 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access } from "node:fs/promises";
-import { delimiter, join } from "node:path";
+import { access, stat } from "node:fs/promises";
+import { extname, join } from "node:path";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 10_000;
+const WINDOWS_DEFAULT_PATHEXT = [".EXE", ".CMD", ".BAT", ".COM"];
 
 export type CreateSystemCommandRunnerInput = {
   env?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
+};
+
+const pathDelimiterForPlatform = (platform: NodeJS.Platform): string =>
+  platform === "win32" ? ";" : ":";
+
+const commandHasPath = (command: string): boolean =>
+  command.includes("/") || command.includes("\\");
+
+const hasCommandExtension = (command: string): boolean => extname(command).length > 0;
+
+const windowsPathExt = (env: NodeJS.ProcessEnv): string[] => {
+  const configured = env.PATHEXT;
+  if (configured === undefined) {
+    return WINDOWS_DEFAULT_PATHEXT;
+  }
+
+  const extensions = configured
+    .split(";")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => (entry.startsWith(".") ? entry : `.${entry}`));
+
+  return extensions.length > 0 ? extensions : WINDOWS_DEFAULT_PATHEXT;
 };
 
 const commandFileNames = (
@@ -16,25 +40,19 @@ const commandFileNames = (
   platform: NodeJS.Platform,
   env: NodeJS.ProcessEnv,
 ): string[] => {
-  if (platform !== "win32") {
+  if (platform !== "win32" || hasCommandExtension(command) || commandHasPath(command)) {
     return [command];
   }
 
-  const extensionPattern = /\.[^\\/]+$/;
-  if (extensionPattern.test(command)) {
-    return [command];
-  }
-
-  const pathExt = env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM";
-  return pathExt
-    .split(";")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean)
-    .map((extension) => `${command}${extension}`);
+  return windowsPathExt(env).map((extension) => `${command}${extension}`);
 };
 
-const canExecute = async (candidate: string): Promise<boolean> => {
+const canExecute = async (candidate: string, platform: NodeJS.Platform): Promise<boolean> => {
   try {
+    if (platform === "win32") {
+      return (await stat(candidate)).isFile();
+    }
+
     await access(candidate, constants.X_OK);
     return true;
   } catch {
@@ -47,15 +65,15 @@ const resolveCommandPath = async (
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
 ): Promise<string | null> => {
-  if (command.includes("/") || command.includes("\\")) {
-    return (await canExecute(command)) ? command : null;
+  if (commandHasPath(command)) {
+    return (await canExecute(command, platform)) ? command : null;
   }
 
   const pathValue = env.PATH ?? "";
-  for (const directory of pathValue.split(delimiter).filter(Boolean)) {
+  for (const directory of pathValue.split(pathDelimiterForPlatform(platform)).filter(Boolean)) {
     for (const fileName of commandFileNames(command, platform, env)) {
       const candidate = join(directory, fileName);
-      if (await canExecute(candidate)) {
+      if (await canExecute(candidate, platform)) {
         return candidate;
       }
     }
@@ -70,11 +88,50 @@ const firstNonEmptyLine = (value: string): string | null =>
     .map((line) => line.trim())
     .find(Boolean) ?? null;
 
+const quoteWindowsCommandArgument = (value: string): string => {
+  if (value.length === 0) {
+    return `""`;
+  }
+  if (!/[\s"%^]/u.test(value)) {
+    return value;
+  }
+  return `"${value.replaceAll("^", "^^").replaceAll("%", "%%").replaceAll(`"`, `^"`)}"`;
+};
+
+const isWindowsCommandScript = (command: string, platform: NodeJS.Platform): boolean =>
+  platform === "win32" && /\.(?:cmd|bat)$/iu.test(command);
+
+export const createSystemCommandLaunch = (
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): { command: string; args: string[]; windowsVerbatimArguments?: boolean } => {
+  if (!isWindowsCommandScript(command, platform)) {
+    return { command, args };
+  }
+
+  const windowsCommandShell = env.ComSpec?.trim() || process.env.ComSpec || "cmd.exe";
+  const shellOptions = ["/d", "/s", "/c"];
+  const quotedScriptInvocation = [command, ...args].map(quoteWindowsCommandArgument).join(" ");
+  const shellCommandLine = `"${quotedScriptInvocation}"`;
+
+  return {
+    command: windowsCommandShell,
+    args: [...shellOptions, shellCommandLine],
+    windowsVerbatimArguments: true,
+  };
+};
+
 export const createSystemCommandRunner = ({
   env = process.env,
   platform = process.platform,
 }: CreateSystemCommandRunnerInput = {}): SystemCommandPort => {
   const port: SystemCommandPort = {
+    resolveCommandPath(command, commandEnv = env) {
+      return resolveCommandPath(command, commandEnv, platform);
+    },
+
     async requiredCommandError(command) {
       const resolved = await resolveCommandPath(command, env, platform);
       return resolved === null
@@ -91,12 +148,16 @@ export const createSystemCommandRunner = ({
       }
     },
 
-    runCommandAllowFailure(command, args, options = {}) {
+    async runCommandAllowFailure(command, args, options = {}) {
+      const commandEnv = { ...env, ...options.env };
+      const resolvedCommand = (await resolveCommandPath(command, commandEnv, platform)) ?? command;
+      const launch = createSystemCommandLaunch(resolvedCommand, args, commandEnv, platform);
       return new Promise<SystemCommandRunResult>((resolve, reject) => {
-        const child = spawn(command, args, {
+        const child = spawn(launch.command, launch.args, {
           cwd: options.cwd,
-          env: { ...env, ...options.env },
+          env: commandEnv,
           stdio: ["ignore", "pipe", "pipe"],
+          windowsVerbatimArguments: launch.windowsVerbatimArguments === true,
         });
         const stdoutChunks: Buffer[] = [];
         const stderrChunks: Buffer[] = [];

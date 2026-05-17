@@ -11,12 +11,14 @@ import type {
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import {
+  type ProcessTreePlatform,
   type ProcessTreeTerminator,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
   waitForChildProcessClose,
 } from "../process/process-tree";
 import { resolveOpencodeBinary } from "../runtimes/runtime-binaries";
+import { createSystemCommandLaunch } from "../system/system-command-runner";
 
 export type OpenCodeMcpBridgeConnection = {
   workspaceId: string;
@@ -46,6 +48,7 @@ export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   runtimeId?: () => string;
   portAllocator?: LocalPortAllocator;
   portProbe?: LocalPortProbe;
+  platform?: ProcessTreePlatform;
   processTreeTerminator?: ProcessTreeTerminator;
 };
 
@@ -179,6 +182,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
   runtimeId = () => randomUUID(),
   portAllocator = pickFreePort,
   portProbe = canConnect,
+  platform = process.platform,
   processTreeTerminator = terminateProcessTree,
 }: CreateOpenCodeWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
@@ -198,7 +202,13 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
     const configContent = buildOpenCodeConfigContent(bridge, resolvedMcpCommand);
     const binary = opencodeBinary ?? (await resolveOpencodeBinary(systemCommands, processEnv));
     const port = await portAllocator();
-    const child = spawn(binary, ["serve", "--hostname", "127.0.0.1", "--port", port.toString()], {
+    const command = createSystemCommandLaunch(
+      binary,
+      ["serve", "--hostname", "127.0.0.1", "--port", port.toString()],
+      processEnv,
+      platform,
+    );
+    const child = spawn(command.command, command.args, {
       cwd: input.workingDirectory,
       detached: shouldStartDetachedProcessGroup(),
       env: {
@@ -206,6 +216,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         OPENCODE_CONFIG_CONTENT: configContent,
       },
       stdio: ["ignore", "pipe", "pipe"],
+      windowsVerbatimArguments: command.windowsVerbatimArguments === true,
     });
     const pid = child.pid;
     if (!pid || pid <= 0) {

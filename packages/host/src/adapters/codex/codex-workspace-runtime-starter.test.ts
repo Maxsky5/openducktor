@@ -1,14 +1,15 @@
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { removeTestDirectory } from "../../test-support/temp-directory";
+import { createSystemCommandRunner } from "../system/system-command-runner";
 import { createCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 import {
   buildCodexMcpConfigArgs,
-  codexCommand,
   createCodexWorkspaceRuntimeStarter,
 } from "./codex-workspace-runtime-starter";
 
@@ -32,7 +33,6 @@ const createFakeCodex = async (
   }: { childPidPath?: string; emitStreamEvents?: boolean } = {},
 ): Promise<string> => {
   const scriptPath = join(root, "codex.mjs");
-  const executable = join(root, process.platform === "win32" ? "codex.cmd" : "codex");
   await writeFile(
     scriptPath,
     `import { spawn } from "node:child_process";
@@ -95,13 +95,7 @@ process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
 `,
   );
-  if (process.platform === "win32") {
-    await writeFile(executable, `@echo off\r\nnode "%~dp0codex.mjs" %*\r\n`);
-  } else {
-    await writeFile(executable, `#!/bin/sh\nexec bun "$(dirname "$0")/codex.mjs" "$@"\n`);
-  }
-  await chmod(executable, 0o755);
-  return executable;
+  return writeFakeRuntimeCommand(root, "codex", "codex.mjs");
 };
 
 const waitForEvents = async (events: unknown[], count: number): Promise<void> => {
@@ -147,13 +141,6 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       "--config",
       "mcp_servers.openducktor.enabled=true",
     ]);
-  });
-
-  test("wraps Windows command scripts through cmd.exe", () => {
-    expect(codexCommand("C:\\Tools\\codex.cmd", ["app-server"], "win32", "cmd.exe")).toEqual({
-      file: "cmd.exe",
-      args: ["/d", "/c", "call", "C:\\Tools\\codex.cmd", "app-server"],
-    });
   });
 
   test("fails fast when the MCP bridge connection is not configured", async () => {
@@ -332,6 +319,61 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         }),
       ).rejects.toThrow("Codex app-server transport not found");
     } finally {
+      await removeTestDirectory(root);
+    }
+  });
+
+  test("starts a Windows PATH-discovered cmd Codex app-server runtime", async () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+
+    const root = await mkdtemp(join(tmpdir(), "odt-codex-path-starter-"));
+    const originalCapturePath = process.env.CODEX_CAPTURE_PATH;
+    try {
+      const repo = join(root, "repo");
+      await mkdir(repo);
+      const capturePath = join(root, "capture.json");
+      process.env.CODEX_CAPTURE_PATH = capturePath;
+      const codexBinary = await createFakeCodex(root);
+      const codexAppServer = createCodexAppServerTransportRegistry();
+      const pathWithFakeRuntime = `${root};${process.env.PATH ?? ""}`;
+      const starter = createCodexWorkspaceRuntimeStarter({
+        systemCommands: createSystemCommandRunner({
+          env: { ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" },
+          platform: "win32",
+        }),
+        processEnv: { ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" },
+        codexAppServer,
+        mcpCommand: ["mcp-bin", "--stdio"],
+        clientVersion: "0.3.1-test",
+        resolveMcpBridgeConnection: async () => ({
+          workspaceId: "repo",
+          hostUrl: "http://127.0.0.1:14327",
+          hostToken: "token-1",
+        }),
+        requestTimeoutMs: 4_000,
+        runtimeId: () => "runtime-path",
+      });
+
+      expect(codexBinary.endsWith(".cmd")).toBe(true);
+      const handle = await starter.startWorkspaceRuntime({
+        runtimeKind: "codex",
+        repoPath: repo,
+        workingDirectory: repo,
+        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+      });
+
+      expect(handle.runtime.runtimeId).toBe("runtime-path");
+      const capture = JSON.parse(await readFile(capturePath, "utf8"));
+      expect(capture.args).toContain("app-server");
+      await expect(handle.stop()).resolves.toBeUndefined();
+    } finally {
+      if (originalCapturePath === undefined) {
+        delete process.env.CODEX_CAPTURE_PATH;
+      } else {
+        process.env.CODEX_CAPTURE_PATH = originalCapturePath;
+      }
       await removeTestDirectory(root);
     }
   });

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,8 +42,7 @@ const createEmptyConfigDir = async (): Promise<string> => {
   return dir;
 };
 
-afterEach(async () => {
-  globalThis.fetch = originalFetch;
+const clearStoreContextEnv = (): void => {
   delete process.env.ODT_WORKSPACE_ID;
   delete process.env.ODT_HOST_URL;
   delete process.env.ODT_HOST_TOKEN;
@@ -54,6 +53,15 @@ afterEach(async () => {
   delete process.env.ODT_DOLT_HOST;
   delete process.env.ODT_DOLT_PORT;
   delete process.env.ODT_DATABASE_NAME;
+};
+
+beforeEach(() => {
+  clearStoreContextEnv();
+});
+
+afterEach(async () => {
+  globalThis.fetch = originalFetch;
+  clearStoreContextEnv();
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 

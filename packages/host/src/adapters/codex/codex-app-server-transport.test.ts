@@ -11,6 +11,8 @@ const createChild = (): ChildProcessByStdio<PassThrough, PassThrough, PassThroug
   return child;
 };
 
+const waitForStreamEvents = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
 describe("createCodexAppServerTransport", () => {
   test("keeps emitted notifications drainable after a request response", async () => {
     const child = createChild();
@@ -67,5 +69,23 @@ describe("createCodexAppServerTransport", () => {
     await expect(transport.drainServerRequests()).resolves.toEqual([]);
 
     await transport.close();
+  });
+
+  test("bounds captured stderr bytes used in process-close diagnostics", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+
+    child.stderr.write("first-error-line\n");
+    child.stderr.write(`${"é".repeat(40 * 1024)}\n`);
+    child.stderr.write("latest-error-line\n");
+    await waitForStreamEvents();
+    child.emit("close", 1, null);
+
+    await expect(transport.request({ method: "thread/read" })).rejects.toThrow(
+      /Codex app-server closed: process exited with code 1 for runtime runtime-1: .*latest-error-line/s,
+    );
+    await expect(transport.request({ method: "thread/read" })).rejects.not.toThrow(
+      "first-error-line",
+    );
   });
 });
