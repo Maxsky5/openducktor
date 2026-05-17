@@ -6,27 +6,11 @@ const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
   return { exited } as Bun.Subprocess;
 };
 
-const createTerminableHostProcess = (pid?: number, exited = new Promise<number>(() => {})) => {
-  const killCalls: Array<number | NodeJS.Signals | undefined> = [];
-  const child = {
-    pid,
-    exited,
-    kill(signal?: number | NodeJS.Signals) {
-      killCalls.push(signal);
-      return true;
-    },
-  } as unknown as Bun.Subprocess;
-
-  return { child, killCalls };
-};
-
-const noopWindowsProcessTreeTerminator = async () => {};
-
 describe("launcher internals", () => {
   test("waits for the fake host health and token-authenticated session endpoints", async () => {
     const requests: Array<{ url: string; method: string | undefined; token: string | null }> = [];
     let healthAttempts = 0;
-    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+    const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       requests.push({
         url: String(url),
@@ -38,7 +22,7 @@ describe("launcher internals", () => {
         return new Response(null, { status: healthAttempts === 1 ? 503 : 200 });
       }
       return new Response(null, { status: 200 });
-    }) as typeof fetch;
+    };
 
     await __launcherTestInternals.waitForBackend(
       "http://127.0.0.1:14327",
@@ -56,9 +40,9 @@ describe("launcher internals", () => {
   });
 
   test("rejects stale hosts that do not know the launcher app token", async () => {
-    const fetchImpl = (async (url: string | URL | Request) => {
+    const fetchImpl = async (url: string | URL | Request) => {
       return new Response(null, { status: String(url).endsWith("/session") ? 403 : 200 });
-    }) as typeof fetch;
+    };
 
     await expect(
       __launcherTestInternals.verifyBackendReadiness(
@@ -80,7 +64,7 @@ describe("launcher internals", () => {
         1_000,
         createHostProcess(exited),
         {
-          fetch: (async () => new Response(null, { status: 503 })) as unknown as typeof fetch,
+          fetch: async () => new Response(null, { status: 503 }),
           sleep: async () => {},
         },
       ),
@@ -89,7 +73,7 @@ describe("launcher internals", () => {
 
   test("sends the launcher control token when shutting down the fake host", async () => {
     const requests: Array<{ url: string; token: string | null; method: string | undefined }> = [];
-    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+    const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       requests.push({
         url: String(url),
@@ -97,7 +81,7 @@ describe("launcher internals", () => {
         token: headers.get("x-openducktor-control-token"),
       });
       return new Response(null, { status: 202 });
-    }) as typeof fetch;
+    };
 
     await __launcherTestInternals.requestHostShutdown(
       "http://127.0.0.1:14327",
@@ -114,137 +98,62 @@ describe("launcher internals", () => {
     ]);
   });
 
-  test("detects when the host exits during the graceful shutdown wait", async () => {
-    const hostExited = await __launcherTestInternals.waitForGracefulHostExit(
+  test("detects the host exit code during the graceful shutdown wait", async () => {
+    const hostExitCode = await __launcherTestInternals.waitForGracefulHostExitCode(
       createHostProcess(Promise.resolve(0)),
       async () => new Promise(() => {}),
     );
 
-    expect(hostExited).toBe(true);
+    expect(hostExitCode).toBe(0);
   });
 
   test("detects when the host needs force termination after graceful shutdown wait", async () => {
-    const hostExited = await __launcherTestInternals.waitForGracefulHostExit(
+    const hostExitCode = await __launcherTestInternals.waitForGracefulHostExitCode(
       createHostProcess(new Promise<number>(() => {})),
       async () => {},
     );
 
-    expect(hostExited).toBe(false);
+    expect(hostExitCode).toBeNull();
   });
 
-  test("uses process-group signals on non-Windows platforms", async () => {
-    const { child, killCalls } = createTerminableHostProcess(1234);
-    const processKillCalls: Array<{ pid: number; signal: string | number | undefined }> = [];
-
-    await __launcherTestInternals.terminateHostProcess(child, {
-      platform: "linux",
-      killProcess(pid, signal) {
-        processKillCalls.push({ pid, signal });
-        return true;
+  test("still stops host services after shutdown request failures", async () => {
+    let stopCalls = 0;
+    let frontendCloseCalls = 0;
+    const hostBackend = {
+      exited: Promise.resolve(0),
+      port: 14327,
+      stop: async () => {
+        stopCalls += 1;
       },
-      terminateWindowsProcessTree: noopWindowsProcessTreeTerminator,
-      sleep: async () => {},
-    });
-
-    expect(processKillCalls).toEqual([
-      { pid: -1234, signal: "SIGTERM" },
-      { pid: -1234, signal: 0 },
-      { pid: -1234, signal: "SIGKILL" },
-    ]);
-    expect(killCalls).toEqual([undefined, 9]);
-  });
-
-  test("waits the full process-group grace window before Unix escalation", async () => {
-    const { child } = createTerminableHostProcess(1234, Promise.resolve(0));
-    const calls: string[] = [];
-
-    await __launcherTestInternals.terminateHostProcess(child, {
-      platform: "linux",
-      killProcess(_pid, signal) {
-        calls.push(`process:${signal}`);
-        return true;
+    };
+    const frontendServer = {
+      close: async () => {
+        frontendCloseCalls += 1;
       },
-      terminateWindowsProcessTree: noopWindowsProcessTreeTerminator,
-      sleep: async (durationMs) => {
-        calls.push(`sleep:${durationMs}`);
-      },
-    });
+    };
 
-    expect(calls).toEqual([
-      "process:SIGTERM",
-      "sleep:3000",
-      "process:0",
-      "process:SIGKILL",
-      "sleep:1000",
-    ]);
-  });
+    await expect(
+      __launcherTestInternals.stopLauncherServices(
+        {
+          backendUrl: "http://127.0.0.1:14327",
+          controlToken: "control-token",
+          frontendServer,
+          hostBackend,
+        },
+        {
+          requestShutdown: async () => {
+            throw new Error("shutdown request failed");
+          },
+          closeServer: async (server) => {
+            await server?.close();
+          },
+          waitForGracefulExitCode: async () => null,
+        },
+      ),
+    ).rejects.toThrow("shutdown request failed");
 
-  test("skips Unix SIGKILL when the process group is already gone", async () => {
-    const { child, killCalls } = createTerminableHostProcess(1234);
-    const processKillCalls: Array<{ pid: number; signal: string | number | undefined }> = [];
-
-    await __launcherTestInternals.terminateHostProcess(child, {
-      platform: "linux",
-      killProcess(pid, signal) {
-        processKillCalls.push({ pid, signal });
-        if (signal === 0) {
-          throw new Error("process group is gone");
-        }
-        return true;
-      },
-      terminateWindowsProcessTree: noopWindowsProcessTreeTerminator,
-      sleep: async () => {},
-    });
-
-    expect(processKillCalls).toEqual([
-      { pid: -1234, signal: "SIGTERM" },
-      { pid: -1234, signal: 0 },
-    ]);
-    expect(killCalls).toEqual([undefined, 9]);
-  });
-
-  test("terminates the Windows process tree without negative process-group signals", async () => {
-    const { child, killCalls } = createTerminableHostProcess(1234);
-    const processKillCalls: Array<{ pid: number; signal: string | number | undefined }> = [];
-    const processTreeKills: number[] = [];
-
-    await __launcherTestInternals.terminateHostProcess(child, {
-      platform: "win32",
-      killProcess(pid, signal) {
-        processKillCalls.push({ pid, signal });
-        if (pid < 0) {
-          throw new Error("Windows termination must not use negative PIDs.");
-        }
-        return true;
-      },
-      terminateWindowsProcessTree(pid) {
-        processTreeKills.push(pid);
-        return Promise.resolve();
-      },
-      sleep: async () => {},
-    });
-
-    expect(processKillCalls).toEqual([]);
-    expect(processTreeKills).toEqual([1234]);
-    expect(killCalls).toEqual([]);
-  });
-
-  test("skips process-group signals when the host PID is invalid", async () => {
-    const { child, killCalls } = createTerminableHostProcess(0);
-    const processKillCalls: Array<{ pid: number; signal: string | number | undefined }> = [];
-
-    await __launcherTestInternals.terminateHostProcess(child, {
-      platform: "darwin",
-      killProcess(pid, signal) {
-        processKillCalls.push({ pid, signal });
-        return true;
-      },
-      terminateWindowsProcessTree: noopWindowsProcessTreeTerminator,
-      sleep: async () => {},
-    });
-
-    expect(processKillCalls).toEqual([]);
-    expect(killCalls).toEqual([undefined, 9]);
+    expect(frontendCloseCalls).toBe(1);
+    expect(stopCalls).toBe(1);
   });
 
   test("builds runtime config JSON for the browser shell", () => {

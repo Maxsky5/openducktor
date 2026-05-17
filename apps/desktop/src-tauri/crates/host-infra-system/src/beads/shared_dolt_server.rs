@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(windows)))]
 use sysinfo::Signal;
 use sysinfo::{Pid, ProcessesToUpdate, System};
 use url::Url;
@@ -552,10 +552,83 @@ fn cleanup_spawned_child(child: &mut std::process::Child) -> Result<()> {
         .try_wait()
         .context("Failed checking shared Dolt server process state")?;
     if status.is_none() {
-        let _ = child.kill();
-        let _ = child.wait();
+        terminate_spawned_shared_dolt_child(child)?;
     }
     Ok(())
+}
+
+#[cfg(unix)]
+fn terminate_spawned_shared_dolt_child(child: &mut std::process::Child) -> Result<()> {
+    let pid = child.id();
+    signal_shared_dolt_process_tree(pid, libc::SIGTERM, "SIGTERM")?;
+    if wait_for_child_exit(child, Duration::from_secs(3))? {
+        return Ok(());
+    }
+
+    signal_shared_dolt_process_tree(pid, libc::SIGKILL, "SIGKILL")?;
+    if wait_for_child_exit(child, Duration::from_secs(2))? {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "Spawned shared Dolt server process {} is still alive after SIGKILL timeout",
+        pid
+    ))
+}
+
+#[cfg(windows)]
+fn terminate_spawned_shared_dolt_child(child: &mut std::process::Child) -> Result<()> {
+    let pid = child.id();
+    let status = Command::new("taskkill")
+        .args(windows_taskkill_args(pid))
+        .status()
+        .with_context(|| format!("Failed running taskkill for spawned Dolt pid {pid}"))?;
+    if wait_for_child_exit(child, Duration::from_secs(2))? {
+        return Ok(());
+    }
+    if status.success() {
+        return Err(anyhow!(
+            "Spawned shared Dolt server process {pid} is still alive after taskkill timeout"
+        ));
+    }
+    Err(anyhow!(
+        "taskkill failed to stop spawned Dolt process tree {pid}"
+    ))
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn terminate_spawned_shared_dolt_child(child: &mut std::process::Child) -> Result<()> {
+    child
+        .kill()
+        .context("Failed terminating spawned shared Dolt server process")?;
+    if wait_for_child_exit(child, Duration::from_secs(3))? {
+        return Ok(());
+    }
+    Err(anyhow!(
+        "Spawned shared Dolt server process {} is still alive after termination timeout",
+        child.id()
+    ))
+}
+
+pub(crate) fn wait_for_child_exit(
+    child: &mut std::process::Child,
+    timeout: Duration,
+) -> Result<bool> {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if child
+            .try_wait()
+            .context("Failed checking spawned shared Dolt server process state")?
+            .is_some()
+        {
+            return Ok(true);
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    Ok(child
+        .try_wait()
+        .context("Failed checking spawned shared Dolt server process state")?
+        .is_some())
 }
 
 fn remove_if_exists(path: &Path) -> Result<()> {
@@ -578,37 +651,45 @@ fn terminate_process_by_pid(pid: u32, expected_shared_server_root: &Path) -> Res
         ));
     }
 
-    #[cfg(unix)]
-    {
-        let raw_pid = pid as i32;
-        let terminate_status = unsafe { libc::kill(raw_pid, libc::SIGTERM) };
-        if terminate_status != 0 {
-            return Err(std::io::Error::last_os_error())
-                .with_context(|| format!("Failed sending SIGTERM to Dolt pid {pid}"));
-        }
-        let terminated_after_term = wait_for_process_exit(pid, Duration::from_secs(3));
-        if is_process_alive(pid) {
-            let kill_status = unsafe { libc::kill(raw_pid, libc::SIGKILL) };
-            if kill_status != 0 {
-                return Err(std::io::Error::last_os_error())
-                    .with_context(|| format!("Failed sending SIGKILL to Dolt pid {pid}"));
-            }
-            if !wait_for_process_exit(pid, Duration::from_secs(2)) {
-                return Err(anyhow!(
-                    "Dolt pid {} is still alive after SIGKILL timeout",
-                    pid
-                ));
-            }
-        } else if !terminated_after_term {
-            return Err(anyhow!(
-                "Dolt pid {} is still alive after SIGTERM timeout",
-                pid
-            ));
-        }
-        Ok(())
+    terminate_shared_dolt_process_tree(pid)
+}
+
+fn terminate_shared_dolt_process_tree(pid: u32) -> Result<()> {
+    if !is_process_alive(pid) {
+        return Ok(());
     }
 
-    #[cfg(not(unix))]
+    #[cfg(unix)]
+    {
+        signal_shared_dolt_process_tree(pid, libc::SIGTERM, "SIGTERM")?;
+        if wait_for_process_exit(pid, Duration::from_secs(3)) {
+            return Ok(());
+        }
+
+        signal_shared_dolt_process_tree(pid, libc::SIGKILL, "SIGKILL")?;
+        if wait_for_process_exit(pid, Duration::from_secs(2)) {
+            return Ok(());
+        }
+
+        Err(anyhow!(
+            "Dolt process group {} is still alive after SIGKILL timeout",
+            pid
+        ))
+    }
+
+    #[cfg(windows)]
+    {
+        let status = Command::new("taskkill")
+            .args(windows_taskkill_args(pid))
+            .status()
+            .with_context(|| format!("Failed running taskkill for Dolt pid {pid}"))?;
+        if status.success() || !is_process_alive(pid) {
+            return Ok(());
+        }
+        Err(anyhow!("taskkill failed to stop Dolt process tree {pid}"))
+    }
+
+    #[cfg(all(not(unix), not(windows)))]
     {
         let mut system = System::new_all();
         system.refresh_processes(ProcessesToUpdate::All, true);
@@ -629,6 +710,32 @@ fn terminate_process_by_pid(pid: u32, expected_shared_server_root: &Path) -> Res
         }
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn signal_shared_dolt_process_tree(pid: u32, signal: i32, label: &str) -> Result<()> {
+    let process_group_id = unix_process_tree_signal_target(pid);
+    let status = unsafe { libc::kill(process_group_id, signal) };
+    if status == 0 {
+        return Ok(());
+    }
+    Err(std::io::Error::last_os_error())
+        .with_context(|| format!("Failed sending {label} to Dolt process group {pid}"))
+}
+
+#[cfg(unix)]
+pub(crate) fn unix_process_tree_signal_target(pid: u32) -> i32 {
+    -(pid as i32)
+}
+
+#[cfg(windows)]
+pub(crate) fn windows_taskkill_args(pid: u32) -> Vec<String> {
+    vec![
+        "/PID".to_string(),
+        pid.to_string(),
+        "/T".to_string(),
+        "/F".to_string(),
+    ]
 }
 
 fn wait_for_process_exit(pid: u32, timeout: Duration) -> bool {

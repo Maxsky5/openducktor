@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +8,7 @@ import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 import {
   buildCodexMcpConfigArgs,
+  codexCommand,
   createCodexWorkspaceRuntimeStarter,
 } from "./codex-workspace-runtime-starter";
 
@@ -24,16 +26,21 @@ const createSystemCommands = (): SystemCommandPort => ({
 
 const createFakeCodex = async (
   root: string,
-  { emitStreamEvents = false }: { emitStreamEvents?: boolean } = {},
+  {
+    childPidPath,
+    emitStreamEvents = false,
+  }: { childPidPath?: string; emitStreamEvents?: boolean } = {},
 ): Promise<string> => {
   const scriptPath = join(root, "codex.mjs");
   const executable = join(root, process.platform === "win32" ? "codex.cmd" : "codex");
   await writeFile(
     scriptPath,
-    `import { createInterface } from "node:readline";
+    `import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 import { writeFileSync } from "node:fs";
 
 const capturePath = process.env.CODEX_CAPTURE_PATH;
+const childPidPath = ${JSON.stringify(childPidPath ?? null)};
 const emitStreamEvents = ${JSON.stringify(emitStreamEvents)};
 const capture = {
   args: process.argv.slice(2),
@@ -53,6 +60,12 @@ if (capturePath) {
 if (!process.argv.includes("app-server")) {
   console.error("expected app-server command");
   process.exit(2);
+}
+if (childPidPath) {
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], {
+    stdio: "ignore",
+  });
+  writeFileSync(childPidPath, String(child.pid));
 }
 
 const lines = createInterface({ input: process.stdin });
@@ -102,6 +115,26 @@ const waitForEvents = async (events: unknown[], count: number): Promise<void> =>
   throw new Error(`Timed out waiting for ${count} Codex app-server event(s).`);
 };
 
+const waitFor = async (predicate: () => boolean, timeoutMs = 1_000): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Timed out waiting for condition.");
+};
+
+const processIsAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 describe("createCodexWorkspaceRuntimeStarter", () => {
   test("builds Codex MCP config args for OpenDucktor tools", () => {
     expect(buildCodexMcpConfigArgs(["mcp-bin", "--stdio"])).toEqual([
@@ -114,6 +147,13 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       "--config",
       "mcp_servers.openducktor.enabled=true",
     ]);
+  });
+
+  test("wraps Windows command scripts through cmd.exe", () => {
+    expect(codexCommand("C:\\Tools\\codex.cmd", ["app-server"], "win32", "cmd.exe")).toEqual({
+      file: "cmd.exe",
+      args: ["/d", "/c", "call", "C:\\Tools\\codex.cmd", "app-server"],
+    });
   });
 
   test("fails fast when the MCP bridge connection is not configured", async () => {
@@ -206,6 +246,92 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       } else {
         process.env.CODEX_CAPTURE_PATH = originalCapturePath;
       }
+      await removeTestDirectory(root);
+    }
+  });
+
+  test("stops the Codex app-server process tree including descendants", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-codex-starter-tree-"));
+    let childPid: number | null = null;
+    try {
+      const repo = join(root, "repo");
+      const childPidPath = join(root, "child.pid");
+      await mkdir(repo);
+      const codexBinary = await createFakeCodex(root, { childPidPath });
+      const codexAppServer = createCodexAppServerTransportRegistry();
+      const starter = createCodexWorkspaceRuntimeStarter({
+        systemCommands: createSystemCommands(),
+        codexAppServer,
+        codexBinary,
+        mcpCommand: ["mcp-bin", "--stdio"],
+        resolveMcpBridgeConnection: async () => ({
+          workspaceId: "repo",
+          hostUrl: "http://127.0.0.1:14327",
+          hostToken: "token-1",
+        }),
+        requestTimeoutMs: 4_000,
+        runtimeId: () => "runtime-tree",
+      });
+
+      const handle = await starter.startWorkspaceRuntime({
+        runtimeKind: "codex",
+        repoPath: repo,
+        workingDirectory: repo,
+        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+      });
+      await waitFor(() => existsSync(childPidPath));
+      childPid = Number(await readFile(childPidPath, "utf8"));
+      expect(processIsAlive(childPid)).toBe(true);
+
+      await handle.stop();
+      await waitFor(() => !processIsAlive(childPid as number));
+    } finally {
+      if (childPid !== null && processIsAlive(childPid)) {
+        process.kill(childPid, "SIGKILL");
+      }
+      await removeTestDirectory(root);
+    }
+  });
+
+  test("keeps process-tree cleanup failures visible while unregistering transport", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-codex-cleanup-failure-"));
+    try {
+      const repo = join(root, "repo");
+      await mkdir(repo);
+      const codexBinary = await createFakeCodex(root);
+      const codexAppServer = createCodexAppServerTransportRegistry();
+      const starter = createCodexWorkspaceRuntimeStarter({
+        systemCommands: createSystemCommands(),
+        codexAppServer,
+        codexBinary,
+        mcpCommand: ["mcp-bin", "--stdio"],
+        resolveMcpBridgeConnection: async () => ({
+          workspaceId: "repo",
+          hostUrl: "http://127.0.0.1:14327",
+          hostToken: "token-1",
+        }),
+        requestTimeoutMs: 4_000,
+        runtimeId: () => "runtime-cleanup-failure",
+        processTreeTerminator: async () => {
+          throw new Error("process tree stayed alive");
+        },
+      });
+
+      const handle = await starter.startWorkspaceRuntime({
+        runtimeKind: "codex",
+        repoPath: repo,
+        workingDirectory: repo,
+        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+      });
+
+      await expect(handle.stop()).rejects.toThrow("process tree: process tree stayed alive");
+      await expect(
+        codexAppServer.request({
+          runtimeId: "runtime-cleanup-failure",
+          method: "thread/loaded/list",
+        }),
+      ).rejects.toThrow("Codex app-server transport not found");
+    } finally {
       await removeTestDirectory(root);
     }
   });

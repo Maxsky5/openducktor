@@ -12,7 +12,13 @@ import type {
 } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
-import { shouldStartDetachedProcessGroup, signalProcessTree } from "../process/process-tree";
+import {
+  type ProcessTreePlatform,
+  type ProcessTreeTerminator,
+  shouldStartDetachedProcessGroup,
+  terminateProcessTree,
+  waitForChildProcessClose,
+} from "../process/process-tree";
 import { resolveCodexBinary } from "../runtimes/runtime-binaries";
 import {
   type CodexAppServerEventEmitter,
@@ -43,6 +49,9 @@ export type CreateCodexWorkspaceRuntimeStarterInput = {
   stopTimeoutMs?: number;
   now?: () => Date;
   runtimeId?: () => string;
+  platform?: ProcessTreePlatform;
+  commandShell?: string;
+  processTreeTerminator?: ProcessTreeTerminator;
 };
 
 const CODEX_MCP_ENV_VARS = [
@@ -103,59 +112,25 @@ const requireBridgeValue = (value: string, label: keyof CodexMcpBridgeConnection
   return trimmed;
 };
 
-const waitForClose = (
-  child: CodexChildProcess,
-  isClosed: () => boolean,
-  timeoutMs: number,
-): Promise<boolean> => {
-  if (isClosed()) {
-    return Promise.resolve(true);
-  }
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      child.off("close", onClose);
-      resolve(false);
-    }, timeoutMs);
-    const onClose = () => {
-      clearTimeout(timeout);
-      resolve(true);
-    };
-    child.once("close", onClose);
-  });
-};
-
-const stopChildProcess = async (
-  child: CodexChildProcess,
-  pid: number,
-  isClosed: () => boolean,
-  stopTimeoutMs: number,
-): Promise<void> => {
-  if (isClosed()) {
-    return;
-  }
-
-  signalProcessTree(pid, "SIGTERM");
-  if (await waitForClose(child, isClosed, stopTimeoutMs)) {
-    return;
-  }
-
-  signalProcessTree(pid, "SIGKILL");
-  if (await waitForClose(child, isClosed, stopTimeoutMs)) {
-    return;
-  }
-
-  throw new Error(`Timed out waiting for Codex app-server process group ${pid} to stop.`);
-};
-
-const codexCommand = (binary: string, args: string[]): { file: string; args: string[] } => {
+export const codexCommand = (
+  binary: string,
+  args: string[],
+  platform: ProcessTreePlatform = process.platform,
+  commandShell = process.env.ComSpec ?? "cmd.exe",
+): { file: string; args: string[] } => {
   const lowerBinary = binary.toLowerCase();
   const isWindowsCommandScript =
-    process.platform === "win32" && (lowerBinary.endsWith(".cmd") || lowerBinary.endsWith(".bat"));
+    platform === "win32" && (lowerBinary.endsWith(".cmd") || lowerBinary.endsWith(".bat"));
 
   return isWindowsCommandScript
-    ? { file: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/c", "call", binary, ...args] }
+    ? { file: commandShell, args: ["/d", "/c", "call", binary, ...args] }
     : { file: binary, args };
+};
+
+const throwCleanupErrors = (errors: string[]): void => {
+  if (errors.length > 0) {
+    throw new Error(errors.join("\n"));
+  }
 };
 
 export const createCodexWorkspaceRuntimeStarter = ({
@@ -171,6 +146,9 @@ export const createCodexWorkspaceRuntimeStarter = ({
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
   now = () => new Date(),
   runtimeId = () => randomUUID(),
+  platform = process.platform,
+  commandShell,
+  processTreeTerminator = terminateProcessTree,
 }: CreateCodexWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
     if (input.runtimeKind !== "codex") {
@@ -187,10 +165,12 @@ export const createCodexWorkspaceRuntimeStarter = ({
       resolveConfiguredMcpCommand(processEnv, mcpCommand) ??
       (await resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
     const binary = codexBinary ?? (await resolveCodexBinary(systemCommands, processEnv));
-    const command = codexCommand(binary, [
-      ...buildCodexMcpConfigArgs(resolvedMcpCommand),
-      "app-server",
-    ]);
+    const command = codexCommand(
+      binary,
+      [...buildCodexMcpConfigArgs(resolvedMcpCommand), "app-server"],
+      platform,
+      commandShell,
+    );
     const nextRuntimeId = runtimeId();
     const child = spawn(command.file, command.args, {
       cwd: input.workingDirectory,
@@ -223,6 +203,28 @@ export const createCodexWorkspaceRuntimeStarter = ({
     );
     codexAppServer.registerTransport(nextRuntimeId, transport);
 
+    const cleanupCodexRuntime = async (): Promise<void> => {
+      const errors: string[] = [];
+      codexAppServer.unregisterTransport(nextRuntimeId);
+      try {
+        await processTreeTerminator({
+          pid,
+          label: `Codex app-server runtime ${nextRuntimeId}`,
+          isClosed: () => closed,
+          waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
+          stopTimeoutMs,
+        });
+      } catch (error) {
+        errors.push(`process tree: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      try {
+        await transport.close();
+      } catch (error) {
+        errors.push(`transport: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      throwCleanupErrors(errors);
+    };
+
     try {
       await transport.request({
         method: "initialize",
@@ -240,9 +242,14 @@ export const createCodexWorkspaceRuntimeStarter = ({
       });
       await transport.notify("initialized", {});
     } catch (error) {
-      codexAppServer.unregisterTransport(nextRuntimeId);
-      await stopChildProcess(child, pid, () => closed, stopTimeoutMs);
-      await transport.close();
+      try {
+        await cleanupCodexRuntime();
+      } catch (cleanupError) {
+        const startupMessage = error instanceof Error ? error.message : String(error);
+        const cleanupMessage =
+          cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+        throw new Error(`${startupMessage}\nCleanup failed:\n${cleanupMessage}`, { cause: error });
+      }
       throw error;
     }
 
@@ -264,9 +271,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
     return {
       runtime,
       async stop() {
-        codexAppServer.unregisterTransport(nextRuntimeId);
-        await stopChildProcess(child, pid, () => closed, stopTimeoutMs);
-        await transport.close();
+        await cleanupCodexRuntime();
       },
     };
   },

@@ -70,7 +70,7 @@ describe("TypeScript web host backend", () => {
       }
       await rm(tempConfigDir, { force: true, recursive: true });
     }
-  });
+  }, 5_000);
 
   test("rejects invalid browser frontend origins before opening a host port", () => {
     const { validateWebFrontendOrigin } = __typescriptHostBackendTestInternals;

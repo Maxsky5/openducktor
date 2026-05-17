@@ -1,7 +1,6 @@
-import { type ChildProcessByStdio, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createServer, Socket } from "node:net";
-import type { Readable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
 import type {
@@ -11,7 +10,12 @@ import type {
 } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
-import { shouldStartDetachedProcessGroup, signalProcessTree } from "../process/process-tree";
+import {
+  type ProcessTreeTerminator,
+  shouldStartDetachedProcessGroup,
+  terminateProcessTree,
+  waitForChildProcessClose,
+} from "../process/process-tree";
 import { resolveOpencodeBinary } from "../runtimes/runtime-binaries";
 
 export type OpenCodeMcpBridgeConnection = {
@@ -42,6 +46,7 @@ export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   runtimeId?: () => string;
   portAllocator?: LocalPortAllocator;
   portProbe?: LocalPortProbe;
+  processTreeTerminator?: ProcessTreeTerminator;
 };
 
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
@@ -49,8 +54,6 @@ const DEFAULT_CONNECT_TIMEOUT_MS = 250;
 const DEFAULT_RETRY_DELAY_MS = 100;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 const MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024;
-
-type OpenCodeChildProcess = ChildProcessByStdio<null, Readable, Readable>;
 
 const resolveConfiguredMcpCommand = (
   env: NodeJS.ProcessEnv,
@@ -162,51 +165,6 @@ const canConnect = (port: number, timeoutMs: number): Promise<boolean> =>
     socket.connect(port, "127.0.0.1");
   });
 
-const waitForClose = (
-  child: OpenCodeChildProcess,
-  isClosed: () => boolean,
-  timeoutMs: number,
-): Promise<boolean> => {
-  if (isClosed()) {
-    return Promise.resolve(true);
-  }
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      child.off("close", onClose);
-      resolve(false);
-    }, timeoutMs);
-    const onClose = () => {
-      clearTimeout(timeout);
-      resolve(true);
-    };
-    child.once("close", onClose);
-  });
-};
-
-const stopChildProcess = async (
-  child: OpenCodeChildProcess,
-  pid: number,
-  isClosed: () => boolean,
-  stopTimeoutMs: number,
-): Promise<void> => {
-  if (isClosed()) {
-    return;
-  }
-
-  signalProcessTree(pid, "SIGTERM");
-  if (await waitForClose(child, isClosed, stopTimeoutMs)) {
-    return;
-  }
-
-  signalProcessTree(pid, "SIGKILL");
-  if (await waitForClose(child, isClosed, stopTimeoutMs)) {
-    return;
-  }
-
-  throw new Error(`Timed out waiting for OpenCode process group ${pid} to stop.`);
-};
-
 export const createOpenCodeWorkspaceRuntimeStarter = ({
   systemCommands,
   resolveMcpBridgeConnection,
@@ -221,6 +179,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
   runtimeId = () => randomUUID(),
   portAllocator = pickFreePort,
   portProbe = canConnect,
+  processTreeTerminator = terminateProcessTree,
 }: CreateOpenCodeWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
   async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
     if (input.runtimeKind !== "opencode") {
@@ -309,7 +268,13 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         return {
           runtime,
           async stop() {
-            await stopChildProcess(child, pid, () => closed, stopTimeoutMs);
+            await processTreeTerminator({
+              pid,
+              label: `OpenCode runtime ${runtime.runtimeId}`,
+              isClosed: () => closed,
+              waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
+              stopTimeoutMs,
+            });
           },
         };
       }
@@ -317,7 +282,19 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       await delay(retryDelayMs);
     }
 
-    await stopChildProcess(child, pid, () => closed, stopTimeoutMs);
-    throw new Error(`Timed out waiting for OpenCode runtime on 127.0.0.1:${port}.`);
+    const timeoutMessage = `Timed out waiting for OpenCode runtime on 127.0.0.1:${port}.`;
+    try {
+      await processTreeTerminator({
+        pid,
+        label: `OpenCode runtime on 127.0.0.1:${port}`,
+        isClosed: () => closed,
+        waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
+        stopTimeoutMs,
+      });
+    } catch (error) {
+      const cleanupMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`${timeoutMessage} Cleanup failed: ${cleanupMessage}`, { cause: error });
+    }
+    throw new Error(timeoutMessage);
   },
 });
