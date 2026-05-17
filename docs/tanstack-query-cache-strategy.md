@@ -1,6 +1,20 @@
 # TanStack Query Cache Strategy
 
-This document describes the cache and stale-time strategy used in `apps/desktop`.
+This document describes the frontend cache and stale-time strategy. TanStack Query owns server-read caching in the shared frontend, even when the underlying host implementation uses Effect internally.
+
+## Boundary with Effect
+
+OpenDucktor is adopting Effect progressively, starting with `packages/host`. Effect owns host-side execution concerns: typed failures, dependency wiring, fallible I/O, lifecycle cleanup, and Promise interop at shell-facing boundaries.
+
+TanStack Query still owns frontend server-read behavior:
+
+- query keys
+- stale-time and garbage-collection policy
+- in-flight read deduplication
+- cache updates and invalidation after mutations
+- render-path loading/error states
+
+Effect-backed host clients or query functions may be used under Query, but they must not introduce a second cache for the same server-owned data. If data is read by React render paths and should be reused, refreshed, invalidated, or deduplicated, it belongs behind TanStack Query. If work is a mutation, process lifecycle action, runtime orchestration step, stream assembly, or local UI interaction, it stays outside Query.
 
 ## Global defaults
 
