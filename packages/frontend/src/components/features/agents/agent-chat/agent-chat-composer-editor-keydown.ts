@@ -218,6 +218,52 @@ const removeTrailingLineBreak = ({
   return true;
 };
 
+const removeCurrentLineText = ({
+  event,
+  sourceDraft,
+  repairedSelection,
+  applyEditResult,
+  closeSlashMenu,
+  closeFileMenu,
+}: {
+  event: ReactKeyboardEvent<HTMLDivElement>;
+  sourceDraft: AgentChatComposerDraft;
+  repairedSelection: ActiveTextSelection;
+  applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
+  closeSlashMenu: () => void;
+  closeFileMenu: () => void;
+}): boolean => {
+  if (event.key !== "Backspace" || !event.metaKey || repairedSelection.caretOffset === null) {
+    return false;
+  }
+
+  const boundedCaretOffset = Math.max(
+    0,
+    Math.min(repairedSelection.caretOffset, repairedSelection.text.length),
+  );
+  const lineStart = repairedSelection.text.lastIndexOf("\n", boundedCaretOffset - 1) + 1;
+  if (lineStart >= boundedCaretOffset) {
+    return false;
+  }
+
+  event.preventDefault();
+  const nextText = `${repairedSelection.text.slice(0, lineStart)}${repairedSelection.text.slice(
+    boundedCaretOffset,
+  )}`;
+  const didApply = applyEditResult(
+    applyComposerDraftEdit(sourceDraft, {
+      type: "update_text",
+      segmentId: repairedSelection.segmentId,
+      text: nextText,
+      caretOffset: lineStart,
+    }),
+  );
+  if (didApply) {
+    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu });
+  }
+  return true;
+};
+
 export const handleComposerEditorKeyDown = ({
   event,
   root,
@@ -325,6 +371,19 @@ export const handleComposerEditorKeyDown = ({
   ) {
     event.preventDefault();
     selection.focusTextSegmentWithMemory(repairedSelection.segmentId, 0, sourceDraft);
+    return true;
+  }
+
+  if (
+    removeCurrentLineText({
+      event,
+      sourceDraft,
+      repairedSelection,
+      applyEditResult,
+      closeSlashMenu,
+      closeFileMenu,
+    })
+  ) {
     return true;
   }
 

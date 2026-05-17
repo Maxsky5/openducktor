@@ -269,6 +269,36 @@ describe("agent-chat-composer-editor-keydown", () => {
     expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
   });
 
+  test("removes current line text with command backspace before browser DOM mutation", () => {
+    const sourceDraft = createDraft("hello\nworld", "segment-1");
+    const repairedSelection = createActiveSelection({
+      segmentId: "segment-1",
+      text: "hello\nworld",
+      caretOffset: 11,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      metaKey: true,
+      sourceDraft,
+      repairedSelection,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "segment-1", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "segment-1",
+        offset: 6,
+      },
+    });
+    expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+  });
+
   test("preserves focus on empty-composer backspace when nothing meaningful remains", () => {
     const sourceDraft = createDraft("", "segment-1");
     const repairedSelection = createActiveSelection({
