@@ -20,6 +20,11 @@ const normalizeEditableTextNode = (element: HTMLElement): Text => {
   return textNode;
 };
 
+const focusEditableTarget = (element: HTMLElement): void => {
+  const focusTarget = element.closest<HTMLElement>('[contenteditable="true"]') ?? element;
+  focusTarget.focus();
+};
+
 export const getCaretOffsetWithinElement = (element: HTMLElement): number | null => {
   const selection =
     element.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
@@ -60,13 +65,12 @@ export const setCaretOffsetWithinElement = (element: HTMLElement, logicalOffset:
   } else if (shouldPlaceCaretAfterTrailingSentinel) {
     domOffset = textContent.length;
   }
+  focusEditableTarget(element);
   const range = ownerDocument.createRange();
   range.setStart(textNode, domOffset);
   range.collapse(true);
   selection.removeAllRanges();
   selection.addRange(range);
-  const focusTarget = element.closest<HTMLElement>('[contenteditable="true"]') ?? element;
-  focusTarget.focus();
 };
 
 export const insertTextAtCaretWithinElement = (
@@ -90,6 +94,7 @@ export const insertTextAtCaretWithinElement = (
     !element.contains(selection.anchorNode) ||
     !element.contains(selection.focusNode)
   ) {
+    focusEditableTarget(element);
     const clampedFallbackOffset = Math.max(
       0,
       Math.min(fallbackLogicalOffset, textNode.textContent?.length ?? 0),
@@ -99,8 +104,6 @@ export const insertTextAtCaretWithinElement = (
     fallbackRange.collapse(true);
     selection.removeAllRanges();
     selection.addRange(fallbackRange);
-    const focusTarget = element.closest<HTMLElement>('[contenteditable="true"]') ?? element;
-    focusTarget.focus();
   }
 
   if (selection.rangeCount === 0) {
@@ -112,13 +115,12 @@ export const insertTextAtCaretWithinElement = (
   const insertedNode = ownerDocument.createTextNode(text);
   range.insertNode(insertedNode);
 
+  focusEditableTarget(element);
   const nextRange = ownerDocument.createRange();
   nextRange.setStart(insertedNode, insertedNode.textContent?.length ?? text.length);
   nextRange.collapse(true);
   selection.removeAllRanges();
   selection.addRange(nextRange);
-  const focusTarget = element.closest<HTMLElement>('[contenteditable="true"]') ?? element;
-  focusTarget.focus();
 
   return getCaretOffsetWithinElement(element);
 };
@@ -168,23 +170,23 @@ export const replaceComposerSelectionWithText = (root: HTMLDivElement, text: str
   range.deleteContents();
 
   if (text.length === 0) {
+    root.focus();
     const collapsedRange = root.ownerDocument.createRange();
     collapsedRange.setStart(range.startContainer, range.startOffset);
     collapsedRange.collapse(true);
     selection.removeAllRanges();
     selection.addRange(collapsedRange);
-    root.focus();
     return true;
   }
 
   const textNode = root.ownerDocument.createTextNode(text);
   range.insertNode(textNode);
 
+  root.focus();
   const collapsedRange = root.ownerDocument.createRange();
   collapsedRange.setStart(textNode, text.length);
   collapsedRange.collapse(true);
   selection.removeAllRanges();
   selection.addRange(collapsedRange);
-  root.focus();
   return true;
 };

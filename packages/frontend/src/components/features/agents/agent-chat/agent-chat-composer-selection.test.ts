@@ -38,4 +38,38 @@ describe("agent-chat-composer-selection", () => {
     expect(range?.endOffset).toBe((textNode.textContent ?? "").length);
     expect(selectionModule.getCaretOffsetWithinElement(element)).toBe(6);
   });
+
+  test("preserves the target caret range when focusing the composer mutates selection", () => {
+    const element = createSelectionHost();
+    element.textContent = "hello\n";
+    const root = element.parentElement;
+    if (!root) {
+      throw new Error("Expected contenteditable root");
+    }
+
+    root.focus = () => {
+      const selection = globalThis.getSelection?.();
+      if (!selection) {
+        return;
+      }
+
+      const range = document.createRange();
+      range.setStart(root, 0);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    };
+
+    selectionModule.setCaretOffsetWithinElement(element, 6);
+
+    const selection = globalThis.getSelection?.();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    const textNode = element.firstChild;
+    expect(textNode).toBeInstanceOf(Text);
+    if (!(textNode instanceof Text)) {
+      throw new Error("Expected normalized text node");
+    }
+    expect(range?.endContainer).toBe(textNode);
+    expect(range?.endOffset).toBe((textNode.textContent ?? "").length);
+  });
 });
