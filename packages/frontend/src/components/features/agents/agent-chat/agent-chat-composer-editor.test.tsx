@@ -1110,6 +1110,22 @@ describe("AgentChatComposerEditor", () => {
     });
   });
 
+  test("anchors the trailing blank line after shift-enter with normal line geometry", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+
+    await waitFor(() => {
+      const textSegment = getLastTextSegment(rendered.container);
+      expect(textSegment.textContent).toBe("hello\n\u200B");
+      expect(textSegment.className).toContain("after:inline-block");
+      expect(textSegment.className).toContain("after:h-6");
+      expect(textSegment.className).toContain("after:w-px");
+    });
+  });
+
   test("renders empty trailing text segments as inline blocks for caret placement after slash chips", async () => {
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
@@ -1241,6 +1257,48 @@ describe("AgentChatComposerEditor", () => {
       const trailingEditable = editables[0];
       expect(trailingEditable?.className).toContain("inline-block");
       expect(trailingEditable?.className).toContain("min-w-[1px]");
+    });
+  });
+
+  test("keeps shift-enter newlines after file chips in normal inline flow", async () => {
+    resetSelectionMocks();
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "@");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "main.ts",
+      );
+    });
+
+    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    if (!(trailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    fireEvent.keyDown(trailingEditable, { key: "Enter", shiftKey: true });
+
+    await waitFor(() => {
+      const updatedTrailingEditable =
+        rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+      expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
+      expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
+      const classNames = (updatedTrailingEditable as HTMLElement).className.split(/\s+/);
+      expect(classNames).toContain("inline");
+      expect(classNames).not.toContain("inline-block");
+      expect(classNames).not.toContain("min-w-[1px]");
+      expect(classNames).toContain("after:w-px");
     });
   });
 
