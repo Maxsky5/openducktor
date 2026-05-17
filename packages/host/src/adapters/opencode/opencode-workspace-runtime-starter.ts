@@ -283,13 +283,19 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       await delay(retryDelayMs);
     }
 
-    await processTreeTerminator({
-      pid,
-      label: `OpenCode runtime on 127.0.0.1:${port}`,
-      isClosed: () => closed,
-      waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
-      stopTimeoutMs,
-    });
-    throw new Error(`Timed out waiting for OpenCode runtime on 127.0.0.1:${port}.`);
+    const timeoutMessage = `Timed out waiting for OpenCode runtime on 127.0.0.1:${port}.`;
+    try {
+      await processTreeTerminator({
+        pid,
+        label: `OpenCode runtime on 127.0.0.1:${port}`,
+        isClosed: () => closed,
+        waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
+        stopTimeoutMs,
+      });
+    } catch (error) {
+      const cleanupMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`${timeoutMessage} Cleanup failed: ${cleanupMessage}`, { cause: error });
+    }
+    throw new Error(timeoutMessage);
   },
 });

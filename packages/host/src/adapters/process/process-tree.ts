@@ -93,7 +93,7 @@ export const terminateProcessTree = async ({
   }
 
   throw new Error(
-    `Timed out waiting ${stopTimeoutMs}ms for ${label} process tree ${pid} to stop after SIGTERM and SIGKILL.`,
+    `Timed out waiting ${stopTimeoutMs}ms per signal for ${label} process tree ${pid} to stop after SIGTERM and SIGKILL.`,
   );
 };
 

@@ -95,7 +95,7 @@ describe("process-tree", () => {
         },
       }),
     ).rejects.toThrow(
-      "Timed out waiting 5ms for stubborn child process tree 4321 to stop after SIGTERM and SIGKILL.",
+      "Timed out waiting 5ms per signal for stubborn child process tree 4321 to stop after SIGTERM and SIGKILL.",
     );
   });
 
