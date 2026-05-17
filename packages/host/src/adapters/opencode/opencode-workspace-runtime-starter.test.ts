@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import {
@@ -48,7 +49,6 @@ const createFakeOpenCode = async (
   options: { childPidPath?: string } = {},
 ): Promise<string> => {
   const scriptPath = join(root, "opencode.mjs");
-  const executable = join(root, process.platform === "win32" ? "opencode.cmd" : "opencode");
   await writeFile(
     scriptPath,
     `import { spawn } from "node:child_process";
@@ -80,13 +80,7 @@ process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
 `,
   );
-  if (process.platform === "win32") {
-    await writeFile(executable, `@echo off\r\n"${process.execPath}" "%~dp0opencode.mjs" %*\r\n`);
-  } else {
-    await writeFile(executable, `#!/bin/sh\nexec bun "$(dirname "$0")/opencode.mjs" "$@"\n`);
-  }
-  await chmod(executable, 0o755);
-  return executable;
+  return writeFakeRuntimeCommand(root, "opencode", "opencode.mjs");
 };
 
 describe("createOpenCodeWorkspaceRuntimeStarter", () => {
