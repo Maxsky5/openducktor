@@ -12,10 +12,12 @@ use super::{
     SharedDoltServerState, SHARED_DOLT_PORT_RANGE_LEN, SHARED_DOLT_PORT_RANGE_START,
     SHARED_DOLT_SERVER_HOST, SHARED_DOLT_SERVER_USER,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use host_test_support::{lock_env, EnvVarGuard};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
@@ -177,6 +179,31 @@ fn shared_dolt_windows_cleanup_uses_taskkill_tree_args() {
             "/F".to_string(),
         ]
     );
+}
+
+#[test]
+fn shared_dolt_spawned_child_wait_reaps_exited_child() -> Result<()> {
+    #[cfg(windows)]
+    let mut child = Command::new("cmd")
+        .args(["/C", "exit", "/B", "0"])
+        .spawn()
+        .context("spawn exited child")?;
+
+    #[cfg(not(windows))]
+    let mut child = Command::new("sh")
+        .args(["-c", "exit 0"])
+        .spawn()
+        .context("spawn exited child")?;
+
+    assert!(super::wait_for_child_exit(
+        &mut child,
+        Duration::from_secs(2)
+    )?);
+    assert!(child
+        .try_wait()
+        .context("check child after reaping")?
+        .is_some());
+    Ok(())
 }
 
 #[test]

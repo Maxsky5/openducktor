@@ -552,12 +552,83 @@ fn cleanup_spawned_child(child: &mut std::process::Child) -> Result<()> {
         .try_wait()
         .context("Failed checking shared Dolt server process state")?;
     if status.is_none() {
-        terminate_shared_dolt_process_tree(child.id())?;
-        child
-            .wait()
-            .context("Failed waiting for spawned shared Dolt server cleanup")?;
+        terminate_spawned_shared_dolt_child(child)?;
     }
     Ok(())
+}
+
+#[cfg(unix)]
+fn terminate_spawned_shared_dolt_child(child: &mut std::process::Child) -> Result<()> {
+    let pid = child.id();
+    signal_shared_dolt_process_tree(pid, libc::SIGTERM, "SIGTERM")?;
+    if wait_for_child_exit(child, Duration::from_secs(3))? {
+        return Ok(());
+    }
+
+    signal_shared_dolt_process_tree(pid, libc::SIGKILL, "SIGKILL")?;
+    if wait_for_child_exit(child, Duration::from_secs(2))? {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "Spawned shared Dolt server process {} is still alive after SIGKILL timeout",
+        pid
+    ))
+}
+
+#[cfg(windows)]
+fn terminate_spawned_shared_dolt_child(child: &mut std::process::Child) -> Result<()> {
+    let pid = child.id();
+    let status = Command::new("taskkill")
+        .args(windows_taskkill_args(pid))
+        .status()
+        .with_context(|| format!("Failed running taskkill for spawned Dolt pid {pid}"))?;
+    if wait_for_child_exit(child, Duration::from_secs(2))? {
+        return Ok(());
+    }
+    if status.success() {
+        return Err(anyhow!(
+            "Spawned shared Dolt server process {pid} is still alive after taskkill timeout"
+        ));
+    }
+    Err(anyhow!(
+        "taskkill failed to stop spawned Dolt process tree {pid}"
+    ))
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn terminate_spawned_shared_dolt_child(child: &mut std::process::Child) -> Result<()> {
+    child
+        .kill()
+        .context("Failed terminating spawned shared Dolt server process")?;
+    if wait_for_child_exit(child, Duration::from_secs(3))? {
+        return Ok(());
+    }
+    Err(anyhow!(
+        "Spawned shared Dolt server process {} is still alive after termination timeout",
+        child.id()
+    ))
+}
+
+pub(crate) fn wait_for_child_exit(
+    child: &mut std::process::Child,
+    timeout: Duration,
+) -> Result<bool> {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if child
+            .try_wait()
+            .context("Failed checking spawned shared Dolt server process state")?
+            .is_some()
+        {
+            return Ok(true);
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    Ok(child
+        .try_wait()
+        .context("Failed checking spawned shared Dolt server process state")?
+        .is_some())
 }
 
 fn remove_if_exists(path: &Path) -> Result<()> {
@@ -590,21 +661,12 @@ fn terminate_shared_dolt_process_tree(pid: u32) -> Result<()> {
 
     #[cfg(unix)]
     {
-        let process_group_id = unix_process_tree_signal_target(pid);
-        let terminate_status = unsafe { libc::kill(process_group_id, libc::SIGTERM) };
-        if terminate_status != 0 {
-            return Err(std::io::Error::last_os_error())
-                .with_context(|| format!("Failed sending SIGTERM to Dolt process group {pid}"));
-        }
+        signal_shared_dolt_process_tree(pid, libc::SIGTERM, "SIGTERM")?;
         if wait_for_process_exit(pid, Duration::from_secs(3)) {
             return Ok(());
         }
 
-        let kill_status = unsafe { libc::kill(process_group_id, libc::SIGKILL) };
-        if kill_status != 0 {
-            return Err(std::io::Error::last_os_error())
-                .with_context(|| format!("Failed sending SIGKILL to Dolt process group {pid}"));
-        }
+        signal_shared_dolt_process_tree(pid, libc::SIGKILL, "SIGKILL")?;
         if wait_for_process_exit(pid, Duration::from_secs(2)) {
             return Ok(());
         }
@@ -648,6 +710,17 @@ fn terminate_shared_dolt_process_tree(pid: u32) -> Result<()> {
         }
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn signal_shared_dolt_process_tree(pid: u32, signal: i32, label: &str) -> Result<()> {
+    let process_group_id = unix_process_tree_signal_target(pid);
+    let status = unsafe { libc::kill(process_group_id, signal) };
+    if status == 0 {
+        return Ok(());
+    }
+    Err(std::io::Error::last_os_error())
+        .with_context(|| format!("Failed sending {label} to Dolt process group {pid}"))
 }
 
 #[cfg(unix)]

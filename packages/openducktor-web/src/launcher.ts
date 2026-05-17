@@ -15,20 +15,22 @@ export type LauncherOptions = {
   readinessTimeoutMs?: number;
 };
 
-type ManagedProcess = Bun.Subprocess;
 type ManagedHost = Pick<Bun.Subprocess, "exited"> | TypescriptHostBackend;
 type BackendReadinessDependencies = {
   fetch: typeof fetch;
   sleep: (durationMs: number) => Promise<unknown>;
 };
-type HostTerminationDependencies = {
-  platform: NodeJS.Platform;
-  killProcess: typeof process.kill;
-  terminateWindowsProcessTree: (pid: number) => Promise<void>;
-  sleep: (durationMs: number) => Promise<unknown>;
-};
 type FrontendServer = {
   close(): Promise<void>;
+};
+type StopLauncherServicesInput = {
+  backendUrl: string;
+  controlToken: string;
+  frontendServer: FrontendServer | null;
+  hostBackend: TypescriptHostBackend;
+  requestShutdown?: typeof requestHostShutdown;
+  closeServer?: typeof closeFrontendServer;
+  waitForGracefulExitCode?: typeof waitForGracefulHostExitCode;
 };
 
 const LOCALHOST = "127.0.0.1";
@@ -37,8 +39,6 @@ const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const VITE_CLOSE_TIMEOUT_MS = 3_000;
 const HOST_GRACEFUL_EXIT_TIMEOUT_MS = 2_000;
 const FORCE_EXIT_SIGNAL_GRACE_MS = 1_500;
-const HOST_FORCE_TERMINATION_GRACE_MS = 3_000;
-const HOST_FORCE_KILL_WAIT_MS = 1_000;
 
 const buildFrontendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
 const buildBackendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
@@ -101,90 +101,14 @@ const verifyBackendReadiness = async (
   }
 };
 
-const defaultHostTerminationDependencies: HostTerminationDependencies = {
-  platform: process.platform,
-  killProcess: process.kill,
-  terminateWindowsProcessTree: async (pid: number) => {
-    const taskkill = Bun.spawn({
-      cmd: ["taskkill", "/PID", String(pid), "/T", "/F"],
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    await Promise.race([taskkill.exited, Bun.sleep(HOST_FORCE_TERMINATION_GRACE_MS)]);
-  },
-  sleep: Bun.sleep,
-};
-
-const waitForHostExit = async (
-  child: ManagedProcess,
-  durationMs: number,
-  sleep: HostTerminationDependencies["sleep"],
-): Promise<number | null> => {
-  return Promise.race([child.exited, sleep(durationMs).then(() => null)]);
-};
-
 const waitForGracefulHostExitCode = async (
   child: ManagedHost,
-  sleep: HostTerminationDependencies["sleep"] = Bun.sleep,
+  sleep: (durationMs: number) => Promise<unknown> = Bun.sleep,
 ): Promise<number | null> => {
   return Promise.race([
     child.exited.then((exitCode) => exitCode),
     sleep(HOST_GRACEFUL_EXIT_TIMEOUT_MS).then(() => null),
   ]);
-};
-
-const terminateHostProcess = async (
-  child: ManagedProcess | null,
-  dependencies: HostTerminationDependencies = defaultHostTerminationDependencies,
-): Promise<void> => {
-  if (!child) {
-    return;
-  }
-
-  const pid = child.pid;
-  const hasProcessGroupPid = typeof pid === "number" && pid > 0;
-
-  if (dependencies.platform === "win32") {
-    if (hasProcessGroupPid) {
-      await dependencies.terminateWindowsProcessTree(pid);
-    } else {
-      child.kill();
-    }
-    const exitCode = await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
-    if (exitCode === null) {
-      throw new Error(`Timed out waiting for OpenDucktor web host process ${pid} to exit.`);
-    }
-    return;
-  }
-
-  if (hasProcessGroupPid) {
-    dependencies.killProcess(-pid, "SIGTERM");
-  }
-
-  child.kill();
-  await dependencies.sleep(HOST_FORCE_TERMINATION_GRACE_MS);
-
-  if (hasProcessGroupPid) {
-    try {
-      dependencies.killProcess(-pid, 0);
-    } catch {
-      child.kill(9);
-      const exitCode = await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
-      if (exitCode === null) {
-        throw new Error(`Timed out waiting for OpenDucktor web host process ${pid} to exit.`);
-      }
-      return;
-    }
-    dependencies.killProcess(-pid, "SIGKILL");
-  }
-
-  child.kill(9);
-  const exitCode = await waitForHostExit(child, HOST_FORCE_KILL_WAIT_MS, dependencies.sleep);
-  if (exitCode === null) {
-    throw new Error(
-      `Timed out waiting for OpenDucktor web host process ${pid ?? "unknown"} to exit.`,
-    );
-  }
 };
 
 const closeFrontendServer = async (server: FrontendServer | null): Promise<void> => {
@@ -285,13 +209,66 @@ const shouldForceExitForRepeatedSignal = (
   graceMs = FORCE_EXIT_SIGNAL_GRACE_MS,
 ): boolean => now - firstSignalReceivedAt >= graceMs;
 
+const throwLauncherShutdownFailures = (failures: unknown[]): void => {
+  if (failures.length === 0) {
+    return;
+  }
+  if (failures.length === 1) {
+    throw failures[0];
+  }
+  throw new AggregateError(failures, "OpenDucktor web shutdown failed.");
+};
+
+const stopLauncherServices = async ({
+  backendUrl,
+  controlToken,
+  frontendServer,
+  hostBackend,
+  requestShutdown = requestHostShutdown,
+  closeServer = closeFrontendServer,
+  waitForGracefulExitCode = waitForGracefulHostExitCode,
+}: StopLauncherServicesInput): Promise<void> => {
+  const shutdownResults = await Promise.allSettled([
+    requestShutdown(backendUrl, controlToken),
+    closeServer(frontendServer),
+  ]);
+  const shutdownFailures = shutdownResults
+    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+    .map((result) => result.reason);
+  for (const failure of shutdownFailures) {
+    logError(failure instanceof Error ? failure.message : failure);
+  }
+
+  let hostExitCode: number | null;
+  try {
+    hostExitCode = await waitForGracefulExitCode(hostBackend);
+    if (hostExitCode === null) {
+      logInfo("Ensuring OpenDucktor TypeScript host has stopped...");
+      await hostBackend.stop();
+      hostExitCode = await hostBackend.exited;
+    }
+  } catch (error) {
+    shutdownFailures.push(error);
+    throwLauncherShutdownFailures(shutdownFailures);
+    return;
+  }
+
+  if (hostExitCode !== 0) {
+    shutdownFailures.push(
+      new Error(`OpenDucktor TypeScript host shutdown failed with exit code ${hostExitCode}.`),
+    );
+  }
+
+  throwLauncherShutdownFailures(shutdownFailures);
+};
+
 export const __launcherTestInternals = {
   buildFrontendDisplayUrls,
   buildBrowserRuntimeConfigJson,
   resolveStaticAssetPath,
   requestHostShutdown,
   shouldForceExitForRepeatedSignal,
-  terminateHostProcess,
+  stopLauncherServices,
   verifyBackendReadiness,
   waitForBackend,
   waitForGracefulHostExitCode,
@@ -425,34 +402,7 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
       logInfo("Stopping OpenDucktor frontend server...");
       logInfo("Stopping OpenDucktor TypeScript host services...");
 
-      const shutdownResults = await Promise.allSettled([
-        requestHostShutdown(backendUrl, controlToken),
-        closeFrontendServer(frontendServer),
-      ]);
-
-      const shutdownError = shutdownResults.find(
-        (result): result is PromiseRejectedResult => result.status === "rejected",
-      );
-      if (shutdownError) {
-        logError(
-          shutdownError.reason instanceof Error
-            ? shutdownError.reason.message
-            : shutdownError.reason,
-        );
-        throw shutdownError.reason;
-      }
-
-      let hostExitCode = await waitForGracefulHostExitCode(hostBackend);
-      if (hostExitCode === null) {
-        logInfo("Ensuring OpenDucktor TypeScript host has stopped...");
-        await hostBackend.stop();
-        hostExitCode = await hostBackend.exited;
-      }
-      if (hostExitCode !== 0) {
-        throw new Error(
-          `OpenDucktor TypeScript host shutdown failed with exit code ${hostExitCode}.`,
-        );
-      }
+      await stopLauncherServices({ backendUrl, controlToken, frontendServer, hostBackend });
       logSuccess("OpenDucktor web stopped.");
     })();
 

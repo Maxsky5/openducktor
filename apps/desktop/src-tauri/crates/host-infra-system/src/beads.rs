@@ -24,7 +24,7 @@ pub use shared_dolt_server::{
 #[cfg(test)]
 pub(crate) use shared_dolt_server::{
     deterministic_shared_dolt_port_candidate, process_matches_expected_dolt_server,
-    wrap_port_candidate, write_dolt_config_file, SHARED_DOLT_PORT_RANGE_LEN,
+    wait_for_child_exit, wrap_port_candidate, write_dolt_config_file, SHARED_DOLT_PORT_RANGE_LEN,
     SHARED_DOLT_PORT_RANGE_START,
 };
 
