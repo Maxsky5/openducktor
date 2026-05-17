@@ -1126,6 +1126,22 @@ describe("AgentChatComposerEditor", () => {
     });
   });
 
+  test("removes a shift-enter trailing blank line with one backspace", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+
+    await expectComposerText(rendered.container, "hello\n");
+    const textSegment = getLastTextSegment(rendered.container);
+    setCaretOffsetWithinElementMock(textSegment, 6);
+    fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace" });
+
+    await expectComposerText(rendered.container, "hello");
+    expect(getLastTextSegment(rendered.container).className).not.toContain("after:w-px");
+  });
+
   test("renders empty trailing text segments as inline blocks for caret placement after slash chips", async () => {
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
@@ -1299,6 +1315,57 @@ describe("AgentChatComposerEditor", () => {
       expect(classNames).not.toContain("inline-block");
       expect(classNames).not.toContain("min-w-[1px]");
       expect(classNames).toContain("after:w-px");
+    });
+  });
+
+  test("removes a shift-enter trailing blank line after file chips with one backspace", async () => {
+    resetSelectionMocks();
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "@");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "main.ts",
+      );
+    });
+
+    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    if (!(trailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    fireEvent.keyDown(trailingEditable, { key: "Enter", shiftKey: true });
+    await waitFor(() => {
+      const updatedTrailingEditable =
+        rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+      expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
+    });
+
+    const lineBreakEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    if (!(lineBreakEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment after line break");
+    }
+    setCaretOffsetWithinElementMock(lineBreakEditable, 1);
+    fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace" });
+
+    await waitFor(() => {
+      const updatedTrailingEditable =
+        rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+      expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
+      expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\u200B");
+      expect((updatedTrailingEditable as HTMLElement).className).toContain("inline-block");
+      expect((updatedTrailingEditable as HTMLElement).className).not.toContain("after:w-px");
     });
   });
 

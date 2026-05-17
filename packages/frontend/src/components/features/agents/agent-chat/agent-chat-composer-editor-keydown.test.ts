@@ -240,6 +240,35 @@ describe("agent-chat-composer-editor-keydown", () => {
     expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
   });
 
+  test("removes a newly inserted trailing line break before browser DOM mutation", () => {
+    const sourceDraft = createDraft("hello\n", "segment-1");
+    const repairedSelection = createActiveSelection({
+      segmentId: "segment-1",
+      text: "hello\n",
+      caretOffset: 6,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      sourceDraft,
+      repairedSelection,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "segment-1", kind: "text", text: "hello" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "segment-1",
+        offset: 5,
+      },
+    });
+    expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+  });
+
   test("preserves focus on empty-composer backspace when nothing meaningful remains", () => {
     const sourceDraft = createDraft("", "segment-1");
     const repairedSelection = createActiveSelection({
