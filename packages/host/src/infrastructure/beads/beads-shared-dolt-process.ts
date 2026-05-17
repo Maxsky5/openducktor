@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 
 export const processIsAlive = (pid: number): boolean => {
   try {
@@ -24,8 +24,9 @@ export const signalProcess = (pid: number, signal: NodeJS.Signals): void => {
 
 export const waitForProcessExit = (pid: number, timeoutMs: number): Effect.Effect<boolean> =>
   Effect.gen(function* () {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
+    const startedAt = yield* Clock.currentTimeMillis;
+    const deadline = startedAt + timeoutMs;
+    while ((yield* Clock.currentTimeMillis) < deadline) {
       if (!processIsAlive(pid)) {
         return true;
       }

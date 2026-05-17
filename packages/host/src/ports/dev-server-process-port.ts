@@ -1,5 +1,4 @@
-import type { Effect } from "effect";
-import { Data } from "effect";
+import { Context, Data, type Effect } from "effect";
 import type { HostOperationError, HostValidationError } from "../effect/host-errors";
 
 export type DevServerProcessExit = {
@@ -30,6 +29,12 @@ export type DevServerProcessPort = {
     DevServerProcessStartExitError | HostOperationError | HostValidationError
   >;
 };
+
+export class DevServerProcessPortTag extends Context.Tag("@openducktor/host/DevServerProcessPort")<
+  DevServerProcessPortTag,
+  DevServerProcessPort
+>() {}
+
 export const devServerExitMessage = (exitCode: number | null, signal: string | null): string => {
   if (exitCode !== null) {
     return `Dev server exited with code ${exitCode}.`;

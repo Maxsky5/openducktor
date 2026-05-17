@@ -47,7 +47,7 @@ export const spawnBd = (
           }),
         ),
       ));
-    return yield* Effect.async<unknown, TaskStoreError>((resume) => {
+    return yield* Effect.async<unknown, TaskStoreError>((resume, signal) => {
       const command = args[0] ?? "unknown";
       let child: ReturnType<typeof spawn>;
       try {
@@ -60,33 +60,51 @@ export const spawnBd = (
         resume(Effect.fail(toBeadsSpawnError(cause, args, repoPath)));
         return;
       }
+      if (!child.stdout || !child.stderr) {
+        child.kill("SIGTERM");
+        resume(
+          Effect.fail(
+            new HostOperationError({
+              operation: "beads.spawn",
+              message: `bd ${command} did not expose piped stdout and stderr.`,
+              details: { args, command },
+            }),
+          ),
+        );
+        return;
+      }
       const stdoutChunks: Buffer[] = [];
       const stderrChunks: Buffer[] = [];
       let settled = false;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
       const finish = (effect: Effect.Effect<unknown, TaskStoreError>): void => {
         if (settled) {
           return;
         }
         settled = true;
-        clearTimeout(timeout);
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+        signal.removeEventListener("abort", abort);
+        child.off("error", onError);
+        child.off("close", onClose);
         resume(effect);
       };
-      const timeout = setTimeout(() => {
+      const abort = (): void => {
         child.kill("SIGTERM");
         finish(
           Effect.fail(
             new HostOperationError({
               operation: "beads.spawn",
-              message: `Timed out running bd ${command} after ${BD_COMMAND_TIMEOUT_MS}ms`,
-              details: { args, command, timeoutMs: BD_COMMAND_TIMEOUT_MS },
+              message: `bd ${command} was aborted.`,
+              details: { args, command },
             }),
           ),
         );
-      }, BD_COMMAND_TIMEOUT_MS);
-      child.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
-      child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
-      child.once("error", (cause) => finish(Effect.fail(toBeadsSpawnError(cause, args, repoPath))));
-      child.once("close", (code) => {
+      };
+      const onError = (cause: Error) =>
+        finish(Effect.fail(toBeadsSpawnError(cause, args, repoPath)));
+      const onClose = (code: number | null) => {
         const stdout = Buffer.concat(stdoutChunks).toString("utf8");
         const stderr = Buffer.concat(stderrChunks).toString("utf8");
         if (code !== 0) {
@@ -117,7 +135,28 @@ export const spawnBd = (
             ),
           );
         }
-      });
+      };
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) {
+        abort();
+        return;
+      }
+      timeout = setTimeout(() => {
+        child.kill("SIGTERM");
+        finish(
+          Effect.fail(
+            new HostOperationError({
+              operation: "beads.spawn",
+              message: `Timed out running bd ${command} after ${BD_COMMAND_TIMEOUT_MS}ms`,
+              details: { args, command, timeoutMs: BD_COMMAND_TIMEOUT_MS },
+            }),
+          ),
+        );
+      }, BD_COMMAND_TIMEOUT_MS);
+      child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+      child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+      child.once("error", onError);
+      child.once("close", onClose);
     });
   });
 export const defaultRunBd =

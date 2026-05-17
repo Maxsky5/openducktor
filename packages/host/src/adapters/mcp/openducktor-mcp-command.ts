@@ -6,6 +6,7 @@ import {
   HostValidationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
+import { parseJson } from "../../effect/json";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { isExecutableFile, resolveUserPath } from "../runtimes/runtime-binaries";
 
@@ -18,7 +19,7 @@ export type ResolveOpenDucktorMcpCommandInput = {
   startPath?: string;
 };
 export const parseMcpCommandJson = (raw: string): string[] => {
-  const parsed = JSON.parse(raw) as unknown;
+  const parsed = parseJson(raw);
   if (!Array.isArray(parsed)) {
     throw new HostValidationError({
       field: MCP_COMMAND_JSON_ENV,

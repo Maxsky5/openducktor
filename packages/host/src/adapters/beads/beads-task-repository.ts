@@ -1,4 +1,4 @@
-import { Cause, Effect, Fiber } from "effect";
+import { Cause, Clock, Effect, Fiber } from "effect";
 import {
   HostDependencyError,
   HostOperationError,
@@ -262,7 +262,12 @@ export const createBeadsTaskRepository = ({
     },
     listTasks({ repoPath, doneVisibleDays }) {
       return Effect.gen(function* () {
-        const cached = taskListCache.cachedTaskListAndGeneration(repoPath, doneVisibleDays);
+        const cacheCheckedAt = yield* Clock.currentTimeMillis;
+        const cached = taskListCache.cachedTaskListAndGeneration(
+          repoPath,
+          doneVisibleDays,
+          cacheCheckedAt,
+        );
         if (cached.tasks) {
           return cached.tasks;
         }
@@ -273,6 +278,7 @@ export const createBeadsTaskRepository = ({
           doneVisibleDays,
           cached.generation,
           tasks,
+          yield* Clock.currentTimeMillis,
         );
         return cloneTasks(tasks);
       });

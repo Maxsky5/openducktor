@@ -1,31 +1,17 @@
 import { Effect } from "effect";
-import { createLocalAttachmentAdapter } from "../../adapters/attachments/local-attachment-adapter";
 import {
   type BeadsTaskRepository,
   createBeadsTaskRepository,
 } from "../../adapters/beads/beads-task-repository";
-import {
-  type CodexAppServerTransportRegistry,
-  createCodexAppServerTransportRegistry,
-} from "../../adapters/codex/codex-app-server-transport-registry";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
-import { createDevServerProcessAdapter } from "../../adapters/dev-servers/dev-server-process-adapter";
-import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-adapter";
-import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-file-adapter";
-import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import {
   createMcpHostBridgeServer,
   type McpHostBridgeServer,
   resolveMcpBridgeDiscoveryPath,
 } from "../../adapters/mcp/mcp-host-bridge-server";
-import { createOpenInToolsAdapter } from "../../adapters/open-in-tools/open-in-tools-adapter";
 import { createOpenCodeWorkspaceRuntimeStarter } from "../../adapters/opencode/opencode-workspace-runtime-starter";
-import { createProcessEnvironment } from "../../adapters/process/process-environment";
-import { createRuntimeHealthProbe } from "../../adapters/runtimes/runtime-health-probe";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
-import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
-import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
@@ -68,21 +54,11 @@ import {
   type HostCommandRouter,
   toPromiseHostCommandRouter,
 } from "../../interface/router/host-command-router";
-import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
-import type { DevServerProcessPort } from "../../ports/dev-server-process-port";
-import type { FilesystemPort } from "../../ports/filesystem-port";
-import type { GitPort } from "../../ports/git-port";
-import type { LocalAttachmentPort } from "../../ports/local-attachment-port";
-import type { OpenInToolsPort } from "../../ports/open-in-tools-port";
-import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type {
   RuntimeRegistryPort,
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
-import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import {
   createStopDevServersStep,
   createStopMcpHostBridgeStep,
@@ -91,76 +67,18 @@ import {
   type HostLifecycleLogger,
   runShutdownSteps,
 } from "../host-lifecycle";
+import {
+  type CreateNodeHostDefaultPortsInput,
+  createNodeHostDefaultPorts,
+} from "./node-host-default-ports";
 
-type NodeHostDefaultPorts = {
-  codexAppServer: CodexAppServerPort;
-  codexTransportRegistry: CodexAppServerTransportRegistry;
-  devServerProcesses: DevServerProcessPort;
-  filesystem: FilesystemPort;
-  git: GitPort;
-  localAttachments: LocalAttachmentPort;
-  openInTools: OpenInToolsPort;
-  processEnv: NodeJS.ProcessEnv;
-  runtimeHealth: RuntimeHealthPort;
-  settingsConfig: SettingsConfigPort;
-  systemCommands: SystemCommandPort;
-  worktreeFiles: WorktreeFilePort;
-};
-
-export type CreateNodeHostCommandRouterInput = {
+export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput & {
   clientVersion?: string;
-  codexAppServer?: CodexAppServerPort;
-  codexAppServerTransportRegistry?: CodexAppServerTransportRegistry;
-  devServerProcesses?: DevServerProcessPort;
   eventBus?: HostEventBusPort;
-  filesystem?: FilesystemPort;
-  git?: GitPort;
-  localAttachments?: LocalAttachmentPort;
   lifecycleLogger?: HostLifecycleLogger;
-  openInTools?: OpenInToolsPort;
   mcpHostBridge?: McpHostBridgeServer;
-  processEnv?: NodeJS.ProcessEnv;
-  runtimeHealth?: RuntimeHealthPort;
   runtimeRegistry?: RuntimeRegistryPort;
-  settingsConfig?: SettingsConfigPort;
-  systemCommands?: SystemCommandPort;
   taskStore?: TaskStorePort;
-  worktreeFiles?: WorktreeFilePort;
-};
-
-const isCodexAppServerTransportRegistry = (
-  value: CodexAppServerPort,
-): value is CodexAppServerPort & CodexAppServerTransportRegistry =>
-  "registerTransport" in value &&
-  typeof value.registerTransport === "function" &&
-  "unregisterTransport" in value &&
-  typeof value.unregisterTransport === "function";
-
-const createNodeHostDefaultPorts = (
-  input: CreateNodeHostCommandRouterInput,
-): NodeHostDefaultPorts => {
-  const processEnv = input.processEnv ?? createProcessEnvironment();
-  const systemCommands = input.systemCommands ?? createSystemCommandRunner({ env: processEnv });
-  const runtimeHealth = input.runtimeHealth ?? createRuntimeHealthProbe(systemCommands, processEnv);
-  const defaultCodexAppServer = createCodexAppServerTransportRegistry();
-  const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
-  const codexTransportRegistry =
-    input.codexAppServerTransportRegistry ??
-    (isCodexAppServerTransportRegistry(codexAppServer) ? codexAppServer : defaultCodexAppServer);
-  return {
-    codexAppServer,
-    codexTransportRegistry,
-    devServerProcesses: input.devServerProcesses ?? createDevServerProcessAdapter({ processEnv }),
-    filesystem: input.filesystem ?? createFilesystemAdapter(),
-    git: input.git ?? createGitCliAdapter({ processEnv }),
-    localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
-    openInTools: input.openInTools ?? createOpenInToolsAdapter(),
-    processEnv,
-    runtimeHealth,
-    settingsConfig: input.settingsConfig ?? createSettingsConfigAdapter(),
-    systemCommands,
-    worktreeFiles: input.worktreeFiles ?? createWorktreeFileAdapter(),
-  };
 };
 
 export const createNodeEffectHostCommandRouter = (

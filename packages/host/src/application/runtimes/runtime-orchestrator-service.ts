@@ -5,7 +5,7 @@ import {
   type RuntimeRoute,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
@@ -21,6 +21,7 @@ import {
   buildWaitingStartupStatus,
   describeRuntimeRoute,
   findWorkspaceRuntime,
+  isoFromMillis,
   loadTargetSession,
   normalizePathForComparison,
   type RuntimeOrchestratorLogger,
@@ -159,7 +160,11 @@ export const createRuntimeOrchestratorService = ({
       }
       return (
         runtimeStartupStatuses.get(startupStatusKey(runtimeKind, canonicalRepoPath)) ??
-        buildIdleStartupStatus(runtimeKind, canonicalRepoPath)
+        buildIdleStartupStatus(
+          runtimeKind,
+          canonicalRepoPath,
+          isoFromMillis(yield* Clock.currentTimeMillis),
+        )
       );
     });
   const runtimeEnsure: RuntimeOrchestratorService["runtimeEnsure"] = (input) =>
@@ -168,7 +173,7 @@ export const createRuntimeOrchestratorService = ({
       const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
       const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
       const statusKey = startupStatusKey(runtimeKind, canonicalRepoPath);
-      const startedAt = new Date().toISOString();
+      const startedAt = isoFromMillis(yield* Clock.currentTimeMillis);
       runtimeStartupStatuses.set(
         statusKey,
         buildWaitingStartupStatus(runtimeKind, canonicalRepoPath, startedAt),
@@ -192,9 +197,17 @@ export const createRuntimeOrchestratorService = ({
         return parsed;
       }
       const message = errorMessage(ensureResult.left);
+      const failedAt = isoFromMillis(yield* Clock.currentTimeMillis);
       runtimeStartupStatuses.set(
         statusKey,
-        buildFailedStartupStatus(runtimeKind, canonicalRepoPath, startedAt, "error", message),
+        buildFailedStartupStatus(
+          runtimeKind,
+          canonicalRepoPath,
+          startedAt,
+          failedAt,
+          "error",
+          message,
+        ),
       );
       logger?.error(
         `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,

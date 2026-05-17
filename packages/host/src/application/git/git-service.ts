@@ -16,7 +16,7 @@ import {
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import {
@@ -112,6 +112,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
           targetBranch,
           diffScope,
         );
+        const observedAtMs = yield* Clock.currentTimeMillis;
         const snapshot = createWorktreeSnapshot(
           workingDirectory,
           targetBranch,
@@ -123,6 +124,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
             statusData.upstreamAheadBehind,
           ),
           hashWorktreeDiffPayload(statusData.fileDiffs),
+          observedAtMs,
         );
         return yield* Effect.try({
           try: () =>
@@ -154,6 +156,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
           targetBranch,
           diffScope,
         );
+        const observedAtMs = yield* Clock.currentTimeMillis;
         const snapshot = createWorktreeSnapshot(
           workingDirectory,
           targetBranch,
@@ -169,6 +172,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
             summaryData.targetAheadBehind,
             summaryData.fileStatusCounts,
           ),
+          observedAtMs,
         );
         return yield* Effect.try({
           try: () =>

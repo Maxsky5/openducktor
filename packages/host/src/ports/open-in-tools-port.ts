@@ -1,5 +1,5 @@
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
-import type { Effect } from "effect";
+import { Context, type Effect } from "effect";
 import type {
   HostOperationError,
   HostPathAccessError,
@@ -27,3 +27,8 @@ export type OpenInToolsPort = {
   ): Effect.Effect<void, OpenInToolsPortError>;
   openExternalUrl(url: string): Effect.Effect<void, OpenInToolsPortError>;
 };
+
+export class OpenInToolsPortTag extends Context.Tag("@openducktor/host/OpenInToolsPort")<
+  OpenInToolsPortTag,
+  OpenInToolsPort
+>() {}

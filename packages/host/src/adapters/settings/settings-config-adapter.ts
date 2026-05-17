@@ -3,13 +3,14 @@ import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/pr
 import { homedir } from "node:os";
 import path from "node:path";
 import type { GlobalConfig } from "@openducktor/contracts";
-import { Effect, Layer } from "effect";
+import { Clock, Effect, Layer } from "effect";
 import {
   HostOperationError,
   HostValidationError,
   toHostOperationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
+import { parseJson } from "../../effect/json";
 import { type SettingsConfigPort, SettingsConfigPortTag } from "../../ports/settings-config-port";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
@@ -148,7 +149,7 @@ export const createSettingsConfigAdapter = ({
         }
 
         return yield* Effect.try({
-          try: () => JSON.parse(payload) as unknown,
+          try: () => parseJson(payload),
           catch: (cause) =>
             toHostOperationError(cause, "settingsConfig.parseConfig", {
               path: resolvedConfigPath,
@@ -188,9 +189,10 @@ export const createSettingsConfigAdapter = ({
           ),
         );
 
+        const now = yield* Clock.currentTimeMillis;
         const tempPath = path.join(
           baseDir,
-          `.${path.basename(resolvedConfigPath)}.tmp-${process.pid}-${Date.now()}`,
+          `.${path.basename(resolvedConfigPath)}.tmp-${process.pid}-${now}`,
         );
         const payload = `${JSON.stringify(config, null, 2)}\n`;
 

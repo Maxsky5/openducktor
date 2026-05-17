@@ -1,10 +1,11 @@
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { HostInvariantError, HostResourceError } from "../../effect/host-errors";
 import type {
   CodexAppServerPort,
   CodexAppServerRequestInput,
   CodexAppServerRespondInput,
 } from "../../ports/codex-app-server-port";
+import { CodexAppServerPortTag } from "../../ports/codex-app-server-port";
 import type { CodexAppServerTransportError } from "./codex-app-server-transport";
 
 export type CodexAppServerTransportRegistryError = CodexAppServerTransportError | HostResourceError;
@@ -87,3 +88,8 @@ export const createCodexAppServerTransportRegistry = (): CodexAppServerTransport
     },
   };
 };
+
+export const CodexAppServerPortLive = Layer.sync(
+  CodexAppServerPortTag,
+  createCodexAppServerTransportRegistry,
+);

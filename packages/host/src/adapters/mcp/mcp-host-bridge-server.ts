@@ -9,6 +9,7 @@ import { Deferred, Effect } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError } from "../../effect/host-errors";
+import { parseJson } from "../../effect/json";
 import type { OpenCodeMcpBridgeConnection } from "../opencode/opencode-workspace-runtime-starter";
 import {
   type McpBridgeDiscoveryFile,
@@ -55,7 +56,7 @@ const MAX_BODY_BYTES = 1024 * 1024;
 const workspaceScopedToolNames = new Set<string>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
 
 const readRequestBody = (request: IncomingMessage): Effect.Effect<unknown, HostOperationError> =>
-  Effect.async<unknown, HostOperationError>((resume) => {
+  Effect.async<unknown, HostOperationError>((resume, signal) => {
     let body = "";
     let receivedBytes = 0;
     let settled = false;
@@ -64,11 +65,24 @@ const readRequestBody = (request: IncomingMessage): Effect.Effect<unknown, HostO
         return;
       }
       settled = true;
+      signal.removeEventListener("abort", abort);
+      request.off("data", onData);
+      request.off("end", onEnd);
+      request.off("error", onError);
       resume(effect);
     };
-
-    request.setEncoding("utf8");
-    request.on("data", (chunk: string) => {
+    const abort = (): void => {
+      finish(
+        Effect.fail(
+          new HostOperationError({
+            operation: "mcpHostBridge.readRequestBody",
+            message: "MCP host bridge request body read was aborted.",
+          }),
+        ),
+      );
+      request.destroy();
+    };
+    const onData = (chunk: string): void => {
       receivedBytes += Buffer.byteLength(chunk);
       if (receivedBytes > MAX_BODY_BYTES) {
         finish(
@@ -84,27 +98,25 @@ const readRequestBody = (request: IncomingMessage): Effect.Effect<unknown, HostO
         return;
       }
       body += chunk;
-    });
-    request.on("end", () => {
+    };
+    const onEnd = (): void => {
       if (!body.trim()) {
         finish(Effect.succeed({}));
         return;
       }
-      try {
-        finish(Effect.succeed(JSON.parse(body) as unknown));
-      } catch (error) {
-        finish(
-          Effect.fail(
+      finish(
+        Effect.try({
+          try: () => parseJson(body),
+          catch: (error) =>
             new HostOperationError({
               operation: "mcpHostBridge.readRequestBody",
               message: `Invalid JSON request body: ${error instanceof Error ? error.message : error}`,
               cause: error,
             }),
-          ),
-        );
-      }
-    });
-    request.on("error", (error) =>
+        }),
+      );
+    };
+    const onError = (error: Error): void =>
       finish(
         Effect.fail(
           new HostOperationError({
@@ -113,8 +125,17 @@ const readRequestBody = (request: IncomingMessage): Effect.Effect<unknown, HostO
             cause: error,
           }),
         ),
-      ),
-    );
+      );
+
+    request.setEncoding("utf8");
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    request.on("data", onData);
+    request.on("end", onEnd);
+    request.on("error", onError);
   });
 
 const sendJson = (response: ServerResponse, statusCode: number, payload: unknown): void => {
@@ -138,45 +159,91 @@ const toMcpHostBridgeError = (cause: unknown, operation: string): HostOperationE
       });
 
 const listen = (server: Server): Effect.Effect<number, HostOperationError> =>
-  Effect.async<number, HostOperationError>((resume) => {
+  Effect.async<number, HostOperationError>((resume, signal) => {
     let settled = false;
     const finish = (effect: Effect.Effect<number, HostOperationError>): void => {
       if (settled) {
         return;
       }
       settled = true;
+      signal.removeEventListener("abort", abort);
       server.off("error", onError);
       resume(effect);
     };
-    const onError = (error: Error) =>
-      finish(Effect.fail(toMcpHostBridgeError(error, "mcpHostBridge.listen")));
-    server.once("error", onError);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (!address || typeof address === "string") {
-        finish(
-          Effect.fail(
-            new HostOperationError({
-              operation: "mcpHostBridge.listen",
-              message: "Failed to bind MCP host bridge on 127.0.0.1.",
-            }),
-          ),
-        );
+    const closeThenFinish = (effect: Effect.Effect<number, HostOperationError>): void => {
+      if (!server.listening) {
+        finish(effect);
         return;
       }
-      finish(Effect.succeed((address as AddressInfo).port));
-    });
+      server.close((error) => {
+        if (error) {
+          finish(Effect.fail(toMcpHostBridgeError(error, "mcpHostBridge.listen.close")));
+          return;
+        }
+        finish(effect);
+      });
+    };
+    const abort = () =>
+      closeThenFinish(
+        Effect.fail(
+          new HostOperationError({
+            operation: "mcpHostBridge.listen",
+            message: "MCP host bridge listen was aborted.",
+          }),
+        ),
+      );
+    const onError = (error: Error) =>
+      finish(Effect.fail(toMcpHostBridgeError(error, "mcpHostBridge.listen")));
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    server.once("error", onError);
+    try {
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        if (!address || typeof address === "string") {
+          closeThenFinish(
+            Effect.fail(
+              new HostOperationError({
+                operation: "mcpHostBridge.listen",
+                message: "Failed to bind MCP host bridge on 127.0.0.1.",
+              }),
+            ),
+          );
+          return;
+        }
+        finish(Effect.succeed((address as AddressInfo).port));
+      });
+    } catch (error) {
+      finish(Effect.fail(toMcpHostBridgeError(error, "mcpHostBridge.listen")));
+    }
   });
 
 const closeServer = (server: Server): Effect.Effect<void, HostOperationError> =>
-  Effect.async<void, HostOperationError>((resume) => {
-    server.close((error) => {
-      if (error) {
-        resume(Effect.fail(toMcpHostBridgeError(error, "mcpHostBridge.closeServer")));
+  Effect.async<void, HostOperationError>((resume, signal) => {
+    let settled = false;
+    const finish = (effect: Effect.Effect<void, HostOperationError>): void => {
+      if (settled) {
         return;
       }
-      resume(Effect.void);
+      settled = true;
+      signal.removeEventListener("abort", abort);
+      resume(effect);
+    };
+    const abort = () => finish(Effect.void);
+    signal.addEventListener("abort", abort, { once: true });
+    server.close((error) => {
+      if (error) {
+        finish(Effect.fail(toMcpHostBridgeError(error, "mcpHostBridge.closeServer")));
+        return;
+      }
+      finish(Effect.void);
     });
+    if (signal.aborted) {
+      abort();
+    }
   });
 
 const createBridgeRequestHandler =

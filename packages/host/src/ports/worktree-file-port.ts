@@ -1,4 +1,4 @@
-import type { Effect } from "effect";
+import { Context, type Effect } from "effect";
 import type { HostOperationError, HostValidationError } from "../effect/host-errors";
 
 export type WorktreeFileError = HostOperationError | HostValidationError;
@@ -14,3 +14,8 @@ export type WorktreeFilePort = {
   resolveWorktreePath(repoPath: string, worktreePath: string): string;
   pathIsWithinRoot(root: string, candidate: string): Effect.Effect<boolean, WorktreeFileError>;
 };
+
+export class WorktreeFilePortTag extends Context.Tag("@openducktor/host/WorktreeFilePort")<
+  WorktreeFilePortTag,
+  WorktreeFilePort
+>() {}

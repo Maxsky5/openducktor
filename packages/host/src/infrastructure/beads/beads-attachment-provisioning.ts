@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { RepoStoreHealth } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import {
   HostOperationError,
   HostPathAccessError,
@@ -135,7 +135,8 @@ export const ensureExistingAttachmentRunsWithoutGitOps = (
     if (existing === updated) {
       return;
     }
-    const tempPath = `${configPath}.tmp-${process.pid}-${Date.now()}`;
+    const now = yield* Clock.currentTimeMillis;
+    const tempPath = `${configPath}.tmp-${process.pid}-${now}`;
     yield* writeTextFile(tempPath, updated, "beads.attachment.write-config");
     yield* renamePath(tempPath, configPath, "beads.attachment.replace-config");
   });

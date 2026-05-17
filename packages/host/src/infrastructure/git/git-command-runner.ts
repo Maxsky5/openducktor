@@ -51,7 +51,7 @@ export const runSpawnedGit = (
       ok: boolean;
     },
     HostOperationError
-  >((resume) => {
+  >((resume, signal) => {
     let child: ReturnType<typeof spawn>;
     try {
       child = spawn("git", args, {
@@ -63,6 +63,7 @@ export const runSpawnedGit = (
       return;
     }
     if (!child.stdin || !child.stdout || !child.stderr) {
+      child.kill("SIGTERM");
       resume(
         Effect.fail(
           new HostOperationError({
@@ -89,20 +90,26 @@ export const runSpawnedGit = (
         return;
       }
       settled = true;
+      signal.removeEventListener("abort", abort);
+      child.off("error", onError);
+      child.off("close", onClose);
       resume(effect);
     };
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    child.on("error", (cause) =>
-      finish(Effect.fail(toHostOperationError(cause, "git.spawn", { args, workingDirectory }))),
-    );
-    child.on("close", (code) => {
+    const abort = (): void => {
+      child.kill("SIGTERM");
+      finish(
+        Effect.fail(
+          new HostOperationError({
+            operation: "git.spawn",
+            message: "Git command was aborted.",
+            details: { args, workingDirectory },
+          }),
+        ),
+      );
+    };
+    const onError = (cause: Error) =>
+      finish(Effect.fail(toHostOperationError(cause, "git.spawn", { args, workingDirectory })));
+    const onClose = (code: number | null) => {
       if (code === 0) {
         finish(Effect.succeed({ ok: true, stdout, stderr }));
         return;
@@ -120,7 +127,22 @@ export const runSpawnedGit = (
           }),
         ),
       );
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
     });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on("error", onError);
+    child.on("close", onClose);
     child.stdin.end(options.stdin);
   });
 export const createDefaultGitRunner =

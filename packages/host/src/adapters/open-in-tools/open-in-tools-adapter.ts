@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import {
   HostOperationError,
   type HostPathAccessError,
@@ -13,7 +13,7 @@ import {
   toHostOperationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
-import type { OpenInToolsPort } from "../../ports/open-in-tools-port";
+import { type OpenInToolsPort, OpenInToolsPortTag } from "../../ports/open-in-tools-port";
 import { resolveMacOsAppIconDataUrl } from "./macos-open-in-icons";
 
 const execFileAsync = promisify(execFile);
@@ -363,3 +363,5 @@ export const createOpenInToolsAdapter = ({
     },
   };
 };
+
+export const OpenInToolsPortLive = Layer.sync(OpenInToolsPortTag, () => createOpenInToolsAdapter());

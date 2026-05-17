@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import net from "node:net";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { processIsAlive } from "../../adapters/process/process-tree";
 import { toHostPathStatError } from "../../effect/host-errors";
 import {
@@ -29,37 +29,85 @@ export const pathExists = (inputPath: string) =>
   );
 
 export const tcpProbe = (port: number): Effect.Effect<boolean> =>
-  Effect.async<boolean>((resume) => {
-    const socket = net.createConnection({ host: SHARED_DOLT_SERVER_HOST, port });
+  Effect.async<boolean>((resume, signal) => {
+    let socket: net.Socket;
+    try {
+      socket = net.createConnection({ host: SHARED_DOLT_SERVER_HOST, port });
+    } catch {
+      resume(Effect.succeed(false));
+      return;
+    }
     let settled = false;
     const finish = (result: boolean) => {
       if (settled) {
         return;
       }
       settled = true;
+      signal.removeEventListener("abort", abort);
+      socket.off("connect", onConnect);
+      socket.off("timeout", onTimeout);
+      socket.off("error", onError);
       socket.destroy();
       resume(Effect.succeed(result));
     };
-    socket.setTimeout(SHARED_DOLT_TCP_TIMEOUT_MS, () => finish(false));
-    socket.once("connect", () => finish(true));
-    socket.once("error", () => finish(false));
+    const abort = () => finish(false);
+    const onConnect = () => finish(true);
+    const onTimeout = () => finish(false);
+    const onError = () => finish(false);
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    socket.setTimeout(SHARED_DOLT_TCP_TIMEOUT_MS);
+    socket.once("connect", onConnect);
+    socket.once("timeout", onTimeout);
+    socket.once("error", onError);
   });
 
 export const runDoltAllowFailure = (
   args: string[],
   env: NodeJS.ProcessEnv,
 ): Effect.Effect<boolean> =>
-  Effect.async<boolean>((resume) => {
-    const child = spawn("dolt", args, {
-      env,
-      stdio: ["ignore", "ignore", "ignore"],
-    });
-    child.once("error", () => resume(Effect.succeed(false)));
-    child.once("close", (code) => resume(Effect.succeed(code === 0)));
+  Effect.async<boolean>((resume, signal) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn("dolt", args, {
+        env,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+    } catch {
+      resume(Effect.succeed(false));
+      return;
+    }
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      signal.removeEventListener("abort", abort);
+      child.off("error", onError);
+      child.off("close", onClose);
+      resume(Effect.succeed(ok));
+    };
+    const abort = () => {
+      child.kill("SIGTERM");
+      finish(false);
+    };
+    const onError = () => finish(false);
+    const onClose = (code: number | null) => finish(code === 0);
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    child.once("error", onError);
+    child.once("close", onClose);
   });
 
 export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd, env }) =>
-  Effect.async<BeadsCommandResult, SharedDoltServerError>((resume) => {
+  Effect.async<BeadsCommandResult, SharedDoltServerError>((resume, signal) => {
     let child: ReturnType<typeof spawn>;
     try {
       child = spawn(command, args, {
@@ -71,6 +119,18 @@ export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd,
       resume(Effect.fail(toSharedDoltServerError(cause, "shared-dolt.run-command")));
       return;
     }
+    if (!child.stdout || !child.stderr) {
+      child.kill("SIGTERM");
+      resume(
+        Effect.fail(
+          toSharedDoltServerError(
+            new Error(`Command ${command} did not expose piped stdout and stderr.`),
+            "shared-dolt.run-command",
+          ),
+        ),
+      );
+      return;
+    }
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
     let settled = false;
@@ -79,14 +139,25 @@ export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd,
         return;
       }
       settled = true;
+      signal.removeEventListener("abort", abort);
+      child.off("error", onError);
+      child.off("close", onClose);
       resume(effect);
     };
-    child.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
-    child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
-    child.once("error", (cause) =>
-      finish(Effect.fail(toSharedDoltServerError(cause, "shared-dolt.run-command"))),
-    );
-    child.once("close", (code) => {
+    const abort = () => {
+      child.kill("SIGTERM");
+      finish(
+        Effect.fail(
+          toSharedDoltServerError(
+            new Error(`Command ${command} was aborted.`),
+            "shared-dolt.run-command",
+          ),
+        ),
+      );
+    };
+    const onError = (cause: Error) =>
+      finish(Effect.fail(toSharedDoltServerError(cause, "shared-dolt.run-command")));
+    const onClose = (code: number | null) => {
       finish(
         Effect.succeed({
           ok: code === 0,
@@ -94,7 +165,16 @@ export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd,
           stderr: Buffer.concat(stderrChunks).toString("utf8"),
         }),
       );
-    });
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    child.once("error", onError);
+    child.once("close", onClose);
   });
 
 export const sqlProbe = (port: number, env: NodeJS.ProcessEnv): Effect.Effect<boolean> =>
@@ -135,8 +215,9 @@ export const serverStateIsHealthy = (
 
 export const waitForServerReady = (port: number, env: NodeJS.ProcessEnv): Effect.Effect<boolean> =>
   Effect.gen(function* () {
-    const deadline = Date.now() + SHARED_DOLT_HEALTH_TIMEOUT_MS;
-    while (Date.now() < deadline) {
+    const startedAt = yield* Clock.currentTimeMillis;
+    const deadline = startedAt + SHARED_DOLT_HEALTH_TIMEOUT_MS;
+    while ((yield* Clock.currentTimeMillis) < deadline) {
       if ((yield* tcpProbe(port)) && (yield* sqlProbe(port, env))) {
         return true;
       }

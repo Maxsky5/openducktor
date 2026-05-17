@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
+import { parseJson } from "../../effect/json";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
@@ -69,7 +70,7 @@ export const resolveMcpBridgeDiscoveryPath = (env: NodeJS.ProcessEnv = process.e
 };
 
 const parseDiscoveryFile = (payload: string, discoveryPath: string): McpBridgeDiscoveryFile => {
-  const parsed = JSON.parse(payload) as unknown;
+  const parsed = parseJson(payload);
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new HostValidationError({
       message: `Invalid MCP bridge discovery file at ${discoveryPath}: expected object.`,

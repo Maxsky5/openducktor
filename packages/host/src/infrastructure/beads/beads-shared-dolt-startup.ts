@@ -11,7 +11,7 @@ import {
 } from "./beads-context-model";
 
 export const portIsAvailable = (port: number): Effect.Effect<boolean> =>
-  Effect.async<boolean>((resume) => {
+  Effect.async<boolean>((resume, signal) => {
     const server = net.createServer();
     let settled = false;
     const finish = (available: boolean) => {
@@ -19,12 +19,30 @@ export const portIsAvailable = (port: number): Effect.Effect<boolean> =>
         return;
       }
       settled = true;
+      signal.removeEventListener("abort", abort);
+      server.off("error", onError);
       resume(Effect.succeed(available));
     };
-    server.once("error", () => finish(false));
-    server.listen(port, SHARED_DOLT_SERVER_HOST, () => {
-      server.close(() => finish(true));
-    });
+    const closeThenFinish = (available: boolean): void => {
+      if (server.listening) {
+        server.close(() => finish(available));
+        return;
+      }
+      finish(available);
+    };
+    const abort = () => closeThenFinish(false);
+    const onError = () => finish(false);
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    server.once("error", onError);
+    try {
+      server.listen(port, SHARED_DOLT_SERVER_HOST, () => closeThenFinish(true));
+    } catch {
+      finish(false);
+    }
   });
 
 export const deterministicSharedDoltPortCandidate = (baseDir: string): Effect.Effect<number> =>

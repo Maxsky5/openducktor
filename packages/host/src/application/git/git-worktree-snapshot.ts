@@ -151,11 +151,12 @@ export const createWorktreeSnapshot = (
   diffScope: GitDiffScope,
   statusHash: string,
   diffHash: string,
+  observedAtMs: number,
 ): GitWorktreeStatusSnapshot => ({
   effectiveWorkingDir,
   targetBranch,
   diffScope,
-  observedAtMs: Date.now(),
+  observedAtMs,
   hashVersion: gitWorktreeHashVersion,
   statusHash,
   diffHash,

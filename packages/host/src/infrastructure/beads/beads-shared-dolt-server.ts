@@ -2,13 +2,14 @@ import { spawn } from "node:child_process";
 import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Effect, Fiber } from "effect";
+import { Clock, Effect, Fiber } from "effect";
 import {
   processIsAlive,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
 } from "../../adapters/process/process-tree";
 import { HostResourceError } from "../../effect/host-errors";
+import { parseJson } from "../../effect/json";
 import {
   type BeadsSharedServerPaths,
   type BeadsSharedServerState,
@@ -91,7 +92,7 @@ export const readSharedServerState = (
     }
 
     const parsed = yield* Effect.try({
-      try: () => JSON.parse(payload) as unknown,
+      try: () => parseJson(payload),
       catch: (error) =>
         sharedDoltValidationError(
           `Failed parsing shared Dolt server state ${serverStatePath}: ${String(error)}`,
@@ -164,8 +165,9 @@ export const readSharedServerState = (
 
 export const waitForProcessExit = (pid: number, timeoutMs: number): Effect.Effect<boolean> =>
   Effect.gen(function* () {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
+    const startedAt = yield* Clock.currentTimeMillis;
+    const deadline = startedAt + timeoutMs;
+    while ((yield* Clock.currentTimeMillis) < deadline) {
       if (!processIsAlive(pid)) {
         return true;
       }
@@ -231,118 +233,142 @@ export const spawnSharedDoltServer = (
   paths: BeadsSharedServerPaths,
   port: number,
 ): Effect.Effect<BeadsSharedServerState, SharedDoltServerError> =>
-  Effect.gen(function* () {
-    const stdout = yield* Effect.tryPromise({
-      try: () => open(path.join(paths.sharedServerRoot, "server.stdout.log"), "w"),
-      catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.open-stdout"),
-    });
-    const stderrLogPath = path.join(paths.sharedServerRoot, "server.stderr.log");
-    const stderr = yield* Effect.tryPromise({
-      try: () => open(stderrLogPath, "w"),
-      catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.open-stderr"),
-    });
-    const child = yield* Effect.try({
-      try: () =>
-        spawn("dolt", ["sql-server", "--config", paths.doltConfigFile], {
-          cwd: paths.sharedServerRoot,
-          detached: shouldStartDetachedProcessGroup(),
-          env: paths.env,
-          stdio: ["ignore", stdout.fd, stderr.fd],
-        }),
-      catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.spawn"),
-    });
-
-    const spawnError = yield* Effect.async<Error | null>((resume) => {
-      let settled = false;
-      const finish = (error: Error | null): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        child.off("error", onError);
-        child.off("spawn", onSpawn);
-        resume(Effect.succeed(error));
-      };
-      const onError = (error: Error) => finish(error);
-      const onSpawn = () => finish(null);
-      child.once("error", onError);
-      child.once("spawn", onSpawn);
-    });
-    yield* Effect.all(
-      [
+  Effect.scoped(
+    Effect.gen(function* () {
+      const stdout = yield* Effect.tryPromise({
+        try: () => open(path.join(paths.sharedServerRoot, "server.stdout.log"), "w"),
+        catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.open-stdout"),
+      });
+      yield* Effect.addFinalizer(() =>
         Effect.tryPromise({
           try: () => stdout.close(),
           catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.close-stdout"),
-        }),
+        }).pipe(Effect.catchAll(() => Effect.void)),
+      );
+      const stderrLogPath = path.join(paths.sharedServerRoot, "server.stderr.log");
+      const stderr = yield* Effect.tryPromise({
+        try: () => open(stderrLogPath, "w"),
+        catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.open-stderr"),
+      });
+      yield* Effect.addFinalizer(() =>
         Effect.tryPromise({
           try: () => stderr.close(),
           catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.close-stderr"),
-        }),
-      ],
-      { discard: true },
-    );
-    if (spawnError) {
-      return yield* Effect.fail(
-        sharedDoltOperationError(
-          `Failed starting shared Dolt server with config ${paths.doltConfigFile}: ${spawnError.message}`,
-          "shared-dolt.start",
-          spawnError,
-        ),
+        }).pipe(Effect.catchAll(() => Effect.void)),
       );
-    }
+      const child = yield* Effect.try({
+        try: () =>
+          spawn("dolt", ["sql-server", "--config", paths.doltConfigFile], {
+            cwd: paths.sharedServerRoot,
+            detached: shouldStartDetachedProcessGroup(),
+            env: paths.env,
+            stdio: ["ignore", stdout.fd, stderr.fd],
+          }),
+        catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.spawn"),
+      });
 
-    if (yield* waitForServerReady(port, paths.env)) {
-      if (!child.pid) {
-        child.kill();
+      const spawnError = yield* Effect.async<Error | null>((resume, signal) => {
+        let settled = false;
+        const finish = (error: Error | null): void => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          signal.removeEventListener("abort", abort);
+          child.off("error", onError);
+          child.off("spawn", onSpawn);
+          resume(Effect.succeed(error));
+        };
+        const abort = (): void => {
+          child.kill("SIGTERM");
+          finish(new Error("Shared Dolt server spawn was aborted."));
+        };
+        const onError = (error: Error) => finish(error);
+        const onSpawn = () => finish(null);
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) {
+          abort();
+          return;
+        }
+        child.once("error", onError);
+        child.once("spawn", onSpawn);
+      });
+      yield* Effect.all(
+        [
+          Effect.tryPromise({
+            try: () => stdout.close(),
+            catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.close-stdout"),
+          }),
+          Effect.tryPromise({
+            try: () => stderr.close(),
+            catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.close-stderr"),
+          }),
+        ],
+        { discard: true },
+      );
+      if (spawnError) {
         return yield* Effect.fail(
-          sharedDoltResourceError(
-            `Shared Dolt server on port ${port} started without a process id`,
+          sharedDoltOperationError(
+            `Failed starting shared Dolt server with config ${paths.doltConfigFile}: ${spawnError.message}`,
             "shared-dolt.start",
-            "pid",
+            spawnError,
           ),
         );
       }
-      child.unref();
-      return {
-        pid: child.pid,
-        ownerPid: process.pid,
-        acquisition: "started_by_owner",
-        host: SHARED_DOLT_SERVER_HOST,
-        user: SHARED_DOLT_SERVER_USER,
-        port,
-        sharedServerRoot: paths.sharedServerRoot,
-        doltDataDir: paths.doltRoot,
-        startedAt: new Date().toISOString(),
-      };
-    }
 
-    const cleanupErrors: string[] = [];
-    const childPid = child.pid;
-    if (childPid && childPid > 0) {
-      const cleanupExit = yield* Effect.either(
-        terminateSharedDoltProcess(childPid, `shared Dolt server on port ${port}`),
-      );
-      if (cleanupExit._tag === "Left") {
-        cleanupErrors.push(cleanupExit.left.message);
+      if (yield* waitForServerReady(port, paths.env)) {
+        if (!child.pid) {
+          child.kill();
+          return yield* Effect.fail(
+            sharedDoltResourceError(
+              `Shared Dolt server on port ${port} started without a process id`,
+              "shared-dolt.start",
+              "pid",
+            ),
+          );
+        }
+        child.unref();
+        return {
+          pid: child.pid,
+          ownerPid: process.pid,
+          acquisition: "started_by_owner",
+          host: SHARED_DOLT_SERVER_HOST,
+          user: SHARED_DOLT_SERVER_USER,
+          port,
+          sharedServerRoot: paths.sharedServerRoot,
+          doltDataDir: paths.doltRoot,
+          startedAt: new Date().toISOString(),
+        };
       }
-    }
-    const stderrOutput = yield* Effect.tryPromise({
-      try: () => readFile(stderrLogPath, "utf8"),
-      catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.read-stderr"),
-    }).pipe(Effect.catchAll(() => Effect.succeed("")));
-    const detail = formatDoltStartupLog(stderrOutput);
-    const startupError = detail
-      ? `Shared Dolt server on port ${port} failed to become ready: ${detail}`
-      : `Shared Dolt server on port ${port} failed to become ready within ${SHARED_DOLT_HEALTH_TIMEOUT_MS}ms`;
-    return yield* Effect.fail(
-      sharedDoltOperationError(
-        cleanupErrors.length > 0
-          ? `${startupError}\nCleanup failed: ${cleanupErrors.join("\n")}`
-          : startupError,
-        "shared-dolt.wait-ready",
-      ),
-    );
-  });
+
+      const cleanupErrors: string[] = [];
+      const childPid = child.pid;
+      if (childPid && childPid > 0) {
+        const cleanupExit = yield* Effect.either(
+          terminateSharedDoltProcess(childPid, `shared Dolt server on port ${port}`),
+        );
+        if (cleanupExit._tag === "Left") {
+          cleanupErrors.push(cleanupExit.left.message);
+        }
+      }
+      const stderrOutput = yield* Effect.tryPromise({
+        try: () => readFile(stderrLogPath, "utf8"),
+        catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.read-stderr"),
+      }).pipe(Effect.catchAll(() => Effect.succeed("")));
+      const detail = formatDoltStartupLog(stderrOutput);
+      const startupError = detail
+        ? `Shared Dolt server on port ${port} failed to become ready: ${detail}`
+        : `Shared Dolt server on port ${port} failed to become ready within ${SHARED_DOLT_HEALTH_TIMEOUT_MS}ms`;
+      return yield* Effect.fail(
+        sharedDoltOperationError(
+          cleanupErrors.length > 0
+            ? `${startupError}\nCleanup failed: ${cleanupErrors.join("\n")}`
+            : startupError,
+          "shared-dolt.wait-ready",
+        ),
+      );
+    }),
+  );
 
 export const ensureSharedDoltServerRunning = (
   paths: BeadsSharedServerPaths,
@@ -376,9 +402,10 @@ export const writeSharedServerState = (
       try: () => mkdir(path.dirname(paths.serverStatePath), { recursive: true }),
       catch: (cause) => toSharedDoltServerError(cause, "shared-dolt.ensure-state-dir"),
     });
+    const now = yield* Clock.currentTimeMillis;
     const tempFile = path.join(
       path.dirname(paths.serverStatePath),
-      `.server.json.tmp-${process.pid}-${Date.now()}`,
+      `.server.json.tmp-${process.pid}-${now}`,
     );
     yield* Effect.tryPromise({
       try: () => writeFile(tempFile, `${JSON.stringify(state, null, 2)}\n`),

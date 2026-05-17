@@ -1,12 +1,16 @@
 import { cp, lstat, mkdir, readdir, readlink, realpath, rm, symlink } from "node:fs/promises";
 import path from "node:path";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import {
   HostOperationError,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
-import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
+import {
+  type WorktreeFileError,
+  type WorktreeFilePort,
+  WorktreeFilePortTag,
+} from "../../ports/worktree-file-port";
 
 const metadataDirectoryName = ".git";
 const normalizeMissingPath = (inputPath: string): string => path.resolve(inputPath);
@@ -358,3 +362,5 @@ export const createWorktreeFileAdapter = (): WorktreeFilePort => ({
     });
   },
 });
+
+export const WorktreeFilePortLive = Layer.sync(WorktreeFilePortTag, createWorktreeFileAdapter);

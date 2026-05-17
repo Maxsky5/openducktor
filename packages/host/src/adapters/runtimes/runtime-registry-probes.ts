@@ -9,6 +9,7 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
+import { parseJson } from "../../effect/json";
 import type {
   RuntimeEnsureWorkspaceInput,
   RuntimeMcpStatusProbeInput,
@@ -293,7 +294,7 @@ const fetchOpenCodeJson = (
       return null;
     }
     return yield* Effect.try({
-      try: () => JSON.parse(body) as unknown,
+      try: () => parseJson(body),
       catch: (cause) =>
         new HostValidationError({
           message: cause instanceof Error ? cause.message : String(cause),

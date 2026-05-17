@@ -1,8 +1,8 @@
 import type { RuntimeHealth, RuntimeKind } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { errorMessage } from "../../effect/host-errors";
-import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
+import { type RuntimeHealthPort, RuntimeHealthPortTag } from "../../ports/runtime-health-port";
+import { type SystemCommandPort, SystemCommandPortTag } from "../../ports/system-command-port";
 import { resolveCodexBinary, resolveOpencodeBinary } from "./runtime-binaries";
 
 const OPENCODE_VERSION_ENV = {
@@ -76,3 +76,8 @@ export const createRuntimeHealthProbe = (
     });
   },
 });
+
+export const RuntimeHealthPortLive = Layer.effect(
+  RuntimeHealthPortTag,
+  Effect.map(SystemCommandPortTag, (systemCommands) => createRuntimeHealthProbe(systemCommands)),
+);

@@ -1,4 +1,4 @@
-import type { Effect } from "effect";
+import { Context, type Effect } from "effect";
 import type {
   HostOperationError,
   HostResourceError,
@@ -24,3 +24,8 @@ export type CodexAppServerPort = {
   drainServerRequests(runtimeId: string): Effect.Effect<unknown[], CodexAppServerError>;
   respond(input: CodexAppServerRespondInput): Effect.Effect<void, CodexAppServerError>;
 };
+
+export class CodexAppServerPortTag extends Context.Tag("@openducktor/host/CodexAppServerPort")<
+  CodexAppServerPortTag,
+  CodexAppServerPort
+>() {}

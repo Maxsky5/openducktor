@@ -184,23 +184,26 @@ export const showRawIssue = (runBdJson: RunBdJson, repoPath: string, taskId: str
     const value = yield* runBdJson(repoPath, ["show", "--id", taskId]);
     const issueValue = Array.isArray(value) ? value[0] : undefined;
     if (issueValue === undefined) {
-      throw new HostResourceError({
-        resource: "task",
-        operation: "beadsTaskMapping.showRawIssue",
-        message: `Task not found: ${taskId}`,
-        details: { taskId, repoPath },
-      });
+      return yield* Effect.fail(
+        new HostResourceError({
+          resource: "task",
+          operation: "beadsTaskMapping.showRawIssue",
+          message: `Task not found: ${taskId}`,
+          details: { taskId, repoPath },
+        }),
+      );
     }
-    try {
-      return parseRawIssue(issueValue);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new HostValidationError({
-        message: `Failed to decode bd show payload: ${message}`,
-        cause: error,
-        details: { taskId, repoPath },
-      });
-    }
+    return yield* Effect.try({
+      try: () => parseRawIssue(issueValue),
+      catch: (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        return new HostValidationError({
+          message: `Failed to decode bd show payload: ${message}`,
+          cause: error,
+          details: { taskId, repoPath },
+        });
+      },
+    });
   });
 export const appendRawIssueList = (
   value: unknown,

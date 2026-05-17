@@ -13,6 +13,7 @@ import type {
   CodexAppServerRespondInput,
 } from "../../ports/codex-app-server-port";
 import type { CodexAppServerTransport } from "./codex-app-server-transport-registry";
+import { writeJsonLine } from "./codex-json-line-writer";
 
 type CodexChildProcess = ChildProcessByStdio<Writable, Readable, Readable>;
 
@@ -45,17 +46,6 @@ const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
 
 const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-const writeLine = (stdin: Writable, payload: unknown) =>
-  Effect.async<void, HostOperationError>((resume) => {
-    stdin.write(`${JSON.stringify(payload)}\n`, (error) => {
-      if (error) {
-        resume(Effect.fail(toHostOperationError(error, "codexAppServerTransport.writeLine")));
-        return;
-      }
-      resume(Effect.void);
-    });
-  });
 
 const resolveAfterQueuedMessages = (resolve: (value: unknown) => void, value: unknown): void => {
   setImmediate(() => resolve(value));
@@ -139,7 +129,7 @@ export const createCodexAppServerTransport = (
   const sendMessage = (message: Record<string, unknown>) =>
     Effect.gen(function* () {
       yield* ensureOpenEffect();
-      yield* writeLine(child.stdin, message).pipe(
+      yield* writeJsonLine(child.stdin, message).pipe(
         Effect.mapError(
           (error) =>
             new HostOperationError({

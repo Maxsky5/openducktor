@@ -1,5 +1,5 @@
 import { realpath } from "node:fs/promises";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import {
   createDefaultGitRunner,
@@ -44,7 +44,7 @@ import {
   buildWorktreeStatusData,
   buildWorktreeStatusSummaryData,
 } from "../../infrastructure/git/git-worktree-status";
-import type { GitPort, GitRemote } from "../../ports/git-port";
+import { type GitPort, GitPortTag, type GitRemote } from "../../ports/git-port";
 
 export type {
   GitCommandResult,
@@ -227,3 +227,5 @@ export const createGitCliAdapter = ({
     return abortConflict(runner, workingDirectory, operation);
   },
 });
+
+export const GitPortLive = Layer.sync(GitPortTag, () => createGitCliAdapter());

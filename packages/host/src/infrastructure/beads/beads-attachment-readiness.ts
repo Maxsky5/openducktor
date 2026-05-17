@@ -9,6 +9,7 @@ import {
   HostValidationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
+import { parseJson } from "../../effect/json";
 import type { BeadsAttachmentProvisioningError } from "./beads-attachment-provisioning";
 import { readTextFile } from "./beads-attachment-store";
 import {
@@ -107,7 +108,7 @@ const readAttachmentMetadata = (
     }
     const payload = yield* readTextFile(metadataPath, "beads.attachment.read-metadata");
     const parsed = yield* Effect.try({
-      try: () => JSON.parse(payload) as unknown,
+      try: () => parseJson(payload),
       catch: (error) =>
         beadsValidationError(
           `Failed parsing Beads attachment metadata ${metadataPath}: ${String(error)}`,
@@ -246,7 +247,7 @@ const probeSharedDatabasePresence = (
   });
 
 const parseBdWherePayload = (payload: string): BeadsWherePayload => {
-  const parsed = JSON.parse(payload) as unknown;
+  const parsed = parseJson(payload);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw beadsValidationError("bd where --json payload must be an object", "payload");
   }

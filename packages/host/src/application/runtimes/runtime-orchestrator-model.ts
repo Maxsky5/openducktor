@@ -9,7 +9,7 @@ import {
   repoRuntimeHealthCheckSchema,
   repoRuntimeStartupStatusSchema,
 } from "@openducktor/contracts";
-import { Effect, Schedule } from "effect";
+import { Clock, Effect, Schedule } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type {
@@ -60,7 +60,7 @@ export type RuntimeOrchestratorLogger = {
   info(message: string): void;
   error(message: string): void;
 };
-export const nowIso = (): string => new Date().toISOString();
+export const isoFromMillis = (millis: number): string => new Date(millis).toISOString();
 export const ACTIVE_MCP_PROBE_ATTEMPTS = 20;
 export const ACTIVE_MCP_PROBE_RETRY_DELAY_MS = 250;
 export const activeMcpReadinessProbeSchedule = (attempts: number, retryDelayMs: number) =>
@@ -226,8 +226,8 @@ export const findWorkspaceRuntime = (
 export const buildIdleStartupStatus = (
   runtimeKind: string,
   repoPath: string,
+  updatedAt: string,
 ): RepoRuntimeStartupStatus => {
-  const updatedAt = nowIso();
   return repoRuntimeStartupStatusSchema.parse({
     runtimeKind,
     repoPath,
@@ -269,7 +269,7 @@ export const buildWaitingStartupStatus = (
     stage: "waiting_for_runtime",
     runtime: null,
     startedAt,
-    updatedAt: nowIso(),
+    updatedAt: startedAt,
     elapsedMs: null,
     attempts: 0,
     failureKind: null,
@@ -280,18 +280,23 @@ export const buildFailedStartupStatus = (
   runtimeKind: string,
   repoPath: string,
   startedAt: string,
+  failedAt: string,
   failureReason: string,
   detail: string,
 ): RepoRuntimeStartupStatus => {
   const startedAtMs = Date.parse(startedAt);
-  const elapsedMs = Number.isNaN(startedAtMs) ? null : Math.max(Date.now() - startedAtMs, 0);
+  const failedAtMs = Date.parse(failedAt);
+  const elapsedMs =
+    Number.isNaN(startedAtMs) || Number.isNaN(failedAtMs)
+      ? null
+      : Math.max(failedAtMs - startedAtMs, 0);
   return repoRuntimeStartupStatusSchema.parse({
     runtimeKind,
     repoPath,
     stage: "startup_failed",
     runtime: null,
     startedAt,
-    updatedAt: nowIso(),
+    updatedAt: failedAt,
     elapsedMs,
     attempts: null,
     failureKind: "error",
@@ -304,53 +309,51 @@ export const buildHealthStatus = (
   startupStatus: RepoRuntimeStartupStatus,
   runtimeRegistry: RuntimeRegistryPort,
   options: BuildHealthStatusOptions = {},
-) => {
-  const runtimeReady = startupStatus.stage === "runtime_ready";
-  const startupFailed = startupStatus.stage === "startup_failed";
-  const startupInProgress =
-    startupStatus.stage === "startup_requested" || startupStatus.stage === "waiting_for_runtime";
-  const checkedAt = nowIso();
-  const runtimeState = runtimeReady
-    ? "ready"
-    : startupFailed
-      ? "error"
-      : startupInProgress
-        ? "checking"
-        : "not_started";
-  const supportsMcp = descriptor.capabilities.optionalSurfaces.supportsMcpStatus;
-  const runtimeHealth = {
-    status: runtimeState,
-    stage: startupStatus.stage,
-    observation: runtimeReady ? "observed_existing_runtime" : null,
-    instance: startupStatus.runtime,
-    startedAt: startupStatus.startedAt,
-    updatedAt: startupStatus.updatedAt,
-    elapsedMs: startupStatus.elapsedMs,
-    attempts: startupStatus.attempts,
-    detail: runtimeReady
-      ? null
-      : (startupStatus.detail ??
-        (startupFailed
-          ? (startupStatus.failureReason ?? "Runtime startup failed.")
-          : startupInProgress
-            ? "Runtime startup is in progress."
-            : "Runtime has not been started yet.")),
-    failureKind: startupStatus.failureKind,
-    failureReason: startupStatus.failureReason,
-  };
-  if (!supportsMcp) {
-    return Effect.succeed(
-      repoRuntimeHealthCheckSchema.parse({
+): Effect.Effect<RepoRuntimeHealthCheck, RuntimeRegistryError> =>
+  Effect.gen(function* () {
+    const runtimeReady = startupStatus.stage === "runtime_ready";
+    const startupFailed = startupStatus.stage === "startup_failed";
+    const startupInProgress =
+      startupStatus.stage === "startup_requested" || startupStatus.stage === "waiting_for_runtime";
+    const checkedAt = isoFromMillis(yield* Clock.currentTimeMillis);
+    const runtimeState = runtimeReady
+      ? "ready"
+      : startupFailed
+        ? "error"
+        : startupInProgress
+          ? "checking"
+          : "not_started";
+    const supportsMcp = descriptor.capabilities.optionalSurfaces.supportsMcpStatus;
+    const runtimeHealth = {
+      status: runtimeState,
+      stage: startupStatus.stage,
+      observation: runtimeReady ? "observed_existing_runtime" : null,
+      instance: startupStatus.runtime,
+      startedAt: startupStatus.startedAt,
+      updatedAt: startupStatus.updatedAt,
+      elapsedMs: startupStatus.elapsedMs,
+      attempts: startupStatus.attempts,
+      detail: runtimeReady
+        ? null
+        : (startupStatus.detail ??
+          (startupFailed
+            ? (startupStatus.failureReason ?? "Runtime startup failed.")
+            : startupInProgress
+              ? "Runtime startup is in progress."
+              : "Runtime has not been started yet.")),
+      failureKind: startupStatus.failureKind,
+      failureReason: startupStatus.failureReason,
+    };
+    if (!supportsMcp) {
+      return repoRuntimeHealthCheckSchema.parse({
         status: runtimeState,
         checkedAt,
         runtime: runtimeHealth,
         mcp: null,
-      }),
-    );
-  }
-  if (!runtimeReady || !startupStatus.runtime) {
-    return Effect.succeed(
-      repoRuntimeHealthCheckSchema.parse({
+      });
+    }
+    if (!runtimeReady || !startupStatus.runtime) {
+      return repoRuntimeHealthCheckSchema.parse({
         status: runtimeState,
         checkedAt,
         runtime: runtimeHealth,
@@ -363,12 +366,10 @@ export const buildHealthStatus = (
           detail: null,
           failureKind: null,
         },
-      }),
-    );
-  }
-  if (!runtimeRegistry.probeMcpStatus) {
-    return Effect.succeed(
-      repoRuntimeHealthCheckSchema.parse({
+      });
+    }
+    if (!runtimeRegistry.probeMcpStatus) {
+      return repoRuntimeHealthCheckSchema.parse({
         status: runtimeState,
         checkedAt,
         runtime: runtimeHealth,
@@ -381,57 +382,56 @@ export const buildHealthStatus = (
           detail: null,
           failureKind: null,
         },
-      }),
-    );
-  }
-  return probeMcpStatusWithRetry(
-    runtimeRegistry,
-    {
-      runtimeKind: descriptor.kind,
-      runtimeRoute: startupStatus.runtime.runtimeRoute,
-      workingDirectory: startupStatus.runtime.workingDirectory,
-      serverName: "openducktor",
-    },
-    options.mcpProbeAttempts ?? 1,
-    options.mcpProbeRetryDelayMs ?? ACTIVE_MCP_PROBE_RETRY_DELAY_MS,
-  ).pipe(
-    Effect.map((probe) =>
-      repoRuntimeHealthCheckSchema.parse({
-        status: probe.connected || !probe.supported ? "ready" : "error",
-        checkedAt,
-        runtime: runtimeHealth,
-        mcp: {
-          supported: probe.supported,
-          status: !probe.supported ? "unsupported" : probe.connected ? "connected" : "error",
-          serverName: "openducktor",
-          serverStatus: probe.serverStatus,
-          toolIds: probe.connected ? probe.toolIds : [],
-          detail: probe.detail,
-          failureKind: probe.failureKind,
-        },
-      }),
-    ),
-    Effect.catchAll((error) => {
-      const detail = errorMessage(error);
-      return Effect.succeed(
+      });
+    }
+    return yield* probeMcpStatusWithRetry(
+      runtimeRegistry,
+      {
+        runtimeKind: descriptor.kind,
+        runtimeRoute: startupStatus.runtime.runtimeRoute,
+        workingDirectory: startupStatus.runtime.workingDirectory,
+        serverName: "openducktor",
+      },
+      options.mcpProbeAttempts ?? 1,
+      options.mcpProbeRetryDelayMs ?? ACTIVE_MCP_PROBE_RETRY_DELAY_MS,
+    ).pipe(
+      Effect.map((probe) =>
         repoRuntimeHealthCheckSchema.parse({
-          status: "error",
+          status: probe.connected || !probe.supported ? "ready" : "error",
           checkedAt,
           runtime: runtimeHealth,
           mcp: {
-            supported: true,
-            status: "error",
+            supported: probe.supported,
+            status: !probe.supported ? "unsupported" : probe.connected ? "connected" : "error",
             serverName: "openducktor",
-            serverStatus: null,
-            toolIds: [],
-            detail,
-            failureKind: "error",
+            serverStatus: probe.serverStatus,
+            toolIds: probe.connected ? probe.toolIds : [],
+            detail: probe.detail,
+            failureKind: probe.failureKind,
           },
         }),
-      );
-    }),
-  );
-};
+      ),
+      Effect.catchAll((error) => {
+        const detail = errorMessage(error);
+        return Effect.succeed(
+          repoRuntimeHealthCheckSchema.parse({
+            status: "error",
+            checkedAt,
+            runtime: runtimeHealth,
+            mcp: {
+              supported: true,
+              status: "error",
+              serverName: "openducktor",
+              serverStatus: null,
+              toolIds: [],
+              detail,
+              failureKind: "error",
+            },
+          }),
+        );
+      }),
+    );
+  });
 export const probeMcpStatusWithRetry = (
   runtimeRegistry: RuntimeRegistryPort,
   input: RuntimeMcpStatusProbeInput,

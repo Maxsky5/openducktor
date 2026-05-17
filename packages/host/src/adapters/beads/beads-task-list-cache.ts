@@ -40,12 +40,13 @@ export const createTaskListCache = () => {
   const cachedTaskListAndGeneration = (
     repoPath: string,
     doneVisibleDays: number | undefined,
+    nowMs: number,
   ): {
     generation: number;
     tasks: TaskCard[] | null;
   } => {
     const state = stateFor(repoPath, doneVisibleDays);
-    if (state.entry && Date.now() - state.entry.cachedAt <= TASK_LIST_CACHE_TTL_MS) {
+    if (state.entry && nowMs - state.entry.cachedAt <= TASK_LIST_CACHE_TTL_MS) {
       return { generation: state.generation, tasks: cloneTasks(state.entry.tasks) };
     }
     state.entry = null;
@@ -57,13 +58,14 @@ export const createTaskListCache = () => {
     doneVisibleDays: number | undefined,
     generation: number,
     tasks: TaskCard[],
+    nowMs: number,
   ): void => {
     const state = stateFor(repoPath, doneVisibleDays);
     if (state.generation !== generation) {
       return;
     }
     state.entry = {
-      cachedAt: Date.now(),
+      cachedAt: nowMs,
       tasks: cloneTasks(tasks),
     };
   };

@@ -1,6 +1,5 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { createServer, Socket } from "node:net";
 import type { Readable } from "node:stream";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
 import { Effect, Exit, Schedule, Scope } from "effect";
@@ -25,6 +24,7 @@ import {
 } from "../process/process-tree";
 import { resolveOpencodeBinary } from "../runtimes/runtime-binaries";
 import { createSystemCommandLaunch } from "../system/system-command-runner";
+import { canConnect, pickFreePort } from "./opencode-local-port";
 
 export type OpenCodeMcpBridgeConnection = {
   workspaceId: string;
@@ -124,47 +124,6 @@ export const buildOpenCodeConfigContent = (
     },
   });
 
-const pickFreePort = (): Effect.Effect<number, HostOperationError | HostResourceError> =>
-  Effect.async<number, HostOperationError | HostResourceError>((resume) => {
-    const server = createServer();
-    let settled = false;
-    const finish = (effect: Effect.Effect<number, HostOperationError | HostResourceError>) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      resume(effect);
-    };
-    server.once("error", (error) =>
-      finish(Effect.fail(toHostOperationError(error, "opencode.pickFreePort"))),
-    );
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (!address || typeof address === "string") {
-        server.close(() => {
-          finish(
-            Effect.fail(
-              new HostResourceError({
-                resource: "localPort",
-                operation: "opencode.pickFreePort",
-                message: "Failed to allocate a local OpenCode runtime port.",
-              }),
-            ),
-          );
-        });
-        return;
-      }
-      const port = address.port;
-      server.close((error) => {
-        if (error) {
-          finish(Effect.fail(toHostOperationError(error, "opencode.pickFreePort.close")));
-          return;
-        }
-        finish(Effect.succeed(port));
-      });
-    });
-  });
-
 const appendCapturedOutput = (current: string, chunk: Buffer): string => {
   const next = current + chunk.toString("utf8");
   if (next.length <= MAX_CAPTURED_OUTPUT_BYTES) {
@@ -187,27 +146,6 @@ const startupProbeSchedule = (startupTimeoutMs: number, retryDelayMs: number) =>
     Schedule.recurs(Math.max(1, Math.ceil(startupTimeoutMs / Math.max(1, retryDelayMs))) - 1),
     () => `${retryDelayMs} millis`,
   );
-
-const canConnect = (port: number, timeoutMs: number): Effect.Effect<boolean> =>
-  Effect.async<boolean>((resume) => {
-    const socket = new Socket();
-    let settled = false;
-
-    const finish = (connected: boolean): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      socket.destroy();
-      resume(Effect.succeed(connected));
-    };
-
-    socket.setTimeout(timeoutMs);
-    socket.once("connect", () => finish(true));
-    socket.once("timeout", () => finish(false));
-    socket.once("error", () => finish(false));
-    socket.connect(port, "127.0.0.1");
-  });
 
 export const createOpenCodeWorkspaceRuntimeStarter = ({
   systemCommands,

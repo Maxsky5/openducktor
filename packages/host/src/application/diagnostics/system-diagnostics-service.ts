@@ -9,7 +9,7 @@ import {
   type RuntimeHealth,
   type SystemCheck,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import {
   type HostOperationError,
   HostValidationError,
@@ -193,14 +193,16 @@ export const createSystemDiagnosticsService = ({
     Effect.gen(function* () {
       const force = forceRefresh ?? false;
       if (!force && cachedRuntimeCheck) {
-        if (Date.now() - cachedRuntimeCheck.checkedAt <= RUNTIME_CHECK_CACHE_TTL_MS) {
+        const now = yield* Clock.currentTimeMillis;
+        if (now - cachedRuntimeCheck.checkedAt <= RUNTIME_CHECK_CACHE_TTL_MS) {
           return cachedRuntimeCheck.value;
         }
         cachedRuntimeCheck = null;
       }
       const check = yield* probeRuntimeCheck();
+      const checkedAt = yield* Clock.currentTimeMillis;
       cachedRuntimeCheck = {
-        checkedAt: Date.now(),
+        checkedAt,
         value: check,
       };
       return check;
