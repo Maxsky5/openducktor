@@ -4,6 +4,7 @@ import {
   createRuntimeDefinitionsService,
   createRuntimeRegistry,
   type DevServerProcessPort,
+  Effect,
   type FilesystemPort,
   type GitPort,
   type HostEventBusPort,
@@ -17,7 +18,6 @@ import {
   type TaskStorePort,
   type WorktreeFilePort,
 } from "@openducktor/host";
-import { Effect } from "effect";
 import { createElectronHostCommandRouter as createProductionElectronHostCommandRouter } from "./electron-host";
 
 type RuntimeRegistryEntry = RuntimeInstanceSummary;

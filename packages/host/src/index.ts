@@ -1,3 +1,4 @@
+export { Effect } from "effect";
 export { createLocalAttachmentAdapter } from "./adapters/attachments/local-attachment-adapter";
 export { createRuntimeRegistry } from "./adapters/runtimes/runtime-registry";
 export { createRuntimeDefinitionsService } from "./application/runtimes/runtime-definitions-service";
