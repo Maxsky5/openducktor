@@ -89,6 +89,7 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
     focusTextSegment: mock(() => true),
     setPendingFocusTarget: mock(() => {}),
     resolveActiveTextSelection: mock(() => activeSelection),
+    resolveActiveTextSelectionRange: mock(() => null),
     resolveSelectionTargetForLineBreak: mock(() => lineBreakTarget),
     focusTextSegmentWithMemory: mock(() => true),
   };

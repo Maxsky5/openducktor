@@ -43,6 +43,21 @@ export const getCaretOffsetWithinElement = (element: HTMLElement): number | null
   return measurementRange.toString().split(EMPTY_TEXT_SEGMENT_SENTINEL).join("").length;
 };
 
+export const getTextOffsetWithinElement = (
+  element: HTMLElement,
+  container: Node,
+  offset: number,
+): number | null => {
+  if (!element.contains(container)) {
+    return null;
+  }
+
+  const measurementRange = element.ownerDocument.createRange();
+  measurementRange.selectNodeContents(element);
+  measurementRange.setEnd(container, offset);
+  return measurementRange.toString().split(EMPTY_TEXT_SEGMENT_SENTINEL).join("").length;
+};
+
 export const setCaretOffsetWithinElement = (element: HTMLElement, logicalOffset: number): void => {
   const ownerDocument = element.ownerDocument;
   const selection = ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();

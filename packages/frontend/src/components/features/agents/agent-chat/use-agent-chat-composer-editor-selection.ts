@@ -10,6 +10,7 @@ import {
 import {
   getCaretOffsetWithinElement,
   getComposerContentRoot,
+  getTextOffsetWithinElement,
   readEditableTextContent,
   setCaretOffsetWithinElement,
 } from "./agent-chat-composer-selection";
@@ -19,6 +20,14 @@ export type ActiveTextSelection = {
   element: HTMLElement;
   text: string;
   caretOffset: number | null;
+};
+
+export type ActiveTextSelectionRange = {
+  segmentId: string;
+  element: HTMLElement;
+  text: string;
+  rangeStart: number;
+  rangeEnd: number;
 };
 
 export type TextSelectionTarget = {
@@ -183,6 +192,46 @@ export const readActiveTextSelection = (
   return null;
 };
 
+export const readActiveTextSelectionRange = (
+  root: HTMLElement,
+): ActiveTextSelectionRange | null => {
+  const selection = root.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    return null;
+  }
+
+  const range = selection.getRangeAt(0);
+  const startSegment = getClosestTextSegmentElement(range.startContainer, root);
+  const endSegment = getClosestTextSegmentElement(range.endContainer, root);
+  if (!startSegment || startSegment !== endSegment) {
+    return null;
+  }
+
+  const startOffset = getTextOffsetWithinElement(
+    startSegment,
+    range.startContainer,
+    range.startOffset,
+  );
+  const endOffset = getTextOffsetWithinElement(startSegment, range.endContainer, range.endOffset);
+  if (startOffset === null || endOffset === null) {
+    return null;
+  }
+
+  const rangeStart = Math.min(startOffset, endOffset);
+  const rangeEnd = Math.max(startOffset, endOffset);
+  if (rangeStart === rangeEnd) {
+    return null;
+  }
+
+  return {
+    segmentId: startSegment.dataset.textSegmentId ?? startSegment.dataset.segmentId ?? "",
+    element: startSegment,
+    text: readEditableTextContent(startSegment),
+    rangeStart,
+    rangeEnd,
+  };
+};
+
 export const parseComposerDraftFromRoot = (
   root: HTMLElement,
   previousDraft: AgentChatComposerDraft,
@@ -253,6 +302,7 @@ export type UseAgentChatComposerEditorSelectionResult = {
     sourceDraft: AgentChatComposerDraft,
     eventTarget?: EventTarget | null,
   ) => ActiveTextSelection | null;
+  resolveActiveTextSelectionRange: (root: HTMLDivElement) => ActiveTextSelectionRange | null;
   resolveSelectionTargetForLineBreak: (
     root: HTMLDivElement,
     sourceDraft: AgentChatComposerDraft,
@@ -420,6 +470,10 @@ export const useAgentChatComposerEditorSelection = ({
     [repairCollapsedSelection],
   );
 
+  const resolveActiveTextSelectionRange = useCallback((root: HTMLDivElement) => {
+    return readActiveTextSelectionRange(root);
+  }, []);
+
   const resolveSelectionTargetForLineBreak = useCallback(
     (
       root: HTMLDivElement,
@@ -476,6 +530,7 @@ export const useAgentChatComposerEditorSelection = ({
     focusTextSegment,
     setPendingFocusTarget,
     resolveActiveTextSelection,
+    resolveActiveTextSelectionRange,
     resolveSelectionTargetForLineBreak,
     focusTextSegmentWithMemory,
     focusLastTextSegment,

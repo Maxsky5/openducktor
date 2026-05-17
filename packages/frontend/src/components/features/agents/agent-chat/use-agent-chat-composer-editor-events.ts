@@ -124,6 +124,7 @@ type UseAgentChatComposerEditorEventsArgs = {
     | "focusTextSegment"
     | "setPendingFocusTarget"
     | "resolveActiveTextSelection"
+    | "resolveActiveTextSelectionRange"
     | "resolveSelectionTargetForLineBreak"
     | "focusTextSegmentWithMemory"
   >;

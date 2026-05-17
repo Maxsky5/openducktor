@@ -10,6 +10,7 @@ import { buildFileSearchResult } from "./agent-chat-test-fixtures";
 import type { FileMenuState } from "./use-agent-chat-composer-editor-autocomplete";
 import type {
   ActiveTextSelection,
+  ActiveTextSelectionRange,
   TextSelectionTarget,
 } from "./use-agent-chat-composer-editor-selection";
 
@@ -32,6 +33,7 @@ type KeyDownTestSetupOverrides = {
   metaKey?: boolean;
   ctrlKey?: boolean;
   repairedSelection?: ActiveTextSelection | null;
+  selectedTextRange?: ActiveTextSelectionRange | null;
   lineBreakTarget?: TextSelectionTarget | null;
   selectComposerContents?: boolean;
   isComposerContentFullySelected?: boolean;
@@ -64,6 +66,17 @@ const createActiveSelection = (
   ...overrides,
 });
 
+const createActiveSelectionRange = (
+  overrides: Partial<ActiveTextSelectionRange> = {},
+): ActiveTextSelectionRange => ({
+  segmentId: "segment-1",
+  element: document.createElement("div"),
+  text: "hello",
+  rangeStart: 0,
+  rangeEnd: 5,
+  ...overrides,
+});
+
 const createDraft = (text = "hello", segmentId = "segment-1"): AgentChatComposerDraft => ({
   segments: [createTextSegment(text, segmentId)],
   attachments: [],
@@ -84,6 +97,7 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
 
   const selection = {
     resolveActiveTextSelection: mock(() => repairedSelection),
+    resolveActiveTextSelectionRange: mock(() => overrides.selectedTextRange ?? null),
     resolveSelectionTargetForLineBreak: mock(() => lineBreakTarget),
     focusTextSegmentWithMemory: mock(() => true),
   };
@@ -267,6 +281,64 @@ describe("agent-chat-composer-editor-keydown", () => {
     });
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
     expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+  });
+
+  test("removes selected text before browser DOM mutation", () => {
+    const sourceDraft = createDraft("hello\nworld", "segment-1");
+    const selectedTextRange = createActiveSelectionRange({
+      segmentId: "segment-1",
+      text: "hello\nworld",
+      rangeStart: 6,
+      rangeEnd: 11,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      sourceDraft,
+      selectedTextRange,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "segment-1", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "segment-1",
+        offset: 6,
+      },
+    });
+    expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+  });
+
+  test("removes selected text with delete before browser DOM mutation", () => {
+    const sourceDraft = createDraft("hello\nworld", "segment-1");
+    const selectedTextRange = createActiveSelectionRange({
+      segmentId: "segment-1",
+      text: "hello\nworld",
+      rangeStart: 6,
+      rangeEnd: 11,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Delete",
+      sourceDraft,
+      selectedTextRange,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "segment-1", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "segment-1",
+        offset: 6,
+      },
+    });
   });
 
   test("removes current line text with command backspace before browser DOM mutation", () => {

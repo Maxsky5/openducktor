@@ -220,6 +220,24 @@ const typeIntoEditor = (container: HTMLElement, value: string): HTMLElement => {
   return getLastTextSegment(container);
 };
 
+const selectTextSegmentRange = (
+  textSegment: HTMLElement,
+  startOffset: number,
+  endOffset: number,
+): void => {
+  const textNode = textSegment.firstChild;
+  if (!(textNode instanceof Text)) {
+    throw new Error("Expected text node in composer text segment");
+  }
+
+  const range = document.createRange();
+  range.setStart(textNode, startOffset);
+  range.setEnd(textNode, endOffset);
+  const selection = globalThis.getSelection?.();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+};
+
 const selectAllComposerContents = (container: HTMLElement): HTMLElement => {
   const editorRoot = getEditorRoot(container);
   fireEvent.keyDown(editorRoot, {
@@ -1159,6 +1177,24 @@ describe("AgentChatComposerEditor", () => {
     expect(textSegment.className).toContain("after:w-px");
   });
 
+  test("removes selected current-line text without adding an extra row", async () => {
+    resetSelectionMocks();
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    const editable = typeIntoEditor(rendered.container, "hello");
+    fireEvent.keyDown(editable, { key: "Enter", shiftKey: true });
+    await expectComposerText(rendered.container, "hello\n");
+
+    const textSegment = typeIntoEditor(rendered.container, "hello\nworld");
+    selectTextSegmentRange(textSegment, 6, 11);
+    fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace" });
+
+    await expectComposerText(rendered.container, "hello\n");
+    const updatedTextSegment = getLastTextSegment(rendered.container);
+    expect(updatedTextSegment.textContent).toBe("hello\n\u200B");
+    expect(updatedTextSegment.className).toContain("after:w-px");
+  });
+
   test("renders empty trailing text segments as inline blocks for caret placement after slash chips", async () => {
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
@@ -1410,6 +1446,41 @@ describe("AgentChatComposerEditor", () => {
 
     typeIntoEditor(rendered.container, "\nworld");
     fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace", metaKey: true });
+
+    await waitFor(() => {
+      const updatedTrailingEditable =
+        rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+      expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
+      expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
+      expect((updatedTrailingEditable as HTMLElement).className).toContain("after:w-px");
+    });
+  });
+
+  test("removes selected current-line text after file chips without adding an extra row", async () => {
+    resetSelectionMocks();
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "@");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "main.ts",
+      );
+    });
+
+    const trailingEditable = typeIntoEditor(rendered.container, "\nworld");
+    selectTextSegmentRange(trailingEditable, 1, 6);
+    fireEvent.keyDown(getEditorRoot(rendered.container), { key: "Backspace" });
 
     await waitFor(() => {
       const updatedTrailingEditable =

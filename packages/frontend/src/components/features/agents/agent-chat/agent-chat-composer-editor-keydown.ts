@@ -8,13 +8,17 @@ import {
 import type { FileMenuState, SlashMenuState } from "./use-agent-chat-composer-editor-autocomplete";
 import type {
   ActiveTextSelection,
+  ActiveTextSelectionRange,
   TextSelectionTarget,
   UseAgentChatComposerEditorSelectionResult,
 } from "./use-agent-chat-composer-editor-selection";
 
 type KeyDownSelection = Pick<
   UseAgentChatComposerEditorSelectionResult,
-  "resolveActiveTextSelection" | "resolveSelectionTargetForLineBreak" | "focusTextSegmentWithMemory"
+  | "resolveActiveTextSelection"
+  | "resolveActiveTextSelectionRange"
+  | "resolveSelectionTargetForLineBreak"
+  | "focusTextSegmentWithMemory"
 >;
 
 type HandleComposerEditorKeyDownArgs = {
@@ -264,6 +268,47 @@ const removeCurrentLineText = ({
   return true;
 };
 
+const removeSelectedTextRange = ({
+  event,
+  sourceDraft,
+  selectedRange,
+  applyEditResult,
+  closeSlashMenu,
+  closeFileMenu,
+}: {
+  event: ReactKeyboardEvent<HTMLDivElement>;
+  sourceDraft: AgentChatComposerDraft;
+  selectedRange: ActiveTextSelectionRange | null;
+  applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
+  closeSlashMenu: () => void;
+  closeFileMenu: () => void;
+}): boolean => {
+  if (
+    !selectedRange ||
+    (event.key !== "Backspace" && event.key !== "Delete") ||
+    selectedRange.rangeStart >= selectedRange.rangeEnd
+  ) {
+    return false;
+  }
+
+  event.preventDefault();
+  const nextText = `${selectedRange.text.slice(0, selectedRange.rangeStart)}${selectedRange.text.slice(
+    selectedRange.rangeEnd,
+  )}`;
+  const didApply = applyEditResult(
+    applyComposerDraftEdit(sourceDraft, {
+      type: "update_text",
+      segmentId: selectedRange.segmentId,
+      text: nextText,
+      caretOffset: selectedRange.rangeStart,
+    }),
+  );
+  if (didApply) {
+    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu });
+  }
+  return true;
+};
+
 export const handleComposerEditorKeyDown = ({
   event,
   root,
@@ -355,6 +400,19 @@ export const handleComposerEditorKeyDown = ({
     void insertNewlineAtSelectionTarget(
       selection.resolveSelectionTargetForLineBreak(root, sourceDraft, activeSelection),
     );
+    return true;
+  }
+
+  if (
+    removeSelectedTextRange({
+      event,
+      sourceDraft,
+      selectedRange: selection.resolveActiveTextSelectionRange(root),
+      applyEditResult,
+      closeSlashMenu,
+      closeFileMenu,
+    })
+  ) {
     return true;
   }
 
