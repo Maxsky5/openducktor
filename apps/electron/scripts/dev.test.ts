@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
-import { resolveRendererDevPort, shouldRestartElectronForChange } from "./dev";
+import { electronRuntimeEnv, resolveRendererDevPort, shouldRestartElectronForChange } from "./dev";
 
 describe("electron dev script", () => {
   test("uses the default renderer dev server port", () => {
@@ -19,6 +19,15 @@ describe("electron dev script", () => {
     expect(() => resolveRendererDevPort("70000")).toThrow(
       "ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: 70000",
     );
+  });
+
+  test("does not launch Electron in Node compatibility mode", () => {
+    expect(
+      electronRuntimeEnv({
+        ELECTRON_RUN_AS_NODE: "1",
+        PATH: "/usr/bin",
+      }),
+    ).toEqual({ PATH: "/usr/bin" });
   });
 
   test("restarts Electron for main-process dependencies", () => {

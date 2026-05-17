@@ -119,6 +119,11 @@ const resolveRendererDevUrl = (server: ViteDevServer): string => {
   return `http://${RENDERER_DEV_HOST}:${configuredPort}`;
 };
 
+export const electronRuntimeEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
+  const { ELECTRON_RUN_AS_NODE: _electronRunAsNode, ...runtimeEnv } = env;
+  return runtimeEnv;
+};
+
 const startElectron = (rendererDevUrl: string): ManagedElectronProcess =>
   Bun.spawn(["electron", "dist/main.js"], {
     cwd: packageRoot,
@@ -126,7 +131,7 @@ const startElectron = (rendererDevUrl: string): ManagedElectronProcess =>
     stdout: "inherit",
     stderr: "inherit",
     env: {
-      ...process.env,
+      ...electronRuntimeEnv(process.env),
       VITE_DEV_SERVER_URL: rendererDevUrl,
     },
   });

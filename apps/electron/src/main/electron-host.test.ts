@@ -542,6 +542,23 @@ describe("createElectronHostCommandRouter", () => {
             stoppedRuntimes.push(runtimeId);
             return true;
           }),
+        stopAllRuntimes: () =>
+          Effect.sync(() => {
+            stoppedRuntimes.push("runtime-1");
+            return [
+              {
+                kind: "opencode",
+                runtimeId: "runtime-1",
+                repoPath: "/repo",
+                taskId: null,
+                role: "workspace",
+                workingDirectory: "/repo",
+                runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:9999" },
+                startedAt: "2026-05-13T00:00:00Z",
+                descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
+              },
+            ] satisfies RuntimeInstanceSummary[];
+          }),
         stopSession: () => Effect.succeed(undefined),
       },
       settingsConfig: createSettingsConfig(),
@@ -554,8 +571,8 @@ describe("createElectronHostCommandRouter", () => {
       expect.arrayContaining([
         "Shutting down OpenDucktor host services",
         "No dev servers are running",
-        "Stopping 1 active agent runtime(s)",
-        "Stopping opencode runtime runtime-1 for task workspace (workspace)",
+        "Stopping registered agent runtimes",
+        "Stopped opencode runtime runtime-1 for task workspace (workspace)",
         "No MCP host bridge server is running",
         "No shared Dolt server owned by this OpenDucktor process",
         "OpenDucktor host services stopped",
