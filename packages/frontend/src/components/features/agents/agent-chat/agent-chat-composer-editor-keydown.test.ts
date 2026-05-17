@@ -3,6 +3,7 @@ import type { AgentSlashCommand } from "@openducktor/core";
 import {
   type AgentChatComposerDraft,
   createFileReferenceSegment,
+  createSlashCommandSegment,
   createTextSegment,
 } from "./agent-chat-composer-draft";
 import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
@@ -422,6 +423,77 @@ describe("agent-chat-composer-editor-keydown", () => {
     });
     expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
     expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
+  });
+
+  test("removes file chips on the current line with command backspace", () => {
+    const file = buildFileSearchResult({ path: "src/main.ts", name: "main.ts" });
+    const sourceDraft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("hello\n", "text-before"),
+        createFileReferenceSegment(file, "file-1"),
+        createTextSegment("world", "text-after"),
+      ],
+      attachments: [],
+    };
+    const repairedSelection = createActiveSelection({
+      segmentId: "text-after",
+      text: "world",
+      caretOffset: 5,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      metaKey: true,
+      sourceDraft,
+      repairedSelection,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "text-before", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "text-before",
+        offset: 6,
+      },
+    });
+  });
+
+  test("removes slash chips on the current line with command backspace", () => {
+    const sourceDraft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("hello\n", "text-before"),
+        createSlashCommandSegment(slashCommand, "slash-1"),
+        createTextSegment("world", "text-after"),
+      ],
+      attachments: [],
+    };
+    const repairedSelection = createActiveSelection({
+      segmentId: "text-after",
+      text: "world",
+      caretOffset: 5,
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      metaKey: true,
+      sourceDraft,
+      repairedSelection,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "text-before", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "text-before",
+        offset: 6,
+      },
+    });
   });
 
   test("preserves focus on empty-composer backspace when nothing meaningful remains", () => {

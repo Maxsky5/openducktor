@@ -222,6 +222,50 @@ const removeTrailingLineBreak = ({
   return true;
 };
 
+const resolveCurrentLineStart = (
+  sourceDraft: AgentChatComposerDraft,
+  repairedSelection: ActiveTextSelection,
+  boundedCaretOffset: number,
+): TextSelectionTarget | null => {
+  const currentIndex = sourceDraft.segments.findIndex(
+    (segment) => segment.id === repairedSelection.segmentId,
+  );
+  const currentSegment = sourceDraft.segments[currentIndex];
+  if (!currentSegment || currentSegment.kind !== "text") {
+    return null;
+  }
+
+  const segmentLineStart = currentSegment.text.lastIndexOf("\n", boundedCaretOffset - 1) + 1;
+  if (segmentLineStart > 0) {
+    return {
+      segmentId: currentSegment.id,
+      offset: segmentLineStart,
+    };
+  }
+
+  let lineStart: TextSelectionTarget = {
+    segmentId: currentSegment.id,
+    offset: 0,
+  };
+  for (let index = currentIndex - 1; index >= 0; index -= 1) {
+    const segment = sourceDraft.segments[index];
+    if (segment?.kind !== "text") {
+      continue;
+    }
+
+    const previousLineBreakOffset = segment.text.lastIndexOf("\n");
+    lineStart = {
+      segmentId: segment.id,
+      offset: previousLineBreakOffset + 1,
+    };
+    if (previousLineBreakOffset >= 0) {
+      return lineStart;
+    }
+  }
+
+  return lineStart;
+};
+
 const removeCurrentLineText = ({
   event,
   sourceDraft,
@@ -245,21 +289,22 @@ const removeCurrentLineText = ({
     0,
     Math.min(repairedSelection.caretOffset, repairedSelection.text.length),
   );
-  const lineStart = repairedSelection.text.lastIndexOf("\n", boundedCaretOffset - 1) + 1;
-  if (lineStart >= boundedCaretOffset) {
+  const lineStart = resolveCurrentLineStart(sourceDraft, repairedSelection, boundedCaretOffset);
+  if (
+    !lineStart ||
+    (lineStart.segmentId === repairedSelection.segmentId && lineStart.offset >= boundedCaretOffset)
+  ) {
     return false;
   }
 
   event.preventDefault();
-  const nextText = `${repairedSelection.text.slice(0, lineStart)}${repairedSelection.text.slice(
-    boundedCaretOffset,
-  )}`;
   const didApply = applyEditResult(
     applyComposerDraftEdit(sourceDraft, {
-      type: "update_text",
-      segmentId: repairedSelection.segmentId,
-      text: nextText,
-      caretOffset: lineStart,
+      type: "remove_segment_range",
+      startTextSegmentId: lineStart.segmentId,
+      startOffset: lineStart.offset,
+      endTextSegmentId: repairedSelection.segmentId,
+      endOffset: boundedCaretOffset,
     }),
   );
   if (didApply) {
