@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, test as bunTest, describe, expect } from "bun:test";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -26,6 +26,11 @@ type ContentToolResult = {
 
 const activeServers = new Set<ReturnType<typeof createServer>>();
 const mcpPackageRoot = fileURLToPath(new URL("..", import.meta.url));
+const mcpStdioTestTimeoutMs = 5_000;
+
+const test = (name: string, run: () => Promise<void>): void => {
+  bunTest(name, run, mcpStdioTestTimeoutMs);
+};
 
 const closeServer = async (server: ReturnType<typeof createServer>): Promise<void> => {
   await new Promise<void>((resolve, reject) => {
