@@ -1,8 +1,20 @@
 import {
+  type KillProcess,
   shouldStartDetachedProcessGroup,
   signalProcessTree,
   terminateProcessTree,
 } from "./process-tree";
+
+const noopKill: KillProcess = () => true;
+const noopSpawnSync = () => ({
+  status: 0,
+  signal: null,
+  output: [],
+  pid: 0,
+  stdout: Buffer.alloc(0),
+  stderr: Buffer.alloc(0),
+});
+const processIsAlive = () => true;
 
 describe("process-tree", () => {
   test("selects taskkill for Windows process trees without negative pids", () => {
@@ -10,11 +22,12 @@ describe("process-tree", () => {
 
     signalProcessTree(1234, "SIGTERM", {
       platform: "win32",
-      spawnSync: ((command, args) => {
-        calls.push({ command, args: args as string[] });
-        return { status: 0 };
-      }) as typeof import("node:child_process").spawnSync,
-      isAlive: () => true,
+      kill: noopKill,
+      spawnSync: (command, args) => {
+        calls.push({ command, args });
+        return noopSpawnSync();
+      },
+      isAlive: processIsAlive,
     });
 
     expect(calls).toEqual([
@@ -41,14 +54,15 @@ describe("process-tree", () => {
       stopTimeoutMs: 10,
       signalDependencies: {
         platform: "linux",
-        kill: ((pid, signal) => {
-          if (signal === undefined) {
+        kill: (pid, signal) => {
+          if (signal === undefined || signal === 0) {
             throw new Error("Expected a process signal.");
           }
-          signals.push({ pid, signal: signal as NodeJS.Signals });
+          signals.push({ pid, signal });
           return true;
-        }) as typeof process.kill,
-        isAlive: () => true,
+        },
+        spawnSync: noopSpawnSync,
+        isAlive: processIsAlive,
       },
     });
 
@@ -70,10 +84,13 @@ describe("process-tree", () => {
       },
       stopTimeoutMs: 10,
       signalDependencies: {
-        kill: ((pid, signal) => {
+        platform: "linux",
+        kill: (pid, signal) => {
           signals.push({ pid, signal });
           return true;
-        }) as typeof process.kill,
+        },
+        spawnSync: noopSpawnSync,
+        isAlive: processIsAlive,
       },
     });
 
@@ -90,8 +107,9 @@ describe("process-tree", () => {
         stopTimeoutMs: 5,
         signalDependencies: {
           platform: "linux",
-          kill: (() => true) as typeof process.kill,
-          isAlive: () => true,
+          kill: noopKill,
+          spawnSync: noopSpawnSync,
+          isAlive: processIsAlive,
         },
       }),
     ).rejects.toThrow(
@@ -105,9 +123,10 @@ describe("process-tree", () => {
     expect(() =>
       signalProcessTree(1234, "SIGTERM", {
         platform: "linux",
-        kill: (() => {
+        kill: () => {
           throw error;
-        }) as typeof process.kill,
+        },
+        spawnSync: noopSpawnSync,
         isAlive: () => false,
       }),
     ).not.toThrow();

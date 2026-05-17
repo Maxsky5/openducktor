@@ -1,12 +1,23 @@
-import { type ChildProcess, spawnSync } from "node:child_process";
+import {
+  type ChildProcess,
+  type SpawnSyncOptions,
+  type SpawnSyncReturns,
+  spawnSync,
+} from "node:child_process";
 
 export type ProcessTreePlatform = NodeJS.Platform;
+export type KillProcess = (pid: number, signal?: NodeJS.Signals | 0) => boolean;
+type SpawnSyncCommand = (
+  command: string,
+  args: string[],
+  options: SpawnSyncOptions,
+) => SpawnSyncReturns<Buffer>;
 
 type SignalProcessTreeDependencies = {
-  platform?: ProcessTreePlatform;
-  kill?: typeof process.kill;
-  spawnSync?: typeof spawnSync;
-  isAlive?: (pid: number) => boolean;
+  platform: ProcessTreePlatform;
+  kill: KillProcess;
+  spawnSync: SpawnSyncCommand;
+  isAlive: (pid: number) => boolean;
 };
 
 export type TerminateProcessTreeInput = {
@@ -18,7 +29,19 @@ export type TerminateProcessTreeInput = {
   signalDependencies?: SignalProcessTreeDependencies;
 };
 
-export const processIsAlive = (pid: number, kill: typeof process.kill = process.kill): boolean => {
+export type ProcessTreeTerminator = (input: TerminateProcessTreeInput) => Promise<void>;
+
+const defaultSignalProcessTreeDependencies = (): SignalProcessTreeDependencies => {
+  const kill: KillProcess = process.kill;
+  return {
+    platform: process.platform,
+    kill,
+    spawnSync,
+    isAlive: (pid) => processIsAlive(pid, kill),
+  };
+};
+
+export const processIsAlive = (pid: number, kill: KillProcess = process.kill): boolean => {
   try {
     kill(pid, 0);
     return true;
@@ -39,12 +62,9 @@ const assertValidPid = (pid: number, label: string): void => {
 export const signalProcessTree = (
   pid: number,
   signal: NodeJS.Signals,
-  dependencies: SignalProcessTreeDependencies = {},
+  dependencies: SignalProcessTreeDependencies = defaultSignalProcessTreeDependencies(),
 ): void => {
-  const platform = dependencies.platform ?? process.platform;
-  const kill = dependencies.kill ?? process.kill;
-  const spawnSyncCommand = dependencies.spawnSync ?? spawnSync;
-  const isAlive = dependencies.isAlive ?? ((targetPid: number) => processIsAlive(targetPid, kill));
+  const { platform, kill, spawnSync: spawnSyncCommand, isAlive } = dependencies;
 
   if (platform === "win32") {
     const result = spawnSyncCommand("taskkill", ["/pid", String(pid), "/t", "/f"], {

@@ -16,9 +16,11 @@ export type LauncherOptions = {
 };
 
 type ManagedHost = Pick<Bun.Subprocess, "exited"> | TypescriptHostBackend;
+type FetchFunction = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+type SleepFunction = (durationMs: number) => Promise<unknown>;
 type BackendReadinessDependencies = {
-  fetch: typeof fetch;
-  sleep: (durationMs: number) => Promise<unknown>;
+  fetch: FetchFunction;
+  sleep: SleepFunction;
 };
 type FrontendServer = {
   close(): Promise<void>;
@@ -28,9 +30,11 @@ type StopLauncherServicesInput = {
   controlToken: string;
   frontendServer: FrontendServer | null;
   hostBackend: TypescriptHostBackend;
-  requestShutdown?: typeof requestHostShutdown;
-  closeServer?: typeof closeFrontendServer;
-  waitForGracefulExitCode?: typeof waitForGracefulHostExitCode;
+};
+type LauncherShutdownDependencies = {
+  requestShutdown: (backendUrl: string, controlToken: string) => Promise<void>;
+  closeServer: (server: FrontendServer | null) => Promise<void>;
+  waitForGracefulExitCode: (child: ManagedHost) => Promise<number | null>;
 };
 
 const LOCALHOST = "127.0.0.1";
@@ -58,7 +62,7 @@ const logFrontendAvailability = (port: number): void => {
 const requestHostShutdown = async (
   backendUrl: string,
   controlToken: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: FetchFunction = fetch,
 ): Promise<void> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3_000);
@@ -81,7 +85,7 @@ const requestHostShutdown = async (
 const verifyBackendReadiness = async (
   backendUrl: string,
   appToken: string,
-  fetchImpl: typeof fetch,
+  fetchImpl: FetchFunction,
 ): Promise<void> => {
   const healthResponse = await fetchImpl(`${backendUrl}/health`);
   if (!healthResponse.ok) {
@@ -103,7 +107,7 @@ const verifyBackendReadiness = async (
 
 const waitForGracefulHostExitCode = async (
   child: ManagedHost,
-  sleep: (durationMs: number) => Promise<unknown> = Bun.sleep,
+  sleep: SleepFunction = Bun.sleep,
 ): Promise<number | null> => {
   return Promise.race([
     child.exited.then((exitCode) => exitCode),
@@ -219,15 +223,20 @@ const throwLauncherShutdownFailures = (failures: unknown[]): void => {
   throw new AggregateError(failures, "OpenDucktor web shutdown failed.");
 };
 
-const stopLauncherServices = async ({
-  backendUrl,
-  controlToken,
-  frontendServer,
-  hostBackend,
-  requestShutdown = requestHostShutdown,
-  closeServer = closeFrontendServer,
-  waitForGracefulExitCode = waitForGracefulHostExitCode,
-}: StopLauncherServicesInput): Promise<void> => {
+const defaultLauncherShutdownDependencies: LauncherShutdownDependencies = {
+  requestShutdown: requestHostShutdown,
+  closeServer: closeFrontendServer,
+  waitForGracefulExitCode: waitForGracefulHostExitCode,
+};
+
+const stopLauncherServices = async (
+  { backendUrl, controlToken, frontendServer, hostBackend }: StopLauncherServicesInput,
+  {
+    requestShutdown,
+    closeServer,
+    waitForGracefulExitCode,
+  }: LauncherShutdownDependencies = defaultLauncherShutdownDependencies,
+): Promise<void> => {
   const shutdownResults = await Promise.allSettled([
     requestShutdown(backendUrl, controlToken),
     closeServer(frontendServer),

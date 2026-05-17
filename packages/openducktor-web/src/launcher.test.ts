@@ -10,7 +10,7 @@ describe("launcher internals", () => {
   test("waits for the fake host health and token-authenticated session endpoints", async () => {
     const requests: Array<{ url: string; method: string | undefined; token: string | null }> = [];
     let healthAttempts = 0;
-    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+    const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       requests.push({
         url: String(url),
@@ -22,7 +22,7 @@ describe("launcher internals", () => {
         return new Response(null, { status: healthAttempts === 1 ? 503 : 200 });
       }
       return new Response(null, { status: 200 });
-    }) as typeof fetch;
+    };
 
     await __launcherTestInternals.waitForBackend(
       "http://127.0.0.1:14327",
@@ -40,9 +40,9 @@ describe("launcher internals", () => {
   });
 
   test("rejects stale hosts that do not know the launcher app token", async () => {
-    const fetchImpl = (async (url: string | URL | Request) => {
+    const fetchImpl = async (url: string | URL | Request) => {
       return new Response(null, { status: String(url).endsWith("/session") ? 403 : 200 });
-    }) as typeof fetch;
+    };
 
     await expect(
       __launcherTestInternals.verifyBackendReadiness(
@@ -64,7 +64,7 @@ describe("launcher internals", () => {
         1_000,
         createHostProcess(exited),
         {
-          fetch: (async () => new Response(null, { status: 503 })) as unknown as typeof fetch,
+          fetch: async () => new Response(null, { status: 503 }),
           sleep: async () => {},
         },
       ),
@@ -73,7 +73,7 @@ describe("launcher internals", () => {
 
   test("sends the launcher control token when shutting down the fake host", async () => {
     const requests: Array<{ url: string; token: string | null; method: string | undefined }> = [];
-    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+    const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       requests.push({
         url: String(url),
@@ -81,7 +81,7 @@ describe("launcher internals", () => {
         token: headers.get("x-openducktor-control-token"),
       });
       return new Response(null, { status: 202 });
-    }) as typeof fetch;
+    };
 
     await __launcherTestInternals.requestHostShutdown(
       "http://127.0.0.1:14327",
@@ -133,19 +133,23 @@ describe("launcher internals", () => {
     };
 
     await expect(
-      __launcherTestInternals.stopLauncherServices({
-        backendUrl: "http://127.0.0.1:14327",
-        controlToken: "control-token",
-        frontendServer,
-        hostBackend,
-        requestShutdown: async () => {
-          throw new Error("shutdown request failed");
+      __launcherTestInternals.stopLauncherServices(
+        {
+          backendUrl: "http://127.0.0.1:14327",
+          controlToken: "control-token",
+          frontendServer,
+          hostBackend,
         },
-        closeServer: async (server) => {
-          await server?.close();
+        {
+          requestShutdown: async () => {
+            throw new Error("shutdown request failed");
+          },
+          closeServer: async (server) => {
+            await server?.close();
+          },
+          waitForGracefulExitCode: async () => null,
         },
-        waitForGracefulExitCode: async () => null,
-      }),
+      ),
     ).rejects.toThrow("shutdown request failed");
 
     expect(frontendCloseCalls).toBe(1);

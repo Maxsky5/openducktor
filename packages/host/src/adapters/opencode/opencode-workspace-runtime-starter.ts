@@ -11,6 +11,7 @@ import type {
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import {
+  type ProcessTreeTerminator,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
   waitForChildProcessClose,
@@ -30,8 +31,6 @@ export type OpenCodeMcpBridgeConnectionResolver = (
 type LocalPortAllocator = () => Promise<number>;
 
 type LocalPortProbe = (port: number, timeoutMs: number) => Promise<boolean>;
-
-type ProcessTreeTerminator = typeof terminateProcessTree;
 
 export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   systemCommands: SystemCommandPort;

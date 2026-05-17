@@ -14,6 +14,7 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import {
   type ProcessTreePlatform,
+  type ProcessTreeTerminator,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
   waitForChildProcessClose,
@@ -26,7 +27,6 @@ import {
 import type { CodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 
 type CodexChildProcess = ChildProcessByStdio<Writable, Readable, Readable>;
-type ProcessTreeTerminator = typeof terminateProcessTree;
 
 export type CodexMcpBridgeConnection = {
   workspaceId: string;
