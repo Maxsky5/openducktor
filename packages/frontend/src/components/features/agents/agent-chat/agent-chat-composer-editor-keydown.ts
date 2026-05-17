@@ -286,21 +286,20 @@ const removeSelectedTextRange = ({
   if (
     !selectedRange ||
     (event.key !== "Backspace" && event.key !== "Delete") ||
-    selectedRange.rangeStart >= selectedRange.rangeEnd
+    (selectedRange.start.segmentId === selectedRange.end.segmentId &&
+      selectedRange.start.offset >= selectedRange.end.offset)
   ) {
     return false;
   }
 
   event.preventDefault();
-  const nextText = `${selectedRange.text.slice(0, selectedRange.rangeStart)}${selectedRange.text.slice(
-    selectedRange.rangeEnd,
-  )}`;
   const didApply = applyEditResult(
     applyComposerDraftEdit(sourceDraft, {
-      type: "update_text",
-      segmentId: selectedRange.segmentId,
-      text: nextText,
-      caretOffset: selectedRange.rangeStart,
+      type: "remove_segment_range",
+      startTextSegmentId: selectedRange.start.segmentId,
+      startOffset: selectedRange.start.offset,
+      endTextSegmentId: selectedRange.end.segmentId,
+      endOffset: selectedRange.end.offset,
     }),
   );
   if (didApply) {
@@ -407,7 +406,7 @@ export const handleComposerEditorKeyDown = ({
     removeSelectedTextRange({
       event,
       sourceDraft,
-      selectedRange: selection.resolveActiveTextSelectionRange(root),
+      selectedRange: selection.resolveActiveTextSelectionRange(root, sourceDraft),
       applyEditResult,
       closeSlashMenu,
       closeFileMenu,

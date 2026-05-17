@@ -22,17 +22,14 @@ export type ActiveTextSelection = {
   caretOffset: number | null;
 };
 
-export type ActiveTextSelectionRange = {
-  segmentId: string;
-  element: HTMLElement;
-  text: string;
-  rangeStart: number;
-  rangeEnd: number;
-};
-
 export type TextSelectionTarget = {
   segmentId: string;
   offset: number;
+};
+
+export type ActiveTextSelectionRange = {
+  start: TextSelectionTarget;
+  end: TextSelectionTarget;
 };
 
 export type PendingInputState = TextSelectionTarget & {
@@ -160,6 +157,138 @@ const getClosestTextSegmentElement = (node: Node | null, root: HTMLElement): HTM
   return textSegment;
 };
 
+const getClosestSegmentElement = (node: Node | null, root: HTMLElement): HTMLElement | null => {
+  const element = node instanceof HTMLElement ? node : (node?.parentElement ?? null);
+  const segmentElement = element?.closest<HTMLElement>("[data-segment-id]") ?? null;
+  if (!segmentElement || !root.contains(segmentElement)) {
+    return null;
+  }
+  return segmentElement;
+};
+
+const getTextTargetBeforeSegment = (
+  draft: AgentChatComposerDraft,
+  segmentId: string,
+): TextSelectionTarget | null => {
+  const segmentIndex = draft.segments.findIndex((segment) => segment.id === segmentId);
+  if (segmentIndex < 0) {
+    return null;
+  }
+
+  for (let index = segmentIndex; index >= 0; index -= 1) {
+    const segment = draft.segments[index];
+    if (segment?.kind === "text") {
+      return {
+        segmentId: segment.id,
+        offset: index === segmentIndex ? 0 : segment.text.length,
+      };
+    }
+  }
+  return null;
+};
+
+const getTextTargetAfterSegment = (
+  draft: AgentChatComposerDraft,
+  segmentId: string,
+): TextSelectionTarget | null => {
+  const segmentIndex = draft.segments.findIndex((segment) => segment.id === segmentId);
+  if (segmentIndex < 0) {
+    return null;
+  }
+
+  for (let index = segmentIndex; index < draft.segments.length; index += 1) {
+    const segment = draft.segments[index];
+    if (segment?.kind === "text") {
+      return {
+        segmentId: segment.id,
+        offset: index === segmentIndex ? segment.text.length : 0,
+      };
+    }
+  }
+  return null;
+};
+
+const resolveTextSelectionBoundaryFromSegmentElement = (
+  draft: AgentChatComposerDraft,
+  segmentElement: HTMLElement,
+  side: "before" | "after",
+): TextSelectionTarget | null => {
+  const segmentId = segmentElement.dataset.segmentId ?? segmentElement.dataset.textSegmentId ?? "";
+  if (segmentId.length === 0) {
+    return null;
+  }
+
+  return side === "before"
+    ? getTextTargetBeforeSegment(draft, segmentId)
+    : getTextTargetAfterSegment(draft, segmentId);
+};
+
+const resolveTextSelectionBoundaryFromRootOffset = (
+  draft: AgentChatComposerDraft,
+  contentRoot: HTMLElement,
+  offset: number,
+  side: "start" | "end",
+): TextSelectionTarget | null => {
+  const childNodes = Array.from(contentRoot.childNodes);
+  const childIndex = side === "start" ? offset : offset - 1;
+  const child = childNodes[childIndex] ?? null;
+  if (child instanceof HTMLElement) {
+    return resolveTextSelectionBoundaryFromSegmentElement(
+      draft,
+      child,
+      side === "start" ? "before" : "after",
+    );
+  }
+
+  const fallbackChild = childNodes[side === "start" ? offset - 1 : offset] ?? null;
+  if (fallbackChild instanceof HTMLElement) {
+    return resolveTextSelectionBoundaryFromSegmentElement(
+      draft,
+      fallbackChild,
+      side === "start" ? "after" : "before",
+    );
+  }
+
+  return null;
+};
+
+const readTextSelectionBoundary = (
+  root: HTMLElement,
+  draft: AgentChatComposerDraft,
+  container: Node,
+  offset: number,
+  side: "start" | "end",
+): TextSelectionTarget | null => {
+  const textSegment = getClosestTextSegmentElement(container, root);
+  if (textSegment) {
+    const textOffset = getTextOffsetWithinElement(textSegment, container, offset);
+    if (textOffset === null) {
+      return null;
+    }
+
+    return {
+      segmentId: textSegment.dataset.textSegmentId ?? textSegment.dataset.segmentId ?? "",
+      offset: textOffset,
+    };
+  }
+
+  const contentRoot = getComposerContentRoot(root);
+  if (contentRoot && container === contentRoot) {
+    return resolveTextSelectionBoundaryFromRootOffset(draft, contentRoot, offset, side);
+  }
+
+  const segmentElement = getClosestSegmentElement(container, root);
+  if (!segmentElement) {
+    return null;
+  }
+
+  return resolveTextSelectionBoundaryFromSegmentElement(
+    draft,
+    segmentElement,
+    side === "start" ? "before" : "after",
+  );
+};
+
 export const readActiveTextSelection = (
   root: HTMLElement,
   eventTarget?: EventTarget | null,
@@ -194,6 +323,7 @@ export const readActiveTextSelection = (
 
 export const readActiveTextSelectionRange = (
   root: HTMLElement,
+  draft: AgentChatComposerDraft,
 ): ActiveTextSelectionRange | null => {
   const selection = root.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
@@ -201,35 +331,23 @@ export const readActiveTextSelectionRange = (
   }
 
   const range = selection.getRangeAt(0);
-  const startSegment = getClosestTextSegmentElement(range.startContainer, root);
-  const endSegment = getClosestTextSegmentElement(range.endContainer, root);
-  if (!startSegment || startSegment !== endSegment) {
-    return null;
-  }
-
-  const startOffset = getTextOffsetWithinElement(
-    startSegment,
+  const start = readTextSelectionBoundary(
+    root,
+    draft,
     range.startContainer,
     range.startOffset,
+    "start",
   );
-  const endOffset = getTextOffsetWithinElement(startSegment, range.endContainer, range.endOffset);
-  if (startOffset === null || endOffset === null) {
+  const end = readTextSelectionBoundary(root, draft, range.endContainer, range.endOffset, "end");
+  if (!start || !end) {
     return null;
   }
 
-  const rangeStart = Math.min(startOffset, endOffset);
-  const rangeEnd = Math.max(startOffset, endOffset);
-  if (rangeStart === rangeEnd) {
+  if (start.segmentId === end.segmentId && start.offset === end.offset) {
     return null;
   }
 
-  return {
-    segmentId: startSegment.dataset.textSegmentId ?? startSegment.dataset.segmentId ?? "",
-    element: startSegment,
-    text: readEditableTextContent(startSegment),
-    rangeStart,
-    rangeEnd,
-  };
+  return { start, end };
 };
 
 export const parseComposerDraftFromRoot = (
@@ -302,7 +420,10 @@ export type UseAgentChatComposerEditorSelectionResult = {
     sourceDraft: AgentChatComposerDraft,
     eventTarget?: EventTarget | null,
   ) => ActiveTextSelection | null;
-  resolveActiveTextSelectionRange: (root: HTMLDivElement) => ActiveTextSelectionRange | null;
+  resolveActiveTextSelectionRange: (
+    root: HTMLDivElement,
+    sourceDraft: AgentChatComposerDraft,
+  ) => ActiveTextSelectionRange | null;
   resolveSelectionTargetForLineBreak: (
     root: HTMLDivElement,
     sourceDraft: AgentChatComposerDraft,
@@ -470,9 +591,12 @@ export const useAgentChatComposerEditorSelection = ({
     [repairCollapsedSelection],
   );
 
-  const resolveActiveTextSelectionRange = useCallback((root: HTMLDivElement) => {
-    return readActiveTextSelectionRange(root);
-  }, []);
+  const resolveActiveTextSelectionRange = useCallback(
+    (root: HTMLDivElement, sourceDraft: AgentChatComposerDraft) => {
+      return readActiveTextSelectionRange(root, sourceDraft);
+    },
+    [],
+  );
 
   const resolveSelectionTargetForLineBreak = useCallback(
     (

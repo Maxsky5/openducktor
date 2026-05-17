@@ -1491,6 +1491,34 @@ describe("AgentChatComposerEditor", () => {
     });
   });
 
+  test("removes a selected line containing a file reference without adding an extra row", async () => {
+    resetSelectionMocks();
+    const file = buildFileSearchResult({ path: "src/main.ts", name: "main.ts" });
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={{
+          segments: [
+            createTextSegment("hello\n", "text-before"),
+            createFileReferenceSegment(file, "file-chip"),
+            createTextSegment("world", "text-after"),
+          ],
+          attachments: [],
+        }}
+      />,
+    );
+
+    const editorRoot = selectRangeAcrossTextSegments(rendered.container, 6, 5);
+    fireEvent.keyDown(editorRoot, { key: "Backspace" });
+
+    await expectComposerText(rendered.container, "hello\n");
+    expect(rendered.container.querySelector("[data-chip-segment-id]")).toBeNull();
+    const textSegment = getLastTextSegment(rendered.container);
+    expect(textSegment.textContent).toBe("hello\n\u200B");
+    expect(textSegment.className).toContain("after:w-px");
+  });
+
   test("switches the trailing text segment back to inline after typing after a file chip", async () => {
     const rendered = render(
       <EditorHarness

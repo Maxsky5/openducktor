@@ -69,11 +69,14 @@ const createActiveSelection = (
 const createActiveSelectionRange = (
   overrides: Partial<ActiveTextSelectionRange> = {},
 ): ActiveTextSelectionRange => ({
-  segmentId: "segment-1",
-  element: document.createElement("div"),
-  text: "hello",
-  rangeStart: 0,
-  rangeEnd: 5,
+  start: {
+    segmentId: "segment-1",
+    offset: 0,
+  },
+  end: {
+    segmentId: "segment-1",
+    offset: 5,
+  },
   ...overrides,
 });
 
@@ -286,10 +289,14 @@ describe("agent-chat-composer-editor-keydown", () => {
   test("removes selected text before browser DOM mutation", () => {
     const sourceDraft = createDraft("hello\nworld", "segment-1");
     const selectedTextRange = createActiveSelectionRange({
-      segmentId: "segment-1",
-      text: "hello\nworld",
-      rangeStart: 6,
-      rangeEnd: 11,
+      start: {
+        segmentId: "segment-1",
+        offset: 6,
+      },
+      end: {
+        segmentId: "segment-1",
+        offset: 11,
+      },
     });
     const setup = createKeyDownTestSetup({
       key: "Backspace",
@@ -316,10 +323,14 @@ describe("agent-chat-composer-editor-keydown", () => {
   test("removes selected text with delete before browser DOM mutation", () => {
     const sourceDraft = createDraft("hello\nworld", "segment-1");
     const selectedTextRange = createActiveSelectionRange({
-      segmentId: "segment-1",
-      text: "hello\nworld",
-      rangeStart: 6,
-      rangeEnd: 11,
+      start: {
+        segmentId: "segment-1",
+        offset: 6,
+      },
+      end: {
+        segmentId: "segment-1",
+        offset: 11,
+      },
     });
     const setup = createKeyDownTestSetup({
       key: "Delete",
@@ -339,6 +350,48 @@ describe("agent-chat-composer-editor-keydown", () => {
         offset: 6,
       },
     });
+  });
+
+  test("removes selected text and file chips before browser DOM mutation", () => {
+    const file = buildFileSearchResult({ path: "src/main.ts", name: "main.ts" });
+    const sourceDraft: AgentChatComposerDraft = {
+      segments: [
+        createTextSegment("hello\n", "text-before"),
+        createFileReferenceSegment(file, "file-1"),
+        createTextSegment("world", "text-after"),
+      ],
+      attachments: [],
+    };
+    const selectedTextRange = createActiveSelectionRange({
+      start: {
+        segmentId: "text-before",
+        offset: 6,
+      },
+      end: {
+        segmentId: "text-after",
+        offset: 5,
+      },
+    });
+    const setup = createKeyDownTestSetup({
+      key: "Backspace",
+      sourceDraft,
+      selectedTextRange,
+    });
+
+    expect(setup.handled()).toBe(true);
+    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(setup.applyEditResult).toHaveBeenCalledWith({
+      draft: {
+        segments: [expect.objectContaining({ id: "text-before", kind: "text", text: "hello\n" })],
+        attachments: [],
+      },
+      focusTarget: {
+        segmentId: "text-before",
+        offset: 6,
+      },
+    });
+    expect(setup.closeSlashMenu).toHaveBeenCalledTimes(1);
+    expect(setup.closeFileMenu).toHaveBeenCalledTimes(1);
   });
 
   test("removes current line text with command backspace before browser DOM mutation", () => {

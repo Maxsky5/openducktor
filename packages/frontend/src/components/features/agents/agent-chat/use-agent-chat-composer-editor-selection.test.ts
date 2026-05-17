@@ -25,6 +25,7 @@ const buildDraft = (text: string, segmentId = "segment-1") => ({
 
 const appendTextSegment = (root: HTMLElement, segmentId: string, text: string): HTMLDivElement => {
   const element = document.createElement("div");
+  element.dataset.segmentId = segmentId;
   element.dataset.textSegmentId = segmentId;
   element.textContent = text;
   root.append(element);
@@ -302,6 +303,67 @@ describe("useAgentChatComposerEditorSelection", () => {
       segmentId: "segment-1",
       caretOffset: 2,
       text: "hello",
+    });
+
+    await harness.unmount();
+  });
+
+  test("resolves selected ranges that span file reference chips", async () => {
+    const file = {
+      id: "file-1",
+      path: "src/main.ts",
+      name: "main.ts",
+      kind: "code" as const,
+    };
+    const draft = {
+      segments: [
+        createTextSegment("hello\n", "text-before"),
+        createFileReferenceSegment(file, "file-segment"),
+        createTextSegment("world", "text-after"),
+      ],
+      attachments: [],
+    };
+    const root = document.createElement("div");
+    root.contentEditable = "true";
+    root.dataset.composerContentRoot = "true";
+    document.body.append(root);
+
+    const textBefore = appendTextSegment(root, "text-before", "hello\n");
+    const chip = document.createElement("span");
+    chip.dataset.chipSegmentId = "file-segment";
+    chip.dataset.segmentId = "file-segment";
+    chip.textContent = "main.ts";
+    root.append(chip);
+    const textAfter = appendTextSegment(root, "text-after", "world");
+
+    const startNode = textBefore.firstChild;
+    const endNode = textAfter.firstChild;
+    if (!(startNode instanceof Text) || !(endNode instanceof Text)) {
+      throw new Error("Expected text nodes for selected range");
+    }
+
+    const range = document.createRange();
+    range.setStart(startNode, 6);
+    range.setEnd(endNode, 5);
+    const selection = globalThis.getSelection?.();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    const editorRef = { current: root } as RefObject<HTMLDivElement | null>;
+    const harness = createSelectionHarness(editorRef);
+    await harness.mount();
+
+    await harness.run((state) => {
+      expect(state.resolveActiveTextSelectionRange(root, draft)).toEqual({
+        start: {
+          segmentId: "text-before",
+          offset: 6,
+        },
+        end: {
+          segmentId: "text-after",
+          offset: 5,
+        },
+      });
     });
 
     await harness.unmount();
