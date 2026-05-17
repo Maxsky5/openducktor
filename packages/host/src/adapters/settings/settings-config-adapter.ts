@@ -169,15 +169,14 @@ export const createSettingsConfigAdapter = ({
     },
     writeConfig(config: GlobalConfig) {
       return Effect.gen(function* () {
-        yield* Effect.asVoid(
-          Effect.tryPromise({
-            try: () => mkdir(baseDir, { recursive: true }),
-            catch: (cause) =>
-              toHostOperationError(cause, "settingsConfig.createConfigDirectory", {
-                path: baseDir,
-              }),
-          }),
-        ).pipe(
+        yield* Effect.tryPromise({
+          try: () => mkdir(baseDir, { recursive: true }),
+          catch: (cause) =>
+            toHostOperationError(cause, "settingsConfig.createConfigDirectory", {
+              path: baseDir,
+            }),
+        }).pipe(
+          Effect.asVoid,
           Effect.mapError(
             (error) =>
               new HostOperationError({

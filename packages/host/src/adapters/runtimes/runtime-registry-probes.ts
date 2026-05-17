@@ -133,13 +133,13 @@ export const findWorkspaceRuntime = (
 };
 
 const readBoundedResponseText = (response: Response) =>
-  Effect.map(
-    Effect.tryPromise({
-      try: () => response.text(),
-      catch: (cause) => toHostOperationError(cause, "runtimeRegistry.readResponseText"),
-    }),
-    (text) =>
+  Effect.tryPromise({
+    try: () => response.text(),
+    catch: (cause) => toHostOperationError(cause, "runtimeRegistry.readResponseText"),
+  }).pipe(
+    Effect.map((text) =>
       text.length > MAX_ABORT_ERROR_BODY_BYTES ? text.slice(0, MAX_ABORT_ERROR_BODY_BYTES) : text,
+    ),
   );
 
 export const stopOpenCodeSession = ({

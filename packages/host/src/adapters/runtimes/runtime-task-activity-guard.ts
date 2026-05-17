@@ -122,18 +122,21 @@ export const createRuntimeTaskActivityGuard = ({
             }),
           );
         }
-        const evidence = yield* Effect.mapError(
-          collectActiveWorkEvidence(runtimeRegistry, input.repoPath, task.agentSessions ?? [], [
-            "build",
-            "qa",
-          ]),
-          (error) =>
-            new HostOperationError({
-              operation: "runtimeTaskActivityGuard.ensureNoActiveTaskDeleteRuns",
-              message: `Failed checking active task work before deleting ${taskId}`,
-              cause: error,
-              details: { taskId },
-            }),
+        const evidence = yield* collectActiveWorkEvidence(
+          runtimeRegistry,
+          input.repoPath,
+          task.agentSessions ?? [],
+          ["build", "qa"],
+        ).pipe(
+          Effect.mapError(
+            (error) =>
+              new HostOperationError({
+                operation: "runtimeTaskActivityGuard.ensureNoActiveTaskDeleteRuns",
+                message: `Failed checking active task work before deleting ${taskId}`,
+                cause: error,
+                details: { taskId },
+              }),
+          ),
         );
         if (evidence.activeSessionRoles.length > 0) {
           activeTasks.push({ taskId, evidence });
@@ -172,20 +175,21 @@ export const createRuntimeTaskActivityGuard = ({
   },
   ensureNoActiveTaskResetActivity(input) {
     return Effect.gen(function* () {
-      const evidence = yield* Effect.mapError(
-        collectActiveWorkEvidence(
-          runtimeRegistry,
-          input.repoPath,
-          input.sessions,
-          input.sessionRoles,
+      const evidence = yield* collectActiveWorkEvidence(
+        runtimeRegistry,
+        input.repoPath,
+        input.sessions,
+        input.sessionRoles,
+      ).pipe(
+        Effect.mapError(
+          (error) =>
+            new HostOperationError({
+              operation: "runtimeTaskActivityGuard.ensureNoActiveTaskResetActivity",
+              message: `Failed checking live runtime state before ${input.operationLabel} ${input.taskId}`,
+              cause: error,
+              details: { taskId: input.taskId, operationLabel: input.operationLabel },
+            }),
         ),
-        (error) =>
-          new HostOperationError({
-            operation: "runtimeTaskActivityGuard.ensureNoActiveTaskResetActivity",
-            message: `Failed checking live runtime state before ${input.operationLabel} ${input.taskId}`,
-            cause: error,
-            details: { taskId: input.taskId, operationLabel: input.operationLabel },
-          }),
       );
       if (evidence.activeSessionRoles.length === 0) {
         return;

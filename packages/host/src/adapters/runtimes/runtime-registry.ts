@@ -63,9 +63,9 @@ export const createRuntimeRegistry = ({
     if (flights.length === 0) {
       return Effect.succeed(undefined);
     }
-    return Effect.asVoid(
-      Effect.forEach(flights, (flight) => Effect.either(flight), { concurrency: "unbounded" }),
-    );
+    return Effect.forEach(flights, (flight) => Effect.either(flight), {
+      concurrency: "unbounded",
+    }).pipe(Effect.asVoid);
   };
   const registry: RuntimeRegistryPort = {
     ensureWorkspaceRuntime(input) {

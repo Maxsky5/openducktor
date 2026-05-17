@@ -232,15 +232,13 @@ const copyPath = (
       });
       return;
     }
-    yield* Effect.asVoid(
-      Effect.tryPromise({
-        try: () => mkdir(path.dirname(destinationPath), { recursive: true }),
-        catch: (cause) =>
-          toHostOperationError(cause, "worktreeFile.ensureDestinationDirectory", {
-            destinationPath,
-          }),
-      }),
-    );
+    yield* Effect.tryPromise({
+      try: () => mkdir(path.dirname(destinationPath), { recursive: true }),
+      catch: (cause) =>
+        toHostOperationError(cause, "worktreeFile.ensureDestinationDirectory", {
+          destinationPath,
+        }),
+    }).pipe(Effect.asVoid);
     if (stats.isSymbolicLink()) {
       yield* Effect.tryPromise({
         try: () => rm(destinationPath, { force: true, recursive: true }),
@@ -287,13 +285,11 @@ const copyPath = (
   });
 export const createWorktreeFileAdapter = (): WorktreeFilePort => ({
   ensureDirectory(inputPath) {
-    return Effect.asVoid(
-      Effect.tryPromise({
-        try: () => mkdir(inputPath, { recursive: true }),
-        catch: (cause) =>
-          toHostOperationError(cause, "worktreeFile.ensureDirectory", { path: inputPath }),
-      }),
-    );
+    return Effect.tryPromise({
+      try: () => mkdir(inputPath, { recursive: true }),
+      catch: (cause) =>
+        toHostOperationError(cause, "worktreeFile.ensureDirectory", { path: inputPath }),
+    }).pipe(Effect.asVoid);
   },
   copyConfiguredPaths(repoPath, worktreePath, relativePaths) {
     return Effect.gen(function* () {

@@ -104,13 +104,11 @@ export const createEffectHostCommandRouter = ({
           }),
         );
       }
-      return yield* Effect.flatMap(
-        Effect.try({
-          try: () => handler(args, { command: hostCommand, args }),
-          catch: (cause) => toHostCommandHandlerError(cause, hostCommand),
-        }),
-        (handlerEffect) => handlerEffect,
-      );
+      const handlerEffect = yield* Effect.try({
+        try: () => handler(args, { command: hostCommand, args }),
+        catch: (cause) => toHostCommandHandlerError(cause, hostCommand),
+      });
+      return yield* handlerEffect;
     });
   },
 });

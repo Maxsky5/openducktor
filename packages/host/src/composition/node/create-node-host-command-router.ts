@@ -123,10 +123,9 @@ export const createNodeEffectHostCommandRouter = (
         processEnv,
         systemCommands,
         resolveWorkspaceIdForRepoPath: (repoPath) =>
-          Effect.map(
-            workspaceSettingsService.getRepoConfigByRepoPath(repoPath),
-            (repoConfig) => repoConfig.workspaceId,
-          ),
+          workspaceSettingsService
+            .getRepoConfigByRepoPath(repoPath)
+            .pipe(Effect.map((repoConfig) => repoConfig.workspaceId)),
       });
       return ownedTaskStore;
     })();
