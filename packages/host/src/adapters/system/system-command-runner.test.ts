@@ -134,7 +134,12 @@ describe("createSystemCommandRunner", () => {
   test("builds a Windows shell launch for cmd files with quoted config arguments", () => {
     const launch = createSystemCommandLaunch(
       String.raw`C:\Program Files\Codex\codex.cmd`,
-      ["--config", 'mcp_servers.openducktor.command="mcp-bin"', "path=%APPDATA%\\foo"],
+      [
+        "--config",
+        'mcp_servers.openducktor.command="mcp-bin"',
+        "path=%APPDATA%\\foo",
+        "caret=foo^bar",
+      ],
       { ComSpec: String.raw`C:\Windows\System32\cmd.exe` },
       "win32",
     );
@@ -145,7 +150,7 @@ describe("createSystemCommandRunner", () => {
         "/d",
         "/s",
         "/c",
-        String.raw`""C:\Program Files\Codex\codex.cmd" --config "mcp_servers.openducktor.command=^"mcp-bin^"" "path=%%APPDATA%%\foo""`,
+        String.raw`""C:\Program Files\Codex\codex.cmd" --config "mcp_servers.openducktor.command=^"mcp-bin^"" "path=%%APPDATA%%\foo" "caret=foo^^bar""`,
       ],
       windowsVerbatimArguments: true,
     });

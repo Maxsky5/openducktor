@@ -60,10 +60,11 @@ const pushBoundedMessage = (messages: unknown[], message: unknown): void => {
 
 const appendCapturedStderr = (current: string, line: string): string => {
   const next = current.length > 0 ? `${current}\n${line}` : line;
-  if (next.length <= MAX_CAPTURED_STDERR_BYTES) {
+  const encoded = Buffer.from(next, "utf8");
+  if (encoded.byteLength <= MAX_CAPTURED_STDERR_BYTES) {
     return next;
   }
-  return next.slice(next.length - MAX_CAPTURED_STDERR_BYTES);
+  return encoded.subarray(encoded.byteLength - MAX_CAPTURED_STDERR_BYTES).toString("utf8");
 };
 
 const extractErrorMessage = (value: unknown): string => {

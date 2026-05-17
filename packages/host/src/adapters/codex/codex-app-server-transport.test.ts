@@ -71,12 +71,12 @@ describe("createCodexAppServerTransport", () => {
     await transport.close();
   });
 
-  test("bounds captured stderr used in process-close diagnostics", async () => {
+  test("bounds captured stderr bytes used in process-close diagnostics", async () => {
     const child = createChild();
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
 
     child.stderr.write("first-error-line\n");
-    child.stderr.write(`${"x".repeat(70 * 1024)}\n`);
+    child.stderr.write(`${"é".repeat(40 * 1024)}\n`);
     child.stderr.write("latest-error-line\n");
     await waitForStreamEvents();
     child.emit("close", 1, null);
