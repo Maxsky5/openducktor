@@ -13,6 +13,7 @@ import type {
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
 import { probeCodexSessionStatus } from "../codex/codex-session-status-probe";
+import { stopCodexSession } from "../codex/codex-session-stop";
 import {
   findWorkspaceRuntime,
   probeCodexMcpStatus,
@@ -24,7 +25,7 @@ import {
 export type CreateRuntimeRegistryInput = {
   runtimes?: RuntimeInstanceSummary[];
   workspaceStarter?: RuntimeWorkspaceStarterPort;
-  codexAppServer?: Pick<CodexAppServerPort, "listLoadedThreads" | "listThreads">;
+  codexAppServer?: Pick<CodexAppServerPort, "listLoadedThreads" | "listThreads" | "request">;
 };
 
 type RuntimeEnsureFlight = {
@@ -189,6 +190,18 @@ export const createRuntimeRegistry = ({
     stopSession(input) {
       if (input.runtimeKind === "opencode") {
         return stopOpenCodeSession(input);
+      }
+      if (input.runtimeKind === "codex") {
+        if (!codexAppServer) {
+          return Effect.fail(
+            new HostResourceError({
+              resource: "codexAppServer",
+              operation: "runtimeRegistry.stopCodexSession",
+              message: "Codex session stop requires the Codex app-server port.",
+            }),
+          );
+        }
+        return stopCodexSession({ ...input, codexAppServer });
       }
       return Effect.fail(
         new HostValidationError({
