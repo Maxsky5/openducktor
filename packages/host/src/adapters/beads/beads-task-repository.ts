@@ -43,8 +43,8 @@ import {
 import {
   awaitBeadsCliContextFlight,
   type BeadsCliContextFlight,
-  completeBeadsCliContextFlight,
   makeBeadsCliContextFlight,
+  resolveBeadsCliContextFlight,
 } from "./beads-cli-context-flight";
 import { assertRequiredCommand } from "./beads-required-command";
 import { cloneTasks, createTaskListCache } from "./beads-task-list-cache";
@@ -89,11 +89,11 @@ export const createBeadsTaskRepository = ({
           return nextFlight;
         });
         yield* Effect.forkDaemon(
-          completeBeadsCliContextFlight({
-            contextEffect,
+          resolveBeadsCliContextFlight({
             flight,
-            onComplete: Effect.sync(() => cliContextFlights.delete(flight)),
-            trackContext: trackOwnedSharedServer,
+            releaseReservation: Effect.sync(() => cliContextFlights.delete(flight)),
+            rememberOwnedContext: trackOwnedSharedServer,
+            resolveContext: contextEffect,
           }),
         );
         return yield* restore(awaitBeadsCliContextFlight(flight));
@@ -167,16 +167,16 @@ export const createBeadsTaskRepository = ({
             return yield* restore(awaitBeadsCliContextFlight(reservation.flight));
           }
           yield* Effect.forkDaemon(
-            completeBeadsCliContextFlight({
-              contextEffect: resolveCliContext(repoPath, request.options),
-              flight: reservation.flight,
-              onComplete: Effect.sync(() => cliContextFlights.delete(reservation.flight)),
-              onFailure: Effect.sync(() => {
+            resolveBeadsCliContextFlight({
+              evictCachedContext: Effect.sync(() => {
                 if (readyCliContexts.get(request.cacheKey) === reservation.flight) {
                   readyCliContexts.delete(request.cacheKey);
                 }
               }),
-              trackContext: trackOwnedSharedServer,
+              flight: reservation.flight,
+              releaseReservation: Effect.sync(() => cliContextFlights.delete(reservation.flight)),
+              rememberOwnedContext: trackOwnedSharedServer,
+              resolveContext: resolveCliContext(repoPath, request.options),
             }),
           );
           return yield* restore(awaitBeadsCliContextFlight(reservation.flight));

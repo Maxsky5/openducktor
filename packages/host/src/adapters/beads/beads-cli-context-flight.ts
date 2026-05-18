@@ -2,6 +2,7 @@ import { Deferred, Effect, FiberId } from "effect";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type { BeadsCliContext } from "./beads-cli-context";
 
+// A flight publishes one context resolution result to all fibers waiting for it.
 export type BeadsCliContextFlight = {
   deferred: Deferred.Deferred<BeadsCliContext, TaskStoreError>;
 };
@@ -14,23 +15,26 @@ export const awaitBeadsCliContextFlight = (
   flight: BeadsCliContextFlight,
 ): Effect.Effect<BeadsCliContext, TaskStoreError> => Deferred.await(flight.deferred);
 
-export const completeBeadsCliContextFlight = ({
-  contextEffect,
+export const resolveBeadsCliContextFlight = ({
+  evictCachedContext,
   flight,
-  onComplete,
-  onFailure,
-  trackContext,
+  releaseReservation,
+  rememberOwnedContext,
+  resolveContext,
 }: {
-  contextEffect: Effect.Effect<BeadsCliContext, TaskStoreError>;
+  evictCachedContext?: Effect.Effect<void>;
   flight: BeadsCliContextFlight;
-  onComplete: Effect.Effect<void>;
-  onFailure?: Effect.Effect<void>;
-  trackContext: (context: BeadsCliContext) => BeadsCliContext;
+  releaseReservation: Effect.Effect<void>;
+  rememberOwnedContext: (context: BeadsCliContext) => BeadsCliContext;
+  resolveContext: Effect.Effect<BeadsCliContext, TaskStoreError>;
 }): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    const exit = yield* Effect.exit(contextEffect.pipe(Effect.map(trackContext)));
-    if (exit._tag === "Failure" && onFailure) {
-      yield* onFailure;
-    }
-    yield* Deferred.done(flight.deferred, exit);
-  }).pipe(Effect.ensuring(onComplete));
+  resolveContext.pipe(
+    Effect.map(rememberOwnedContext),
+    Effect.exit,
+    Effect.tap((exit) =>
+      exit._tag === "Failure" && evictCachedContext ? evictCachedContext : Effect.void,
+    ),
+    Effect.flatMap((exit) => Deferred.done(flight.deferred, exit)),
+    Effect.ensuring(releaseReservation),
+    Effect.asVoid,
+  );

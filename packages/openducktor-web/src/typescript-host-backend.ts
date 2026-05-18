@@ -3,14 +3,14 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import {
   createLocalAttachmentAdapter,
-  createNodeHostCommandRouter,
-  type HostCommandRouter,
+  createNodeEffectHostCommandRouter,
+  type EffectHostCommandRouter,
   type HostEventBusPort,
   type HostEventChannel,
   type HostEventListener,
   type HostEventUnsubscribe,
 } from "@openducktor/host";
-import { Effect } from "effect";
+import { Cause, Data, Effect } from "effect";
 import { logError, logInfo } from "./logger";
 
 export type TypescriptHostBackendOptions = {
@@ -305,31 +305,6 @@ const validateAppCookieOrHeader = (request: Request, expectedToken: string): Res
     "Invalid OpenDucktor web host app token.",
   );
 
-const parseJsonObjectBody = async (request: Request): Promise<Record<string, unknown>> => {
-  let parsed: unknown;
-  try {
-    parsed = await request.json();
-  } catch (error) {
-    throw new Error(error instanceof Error ? error.message : "Malformed JSON request body.");
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Command request body must be a JSON object.");
-  }
-  return parsed as Record<string, unknown>;
-};
-
-const parseLastEventId = (request: Request): number | null => {
-  const raw = request.headers.get(LAST_EVENT_ID_HEADER);
-  if (raw === null) {
-    return null;
-  }
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new Error(`Invalid Last-Event-ID header: ${raw}`);
-  }
-  return parsed;
-};
-
 const writeSseEvent = (event: BufferedEvent): string =>
   [`id: ${event.id}`, ...event.payload.split(/\r?\n/).map((line) => `data: ${line}`), "", ""].join(
     "\n",
@@ -371,247 +346,412 @@ const isWithinDirectory = (directory: string, candidate: string): boolean => {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 };
 
-const localAttachmentPreviewResponse = async (
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+class WebHostRequestRejection extends Data.TaggedError("WebHostRequestRejection")<{
+  message: string;
+  status: number;
+  failureKind?: string | undefined;
+}> {}
+
+class WebHostStartupError extends Data.TaggedError("WebHostStartupError")<{
+  message: string;
+  cause?: unknown | undefined;
+}> {}
+
+const rejectWebHostRequest = (
+  message: string,
+  status: number,
+  failureKind?: string,
+): Effect.Effect<never, WebHostRequestRejection> =>
+  Effect.fail(
+    new WebHostRequestRejection(
+      failureKind ? { failureKind, message, status } : { message, status },
+    ),
+  );
+
+const webHostRequestErrorResponse = (
+  error: WebHostRequestRejection,
+  corsHeaders: HeadersInit,
+): Response => errorResponse(error.message, error.status, corsHeaders, error.failureKind);
+
+const isJsonObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const parseJsonObjectBody = (
+  request: Request,
+): Effect.Effect<Record<string, unknown>, WebHostRequestRejection> =>
+  Effect.gen(function* () {
+    const parsed: unknown = yield* Effect.tryPromise({
+      try: () => request.json(),
+      catch: (error) =>
+        new WebHostRequestRejection({
+          message: error instanceof Error ? error.message : "Malformed JSON request body.",
+          status: 400,
+        }),
+    });
+    if (!isJsonObject(parsed)) {
+      return yield* rejectWebHostRequest("Command request body must be a JSON object.", 400);
+    }
+    return parsed;
+  });
+
+const parseLastEventId = (
+  request: Request,
+): Effect.Effect<number | null, WebHostRequestRejection> =>
+  Effect.gen(function* () {
+    const raw = request.headers.get(LAST_EVENT_ID_HEADER);
+    if (raw === null) {
+      return null;
+    }
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      return yield* rejectWebHostRequest(`Invalid Last-Event-ID header: ${raw}`, 400);
+    }
+    return parsed;
+  });
+
+const statLocalAttachmentPreview = (
+  requestedPath: string,
+): Effect.Effect<Stats, WebHostRequestRejection> =>
+  Effect.tryPromise({
+    try: () => stat(requestedPath),
+    catch: (error) =>
+      new WebHostRequestRejection({
+        message: `Failed to stat local attachment preview: ${errorMessage(error)}`,
+        status: 404,
+      }),
+  });
+
+const localAttachmentPreviewResponse = (
   request: Request,
   localAttachmentPort: ReturnType<typeof createLocalAttachmentAdapter>,
   corsHeaders: HeadersInit,
-): Promise<Response> => {
-  const requestUrl = new URL(request.url);
-  const requestedPath = requestUrl.searchParams.get("path");
-  if (!requestedPath) {
-    return errorResponse("Local attachment preview path is required.", 400, corsHeaders);
-  }
+): Effect.Effect<Response, WebHostRequestRejection> =>
+  Effect.gen(function* () {
+    const requestUrl = new URL(request.url);
+    const requestedPath = requestUrl.searchParams.get("path");
+    if (!requestedPath) {
+      return yield* rejectWebHostRequest("Local attachment preview path is required.", 400);
+    }
 
-  let metadata: Stats;
-  try {
-    metadata = await stat(requestedPath);
-  } catch (error) {
-    return errorResponse(
-      `Failed to stat local attachment preview: ${String(error)}`,
-      404,
-      corsHeaders,
+    const metadata = yield* statLocalAttachmentPreview(requestedPath);
+    if (!metadata.isFile()) {
+      return yield* rejectWebHostRequest(
+        "Local attachment preview path must reference a file",
+        400,
+      );
+    }
+
+    const canonicalDirectory = yield* localAttachmentPort
+      .canonicalizePath(localAttachmentPort.stageDirectory())
+      .pipe(
+        Effect.mapError(
+          (error) =>
+            new WebHostRequestRejection({
+              message: `Failed to resolve local attachment preview directory: ${errorMessage(error)}`,
+              status: 500,
+            }),
+        ),
+      );
+    const canonicalPath = yield* localAttachmentPort.canonicalizePath(requestedPath).pipe(
+      Effect.mapError(
+        (error) =>
+          new WebHostRequestRejection({
+            message: `Failed to resolve local attachment preview path: ${errorMessage(error)}`,
+            status: 500,
+          }),
+      ),
     );
-  }
-  if (!metadata.isFile()) {
-    return errorResponse("Local attachment preview path must reference a file", 400, corsHeaders);
-  }
+    if (!isWithinDirectory(canonicalDirectory, canonicalPath)) {
+      return yield* rejectWebHostRequest(
+        "Local attachment preview is only available for staged attachment files.",
+        403,
+      );
+    }
 
-  const canonicalDirectory = await Effect.runPromise(
-    localAttachmentPort.canonicalizePath(localAttachmentPort.stageDirectory()),
-  );
-  const canonicalPath = await Effect.runPromise(
-    localAttachmentPort.canonicalizePath(requestedPath),
-  );
-  if (!isWithinDirectory(canonicalDirectory, canonicalPath)) {
-    return errorResponse(
-      "Local attachment preview is only available for staged attachment files.",
-      403,
-      corsHeaders,
-    );
-  }
-
-  const file = Bun.file(requestedPath);
-  return new Response(file, {
-    headers: {
-      ...corsHeaders,
-      "cache-control": "no-store, private",
-      "content-type": file.type || "application/octet-stream",
-    },
+    const file = Bun.file(requestedPath);
+    return new Response(file, {
+      headers: {
+        ...corsHeaders,
+        "cache-control": "no-store, private",
+        "content-type": file.type || "application/octet-stream",
+      },
+    });
   });
-};
 
-export const startTypescriptHostBackend = async ({
+const routeCorsRequest = ({
+  appToken,
+  controlToken,
+  corsHeaders,
+  eventBus,
+  hostCommandRouter,
+  localAttachments,
+  request,
+  shutdownStarted,
+  stop,
+}: {
+  appToken: string;
+  controlToken: string;
+  corsHeaders: HeadersInit;
+  eventBus: BufferedHostEventBus;
+  hostCommandRouter: EffectHostCommandRouter;
+  localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
+  request: Request;
+  shutdownStarted: boolean;
+  stop: () => Promise<void>;
+}): Effect.Effect<Response, WebHostRequestRejection> =>
+  Effect.gen(function* () {
+    const requestUrl = new URL(request.url);
+    if (requestUrl.pathname === "/health" && request.method === "GET") {
+      return jsonResponse({ ok: true }, undefined, corsHeaders);
+    }
+
+    if (requestUrl.pathname === "/session" && request.method === "POST") {
+      const tokenError = validateAppTokenHeader(request, appToken);
+      if (tokenError) {
+        return tokenError;
+      }
+      return jsonResponse(
+        { ok: true },
+        {
+          headers: {
+            "set-cookie": `${APP_SESSION_COOKIE_NAME}=${appToken}; HttpOnly; SameSite=Strict; Path=/`,
+          },
+        },
+        corsHeaders,
+      );
+    }
+
+    if (requestUrl.pathname === "/shutdown" && request.method === "POST") {
+      const tokenError = validateControlToken(request, controlToken);
+      if (tokenError) {
+        return tokenError;
+      }
+      yield* Effect.sync(() => {
+        setTimeout(() => {
+          void stop();
+        }, 10);
+      });
+      return jsonResponse({ ok: true }, { status: 202 }, corsHeaders);
+    }
+
+    const streamChannel = STREAM_PATH_TO_CHANNEL.get(requestUrl.pathname.replace(/^\//, ""));
+    if (streamChannel && request.method === "GET") {
+      const tokenError = validateAppCookieOrHeader(request, appToken);
+      if (tokenError) {
+        return tokenError;
+      }
+      if (shutdownStarted) {
+        return yield* rejectWebHostRequest(
+          "Browser backend is shutting down and is no longer accepting new work.",
+          503,
+        );
+      }
+      return createSseResponse(
+        eventBus.streamFor(streamChannel),
+        yield* parseLastEventId(request),
+        corsHeaders,
+      );
+    }
+
+    if (requestUrl.pathname === "/local-attachment-preview" && request.method === "GET") {
+      const tokenError = validateAppSessionCookie(request, appToken);
+      if (tokenError) {
+        return tokenError;
+      }
+      return yield* localAttachmentPreviewResponse(request, localAttachments, corsHeaders);
+    }
+
+    const invokeMatch = /^\/invoke\/([^/]+)$/.exec(requestUrl.pathname);
+    if (invokeMatch && request.method === "POST") {
+      const tokenError = validateAppTokenHeader(request, appToken);
+      if (tokenError) {
+        return tokenError;
+      }
+      if (shutdownStarted) {
+        return yield* rejectWebHostRequest(
+          "Browser backend is shutting down and is no longer accepting new work.",
+          503,
+        );
+      }
+      const args = yield* parseJsonObjectBody(request);
+      const [, command] = invokeMatch;
+      if (!command) {
+        return yield* rejectWebHostRequest("Host command is required.", 400);
+      }
+      const result = yield* hostCommandRouter.invoke(decodeURIComponent(command), args).pipe(
+        Effect.mapError(
+          (error) =>
+            new WebHostRequestRejection({
+              message: errorMessage(error),
+              status: 500,
+            }),
+        ),
+      );
+      return jsonResponse(result, undefined, corsHeaders);
+    }
+
+    return errorResponse("Not found", 404, corsHeaders);
+  });
+
+const handleTypescriptHostBackendRequest = ({
+  allowedOrigins,
+  appToken,
+  controlToken,
+  eventBus,
+  hostCommandRouter,
+  localAttachments,
+  request,
+  shutdownStarted,
+  stop,
+}: {
+  allowedOrigins: Set<string>;
+  appToken: string;
+  controlToken: string;
+  eventBus: BufferedHostEventBus;
+  hostCommandRouter: EffectHostCommandRouter;
+  localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
+  request: Request;
+  shutdownStarted: boolean;
+  stop: () => Promise<void>;
+}): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    if (request.method === "OPTIONS") {
+      return preflightResponse(request, allowedOrigins);
+    }
+
+    const corsHeaders = corsHeadersForRequest(request, allowedOrigins);
+    if (corsHeaders instanceof Response) {
+      return corsHeaders;
+    }
+
+    return yield* routeCorsRequest({
+      appToken,
+      controlToken,
+      corsHeaders,
+      eventBus,
+      hostCommandRouter,
+      localAttachments,
+      request,
+      shutdownStarted,
+      stop,
+    }).pipe(
+      Effect.catchAll((error) => Effect.succeed(webHostRequestErrorResponse(error, corsHeaders))),
+    );
+  });
+
+const toWebHostStartupError = (message: string, cause?: unknown): WebHostStartupError =>
+  new WebHostStartupError(cause === undefined ? { message } : { cause, message });
+
+export const startTypescriptHostBackendEffect = ({
   port,
   frontendOrigin,
   controlToken,
   appToken,
-}: TypescriptHostBackendOptions): Promise<TypescriptHostBackend> => {
-  const validatedFrontendOrigin = validateWebFrontendOrigin(frontendOrigin);
-  const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
-  const eventBus = new BufferedHostEventBus();
-  const localAttachments = createLocalAttachmentAdapter();
-  const hostCommandRouter: HostCommandRouter = createNodeHostCommandRouter({
-    eventBus,
-    lifecycleLogger: {
-      error: logError,
-      info: logInfo,
-    },
-    localAttachments,
-  });
-  let shutdownStarted = false;
-  let stopPromise: Promise<void> | null = null;
-  let resolveExited: (exitCode: number) => void = () => {};
-  const exited = new Promise<number>((resolve) => {
-    resolveExited = resolve;
-  });
+}: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebHostStartupError> =>
+  Effect.gen(function* () {
+    const validatedFrontendOrigin = yield* Effect.try({
+      try: () => validateWebFrontendOrigin(frontendOrigin),
+      catch: (error) => toWebHostStartupError(errorMessage(error), error),
+    });
+    const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
+    const eventBus = new BufferedHostEventBus();
+    const localAttachments = createLocalAttachmentAdapter();
+    const hostCommandRouter: EffectHostCommandRouter = createNodeEffectHostCommandRouter({
+      eventBus,
+      lifecycleLogger: {
+        error: logError,
+        info: logInfo,
+      },
+      localAttachments,
+    });
+    let shutdownStarted = false;
+    let stopPromise: Promise<void> | null = null;
+    let resolveExited: (exitCode: number) => void = () => {};
+    const exited = new Promise<number>((resolve) => {
+      resolveExited = resolve;
+    });
 
-  const stop = async (): Promise<void> => {
-    if (stopPromise) {
-      return stopPromise;
-    }
-    shutdownStarted = true;
-    stopPromise = (async () => {
-      let exitCode = 0;
-      server.stop(true);
-      try {
-        await hostCommandRouter.dispose();
-      } catch (error) {
-        exitCode = 1;
-        logError(error instanceof Error ? error.message : String(error));
-      } finally {
-        resolveExited(exitCode);
+    const stop = async (): Promise<void> => {
+      if (stopPromise) {
+        return stopPromise;
       }
-    })();
-    return stopPromise;
-  };
-
-  const server = Bun.serve({
-    hostname: LOCALHOST,
-    port,
-    async fetch(request) {
-      if (request.method === "OPTIONS") {
-        return preflightResponse(request, allowedOrigins);
-      }
-
-      const corsHeaders = corsHeadersForRequest(request, allowedOrigins);
-      if (corsHeaders instanceof Response) {
-        return corsHeaders;
-      }
-
-      const requestUrl = new URL(request.url);
-      if (requestUrl.pathname === "/health" && request.method === "GET") {
-        return jsonResponse({ ok: true }, undefined, corsHeaders);
-      }
-
-      if (requestUrl.pathname === "/session" && request.method === "POST") {
-        const tokenError = validateAppTokenHeader(request, appToken);
-        if (tokenError) {
-          return tokenError;
-        }
-        return jsonResponse(
-          { ok: true },
-          {
-            headers: {
-              "set-cookie": `${APP_SESSION_COOKIE_NAME}=${appToken}; HttpOnly; SameSite=Strict; Path=/`,
-            },
-          },
-          corsHeaders,
-        );
-      }
-
-      if (requestUrl.pathname === "/shutdown" && request.method === "POST") {
-        const tokenError = validateControlToken(request, controlToken);
-        if (tokenError) {
-          return tokenError;
-        }
-        setTimeout(() => {
-          void stop();
-        }, 10);
-        return jsonResponse({ ok: true }, { status: 202 }, corsHeaders);
-      }
-
-      const streamChannel = STREAM_PATH_TO_CHANNEL.get(requestUrl.pathname.replace(/^\//, ""));
-      if (streamChannel && request.method === "GET") {
-        const tokenError = validateAppCookieOrHeader(request, appToken);
-        if (tokenError) {
-          return tokenError;
-        }
-        if (shutdownStarted) {
-          return errorResponse(
-            "Browser backend is shutting down and is no longer accepting new work.",
-            503,
-            corsHeaders,
-          );
-        }
-        try {
-          return createSseResponse(
-            eventBus.streamFor(streamChannel),
-            parseLastEventId(request),
-            corsHeaders,
-          );
-        } catch (error) {
-          return errorResponse(
-            error instanceof Error ? error.message : String(error),
-            400,
-            corsHeaders,
-          );
-        }
-      }
-
-      if (requestUrl.pathname === "/local-attachment-preview" && request.method === "GET") {
-        const tokenError = validateAppSessionCookie(request, appToken);
-        if (tokenError) {
-          return tokenError;
-        }
-        return localAttachmentPreviewResponse(request, localAttachments, corsHeaders);
-      }
-
-      const invokeMatch = /^\/invoke\/([^/]+)$/.exec(requestUrl.pathname);
-      if (invokeMatch && request.method === "POST") {
-        const tokenError = validateAppTokenHeader(request, appToken);
-        if (tokenError) {
-          return tokenError;
-        }
-        if (shutdownStarted) {
-          return errorResponse(
-            "Browser backend is shutting down and is no longer accepting new work.",
-            503,
-            corsHeaders,
-          );
-        }
-        try {
-          const args = await parseJsonObjectBody(request);
-          const [, command] = invokeMatch;
-          if (!command) {
-            return errorResponse("Host command is required.", 400, corsHeaders);
+      shutdownStarted = true;
+      stopPromise = Effect.runPromise(
+        Effect.gen(function* () {
+          let exitCode = 0;
+          yield* Effect.sync(() => server.stop(true));
+          const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
+          if (disposeExit._tag === "Failure") {
+            exitCode = 1;
+            logError(Cause.pretty(disposeExit.cause));
           }
-          const result = await hostCommandRouter.invoke(decodeURIComponent(command), args);
-          return jsonResponse(result, undefined, corsHeaders);
-        } catch (error) {
-          return errorResponse(
-            error instanceof Error ? error.message : String(error),
-            500,
-            corsHeaders,
-          );
-        }
-      }
+          resolveExited(exitCode);
+        }),
+      );
+      return stopPromise;
+    };
 
-      return errorResponse("Not found", 404, corsHeaders);
-    },
-  });
+    const server = Bun.serve({
+      hostname: LOCALHOST,
+      port,
+      fetch(request) {
+        return Effect.runPromise(
+          handleTypescriptHostBackendRequest({
+            allowedOrigins,
+            appToken,
+            controlToken,
+            eventBus,
+            hostCommandRouter,
+            localAttachments,
+            request,
+            shutdownStarted,
+            stop,
+          }),
+        );
+      },
+    });
 
-  if (server.port === undefined) {
-    server.stop(true);
-    throw new Error("OpenDucktor TypeScript host did not expose a listening port.");
-  }
-
-  try {
-    await hostCommandRouter.initialize();
-  } catch (error) {
-    server.stop(true);
-    try {
-      await hostCommandRouter.dispose();
-    } catch (disposeError) {
-      logError(
-        `Failed to dispose local OpenDucktor host after startup failure: ${
-          disposeError instanceof Error ? disposeError.message : String(disposeError)
-        }`,
+    if (server.port === undefined) {
+      server.stop(true);
+      return yield* Effect.fail(
+        toWebHostStartupError("OpenDucktor TypeScript host did not expose a listening port."),
       );
     }
-    throw new Error(
-      `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-      { cause: error },
-    );
-  }
 
-  return {
-    exited,
-    port: server.port,
-    stop,
-  };
-};
+    const initializeExit = yield* Effect.exit(hostCommandRouter.initialize());
+    if (initializeExit._tag === "Failure") {
+      yield* Effect.sync(() => server.stop(true));
+      const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
+      if (disposeExit._tag === "Failure") {
+        logError(
+          `Failed to dispose local OpenDucktor host after startup failure: ${Cause.pretty(
+            disposeExit.cause,
+          )}`,
+        );
+      }
+      return yield* Effect.fail(
+        toWebHostStartupError(
+          `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${Cause.pretty(
+            initializeExit.cause,
+          )}`,
+          initializeExit.cause,
+        ),
+      );
+    }
+
+    return {
+      exited,
+      port: server.port,
+      stop,
+    };
+  });
+
+export const startTypescriptHostBackend = (
+  options: TypescriptHostBackendOptions,
+): Promise<TypescriptHostBackend> => Effect.runPromise(startTypescriptHostBackendEffect(options));
 
 export const __typescriptHostBackendTestInternals = {
   BufferedHostEventBus,
