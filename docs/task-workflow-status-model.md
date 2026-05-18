@@ -137,7 +137,7 @@ Root namespace key is fixed to `openducktor`.
 Notes:
 - Legacy entries without `encoding` remain readable. In those entries, `markdown` is stored as literal markdown.
 - New or updated spec, plan, and QA documents are stored with `encoding: "gzip-base64-v1"` and a base64-encoded gzip payload in `markdown`.
-- Encode and decode translation is owned by the Rust host. Frontend and MCP callers continue to receive plain markdown on successful reads.
+- Encode and decode translation is owned by the host. Frontend and MCP callers continue to receive plain markdown on successful reads.
 - When the latest stored document cannot be decoded, host-backed read APIs return an empty markdown string plus a document-level `error` field instead of silently treating the document as missing.
 - There is no automatic backfill migration for older markdown-only entries.
 

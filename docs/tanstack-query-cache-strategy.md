@@ -18,7 +18,7 @@ Effect-backed host clients or query functions may be used under Query, but they 
 
 ## Global defaults
 
-Defined in [apps/desktop/src/lib/query-client.ts](../apps/desktop/src/lib/query-client.ts):
+Defined in [packages/frontend/src/lib/query-client.ts](../packages/frontend/src/lib/query-client.ts):
 
 - `retry: false`
 - `refetchOnWindowFocus: false`
@@ -46,9 +46,9 @@ Used for shared, read-mostly configuration that changes rarely and should be inv
 
 Files:
 
-- [apps/desktop/src/state/queries/workspace.ts](../apps/desktop/src/state/queries/workspace.ts)
-- [apps/desktop/src/state/queries/runtime.ts](../apps/desktop/src/state/queries/runtime.ts)
-- [apps/desktop/src/state/queries/runtime-catalog.ts](../apps/desktop/src/state/queries/runtime-catalog.ts)
+- [packages/frontend/src/state/queries/workspace.ts](../packages/frontend/src/state/queries/workspace.ts)
+- [packages/frontend/src/state/queries/runtime.ts](../packages/frontend/src/state/queries/runtime.ts)
+- [packages/frontend/src/state/queries/runtime-catalog.ts](../packages/frontend/src/state/queries/runtime-catalog.ts)
 
 ### Medium-lived operational reads
 
@@ -63,11 +63,11 @@ Used for workflow data that can change during a session, but where we still want
 
 Files:
 
-- [apps/desktop/src/state/queries/tasks.ts](../apps/desktop/src/state/queries/tasks.ts)
-- [apps/desktop/src/state/queries/agent-sessions.ts](../apps/desktop/src/state/queries/agent-sessions.ts)
-- [apps/desktop/src/state/queries/documents.ts](../apps/desktop/src/state/queries/documents.ts)
-- [apps/desktop/src/state/queries/task-approval.ts](../apps/desktop/src/state/queries/task-approval.ts)
-- [apps/desktop/src/state/queries/runtime.ts](../apps/desktop/src/state/queries/runtime.ts)
+- [packages/frontend/src/state/queries/tasks.ts](../packages/frontend/src/state/queries/tasks.ts)
+- [packages/frontend/src/state/queries/agent-sessions.ts](../packages/frontend/src/state/queries/agent-sessions.ts)
+- [packages/frontend/src/state/queries/documents.ts](../packages/frontend/src/state/queries/documents.ts)
+- [packages/frontend/src/state/queries/task-approval.ts](../packages/frontend/src/state/queries/task-approval.ts)
+- [packages/frontend/src/state/queries/runtime.ts](../packages/frontend/src/state/queries/runtime.ts)
 
 ### Diagnostics and health
 
@@ -79,7 +79,7 @@ Used for checks that are somewhat volatile, but still should not refetch constan
 
 File:
 
-- [apps/desktop/src/state/queries/checks.ts](../apps/desktop/src/state/queries/checks.ts)
+- [packages/frontend/src/state/queries/checks.ts](../packages/frontend/src/state/queries/checks.ts)
 
 ### Short-lived filesystem browsing
 
@@ -89,7 +89,7 @@ Used for interactive directory exploration where repeated navigation should reus
 
 File:
 
-- [apps/desktop/src/state/queries/filesystem.ts](../apps/desktop/src/state/queries/filesystem.ts)
+- [packages/frontend/src/state/queries/filesystem.ts](../packages/frontend/src/state/queries/filesystem.ts)
 
 ### Git state
 
@@ -104,7 +104,7 @@ Used for repository state where some values are stable and some are intentionall
 
 File:
 
-- [apps/desktop/src/state/queries/git.ts](../apps/desktop/src/state/queries/git.ts)
+- [packages/frontend/src/state/queries/git.ts](../packages/frontend/src/state/queries/git.ts)
 
 ## Read patterns
 
@@ -130,7 +130,7 @@ Examples:
 - document reads
 - worktree status reads
 
-Task documents keep their normal `60 sec` stale time for ordinary viewing, but workflow-driven refreshes use explicit force-fresh fetches in `apps/desktop/src/state/queries/documents.ts` so external ODT document writes bypass stale adapter metadata without adding polling or focus refetching.
+Task documents keep their normal `60 sec` stale time for ordinary viewing, but workflow-driven refreshes use explicit force-fresh fetches in `packages/frontend/src/state/queries/documents.ts` so external ODT document writes bypass stale adapter metadata without adding polling or focus refetching.
 
 ## Mutation strategy
 

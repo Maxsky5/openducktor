@@ -1,6 +1,6 @@
 # OpenDucktor Web Runner
 
-The web runner lets OpenDucktor run in a browser without a Tauri window while preserving the desktop app. It is a regular supported way to run OpenDucktor locally.
+The web runner lets OpenDucktor run in a browser without a desktop window. It uses the same shared React frontend as the desktop shells and the same TypeScript host boundary as the Electron shell.
 
 ## Command
 
@@ -14,20 +14,21 @@ During repository development, use the root wrapper:
 bun run browser:dev
 ```
 
-Both commands start a loopback-only Rust host and serve the shared frontend with Vite.
+Both commands start a loopback-only TypeScript host backend and serve the shared frontend.
 
 ## Architecture
 
 - `packages/frontend` owns the shared React app and shell bootstrap. It exposes `bootstrapOpenDucktorShell` and the `ShellBridge` contract types.
 - `apps/desktop/src` is a thin Tauri shell that implements the bridge with Tauri invoke/events.
-- `packages/openducktor-web` is a thin browser shell and launcher. It implements the bridge with HTTP invoke calls and SSE subscriptions against the local Rust host.
-- `openducktor-web-host` is a dedicated Rust binary under `apps/desktop/src-tauri/src/bin/`.
+- `apps/electron` is a thin Electron shell that implements the bridge with Electron IPC/preload and delegates host behavior to `@openducktor/host`.
+- `packages/openducktor-web` is a browser shell and launcher. It implements the bridge with HTTP invoke calls and SSE subscriptions against the local TypeScript host backend.
+- `packages/openducktor-web/src/typescript-host-backend.ts` adapts `@openducktor/host` to the browser HTTP/SSE contract.
 
 Shared frontend code must not import `@tauri-apps/api`, `apps/desktop`, or `src-tauri`. The root `bun run frontend:boundary-guard` check enforces that boundary.
 
 ## Control Plane
 
-The launcher generates two tokens for each run and passes both to the Rust web host:
+The launcher generates two tokens for each run and passes both to the TypeScript host backend:
 
 - a control token for launcher-only operations such as `/shutdown`, sent with the `x-openducktor-control-token` header;
 - an app token for browser-facing API bootstrap. The browser shell sends it once to `/session` with the `x-openducktor-app-token` header. The host then sets an HttpOnly `openducktor_web_session` cookie for SSE streams and attachment previews, so app tokens are not placed in URLs. Invoke requests still include the app-token header and credentials.
@@ -36,24 +37,20 @@ The browser shell fails fast if the launcher does not inject `VITE_ODT_BROWSER_B
 
 The web host validates the configured frontend origin for CORS. The origin must be an `http` loopback origin with an explicit port and no credentials, path, query, or fragment. There is no fallback from the web host to a desktop runtime route.
 
-The desktop binary also accepts a strict internal `--web-host` mode for bridge processes. The older `--browser-backend` flag remains as a compatibility alias, but new callers should use `--web-host`.
-
 ## Release Packaging
 
-Published installs resolve a platform-specific host binary from `packages/openducktor-web/bin/`:
+Published installs are self-contained in the `@openducktor/web` package:
 
-- `openducktor-web-host-darwin-arm64`
-- `openducktor-web-host-darwin-x64`
+- `dist/cli.js` contains the launcher and TypeScript host backend.
+- `dist/web-shell/**` contains the built browser shell.
 
-Each binary must have a sibling `.sha256` file. The launcher fails before startup if the current platform is unsupported, the binary is missing, or the checksum does not match.
+Release automation owns the package in `.github/workflows/publish-web.yml`. The workflow builds `@openducktor/web`, verifies package contents with `scripts/prepare-web-publish-packages.ts`, runs `npm publish --dry-run`, and publishes the package through npm Trusted Publisher.
 
-Release automation owns those artifacts in `.github/workflows/publish-web.yml`. The workflow builds `openducktor-web-host` for both macOS targets, passes the binaries to the publish job as GitHub Actions artifacts, copies them into `packages/openducktor-web/bin/`, verifies package contents and checksums, runs `npm publish --dry-run`, and publishes the single self-contained `@openducktor/web` package.
+Workspace development mode (`bun run browser:dev`) runs the same launcher in `--workspace` mode. It starts the TypeScript host backend in-process and serves the repo-local frontend with Vite.
 
-Workspace development mode (`bun run browser:dev`) resolves the host through Cargo instead:
+The published package and workspace mode both fail fast if runtime config is missing, if the launcher cannot establish a session with the app token, or if a host command is unavailable.
 
-```sh
-cargo run --bin openducktor-web-host -- --port <port> --frontend-origin <origin> --control-token <token> --app-token <token>
-```
+The web runner is currently intended for local development and local browser use. Platform behavior follows the TypeScript host and local runtime discovery behavior rather than the legacy Rust web-host binary path.
 
 ## Verification
 
@@ -66,7 +63,6 @@ bun run --filter @openducktor/frontend test
 bun run --filter @openducktor/web test
 bun run --filter @openducktor/web typecheck
 bun run --filter @openducktor/web build
-cd apps/desktop/src-tauri && cargo test --bin openducktor-web-host
 ```
 
-Full release confidence also requires the root repo checks (`bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`, `bun run check:rust`, `bun run test:rust`) and a browser smoke against the live `bun run browser:dev` app. Desktop changes should be smoke-tested with `bun run tauri:dev` or the packaged desktop artifact before publishing the draft release.
+Full release confidence also requires the root repo checks (`bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`) and a browser smoke against the live `bun run browser:dev` app. Desktop changes should be smoke-tested with the relevant desktop shell (`bun run electron:dev`, `bun run tauri:dev`, or a packaged desktop artifact) before publishing the draft release.
