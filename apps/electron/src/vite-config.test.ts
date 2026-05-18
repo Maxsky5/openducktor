@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import packageJson from "./package.json";
-import { resolveAppVersion } from "./vite.config";
+import packageJson from "../package.json";
+import { resolveAppVersion } from "../vite.config";
 
 describe("resolveAppVersion", () => {
   test("uses ODT_APP_VERSION when provided", () => {
