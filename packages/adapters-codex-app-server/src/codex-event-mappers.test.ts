@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
-import { todoMapper } from "./event-mappers";
+import { compactionMapper, todoMapper } from "./event-mappers";
 
 const TODO_PAYLOAD = {
   explanation: "Tracking work",
@@ -73,5 +73,53 @@ describe("Codex todo event mapper", () => {
         }),
       );
     }
+  });
+});
+
+describe("Codex compaction event mapper", () => {
+  test("projects live thread compaction notifications to session events", () => {
+    const events = projectCodexCanonicalEvents(
+      compactionMapper.fromLive(
+        {
+          kind: "notification",
+          notification: {
+            method: "thread/compacted",
+            params: {},
+          },
+        },
+        {
+          source: "live",
+          threadId: "thread-1",
+          timestamp: "2026-05-18T21:00:00.000Z",
+        },
+      ).events,
+    );
+
+    expect(events).toEqual([
+      {
+        type: "session_compacted",
+        externalSessionId: "thread-1",
+        timestamp: "2026-05-18T21:00:00.000Z",
+        message: "Codex compacted the conversation.",
+      },
+    ]);
+  });
+
+  test("does not map unknown notifications as compaction", () => {
+    const result = compactionMapper.fromLive(
+      {
+        kind: "notification",
+        notification: {
+          method: "thread/status/changed",
+          params: { status: "thinking" },
+        },
+      },
+      {
+        source: "live",
+        threadId: "thread-1",
+      },
+    );
+
+    expect(result).toEqual({ events: [], handled: false });
   });
 });

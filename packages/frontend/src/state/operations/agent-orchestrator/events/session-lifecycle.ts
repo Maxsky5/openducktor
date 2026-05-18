@@ -14,6 +14,7 @@ import {
   upsertSessionMessage,
 } from "../support/messages";
 import {
+  buildSessionCompactedNoticeMessage,
   buildSessionErrorNoticeMessage,
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
@@ -660,6 +661,22 @@ export const handleSessionTodosUpdated = (
   );
 };
 
+export const handleSessionCompacted = (
+  context: Pick<SessionLifecycleEventContext, "store">,
+  event: Extract<SessionEvent, { type: "session_compacted" }>,
+): void => {
+  context.store.updateSession(
+    context.store.externalSessionId,
+    (current) => ({
+      ...current,
+      messages: appendSessionMessage(
+        current,
+        buildSessionCompactedNoticeMessage(event.timestamp, event.message),
+      ),
+    }),
+    { persist: true },
+  );
+};
 const settleTerminalMessages = (
   session: Pick<
     SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string],

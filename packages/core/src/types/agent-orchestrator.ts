@@ -419,6 +419,12 @@ export type AgentEvent =
       todos: AgentSessionTodoItem[];
     }
   | {
+      type: "session_compacted";
+      externalSessionId: ExternalSessionId;
+      timestamp: string;
+      message: string;
+    }
+  | {
       type: "tool_call";
       externalSessionId: ExternalSessionId;
       timestamp: string;

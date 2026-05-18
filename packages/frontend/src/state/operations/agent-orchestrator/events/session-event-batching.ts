@@ -99,6 +99,9 @@ const SESSION_EVENT_BATCH_RULES: SessionEventBatchRules = {
     immediate: false,
     dedupeKey: () => "session_todos_updated",
   },
+  session_compacted: {
+    immediate: true,
+  },
   session_error: {
     immediate: true,
   },
@@ -153,6 +156,8 @@ const withTypedSessionEvent = <T>(
       return callback(event, SESSION_EVENT_BATCH_RULES.question_required);
     case "session_todos_updated":
       return callback(event, SESSION_EVENT_BATCH_RULES.session_todos_updated);
+    case "session_compacted":
+      return callback(event, SESSION_EVENT_BATCH_RULES.session_compacted);
     case "session_error":
       return callback(event, SESSION_EVENT_BATCH_RULES.session_error);
     case "session_idle":

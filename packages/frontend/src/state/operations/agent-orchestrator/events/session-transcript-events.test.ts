@@ -426,6 +426,142 @@ describe("agent-orchestrator session transcript events", () => {
     expect(userMessages[0].meta.state).toBe("read");
   });
 
+  test("appends Codex compaction notices without changing live session state", () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const updateSessionOptions: Array<{ persist?: boolean } | undefined> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const previousMessage = {
+      id: "assistant-1",
+      role: "assistant" as const,
+      content: "Working on it.",
+      timestamp: "2026-05-18T21:00:00.000Z",
+    };
+    const protectedSessionState = {
+      status: "running" as const,
+      draftAssistantText: "draft text",
+      draftAssistantMessageId: "draft-assistant-1",
+      draftReasoningText: "draft reasoning",
+      draftReasoningMessageId: "draft-reasoning-1",
+      pendingUserMessageStartedAt: Date.parse("2026-05-18T21:00:00.000Z"),
+      pendingApprovals: [
+        {
+          requestId: "approval-1",
+          requestType: "command_execution" as const,
+          title: "Run command",
+        },
+      ],
+      pendingQuestions: [
+        {
+          requestId: "question-1",
+          questions: [{ header: "Choice", question: "Proceed?", options: [] }],
+        },
+      ],
+      todos: [
+        {
+          id: "todo-1",
+          content: "Keep working",
+          status: "in_progress" as const,
+          priority: "high" as const,
+        },
+      ],
+      contextUsage: {
+        totalTokens: 12_000,
+        contextWindow: 200_000,
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+      selectedModel: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "build",
+          messages: [previousMessage],
+          ...protectedSessionState,
+        }),
+      },
+    };
+
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+      options?: { persist?: boolean },
+    ) => {
+      const current = sessionsRef.current[externalSessionId];
+      if (!current) {
+        return;
+      }
+      updateSessionOptions.push(options);
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [externalSessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: { "session-1": { reasoning: "draft reasoning" } } },
+      draftSourceBySessionRef: { current: { "session-1": { reasoning: "delta" } } },
+      draftMessageIdBySessionRef: { current: { "session-1": { reasoning: "draft-reasoning-1" } } },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: { "session-1": 1_777_000_000_000 } },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "session_compacted",
+      externalSessionId: "session-1",
+      timestamp: "2026-05-18T21:01:00.000Z",
+      message: "Codex compacted the conversation.",
+    });
+
+    const session = sessionsRef.current["session-1"];
+    if (!session) {
+      throw new Error("Expected session to exist");
+    }
+    const messages = getSessionMessages(sessionsRef);
+    const notice = messages.at(-1);
+    expect(messages[0]).toEqual(previousMessage);
+    expect(notice).toEqual(
+      expect.objectContaining({
+        role: "system",
+        content: "Codex compacted the conversation.",
+        timestamp: "2026-05-18T21:01:00.000Z",
+        meta: {
+          kind: "session_notice",
+          tone: "info",
+          reason: "codex_compacted",
+          title: "Compacted",
+        },
+      }),
+    );
+    expect(updateSessionOptions).toContainEqual({ persist: true });
+    expect(session).toEqual(
+      expect.objectContaining({
+        ...protectedSessionState,
+      }),
+    );
+  });
+
   test("reconciles queued user_message updates in place when the agent reads the turn", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {

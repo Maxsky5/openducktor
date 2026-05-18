@@ -82,6 +82,12 @@ describe("CodexAppServerAdapter streaming", () => {
           },
         },
         {
+          method: "thread/compacted",
+          params: {
+            threadId: "thread/start-runtime-ensure",
+          },
+        },
+        {
           method: "turn/plan/updated",
           params: {
             threadId: "thread/start-runtime-ensure",
@@ -176,6 +182,15 @@ describe("CodexAppServerAdapter streaming", () => {
         contextWindow: 200_000,
       }),
     );
+    expect(events).toContainEqual({
+      type: "session_compacted",
+      externalSessionId: "thread/start-runtime-ensure",
+      timestamp: expect.any(String),
+      message: "Codex compacted the conversation.",
+    });
+    expect(
+      events.filter((event) => (event as { type?: string }).type === "session_compacted"),
+    ).toHaveLength(1);
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "assistant_part",
@@ -659,12 +674,10 @@ describe("CodexAppServerAdapter streaming", () => {
       runtimeId: "runtime-live",
       kind: "notification",
       message: {
-        method: "item/agentMessage/delta",
+        method: "thread/compacted",
         params: {
           threadId: "thread-saved",
           turnId: "turn-live",
-          itemId: "agent-live",
-          delta: "buffered text",
         },
       },
     });
@@ -673,13 +686,12 @@ describe("CodexAppServerAdapter streaming", () => {
     const events: unknown[] = [];
     const unsubscribe = adapter.subscribeEvents("thread-saved", (event) => events.push(event));
 
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "assistant_delta",
-        messageId: "agent-live",
-        delta: "buffered text",
-      }),
-    );
+    expect(events).toContainEqual({
+      type: "session_compacted",
+      externalSessionId: "thread-saved",
+      timestamp: expect.any(String),
+      message: "Codex compacted the conversation.",
+    });
     unsubscribe();
   });
 

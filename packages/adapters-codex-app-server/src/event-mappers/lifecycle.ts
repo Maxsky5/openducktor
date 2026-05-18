@@ -49,6 +49,33 @@ export const lifecycleMapper: CodexEventMapper = {
   fromThreadItem: emptyCodexMappingResult,
 };
 
+export const compactionMapper: CodexEventMapper = {
+  name: "compaction",
+  createState: noCodexMapperState,
+  fromLive(input, ctx): CodexMappingResult {
+    if (input.kind !== "notification" || input.notification.method !== "thread/compacted") {
+      return emptyCodexMappingResult();
+    }
+
+    return {
+      handled: true,
+      events: [
+        {
+          kind: "session_compacted",
+          source: ctx.source,
+          mapper: "compaction",
+          threadId: ctx.threadId,
+          ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
+          ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
+          raw: input.notification.params,
+          message: "Codex compacted the conversation.",
+        },
+      ],
+    };
+  },
+  fromThreadItem: emptyCodexMappingResult,
+};
+
 export const tokenUsageMapper: CodexEventMapper = {
   name: "token_usage",
   createState: noCodexMapperState,

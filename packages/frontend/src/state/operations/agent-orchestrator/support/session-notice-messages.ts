@@ -17,6 +17,12 @@ const buildSessionNoticeMessage = ({
       content: string;
       tone: "error";
       title: string;
+    }
+  | {
+      timestamp: string;
+      content: string;
+      tone: "info";
+      title: string;
     }): AgentChatMessage => ({
   id: crypto.randomUUID(),
   role: "system",
@@ -30,12 +36,19 @@ const buildSessionNoticeMessage = ({
           reason: "user_stopped",
           title,
         }
-      : {
-          kind: "session_notice",
-          tone: "error",
-          reason: "session_error",
-          title,
-        },
+      : tone === "info"
+        ? {
+            kind: "session_notice",
+            tone: "info",
+            reason: "session_compacted",
+            title,
+          }
+        : {
+            kind: "session_notice",
+            tone: "error",
+            reason: "session_error",
+            title,
+          },
 });
 
 export const USER_STOPPED_NOTICE = "Session stopped at your request.";
@@ -57,4 +70,15 @@ export const buildSessionErrorNoticeMessage = (
     content: message,
     tone: "error",
     title: "Error",
+  });
+
+export const buildSessionCompactedNoticeMessage = (
+  timestamp: string,
+  message: string,
+): AgentChatMessage =>
+  buildSessionNoticeMessage({
+    timestamp,
+    content: message,
+    tone: "info",
+    title: "Compacted",
   });

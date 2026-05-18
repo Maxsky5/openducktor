@@ -76,6 +76,15 @@ export const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEve
     };
   }
 
+  if (event.kind === "session_compacted") {
+    return {
+      type: "session_compacted",
+      externalSessionId: event.threadId,
+      timestamp,
+      message: event.message,
+    };
+  }
+
   return {
     type: "session_todos_updated",
     externalSessionId: event.threadId,
