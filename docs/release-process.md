@@ -36,7 +36,7 @@ It does all release preparation work:
   - `stable` publishes npm packages with `latest`
   - `beta` publishes npm packages with `beta`
 
-The same release version applies to the desktop apps, `@openducktor/mcp`, and `@openducktor/web`.
+For beta releases, npm-facing packages keep the full prerelease version, for example `0.4.0-beta.1`. Desktop bundle metadata uses the numeric base version, for example `0.4.0`, because macOS bundle short versions must be numeric period-separated components.
 
 ### 2. Release Desktop Tauri
 
@@ -201,6 +201,13 @@ The helper script remains useful because this repo spans three version domains:
 - Electron package metadata
 - Tauri config
 - Cargo workspace/root package metadata
+
+Stable releases use the same version everywhere. Beta releases split the version domains deliberately:
+
+- root, internal packages, `@openducktor/mcp`, and `@openducktor/web`: full prerelease version, for example `0.4.0-beta.1`
+- desktop package metadata, Tauri config, and Cargo metadata: numeric desktop bundle version, for example `0.4.0`
+
+The GitHub release tag remains the full release tag, for example `v0.4.0-beta.1`, and both desktop workflows still attach assets to that beta draft release.
 
 ## Recommended release sequence
 

@@ -56,6 +56,14 @@ jobs:
             exit 1
           fi
 
+          case "$NPM_DIST_TAG" in
+            latest|beta) ;;
+            *)
+              echo "Unsupported npm dist-tag $NPM_DIST_TAG. Expected latest or beta." >&2
+              exit 1
+              ;;
+          esac
+
           if [[ "$NPM_DIST_TAG" == "beta" && ! "$TAG" =~ - ]]; then
             echo "Publishing with npm dist-tag beta requires a prerelease tag, for example v0.4.0-beta.1." >&2
             exit 1
@@ -83,7 +91,9 @@ jobs:
 
       - name: Publish package
         working-directory: packages/openducktor-mcp
-        run: npm publish --access public --tag "${{ inputs.npm_dist_tag }}"
+        env:
+          NPM_DIST_TAG: ${{ inputs.npm_dist_tag }}
+        run: npm publish --access public --tag "$NPM_DIST_TAG"
 
       - name: Publish workflow summary
         env:
