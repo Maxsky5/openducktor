@@ -7,6 +7,14 @@ on:
         description: "Release tag to publish (for example v0.1.0)"
         required: true
         type: string
+      npm_dist_tag:
+        description: "npm dist-tag to publish"
+        required: true
+        type: choice
+        default: latest
+        options:
+          - latest
+          - beta
 
 env:
   BUN_VERSION: 1.3.11
@@ -40,10 +48,20 @@ jobs:
       - name: Validate MCP tag matches package version
         env:
           TAG: ${{ inputs.tag }}
+          NPM_DIST_TAG: ${{ inputs.npm_dist_tag }}
         run: |
           set -euo pipefail
           if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "Expected release tag like v0.1.0 or v0.1.0-rc.1." >&2
+            exit 1
+          fi
+
+          if [[ "$NPM_DIST_TAG" == "beta" && ! "$TAG" =~ - ]]; then
+            echo "Publishing with npm dist-tag beta requires a prerelease tag, for example v0.4.0-beta.1." >&2
+            exit 1
+          fi
+          if [[ "$NPM_DIST_TAG" == "latest" && "$TAG" =~ - ]]; then
+            echo "Publishing a prerelease tag to npm latest is not allowed." >&2
             exit 1
           fi
 
@@ -65,7 +83,7 @@ jobs:
 
       - name: Publish package
         working-directory: packages/openducktor-mcp
-        run: npm publish --access public
+        run: npm publish --access public --tag "${{ inputs.npm_dist_tag }}"
 
       - name: Publish workflow summary
         env:
@@ -76,4 +94,5 @@ jobs:
             echo
             echo "- Tag: $TAG"
             echo "- Package: @openducktor/mcp"
+            echo "- npm dist-tag: ${{ inputs.npm_dist_tag }}"
           } >> "$GITHUB_STEP_SUMMARY"
