@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
@@ -9,6 +10,21 @@ const __dirname = path.dirname(__filename);
 const workspaceRoot = path.resolve(__dirname, "../..");
 const packagesRoot = path.join(workspaceRoot, "packages");
 const DEFAULT_RENDERER_DEV_PORT = 1430;
+
+const readPackageVersion = (packageJsonPath = path.resolve(__dirname, "package.json")): string => {
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as {
+    version?: unknown;
+  };
+  if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
+    throw new Error(`Missing package version in ${packageJsonPath}`);
+  }
+  return packageJson.version;
+};
+
+export const resolveAppVersion = (env: NodeJS.ProcessEnv = process.env): string => {
+  const versionOverride = env.ODT_APP_VERSION?.trim();
+  return versionOverride || readPackageVersion();
+};
 
 const resolveRendererDevPort = (): number => {
   const configuredPort = process.env.ELECTRON_RENDERER_DEV_PORT?.trim();
@@ -36,7 +52,7 @@ export default defineConfig({
   base: "./",
   plugins: [react(), tailwindcss()],
   define: {
-    "import.meta.env.VITE_ODT_APP_VERSION": JSON.stringify(process.env.ODT_APP_VERSION ?? ""),
+    "import.meta.env.VITE_ODT_APP_VERSION": JSON.stringify(resolveAppVersion()),
   },
   resolve: {
     alias: [
