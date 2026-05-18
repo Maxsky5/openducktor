@@ -2,6 +2,7 @@ import type { ChildProcessByStdio } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { Effect } from "effect";
+import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server-port";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 
 const createChild = (): ChildProcessByStdio<PassThrough, PassThrough, PassThrough> => {
@@ -23,28 +24,41 @@ describe("createCodexAppServerTransport", () => {
     );
     const response = Effect.runPromise(
       transport.request({
-        method: "thread/read",
-        params: { threadId: "thread-1", includeTurns: true },
+        method: "model/list",
+        params: {},
       }),
     );
     const notification = {
-      jsonrpc: "2.0",
       method: "thread/tokenUsage/updated",
       params: {
         threadId: "thread-1",
         turnId: "turn-1",
         tokenUsage: {
-          total: { totalTokens: 10 },
-          last: { totalTokens: 10 },
+          last: {
+            totalTokens: 10,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 10,
+            reasoningOutputTokens: 0,
+          },
+          total: {
+            totalTokens: 10,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 10,
+            reasoningOutputTokens: 0,
+          },
           modelContextWindow: 200,
         },
       },
-    };
+    } satisfies CodexAppServerProtocolMessage;
 
-    child.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { ok: true } })}\n`);
+    child.stdout.write(
+      `${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { data: [], nextCursor: null } })}\n`,
+    );
     child.stdout.write(`${JSON.stringify(notification)}\n`);
 
-    await expect(response).resolves.toEqual({ ok: true });
+    await expect(response).resolves.toEqual({ data: [], nextCursor: null });
     expect(emitted).toEqual([
       { runtimeId: "runtime-1", kind: "notification", message: notification },
     ]);
@@ -62,10 +76,17 @@ describe("createCodexAppServerTransport", () => {
       emitted.push(event),
     );
     const request = {
-      jsonrpc: "2.0",
       id: 1,
-      method: "askForApproval",
-      params: { threadId: "thread-1" },
+      method: "execCommandApproval",
+      params: {
+        conversationId: "thread-1",
+        callId: "call-1",
+        approvalId: null,
+        command: ["true"],
+        cwd: "/repo",
+        reason: null,
+        parsedCmd: [],
+      },
     };
 
     child.stdout.write(`${JSON.stringify(request)}\n`);
@@ -86,11 +107,13 @@ describe("createCodexAppServerTransport", () => {
     await waitForStreamEvents();
     child.emit("close", 1, null);
 
-    await expect(Effect.runPromise(transport.request({ method: "thread/read" }))).rejects.toThrow(
+    await expect(
+      Effect.runPromise(transport.request({ method: "model/list", params: {} })),
+    ).rejects.toThrow(
       /Codex app-server closed: process exited with code 1 for runtime runtime-1: .*latest-error-line/s,
     );
     await expect(
-      Effect.runPromise(transport.request({ method: "thread/read" })),
+      Effect.runPromise(transport.request({ method: "model/list", params: {} })),
     ).rejects.not.toThrow("first-error-line");
   });
 });

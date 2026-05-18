@@ -6,13 +6,13 @@ import {
   themeSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { LoadedGlobalConfig } from "../../config/global-config";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import {
   buildMergedRepoConfig,
   ensureRepoPathAvailable,
   findRepoConfigByRepoPath,
-  type LoadedGlobalConfig,
   loadGlobalConfig,
   normalizeSnapshotWorkspaces,
   requireConfiguredWorkspace,

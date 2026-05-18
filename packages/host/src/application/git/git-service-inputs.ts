@@ -1,9 +1,4 @@
-import {
-  type GitConflictOperation,
-  type GitDiffScope,
-  type GlobalConfig,
-  globalConfigSchema,
-} from "@openducktor/contracts";
+import type { GitConflictOperation, GitDiffScope, GlobalConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
@@ -117,31 +112,20 @@ export const resolveGitWorkingDirectory = (
     }
     return canonicalWorkingDir;
   });
-export const parseGlobalConfig = (payload: unknown): GlobalConfig => {
+export const requireGlobalConfig = (payload: GlobalConfig | null): GlobalConfig => {
   if (payload === null) {
     throw new HostValidationError({
       message: "No OpenDucktor workspace config is available for git worktree mutation.",
     });
   }
-  return globalConfigSchema.parse(payload);
+  return payload;
 };
 export const findRepoConfigByPath = (
   settingsConfig: SettingsConfigPort,
   canonicalRepoPath: string,
 ) =>
   Effect.gen(function* () {
-    const config = yield* settingsConfig.readConfig().pipe(
-      Effect.flatMap((payload) =>
-        Effect.try({
-          try: () => parseGlobalConfig(payload),
-          catch: (cause) =>
-            new HostValidationError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        }),
-      ),
-    );
+    const config = requireGlobalConfig(yield* settingsConfig.readConfig());
     for (const repoConfig of Object.values(config.workspaces)) {
       const configuredRepoPath = yield* settingsConfig.canonicalizePath(repoConfig.repoPath);
       if (configuredRepoPath === canonicalRepoPath) {

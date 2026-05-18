@@ -56,7 +56,7 @@ const createFakeSettingsConfig = ({
   existingPaths = new Set<string>(),
   canonicalPaths = {},
 }: {
-  config?: unknown | null;
+  config?: GlobalConfig | null;
   existingPaths?: Set<string>;
   canonicalPaths?: Record<string, string>;
 } = {}): FakeSettingsConfigPort => {

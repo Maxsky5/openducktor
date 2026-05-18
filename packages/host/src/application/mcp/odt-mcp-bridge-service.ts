@@ -4,6 +4,7 @@ import {
   type BuildResumedResult,
   type CreateTaskResult,
   type GetWorkspacesResult,
+  ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_MCP_TOOL_NAMES,
   type OdtHostBridgeReady,
   type QaApprovedResult,
@@ -39,6 +40,8 @@ import {
   resolveTaskReference,
 } from "./odt-mcp-bridge-model";
 
+const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
+
 export type OdtMcpBridgeError =
   | HostOperationError
   | HostValidationError
@@ -46,13 +49,27 @@ export type OdtMcpBridgeError =
   | TaskSyncError
   | WorkspaceSettingsError;
 
+export type WorkspaceScopedOdtToolResult =
+  | BuildBlockedResult
+  | BuildCompletedResult
+  | BuildResumedResult
+  | CreateTaskResult
+  | QaApprovedResult
+  | QaRejectedResult
+  | SearchTasksResult
+  | SetPlanResult
+  | SetPullRequestResult
+  | SetSpecResult
+  | TaskDocumentsRead
+  | TaskSummary;
+
 export type OdtMcpBridgeService = {
   ready(input?: unknown): Effect.Effect<OdtHostBridgeReady, OdtMcpBridgeError>;
   getWorkspaces(input?: unknown): Effect.Effect<GetWorkspacesResult, OdtMcpBridgeError>;
   invoke(
     toolName: WorkspaceScopedOdtToolName,
     input: unknown,
-  ): Effect.Effect<unknown, OdtMcpBridgeError>;
+  ): Effect.Effect<WorkspaceScopedOdtToolResult, OdtMcpBridgeError>;
 };
 export type CreateOdtMcpBridgeServiceInput = {
   taskService: TaskService;
@@ -96,9 +113,9 @@ export const createOdtMcpBridgeService = ({
     getWorkspaces(input) {
       return Effect.gen(function* () {
         yield* parseToolInput("odt_get_workspaces", input ?? {});
-        return (yield* parseResponse("odt_get_workspaces", {
+        return yield* parseResponse("odt_get_workspaces", RESPONSE_SCHEMAS.odt_get_workspaces, {
           workspaces: yield* workspaceSettingsService.listWorkspaces(),
-        })) as GetWorkspacesResult;
+        });
       });
     },
     invoke(toolName, input) {
@@ -121,7 +138,11 @@ export const createOdtMcpBridgeService = ({
             if (taskSyncService) {
               yield* taskSyncService.publishExternalTaskCreated(repoPath, created.id);
             }
-            return (yield* parseResponse(toolName, mapTaskSummary(created))) as CreateTaskResult;
+            return yield* parseResponse(
+              toolName,
+              RESPONSE_SCHEMAS.odt_create_task,
+              mapTaskSummary(created),
+            );
           }
           case "odt_search_tasks": {
             const parsed = yield* parseToolInput(toolName, input);
@@ -151,19 +172,20 @@ export const createOdtMcpBridgeService = ({
               return true;
             });
             const results = tasks.slice(0, parsed.limit).map(mapTaskSummary);
-            return (yield* parseResponse(toolName, {
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_search_tasks, {
               results,
               limit: parsed.limit,
               totalCount: tasks.length,
               hasMore: tasks.length > results.length,
-            })) as SearchTasksResult;
+            });
           }
           case "odt_read_task": {
             const parsed = yield* parseToolInput(toolName, input);
-            return (yield* parseResponse(
+            return yield* parseResponse(
               toolName,
+              RESPONSE_SCHEMAS.odt_read_task,
               mapTaskSummary(yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId)),
-            )) as TaskSummary;
+            );
           }
           case "odt_read_task_documents": {
             const parsed = yield* parseToolInput(toolName, input);
@@ -180,7 +202,9 @@ export const createOdtMcpBridgeService = ({
             if (parsed.includeQaReport) {
               documents.latestQaReport = latestQaReport(metadata.qaReport);
             }
-            return (yield* parseResponse(toolName, { documents })) as TaskDocumentsRead;
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_read_task_documents, {
+              documents,
+            });
           }
           case "odt_set_spec": {
             const parsed = yield* parseToolInput(toolName, input);
@@ -192,10 +216,10 @@ export const createOdtMcpBridgeService = ({
               markdown: parsed.markdown,
             });
             const updated = yield* taskForWorkspace(parsed.workspaceId ?? "", task.id);
-            return (yield* parseResponse(toolName, {
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_set_spec, {
               task: mapPublicTask(updated),
               document: persistedDocument(document, toolName),
-            })) as SetSpecResult;
+            });
           }
           case "odt_set_plan": {
             const parsed = yield* parseToolInput(toolName, input);
@@ -232,11 +256,11 @@ export const createOdtMcpBridgeService = ({
                   },
                 }),
             });
-            return (yield* parseResponse(toolName, {
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_set_plan, {
               task: mapPublicTask(updated),
               document: persistedDocument(document, toolName),
               createdSubtaskIds: createdSubtaskIds(previousSubtaskIds, afterTasks, task.id),
-            })) as SetPlanResult;
+            });
           }
           case "odt_build_blocked": {
             const parsed = yield* parseToolInput(toolName, input);
@@ -247,19 +271,19 @@ export const createOdtMcpBridgeService = ({
               taskId: task.id,
               reason: parsed.reason,
             });
-            return (yield* parseResponse(toolName, {
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_build_blocked, {
               task: mapPublicTask(updated),
               reason: parsed.reason.trim(),
-            })) as BuildBlockedResult;
+            });
           }
           case "odt_build_resumed": {
             const parsed = yield* parseToolInput(toolName, input);
             const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
             const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
             const updated = yield* taskService.buildResumed({ repoPath, taskId: task.id });
-            return (yield* parseResponse(toolName, {
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_build_resumed, {
               task: mapPublicTask(updated),
-            })) as BuildResumedResult;
+            });
           }
           case "odt_build_completed": {
             const parsed = yield* parseToolInput(toolName, input);
@@ -270,10 +294,10 @@ export const createOdtMcpBridgeService = ({
               taskId: task.id,
               ...(parsed.summary === undefined ? {} : { summary: parsed.summary }),
             });
-            return (yield* parseResponse(toolName, {
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_build_completed, {
               task: mapPublicTask(updated),
               ...(parsed.summary === undefined ? {} : { summary: parsed.summary }),
-            })) as BuildCompletedResult;
+            });
           }
           case "odt_set_pull_request": {
             const parsed = yield* parseToolInput(toolName, input);
@@ -288,10 +312,10 @@ export const createOdtMcpBridgeService = ({
               number: parsed.number,
             });
             const updated = yield* taskForWorkspace(parsed.workspaceId ?? "", task.id);
-            return (yield* parseResponse(toolName, {
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_set_pull_request, {
               task: mapPublicTask(updated),
               pullRequest,
-            })) as SetPullRequestResult;
+            });
           }
           case "odt_qa_approved": {
             const parsed = yield* parseToolInput(toolName, input);
@@ -302,9 +326,9 @@ export const createOdtMcpBridgeService = ({
               taskId: task.id,
               markdown: parsed.reportMarkdown,
             });
-            return (yield* parseResponse(toolName, {
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_qa_approved, {
               task: mapPublicTask(updated),
-            })) as QaApprovedResult;
+            });
           }
           case "odt_qa_rejected": {
             const parsed = yield* parseToolInput(toolName, input);
@@ -315,9 +339,9 @@ export const createOdtMcpBridgeService = ({
               taskId: task.id,
               markdown: parsed.reportMarkdown,
             });
-            return (yield* parseResponse(toolName, {
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_qa_rejected, {
               task: mapPublicTask(updated),
-            })) as QaRejectedResult;
+            });
           }
         }
       });

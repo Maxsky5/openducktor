@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { GlobalConfig } from "@openducktor/contracts";
 import { Clock, Effect, Layer } from "effect";
+import { parsePersistedGlobalConfig } from "../../config/global-config";
 import {
   HostOperationError,
   HostValidationError,
@@ -149,20 +150,27 @@ export const createSettingsConfigAdapter = ({
         }
 
         return yield* Effect.try({
-          try: () => parseJson(payload),
+          try: () => parsePersistedGlobalConfig(parseJson(payload)),
           catch: (cause) =>
-            toHostOperationError(cause, "settingsConfig.parseConfig", {
-              path: resolvedConfigPath,
-            }),
+            cause instanceof HostValidationError
+              ? new HostValidationError({
+                  message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
+                  cause,
+                  details: { path: resolvedConfigPath },
+                })
+              : toHostOperationError(cause, "settingsConfig.parseConfig", {
+                  path: resolvedConfigPath,
+                }),
         }).pipe(
-          Effect.mapError(
-            (error) =>
-              new HostOperationError({
-                operation: "settingsConfig.parseConfig",
-                message: `Failed parsing config file ${resolvedConfigPath}: ${error.message}`,
-                cause: error,
-                details: { path: resolvedConfigPath },
-              }),
+          Effect.mapError((error) =>
+            error instanceof HostValidationError
+              ? error
+              : new HostOperationError({
+                  operation: "settingsConfig.parseConfig",
+                  message: `Failed parsing config file ${resolvedConfigPath}: ${error.message}`,
+                  cause: error,
+                  details: { path: resolvedConfigPath },
+                }),
           ),
         );
       });

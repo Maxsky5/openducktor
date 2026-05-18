@@ -44,11 +44,18 @@ export type RawIssue = {
   updatedAt: string;
   createdAt: string;
 };
+export type BeadsCommandJsonOutput =
+  | boolean
+  | null
+  | number
+  | string
+  | BeadsCommandJsonOutput[]
+  | { [key in string]?: BeadsCommandJsonOutput };
 export type RunBdJson = (
   repoPath: string,
   args: string[],
   context?: BeadsCliContext,
-) => Effect.Effect<unknown, TaskStoreError>;
+) => Effect.Effect<BeadsCommandJsonOutput, TaskStoreError>;
 export type RunBd = (
   repoPath: string,
   args: string[],

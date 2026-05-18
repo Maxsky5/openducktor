@@ -1,5 +1,4 @@
 import {
-  ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
   type OdtPersistedDocument,
   type OdtToolName,
@@ -14,6 +13,9 @@ import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 
 type OdtToolInput<Name extends OdtToolName> = ReturnType<(typeof ODT_TOOL_SCHEMAS)[Name]["parse"]>;
+type ResponseParser<A> = {
+  parse(output: unknown): A;
+};
 
 const MAX_TASK_CANDIDATES = 5;
 
@@ -247,9 +249,13 @@ export const parseToolInput = <Name extends OdtToolName>(toolName: Name, input: 
       }),
   });
 
-export const parseResponse = <Name extends OdtToolName>(toolName: Name, output: unknown) =>
+export const parseResponse = <A>(
+  toolName: OdtToolName,
+  parser: ResponseParser<A>,
+  output: unknown,
+): Effect.Effect<A, HostValidationError> =>
   Effect.try({
-    try: () => ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName].parse(output),
+    try: () => parser.parse(output),
     catch: (cause) =>
       new HostValidationError({
         message: cause instanceof Error ? cause.message : String(cause),

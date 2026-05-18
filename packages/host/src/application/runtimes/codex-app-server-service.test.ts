@@ -1,7 +1,28 @@
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
-import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
+import type {
+  CodexAppServerPort,
+  CodexAppServerProtocolMessage,
+} from "../../ports/codex-app-server-port";
 import { createCodexAppServerService as createEffectCodexAppServerService } from "./codex-app-server-service";
+
+const codexStatusNotification = {
+  method: "thread/status/changed",
+  params: { threadId: "thread-1", status: { type: "idle" } },
+} satisfies CodexAppServerProtocolMessage;
+
+const codexApprovalRequest = {
+  method: "execCommandApproval",
+  id: 7,
+  params: {
+    conversationId: "thread-1",
+    callId: "call-1",
+    approvalId: null,
+    command: ["true"],
+    cwd: "/repo",
+    reason: null,
+    parsedCmd: [],
+  },
+} satisfies CodexAppServerProtocolMessage;
 
 const createCodexAppServerService = (
   ...args: Parameters<typeof createEffectCodexAppServerService>
@@ -15,59 +36,32 @@ const createPort = (): {
     calls,
     port: {
       request(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ method: "request", input });
-            return { ok: true };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        calls.push({ method: "request", input });
+        return Effect.succeed({ data: [], nextCursor: null });
+      },
+      listLoadedThreads(input) {
+        calls.push({ method: "listLoadedThreads", input });
+        return Effect.succeed({ data: ["session-1"], nextCursor: null });
+      },
+      listThreads(input) {
+        calls.push({ method: "listThreads", input });
+        return Effect.succeed({
+          data: [{ id: "session-1", cwd: "/repo", status: "active" }],
+          nextCursor: null,
+          backwardsCursor: null,
         });
       },
       drainNotifications(runtimeId) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ method: "drainNotifications", runtimeId });
-            return [{ method: "codex/app-server/ready" }];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
+        calls.push({ method: "drainNotifications", runtimeId });
+        return Effect.succeed([codexStatusNotification]);
       },
       drainServerRequests(runtimeId) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ method: "drainServerRequests", runtimeId });
-            return [{ id: 7, method: "approval/request" }];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
+        calls.push({ method: "drainServerRequests", runtimeId });
+        return Effect.succeed([codexApprovalRequest]);
       },
       respond(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ method: "respond", input });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
+        calls.push({ method: "respond", input });
+        return Effect.void;
       },
     },
   };
@@ -81,22 +75,34 @@ describe("createCodexAppServerService", () => {
         service.request({
           runtimeId: "runtime-1",
           method: "model/list",
-          params: { request: "catalog" },
+          params: {},
         }),
       ),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ data: [], nextCursor: null });
     await expect(
       Effect.runPromise(service.notifications({ runtimeId: "runtime-1" })),
-    ).resolves.toEqual([{ method: "codex/app-server/ready" }]);
+    ).resolves.toEqual([codexStatusNotification]);
+    await expect(
+      Effect.runPromise(
+        service.listLoadedThreads({ runtimeId: "runtime-1", cursor: null, limit: 100 }),
+      ),
+    ).resolves.toEqual({ data: ["session-1"], nextCursor: null });
+    await expect(
+      Effect.runPromise(service.listThreads({ runtimeId: "runtime-1", cursor: null, limit: 100 })),
+    ).resolves.toEqual({
+      data: [{ id: "session-1", cwd: "/repo", status: "active" }],
+      nextCursor: null,
+      backwardsCursor: null,
+    });
     await expect(Effect.runPromise(service.requests({ runtimeId: "runtime-1" }))).resolves.toEqual([
-      { id: 7, method: "approval/request" },
+      codexApprovalRequest,
     ]);
     await expect(
       Effect.runPromise(
         service.respond({
           runtimeId: "runtime-1",
           requestId: 7,
-          error: { code: "denied" },
+          error: { code: -32000, message: "denied" },
         }),
       ),
     ).resolves.toBeUndefined();
@@ -106,79 +112,27 @@ describe("createCodexAppServerService", () => {
         input: {
           runtimeId: "runtime-1",
           method: "model/list",
-          params: { request: "catalog" },
+          params: {},
         },
       },
       { method: "drainNotifications", runtimeId: "runtime-1" },
+      {
+        method: "listLoadedThreads",
+        input: { runtimeId: "runtime-1", cursor: null, limit: 100 },
+      },
+      {
+        method: "listThreads",
+        input: { runtimeId: "runtime-1", cursor: null, limit: 100 },
+      },
       { method: "drainServerRequests", runtimeId: "runtime-1" },
       {
         method: "respond",
         input: {
           runtimeId: "runtime-1",
           requestId: 7,
-          error: { code: "denied" },
+          error: { code: -32000, message: "denied" },
         },
       },
     ]);
-  });
-  test("rejects non-array drain results", async () => {
-    const service = createCodexAppServerService({
-      request() {
-        return Effect.tryPromise({
-          try: async () => {
-            return null;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      drainNotifications() {
-        return Effect.tryPromise({
-          try: async () => {
-            return null as unknown as unknown[];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      drainServerRequests() {
-        return Effect.tryPromise({
-          try: async () => {
-            return null as unknown as unknown[];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      respond() {
-        return Effect.tryPromise({
-          try: async () => {},
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    });
-    await expect(
-      Effect.runPromise(service.notifications({ runtimeId: "runtime-1" })),
-    ).rejects.toThrow("codex_app_server_notifications must return an array.");
-    await expect(Effect.runPromise(service.requests({ runtimeId: "runtime-1" }))).rejects.toThrow(
-      "codex_app_server_requests must return an array.",
-    );
   });
 });

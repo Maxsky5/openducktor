@@ -1,43 +1,47 @@
-import { Effect } from "effect";
-import { HostValidationError } from "../../effect/host-errors";
+import type { Effect } from "effect";
 import type {
   CodexAppServerError,
+  CodexAppServerLoadedThreadListInput,
+  CodexAppServerLoadedThreadListResponse,
   CodexAppServerPort,
+  CodexAppServerProtocolMessage,
   CodexAppServerRequestInput,
+  CodexAppServerRequestResult,
   CodexAppServerRespondInput,
+  CodexAppServerThreadListInput,
+  CodexAppServerThreadListResponse,
 } from "../../ports/codex-app-server-port";
 
-export type CodexAppServerServiceError = CodexAppServerError | HostValidationError;
+export type CodexAppServerServiceError = CodexAppServerError;
 
 export type CodexAppServerService = {
-  request(input: CodexAppServerRequestInput): Effect.Effect<unknown, CodexAppServerServiceError>;
+  request(
+    input: CodexAppServerRequestInput,
+  ): Effect.Effect<CodexAppServerRequestResult, CodexAppServerServiceError>;
+  listLoadedThreads(
+    input: CodexAppServerLoadedThreadListInput,
+  ): Effect.Effect<CodexAppServerLoadedThreadListResponse, CodexAppServerServiceError>;
+  listThreads(
+    input: CodexAppServerThreadListInput,
+  ): Effect.Effect<CodexAppServerThreadListResponse, CodexAppServerServiceError>;
   notifications(
     input: CodexAppServerRuntimeInput,
-  ): Effect.Effect<unknown[], CodexAppServerServiceError>;
-  requests(input: CodexAppServerRuntimeInput): Effect.Effect<unknown[], CodexAppServerServiceError>;
+  ): Effect.Effect<CodexAppServerProtocolMessage[], CodexAppServerServiceError>;
+  requests(
+    input: CodexAppServerRuntimeInput,
+  ): Effect.Effect<CodexAppServerProtocolMessage[], CodexAppServerServiceError>;
   respond(input: CodexAppServerRespondInput): Effect.Effect<void, CodexAppServerServiceError>;
 };
 export type CodexAppServerRuntimeInput = {
   runtimeId: string;
 };
-const parseArrayResult = (
-  value: unknown,
-  label: string,
-): Effect.Effect<unknown[], HostValidationError> =>
-  Array.isArray(value)
-    ? Effect.succeed(value)
-    : Effect.fail(new HostValidationError({ message: `${label} must return an array.` }));
 export const createCodexAppServerService = (
   codexAppServerPort: CodexAppServerPort,
 ): CodexAppServerService => ({
   request: (input) => codexAppServerPort.request(input),
-  notifications: (input) =>
-    codexAppServerPort
-      .drainNotifications(input.runtimeId)
-      .pipe(Effect.flatMap((value) => parseArrayResult(value, "codex_app_server_notifications"))),
-  requests: (input) =>
-    codexAppServerPort
-      .drainServerRequests(input.runtimeId)
-      .pipe(Effect.flatMap((value) => parseArrayResult(value, "codex_app_server_requests"))),
+  listLoadedThreads: (input) => codexAppServerPort.listLoadedThreads(input),
+  listThreads: (input) => codexAppServerPort.listThreads(input),
+  notifications: (input) => codexAppServerPort.drainNotifications(input.runtimeId),
+  requests: (input) => codexAppServerPort.drainServerRequests(input.runtimeId),
   respond: (input) => codexAppServerPort.respond(input),
 });

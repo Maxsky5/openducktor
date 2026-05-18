@@ -5,6 +5,7 @@ import type {
   RuntimeHealth,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
@@ -27,7 +28,7 @@ const runtimeHealth = (
   version: error === null ? `${kind} 1.0.0` : null,
   error,
 });
-const createSettingsConfig = (config: unknown | null): SettingsConfigPort =>
+const createSettingsConfig = (config: GlobalConfig | null): SettingsConfigPort =>
   ({
     readConfig: () =>
       Effect.tryPromise({
@@ -184,7 +185,7 @@ describe("createSystemDiagnosticsService", () => {
         codex: runtimeHealth("codex", "codex not found"),
       }),
       settingsConfig: createSettingsConfig({
-        version: 2,
+        ...createDefaultGlobalConfig(),
         agentRuntimes: {
           opencode: { enabled: true },
           codex: { enabled: false },

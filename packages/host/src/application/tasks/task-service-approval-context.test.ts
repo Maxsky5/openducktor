@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   createAgentSessionRecord,
@@ -226,7 +227,10 @@ describe("createTaskService approval context", () => {
           readConfig() {
             return Effect.tryPromise({
               try: async () => {
-                return { version: 2, git: { defaultMergeMethod: "squash" } };
+                return {
+                  ...createDefaultGlobalConfig(),
+                  git: { defaultMergeMethod: "squash" },
+                };
               },
               catch: (cause) =>
                 new HostOperationError({

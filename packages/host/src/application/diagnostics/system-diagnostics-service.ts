@@ -1,29 +1,20 @@
 import {
-  type AgentRuntimes,
   type BeadsCheck,
   DEFAULT_AGENT_RUNTIMES,
-  type GlobalConfig,
-  globalConfigSchema,
   type RepoStoreHealth,
   type RuntimeCheck,
   type RuntimeHealth,
   type SystemCheck,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
-import {
-  type HostOperationError,
-  HostValidationError,
-  toHostOperationError,
-} from "../../effect/host-errors";
+import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
+import type { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
 import type { RepoStoreDiagnostics, TaskStoreError } from "../../ports/task-repository-ports";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 
-type LoadedGlobalConfig = GlobalConfig & {
-  agentRuntimes: AgentRuntimes;
-};
 type CachedRuntimeCheck = {
   checkedAt: number;
   value: RuntimeCheck;
@@ -40,30 +31,9 @@ export type SystemDiagnosticsError =
   | TaskStoreError;
 const RUNTIME_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
 const GH_NON_INTERACTIVE_ENV = { GH_PROMPT_DISABLED: "1" };
-const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
-  globalConfigSchema.parse({ version: 2 }) as LoadedGlobalConfig;
-const assertSupportedConfigVersion = (payload: unknown): void => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new HostValidationError({ message: "Config file must contain a JSON object." });
-  }
-  const version = (payload as Record<string, unknown>).version;
-  if (version !== 2) {
-    throw new HostValidationError({
-      message: `Unsupported config version ${String(version)}. Expected 2.`,
-    });
-  }
-};
-const parseGlobalConfig = (payload: unknown): LoadedGlobalConfig => {
-  assertSupportedConfigVersion(payload);
-  return globalConfigSchema.parse(payload) as LoadedGlobalConfig;
-};
 const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
-    const payload = yield* settingsConfig.readConfig();
-    return yield* Effect.try({
-      try: () => (payload === null ? createDefaultGlobalConfig() : parseGlobalConfig(payload)),
-      catch: (cause) => toHostOperationError(cause, "systemDiagnostics.loadGlobalConfig"),
-    });
+    return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
 const parseGithubAuthLogin = (output: string): string | null => {
   const accountMarker = "account ";

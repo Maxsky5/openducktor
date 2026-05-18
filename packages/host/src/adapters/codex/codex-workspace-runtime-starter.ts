@@ -25,11 +25,9 @@ import {
 } from "../process/process-tree";
 import { resolveCodexBinary } from "../runtimes/runtime-binaries";
 import { createSystemCommandLaunch } from "../system/system-command-runner";
-import {
-  type CodexAppServerEventEmitter,
-  createCodexAppServerTransport,
-} from "./codex-app-server-transport";
+import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { CodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
+import type { CodexAppServerEventEmitter } from "./codex-app-server-transport-types";
 
 type CodexChildProcess = ChildProcessByStdio<Writable, Readable, Readable>;
 
@@ -332,11 +330,12 @@ export const createCodexWorkspaceRuntimeStarter = ({
               },
               capabilities: {
                 experimentalApi: true,
+                requestAttestation: false,
                 optOutNotificationMethods: [],
               },
             },
           });
-          yield* transport.notify("initialized", {});
+          yield* transport.notify({ method: "initialized" });
         }),
       );
       if (initialized._tag === "Left") {

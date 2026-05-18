@@ -9,7 +9,7 @@ import type {
 export type SettingsConfigError = HostOperationError | HostPathAccessError | HostValidationError;
 
 export type SettingsConfigPort = {
-  readConfig(): Effect.Effect<unknown | null, HostOperationError>;
+  readConfig(): Effect.Effect<GlobalConfig | null, SettingsConfigError>;
   writeConfig(config: GlobalConfig): Effect.Effect<void, HostOperationError>;
   defaultWorktreeBasePath(workspaceId: string): string;
   defaultRepoWorktreeBasePath(repoPath: string): string;

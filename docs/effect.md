@@ -114,10 +114,18 @@ Use Effect services for replaceable dependencies. A service is usually:
 Define service tags with `Context.Tag`:
 
 ```ts
+import type { GlobalConfig } from "@openducktor/contracts";
 import { Context, type Effect } from "effect";
+import type {
+  HostOperationError,
+  HostPathAccessError,
+  HostValidationError,
+} from "../effect/host-errors";
+
+export type SettingsConfigError = HostOperationError | HostPathAccessError | HostValidationError;
 
 export type SettingsConfigPort = {
-  readConfig(): Effect.Effect<unknown | null, HostOperationError>;
+  readConfig(): Effect.Effect<GlobalConfig | null, SettingsConfigError>;
   canonicalizePath(path: string): Effect.Effect<string, HostOperationError>;
   join(...paths: Array<string>): string;
 };

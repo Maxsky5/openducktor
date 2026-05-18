@@ -355,34 +355,35 @@ describe("createRuntimeRegistry", () => {
     const calls: unknown[] = [];
     const registry = createRuntimeRegistry({
       codexAppServer: {
-        request(input) {
-          return Effect.try({
-            try: () => {
-              calls.push(input);
-              if (input.method === "thread/loaded/list") {
-                return {
-                  data: ["session-1", "session-2", "session-3"],
-                  nextCursor: null,
-                };
-              }
-              if (input.method === "thread/list") {
-                return {
-                  data: [
-                    {
-                      id: "session-1",
-                      cwd: "/repo/worktree",
-                      status: { type: "active", activeFlags: [] },
-                    },
-                    { id: "session-2", cwd: "/repo/worktree", status: { type: "idle" } },
-                    { id: "session-3", cwd: "/repo/worktree", status: { type: "systemError" } },
-                  ],
-                  nextCursor: null,
-                  backwardsCursor: null,
-                };
-              }
-              throw new Error(`unexpected method ${input.method}`);
-            },
-            catch: (cause) => toHostOperationError(cause, "test.codexAppServer.request"),
+        listLoadedThreads(input) {
+          calls.push({
+            runtimeId: input.runtimeId,
+            method: "thread/loaded/list",
+            params: { cursor: input.cursor, limit: input.limit },
+          });
+          return Effect.succeed({
+            data: ["session-1", "session-2", "session-3"],
+            nextCursor: null,
+          });
+        },
+        listThreads(input) {
+          calls.push({
+            runtimeId: input.runtimeId,
+            method: "thread/list",
+            params: { cursor: input.cursor, limit: input.limit },
+          });
+          return Effect.succeed({
+            data: [
+              {
+                id: "session-1",
+                cwd: "/repo/worktree",
+                status: "active",
+              },
+              { id: "session-2", cwd: "/repo/worktree", status: "idle" },
+              { id: "session-3", cwd: "/repo/worktree", status: "systemError" },
+            ],
+            nextCursor: null,
+            backwardsCursor: null,
           });
         },
       },
@@ -454,8 +455,11 @@ describe("createRuntimeRegistry", () => {
   test("fails Codex session status probing on repeated pagination cursors", async () => {
     const registry = createRuntimeRegistry({
       codexAppServer: {
-        request() {
+        listLoadedThreads() {
           return Effect.succeed({ data: ["session-1"], nextCursor: "cursor-1" });
+        },
+        listThreads() {
+          return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
         },
       },
     });

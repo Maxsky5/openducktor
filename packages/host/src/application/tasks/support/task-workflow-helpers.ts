@@ -1,11 +1,12 @@
-import {
-  type AgentSessionRecord,
-  globalConfigSchema,
-  type QaReportVerdict,
-  type RepoConfig,
-  type TaskCard,
+import type {
+  AgentSessionRecord,
+  GlobalGitConfig,
+  QaReportVerdict,
+  RepoConfig,
+  TaskCard,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createDefaultGlobalConfig } from "../../../config/global-config";
 import {
   deriveAgentWorkflows,
   deriveAvailableActions,
@@ -117,19 +118,11 @@ export const validateAgentSessionWorkingDirectory = (
 export const loadDefaultMergeMethod = (
   settingsConfig: SettingsConfigPort,
 ): Effect.Effect<
-  ReturnType<typeof globalConfigSchema.parse>["git"]["defaultMergeMethod"],
+  GlobalGitConfig["defaultMergeMethod"],
   SettingsConfigError | HostValidationError
 > =>
   Effect.gen(function* () {
-    const payload = yield* settingsConfig.readConfig();
-    const config = yield* Effect.try({
-      try: () => globalConfigSchema.parse(payload ?? { version: 2 }),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
+    const config = (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
     return config.git.defaultMergeMethod;
   });
 export const taskListWithCurrent = (

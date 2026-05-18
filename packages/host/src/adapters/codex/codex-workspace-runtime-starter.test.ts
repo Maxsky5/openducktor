@@ -86,18 +86,52 @@ lines.on("line", (line) => {
     if (capturePath) {
       writeFileSync(capturePath, JSON.stringify(capture));
     }
-    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { ok: true } }) + "\\n");
+    process.stdout.write(JSON.stringify({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: {
+        userAgent: "codex-test",
+        codexHome: "/tmp/codex",
+        platformFamily: "unix",
+        platformOs: "darwin",
+      },
+    }) + "\\n");
     return;
   }
   if (message.method === "initialized") {
     if (emitStreamEvents) {
-      process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "codex/app-server/ready", params: { threadId: "thread-1" } }) + "\\n");
-      process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: 99, method: "item/tool/call", params: { threadId: "thread-1" } }) + "\\n");
+      process.stdout.write(JSON.stringify({
+        jsonrpc: "2.0",
+        method: "thread/status/changed",
+        params: { threadId: "thread-1", status: { type: "idle" } },
+      }) + "\\n");
+      process.stdout.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 99,
+        method: "execCommandApproval",
+        params: {
+          conversationId: "thread-1",
+          callId: "call-1",
+          approvalId: null,
+          command: ["true"],
+          cwd: "/repo",
+          reason: null,
+          parsedCmd: [],
+        },
+      }) + "\\n");
     }
     return;
   }
   if (message.id !== undefined) {
-    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { method: message.method, params: message.params ?? null } }) + "\\n");
+    if (message.method === "thread/loaded/list") {
+      process.stdout.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: { data: [], nextCursor: null },
+      }) + "\\n");
+      return;
+    }
+    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { data: [], nextCursor: null } }) + "\\n");
   }
 });
 const stop = () => process.exit(0);
@@ -233,7 +267,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
             params: { cursor: null },
           }),
         ),
-      ).resolves.toEqual({ method: "thread/loaded/list", params: { cursor: null } });
+      ).resolves.toEqual({ data: [], nextCursor: null });
       const capture = JSON.parse(await readFile(capturePath, "utf8"));
       expect(capture.env).toMatchObject({
         ODT_WORKSPACE_ID: "repo",
@@ -465,19 +499,25 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           runtimeId: "runtime-events",
           kind: "notification",
           message: {
-            jsonrpc: "2.0",
-            method: "codex/app-server/ready",
-            params: { threadId: "thread-1" },
+            method: "thread/status/changed",
+            params: { threadId: "thread-1", status: { type: "idle" } },
           },
         },
         {
           runtimeId: "runtime-events",
           kind: "server_request",
           message: {
-            jsonrpc: "2.0",
             id: 99,
-            method: "item/tool/call",
-            params: { threadId: "thread-1" },
+            method: "execCommandApproval",
+            params: {
+              conversationId: "thread-1",
+              callId: "call-1",
+              approvalId: null,
+              command: ["true"],
+              cwd: "/repo",
+              reason: null,
+              parsedCmd: [],
+            },
           },
         },
       ]);
@@ -485,9 +525,8 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         Effect.runPromise(promiseCodexAppServer.drainNotifications("runtime-events")),
       ).resolves.toEqual([
         {
-          jsonrpc: "2.0",
-          method: "codex/app-server/ready",
-          params: { threadId: "thread-1" },
+          method: "thread/status/changed",
+          params: { threadId: "thread-1", status: { type: "idle" } },
         },
       ]);
       await expect(

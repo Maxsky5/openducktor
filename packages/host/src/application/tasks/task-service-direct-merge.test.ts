@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   createAgentSessionRecord,
@@ -239,7 +240,10 @@ describe("createTaskService direct merge", () => {
             return Effect.tryPromise({
               try: async () => {
                 calls.push({ type: "readConfig" });
-                return { version: 2, git: { defaultMergeMethod: "merge_commit" } };
+                return {
+                  ...createDefaultGlobalConfig(),
+                  git: { defaultMergeMethod: "merge_commit" },
+                };
               },
               catch: (cause) =>
                 new HostOperationError({
@@ -540,7 +544,10 @@ describe("createTaskService direct merge", () => {
               readConfig() {
                 return Effect.tryPromise({
                   try: async () => {
-                    return { version: 2, git: { defaultMergeMethod: "merge_commit" } };
+                    return {
+                      ...createDefaultGlobalConfig(),
+                      git: { defaultMergeMethod: "merge_commit" },
+                    };
                   },
                   catch: (cause) =>
                     new HostOperationError({

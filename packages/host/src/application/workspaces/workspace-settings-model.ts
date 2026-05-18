@@ -1,7 +1,5 @@
 import {
-  type AgentRuntimes,
   DEFAULT_BRANCH_PREFIX,
-  type GlobalConfig,
   type GlobalGitConfig,
   globalConfigSchema,
   type RepoConfig,
@@ -16,14 +14,12 @@ import {
   workspaceRecordSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
 import { HostInvariantError, HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 
 export type WorkspaceSettingsError = HostInvariantError | HostValidationError | SettingsConfigError;
 
-export type LoadedGlobalConfig = GlobalConfig & {
-  agentRuntimes: AgentRuntimes;
-};
 export type WorkspaceSettingsService = {
   listWorkspaces(): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
   addWorkspace(input: WorkspaceAddInput): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
@@ -57,57 +53,9 @@ export type WorkspaceAddInput = {
   workspaceId: string;
   workspaceName: string;
 };
-export const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
-  globalConfigSchema.parse({ version: 2 }) as LoadedGlobalConfig;
-export const migratePersistedConfigShape = (payload: unknown): unknown => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return payload;
-  }
-  const candidate = payload as Record<string, unknown>;
-  const chat = candidate.chat;
-  if (
-    candidate.reusablePrompts !== undefined ||
-    !chat ||
-    typeof chat !== "object" ||
-    Array.isArray(chat) ||
-    !Array.isArray((chat as Record<string, unknown>).customPrompts)
-  ) {
-    return payload;
-  }
-  return {
-    ...candidate,
-    reusablePrompts: (chat as Record<string, unknown>).customPrompts,
-  };
-};
-export const assertSupportedConfigVersion = (payload: unknown): void => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new HostValidationError({ message: "Config file must contain a JSON object." });
-  }
-  const version = (payload as Record<string, unknown>).version;
-  if (version !== 2) {
-    throw new HostValidationError({
-      message: `Unsupported config version ${String(version)}. Expected 2.`,
-    });
-  }
-};
-export const parseGlobalConfig = (payload: unknown): LoadedGlobalConfig => {
-  assertSupportedConfigVersion(payload);
-  return globalConfigSchema.parse(migratePersistedConfigShape(payload)) as LoadedGlobalConfig;
-};
 export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
-    const payload = yield* settingsConfig.readConfig();
-    if (payload === null) {
-      return createDefaultGlobalConfig();
-    }
-    return yield* Effect.try({
-      try: () => parseGlobalConfig(payload),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
+    return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
 export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {

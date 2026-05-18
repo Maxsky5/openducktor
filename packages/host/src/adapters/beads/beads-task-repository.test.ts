@@ -4,11 +4,13 @@ import path, { delimiter } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
+import type { BeadsCommandJsonOutput } from "../../infrastructure/beads/task-store/beads-raw-issue";
 import type { BeadsCliContext } from "./beads-cli-context";
 import { createBeadsTaskRepository } from "./beads-task-repository";
 
 const encodedMarkdown = (markdown: string): string => gzipSync(markdown).toString("base64");
-const rawTask = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+type RawTaskFixture = { [key in string]?: BeadsCommandJsonOutput };
+const rawTask = (overrides: RawTaskFixture = {}): RawTaskFixture => ({
   id: "task-1",
   title: "Task",
   status: "open",

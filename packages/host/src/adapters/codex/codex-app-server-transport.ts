@@ -1,6 +1,4 @@
-import type { ChildProcessByStdio } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { Readable, Writable } from "node:stream";
 import { Effect } from "effect";
 import {
   HostOperationError,
@@ -9,73 +7,33 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type {
-  CodexAppServerRequestInput,
+  CodexAppServerProtocolMessage,
+  CodexAppServerRequestMethod,
+  CodexAppServerRequestResult,
   CodexAppServerRespondInput,
 } from "../../ports/codex-app-server-port";
-import type { CodexAppServerTransport } from "./codex-app-server-transport-registry";
+import {
+  type CodexAppServerClientRequest,
+  parseCodexAppServerRequestResult,
+} from "../../ports/codex-app-server-protocol";
+import {
+  appendCapturedStderr,
+  extractErrorMessage,
+  isJsonRecord,
+  parseStreamMessage,
+  pushBoundedMessage,
+  resolveAfterQueuedMessages,
+} from "./codex-app-server-transport-messages";
+import type {
+  CodexAppServerChildTransport,
+  CodexAppServerEventEmitter,
+  CodexAppServerStreamEvent,
+  CodexChildProcess,
+  PendingCodexAppServerRequest,
+} from "./codex-app-server-transport-types";
 import { writeJsonLine } from "./codex-json-line-writer";
 
-type CodexChildProcess = ChildProcessByStdio<Writable, Readable, Readable>;
-
-type PendingRequest = {
-  method: string;
-  timeout: NodeJS.Timeout;
-  resolve(value: unknown): void;
-  reject(error: Error): void;
-};
-
-export type CodexAppServerChildTransport = CodexAppServerTransport & {
-  notify(method: string, params?: unknown): Effect.Effect<void, CodexAppServerTransportError>;
-  close(): Effect.Effect<void, never>;
-};
-
-type CodexTransportBaseError = HostOperationError | HostResourceError;
-export type CodexAppServerTransportError = CodexTransportBaseError | HostValidationError;
-
-export type CodexAppServerStreamEvent = {
-  runtimeId: string;
-  kind: "notification" | "server_request";
-  message: unknown;
-};
-
-export type CodexAppServerEventEmitter = (event: CodexAppServerStreamEvent) => void;
-
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
-const MAX_BUFFERED_STREAM_MESSAGES = 1_000;
-const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
-
-const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const resolveAfterQueuedMessages = (resolve: (value: unknown) => void, value: unknown): void => {
-  setImmediate(() => resolve(value));
-};
-
-const pushBoundedMessage = (messages: unknown[], message: unknown): void => {
-  messages.push(message);
-  if (messages.length > MAX_BUFFERED_STREAM_MESSAGES) {
-    messages.splice(0, messages.length - MAX_BUFFERED_STREAM_MESSAGES);
-  }
-};
-
-const appendCapturedStderr = (current: string, line: string): string => {
-  const next = current.length > 0 ? `${current}\n${line}` : line;
-  const encoded = Buffer.from(next, "utf8");
-  if (encoded.byteLength <= MAX_CAPTURED_STDERR_BYTES) {
-    return next;
-  }
-  return encoded.subarray(encoded.byteLength - MAX_CAPTURED_STDERR_BYTES).toString("utf8");
-};
-
-const extractErrorMessage = (value: unknown): string => {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (isJsonRecord(value) && typeof value.message === "string") {
-    return value.message;
-  }
-  return JSON.stringify(value);
-};
 
 export const createCodexAppServerTransport = (
   runtimeId: string,
@@ -86,9 +44,9 @@ export const createCodexAppServerTransport = (
   let nextRequestId = 1;
   let closed = false;
   let fatalError: Error | null = null;
-  const pending = new Map<number, PendingRequest>();
-  const notifications: unknown[] = [];
-  const serverRequests: unknown[] = [];
+  const pending = new Map<number, PendingCodexAppServerRequest>();
+  const notifications: CodexAppServerProtocolMessage[] = [];
+  const serverRequests: CodexAppServerProtocolMessage[] = [];
   let stderrOutput = "";
   let stdoutClosed = false;
   let stderrClosed = false;
@@ -142,9 +100,9 @@ export const createCodexAppServerTransport = (
       );
     });
 
-  const waitForResponse = (id: number, method: string) => {
+  const waitForResponse = (id: number, method: CodexAppServerRequestMethod) => {
     type ResponseEffect = Effect.Effect<
-      unknown,
+      CodexAppServerRequestResult,
       HostOperationError | HostResourceError | HostValidationError
     >;
     let resumeEffect: ((effect: ResponseEffect) => void) | null = null;
@@ -196,30 +154,31 @@ export const createCodexAppServerTransport = (
       },
     });
 
-    return Effect.async<unknown, HostOperationError | HostResourceError | HostValidationError>(
-      (resume, signal) => {
-        if (settledEffect) {
-          resume(settledEffect);
-          return;
-        }
-        resumeEffect = resume;
-        abortSignal = signal;
-        abortHandler = () => {
-          clearTimeout(timeout);
-          pending.delete(id);
-          finish(
-            Effect.fail(
-              new HostOperationError({
-                operation: `codexAppServerTransport.request.${method}`,
-                message: `Codex app-server request ${method} was interrupted for runtime ${runtimeId}.`,
-                details: { runtimeId, method },
-              }),
-            ),
-          );
-        };
-        signal.addEventListener("abort", abortHandler, { once: true });
-      },
-    );
+    return Effect.async<
+      CodexAppServerRequestResult,
+      HostOperationError | HostResourceError | HostValidationError
+    >((resume, signal) => {
+      if (settledEffect) {
+        resume(settledEffect);
+        return;
+      }
+      resumeEffect = resume;
+      abortSignal = signal;
+      abortHandler = () => {
+        clearTimeout(timeout);
+        pending.delete(id);
+        finish(
+          Effect.fail(
+            new HostOperationError({
+              operation: `codexAppServerTransport.request.${method}`,
+              message: `Codex app-server request ${method} was interrupted for runtime ${runtimeId}.`,
+              details: { runtimeId, method },
+            }),
+          ),
+        );
+      };
+      signal.addEventListener("abort", abortHandler, { once: true });
+    });
   };
 
   const resolveResponse = (id: number, message: Record<string, unknown>): void => {
@@ -257,11 +216,26 @@ export const createCodexAppServerTransport = (
       );
       return;
     }
-    request.resolve(message.result);
+    const result = Effect.try({
+      try: () => parseCodexAppServerRequestResult(request.method, message.result),
+      catch: (cause) =>
+        new HostValidationError({
+          message: cause instanceof Error ? cause.message : String(cause),
+          cause,
+          field: "result",
+          details: { runtimeId, id, method: request.method },
+        }),
+    });
+    const parsedResult = Effect.runSync(Effect.either(result));
+    if (parsedResult._tag === "Left") {
+      request.reject(parsedResult.left);
+      return;
+    }
+    request.resolve(parsedResult.right);
   };
   const emitEvent = (
     event: CodexAppServerStreamEvent,
-    pendingEvents: unknown[],
+    pendingEvents: CodexAppServerProtocolMessage[],
     options: { bufferWhenEmitting: boolean },
   ): void => {
     if (!eventEmitter || options.bufferWhenEmitting) {
@@ -295,12 +269,14 @@ export const createCodexAppServerTransport = (
       return;
     }
 
-    const id = typeof message.id === "number" ? message.id : null;
+    const responseId = typeof message.id === "number" ? message.id : null;
+    const serverRequestId =
+      typeof message.id === "number" || typeof message.id === "string" ? message.id : null;
     const hasMethod = typeof message.method === "string";
     const hasResponse = "result" in message || "error" in message;
 
     if (hasResponse) {
-      if (id === null) {
+      if (responseId === null) {
         failFast(
           new HostValidationError({
             message: `Codex app-server response for ${runtimeId} is missing a numeric id`,
@@ -310,21 +286,53 @@ export const createCodexAppServerTransport = (
         );
         return;
       }
-      resolveResponse(id, message);
+      resolveResponse(responseId, message);
       return;
     }
 
-    if (hasMethod && id === null) {
-      emitEvent({ runtimeId, kind: "notification", message }, notifications, {
-        bufferWhenEmitting: true,
-      });
+    if (hasMethod && serverRequestId === null) {
+      try {
+        emitEvent(
+          {
+            runtimeId,
+            kind: "notification",
+            message: parseStreamMessage(runtimeId, message, "notification"),
+          },
+          notifications,
+          {
+            bufferWhenEmitting: true,
+          },
+        );
+      } catch (error) {
+        failFast(
+          toHostOperationError(error, "codexAppServerTransport.parseNotification", {
+            runtimeId,
+          }),
+        );
+      }
       return;
     }
 
-    if (hasMethod && id !== null) {
-      emitEvent({ runtimeId, kind: "server_request", message }, serverRequests, {
-        bufferWhenEmitting: false,
-      });
+    if (hasMethod && serverRequestId !== null) {
+      try {
+        emitEvent(
+          {
+            runtimeId,
+            kind: "server_request",
+            message: parseStreamMessage(runtimeId, message, "server_request"),
+          },
+          serverRequests,
+          {
+            bufferWhenEmitting: false,
+          },
+        );
+      } catch (error) {
+        failFast(
+          toHostOperationError(error, "codexAppServerTransport.parseServerRequest", {
+            runtimeId,
+          }),
+        );
+      }
       return;
     }
 
@@ -396,7 +404,7 @@ export const createCodexAppServerTransport = (
   });
 
   return {
-    request({ method, params }: Omit<CodexAppServerRequestInput, "runtimeId">) {
+    request({ method, params }: CodexAppServerClientRequest) {
       return Effect.gen(function* () {
         yield* ensureOpenEffect();
         const id = nextRequestId++;
@@ -420,11 +428,10 @@ export const createCodexAppServerTransport = (
         return yield* response;
       });
     },
-    notify(method, params) {
+    notify(notification) {
       return sendMessage({
         jsonrpc: "2.0",
-        method,
-        ...(params !== undefined ? { params } : {}),
+        ...notification,
       });
     },
     drainNotifications() {
