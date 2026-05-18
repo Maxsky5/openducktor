@@ -12,6 +12,7 @@ describe("runtime path contract", () => {
       "index.ts",
       "lib.ts",
       "listed-tool-schema.ts",
+      "mcp-server.ts",
       "odt-task-store.ts",
       "path-utils.ts",
       "store-context.ts",

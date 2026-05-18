@@ -1,17 +1,9 @@
-import { afterEach, test as bunTest, describe, expect } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-
-const inheritedEnv = Object.fromEntries(
-  Object.entries(process.env).filter(
-    (entry): entry is [string, string] =>
-      typeof entry[1] === "string" &&
-      !entry[0].startsWith("ODT_") &&
-      !entry[0].startsWith("OPENDUCKTOR_"),
-  ),
-);
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import type { RegisteredToolName } from "./listed-tool-schema";
+import { createMcpServer } from "./mcp-server";
 
 type RecordedRequest = {
   url: string;
@@ -25,12 +17,7 @@ type ContentToolResult = {
 };
 
 const activeServers = new Set<ReturnType<typeof createServer>>();
-const mcpPackageRoot = fileURLToPath(new URL("..", import.meta.url));
-const mcpStdioTestTimeoutMs = 5_000;
-
-const test = (name: string, run: () => Promise<void>): void => {
-  bunTest(name, run, mcpStdioTestTimeoutMs);
-};
+const activeMcpServers = new Set<Awaited<ReturnType<typeof createMcpServer>>>();
 
 const closeServer = async (server: ReturnType<typeof createServer>): Promise<void> => {
   await new Promise<void>((resolve, reject) => {
@@ -173,23 +160,31 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
   };
 };
 
-const createTransport = (
+const parseAllowedToolNames = (allowedTools?: string): RegisteredToolName[] | undefined => {
+  return allowedTools
+    ?.split(",")
+    .map((toolName) => toolName.trim())
+    .filter((toolName) => toolName.length > 0) as RegisteredToolName[] | undefined;
+};
+
+const createTransport = async (
   hostUrl: string,
   options: { workspaceId?: string; forbidWorkspaceIdInput?: boolean; allowedTools?: string } = {},
 ) => {
-  return new StdioClientTransport({
-    command: process.execPath,
-    args: ["src/index.ts"],
-    cwd: mcpPackageRoot,
-    env: {
-      ...inheritedEnv,
-      ODT_HOST_URL: hostUrl,
-      ...(options.workspaceId ? { ODT_WORKSPACE_ID: options.workspaceId } : {}),
-      ...(options.forbidWorkspaceIdInput ? { ODT_FORBID_WORKSPACE_ID_INPUT: "true" } : {}),
-      ...(options.allowedTools ? { ODT_ALLOWED_TOOLS: options.allowedTools } : {}),
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = await createMcpServer(
+    {
+      hostUrl,
+      ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
+      ...(options.forbidWorkspaceIdInput ? { forbidWorkspaceIdInput: true } : {}),
     },
-    stderr: "pipe",
-  });
+    {
+      allowedToolNames: parseAllowedToolNames(options.allowedTools),
+    },
+  );
+  activeMcpServers.add(server);
+  await server.connect(serverTransport);
+  return clientTransport;
 };
 
 const requireContentToolResult = (result: unknown): ContentToolResult => {
@@ -228,18 +223,22 @@ const readToolInputProperties = (
 };
 
 afterEach(async () => {
-  await Promise.all(
-    Array.from(activeServers, async (server) => {
+  await Promise.all([
+    ...Array.from(activeMcpServers, async (server) => {
+      activeMcpServers.delete(server);
+      await server.close();
+    }),
+    ...Array.from(activeServers, async (server) => {
       activeServers.delete(server);
       await closeServer(server);
     }),
-  );
+  ]);
 });
 
 describe("MCP server tool results", () => {
   test("workspaceId-forbidden mode rejects workspaceId for advertised workspace-scoped tools", async () => {
     const bridge = await startMockBridge();
-    const transport = createTransport(bridge.url, {
+    const transport = await createTransport(bridge.url, {
       workspaceId: "repo",
       forbidWorkspaceIdInput: true,
     });
@@ -264,7 +263,7 @@ describe("MCP server tool results", () => {
 
   test("workspaceId-forbidden mode rejects explicit workspaceId instead of dropping it", async () => {
     const bridge = await startMockBridge();
-    const transport = createTransport(bridge.url, {
+    const transport = await createTransport(bridge.url, {
       workspaceId: "repo",
       forbidWorkspaceIdInput: true,
     });
@@ -304,7 +303,7 @@ describe("MCP server tool results", () => {
 
   test("host bridge HTTP failures return structured tool errors", async () => {
     const bridge = await startMockBridge();
-    const transport = createTransport(bridge.url, { workspaceId: "repo" });
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
@@ -328,7 +327,7 @@ describe("MCP server tool results", () => {
 
   test("host response schema failures return structured tool errors", async () => {
     const bridge = await startMockBridge();
-    const transport = createTransport(bridge.url, { workspaceId: "repo" });
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
@@ -352,7 +351,7 @@ describe("MCP server tool results", () => {
 
   test("workspaceId stays advertised for public MCP clients with a startup workspace", async () => {
     const bridge = await startMockBridge();
-    const transport = createTransport(bridge.url, { workspaceId: "repo" });
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
@@ -367,7 +366,7 @@ describe("MCP server tool results", () => {
 
   test("workspaceId stays advertised when no startup workspace is configured", async () => {
     const bridge = await startMockBridge();
-    const transport = createTransport(bridge.url);
+    const transport = await createTransport(bridge.url);
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
@@ -382,7 +381,7 @@ describe("MCP server tool results", () => {
 
   test("ODT_ALLOWED_TOOLS limits the advertised tool surface", async () => {
     const bridge = await startMockBridge();
-    const transport = createTransport(bridge.url, {
+    const transport = await createTransport(bridge.url, {
       workspaceId: "repo",
       allowedTools: "odt_read_task,odt_read_task_documents,odt_build_completed",
     });
@@ -405,7 +404,7 @@ describe("MCP server tool results", () => {
 
   test("odt_get_workspaces keeps structuredContent for workspace discovery payloads", async () => {
     const bridge = await startMockBridge();
-    const transport = createTransport(bridge.url);
+    const transport = await createTransport(bridge.url);
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
@@ -452,7 +451,7 @@ describe("MCP server tool results", () => {
 
   test("workspace-scoped object results keep structuredContent and preserve tool input workspaceId", async () => {
     const bridge = await startMockBridge();
-    const transport = createTransport(bridge.url);
+    const transport = await createTransport(bridge.url);
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
@@ -485,7 +484,7 @@ describe("MCP server tool results", () => {
 
   test("startup workspace still lets explicit tool input workspaceId override execution", async () => {
     const bridge = await startMockBridge();
-    const transport = createTransport(bridge.url, { workspaceId: "repo" });
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
@@ -518,7 +517,7 @@ describe("MCP server tool results", () => {
 
   test("odt_set_plan registered tool excludes subtasks from input schema and description", async () => {
     const bridge = await startMockBridge();
-    const transport = createTransport(bridge.url, { workspaceId: "repo" });
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
     try {
