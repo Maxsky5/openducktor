@@ -1,4 +1,6 @@
 import { realpath } from "node:fs/promises";
+import { Effect, Layer } from "effect";
+import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import {
   createDefaultGitRunner,
   type GitCommandRunner,
@@ -42,7 +44,7 @@ import {
   buildWorktreeStatusData,
   buildWorktreeStatusSummaryData,
 } from "../../infrastructure/git/git-worktree-status";
-import type { GitPort, GitRemote } from "../../ports/git-port";
+import { type GitPort, GitPortTag, type GitRemote } from "../../ports/git-port";
 
 export type {
   GitCommandResult,
@@ -59,51 +61,65 @@ export const createGitCliAdapter = ({
   runner = createDefaultGitRunner(processEnv),
 }: CreateGitCliAdapterInput = {}): GitPort => ({
   canonicalizePath(inputPath) {
-    return realpath(inputPath);
+    return Effect.tryPromise({
+      try: () => realpath(inputPath),
+      catch: (cause) =>
+        toHostOperationError(cause, "git.canonicalizePath", {
+          path: inputPath,
+        }),
+    });
   },
-  async isGitRepository(workingDirectory) {
-    const result = await runGitAllowFailure(runner, workingDirectory, [
-      "rev-parse",
-      "--is-inside-work-tree",
-    ]);
-    return result.ok && result.stdout.trim() === "true";
+  isGitRepository(workingDirectory) {
+    return Effect.gen(function* () {
+      const result = yield* runGitAllowFailure(runner, workingDirectory, [
+        "rev-parse",
+        "--is-inside-work-tree",
+      ]);
+      return result.ok && result.stdout.trim() === "true";
+    });
   },
-  async shareGitCommonDirectory(repoPath, workingDir) {
-    const [repoCommonDir, workingCommonDir] = await Promise.all([
-      resolveGitCommonDirectory(runner, repoPath),
-      resolveGitCommonDirectory(runner, workingDir),
-    ]);
-    return repoCommonDir === workingCommonDir;
+  shareGitCommonDirectory(repoPath, workingDir) {
+    return Effect.gen(function* () {
+      const [repoCommonDir, workingCommonDir] = yield* Effect.all([
+        resolveGitCommonDirectory(runner, repoPath),
+        resolveGitCommonDirectory(runner, workingDir),
+      ]);
+      return repoCommonDir === workingCommonDir;
+    });
   },
   referenceExists(workingDir, reference) {
     return referenceExists(runner, workingDir, reference);
   },
-  async listRemotes(workingDirectory) {
-    const remoteNames = parseRemoteNames(await runGit(runner, workingDirectory, ["remote"]));
-    const remotes: GitRemote[] = [];
+  listRemotes(workingDirectory) {
+    return Effect.gen(function* () {
+      const remoteNames = parseRemoteNames(yield* runGit(runner, workingDirectory, ["remote"]));
+      const remotes: GitRemote[] = [];
 
-    for (const name of remoteNames) {
-      const result = await runGitAllowFailure(runner, workingDirectory, [
-        "remote",
-        "get-url",
-        name,
-      ]);
-      const url = result.stdout.trim();
-      if (result.ok && url) {
-        remotes.push({ name, url });
+      for (const name of remoteNames) {
+        const result = yield* runGitAllowFailure(runner, workingDirectory, [
+          "remote",
+          "get-url",
+          name,
+        ]);
+        const url = result.stdout.trim();
+        if (result.ok && url) {
+          remotes.push({ name, url });
+        }
       }
-    }
 
-    return remotes;
+      return remotes;
+    });
   },
-  async listBranches(workingDirectory) {
-    const output = await runGit(runner, workingDirectory, [
-      "for-each-ref",
-      "--format=%(if)%(HEAD)%(then)1%(else)0%(end)|%(refname:short)|%(refname)",
-      "refs/heads",
-      "refs/remotes",
-    ]);
-    return parseBranchRows(output);
+  listBranches(workingDirectory) {
+    return Effect.gen(function* () {
+      const output = yield* runGit(runner, workingDirectory, [
+        "for-each-ref",
+        "--format=%(if)%(HEAD)%(then)1%(else)0%(end)|%(refname:short)|%(refname)",
+        "refs/heads",
+        "refs/remotes",
+      ]);
+      return parseBranchRows(output);
+    });
   },
   getCurrentBranch(workingDirectory) {
     return getCurrentBranchUnchecked(runner, workingDirectory);
@@ -111,10 +127,18 @@ export const createGitCliAdapter = ({
   getStatus(workingDirectory) {
     return getStatusUnchecked(runner, workingDirectory);
   },
-  async getDiff(workingDirectory, targetBranch) {
-    const payload = await loadDiffPayload(runner, workingDirectory, targetBranch);
-    const fileStatuses = await getStatusUnchecked(runner, workingDirectory);
-    return buildFileDiffs(runner, workingDirectory, fileStatuses, payload.numstat, payload.diff);
+  getDiff(workingDirectory, targetBranch) {
+    return Effect.gen(function* () {
+      const payload = yield* loadDiffPayload(runner, workingDirectory, targetBranch);
+      const fileStatuses = yield* getStatusUnchecked(runner, workingDirectory);
+      return yield* buildFileDiffs(
+        runner,
+        workingDirectory,
+        fileStatuses,
+        payload.numstat,
+        payload.diff,
+      );
+    });
   },
   getWorktreeStatusData(workingDirectory, targetBranch, diffScope) {
     return buildWorktreeStatusData(runner, workingDirectory, targetBranch, diffScope);
@@ -152,21 +176,34 @@ export const createGitCliAdapter = ({
   resetWorktreeSelection(workingDirectory, fileDiffs, selection) {
     return resetWorktreeSelection(runner, workingDirectory, fileDiffs, selection);
   },
-  async commitsAheadBehind(workingDirectory, targetBranch) {
-    const target = targetBranch.trim();
-    if (!target) {
-      throw new Error("target branch is required");
-    }
+  commitsAheadBehind(workingDirectory, targetBranch) {
+    return Effect.gen(function* () {
+      const target = targetBranch.trim();
+      if (!target) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "targetBranch",
+            message: "target branch is required",
+          }),
+        );
+      }
 
-    const range = `${target}...HEAD`;
-    const output = await runGit(runner, workingDirectory, [
-      "rev-list",
-      "--count",
-      "--left-right",
-      "--end-of-options",
-      range,
-    ]);
-    return parseAheadBehind(output);
+      const range = `${target}...HEAD`;
+      const output = yield* runGit(runner, workingDirectory, [
+        "rev-list",
+        "--count",
+        "--left-right",
+        "--end-of-options",
+        range,
+      ]);
+      return yield* Effect.try({
+        try: () => parseAheadBehind(output),
+        catch: (cause) =>
+          cause instanceof HostValidationError
+            ? cause
+            : toHostOperationError(cause, "git.parseAheadBehind"),
+      });
+    });
   },
   fetchRemote(workingDirectory, targetBranch) {
     return fetchRemote(runner, workingDirectory, targetBranch);
@@ -190,3 +227,5 @@ export const createGitCliAdapter = ({
     return abortConflict(runner, workingDirectory, operation);
   },
 });
+
+export const GitPortLive = Layer.sync(GitPortTag, () => createGitCliAdapter());

@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import { createTaskService, type TaskStorePort, task } from "./test-support/task-workflow-harness";
 
 describe("createTaskService deferred and planning", () => {
@@ -5,33 +7,93 @@ describe("createTaskService deferred and planning", () => {
     const calls: unknown[] = [];
     const deferredTask = task({ id: "task-1", status: "deferred" });
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [task({ id: "task-1", status: "human_review" })];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [task({ id: "task-1", status: "human_review" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask(input) {
-        calls.push({ type: "transition", input });
-        return deferredTask;
+      transitionTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "transition", input });
+            return deferredTask;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
-    const deferred = await createTaskService({ taskStore }).deferTask({
-      repoPath: "/repo",
-      taskId: "task-1",
-    });
-
+    const deferred = await Effect.runPromise(
+      createTaskService({ taskStore }).deferTask({
+        repoPath: "/repo",
+        taskId: "task-1",
+      }),
+    );
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "transition", input: { repoPath: "/repo", taskId: "task-1", status: "deferred" } },
@@ -42,92 +104,271 @@ describe("createTaskService deferred and planning", () => {
       availableActions: expect.arrayContaining(["resume_deferred"]),
     });
   });
-
   test("rejects deferring subtasks before calling the store", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [task({ id: "task-1", parentId: "epic-1" })];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [task({ id: "task-1", parentId: "epic-1" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("should not transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).deferTask({ repoPath: "/repo", taskId: "task-1" }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).deferTask({ repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).rejects.toThrow("Subtasks cannot be deferred.");
   });
-
   test("rejects deferring closed or already deferred tasks before calling the store", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [task({ id: "task-1", status: "closed" })];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [task({ id: "task-1", status: "closed" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("should not transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).deferTask({ repoPath: "/repo", taskId: "task-1" }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).deferTask({ repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).rejects.toThrow("Only non-closed open-state tasks can be deferred.");
   });
-
   test("resumes deferred tasks", async () => {
     const calls: unknown[] = [];
     const resumedTask = task({ id: "task-1", status: "open" });
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [task({ id: "task-1", status: "deferred" })];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [task({ id: "task-1", status: "deferred" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask(input) {
-        calls.push({ type: "transition", input });
-        return resumedTask;
+      transitionTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "transition", input });
+            return resumedTask;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
-    const resumed = await createTaskService({ taskStore }).resumeDeferredTask({
-      repoPath: "/repo",
-      taskId: "task-1",
-    });
-
+    const resumed = await Effect.runPromise(
+      createTaskService({ taskStore }).resumeDeferredTask({
+        repoPath: "/repo",
+        taskId: "task-1",
+      }),
+    );
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "transition", input: { repoPath: "/repo", taskId: "task-1", status: "open" } },
@@ -138,75 +379,215 @@ describe("createTaskService deferred and planning", () => {
       availableActions: expect.arrayContaining(["defer_issue"]),
     });
   });
-
   test("rejects resuming non-deferred tasks before calling the store", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [task({ id: "task-1", status: "open" })];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [task({ id: "task-1", status: "open" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("should not transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).resumeDeferredTask({
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).resumeDeferredTask({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).rejects.toThrow("Task is not deferred: task-1");
   });
-
   test("sets spec markdown and promotes open tasks to spec_ready", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [task({ id: "task-1", status: "open", issueType: "feature" })];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [task({ id: "task-1", status: "open", issueType: "feature" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument(input) {
-        calls.push({ type: "setSpec", input });
-        return { markdown: input.markdown, updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 };
+      setSpecDocument(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setSpec", input });
+            return { markdown: input.markdown, updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask(input) {
-        calls.push({ type: "transition", input });
-        return task({ id: "task-1", status: "spec_ready", issueType: "feature" });
+      transitionTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "transition", input });
+            return task({ id: "task-1", status: "spec_ready", issueType: "feature" });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).setSpec({
-        repoPath: "/repo",
-        taskId: "task-1",
-        markdown: "# Spec",
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).setSpec({
+          repoPath: "/repo",
+          taskId: "task-1",
+          markdown: "# Spec",
+        }),
+      ),
     ).resolves.toEqual({
       markdown: "# Spec",
       updatedAt: "2026-05-10T10:00:00.000Z",
@@ -221,95 +602,255 @@ describe("createTaskService deferred and planning", () => {
       },
     ]);
   });
-
   test("rejects set_spec for deferred tasks before persisting", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [task({ id: "task-1", status: "deferred" })];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [task({ id: "task-1", status: "deferred" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("should not persist");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not persist");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).setSpec({
-        repoPath: "/repo",
-        taskId: "task-1",
-        markdown: "# Spec",
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).setSpec({
+          repoPath: "/repo",
+          taskId: "task-1",
+          markdown: "# Spec",
+        }),
+      ),
     ).rejects.toThrow(
       "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: deferred)",
     );
   });
-
   test("sets an epic plan, replaces direct subtasks, and promotes to ready_for_dev", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push({ type: "list", input });
-        return [
-          task({ id: "epic-1", status: "spec_ready", issueType: "epic" }),
-          task({ id: "old-child", status: "ready_for_dev", parentId: "epic-1" }),
-        ];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [
+              task({ id: "epic-1", status: "spec_ready", issueType: "epic" }),
+              task({ id: "old-child", status: "ready_for_dev", parentId: "epic-1" }),
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument(input) {
-        calls.push({ type: "setPlan", input });
-        return { markdown: input.markdown, updatedAt: "2026-05-10T10:00:00.000Z", revision: 2 };
+      setPlanDocument(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPlan", input });
+            return { markdown: input.markdown, updatedAt: "2026-05-10T10:00:00.000Z", revision: 2 };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask(input) {
-        calls.push({ type: "delete", input });
-        return true;
+      deleteTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "delete", input });
+            return true;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask(input) {
-        calls.push({ type: "create", input });
-        return task({ id: `created-${input.task.title}`, parentId: "epic-1" });
+      createTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "create", input });
+            return task({ id: `created-${input.task.title}`, parentId: "epic-1" });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask(input) {
-        calls.push({ type: "transition", input });
-        return task({ id: "epic-1", status: "ready_for_dev", issueType: "epic" });
+      transitionTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "transition", input });
+            return task({ id: "epic-1", status: "ready_for_dev", issueType: "epic" });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).setPlan({
-        repoPath: "/repo",
-        taskId: "epic-1",
-        markdown: "# Plan",
-        hasExplicitSubtasks: true,
-        subtasks: [
-          { title: " Build UI ", issueType: "task", priority: 1, description: " Ship it " },
-          { title: "build ui", issueType: "task", priority: 1 },
-          { title: "Wire API", issueType: "feature" },
-        ],
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).setPlan({
+          repoPath: "/repo",
+          taskId: "epic-1",
+          markdown: "# Plan",
+          hasExplicitSubtasks: true,
+          subtasks: [
+            { title: " Build UI ", issueType: "task", priority: 1, description: " Ship it " },
+            { title: "build ui", issueType: "task", priority: 1 },
+            { title: "Wire API", issueType: "feature" },
+          ],
+        }),
+      ),
     ).resolves.toEqual({
       markdown: "# Plan",
       updatedAt: "2026-05-10T10:00:00.000Z",
@@ -356,44 +897,124 @@ describe("createTaskService deferred and planning", () => {
       },
     ]);
   });
-
   test("saves plan documents without applying workflow transitions", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async getTask(input) {
-        calls.push({ type: "get", input });
-        return task({ id: "task-1", status: "in_progress" });
+      getTask(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "get", input });
+            return task({ id: "task-1", status: "in_progress" });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument(input) {
-        calls.push({ type: "setPlan", input });
-        return { markdown: input.markdown, updatedAt: "2026-05-10T10:00:00.000Z", revision: 3 };
+      setPlanDocument(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "setPlan", input });
+            return { markdown: input.markdown, updatedAt: "2026-05-10T10:00:00.000Z", revision: 3 };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).savePlanDocument({
-        repoPath: "/repo",
-        taskId: "task-1",
-        markdown: "# Plan",
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).savePlanDocument({
+          repoPath: "/repo",
+          taskId: "task-1",
+          markdown: "# Plan",
+        }),
+      ),
     ).resolves.toEqual({
       markdown: "# Plan",
       updatedAt: "2026-05-10T10:00:00.000Z",

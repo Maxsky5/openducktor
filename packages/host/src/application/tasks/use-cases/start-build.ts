@@ -1,12 +1,18 @@
 import { buildSessionBootstrapSchema } from "@openducktor/contracts";
-import { buildBranchName, validateTransition } from "../../../domain/task";
+import { Effect } from "effect";
+import { buildBranchName } from "../../../domain/task";
+import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import {
   effectiveTargetBranchForTask,
   resolveBuildStartPoint,
   resolveRuntimeDescriptorForBuild,
   rollbackFailedBuildWorktree,
 } from "../support/builder-worktree-cleanup";
-import { requireBuildStartDependencies } from "../support/required-task-dependencies";
+import {
+  requireBuildStartDependencies,
+  requireDependencies,
+} from "../support/required-task-dependencies";
+import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { runHookCommandsAllowFailure } from "../support/workflow-hooks";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -20,121 +26,170 @@ export const createTaskBuildStartUseCase = ({
   runtimeRegistry,
   worktreeFiles,
 }: CreateTaskServiceInput): Pick<TaskService, "buildStart"> => ({
-  async buildStart(input) {
-    const { repoPath, taskId, runtimeKind } = input;
-    const dependencies = requireBuildStartDependencies(
-      gitPort,
-      runtimeDefinitionsService,
-      runtimeRegistry,
-      settingsConfig,
-      systemCommands,
-      worktreeFiles,
-      workspaceSettingsService,
-    );
-    const descriptor = resolveRuntimeDescriptorForBuild(
-      dependencies.runtimeDefinitionsService,
-      runtimeKind,
-    );
-    const repoConfig =
-      await dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-    const canonicalRepoPath = await dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
-    if (!(await dependencies.gitPort.isGitRepository(canonicalRepoPath))) {
-      throw new Error(`Not a git repository: ${canonicalRepoPath}`);
-    }
-
-    const task = await taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
-    validateTransition(task, [task], task.status, "in_progress");
-
-    const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
-    const targetBranch = await effectiveTargetBranchForTask(
-      dependencies.workspaceSettingsService,
-      task,
-      canonicalRepoPath,
-    );
-    const worktreeBase = repoConfig.worktreeBasePath
-      ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
-      : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
-    const worktreePath = dependencies.settingsConfig.join(worktreeBase, taskId);
-
-    if (await dependencies.settingsConfig.pathExists(worktreePath)) {
-      throw new Error(`Worktree path already exists for task ${taskId}: ${worktreePath}`);
-    }
-    await dependencies.worktreeFiles.ensureDirectory(worktreeBase);
-
-    const startPoint = await resolveBuildStartPoint(
-      dependencies,
-      canonicalRepoPath,
-      targetBranch,
-      task.targetBranch === undefined,
-    );
-    await dependencies.gitPort.createWorktree(
-      canonicalRepoPath,
-      worktreePath,
-      branch,
-      true,
-      startPoint.reference,
-    );
-
-    let createdTrackingRef: string | null = null;
-    try {
-      if (startPoint.upstreamRemote) {
-        const upstreamSetup = await dependencies.gitPort.configureBranchUpstream(
-          canonicalRepoPath,
-          worktreePath,
-          branch,
-          startPoint.upstreamRemote,
+  buildStart(input) {
+    return Effect.gen(function* () {
+      const { repoPath, taskId, runtimeKind } = input;
+      const dependencies = yield* requireDependencies(() =>
+        requireBuildStartDependencies(
+          gitPort,
+          runtimeDefinitionsService,
+          runtimeRegistry,
+          settingsConfig,
+          systemCommands,
+          worktreeFiles,
+          workspaceSettingsService,
+        ),
+      );
+      const descriptor = yield* resolveRuntimeDescriptorForBuild(
+        dependencies.runtimeDefinitionsService,
+        runtimeKind,
+      );
+      const repoConfig =
+        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
+      if (!(yield* dependencies.gitPort.isGitRepository(canonicalRepoPath))) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "repoPath",
+            message: `Not a git repository: ${canonicalRepoPath}`,
+            details: { repoPath: canonicalRepoPath },
+          }),
         );
-        createdTrackingRef = upstreamSetup.createdTrackingRef;
       }
 
-      await dependencies.worktreeFiles.copyConfiguredPaths(
+      const task = yield* taskStore.getTask({ repoPath: canonicalRepoPath, taskId });
+      yield* validateTaskTransitionEffect(task, [task], task.status, "in_progress");
+
+      const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
+      const targetBranch = yield* effectiveTargetBranchForTask(
+        dependencies.workspaceSettingsService,
+        task,
         canonicalRepoPath,
-        worktreePath,
-        repoConfig.worktreeCopyPaths,
       );
+      const worktreeBase = repoConfig.worktreeBasePath
+        ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
+        : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
+      const worktreePath = dependencies.settingsConfig.join(worktreeBase, taskId);
 
-      const preStartHooks = repoConfig.hooks.preStart.map((hook) => hook.trim()).filter(Boolean);
-      const failure = await runHookCommandsAllowFailure(
-        dependencies.systemCommands,
-        preStartHooks,
-        worktreePath,
-      );
-      if (failure) {
-        throw new Error(`Worktree setup script command failed: ${failure.hook}\n${failure.stderr}`);
+      if (yield* dependencies.settingsConfig.pathExists(worktreePath)) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "taskId",
+            message: `Worktree path already exists for task ${taskId}: ${worktreePath}`,
+            details: { taskId, worktreePath },
+          }),
+        );
       }
-    } catch (error) {
-      const cleanupError = await rollbackFailedBuildWorktree(
+      yield* dependencies.worktreeFiles.ensureDirectory(worktreeBase);
+
+      const startPoint = yield* resolveBuildStartPoint(
         dependencies,
+        canonicalRepoPath,
+        targetBranch,
+        task.targetBranch === undefined,
+      );
+      yield* dependencies.gitPort.createWorktree(
         canonicalRepoPath,
         worktreePath,
         branch,
-        createdTrackingRef,
+        true,
+        startPoint.reference,
       );
-      if (error instanceof Error) {
-        throw new Error(`${error.message}${cleanupError}`, { cause: error });
-      }
-      throw new Error(`${String(error)}${cleanupError}`);
-    }
 
-    const runtime = await dependencies.runtimeRegistry
-      .ensureWorkspaceRuntime({
-        runtimeKind,
+      let createdTrackingRef: string | null = null;
+      const setupResult = yield* Effect.either(
+        Effect.gen(function* () {
+          if (startPoint.upstreamRemote) {
+            const upstreamSetup = yield* dependencies.gitPort.configureBranchUpstream(
+              canonicalRepoPath,
+              worktreePath,
+              branch,
+              startPoint.upstreamRemote,
+            );
+            createdTrackingRef = upstreamSetup.createdTrackingRef;
+          }
+
+          yield* dependencies.worktreeFiles.copyConfiguredPaths(
+            canonicalRepoPath,
+            worktreePath,
+            repoConfig.worktreeCopyPaths,
+          );
+
+          const preStartHooks = repoConfig.hooks.preStart
+            .map((hook) => hook.trim())
+            .filter(Boolean);
+          const failure = yield* runHookCommandsAllowFailure(
+            dependencies.systemCommands,
+            preStartHooks,
+            worktreePath,
+          );
+          if (failure) {
+            return yield* Effect.fail(
+              new HostValidationError({
+                field: "taskId",
+                message: `Worktree setup script command failed: ${failure.hook}\n${failure.stderr}`,
+                details: { taskId, hook: failure.hook },
+              }),
+            );
+          }
+        }),
+      );
+      if (setupResult._tag === "Left") {
+        const cleanupError = yield* rollbackFailedBuildWorktree(
+          dependencies,
+          canonicalRepoPath,
+          worktreePath,
+          branch,
+          createdTrackingRef,
+        );
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "task.build_start.prepare_worktree",
+            message: `${errorMessage(setupResult.left)}${cleanupError}`,
+            cause: setupResult.left,
+            details: { repoPath: canonicalRepoPath, taskId, worktreePath },
+          }),
+        );
+      }
+
+      const runtime = yield* dependencies.runtimeRegistry
+        .ensureWorkspaceRuntime({
+          runtimeKind,
+          repoPath: canonicalRepoPath,
+          workingDirectory: canonicalRepoPath,
+          descriptor,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new HostOperationError({
+                operation: "task.build_start.ensure_runtime",
+                message: `${runtimeKind} build runtime failed to start for task ${taskId}`,
+                cause: error,
+                details: { repoPath: canonicalRepoPath, taskId, runtimeKind },
+              }),
+          ),
+        );
+
+      yield* taskStore.transitionTask({
         repoPath: canonicalRepoPath,
-        workingDirectory: canonicalRepoPath,
-        descriptor,
-      })
-      .catch((error: unknown) => {
-        throw new Error(`${runtimeKind} build runtime failed to start for task ${taskId}`, {
-          cause: error,
-        });
+        taskId,
+        status: "in_progress",
       });
 
-    await taskStore.transitionTask({ repoPath: canonicalRepoPath, taskId, status: "in_progress" });
-
-    return buildSessionBootstrapSchema.parse({
-      runtimeKind,
-      runtimeId: runtime.runtimeId,
-      workingDirectory: worktreePath,
+      return yield* Effect.try({
+        try: () =>
+          buildSessionBootstrapSchema.parse({
+            runtimeKind,
+            runtimeId: runtime.runtimeId,
+            workingDirectory: worktreePath,
+          }),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
     });
   },
 });

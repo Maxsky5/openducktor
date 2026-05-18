@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { HostOperationError } from "../effect/host-errors";
 import {
   createStopMcpHostBridgeStep,
   type HostLifecycleLogger,
@@ -21,30 +23,43 @@ describe("host lifecycle shutdown", () => {
     const calls: string[] = [];
 
     await expect(
-      runShutdownSteps(
-        [
-          {
-            label: "first",
-            async run() {
-              calls.push("first");
-              throw new Error("first failed");
+      Effect.runPromise(
+        runShutdownSteps(
+          [
+            {
+              label: "first",
+              run() {
+                calls.push("first");
+                return Effect.fail(
+                  new HostOperationError({
+                    operation: "test.first",
+                    message: "first failed",
+                  }),
+                );
+              },
             },
-          },
-          {
-            label: "second",
-            async run() {
-              calls.push("second");
+            {
+              label: "second",
+              run() {
+                calls.push("second");
+                return Effect.void;
+              },
             },
-          },
-          {
-            label: "third",
-            async run() {
-              calls.push("third");
-              throw new Error("third failed");
+            {
+              label: "third",
+              run() {
+                calls.push("third");
+                return Effect.fail(
+                  new HostOperationError({
+                    operation: "test.third",
+                    message: "third failed",
+                  }),
+                );
+              },
             },
-          },
-        ],
-        logger,
+          ],
+          logger,
+        ),
       ),
     ).rejects.toThrow("first: first failed\nthird: third failed");
 
@@ -59,20 +74,35 @@ describe("host lifecycle shutdown", () => {
     const logger = createLogger();
     const step = createStopMcpHostBridgeStep(
       {
-        async ensureConnection() {
-          throw new Error("ensureConnection should not be called");
+        ensureConnection() {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.ensureConnection",
+              message: "ensureConnection should not be called",
+            }),
+          );
         },
-        async ensureExternalDiscoveryReady() {
-          throw new Error("ensureExternalDiscoveryReady should not be called");
+        ensureExternalDiscoveryReady() {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.ensureExternalDiscoveryReady",
+              message: "ensureExternalDiscoveryReady should not be called",
+            }),
+          );
         },
-        async close() {
-          throw new Error("bridge close failed");
+        close() {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "test.close",
+              message: "bridge close failed",
+            }),
+          );
         },
       },
       logger,
     );
 
-    await expect(runShutdownSteps([step], logger)).rejects.toThrow(
+    await expect(Effect.runPromise(runShutdownSteps([step], logger))).rejects.toThrow(
       "MCP host bridge: bridge close failed",
     );
   });

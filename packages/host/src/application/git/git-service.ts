@@ -1,24 +1,7 @@
 import {
-  type CommitsAheadBehind,
   commitsAheadBehindSchema,
-  type FileDiff,
-  type FileStatus,
   fileDiffSchema,
   fileStatusSchema,
-  type GitBranch,
-  type GitCommitAllResult,
-  type GitConflictAbortResult,
-  type GitCurrentBranch,
-  type GitFetchRemoteResult,
-  type GitPullBranchResult,
-  type GitPushBranchResult,
-  type GitRebaseAbortResult,
-  type GitRebaseBranchResult,
-  type GitResetWorktreeSelectionRequest,
-  type GitResetWorktreeSelectionResult,
-  type GitWorktreeStatus,
-  type GitWorktreeStatusSummary,
-  type GitWorktreeSummary,
   gitBranchSchema,
   gitCommitAllResultSchema,
   gitConflictAbortResultSchema,
@@ -33,29 +16,19 @@ import {
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
 } from "@openducktor/contracts";
+import { Clock, Effect } from "effect";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { WorktreeFilePort } from "../../ports/worktree-file-port";
-
 import {
+  type CreateGitServiceInput,
   cleanupFailedCreatedWorktree,
   findRepoConfigByPath,
-  type GitAbortConflictInput,
-  type GitAheadBehindInput,
-  type GitCommitAllInput,
-  type GitCreateWorktreeInput,
-  type GitDiffInput,
-  type GitPushBranchInput,
-  type GitRebaseBranchInput,
-  type GitRemoveWorktreeInput,
-  type GitScopeInput,
-  type GitSwitchBranchInput,
-  type GitWorktreeStatusInput,
   normalizeCreateGitServiceInput,
   requireSettingsConfig,
   requireWorktreeFiles,
   resolveGitWorkingDirectory,
 } from "./git-service-inputs";
+import type { GitService } from "./git-service-types";
 import {
   createWorktreeSnapshot,
   hashWorktreeDiffPayload,
@@ -65,262 +38,400 @@ import {
 } from "./git-worktree-snapshot";
 import { removeWorktreeAndFilesystemPath } from "./worktree-removal";
 
-export type GitService = {
-  getBranches(input: GitScopeInput): Promise<GitBranch[]>;
-  getCurrentBranch(input: GitScopeInput): Promise<GitCurrentBranch>;
-  getStatus(input: GitScopeInput): Promise<FileStatus[]>;
-  getDiff(input: GitDiffInput): Promise<FileDiff[]>;
-  getWorktreeStatus(input: GitWorktreeStatusInput): Promise<GitWorktreeStatus>;
-  getWorktreeStatusSummary(input: GitWorktreeStatusInput): Promise<GitWorktreeStatusSummary>;
-  createWorktree(input: GitCreateWorktreeInput): Promise<GitWorktreeSummary>;
-  removeWorktree(input: GitRemoveWorktreeInput): Promise<{ ok: boolean }>;
-  switchBranch(input: GitSwitchBranchInput): Promise<GitCurrentBranch>;
-  resetWorktreeSelection(
-    input: GitResetWorktreeSelectionRequest,
-  ): Promise<GitResetWorktreeSelectionResult>;
-  commitsAheadBehind(input: GitAheadBehindInput): Promise<CommitsAheadBehind>;
-  fetchRemote(input: GitAheadBehindInput): Promise<GitFetchRemoteResult>;
-  pullBranch(input: GitScopeInput): Promise<GitPullBranchResult>;
-  commitAll(input: GitCommitAllInput): Promise<GitCommitAllResult>;
-  pushBranch(input: GitPushBranchInput): Promise<GitPushBranchResult>;
-  rebaseBranch(input: GitRebaseBranchInput): Promise<GitRebaseBranchResult>;
-  rebaseAbort(input: GitScopeInput): Promise<GitRebaseAbortResult>;
-  abortConflict(input: GitAbortConflictInput): Promise<GitConflictAbortResult>;
-};
-
-export type CreateGitServiceInput = {
-  gitPort: GitPort;
-  settingsConfig?: SettingsConfigPort;
-  worktreeFiles?: WorktreeFilePort;
-};
-
+export type { CreateGitServiceInput } from "./git-service-inputs";
+export type { GitService, GitServiceError } from "./git-service-types";
 export const createGitService = (input: GitPort | CreateGitServiceInput): GitService => {
   const { gitPort, settingsConfig, worktreeFiles } = normalizeCreateGitServiceInput(input);
-
   return {
-    async getBranches(input) {
-      const { repoPath } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, undefined);
-      const branches = await gitPort.listBranches(workingDirectory);
-      return branches.map((branch) => gitBranchSchema.parse(branch));
-    },
-    async getCurrentBranch(input) {
-      const { repoPath, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      return gitCurrentBranchSchema.parse(await gitPort.getCurrentBranch(workingDirectory));
-    },
-    async getStatus(input) {
-      const { repoPath, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      const statuses = await gitPort.getStatus(workingDirectory);
-      return statuses.map((status) => fileStatusSchema.parse(status));
-    },
-    async getDiff(input) {
-      const { repoPath, targetBranch, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      const diffs = await gitPort.getDiff(workingDirectory, targetBranch);
-      return diffs.map((diff) => fileDiffSchema.parse(diff));
-    },
-    async getWorktreeStatus(input) {
-      const { repoPath, targetBranch, diffScope, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      const statusData = await gitPort.getWorktreeStatusData(
-        workingDirectory,
-        targetBranch,
-        diffScope,
-      );
-      const snapshot = createWorktreeSnapshot(
-        workingDirectory,
-        targetBranch,
-        diffScope,
-        hashWorktreeStatusPayload(
-          statusData.currentBranch,
-          statusData.fileStatuses,
-          statusData.targetAheadBehind,
-          statusData.upstreamAheadBehind,
-        ),
-        hashWorktreeDiffPayload(statusData.fileDiffs),
-      );
-
-      return gitWorktreeStatusSchema.parse({
-        currentBranch: statusData.currentBranch,
-        fileStatuses: statusData.fileStatuses,
-        fileDiffs: statusData.fileDiffs,
-        targetAheadBehind: statusData.targetAheadBehind,
-        upstreamAheadBehind: statusData.upstreamAheadBehind,
-        gitConflict: statusData.gitConflict
-          ? { ...statusData.gitConflict, workingDir: workingDirectory }
-          : undefined,
-        snapshot,
-      });
-    },
-    async getWorktreeStatusSummary(input) {
-      const { repoPath, targetBranch, diffScope, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      const summaryData = await gitPort.getWorktreeStatusSummaryData(
-        workingDirectory,
-        targetBranch,
-        diffScope,
-      );
-      const snapshot = createWorktreeSnapshot(
-        workingDirectory,
-        targetBranch,
-        diffScope,
-        hashWorktreeStatusPayload(
-          summaryData.currentBranch,
-          summaryData.fileStatuses,
-          summaryData.targetAheadBehind,
-          summaryData.upstreamAheadBehind,
-        ),
-        hashWorktreeDiffSummaryPayload(
-          diffScope,
-          summaryData.targetAheadBehind,
-          summaryData.fileStatusCounts,
-        ),
-      );
-
-      return gitWorktreeStatusSummarySchema.parse({
-        currentBranch: summaryData.currentBranch,
-        fileStatusCounts: summaryData.fileStatusCounts,
-        targetAheadBehind: summaryData.targetAheadBehind,
-        upstreamAheadBehind: summaryData.upstreamAheadBehind,
-        gitConflict: summaryData.gitConflict
-          ? { ...summaryData.gitConflict, workingDir: workingDirectory }
-          : undefined,
-        snapshot,
-      });
-    },
-    async commitsAheadBehind(input) {
-      const { repoPath, targetBranch, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      return commitsAheadBehindSchema.parse(
-        await gitPort.commitsAheadBehind(workingDirectory, targetBranch),
-      );
-    },
-    async switchBranch(input) {
-      const { repoPath, branch, create } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, undefined);
-      return gitCurrentBranchSchema.parse(
-        await gitPort.switchBranch(workingDirectory, branch, create),
-      );
-    },
-    async createWorktree(input) {
-      const { repoPath, worktreePath, branch, createBranch } = input;
-      const canonicalRepoPath = await resolveGitWorkingDirectory(gitPort, repoPath, undefined);
-      const config = requireSettingsConfig(settingsConfig);
-      const repoConfig = await findRepoConfigByPath(config, canonicalRepoPath);
-      const files = requireWorktreeFiles(worktreeFiles);
-
-      await gitPort.createWorktree(canonicalRepoPath, worktreePath, branch, createBranch);
-      try {
-        await files.copyConfiguredPaths(
-          canonicalRepoPath,
-          worktreePath,
-          repoConfig.worktreeCopyPaths,
-        );
-      } catch (error) {
-        const cleanupError = await cleanupFailedCreatedWorktree(
-          gitPort,
-          canonicalRepoPath,
-          worktreePath,
-          branch,
-          createBranch,
-        );
-        throw new Error(`Configured worktree copy failed: ${String(error)}${cleanupError}`, {
-          cause: error,
+    getBranches(input) {
+      return Effect.gen(function* () {
+        const { repoPath } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, undefined);
+        const branches = yield* gitPort.listBranches(workingDirectory);
+        return yield* Effect.try({
+          try: () => branches.map((branch) => gitBranchSchema.parse(branch)),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
         });
-      }
-
-      return gitWorktreeSummarySchema.parse({
-        branch,
-        worktreePath,
       });
     },
-    async removeWorktree(input) {
-      const { repoPath, worktreePath, force } = input;
-      const canonicalRepoPath = await resolveGitWorkingDirectory(gitPort, repoPath, undefined);
-      const files = requireWorktreeFiles(worktreeFiles);
-      await removeWorktreeAndFilesystemPath(
-        {
-          gitPort,
-          settingsConfig: requireSettingsConfig(settingsConfig),
-          worktreeFiles: files,
-        },
-        {
-          repoPath: canonicalRepoPath,
-          worktreePath,
-          force,
-        },
-      );
-      return { ok: true };
+    getCurrentBranch(input) {
+      return Effect.gen(function* () {
+        const { repoPath, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const currentBranch = yield* gitPort.getCurrentBranch(workingDirectory);
+        return yield* Effect.try({
+          try: () => gitCurrentBranchSchema.parse(currentBranch),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
     },
-    async resetWorktreeSelection(input) {
-      const request = input;
-      const workingDirectory = await resolveGitWorkingDirectory(
-        gitPort,
-        request.repoPath,
-        request.workingDir,
-      );
-      const statusData = await gitPort.getWorktreeStatusData(
-        workingDirectory,
-        request.targetBranch,
-        "uncommitted",
-      );
-      validateResetSnapshotMatches(request.snapshot, statusData);
-      return gitResetWorktreeSelectionResultSchema.parse(
-        await gitPort.resetWorktreeSelection(
+    getStatus(input) {
+      return Effect.gen(function* () {
+        const { repoPath, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const statuses = yield* gitPort.getStatus(workingDirectory);
+        return yield* Effect.try({
+          try: () => statuses.map((status) => fileStatusSchema.parse(status)),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
+    },
+    getDiff(input) {
+      return Effect.gen(function* () {
+        const { repoPath, targetBranch, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const diffs = yield* gitPort.getDiff(workingDirectory, targetBranch);
+        return yield* Effect.try({
+          try: () => diffs.map((diff) => fileDiffSchema.parse(diff)),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
+    },
+    getWorktreeStatus(input) {
+      return Effect.gen(function* () {
+        const { repoPath, targetBranch, diffScope, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const statusData = yield* gitPort.getWorktreeStatusData(
+          workingDirectory,
+          targetBranch,
+          diffScope,
+        );
+        const observedAtMs = yield* Clock.currentTimeMillis;
+        const snapshot = createWorktreeSnapshot(
+          workingDirectory,
+          targetBranch,
+          diffScope,
+          hashWorktreeStatusPayload(
+            statusData.currentBranch,
+            statusData.fileStatuses,
+            statusData.targetAheadBehind,
+            statusData.upstreamAheadBehind,
+          ),
+          hashWorktreeDiffPayload(statusData.fileDiffs),
+          observedAtMs,
+        );
+        return yield* Effect.try({
+          try: () =>
+            gitWorktreeStatusSchema.parse({
+              currentBranch: statusData.currentBranch,
+              fileStatuses: statusData.fileStatuses,
+              fileDiffs: statusData.fileDiffs,
+              targetAheadBehind: statusData.targetAheadBehind,
+              upstreamAheadBehind: statusData.upstreamAheadBehind,
+              gitConflict: statusData.gitConflict
+                ? { ...statusData.gitConflict, workingDir: workingDirectory }
+                : undefined,
+              snapshot,
+            }),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
+    },
+    getWorktreeStatusSummary(input) {
+      return Effect.gen(function* () {
+        const { repoPath, targetBranch, diffScope, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const summaryData = yield* gitPort.getWorktreeStatusSummaryData(
+          workingDirectory,
+          targetBranch,
+          diffScope,
+        );
+        const observedAtMs = yield* Clock.currentTimeMillis;
+        const snapshot = createWorktreeSnapshot(
+          workingDirectory,
+          targetBranch,
+          diffScope,
+          hashWorktreeStatusPayload(
+            summaryData.currentBranch,
+            summaryData.fileStatuses,
+            summaryData.targetAheadBehind,
+            summaryData.upstreamAheadBehind,
+          ),
+          hashWorktreeDiffSummaryPayload(
+            diffScope,
+            summaryData.targetAheadBehind,
+            summaryData.fileStatusCounts,
+          ),
+          observedAtMs,
+        );
+        return yield* Effect.try({
+          try: () =>
+            gitWorktreeStatusSummarySchema.parse({
+              currentBranch: summaryData.currentBranch,
+              fileStatusCounts: summaryData.fileStatusCounts,
+              targetAheadBehind: summaryData.targetAheadBehind,
+              upstreamAheadBehind: summaryData.upstreamAheadBehind,
+              gitConflict: summaryData.gitConflict
+                ? { ...summaryData.gitConflict, workingDir: workingDirectory }
+                : undefined,
+              snapshot,
+            }),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
+    },
+    commitsAheadBehind(input) {
+      return Effect.gen(function* () {
+        const { repoPath, targetBranch, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const aheadBehind = yield* gitPort.commitsAheadBehind(workingDirectory, targetBranch);
+        return yield* Effect.try({
+          try: () => commitsAheadBehindSchema.parse(aheadBehind),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
+    },
+    switchBranch(input) {
+      return Effect.gen(function* () {
+        const { repoPath, branch, create } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, undefined);
+        const currentBranch = yield* gitPort.switchBranch(workingDirectory, branch, create);
+        return yield* Effect.try({
+          try: () => gitCurrentBranchSchema.parse(currentBranch),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
+    },
+    createWorktree(input) {
+      return Effect.gen(function* () {
+        const { repoPath, worktreePath, branch, createBranch } = input;
+        const canonicalRepoPath = yield* resolveGitWorkingDirectory(gitPort, repoPath, undefined);
+        const config = requireSettingsConfig(settingsConfig);
+        const repoConfig = yield* findRepoConfigByPath(config, canonicalRepoPath);
+        const files = requireWorktreeFiles(worktreeFiles);
+        yield* gitPort.createWorktree(canonicalRepoPath, worktreePath, branch, createBranch);
+        yield* files
+          .copyConfiguredPaths(canonicalRepoPath, worktreePath, repoConfig.worktreeCopyPaths)
+          .pipe(
+            Effect.catchAll((error) =>
+              Effect.gen(function* () {
+                const cleanupError = yield* cleanupFailedCreatedWorktree(
+                  gitPort,
+                  canonicalRepoPath,
+                  worktreePath,
+                  branch,
+                  createBranch,
+                );
+                return yield* Effect.fail(
+                  new HostOperationError({
+                    operation: "git.create_worktree.copy_configured_paths",
+                    message: `Configured worktree copy failed: ${String(error)}${cleanupError}`,
+                    cause: error,
+                  }),
+                );
+              }),
+            ),
+          );
+        return yield* Effect.try({
+          try: () =>
+            gitWorktreeSummarySchema.parse({
+              branch,
+              worktreePath,
+            }),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
+    },
+    removeWorktree(input) {
+      return Effect.gen(function* () {
+        const { repoPath, worktreePath, force } = input;
+        const canonicalRepoPath = yield* resolveGitWorkingDirectory(gitPort, repoPath, undefined);
+        const files = requireWorktreeFiles(worktreeFiles);
+        yield* removeWorktreeAndFilesystemPath(
+          {
+            gitPort,
+            settingsConfig: requireSettingsConfig(settingsConfig),
+            worktreeFiles: files,
+          },
+          {
+            repoPath: canonicalRepoPath,
+            worktreePath,
+            force,
+          },
+        );
+        return { ok: true };
+      });
+    },
+    resetWorktreeSelection(input) {
+      return Effect.gen(function* () {
+        const request = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(
+          gitPort,
+          request.repoPath,
+          request.workingDir,
+        );
+        const statusData = yield* gitPort.getWorktreeStatusData(
+          workingDirectory,
+          request.targetBranch,
+          "uncommitted",
+        );
+        yield* Effect.try({
+          try: () => validateResetSnapshotMatches(request.snapshot, statusData),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+        const result = yield* gitPort.resetWorktreeSelection(
           workingDirectory,
           statusData.fileDiffs,
           request.selection,
-        ),
-      );
+        );
+        return yield* Effect.try({
+          try: () => gitResetWorktreeSelectionResultSchema.parse(result),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
     },
-    async fetchRemote(input) {
-      const { repoPath, targetBranch, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      return gitFetchRemoteResultSchema.parse(
-        await gitPort.fetchRemote(workingDirectory, targetBranch),
-      );
+    fetchRemote(input) {
+      return Effect.gen(function* () {
+        const { repoPath, targetBranch, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const result = yield* gitPort.fetchRemote(workingDirectory, targetBranch);
+        return yield* Effect.try({
+          try: () => gitFetchRemoteResultSchema.parse(result),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
     },
-    async pullBranch(input) {
-      const { repoPath, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      return gitPullBranchResultSchema.parse(await gitPort.pullBranch(workingDirectory));
+    pullBranch(input) {
+      return Effect.gen(function* () {
+        const { repoPath, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const result = yield* gitPort.pullBranch(workingDirectory);
+        return yield* Effect.try({
+          try: () => gitPullBranchResultSchema.parse(result),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
     },
-    async commitAll(input) {
-      const { repoPath, message, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      return gitCommitAllResultSchema.parse(await gitPort.commitAll(workingDirectory, message));
+    commitAll(input) {
+      return Effect.gen(function* () {
+        const { repoPath, message, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const result = yield* gitPort.commitAll(workingDirectory, message);
+        return yield* Effect.try({
+          try: () => gitCommitAllResultSchema.parse(result),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
     },
-    async pushBranch(input) {
-      const { repoPath, branch, remote, workingDir, setUpstream, forceWithLease } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      return gitPushBranchResultSchema.parse(
-        await gitPort.pushBranch(workingDirectory, branch, {
+    pushBranch(input) {
+      return Effect.gen(function* () {
+        const { repoPath, branch, remote, workingDir, setUpstream, forceWithLease } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const result = yield* gitPort.pushBranch(workingDirectory, branch, {
           remote,
           setUpstream: setUpstream ?? false,
           forceWithLease: forceWithLease ?? false,
-        }),
-      );
+        });
+        return yield* Effect.try({
+          try: () => gitPushBranchResultSchema.parse(result),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
     },
-    async rebaseBranch(input) {
-      const { repoPath, targetBranch, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      return gitRebaseBranchResultSchema.parse(
-        await gitPort.rebaseBranch(workingDirectory, targetBranch),
-      );
+    rebaseBranch(input) {
+      return Effect.gen(function* () {
+        const { repoPath, targetBranch, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const result = yield* gitPort.rebaseBranch(workingDirectory, targetBranch);
+        return yield* Effect.try({
+          try: () => gitRebaseBranchResultSchema.parse(result),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
     },
-    async rebaseAbort(input) {
-      const { repoPath, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      return gitRebaseAbortResultSchema.parse(await gitPort.rebaseAbort(workingDirectory));
+    rebaseAbort(input) {
+      return Effect.gen(function* () {
+        const { repoPath, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const result = yield* gitPort.rebaseAbort(workingDirectory);
+        return yield* Effect.try({
+          try: () => gitRebaseAbortResultSchema.parse(result),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
     },
-    async abortConflict(input) {
-      const { repoPath, operation, workingDir } = input;
-      const workingDirectory = await resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-      return gitConflictAbortResultSchema.parse(
-        await gitPort.abortConflict(workingDirectory, operation),
-      );
+    abortConflict(input) {
+      return Effect.gen(function* () {
+        const { repoPath, operation, workingDir } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const result = yield* gitPort.abortConflict(workingDirectory, operation);
+        return yield* Effect.try({
+          try: () => gitConflictAbortResultSchema.parse(result),
+          catch: (cause) =>
+            new HostValidationError({
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      });
     },
   };
 };

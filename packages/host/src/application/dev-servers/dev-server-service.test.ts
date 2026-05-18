@@ -1,4 +1,6 @@
-import type { RepoConfig } from "@openducktor/contracts";
+import type { RepoConfig, TaskWorktreeSummary } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { toHostOperationError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type {
   DevServerProcessHandle,
@@ -6,9 +8,12 @@ import type {
   DevServerProcessStartInput,
 } from "../../ports/dev-server-process-port";
 import { DevServerProcessStartExitError } from "../../ports/dev-server-process-port";
+import type { TaskWorktreeService } from "../tasks/worktrees/task-worktree-service";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
-import { createDevServerService } from "./dev-server-service";
+import { createDevServerService as createEffectDevServerService } from "./dev-server-service";
 
+const createDevServerService = (input: Parameters<typeof createEffectDevServerService>[0]) =>
+  createEffectDevServerService(input);
 const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
@@ -30,18 +35,26 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   agentDefaults: {},
   ...overrides,
 });
-
 const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsService =>
   ({
-    async getRepoConfigByRepoPath(repoPath: unknown) {
-      if (repoPath !== "/repo") {
-        throw new Error(`Workspace is not configured for repository: ${String(repoPath)}`);
-      }
-
-      return config;
+    getRepoConfigByRepoPath(repoPath: unknown) {
+      return Effect.try({
+        try: () => {
+          if (repoPath !== "/repo") {
+            throw new Error(`Workspace is not configured for repository: ${String(repoPath)}`);
+          }
+          return config;
+        },
+        catch: (cause) =>
+          toHostOperationError(cause, "test.workspaceSettings.getRepoConfigByRepoPath"),
+      });
     },
-  }) as WorkspaceSettingsService;
-
+  }) as unknown as WorkspaceSettingsService;
+const createTaskWorktreeService = (worktree: TaskWorktreeSummary | null): TaskWorktreeService => ({
+  getTaskWorktree() {
+    return Effect.succeed(worktree);
+  },
+});
 const createEventBus = () => {
   const events: unknown[] = [];
   const eventBus: HostEventBusPort = {
@@ -54,45 +67,47 @@ const createEventBus = () => {
   };
   return { eventBus, events };
 };
-
 const createProcessPort = () => {
   const starts: DevServerProcessStartInput[] = [];
   const stoppedPids: number[] = [];
   const handles = new Map<number, DevServerProcessHandle>();
   let nextPid = 400;
-
   const processPort: DevServerProcessPort = {
-    async start(input) {
+    start(input) {
       starts.push(input);
       const pid = nextPid;
       nextPid += 1;
       input.onOutput({ data: "ready\n" });
       const handle: DevServerProcessHandle = {
         pid,
-        async stop() {
-          stoppedPids.push(pid);
-          input.onExit({ pid, exitCode: 0, signal: null, error: null });
+        stop() {
+          return Effect.try({
+            try: () => {
+              stoppedPids.push(pid);
+              input.onExit({ pid, exitCode: 0, signal: null, error: null });
+            },
+            catch: (cause) => toHostOperationError(cause, "test.devServerProcess.stop"),
+          });
         },
       };
       handles.set(pid, handle);
-      return handle;
+      return Effect.succeed(handle);
     },
   };
-
   return { handles, processPort, starts, stoppedPids };
 };
-
 describe("createDevServerService", () => {
   test("returns stopped state for configured dev server scripts", async () => {
     const service = createDevServerService({
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-
     await expect(
-      service.getState({
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      Effect.runPromise(
+        service.getState({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toMatchObject({
       repoPath: "/canonical/repo",
       taskId: "task-1",
@@ -113,46 +128,38 @@ describe("createDevServerService", () => {
       updatedAt: expect.any(String),
     });
   });
-
   test("includes the deterministic task worktree when resolved", async () => {
     const service = createDevServerService({
-      taskWorktreeService: {
-        async getTaskWorktree() {
-          return { workingDirectory: "/worktrees/task-1" };
-        },
-      },
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-
     await expect(
-      service.getState({
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      Effect.runPromise(
+        service.getState({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toMatchObject({
       worktreePath: "/worktrees/task-1",
     });
   });
-
   test("starts configured scripts in the deterministic task worktree", async () => {
     const { eventBus, events } = createEventBus();
     const { processPort, starts } = createProcessPort();
     const service = createDevServerService({
       eventBus,
       processPort,
-      taskWorktreeService: {
-        async getTaskWorktree() {
-          return { workingDirectory: "/worktrees/task-1" };
-        },
-      },
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-
     await expect(
-      service.start({
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      Effect.runPromise(
+        service.start({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toMatchObject({
       worktreePath: "/worktrees/task-1",
       scripts: [
@@ -201,80 +208,63 @@ describe("createDevServerService", () => {
       ]),
     );
   });
-
   test("rejects duplicate starts while a script is running", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({
       processPort,
-      taskWorktreeService: {
-        async getTaskWorktree() {
-          return { workingDirectory: "/worktrees/task-1" };
-        },
-      },
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-
-    await service.start({ repoPath: "/repo", taskId: "task-1" });
-
-    await expect(service.start({ repoPath: "/repo", taskId: "task-1" })).rejects.toThrow(
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    await expect(
+      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" })),
+    ).rejects.toThrow(
       "Dev servers are already running for task task-1. Stop or restart them instead.",
     );
   });
-
   test("requires a builder worktree before starting scripts", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({
       processPort,
-      taskWorktreeService: {
-        async getTaskWorktree() {
-          return null;
-        },
-      },
+      taskWorktreeService: createTaskWorktreeService(null),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-
-    await expect(service.start({ repoPath: "/repo", taskId: "task-1" })).rejects.toThrow(
+    await expect(
+      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" })),
+    ).rejects.toThrow(
       "Builder continuation cannot start until a builder worktree exists for task task-1. Start Builder first.",
     );
   });
-
   test("fails start when no dev server scripts are configured", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({
       processPort,
-      taskWorktreeService: {
-        async getTaskWorktree() {
-          return { workingDirectory: "/worktrees/task-1" };
-        },
-      },
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig({ devServers: [] })),
     });
-
-    await expect(service.start({ repoPath: "/repo", taskId: "task-1" })).rejects.toThrow(
+    await expect(
+      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" })),
+    ).rejects.toThrow(
       "No builder dev server scripts are configured for /canonical/repo. Add them in repository settings first.",
     );
   });
-
   test("keeps successful scripts running when another script fails to start", async () => {
     const processPort: DevServerProcessPort = {
-      async start(input) {
+      start(input) {
         if (input.command === "exit 42") {
-          throw new DevServerProcessStartExitError(42, null);
+          return Effect.fail(new DevServerProcessStartExitError(42, null)) as unknown as ReturnType<
+            DevServerProcessPort["start"]
+          >;
         }
-
-        return {
+        return Effect.succeed({
           pid: 501,
-          async stop() {},
-        };
+          stop: () => Effect.succeed(undefined),
+        });
       },
     };
     const service = createDevServerService({
       processPort,
-      taskWorktreeService: {
-        async getTaskWorktree() {
-          return { workingDirectory: "/worktrees/task-1" };
-        },
-      },
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(
         repoConfig({
           devServers: [
@@ -284,8 +274,9 @@ describe("createDevServerService", () => {
         }),
       ),
     });
-
-    await expect(service.start({ repoPath: "/repo", taskId: "task-1" })).resolves.toMatchObject({
+    await expect(
+      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toMatchObject({
       scripts: [
         { scriptId: "web", status: "running", pid: 501 },
         {
@@ -298,31 +289,27 @@ describe("createDevServerService", () => {
       ],
     });
   });
-
   test("does not mark a script running when it exits before the handle is recorded", async () => {
     const processPort: DevServerProcessPort = {
-      async start(input) {
+      start(input) {
         input.onExit({ pid: 601, exitCode: 9, signal: null, error: null });
-        return {
+        return Effect.succeed({
           pid: 601,
-          async stop() {},
-        };
+          stop: () => Effect.succeed(undefined),
+        });
       },
     };
     const service = createDevServerService({
       processPort,
-      taskWorktreeService: {
-        async getTaskWorktree() {
-          return { workingDirectory: "/worktrees/task-1" };
-        },
-      },
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-
-    await expect(service.start({ repoPath: "/repo", taskId: "task-1" })).rejects.toThrow(
-      "Dev server exited with code 9.",
-    );
-    await expect(service.getState({ repoPath: "/repo", taskId: "task-1" })).resolves.toMatchObject({
+    await expect(
+      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" })),
+    ).rejects.toThrow("Dev server exited with code 9.");
+    await expect(
+      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toMatchObject({
       scripts: [
         {
           scriptId: "web",
@@ -334,41 +321,31 @@ describe("createDevServerService", () => {
       ],
     });
   });
-
   test("stops running scripts and returns stopped state", async () => {
     const { processPort, stoppedPids } = createProcessPort();
     const service = createDevServerService({
       processPort,
-      taskWorktreeService: {
-        async getTaskWorktree() {
-          return { workingDirectory: "/worktrees/task-1" };
-        },
-      },
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-    await service.start({ repoPath: "/repo", taskId: "task-1" });
-
-    await expect(service.stop({ repoPath: "/repo", taskId: "task-1" })).resolves.toMatchObject({
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    await expect(
+      Effect.runPromise(service.stop({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toMatchObject({
       scripts: [{ scriptId: "web", status: "stopped", pid: null }],
     });
     expect(stoppedPids).toEqual([400]);
   });
-
   test("stops all running task dev server groups during host shutdown", async () => {
     const { processPort, stoppedPids } = createProcessPort();
     const service = createDevServerService({
       processPort,
-      taskWorktreeService: {
-        async getTaskWorktree() {
-          return { workingDirectory: "/worktrees/task" };
-        },
-      },
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-    await service.start({ repoPath: "/repo", taskId: "task-1" });
-    await service.start({ repoPath: "/repo", taskId: "task-2" });
-
-    await expect(service.stopAll()).resolves.toEqual({
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-2" }));
+    await expect(Effect.runPromise(service.stopAll())).resolves.toEqual({
       stoppedScripts: [
         {
           command: "bun run dev",
@@ -388,7 +365,6 @@ describe("createDevServerService", () => {
         },
       ],
     });
-
     expect(stoppedPids).toEqual([400, 401]);
   });
 });

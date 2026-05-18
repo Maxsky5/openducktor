@@ -1,9 +1,10 @@
-import type { GlobalConfig, RepoConfig } from "@openducktor/contracts";
+import type { GlobalConfig, RepoConfig, RuntimeInstanceSummary } from "@openducktor/contracts";
 import {
   type CodexAppServerPort,
   createRuntimeDefinitionsService,
   createRuntimeRegistry,
   type DevServerProcessPort,
+  Effect,
   type FilesystemPort,
   type GitPort,
   type HostEventBusPort,
@@ -19,7 +20,7 @@ import {
 } from "@openducktor/host";
 import { createElectronHostCommandRouter as createProductionElectronHostCommandRouter } from "./electron-host";
 
-type RuntimeRegistryEntry = Awaited<ReturnType<RuntimeRegistryPort["listRuntimes"]>>[number];
+type RuntimeRegistryEntry = RuntimeInstanceSummary;
 
 const createElectronHostCommandRouter = (
   input: Parameters<typeof createProductionElectronHostCommandRouter>[0] = {},
@@ -31,17 +32,19 @@ const createElectronHostCommandRouter = (
 
 const createFilesystem = (): FilesystemPort => ({
   homeDirectory: () => "/home/dev",
-  canonicalize: async (path) => path,
-  readDirectory: async (path) => [
-    {
-      name: "repo",
-      path: `${path}/repo`,
-    },
-  ],
-  stat: async (path) => ({
-    isDirectory: !path.endsWith("file.txt"),
-  }),
-  exists: async (path) => path.endsWith("/repo/.git"),
+  canonicalize: (path) => Effect.succeed(path),
+  readDirectory: (path) =>
+    Effect.succeed([
+      {
+        name: "repo",
+        path: `${path}/repo`,
+      },
+    ]),
+  stat: (path) =>
+    Effect.succeed({
+      isDirectory: !path.endsWith("file.txt"),
+    }),
+  exists: (path) => Effect.succeed(path.endsWith("/repo/.git")),
   join: (...paths) => paths.join("/").replaceAll(/\/+/g, "/"),
   parent: (path) => {
     const parent = path.split("/").slice(0, -1).join("/");
@@ -94,10 +97,8 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
 });
 
 const createSettingsConfig = (config: unknown | null = null): SettingsConfigPort => ({
-  async readConfig() {
-    return config;
-  },
-  async writeConfig() {},
+  readConfig: () => Effect.succeed(config),
+  writeConfig: () => Effect.succeed(undefined),
   defaultWorktreeBasePath(workspaceId) {
     return `/home/dev/.openducktor/worktrees/${workspaceId}`;
   },
@@ -107,46 +108,26 @@ const createSettingsConfig = (config: unknown | null = null): SettingsConfigPort
   resolveConfiguredPath(rawPath) {
     return rawPath;
   },
-  async canonicalizePath(rawPath) {
-    return rawPath;
-  },
-  async pathExists() {
-    return true;
-  },
+  canonicalizePath: (rawPath) => Effect.succeed(rawPath),
+  pathExists: () => Effect.succeed(true),
   join: (...paths) => paths.join("/").replaceAll(/\/+/g, "/"),
 });
 
 const createGit = (): GitPort => ({
-  async canonicalizePath(path) {
-    return path;
-  },
-  async isGitRepository() {
-    return true;
-  },
-  async shareGitCommonDirectory() {
-    return true;
-  },
-  async referenceExists(_workingDir, reference) {
-    return reference === "origin/main";
-  },
-  async configureBranchUpstream() {
-    return { createdTrackingRef: "refs/remotes/origin/odt/task-1-task-1" };
-  },
-  async deleteReference() {},
-  async listRemotes() {
-    return [{ name: "origin", url: "git@github.com:openai/openducktor.git" }];
-  },
-  async listBranches() {
-    return [{ name: "main", isCurrent: true, isRemote: false }];
-  },
-  async getCurrentBranch() {
-    return { name: "main", detached: false, revision: "abc123" };
-  },
-  async getStatus() {
-    return [{ path: "src/main.ts", status: "modified", staged: false }];
-  },
-  async getDiff() {
-    return [
+  canonicalizePath: (path) => Effect.succeed(path),
+  isGitRepository: () => Effect.succeed(true),
+  shareGitCommonDirectory: () => Effect.succeed(true),
+  referenceExists: (_workingDir, reference) => Effect.succeed(reference === "origin/main"),
+  configureBranchUpstream: () =>
+    Effect.succeed({ createdTrackingRef: "refs/remotes/origin/odt/task-1-task-1" }),
+  deleteReference: () => Effect.succeed(undefined),
+  listRemotes: () =>
+    Effect.succeed([{ name: "origin", url: "git@github.com:openai/openducktor.git" }]),
+  listBranches: () => Effect.succeed([{ name: "main", isCurrent: true, isRemote: false }]),
+  getCurrentBranch: () => Effect.succeed({ name: "main", detached: false, revision: "abc123" }),
+  getStatus: () => Effect.succeed([{ path: "src/main.ts", status: "modified", staged: false }]),
+  getDiff: () =>
+    Effect.succeed([
       {
         file: "src/main.ts",
         type: "modified",
@@ -154,10 +135,9 @@ const createGit = (): GitPort => ({
         deletions: 1,
         diff: "@@ -1 +1 @@\n-old\n+new\n",
       },
-    ];
-  },
-  async getWorktreeStatusData() {
-    return {
+    ]),
+  getWorktreeStatusData: () =>
+    Effect.succeed({
       currentBranch: { name: "main", detached: false, revision: "abc123" },
       fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
       fileDiffs: [
@@ -171,93 +151,66 @@ const createGit = (): GitPort => ({
       ],
       targetAheadBehind: { ahead: 3, behind: 2 },
       upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
-    };
-  },
-  async getWorktreeStatusSummaryData() {
-    return {
+    }),
+  getWorktreeStatusSummaryData: () =>
+    Effect.succeed({
       currentBranch: { name: "main", detached: false, revision: "abc123" },
       fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
       fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
       targetAheadBehind: { ahead: 3, behind: 2 },
       upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
-    };
-  },
-  async createWorktree() {},
-  async removeWorktree() {},
-  async deleteLocalBranch() {},
-  async isAncestor() {
-    return true;
-  },
-  async suggestedSquashCommitMessage() {
-    return "Ship Electron host";
-  },
-  async mergeBranch() {
-    return {
+    }),
+  createWorktree: () => Effect.succeed(undefined),
+  removeWorktree: () => Effect.succeed(undefined),
+  deleteLocalBranch: () => Effect.succeed(undefined),
+  isAncestor: () => Effect.succeed(true),
+  suggestedSquashCommitMessage: () => Effect.succeed("Ship Electron host"),
+  mergeBranch: () =>
+    Effect.succeed({
       outcome: "merged",
       output: "Merged",
-    };
-  },
-  async switchBranch() {
-    return { name: "feature/electron", detached: false, revision: "def456" };
-  },
-  async resetWorktreeSelection() {
-    return { affectedPaths: ["src/main.ts"] };
-  },
-  async commitsAheadBehind() {
-    return { ahead: 3, behind: 2 };
-  },
-  async fetchRemote() {
-    return { outcome: "fetched", output: "Fetched origin" };
-  },
-  async pullBranch() {
-    return { outcome: "pulled", output: "Fast-forward" };
-  },
-  async commitAll() {
-    return {
+    }),
+  switchBranch: () =>
+    Effect.succeed({ name: "feature/electron", detached: false, revision: "def456" }),
+  resetWorktreeSelection: () => Effect.succeed({ affectedPaths: ["src/main.ts"] }),
+  commitsAheadBehind: () => Effect.succeed({ ahead: 3, behind: 2 }),
+  fetchRemote: () => Effect.succeed({ outcome: "fetched", output: "Fetched origin" }),
+  pullBranch: () => Effect.succeed({ outcome: "pulled", output: "Fast-forward" }),
+  commitAll: () =>
+    Effect.succeed({
       outcome: "committed",
       commitHash: "abc123",
       output: "[feature abc123] Ship Electron host",
-    };
-  },
-  async pushBranch() {
-    return {
+    }),
+  pushBranch: () =>
+    Effect.succeed({
       outcome: "pushed",
       remote: "origin",
       branch: "feature/electron",
       output: "Pushed",
-    };
-  },
-  async rebaseBranch() {
-    return {
+    }),
+  rebaseBranch: () =>
+    Effect.succeed({
       outcome: "rebased",
       output: "Successfully rebased",
-    };
-  },
-  async rebaseAbort() {
-    return {
+    }),
+  rebaseAbort: () =>
+    Effect.succeed({
       outcome: "aborted",
       output: "Successfully aborted rebase",
-    };
-  },
-  async abortConflict() {
-    return {
+    }),
+  abortConflict: () =>
+    Effect.succeed({
       output: "Conflict operation aborted",
-    };
-  },
+    }),
 });
 
 const createOpenInTools = (): OpenInToolsPort => ({
-  async canonicalizeDirectory(directoryPath) {
-    return directoryPath;
-  },
-  async isDirectory() {
-    return true;
-  },
-  async discoverOpenInTools() {
-    return [{ toolId: "finder", iconDataUrl: null }];
-  },
-  async openDirectoryInTool() {},
-  async openExternalUrl() {},
+  canonicalizeDirectory: (directoryPath) => Effect.succeed(directoryPath),
+  isDirectory: () => Effect.succeed(true),
+  discoverOpenInTools: () => Effect.succeed([{ toolId: "finder", iconDataUrl: null }]),
+  openDirectoryInTool: () => Effect.succeed(undefined),
+  openExternalUrl: () => Effect.succeed(undefined),
 });
 
 const createLocalAttachments = (): LocalAttachmentPort => ({
@@ -273,61 +226,50 @@ const createLocalAttachments = (): LocalAttachmentPort => ({
   isAbsolutePath(path) {
     return path.startsWith("/");
   },
-  async canonicalizePath(path) {
-    return path;
-  },
-  async ensureDirectory() {},
-  async writeFile() {},
-  async readDirectory() {
-    return [
+  canonicalizePath: (path) => Effect.succeed(path),
+  ensureDirectory: () => Effect.succeed(undefined),
+  writeFile: () => Effect.succeed(undefined),
+  readDirectory: () =>
+    Effect.succeed([
       {
         path: "/tmp/openducktor-local-attachments/00000000-0000-0000-0000-000000000000-brief.pdf",
         fileName: "00000000-0000-0000-0000-000000000000-brief.pdf",
       },
-    ];
-  },
-  async modifiedTimeMs() {
-    return 1;
-  },
-  async exists() {
-    return true;
-  },
+    ]),
+  modifiedTimeMs: () => Effect.succeed(1),
+  exists: () => Effect.succeed(true),
 });
 
 const createSystemCommands = (): SystemCommandPort => ({
-  async requiredCommandError(command) {
-    return command === "bd" ? "Required command `bd` not found." : null;
-  },
-  async versionCommand(command) {
-    return `${command} version 1.0.0`;
-  },
-  async runCommandAllowFailure(command) {
+  requiredCommandError: (command) =>
+    Effect.succeed(command === "bd" ? "Required command `bd` not found." : null),
+  versionCommand: (command) => Effect.succeed(`${command} version 1.0.0`),
+  runCommandAllowFailure: (command) => {
     if (command === "gh") {
-      return {
+      return Effect.succeed({
         ok: true,
         stdout: "Logged in to github.com account octocat\n",
         stderr: "",
-      };
+      });
     }
-    return { ok: true, stdout: "", stderr: "" };
+    return Effect.succeed({ ok: true, stdout: "", stderr: "" });
   },
 });
 
 const createRuntimeHealth = (): RuntimeHealthPort => ({
-  async getRuntimeHealth(kind) {
-    return {
+  getRuntimeHealth: (kind) =>
+    Effect.succeed({
       kind,
       enabled: true,
       ok: true,
       version: `${kind} 1.0.0`,
       error: null,
-    };
-  },
+    }),
 });
 
 const createTaskStore = (): TaskStorePort => ({
-  async getTask() {
-    return {
+  getTask: () =>
+    Effect.succeed({
       id: "task-1",
       title: "Task 1",
       description: "",
@@ -352,17 +294,15 @@ const createTaskStore = (): TaskStorePort => ({
       },
       updatedAt: "2026-01-02T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z",
-    };
-  },
-  async getTaskMetadata() {
-    return {
+    }),
+  getTaskMetadata: () =>
+    Effect.succeed({
       spec: { markdown: "# Spec", updatedAt: "2026-01-02T00:00:00Z", revision: 1 },
       plan: { markdown: "# Plan", updatedAt: "2026-01-02T00:00:00Z", revision: 1 },
       agentSessions: [],
-    };
-  },
-  async createTask() {
-    return {
+    }),
+  createTask: () =>
+    Effect.succeed({
       id: "task-2",
       title: "Task 2",
       description: "",
@@ -387,10 +327,9 @@ const createTaskStore = (): TaskStorePort => ({
       },
       updatedAt: "2026-01-02T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z",
-    };
-  },
-  async listTasks() {
-    return [
+    }),
+  listTasks: () =>
+    Effect.succeed([
       {
         id: "task-1",
         title: "Task 1",
@@ -417,10 +356,9 @@ const createTaskStore = (): TaskStorePort => ({
         updatedAt: "2026-01-02T00:00:00Z",
         createdAt: "2026-01-01T00:00:00Z",
       },
-    ];
-  },
-  async updateTask() {
-    return {
+    ]),
+  updateTask: () =>
+    Effect.succeed({
       id: "task-1",
       title: "Updated task",
       description: "",
@@ -445,24 +383,21 @@ const createTaskStore = (): TaskStorePort => ({
       },
       updatedAt: "2026-01-02T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z",
-    };
-  },
-  async setSpecDocument(input) {
-    return {
+    }),
+  setSpecDocument: (input) =>
+    Effect.succeed({
       markdown: input.markdown,
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
-    };
-  },
-  async setPlanDocument(input) {
-    return {
+    }),
+  setPlanDocument: (input) =>
+    Effect.succeed({
       markdown: input.markdown,
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
-    };
-  },
-  async recordQaOutcome(input) {
-    return {
+    }),
+  recordQaOutcome: (input) =>
+    Effect.succeed({
       id: input.taskId,
       title: "Task 1",
       description: "",
@@ -492,28 +427,15 @@ const createTaskStore = (): TaskStorePort => ({
       },
       updatedAt: "2026-01-02T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z",
-    };
-  },
-  async upsertAgentSession() {
-    return true;
-  },
-  async setPullRequest() {
-    return true;
-  },
-  async setDirectMerge() {
-    return true;
-  },
-  async clearAgentSessionsByRoles() {
-    return true;
-  },
-  async clearWorkflowDocuments() {
-    return true;
-  },
-  async clearQaReports() {
-    return true;
-  },
-  async transitionTask(input) {
-    return {
+    }),
+  upsertAgentSession: () => Effect.succeed(true),
+  setPullRequest: () => Effect.succeed(true),
+  setDirectMerge: () => Effect.succeed(true),
+  clearAgentSessionsByRoles: () => Effect.succeed(true),
+  clearWorkflowDocuments: () => Effect.succeed(true),
+  clearQaReports: () => Effect.succeed(true),
+  transitionTask: (input) =>
+    Effect.succeed({
       id: input.taskId,
       title: "Task 1",
       description: "",
@@ -538,23 +460,39 @@ const createTaskStore = (): TaskStorePort => ({
       },
       updatedAt: "2026-01-02T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z",
-    };
-  },
-  async deleteTask() {
-    return true;
-  },
+    }),
+  deleteTask: () => Effect.succeed(true),
+  listPullRequestSyncCandidates: () => Effect.succeed([]),
+  diagnoseRepoStore: () =>
+    Effect.succeed({
+      category: "attachment_verification_failed",
+      status: "blocking",
+      isReady: false,
+      detail: "Required command `bd` not found.",
+      attachment: {
+        path: null,
+        databaseName: null,
+      },
+      sharedServer: {
+        host: null,
+        port: null,
+        ownershipState: "unavailable",
+      },
+    }),
 });
 
 const createDevServerProcesses = (): DevServerProcessPort => ({
-  async start(input) {
-    input.onOutput({ data: "ready\n" });
-    return {
-      pid: 1234,
-      async stop() {
-        input.onExit({ pid: 1234, exitCode: 0, signal: null, error: null });
-      },
-    };
-  },
+  start: (input) =>
+    Effect.sync(() => {
+      input.onOutput({ data: "ready\n" });
+      return {
+        pid: 1234,
+        stop() {
+          input.onExit({ pid: 1234, exitCode: 0, signal: null, error: null });
+          return Effect.succeed(undefined);
+        },
+      };
+    }),
 });
 
 const createEventBus = () => {
@@ -584,11 +522,9 @@ describe("createElectronHostCommandRouter", () => {
         },
       },
       runtimeRegistry: {
-        async ensureWorkspaceRuntime() {
-          throw new Error("unexpected runtime start");
-        },
-        async listRuntimes() {
-          return [
+        ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime start"),
+        listRuntimes: () =>
+          Effect.succeed([
             {
               kind: "opencode",
               runtimeId: "runtime-1",
@@ -600,13 +536,30 @@ describe("createElectronHostCommandRouter", () => {
               startedAt: "2026-05-13T00:00:00Z",
               descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
             },
-          ];
-        },
-        async stopRuntime(runtimeId) {
-          stoppedRuntimes.push(runtimeId);
-          return true;
-        },
-        async stopSession() {},
+          ]),
+        stopRuntime: (runtimeId) =>
+          Effect.sync(() => {
+            stoppedRuntimes.push(runtimeId);
+            return true;
+          }),
+        stopAllRuntimes: () =>
+          Effect.sync(() => {
+            stoppedRuntimes.push("runtime-1");
+            return [
+              {
+                kind: "opencode",
+                runtimeId: "runtime-1",
+                repoPath: "/repo",
+                taskId: null,
+                role: "workspace",
+                workingDirectory: "/repo",
+                runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:9999" },
+                startedAt: "2026-05-13T00:00:00Z",
+                descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
+              },
+            ] satisfies RuntimeInstanceSummary[];
+          }),
+        stopSession: () => Effect.succeed(undefined),
       },
       settingsConfig: createSettingsConfig(),
     });
@@ -618,8 +571,8 @@ describe("createElectronHostCommandRouter", () => {
       expect.arrayContaining([
         "Shutting down OpenDucktor host services",
         "No dev servers are running",
-        "Stopping 1 active agent runtime(s)",
-        "Stopping opencode runtime runtime-1 for task workspace (workspace)",
+        "Stopping registered agent runtimes",
+        "Stopped opencode runtime runtime-1 for task workspace (workspace)",
         "No MCP host bridge server is running",
         "No shared Dolt server owned by this OpenDucktor process",
         "OpenDucktor host services stopped",
@@ -696,24 +649,25 @@ describe("createElectronHostCommandRouter", () => {
       throw new Error("OpenCode runtime descriptor missing from test fixture.");
     }
     const workspaceStarter: RuntimeWorkspaceStarterPort = {
-      async startWorkspaceRuntime(input) {
-        runtimeStarts.push(input);
-        const runtime = {
-          kind: "opencode",
-          runtimeId: "runtime-1",
-          repoPath: input.repoPath,
-          taskId: null,
-          role: "workspace",
-          workingDirectory: input.workingDirectory,
-          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
-          startedAt: "2026-05-10T10:00:00.000Z",
-          descriptor: opencodeDescriptor,
-        };
-        return {
-          runtime,
-          async stop() {},
-        };
-      },
+      startWorkspaceRuntime: (input) =>
+        Effect.sync(() => {
+          runtimeStarts.push(input);
+          const runtime = {
+            kind: "opencode",
+            runtimeId: "runtime-1",
+            repoPath: input.repoPath,
+            taskId: null,
+            role: "workspace",
+            workingDirectory: input.workingDirectory,
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+            startedAt: "2026-05-10T10:00:00.000Z",
+            descriptor: opencodeDescriptor,
+          };
+          return {
+            runtime,
+            stop: () => Effect.succeed(undefined),
+          };
+        }),
     };
     const runtimeRegistry = createRuntimeRegistry({ workspaceStarter });
     const router = createElectronHostCommandRouter({
@@ -722,16 +676,15 @@ describe("createElectronHostCommandRouter", () => {
       openInTools: createOpenInTools(),
       runtimeRegistry: {
         ...runtimeRegistry,
-        async probeMcpStatus() {
-          return {
+        probeMcpStatus: () =>
+          Effect.succeed({
             supported: true,
             connected: true,
             serverStatus: "connected",
             toolIds: ["odt_read_task"],
             detail: null,
             failureKind: null,
-          };
-        },
+          }),
       },
       settingsConfig: createSettingsConfig(),
     });
@@ -801,21 +754,25 @@ describe("createElectronHostCommandRouter", () => {
   test("registers migrated Codex app-server host commands", async () => {
     const calls: unknown[] = [];
     const codexAppServer: CodexAppServerPort = {
-      async request(input) {
-        calls.push({ method: "request", input });
-        return { ok: true };
-      },
-      async drainNotifications(runtimeId) {
-        calls.push({ method: "drainNotifications", runtimeId });
-        return [{ method: "codex/app-server/ready" }];
-      },
-      async drainServerRequests(runtimeId) {
-        calls.push({ method: "drainServerRequests", runtimeId });
-        return [{ id: 7, method: "approval/request" }];
-      },
-      async respond(input) {
-        calls.push({ method: "respond", input });
-      },
+      request: (input) =>
+        Effect.sync(() => {
+          calls.push({ method: "request", input });
+          return { ok: true };
+        }),
+      drainNotifications: (runtimeId) =>
+        Effect.sync(() => {
+          calls.push({ method: "drainNotifications", runtimeId });
+          return [{ method: "codex/app-server/ready" }];
+        }),
+      drainServerRequests: (runtimeId) =>
+        Effect.sync(() => {
+          calls.push({ method: "drainServerRequests", runtimeId });
+          return [{ id: 7, method: "approval/request" }];
+        }),
+      respond: (input) =>
+        Effect.sync(() => {
+          calls.push({ method: "respond", input });
+        }),
     };
     const router = createElectronHostCommandRouter({
       codexAppServer,
@@ -1278,18 +1235,13 @@ describe("createElectronHostCommandRouter", () => {
       descriptor: opencodeDescriptor,
     };
     const sessionRuntimeRegistry: RuntimeRegistryPort = {
-      async ensureWorkspaceRuntime() {
-        throw new Error("unexpected runtime ensure");
-      },
-      async listRuntimes() {
-        return [sessionRuntime];
-      },
-      async stopRuntime() {
-        throw new Error("unexpected runtime stop");
-      },
-      async stopSession(input) {
-        stoppedSessions.push(input);
-      },
+      ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime ensure"),
+      listRuntimes: () => Effect.succeed([sessionRuntime]),
+      stopRuntime: () => Effect.dieMessage("unexpected runtime stop"),
+      stopSession: (input) =>
+        Effect.sync(() => {
+          stoppedSessions.push(input);
+        }),
     };
     const sessionTaskStore = createTaskStore();
     const sessionStopRouter = createElectronHostCommandRouter({
@@ -1300,8 +1252,8 @@ describe("createElectronHostCommandRouter", () => {
       settingsConfig: createSettingsConfig(),
       taskStore: {
         ...sessionTaskStore,
-        async getTaskMetadata() {
-          return {
+        getTaskMetadata: () =>
+          Effect.succeed({
             spec: { markdown: "# Spec", updatedAt: "2026-01-02T00:00:00Z", revision: 1 },
             plan: { markdown: "# Plan", updatedAt: "2026-01-02T00:00:00Z", revision: 1 },
             agentSessions: [
@@ -1314,8 +1266,7 @@ describe("createElectronHostCommandRouter", () => {
                 selectedModel: null,
               },
             ],
-          };
-        },
+          }),
       },
     });
     await expect(
@@ -1413,16 +1364,19 @@ describe("createElectronHostCommandRouter", () => {
       ),
       taskStore: {
         ...resetImplementationTaskStore,
-        async listTasks(input) {
-          return (await resetImplementationTaskStore.listTasks(input)).map((entry) => ({
-            ...entry,
-            status: "ai_review" as const,
-            documentSummary: {
-              ...entry.documentSummary,
-              plan: { has: true, updatedAt: "2026-01-02T00:00:00Z" },
-            },
-          }));
-        },
+        listTasks: (input) =>
+          resetImplementationTaskStore.listTasks(input).pipe(
+            Effect.map((entries) =>
+              entries.map((entry) => ({
+                ...entry,
+                status: "ai_review" as const,
+                documentSummary: {
+                  ...entry.documentSummary,
+                  plan: { has: true, updatedAt: "2026-01-02T00:00:00Z" },
+                },
+              })),
+            ),
+          ),
       },
     });
     await expect(
@@ -1439,11 +1393,12 @@ describe("createElectronHostCommandRouter", () => {
       settingsConfig: createSettingsConfig(),
       taskStore: {
         ...pullRequestTaskStore,
-        async getTask(input) {
-          return { ...(await pullRequestTaskStore.getTask(input)), status: "human_review" };
-        },
-        async getTaskMetadata() {
-          return {
+        getTask: (input) =>
+          pullRequestTaskStore
+            .getTask(input)
+            .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
+        getTaskMetadata: () =>
+          Effect.succeed({
             spec: { markdown: "# Spec" },
             plan: { markdown: "# Plan" },
             pullRequest: {
@@ -1455,8 +1410,7 @@ describe("createElectronHostCommandRouter", () => {
               updatedAt: "2026-05-02T00:00:00.000Z",
             },
             agentSessions: [],
-          };
-        },
+          }),
       },
     });
     await expect(
@@ -1495,9 +1449,10 @@ describe("createElectronHostCommandRouter", () => {
       systemCommands: createSystemCommands(),
       taskStore: {
         ...createTaskStore(),
-        async getTask(input) {
-          return { ...(await createTaskStore().getTask(input)), status: "human_review" };
-        },
+        getTask: (input) =>
+          createTaskStore()
+            .getTask(input)
+            .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
       },
     });
     await expect(
@@ -1546,11 +1501,15 @@ describe("createElectronHostCommandRouter", () => {
       ),
       systemCommands: {
         ...createSystemCommands(),
-        async runCommandAllowFailure(_command, args) {
+        runCommandAllowFailure: (_command, args) => {
           if (args.includes("auth")) {
-            return { ok: true, stdout: "Logged in to github.com account octocat\n", stderr: "" };
+            return Effect.succeed({
+              ok: true,
+              stdout: "Logged in to github.com account octocat\n",
+              stderr: "",
+            });
           }
-          return {
+          return Effect.succeed({
             ok: true,
             stdout: JSON.stringify([
               {
@@ -1567,14 +1526,15 @@ describe("createElectronHostCommandRouter", () => {
               },
             ]),
             stderr: "",
-          };
+          });
         },
       },
       taskStore: {
         ...createTaskStore(),
-        async getTask(input) {
-          return { ...(await createTaskStore().getTask(input)), status: "human_review" };
-        },
+        getTask: (input) =>
+          createTaskStore()
+            .getTask(input)
+            .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
       },
     });
     await expect(
@@ -1595,15 +1555,14 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: {
         ...createGit(),
-        async getWorktreeStatusSummaryData() {
-          return {
+        getWorktreeStatusSummaryData: () =>
+          Effect.succeed({
             currentBranch: { name: "main", detached: false, revision: "abc123" },
             fileStatuses: [],
             fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
             targetAheadBehind: { ahead: 3, behind: 2 },
             upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
-          };
-        },
+          }),
       },
       openInTools: createOpenInTools(),
       settingsConfig: createSettingsConfig(
@@ -1630,11 +1589,15 @@ describe("createElectronHostCommandRouter", () => {
       ),
       systemCommands: {
         ...createSystemCommands(),
-        async runCommandAllowFailure(_command, args) {
+        runCommandAllowFailure: (_command, args) => {
           if (args.includes("auth")) {
-            return { ok: true, stdout: "Logged in to github.com account octocat\n", stderr: "" };
+            return Effect.succeed({
+              ok: true,
+              stdout: "Logged in to github.com account octocat\n",
+              stderr: "",
+            });
           }
-          return {
+          return Effect.succeed({
             ok: true,
             stdout: JSON.stringify({
               number: 77,
@@ -1649,14 +1612,15 @@ describe("createElectronHostCommandRouter", () => {
               base: { ref: "main" },
             }),
             stderr: "",
-          };
+          });
         },
       },
       taskStore: {
         ...createTaskStore(),
-        async getTask(input) {
-          return { ...(await createTaskStore().getTask(input)), status: "human_review" };
-        },
+        getTask: (input) =>
+          createTaskStore()
+            .getTask(input)
+            .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
       },
     });
     await expect(
@@ -1699,8 +1663,8 @@ describe("createElectronHostCommandRouter", () => {
       ),
       systemCommands: {
         ...createSystemCommands(),
-        async runCommandAllowFailure() {
-          return {
+        runCommandAllowFailure: () =>
+          Effect.succeed({
             ok: true,
             stdout: JSON.stringify({
               number: 42,
@@ -1715,13 +1679,12 @@ describe("createElectronHostCommandRouter", () => {
               base: { ref: "main" },
             }),
             stderr: "",
-          };
-        },
+          }),
       },
       taskStore: {
         ...createTaskStore(),
-        async listPullRequestSyncCandidates() {
-          return [
+        listPullRequestSyncCandidates: () =>
+          Effect.succeed([
             {
               id: "task-1",
               title: "Task 1",
@@ -1756,8 +1719,7 @@ describe("createElectronHostCommandRouter", () => {
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
             },
-          ];
-        },
+          ]),
       },
     });
     await expect(
@@ -1773,15 +1735,14 @@ describe("createElectronHostCommandRouter", () => {
       settingsConfig: createSettingsConfig(),
       taskStore: {
         ...createTaskStore(),
-        async getTaskMetadata() {
-          return {
+        getTaskMetadata: () =>
+          Effect.succeed({
             spec: { markdown: "# Spec" },
             plan: { markdown: "# Plan" },
             agentSessions: [],
-          };
-        },
-        async getTask() {
-          return {
+          }),
+        getTask: () =>
+          Effect.succeed({
             id: "task-1",
             title: "Task 1",
             description: "",
@@ -1806,10 +1767,9 @@ describe("createElectronHostCommandRouter", () => {
             },
             updatedAt: "2026-01-02T00:00:00Z",
             createdAt: "2026-01-01T00:00:00Z",
-          };
-        },
-        async listTasks() {
-          return [
+          }),
+        listTasks: () =>
+          Effect.succeed([
             {
               id: "task-1",
               title: "Task 1",
@@ -1836,8 +1796,7 @@ describe("createElectronHostCommandRouter", () => {
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
             },
-          ];
-        },
+          ]),
       },
     });
     await expect(
@@ -1885,15 +1844,14 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: {
         ...createGit(),
-        async getWorktreeStatusSummaryData() {
-          return {
+        getWorktreeStatusSummaryData: () =>
+          Effect.succeed({
             currentBranch: { name: "odt/task-1", detached: false, revision: "abc123" },
             fileStatuses: [],
             fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
             targetAheadBehind: { ahead: 1, behind: 0 },
             upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
-          };
-        },
+          }),
       },
       openInTools: createOpenInTools(),
       settingsConfig: createSettingsConfig(
@@ -1904,8 +1862,8 @@ describe("createElectronHostCommandRouter", () => {
       ),
       taskStore: {
         ...createTaskStore(),
-        async listTasks() {
-          return [
+        listTasks: () =>
+          Effect.succeed([
             {
               id: "task-1",
               title: "Task 1",
@@ -1932,8 +1890,7 @@ describe("createElectronHostCommandRouter", () => {
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
             },
-          ];
-        },
+          ]),
       },
     });
     await expect(
@@ -1975,8 +1932,8 @@ describe("createElectronHostCommandRouter", () => {
       systemCommands: createSystemCommands(),
       taskStore: {
         ...createTaskStore(),
-        async listTasks() {
-          return [
+        listTasks: () =>
+          Effect.succeed([
             {
               id: "task-1",
               title: "Task 1",
@@ -2003,8 +1960,7 @@ describe("createElectronHostCommandRouter", () => {
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
             },
-          ];
-        },
+          ]),
       },
     });
     await expect(
@@ -2033,8 +1989,8 @@ describe("createElectronHostCommandRouter", () => {
       ),
       taskStore: {
         ...createTaskStore(),
-        async listTasks() {
-          return [
+        listTasks: () =>
+          Effect.succeed([
             {
               id: "task-1",
               title: "Task 1",
@@ -2061,10 +2017,9 @@ describe("createElectronHostCommandRouter", () => {
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
             },
-          ];
-        },
-        async getTaskMetadata() {
-          return {
+          ]),
+        getTaskMetadata: () =>
+          Effect.succeed({
             spec: { markdown: "# Spec" },
             plan: { markdown: "# Plan" },
             directMerge: {
@@ -2074,8 +2029,7 @@ describe("createElectronHostCommandRouter", () => {
               mergedAt: "2026-05-10T11:00:00.000Z",
             },
             agentSessions: [],
-          };
-        },
+          }),
       },
     });
     await expect(
@@ -2102,8 +2056,8 @@ describe("createElectronHostCommandRouter", () => {
       ),
       taskStore: {
         ...createTaskStore(),
-        async listTasks() {
-          return [
+        listTasks: () =>
+          Effect.succeed([
             {
               id: "task-1",
               title: "Task 1",
@@ -2130,8 +2084,7 @@ describe("createElectronHostCommandRouter", () => {
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
             },
-          ];
-        },
+          ]),
       },
     });
     await expect(
@@ -2172,8 +2125,8 @@ describe("createElectronHostCommandRouter", () => {
       settingsConfig: createSettingsConfig(),
       taskStore: {
         ...createTaskStore(),
-        async listTasks() {
-          return [
+        listTasks: () =>
+          Effect.succeed([
             {
               id: "task-1",
               title: "Task 1",
@@ -2200,8 +2153,7 @@ describe("createElectronHostCommandRouter", () => {
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
             },
-          ];
-        },
+          ]),
       },
     });
     await expect(
@@ -2241,8 +2193,8 @@ describe("createElectronHostCommandRouter", () => {
       settingsConfig: createSettingsConfig(),
       taskStore: {
         ...createTaskStore(),
-        async listTasks() {
-          return [
+        listTasks: () =>
+          Effect.succeed([
             {
               id: "task-1",
               title: "Task 1",
@@ -2269,8 +2221,7 @@ describe("createElectronHostCommandRouter", () => {
               updatedAt: "2026-01-02T00:00:00Z",
               createdAt: "2026-01-01T00:00:00Z",
             },
-          ];
-        },
+          ]),
       },
     });
     await expect(
@@ -2292,13 +2243,11 @@ describe("createElectronHostCommandRouter", () => {
     });
     const settingsConfig: SettingsConfigPort = {
       ...createSettingsConfig(config),
-      async pathExists(path) {
-        return path === "/repo";
-      },
+      pathExists: (path) => Effect.succeed(path === "/repo"),
     };
     const runtimeRegistry: RuntimeRegistryPort = {
-      async ensureWorkspaceRuntime(input) {
-        return {
+      ensureWorkspaceRuntime: (input) =>
+        Effect.succeed({
           kind: input.runtimeKind,
           runtimeId: "runtime-1",
           repoPath: input.repoPath,
@@ -2308,26 +2257,19 @@ describe("createElectronHostCommandRouter", () => {
           runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
           startedAt: "2026-05-10T10:00:00.000Z",
           descriptor: input.descriptor,
-        };
-      },
-      async listRuntimes() {
-        return [];
-      },
-      async stopRuntime() {
-        return false;
-      },
-      async stopSession() {},
+        }),
+      listRuntimes: () => Effect.succeed([]),
+      stopRuntime: () => Effect.succeed(false),
+      stopSession: () => Effect.succeed(undefined),
     };
     const worktreeFiles: WorktreeFilePort = {
-      async ensureDirectory() {},
-      async copyConfiguredPaths() {},
-      async removePathIfPresent() {},
+      ensureDirectory: () => Effect.succeed(undefined),
+      copyConfiguredPaths: () => Effect.succeed(undefined),
+      removePathIfPresent: () => Effect.succeed(undefined),
       resolveWorktreePath(_repoPath, worktreePath) {
         return worktreePath;
       },
-      async pathIsWithinRoot() {
-        return true;
-      },
+      pathIsWithinRoot: () => Effect.succeed(true),
     };
     const router = createElectronHostCommandRouter({
       filesystem: createFilesystem(),

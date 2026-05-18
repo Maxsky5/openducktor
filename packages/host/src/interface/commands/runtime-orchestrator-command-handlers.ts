@@ -5,6 +5,7 @@ import type {
   RuntimeRepoInput,
   RuntimeStopInput,
 } from "../../application/runtimes/runtime-orchestrator-service";
+import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { optionalString, requireRecord, requireString } from "./command-inputs";
 
@@ -38,7 +39,11 @@ const parseAgentSessionStopInput = (args: Record<string, unknown> | undefined) =
     return parsed.data;
   }
 
-  throw new Error(`agent_session_stop input.request is invalid: ${parsed.error.message}`);
+  throw new HostValidationError({
+    message: `agent_session_stop input.request is invalid: ${parsed.error.message}`,
+    field: "request",
+    cause: parsed.error,
+  });
 };
 
 export const createRuntimeOrchestratorCommandHandlers = (

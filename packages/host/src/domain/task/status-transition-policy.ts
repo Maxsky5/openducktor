@@ -1,4 +1,5 @@
 import type { TaskCard, TaskStatus } from "@openducktor/contracts";
+import { TaskPolicyError } from "./task-policy-error";
 
 export const canSkipSpecAndPlanning = (task: TaskCard): boolean =>
   task.issueType === "task" || task.issueType === "bug";
@@ -132,7 +133,9 @@ export const validateTransition = (
   to: TaskStatus,
 ): void => {
   if (!allowsTransition(task, from, to)) {
-    throw new Error(`Transition not allowed for ${task.id} (${task.issueType}): ${from} -> ${to}`);
+    throw new TaskPolicyError(
+      `Transition not allowed for ${task.id} (${task.issueType}): ${from} -> ${to}`,
+    );
   }
 
   if (to !== "closed" || task.issueType !== "epic") {
@@ -146,7 +149,7 @@ export const validateTransition = (
       candidate.status !== "deferred",
   );
   if (blockingSubtask) {
-    throw new Error(
+    throw new TaskPolicyError(
       `Epic cannot be completed while direct subtask ${blockingSubtask.id} is still active.`,
     );
   }
@@ -157,7 +160,7 @@ export const ensurePullRequestManagementStatus = (status: TaskCard["status"]): v
     return;
   }
 
-  throw new Error(
+  throw new TaskPolicyError(
     "Pull request management is only available from in_progress, ai_review, or human_review.",
   );
 };
@@ -167,5 +170,5 @@ export const ensureHumanApprovalStatus = (status: TaskCard["status"]): void => {
     return;
   }
 
-  throw new Error("Human approval is only allowed from ai_review or human_review.");
+  throw new TaskPolicyError("Human approval is only allowed from ai_review or human_review.");
 };

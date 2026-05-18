@@ -6,10 +6,14 @@ import {
   type RuntimeInstanceSummary,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
-import type {
-  RuntimeWorkspaceHandle,
-  RuntimeWorkspaceStarterPort,
-} from "../../ports/runtime-registry-port";
+import { Effect, Exit, Scope } from "effect";
+import {
+  HostOperationError,
+  HostResourceError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
+import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import {
@@ -21,11 +25,9 @@ import {
 } from "../process/process-tree";
 import { resolveCodexBinary } from "../runtimes/runtime-binaries";
 import { createSystemCommandLaunch } from "../system/system-command-runner";
-import {
-  type CodexAppServerEventEmitter,
-  createCodexAppServerTransport,
-} from "./codex-app-server-transport";
+import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { CodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
+import type { CodexAppServerEventEmitter } from "./codex-app-server-transport-types";
 
 type CodexChildProcess = ChildProcessByStdio<Writable, Readable, Readable>;
 
@@ -35,7 +37,10 @@ export type CodexMcpBridgeConnection = {
   hostToken: string;
 };
 
-export type CodexMcpBridgeConnectionResolver = () => Promise<CodexMcpBridgeConnection>;
+export type CodexMcpBridgeConnectionResolver = () => Effect.Effect<
+  CodexMcpBridgeConnection,
+  HostOperationError | HostResourceError
+>;
 
 export type CreateCodexWorkspaceRuntimeStarterInput = {
   systemCommands: SystemCommandPort;
@@ -72,7 +77,10 @@ const resolveConfiguredMcpCommand = (
   if (configuredCommand) {
     const command = configuredCommand.map((entry) => entry.trim());
     if (command.length === 0 || command.some((entry) => entry.length === 0)) {
-      throw new Error("Codex MCP command must contain only non-empty strings.");
+      throw new HostValidationError({
+        message: "Codex MCP command must contain only non-empty strings.",
+        field: "mcpCommand",
+      });
     }
     return command;
   }
@@ -93,7 +101,10 @@ const tomlStringArray = (values: string[]): string =>
 export const buildCodexMcpConfigArgs = (mcpCommand: string[]): string[] => {
   const [mcpBinary, ...mcpArgs] = mcpCommand;
   if (!mcpBinary) {
-    throw new Error("OpenDucktor MCP command cannot be empty.");
+    throw new HostValidationError({
+      message: "OpenDucktor MCP command cannot be empty.",
+      field: "mcpCommand",
+    });
   }
 
   return [
@@ -107,16 +118,66 @@ export const buildCodexMcpConfigArgs = (mcpCommand: string[]): string[] => {
 const requireBridgeValue = (value: string, label: keyof CodexMcpBridgeConnection): string => {
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new Error(`Codex MCP bridge ${label} is required.`);
+    throw new HostValidationError({
+      message: `Codex MCP bridge ${label} is required.`,
+      field: label,
+    });
   }
   return trimmed;
 };
 
-const throwCleanupErrors = (errors: string[]): void => {
-  if (errors.length > 0) {
-    throw new Error(errors.join("\n"));
-  }
-};
+const cleanupCodexRuntime = ({
+  child,
+  closed,
+  codexAppServer,
+  nextRuntimeId,
+  pid,
+  processTreeTerminator,
+  stopTimeoutMs,
+  transport,
+}: {
+  child: CodexChildProcess;
+  closed: () => boolean;
+  codexAppServer: CodexAppServerTransportRegistry;
+  nextRuntimeId: string;
+  pid: number;
+  processTreeTerminator: ProcessTreeTerminator;
+  stopTimeoutMs: number;
+  transport: ReturnType<typeof createCodexAppServerTransport>;
+}) =>
+  Effect.gen(function* () {
+    const errors: string[] = [];
+    codexAppServer.unregisterTransport(nextRuntimeId);
+
+    const processExit = yield* Effect.either(
+      processTreeTerminator({
+        pid,
+        label: `Codex app-server runtime ${nextRuntimeId}`,
+        isClosed: closed,
+        waitForExit: (timeoutMs) => waitForChildProcessClose(child, closed, timeoutMs),
+        stopTimeoutMs,
+      }).pipe(
+        Effect.mapError((cause) =>
+          toHostOperationError(cause, "codexWorkspaceRuntime.stopProcess"),
+        ),
+      ),
+    );
+    if (processExit._tag === "Left") {
+      errors.push(`process tree: ${processExit.left.message}`);
+    }
+
+    yield* transport.close();
+
+    if (errors.length > 0) {
+      return yield* Effect.fail(
+        new HostOperationError({
+          operation: "codexWorkspaceRuntime.cleanup",
+          message: errors.join("\n"),
+          details: { runtimeId: nextRuntimeId },
+        }),
+      );
+    }
+  });
 
 export const createCodexWorkspaceRuntimeStarter = ({
   systemCommands,
@@ -134,130 +195,201 @@ export const createCodexWorkspaceRuntimeStarter = ({
   platform = process.platform,
   processTreeTerminator = terminateProcessTree,
 }: CreateCodexWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
-  async startWorkspaceRuntime(input): Promise<RuntimeWorkspaceHandle> {
-    if (input.runtimeKind !== "codex") {
-      throw new Error(
-        `Codex workspace runtime starter does not support runtime kind ${input.runtimeKind}.`,
+  startWorkspaceRuntime(input) {
+    let scope: Parameters<typeof Scope.close>[0] | null = null;
+    return Effect.gen(function* () {
+      if (input.runtimeKind !== "codex") {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "runtimeKind",
+            message: `Codex workspace runtime starter does not support runtime kind ${input.runtimeKind}.`,
+            details: { runtimeKind: input.runtimeKind },
+          }),
+        );
+      }
+      if (!resolveMcpBridgeConnection) {
+        return yield* Effect.fail(
+          new HostResourceError({
+            resource: "mcpBridgeConnection",
+            operation: "codexWorkspaceRuntime.startWorkspaceRuntime",
+            message: "Codex workspace startup requires an MCP host bridge connection.",
+          }),
+        );
+      }
+
+      const bridge = yield* resolveMcpBridgeConnection().pipe(
+        Effect.mapError((cause) =>
+          toHostOperationError(cause, "codexWorkspaceRuntime.resolveMcpBridgeConnection"),
+        ),
       );
-    }
-    if (!resolveMcpBridgeConnection) {
-      throw new Error("Codex workspace startup requires an MCP host bridge connection.");
-    }
-
-    const bridge = await resolveMcpBridgeConnection();
-    const resolvedMcpCommand =
-      resolveConfiguredMcpCommand(processEnv, mcpCommand) ??
-      (await resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
-    const binary = codexBinary ?? (await resolveCodexBinary(systemCommands, processEnv));
-    const command = createSystemCommandLaunch(
-      binary,
-      [...buildCodexMcpConfigArgs(resolvedMcpCommand), "app-server"],
-      processEnv,
-      platform,
-    );
-    const nextRuntimeId = runtimeId();
-    const child = spawn(command.command, command.args, {
-      cwd: input.workingDirectory,
-      detached: shouldStartDetachedProcessGroup(),
-      env: {
-        ...processEnv,
-        ODT_WORKSPACE_ID: requireBridgeValue(bridge.workspaceId, "workspaceId"),
-        ODT_HOST_URL: requireBridgeValue(bridge.hostUrl, "hostUrl"),
-        ODT_HOST_TOKEN: requireBridgeValue(bridge.hostToken, "hostToken"),
-        ODT_FORBID_WORKSPACE_ID_INPUT: "true",
-        ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsVerbatimArguments: command.windowsVerbatimArguments === true,
-    }) as CodexChildProcess;
-    const pid = child.pid;
-    if (!pid || pid <= 0) {
-      throw new Error("Failed to start Codex app-server: child process has no valid pid.");
-    }
-
-    let closed = false;
-    child.once("close", () => {
-      closed = true;
-    });
-
-    const transport = createCodexAppServerTransport(
-      nextRuntimeId,
-      child,
-      requestTimeoutMs,
-      eventEmitter,
-    );
-    codexAppServer.registerTransport(nextRuntimeId, transport);
-
-    const cleanupCodexRuntime = async (): Promise<void> => {
-      const errors: string[] = [];
-      codexAppServer.unregisterTransport(nextRuntimeId);
-      try {
-        await processTreeTerminator({
-          pid,
-          label: `Codex app-server runtime ${nextRuntimeId}`,
-          isClosed: () => closed,
-          waitForExit: (timeoutMs) => waitForChildProcessClose(child, () => closed, timeoutMs),
-          stopTimeoutMs,
-        });
-      } catch (error) {
-        errors.push(`process tree: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      try {
-        await transport.close();
-      } catch (error) {
-        errors.push(`transport: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      throwCleanupErrors(errors);
-    };
-
-    try {
-      await transport.request({
-        method: "initialize",
-        params: {
-          clientInfo: {
-            name: "openducktor",
-            title: "OpenDucktor",
-            version: clientVersion,
-          },
-          capabilities: {
-            experimentalApi: true,
-            optOutNotificationMethods: [],
-          },
-        },
+      const configuredMcpCommand = yield* Effect.try({
+        try: () => resolveConfiguredMcpCommand(processEnv, mcpCommand),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+            details: { runtimeKind: input.runtimeKind },
+          }),
       });
-      await transport.notify("initialized", {});
-    } catch (error) {
-      try {
-        await cleanupCodexRuntime();
-      } catch (cleanupError) {
-        const startupMessage = error instanceof Error ? error.message : String(error);
-        const cleanupMessage =
-          cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
-        throw new Error(`${startupMessage}\nCleanup failed:\n${cleanupMessage}`, { cause: error });
+      const resolvedMcpCommand =
+        configuredMcpCommand ??
+        (yield* resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
+      const binary = codexBinary ?? (yield* resolveCodexBinary(systemCommands, processEnv));
+      const command = yield* Effect.try({
+        try: () =>
+          createSystemCommandLaunch(
+            binary,
+            [...buildCodexMcpConfigArgs(resolvedMcpCommand), "app-server"],
+            processEnv,
+            platform,
+          ),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+            details: { binary, runtimeKind: input.runtimeKind },
+          }),
+      });
+      const nextRuntimeId = runtimeId();
+      const runtimeScope = yield* Scope.make();
+      scope = runtimeScope;
+      const child = yield* Effect.try({
+        try: () =>
+          spawn(command.command, command.args, {
+            cwd: input.workingDirectory,
+            detached: shouldStartDetachedProcessGroup(platform),
+            env: {
+              ...processEnv,
+              ODT_WORKSPACE_ID: requireBridgeValue(bridge.workspaceId, "workspaceId"),
+              ODT_HOST_URL: requireBridgeValue(bridge.hostUrl, "hostUrl"),
+              ODT_HOST_TOKEN: requireBridgeValue(bridge.hostToken, "hostToken"),
+              ODT_FORBID_WORKSPACE_ID_INPUT: "true",
+              ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
+            },
+            stdio: ["pipe", "pipe", "pipe"],
+            windowsVerbatimArguments: command.windowsVerbatimArguments === true,
+          }) as CodexChildProcess,
+        catch: (cause) =>
+          toHostOperationError(cause, "codexWorkspaceRuntime.spawn", {
+            binary,
+            workingDirectory: input.workingDirectory,
+          }),
+      });
+      const pid = child.pid;
+      if (!pid || pid <= 0) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "codexWorkspaceRuntime.startWorkspaceRuntime",
+            message: "Failed to start Codex app-server: child process has no valid pid.",
+          }),
+        );
       }
-      throw error;
-    }
 
-    const runtime = runtimeInstanceSummarySchema.parse({
-      kind: "codex",
-      runtimeId: nextRuntimeId,
-      repoPath: input.repoPath,
-      taskId: null,
-      role: "workspace",
-      workingDirectory: input.workingDirectory,
-      runtimeRoute: {
-        type: "stdio",
-        identity: nextRuntimeId,
-      },
-      startedAt: now().toISOString(),
-      descriptor: input.descriptor,
-    } satisfies RuntimeInstanceSummary);
+      let closed = false;
+      child.once("close", () => {
+        closed = true;
+      });
 
-    return {
-      runtime,
-      async stop() {
-        await cleanupCodexRuntime();
-      },
-    };
+      const transport = createCodexAppServerTransport(
+        nextRuntimeId,
+        child,
+        requestTimeoutMs,
+        eventEmitter,
+      );
+      codexAppServer.registerTransport(nextRuntimeId, transport);
+
+      const cleanup = cleanupCodexRuntime({
+        child,
+        closed: () => closed,
+        codexAppServer,
+        nextRuntimeId,
+        pid,
+        processTreeTerminator,
+        stopTimeoutMs,
+        transport,
+      });
+      let released = false;
+      const closeRuntime = Effect.gen(function* () {
+        if (released) {
+          return;
+        }
+        released = true;
+        yield* cleanup;
+      });
+      yield* Scope.addFinalizer(runtimeScope, closeRuntime.pipe(Effect.ignore));
+
+      const initialized = yield* Effect.either(
+        Effect.gen(function* () {
+          yield* transport.request({
+            method: "initialize",
+            params: {
+              clientInfo: {
+                name: "openducktor",
+                title: "OpenDucktor",
+                version: clientVersion,
+              },
+              capabilities: {
+                experimentalApi: true,
+                requestAttestation: false,
+                optOutNotificationMethods: [],
+              },
+            },
+          });
+          yield* transport.notify({ method: "initialized" });
+        }),
+      );
+      if (initialized._tag === "Left") {
+        const cleanupExit = yield* Effect.either(closeRuntime);
+        if (cleanupExit._tag === "Left") {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "codexWorkspaceRuntime.initialize",
+              message: `${initialized.left.message}\nCleanup failed:\n${cleanupExit.left.message}`,
+              cause: initialized.left,
+              details: { runtimeId: nextRuntimeId },
+            }),
+          );
+        }
+        return yield* Effect.fail(initialized.left);
+      }
+
+      const runtime = yield* Effect.try({
+        try: () =>
+          runtimeInstanceSummarySchema.parse({
+            kind: "codex",
+            runtimeId: nextRuntimeId,
+            repoPath: input.repoPath,
+            taskId: null,
+            role: "workspace",
+            workingDirectory: input.workingDirectory,
+            runtimeRoute: {
+              type: "stdio",
+              identity: nextRuntimeId,
+            },
+            startedAt: now().toISOString(),
+            descriptor: input.descriptor,
+          } satisfies RuntimeInstanceSummary),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+            details: { runtimeKind: input.runtimeKind, runtimeId: nextRuntimeId },
+          }),
+      });
+
+      return {
+        runtime,
+        stop() {
+          return closeRuntime.pipe(
+            Effect.zipRight(Scope.close(runtimeScope, Exit.succeed(undefined)).pipe(Effect.ignore)),
+            Effect.mapError((cause) => toHostOperationError(cause, "codexWorkspaceRuntime.stop")),
+          );
+        },
+      };
+    }).pipe(
+      Effect.onError(() =>
+        scope ? Scope.close(scope, Exit.fail("startup failed")).pipe(Effect.ignore) : Effect.void,
+      ),
+    );
   },
 });

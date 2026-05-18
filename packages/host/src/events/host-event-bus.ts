@@ -1,3 +1,5 @@
+import { HostValidationError } from "../effect/host-errors";
+
 export const HOST_EVENT_CHANNELS = [
   "openducktor://run-event",
   "openducktor://dev-server-event",
@@ -24,7 +26,11 @@ export const parseHostEventChannel = (value: string): HostEventChannel => {
     return value;
   }
 
-  throw new Error(`Unknown OpenDucktor host event channel: ${value}`);
+  throw new HostValidationError({
+    message: `Unknown OpenDucktor host event channel: ${value}`,
+    field: "channel",
+    details: { value },
+  });
 };
 
 export const createHostEventBus = (): HostEventBusPort => {

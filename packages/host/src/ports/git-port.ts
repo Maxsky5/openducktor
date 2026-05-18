@@ -20,12 +20,24 @@ import type {
   GitResetWorktreeSelectionResult,
   GitUpstreamAheadBehind,
 } from "@openducktor/contracts";
+import { Context, type Effect } from "effect";
+import type {
+  HostOperationError,
+  HostPathAccessError,
+  HostResourceError,
+  HostValidationError,
+} from "../effect/host-errors";
+
+export type GitPortError =
+  | HostOperationError
+  | HostPathAccessError
+  | HostResourceError
+  | HostValidationError;
 
 export type GitRemote = {
   name: string;
   url: string;
 };
-
 export type GitWorktreeStatusData = {
   currentBranch: GitCurrentBranch;
   fileStatuses: FileStatus[];
@@ -34,7 +46,6 @@ export type GitWorktreeStatusData = {
   upstreamAheadBehind: GitUpstreamAheadBehind;
   gitConflict?: GitConflict;
 };
-
 export type GitWorktreeStatusSummaryData = {
   currentBranch: GitCurrentBranch;
   fileStatuses: FileStatus[];
@@ -43,13 +54,11 @@ export type GitWorktreeStatusSummaryData = {
   upstreamAheadBehind: GitUpstreamAheadBehind;
   gitConflict?: GitConflict;
 };
-
 export type GitPushBranchOptions = {
   remote?: string;
   setUpstream?: boolean;
   forceWithLease?: boolean;
 };
-
 export type GitMergeBranchRequest = {
   sourceBranch: string;
   targetBranch: string;
@@ -57,7 +66,6 @@ export type GitMergeBranchRequest = {
   method: GitMergeMethod;
   squashCommitMessage?: string;
 };
-
 export type GitMergeBranchResult =
   | {
       outcome: "merged";
@@ -72,73 +80,104 @@ export type GitMergeBranchResult =
       conflictedFiles: string[];
       output: string;
     };
-
 export type GitBranchUpstreamSetup = {
   createdTrackingRef: string | null;
 };
-
 export type GitPort = {
-  canonicalizePath(path: string): Promise<string>;
-  isGitRepository(path: string): Promise<boolean>;
-  shareGitCommonDirectory(repoPath: string, workingDir: string): Promise<boolean>;
-  referenceExists?(workingDir: string, reference: string): Promise<boolean>;
-  listRemotes(workingDir: string): Promise<GitRemote[]>;
-  listBranches(workingDir: string): Promise<GitBranch[]>;
-  getCurrentBranch(workingDir: string): Promise<GitCurrentBranch>;
-  getStatus(workingDir: string): Promise<FileStatus[]>;
-  getDiff(workingDir: string, targetBranch?: string): Promise<FileDiff[]>;
+  canonicalizePath(path: string): Effect.Effect<string, HostOperationError>;
+  isGitRepository(path: string): Effect.Effect<boolean, GitPortError>;
+  shareGitCommonDirectory(
+    repoPath: string,
+    workingDir: string,
+  ): Effect.Effect<boolean, GitPortError>;
+  referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
+  listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;
+  listBranches(workingDir: string): Effect.Effect<GitBranch[], GitPortError>;
+  getCurrentBranch(workingDir: string): Effect.Effect<GitCurrentBranch, GitPortError>;
+  getStatus(workingDir: string): Effect.Effect<FileStatus[], GitPortError>;
+  getDiff(workingDir: string, targetBranch?: string): Effect.Effect<FileDiff[], GitPortError>;
   getWorktreeStatusData(
     workingDir: string,
     targetBranch: string,
     diffScope: GitDiffScope,
-  ): Promise<GitWorktreeStatusData>;
+  ): Effect.Effect<GitWorktreeStatusData, GitPortError>;
   getWorktreeStatusSummaryData(
     workingDir: string,
     targetBranch: string,
     diffScope: GitDiffScope,
-  ): Promise<GitWorktreeStatusSummaryData>;
+  ): Effect.Effect<GitWorktreeStatusSummaryData, GitPortError>;
   createWorktree(
     repoPath: string,
     worktreePath: string,
     branch: string,
     createBranch: boolean,
     startPoint?: string,
-  ): Promise<void>;
-  configureBranchUpstream?(
+  ): Effect.Effect<void, GitPortError>;
+  configureBranchUpstream(
     repoPath: string,
     worktreePath: string,
     branch: string,
     upstreamRemote: string,
-  ): Promise<GitBranchUpstreamSetup>;
-  deleteReference?(repoPath: string, reference: string): Promise<void>;
-  removeWorktree(repoPath: string, worktreePath: string, force: boolean): Promise<void>;
-  deleteLocalBranch(repoPath: string, branch: string, force: boolean): Promise<void>;
-  isAncestor(workingDir: string, ancestor: string, descendant: string): Promise<boolean>;
+  ): Effect.Effect<GitBranchUpstreamSetup, GitPortError>;
+  deleteReference(repoPath: string, reference: string): Effect.Effect<void, GitPortError>;
+  removeWorktree(
+    repoPath: string,
+    worktreePath: string,
+    force: boolean,
+  ): Effect.Effect<void, GitPortError>;
+  deleteLocalBranch(
+    repoPath: string,
+    branch: string,
+    force: boolean,
+  ): Effect.Effect<void, GitPortError>;
+  isAncestor(
+    workingDir: string,
+    ancestor: string,
+    descendant: string,
+  ): Effect.Effect<boolean, GitPortError>;
   suggestedSquashCommitMessage(
     workingDir: string,
     sourceBranch: string,
     targetBranch: string,
-  ): Promise<string | undefined>;
-  mergeBranch(workingDir: string, request: GitMergeBranchRequest): Promise<GitMergeBranchResult>;
-  switchBranch(workingDir: string, branch: string, create: boolean): Promise<GitCurrentBranch>;
+  ): Effect.Effect<string | undefined, GitPortError>;
+  mergeBranch(
+    workingDir: string,
+    request: GitMergeBranchRequest,
+  ): Effect.Effect<GitMergeBranchResult, GitPortError>;
+  switchBranch(
+    workingDir: string,
+    branch: string,
+    create: boolean,
+  ): Effect.Effect<GitCurrentBranch, GitPortError>;
   resetWorktreeSelection(
     workingDir: string,
     fileDiffs: FileDiff[],
     selection: GitResetWorktreeSelection,
-  ): Promise<GitResetWorktreeSelectionResult>;
-  commitsAheadBehind(workingDir: string, targetBranch: string): Promise<CommitsAheadBehind>;
-  fetchRemote(workingDir: string, targetBranch: string): Promise<GitFetchRemoteResult>;
-  pullBranch(workingDir: string): Promise<GitPullBranchResult>;
-  commitAll(workingDir: string, message: string): Promise<GitCommitAllResult>;
+  ): Effect.Effect<GitResetWorktreeSelectionResult, GitPortError>;
+  commitsAheadBehind(
+    workingDir: string,
+    targetBranch: string,
+  ): Effect.Effect<CommitsAheadBehind, GitPortError>;
+  fetchRemote(
+    workingDir: string,
+    targetBranch: string,
+  ): Effect.Effect<GitFetchRemoteResult, GitPortError>;
+  pullBranch(workingDir: string): Effect.Effect<GitPullBranchResult, GitPortError>;
+  commitAll(workingDir: string, message: string): Effect.Effect<GitCommitAllResult, GitPortError>;
   pushBranch(
     workingDir: string,
     branch: string,
     options?: GitPushBranchOptions,
-  ): Promise<GitPushBranchResult>;
-  rebaseBranch(workingDir: string, targetBranch: string): Promise<GitRebaseBranchResult>;
-  rebaseAbort(workingDir: string): Promise<GitRebaseAbortResult>;
+  ): Effect.Effect<GitPushBranchResult, GitPortError>;
+  rebaseBranch(
+    workingDir: string,
+    targetBranch: string,
+  ): Effect.Effect<GitRebaseBranchResult, GitPortError>;
+  rebaseAbort(workingDir: string): Effect.Effect<GitRebaseAbortResult, GitPortError>;
   abortConflict(
     workingDir: string,
     operation: GitConflictOperation,
-  ): Promise<GitConflictAbortResult>;
+  ): Effect.Effect<GitConflictAbortResult, GitPortError>;
 };
+
+export class GitPortTag extends Context.Tag("@openducktor/host/GitPort")<GitPortTag, GitPort>() {}

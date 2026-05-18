@@ -2,6 +2,14 @@ import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { Effect, type Fiber } from "effect";
+import {
+  type HostOperationError,
+  type HostPathAccessError,
+  type HostPathNotFoundError,
+  HostResourceError,
+  HostValidationError,
+} from "../../effect/host-errors";
 
 export const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 export const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
@@ -50,18 +58,27 @@ export type BeadsCliContext = {
   env: NodeJS.ProcessEnv;
 };
 
+export type BeadsInfrastructureError =
+  | HostOperationError
+  | HostPathAccessError
+  | HostPathNotFoundError
+  | HostResourceError
+  | HostValidationError;
+
 export type EnsureSharedDoltServer = (
   paths: BeadsSharedServerPaths,
-) => Promise<BeadsSharedServerState>;
+) => Effect.Effect<BeadsSharedServerState, BeadsInfrastructureError>;
 
-export type EnsureBeadsAttachment = (context: BeadsCliContext) => Promise<void>;
+export type EnsureBeadsAttachment = (
+  context: BeadsCliContext,
+) => Effect.Effect<void, BeadsInfrastructureError>;
 
 export type BeadsCommandRunner = (input: {
   command: string;
   args: string[];
   cwd?: string;
   env?: NodeJS.ProcessEnv;
-}) => Promise<{ ok: boolean; stdout: string; stderr: string }>;
+}) => Effect.Effect<{ ok: boolean; stdout: string; stderr: string }, BeadsInfrastructureError>;
 
 export type ResolveBeadsCliContextOptions = {
   requireSharedServer?: boolean;
@@ -80,7 +97,10 @@ export type BeadsAttachmentMetadata = {
   dolt_database?: unknown;
 };
 
-export const sharedDoltServerFlights = new Map<string, Promise<BeadsSharedServerState>>();
+export const sharedDoltServerFlights = new Map<
+  string,
+  Fiber.RuntimeFiber<BeadsSharedServerState, BeadsInfrastructureError>
+>();
 
 export type BeadsWherePayload = {
   path?: unknown;
@@ -113,18 +133,28 @@ export const resolveHomeDirectory = (): string => {
     return home;
   }
 
-  throw new Error("Unable to resolve user home directory");
+  throw new HostResourceError({
+    message: "Unable to resolve user home directory",
+    resource: "user-home-directory",
+    operation: "beads.resolve-context",
+  });
 };
 
 export const resolveUserPath = (rawPath: string): string => {
   const trimmed = rawPath.trim();
   if (!trimmed) {
-    throw new Error("Path is empty; provide a valid path");
+    throw new HostValidationError({
+      message: "Path is empty; provide a valid path",
+      field: "path",
+    });
   }
 
   const unquoted = stripMatchingQuotes(trimmed);
   if (!unquoted) {
-    throw new Error("Path is empty; provide a valid path");
+    throw new HostValidationError({
+      message: "Path is empty; provide a valid path",
+      field: "path",
+    });
   }
 
   if (unquoted === "~") {
@@ -148,7 +178,10 @@ export const resolveOpenDucktorBaseDir = (env: NodeJS.ProcessEnv = process.env):
   const envDir = env[OPENDUCKTOR_CONFIG_DIR_ENV];
   if (envDir !== undefined) {
     if (envDir.length === 0) {
-      throw new Error("OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path");
+      throw new HostValidationError({
+        message: "OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path",
+        field: OPENDUCKTOR_CONFIG_DIR_ENV,
+      });
     }
 
     return resolveUserPath(envDir);
@@ -187,13 +220,11 @@ export const sanitizeDatabaseIdentifier = (input: string): string => {
   return trimmed.length > 0 ? trimmed : "repo";
 };
 
-export const canonicalOrAbsolute = async (repoPath: string): Promise<string> => {
+export const canonicalOrAbsolute = (repoPath: string): Effect.Effect<string> => {
   const absolute = path.isAbsolute(repoPath) ? repoPath : path.resolve(repoPath);
-  try {
-    return await realpath(absolute);
-  } catch {
-    return absolute;
-  }
+  return Effect.tryPromise(() => realpath(absolute)).pipe(
+    Effect.catchAll(() => Effect.succeed(absolute)),
+  );
 };
 
 export const databaseName = (canonicalRepoPath: string): string => {
@@ -224,7 +255,10 @@ export const repoId = (canonicalRepoPath: string): string => {
 export const workspaceRepoId = (workspaceId: string): string => {
   const normalizedWorkspaceId = workspaceId.trim();
   if (!normalizedWorkspaceId) {
-    throw new Error("workspaceId is empty; provide a valid workspace id");
+    throw new HostValidationError({
+      message: "workspaceId is empty; provide a valid workspace id",
+      field: "workspaceId",
+    });
   }
   return normalizedWorkspaceId;
 };

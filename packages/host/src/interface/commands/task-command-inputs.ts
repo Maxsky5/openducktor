@@ -18,6 +18,7 @@ import type {
   TransitionTaskInput,
   UpdateTaskInput,
 } from "../../application/tasks/task-inputs";
+import { HostValidationError } from "../../effect/host-errors";
 import {
   compactAgentSessionForStorage,
   optionalBoolean,
@@ -202,7 +203,10 @@ export const parseBuildBlockedInput = (input: unknown): BuildBlockedInput => {
   const record = requireRecord(input, "build_blocked input");
   const reason = typeof record.reason === "string" ? record.reason.trim() : "";
   if (!reason) {
-    throw new Error("build_blocked requires a non-empty reason");
+    throw new HostValidationError({
+      message: "build_blocked requires a non-empty reason",
+      field: "reason",
+    });
   }
   return {
     repoPath: requireString(record.repoPath, "repoPath"),

@@ -4,6 +4,8 @@ import {
   type SpawnSyncReturns,
   spawnSync,
 } from "node:child_process";
+import { Effect } from "effect";
+import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 
 export type ProcessTreePlatform = NodeJS.Platform;
 export type KillProcess = (pid: number, signal?: NodeJS.Signals | 0) => boolean;
@@ -24,12 +26,14 @@ export type TerminateProcessTreeInput = {
   pid: number;
   label: string;
   isClosed: () => boolean;
-  waitForExit: (timeoutMs: number) => Promise<boolean>;
+  waitForExit: (timeoutMs: number) => Effect.Effect<boolean, HostOperationError>;
   stopTimeoutMs: number;
   signalDependencies?: SignalProcessTreeDependencies;
 };
 
-export type ProcessTreeTerminator = (input: TerminateProcessTreeInput) => Promise<void>;
+export type ProcessTreeTerminator = (
+  input: TerminateProcessTreeInput,
+) => Effect.Effect<void, HostOperationError>;
 
 const defaultSignalProcessTreeDependencies = (): SignalProcessTreeDependencies => {
   const kill: KillProcess = process.kill;
@@ -55,7 +59,11 @@ const isAlreadyExitedError = (error: unknown): boolean =>
 
 const assertValidPid = (pid: number, label: string): void => {
   if (!Number.isInteger(pid) || pid <= 0) {
-    throw new Error(`Cannot stop ${label}: invalid process pid ${pid}.`);
+    throw new HostOperationError({
+      message: `Cannot stop ${label}: invalid process pid ${pid}.`,
+      operation: "process-tree.stop",
+      details: { pid, label },
+    });
   }
 };
 
@@ -73,7 +81,11 @@ export const signalProcessTree = (
     if (result.status === 0 || !isAlive(pid)) {
       return;
     }
-    throw new Error(`Failed to stop Windows process tree ${pid} with taskkill for ${signal}.`);
+    throw new HostOperationError({
+      message: `Failed to stop Windows process tree ${pid} with taskkill for ${signal}.`,
+      operation: "process-tree.stop",
+      details: { pid, signal },
+    });
   }
 
   try {
@@ -89,57 +101,80 @@ export const signalProcessTree = (
   }
 };
 
-export const terminateProcessTree = async ({
+const signalProcessTreeEffect = (
+  pid: number,
+  signal: NodeJS.Signals,
+  dependencies?: SignalProcessTreeDependencies,
+) =>
+  Effect.try({
+    try: () => signalProcessTree(pid, signal, dependencies),
+    catch: (cause) => toHostOperationError(cause, "process-tree.signal", { pid, signal }),
+  });
+
+export const terminateProcessTree = ({
   pid,
   label,
   isClosed,
   waitForExit,
   stopTimeoutMs,
   signalDependencies,
-}: TerminateProcessTreeInput): Promise<void> => {
-  assertValidPid(pid, label);
-  if (isClosed()) {
-    return;
-  }
+}: TerminateProcessTreeInput): Effect.Effect<void, HostOperationError> =>
+  Effect.gen(function* () {
+    yield* Effect.try({
+      try: () => assertValidPid(pid, label),
+      catch: (cause) => toHostOperationError(cause, "process-tree.stop", { pid, label }),
+    });
+    if (isClosed()) {
+      return;
+    }
 
-  signalProcessTree(pid, "SIGTERM", signalDependencies);
-  if (isClosed() || (await waitForExit(stopTimeoutMs))) {
-    return;
-  }
+    yield* signalProcessTreeEffect(pid, "SIGTERM", signalDependencies);
+    if (isClosed() || (yield* waitForExit(stopTimeoutMs))) {
+      return;
+    }
 
-  signalProcessTree(pid, "SIGKILL", signalDependencies);
-  if (isClosed() || (await waitForExit(stopTimeoutMs))) {
-    return;
-  }
+    yield* signalProcessTreeEffect(pid, "SIGKILL", signalDependencies);
+    if (isClosed() || (yield* waitForExit(stopTimeoutMs))) {
+      return;
+    }
 
-  throw new Error(
-    `Timed out waiting ${stopTimeoutMs}ms per signal for ${label} process tree ${pid} to stop after SIGTERM and SIGKILL.`,
-  );
-};
+    return yield* Effect.fail(
+      new HostOperationError({
+        message: `Timed out waiting ${stopTimeoutMs}ms per signal for ${label} process tree ${pid} to stop after SIGTERM and SIGKILL.`,
+        operation: "process-tree.stop",
+        details: { pid, label, stopTimeoutMs },
+      }),
+    );
+  });
 
 export const waitForChildProcessClose = (
   child: Pick<ChildProcess, "once" | "off">,
   isClosed: () => boolean,
   timeoutMs: number,
-): Promise<boolean> => {
+): Effect.Effect<boolean> => {
   if (isClosed()) {
-    return Promise.resolve(true);
+    return Effect.succeed(true);
   }
 
-  return new Promise((resolve) => {
-    const onClose = () => {
-      clearTimeout(timeout);
-      resolve(true);
-    };
-    const timeout = setTimeout(() => {
+  return Effect.async<boolean>((resume, signal) => {
+    let settled = false;
+    const finish = (closed: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       child.off("close", onClose);
-      resolve(false);
-    }, timeoutMs);
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", onAbort);
+      resume(Effect.succeed(closed));
+    };
+    const onClose = () => finish(true);
+    const onAbort = () => finish(false);
+    const timeout = setTimeout(() => finish(false), timeoutMs);
+    signal.addEventListener("abort", onAbort, { once: true });
     child.once("close", onClose);
     if (isClosed()) {
-      child.off("close", onClose);
-      clearTimeout(timeout);
-      resolve(true);
+      finish(true);
     }
   });
 };

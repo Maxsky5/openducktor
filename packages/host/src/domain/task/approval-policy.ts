@@ -1,5 +1,6 @@
 import type { GitConflict, GitMergeMethod, TaskApprovalContext } from "@openducktor/contracts";
 import { canonicalTargetBranch, checkoutBranch } from "./task-branch-policy";
+import { TaskPolicyError } from "./task-policy-error";
 
 export const ensureCleanBuilderWorktree = (approval: TaskApprovalContext): void => {
   if (!approval.hasUncommittedChanges) {
@@ -11,7 +12,7 @@ export const ensureCleanBuilderWorktree = (approval: TaskApprovalContext): void 
       ? "1 uncommitted file"
       : `${approval.uncommittedFileCount} uncommitted files`;
   const pronoun = approval.uncommittedFileCount === 1 ? "it" : "them";
-  throw new Error(
+  throw new TaskPolicyError(
     `Human approval is blocked because the builder worktree has ${fileLabel}. Commit or discard ${pronoun} before merging or opening a pull request.`,
   );
 };

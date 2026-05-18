@@ -1,14 +1,17 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
-import type {
-  FileDiff,
-  GitResetWorktreeSelection,
-  GitResetWorktreeSelectionResult,
-} from "@openducktor/contracts";
+import type { FileDiff, GitResetWorktreeSelection } from "@openducktor/contracts";
+import { Effect } from "effect";
+import {
+  HostOperationError,
+  HostResourceError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import {
   combineOutput,
   type GitCommandRunner,
-  requireNonEmpty,
+  requireNonEmptyEffect,
   runGitAllowFailure,
   runGitWithStdinAllowFailure,
 } from "./git-command-runner";
@@ -19,235 +22,313 @@ import {
   type RenamePaths,
 } from "./git-patch";
 
+const gitOperationError = (message: string, operation: string): HostOperationError =>
+  new HostOperationError({ message, operation });
+const gitResourceError = (
+  message: string,
+  operation: string,
+  resource: string,
+): HostResourceError => new HostResourceError({ message, operation, resource });
+const gitValidationError = (message: string, field: string): HostValidationError =>
+  new HostValidationError({ message, field });
 export const findFileDiff = (fileDiffs: FileDiff[], filePath: string): FileDiff => {
   const fileDiff = fileDiffs.find((diff) => diff.file === filePath);
   if (!fileDiff) {
-    throw new Error("Displayed diff is stale. Refresh and try again.");
+    throw gitResourceError(
+      "Displayed diff is stale. Refresh and try again.",
+      "git.reset-worktree-selection",
+      filePath,
+    );
   }
-
   return fileDiff;
 };
-
-export const isTrackedPath = async (
+const findFileDiffEffect = (
+  fileDiffs: FileDiff[],
+  filePath: string,
+): Effect.Effect<FileDiff, HostResourceError> =>
+  Effect.try({
+    try: () => findFileDiff(fileDiffs, filePath),
+    catch: (cause) =>
+      cause instanceof HostResourceError
+        ? cause
+        : gitResourceError(
+            "Displayed diff is stale. Refresh and try again.",
+            "git.reset",
+            filePath,
+          ),
+  });
+const parsePatchHunksEffect = (
+  patch: string,
+): Effect.Effect<ReturnType<typeof parsePatchHunks>, HostValidationError> =>
+  Effect.try({
+    try: () => parsePatchHunks(patch),
+    catch: (cause) =>
+      cause instanceof HostValidationError
+        ? cause
+        : gitValidationError(cause instanceof Error ? cause.message : String(cause), "patch"),
+  });
+const findMatchingCachedHunkEffect = (
+  cachedPatch: ReturnType<typeof parsePatchHunks>,
+  selectedHunk: ReturnType<typeof parsePatchHunks>["hunks"][number],
+): Effect.Effect<ReturnType<typeof findMatchingCachedHunk>, HostValidationError> =>
+  Effect.try({
+    try: () => findMatchingCachedHunk(cachedPatch, selectedHunk),
+    catch: (cause) =>
+      cause instanceof HostValidationError
+        ? cause
+        : gitValidationError(cause instanceof Error ? cause.message : String(cause), "patch"),
+  });
+export const isTrackedPath = (
   runner: GitCommandRunner,
   workingDirectory: string,
   filePath: string,
-): Promise<boolean> => {
-  const result = await runGitAllowFailure(runner, workingDirectory, [
-    "ls-files",
-    "--error-unmatch",
-    "--",
-    filePath,
-  ]);
-  if (result.ok) {
-    return true;
-  }
-
-  const output = combineOutput(result.stdout, result.stderr);
-  if (output.includes("did not match any file") || output.includes("error: pathspec")) {
-    return false;
-  }
-
-  throw new Error(output);
-};
-
-export const runGitApplyReverse = async (
+) =>
+  Effect.gen(function* () {
+    const result = yield* runGitAllowFailure(runner, workingDirectory, [
+      "ls-files",
+      "--error-unmatch",
+      "--",
+      filePath,
+    ]);
+    if (result.ok) {
+      return true;
+    }
+    const output = combineOutput(result.stdout, result.stderr);
+    if (output.includes("did not match any file") || output.includes("error: pathspec")) {
+      return false;
+    }
+    return yield* Effect.fail(gitOperationError(output, "git.ls-files"));
+  });
+export const runGitApplyReverse = (
   runner: GitCommandRunner,
   workingDirectory: string,
   patch: string,
   target: "worktree" | "cached",
   checkOnly: boolean,
-): Promise<void> => {
-  const args = ["apply", "--reverse"];
-  if (target === "cached") {
-    args.push("--cached");
-  }
-  if (checkOnly) {
-    args.push("--check");
-  }
-  args.push("-");
-
-  const result = await runGitWithStdinAllowFailure(runner, workingDirectory, args, patch);
-  if (!result.ok) {
-    throw new Error(combineOutput(result.stdout, result.stderr));
-  }
-};
-
-export const loadCachedPatch = async (
+) =>
+  Effect.gen(function* () {
+    const args = ["apply", "--reverse"];
+    if (target === "cached") {
+      args.push("--cached");
+    }
+    if (checkOnly) {
+      args.push("--check");
+    }
+    args.push("-");
+    const result = yield* runGitWithStdinAllowFailure(runner, workingDirectory, args, patch);
+    if (!result.ok) {
+      return yield* Effect.fail(
+        gitOperationError(combineOutput(result.stdout, result.stderr), "git.apply-reverse"),
+      );
+    }
+  });
+export const loadCachedPatch = (
   runner: GitCommandRunner,
   workingDirectory: string,
   filePath: string,
-): Promise<string> => {
-  const result = await runGitAllowFailure(runner, workingDirectory, [
-    "diff",
-    "--cached",
-    "--",
-    filePath,
-  ]);
-  if (result.ok) {
-    return result.stdout;
-  }
-
-  throw new Error(combineOutput(result.stdout, result.stderr));
-};
-
-export const loadUnstagedPatch = async (
+) =>
+  Effect.gen(function* () {
+    const result = yield* runGitAllowFailure(runner, workingDirectory, [
+      "diff",
+      "--cached",
+      "--",
+      filePath,
+    ]);
+    if (result.ok) {
+      return result.stdout;
+    }
+    return yield* Effect.fail(
+      gitOperationError(combineOutput(result.stdout, result.stderr), "git.diff.cached"),
+    );
+  });
+export const loadUnstagedPatch = (
   runner: GitCommandRunner,
   workingDirectory: string,
   filePath: string,
-): Promise<string> => {
-  const result = await runGitAllowFailure(runner, workingDirectory, ["diff", "--", filePath]);
-  if (result.ok) {
-    return result.stdout;
-  }
-
-  throw new Error(combineOutput(result.stdout, result.stderr));
-};
-
-export const resetRenamedFileSelection = async (
+) =>
+  Effect.gen(function* () {
+    const result = yield* runGitAllowFailure(runner, workingDirectory, ["diff", "--", filePath]);
+    if (result.ok) {
+      return result.stdout;
+    }
+    return yield* Effect.fail(
+      gitOperationError(combineOutput(result.stdout, result.stderr), "git.diff.unstaged"),
+    );
+  });
+export const resetRenamedFileSelection = (
   runner: GitCommandRunner,
   workingDirectory: string,
   renamePaths: RenamePaths,
-): Promise<GitResetWorktreeSelectionResult> => {
-  const restoreResult = await runGitAllowFailure(runner, workingDirectory, [
-    "restore",
-    "--source=HEAD",
-    "--staged",
-    "--worktree",
-    "--",
-    renamePaths.oldPath,
-  ]);
-  if (!restoreResult.ok) {
-    throw new Error(combineOutput(restoreResult.stdout, restoreResult.stderr));
-  }
-
-  const removeResult = await runGitAllowFailure(runner, workingDirectory, [
-    "rm",
-    "--force",
-    "--cached",
-    "--ignore-unmatch",
-    "--",
-    renamePaths.newPath,
-  ]);
-  if (!removeResult.ok) {
-    throw new Error(combineOutput(removeResult.stdout, removeResult.stderr));
-  }
-
-  await rm(path.join(workingDirectory, renamePaths.newPath), { recursive: true, force: true });
-  return { affectedPaths: [renamePaths.oldPath, renamePaths.newPath] };
-};
-
-export const resetFileSelection = async (
+) =>
+  Effect.gen(function* () {
+    const restoreResult = yield* runGitAllowFailure(runner, workingDirectory, [
+      "restore",
+      "--source=HEAD",
+      "--staged",
+      "--worktree",
+      "--",
+      renamePaths.oldPath,
+    ]);
+    if (!restoreResult.ok) {
+      return yield* Effect.fail(
+        gitOperationError(
+          combineOutput(restoreResult.stdout, restoreResult.stderr),
+          "git.restore-renamed-file",
+        ),
+      );
+    }
+    const removeResult = yield* runGitAllowFailure(runner, workingDirectory, [
+      "rm",
+      "--force",
+      "--cached",
+      "--ignore-unmatch",
+      "--",
+      renamePaths.newPath,
+    ]);
+    if (!removeResult.ok) {
+      return yield* Effect.fail(
+        gitOperationError(
+          combineOutput(removeResult.stdout, removeResult.stderr),
+          "git.rm-renamed-file",
+        ),
+      );
+    }
+    yield* Effect.tryPromise({
+      try: () =>
+        rm(path.join(workingDirectory, renamePaths.newPath), { recursive: true, force: true }),
+      catch: (cause) =>
+        toHostOperationError(cause, "git.resetRenamedFileSelection.rm", {
+          path: renamePaths.newPath,
+          workingDirectory,
+        }),
+    });
+    return { affectedPaths: [renamePaths.oldPath, renamePaths.newPath] };
+  });
+export const resetFileSelection = (
   runner: GitCommandRunner,
   workingDirectory: string,
   fileDiffs: FileDiff[],
   filePath: string,
-): Promise<GitResetWorktreeSelectionResult> => {
-  const normalizedFile = requireNonEmpty(filePath, "file path");
-  const fileDiff = findFileDiff(fileDiffs, normalizedFile);
-
-  if (fileDiff.type === "renamed") {
-    const parsedPatch = parsePatchHunks(fileDiff.diff);
-    if (!parsedPatch.renamePaths) {
-      throw new Error(
-        `Cannot reset renamed file ${normalizedFile} because rename metadata is unavailable.`,
+) =>
+  Effect.gen(function* () {
+    const normalizedFile = yield* requireNonEmptyEffect(filePath, "file path");
+    const fileDiff = yield* findFileDiffEffect(fileDiffs, normalizedFile);
+    if (fileDiff.type === "renamed") {
+      const parsedPatch = yield* parsePatchHunksEffect(fileDiff.diff);
+      if (!parsedPatch.renamePaths) {
+        return yield* Effect.fail(
+          gitValidationError(
+            `Cannot reset renamed file ${normalizedFile} because rename metadata is unavailable.`,
+            "renamePaths",
+          ),
+        );
+      }
+      return yield* resetRenamedFileSelection(runner, workingDirectory, parsedPatch.renamePaths);
+    }
+    const result = (yield* isTrackedPath(runner, workingDirectory, normalizedFile))
+      ? yield* runGitAllowFailure(runner, workingDirectory, [
+          "restore",
+          "--source=HEAD",
+          "--staged",
+          "--worktree",
+          "--",
+          normalizedFile,
+        ])
+      : yield* runGitAllowFailure(runner, workingDirectory, ["clean", "-f", "--", normalizedFile]);
+    if (!result.ok) {
+      return yield* Effect.fail(
+        gitOperationError(combineOutput(result.stdout, result.stderr), "git.reset-file-selection"),
       );
     }
-    return resetRenamedFileSelection(runner, workingDirectory, parsedPatch.renamePaths);
-  }
-
-  const result = (await isTrackedPath(runner, workingDirectory, normalizedFile))
-    ? await runGitAllowFailure(runner, workingDirectory, [
-        "restore",
-        "--source=HEAD",
-        "--staged",
-        "--worktree",
-        "--",
-        normalizedFile,
-      ])
-    : await runGitAllowFailure(runner, workingDirectory, ["clean", "-f", "--", normalizedFile]);
-  if (!result.ok) {
-    throw new Error(combineOutput(result.stdout, result.stderr));
-  }
-
-  return { affectedPaths: [normalizedFile] };
-};
-
-export const resetHunkSelection = async (
+    return { affectedPaths: [normalizedFile] };
+  });
+export const resetHunkSelection = (
   runner: GitCommandRunner,
   workingDirectory: string,
   fileDiffs: FileDiff[],
   filePath: string,
   hunkIndex: number,
-): Promise<GitResetWorktreeSelectionResult> => {
-  const normalizedFile = requireNonEmpty(filePath, "file path");
-  const fileDiff = findFileDiff(fileDiffs, normalizedFile);
-  if (!fileDiff.diff.trim()) {
-    throw new Error(`Cannot reset hunk because diff content is unavailable for ${normalizedFile}.`);
-  }
-  if (fileDiff.type === "renamed") {
-    throw new Error(
-      "Cannot reset an individual hunk for a renamed file. Reset the whole file instead.",
-    );
-  }
-
-  const parsedPatch = parsePatchHunks(fileDiff.diff);
-  if (parsedPatch.renamePaths) {
-    throw new Error(
-      "Cannot reset an individual hunk for a renamed file. Reset the whole file instead.",
-    );
-  }
-
-  const selectedHunk = parsedPatch.hunks[hunkIndex];
-  if (!selectedHunk) {
-    throw new Error(`Requested hunk ${hunkIndex} does not exist for ${normalizedFile}.`);
-  }
-
-  const worktreePatch = combinePatchHunk(parsedPatch.header, selectedHunk);
-  await runGitApplyReverse(runner, workingDirectory, worktreePatch, "worktree", true);
-
-  const cachedPatchText = await loadCachedPatch(runner, workingDirectory, normalizedFile);
-  const unstagedPatchText = await loadUnstagedPatch(runner, workingDirectory, normalizedFile);
-  let cachedReversePatch: string | undefined;
-  if (cachedPatchText.trim()) {
-    if (!unstagedPatchText.trim()) {
-      await runGitApplyReverse(runner, workingDirectory, worktreePatch, "cached", true);
-      cachedReversePatch = worktreePatch;
-    } else {
-      const cachedPatch = parsePatchHunks(cachedPatchText);
-      if (cachedPatch.renamePaths) {
-        throw new Error(
-          "Cannot reset an individual hunk for a renamed file while staged changes are present. Reset the whole file instead.",
-        );
-      }
-
-      const cachedHunk = findMatchingCachedHunk(cachedPatch, selectedHunk);
-      if (cachedHunk) {
-        const patch = combinePatchHunk(cachedPatch.header, cachedHunk);
-        await runGitApplyReverse(runner, workingDirectory, patch, "cached", true);
-        cachedReversePatch = patch;
+) =>
+  Effect.gen(function* () {
+    const normalizedFile = yield* requireNonEmptyEffect(filePath, "file path");
+    const fileDiff = yield* findFileDiffEffect(fileDiffs, normalizedFile);
+    if (!fileDiff.diff.trim()) {
+      return yield* Effect.fail(
+        gitValidationError(
+          `Cannot reset hunk because diff content is unavailable for ${normalizedFile}.`,
+          "diff",
+        ),
+      );
+    }
+    if (fileDiff.type === "renamed") {
+      return yield* Effect.fail(
+        gitValidationError(
+          "Cannot reset an individual hunk for a renamed file. Reset the whole file instead.",
+          "filePath",
+        ),
+      );
+    }
+    const parsedPatch = yield* parsePatchHunksEffect(fileDiff.diff);
+    if (parsedPatch.renamePaths) {
+      return yield* Effect.fail(
+        gitValidationError(
+          "Cannot reset an individual hunk for a renamed file. Reset the whole file instead.",
+          "filePath",
+        ),
+      );
+    }
+    const selectedHunk = parsedPatch.hunks[hunkIndex];
+    if (!selectedHunk) {
+      return yield* Effect.fail(
+        gitResourceError(
+          `Requested hunk ${hunkIndex} does not exist for ${normalizedFile}.`,
+          "git.reset-hunk-selection",
+          normalizedFile,
+        ),
+      );
+    }
+    const worktreePatch = combinePatchHunk(parsedPatch.header, selectedHunk);
+    yield* runGitApplyReverse(runner, workingDirectory, worktreePatch, "worktree", true);
+    const cachedPatchText = yield* loadCachedPatch(runner, workingDirectory, normalizedFile);
+    const unstagedPatchText = yield* loadUnstagedPatch(runner, workingDirectory, normalizedFile);
+    let cachedReversePatch: string | undefined;
+    if (cachedPatchText.trim()) {
+      if (!unstagedPatchText.trim()) {
+        yield* runGitApplyReverse(runner, workingDirectory, worktreePatch, "cached", true);
+        cachedReversePatch = worktreePatch;
+      } else {
+        const cachedPatch = yield* parsePatchHunksEffect(cachedPatchText);
+        if (cachedPatch.renamePaths) {
+          return yield* Effect.fail(
+            gitValidationError(
+              "Cannot reset an individual hunk for a renamed file while staged changes are present. Reset the whole file instead.",
+              "filePath",
+            ),
+          );
+        }
+        const cachedHunk = yield* findMatchingCachedHunkEffect(cachedPatch, selectedHunk);
+        if (cachedHunk) {
+          const patch = combinePatchHunk(cachedPatch.header, cachedHunk);
+          yield* runGitApplyReverse(runner, workingDirectory, patch, "cached", true);
+          cachedReversePatch = patch;
+        }
       }
     }
-  }
-
-  if (cachedReversePatch) {
-    await runGitApplyReverse(runner, workingDirectory, cachedReversePatch, "cached", false);
-  }
-  await runGitApplyReverse(runner, workingDirectory, worktreePatch, "worktree", false);
-
-  return { affectedPaths: [normalizedFile] };
-};
-
+    if (cachedReversePatch) {
+      yield* runGitApplyReverse(runner, workingDirectory, cachedReversePatch, "cached", false);
+    }
+    yield* runGitApplyReverse(runner, workingDirectory, worktreePatch, "worktree", false);
+    return { affectedPaths: [normalizedFile] };
+  });
 export const resetWorktreeSelection = (
   runner: GitCommandRunner,
   workingDirectory: string,
   fileDiffs: FileDiff[],
   selection: GitResetWorktreeSelection,
-): Promise<GitResetWorktreeSelectionResult> => {
+) => {
   if (selection.kind === "file") {
     return resetFileSelection(runner, workingDirectory, fileDiffs, selection.filePath);
   }
-
   return resetHunkSelection(
     runner,
     workingDirectory,

@@ -1,3 +1,6 @@
+import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
+import type { TaskService } from "./task-service";
 import {
   createAgentSessionRecord,
   createAgentSessionSettingsConfig,
@@ -12,42 +15,102 @@ describe("createTaskService list and session reads", () => {
   test("loads tasks and enriches available actions and workflow state", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks(input) {
-        calls.push(input);
-        return [
-          task({
-            id: "epic-1",
-            issueType: "epic",
-            status: "human_review",
-            documentSummary: {
-              spec: { has: true, updatedAt: "2026-01-03T00:00:00Z" },
-              plan: { has: true, updatedAt: "2026-01-04T00:00:00Z" },
-              qaReport: { has: false, verdict: "not_reviewed" },
-            },
-          }),
-          task({ id: "task-2", parentId: "epic-1" }),
-        ];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push(input);
+            return [
+              task({
+                id: "epic-1",
+                issueType: "epic",
+                status: "human_review",
+                documentSummary: {
+                  spec: { has: true, updatedAt: "2026-01-03T00:00:00Z" },
+                  plan: { has: true, updatedAt: "2026-01-04T00:00:00Z" },
+                  qaReport: { has: false, verdict: "not_reviewed" },
+                },
+              }),
+              task({ id: "task-2", parentId: "epic-1" }),
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     const service = createTaskService({ taskStore });
-    const tasks = await service.listTasks({ repoPath: "/repo", doneVisibleDays: 3 });
-
+    const tasks = await Effect.runPromise(
+      service.listTasks({ repoPath: "/repo", doneVisibleDays: 3 }),
+    );
     expect(calls).toEqual([{ repoPath: "/repo", doneVisibleDays: 3 }]);
     expect(tasks[0]).toMatchObject({
       id: "epic-1",
@@ -70,69 +133,185 @@ describe("createTaskService list and session reads", () => {
       },
     });
   });
-
   test("allows human approval only when an epic has no active direct subtasks", async () => {
     const taskStore: TaskStorePort = {
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        return [
-          task({
-            id: "epic-1",
-            issueType: "epic",
-            status: "human_review",
-          }),
-          task({ id: "task-2", parentId: "epic-1", status: "closed" }),
-        ];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [
+              task({
+                id: "epic-1",
+                issueType: "epic",
+                status: "human_review",
+              }),
+              task({ id: "task-2", parentId: "epic-1", status: "closed" }),
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
-    const tasks = await createTaskService({ taskStore }).listTasks({ repoPath: "/repo" });
-
+    const tasks = await Effect.runPromise(
+      createTaskService({ taskStore }).listTasks({ repoPath: "/repo" }),
+    );
     expect(tasks[0]?.availableActions).toContain("human_approve");
   });
-
   test("rejects invalid list command input before calling the service", async () => {
     const taskStore: TaskStorePort = {
-      async createTask() {
-        throw new Error("should not call store");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call store");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("should not call store");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call store");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("should not call store");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call store");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("should not call store");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call store");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("should not call store");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call store");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("should not call store");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call store");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     const { createTaskCommandHandlers } = await import(
       "../../interface/commands/task-command-handlers"
     );
     const service = createTaskService({ taskStore });
-    const handlers = createTaskCommandHandlers(service);
-
+    const handlers = createTaskCommandHandlers(service as unknown as TaskService);
     expect(() =>
       handlers.tasks_list?.(
         { repoPath: "/repo", doneVisibleDays: -1 },
@@ -140,49 +319,139 @@ describe("createTaskService list and session reads", () => {
       ),
     ).toThrow("doneVisibleDays must be greater than or equal to 0.");
   });
-
   test("loads task metadata through the task store", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
-      async getTaskMetadata(input) {
-        calls.push(input);
-        return {
-          spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
-          plan: { markdown: "# Plan" },
-          agentSessions: [],
-        };
+      getTaskMetadata(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push(input);
+            return {
+              spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
+              plan: { markdown: "# Plan" },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).getTaskMetadata({
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).getTaskMetadata({
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toEqual({
       spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
       plan: { markdown: "# Plan" },
@@ -190,72 +459,176 @@ describe("createTaskService list and session reads", () => {
     });
     expect(calls).toEqual([{ repoPath: "/repo", taskId: "task-1" }]);
   });
-
   test("loads Tauri-compatible document and agent-session read commands from metadata", async () => {
     const calls: unknown[] = [];
     const session = createAgentSessionRecord();
     const taskStore: TaskStorePort = {
-      async getTaskMetadata(input) {
-        calls.push(input);
-        return {
-          spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
-          plan: { markdown: "# Plan", updatedAt: "2026-05-10T11:00:00.000Z", revision: 2 },
-          qaReport: {
-            markdown: "# QA",
-            verdict: "approved",
-            updatedAt: "2026-05-10T12:00:00.000Z",
-            revision: 3,
+      getTaskMetadata(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push(input);
+            return {
+              spec: { markdown: "# Spec", updatedAt: "2026-05-10T10:00:00.000Z", revision: 1 },
+              plan: { markdown: "# Plan", updatedAt: "2026-05-10T11:00:00.000Z", revision: 2 },
+              qaReport: {
+                markdown: "# QA",
+                verdict: "approved",
+                updatedAt: "2026-05-10T12:00:00.000Z",
+                revision: 3,
+              },
+              agentSessions: [session],
+            };
           },
-          agentSessions: [session],
-        };
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
     const service = createTaskService({ taskStore });
-
-    await expect(service.specGet({ repoPath: "/repo", taskId: "task-1" })).resolves.toEqual({
+    await expect(
+      Effect.runPromise(service.specGet({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toEqual({
       markdown: "# Spec",
       updatedAt: "2026-05-10T10:00:00.000Z",
       revision: 1,
     });
-    await expect(service.planGet({ repoPath: "/repo", taskId: "task-1" })).resolves.toEqual({
+    await expect(
+      Effect.runPromise(service.planGet({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toEqual({
       markdown: "# Plan",
       updatedAt: "2026-05-10T11:00:00.000Z",
       revision: 2,
     });
-    await expect(service.qaGetReport({ repoPath: "/repo", taskId: "task-1" })).resolves.toEqual({
+    await expect(
+      Effect.runPromise(service.qaGetReport({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toEqual({
       markdown: "# QA",
       updatedAt: "2026-05-10T12:00:00.000Z",
       revision: 3,
     });
     await expect(
-      service.agentSessionsList({ repoPath: "/repo", taskId: "task-1" }),
+      Effect.runPromise(service.agentSessionsList({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toEqual([session]);
     expect(calls).toEqual([
       { repoPath: "/repo", taskId: "task-1" },
@@ -264,50 +637,149 @@ describe("createTaskService list and session reads", () => {
       { repoPath: "/repo", taskId: "task-1" },
     ]);
   });
-
   test("returns an empty QA document when no report is present", async () => {
     const taskStore: TaskStorePort = {
-      async getTaskMetadata() {
-        return {
-          spec: { markdown: "" },
-          plan: { markdown: "" },
-          agentSessions: [],
-        };
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            return {
+              spec: { markdown: "" },
+              plan: { markdown: "" },
+              agentSessions: [],
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listTasks() {
-        throw new Error("unexpected list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).qaGetReport({ repoPath: "/repo", taskId: "task-1" }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).qaGetReport({ repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).resolves.toEqual({ markdown: "" });
   });
-
   test("lists agent sessions in bulk from task cards", async () => {
     const calls: unknown[] = [];
     const session = {
@@ -319,111 +791,331 @@ describe("createTaskService list and session reads", () => {
       selectedModel: null,
     };
     const taskStore: TaskStorePort = {
-      async listTasks(input) {
-        calls.push(input);
-        return [
-          task({ id: "task-1", agentSessions: [session] }),
-          task({ id: "task-2", agentSessions: [] }),
-        ];
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push(input);
+            return [
+              task({ id: "task-1", agentSessions: [session] }),
+              task({ id: "task-2", agentSessions: [] }),
+            ];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTaskMetadata() {
-        throw new Error("should not read metadata");
+      getTaskMetadata() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not read metadata");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setSpecDocument() {
-        throw new Error("unexpected set spec");
+      setSpecDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set spec");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setPlanDocument() {
-        throw new Error("unexpected set plan");
+      setPlanDocument() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected set plan");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async recordQaOutcome() {
-        throw new Error("unexpected QA");
+      recordQaOutcome() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected QA");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).agentSessionsListBulk({
-        repoPath: "/repo",
-        taskIds: ["task-1", "task-2"],
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).agentSessionsListBulk({
+          repoPath: "/repo",
+          taskIds: ["task-1", "task-2"],
+        }),
+      ),
     ).resolves.toEqual({
       "task-1": [session],
       "task-2": [],
     });
     expect(calls).toEqual([{ repoPath: "/repo" }]);
   });
-
   test("does not list tasks for empty bulk agent-session requests", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        throw new Error("should not list");
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not list");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).agentSessionsListBulk({ repoPath: "/repo", taskIds: [] }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).agentSessionsListBulk({ repoPath: "/repo", taskIds: [] }),
+      ),
     ).resolves.toEqual({});
   });
-
   test("bulk agent-session requests fail for missing task ids", async () => {
     const taskStore: TaskStorePort = {
-      async listTasks() {
-        return [task({ id: "task-1" })];
+      listTasks() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [task({ id: "task-1" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async createTask() {
-        throw new Error("unexpected create");
+      createTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected create");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateTask() {
-        throw new Error("unexpected update");
+      updateTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected update");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getTask() {
-        throw new Error("unexpected get");
+      getTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected get");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async transitionTask() {
-        throw new Error("unexpected transition");
+      transitionTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected transition");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async deleteTask() {
-        throw new Error("unexpected delete");
+      deleteTask() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected delete");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     };
-
     await expect(
-      createTaskService({ taskStore }).agentSessionsListBulk({
-        repoPath: "/repo",
-        taskIds: ["task-1", "missing-task"],
-      }),
+      Effect.runPromise(
+        createTaskService({ taskStore }).agentSessionsListBulk({
+          repoPath: "/repo",
+          taskIds: ["task-1", "missing-task"],
+        }),
+      ),
     ).rejects.toThrow("Task not found: missing-task");
   });
-
   test("upserts an agent session after validating a repository working directory", async () => {
     const calls: unknown[] = [];
     const taskStore = createAgentSessionTaskStore(calls);
@@ -435,17 +1127,17 @@ describe("createTaskService list and session reads", () => {
         effectiveWorktreeBasePath: "/worktrees/repo",
       }),
     });
-
     await expect(
-      service.agentSessionUpsert({
-        repoPath: "/repo",
-        taskId: "task-1",
-        session: createAgentSessionRecord({
-          workingDirectory: "/repo/task-1",
+      Effect.runPromise(
+        service.agentSessionUpsert({
+          repoPath: "/repo",
+          taskId: "task-1",
+          session: createAgentSessionRecord({
+            workingDirectory: "/repo/task-1",
+          }),
         }),
-      }),
+      ),
     ).resolves.toBe(true);
-
     expect(calls).toEqual([
       {
         repoPath: "/repo",
@@ -454,7 +1146,6 @@ describe("createTaskService list and session reads", () => {
       },
     ]);
   });
-
   test("upserts an agent session from the configured worktree base", async () => {
     const calls: unknown[] = [];
     const service = createTaskService({
@@ -467,18 +1158,17 @@ describe("createTaskService list and session reads", () => {
         effectiveWorktreeBasePath: "/worktrees/repo",
       }),
     });
-
     await expect(
-      service.agentSessionUpsert({
-        repoPath: "/repo",
-        taskId: "task-1",
-        session: createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-      }),
+      Effect.runPromise(
+        service.agentSessionUpsert({
+          repoPath: "/repo",
+          taskId: "task-1",
+          session: createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
+        }),
+      ),
     ).resolves.toBe(true);
-
     expect(calls).toHaveLength(1);
   });
-
   test("upserts an agent session from the repository default worktree base", async () => {
     const calls: unknown[] = [];
     const service = createTaskService({
@@ -491,20 +1181,19 @@ describe("createTaskService list and session reads", () => {
         effectiveWorktreeBasePath: "/worktrees/repo",
       }),
     });
-
     await expect(
-      service.agentSessionUpsert({
-        repoPath: "/repo",
-        taskId: "task-1",
-        session: createAgentSessionRecord({
-          workingDirectory: "/repo-default-worktrees/repo/task-1",
+      Effect.runPromise(
+        service.agentSessionUpsert({
+          repoPath: "/repo",
+          taskId: "task-1",
+          session: createAgentSessionRecord({
+            workingDirectory: "/repo-default-worktrees/repo/task-1",
+          }),
         }),
-      }),
+      ),
     ).resolves.toBe(true);
-
     expect(calls).toHaveLength(1);
   });
-
   test("rejects agent sessions outside the repository and worktree bases", async () => {
     const calls: unknown[] = [];
     const service = createTaskService({
@@ -515,13 +1204,14 @@ describe("createTaskService list and session reads", () => {
         effectiveWorktreeBasePath: "/worktrees/repo",
       }),
     });
-
     await expect(
-      service.agentSessionUpsert({
-        repoPath: "/repo",
-        taskId: "task-1",
-        session: createAgentSessionRecord({ workingDirectory: "/outside/task-1" }),
-      }),
+      Effect.runPromise(
+        service.agentSessionUpsert({
+          repoPath: "/repo",
+          taskId: "task-1",
+          session: createAgentSessionRecord({ workingDirectory: "/outside/task-1" }),
+        }),
+      ),
     ).rejects.toThrow("Agent session workingDirectory must stay inside repository");
     expect(calls).toEqual([]);
   });

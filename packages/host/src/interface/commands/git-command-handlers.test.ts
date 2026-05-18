@@ -1,156 +1,339 @@
+import { Effect } from "effect";
 import type { GitService } from "../../application/git/git-service";
+import { HostOperationError } from "../../effect/host-errors";
 import { createHostCommandRouter } from "../router/host-command-router";
 import { createGitCommandHandlers } from "./git-command-handlers";
 
 const createRecordingGitService = () => {
-  const calls: Array<{ method: keyof GitService; input: unknown }> = [];
-  const service: GitService = {
-    async getBranches(input) {
-      calls.push({ method: "getBranches", input });
-      return [{ name: "main", isCurrent: true, isRemote: false }];
-    },
-    async getCurrentBranch(input) {
-      calls.push({ method: "getCurrentBranch", input });
-      return { name: "main", detached: false, revision: "abc123" };
-    },
-    async getStatus(input) {
-      calls.push({ method: "getStatus", input });
-      return [{ path: "src/main.ts", status: "modified", staged: false }];
-    },
-    async getDiff(input) {
-      calls.push({ method: "getDiff", input });
-      return [
-        {
-          file: "src/main.ts",
-          type: "modified",
-          additions: 2,
-          deletions: 1,
-          diff: "@@ -1 +1 @@\n-old\n+new\n",
+  const calls: Array<{
+    method: keyof GitService;
+    input: unknown;
+  }> = [];
+  const promiseService: GitService = {
+    getBranches(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "getBranches", input });
+          return [{ name: "main", isCurrent: true, isRemote: false }];
         },
-      ];
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async getWorktreeStatus(input) {
-      calls.push({ method: "getWorktreeStatus", input });
-      return {
-        currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
-        fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
-        fileDiffs: [
-          {
-            file: "src/main.ts",
-            type: "modified",
-            additions: 2,
-            deletions: 1,
-            diff: "@@ -1 +1 @@\n-old\n+new\n",
-          },
-        ],
-        targetAheadBehind: { ahead: 2, behind: 1 },
-        upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
-        snapshot: {
-          effectiveWorkingDir: "/repo",
-          targetBranch: "origin/main",
-          diffScope: "target",
-          observedAtMs: 1,
-          hashVersion: 1,
-          statusHash: "0000000000000001",
-          diffHash: "0000000000000002",
+    getCurrentBranch(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "getCurrentBranch", input });
+          return { name: "main", detached: false, revision: "abc123" };
         },
-      };
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async getWorktreeStatusSummary(input) {
-      calls.push({ method: "getWorktreeStatusSummary", input });
-      return {
-        currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
-        fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-        targetAheadBehind: { ahead: 2, behind: 1 },
-        upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
-        snapshot: {
-          effectiveWorkingDir: "/repo",
-          targetBranch: "origin/main",
-          diffScope: "target",
-          observedAtMs: 1,
-          hashVersion: 1,
-          statusHash: "0000000000000001",
-          diffHash: "0000000000000002",
+    getStatus(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "getStatus", input });
+          return [{ path: "src/main.ts", status: "modified", staged: false }];
         },
-      };
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async switchBranch(input) {
-      calls.push({ method: "switchBranch", input });
-      return { name: "feature/electron", detached: false, revision: "def456" };
+    getDiff(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "getDiff", input });
+          return [
+            {
+              file: "src/main.ts",
+              type: "modified",
+              additions: 2,
+              deletions: 1,
+              diff: "@@ -1 +1 @@\n-old\n+new\n",
+            },
+          ];
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async createWorktree(input) {
-      calls.push({ method: "createWorktree", input });
-      return { branch: "feature/electron", worktreePath: "/worktrees/electron" };
+    getWorktreeStatus(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "getWorktreeStatus", input });
+          return {
+            currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
+            fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
+            fileDiffs: [
+              {
+                file: "src/main.ts",
+                type: "modified",
+                additions: 2,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+            ],
+            targetAheadBehind: { ahead: 2, behind: 1 },
+            upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
+            snapshot: {
+              effectiveWorkingDir: "/repo",
+              targetBranch: "origin/main",
+              diffScope: "target",
+              observedAtMs: 1,
+              hashVersion: 1,
+              statusHash: "0000000000000001",
+              diffHash: "0000000000000002",
+            },
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async removeWorktree(input) {
-      calls.push({ method: "removeWorktree", input });
-      return { ok: true };
+    getWorktreeStatusSummary(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "getWorktreeStatusSummary", input });
+          return {
+            currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
+            fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
+            targetAheadBehind: { ahead: 2, behind: 1 },
+            upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
+            snapshot: {
+              effectiveWorkingDir: "/repo",
+              targetBranch: "origin/main",
+              diffScope: "target",
+              observedAtMs: 1,
+              hashVersion: 1,
+              statusHash: "0000000000000001",
+              diffHash: "0000000000000002",
+            },
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async resetWorktreeSelection(input) {
-      calls.push({ method: "resetWorktreeSelection", input });
-      return { affectedPaths: ["src/main.ts"] };
+    switchBranch(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "switchBranch", input });
+          return { name: "feature/electron", detached: false, revision: "def456" };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async commitsAheadBehind(input) {
-      calls.push({ method: "commitsAheadBehind", input });
-      return { ahead: 3, behind: 2 };
+    createWorktree(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "createWorktree", input });
+          return { branch: "feature/electron", worktreePath: "/worktrees/electron" };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async fetchRemote(input) {
-      calls.push({ method: "fetchRemote", input });
-      return { outcome: "fetched", output: "Fetched origin" };
+    removeWorktree(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "removeWorktree", input });
+          return { ok: true };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async pullBranch(input) {
-      calls.push({ method: "pullBranch", input });
-      return { outcome: "pulled", output: "Fast-forward" };
+    resetWorktreeSelection(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "resetWorktreeSelection", input });
+          return { affectedPaths: ["src/main.ts"] };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async commitAll(input) {
-      calls.push({ method: "commitAll", input });
-      return {
-        outcome: "committed",
-        commitHash: "abc123",
-        output: "[feature abc123] Ship Electron host",
-      };
+    commitsAheadBehind(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "commitsAheadBehind", input });
+          return { ahead: 3, behind: 2 };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async pushBranch(input) {
-      calls.push({ method: "pushBranch", input });
-      return {
-        outcome: "pushed",
-        remote: "origin",
-        branch: "feature/electron",
-        output: "Pushed",
-      };
+    fetchRemote(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "fetchRemote", input });
+          return { outcome: "fetched", output: "Fetched origin" };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async rebaseBranch(input) {
-      calls.push({ method: "rebaseBranch", input });
-      return {
-        outcome: "rebased",
-        output: "Successfully rebased",
-      };
+    pullBranch(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "pullBranch", input });
+          return { outcome: "pulled", output: "Fast-forward" };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async rebaseAbort(input) {
-      calls.push({ method: "rebaseAbort", input });
-      return {
-        outcome: "aborted",
-        output: "Successfully aborted rebase",
-      };
+    commitAll(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "commitAll", input });
+          return {
+            outcome: "committed",
+            commitHash: "abc123",
+            output: "[feature abc123] Ship Electron host",
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async abortConflict(input) {
-      calls.push({ method: "abortConflict", input });
-      return {
-        output: "Conflict operation aborted",
-      };
+    pushBranch(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "pushBranch", input });
+          return {
+            outcome: "pushed",
+            remote: "origin",
+            branch: "feature/electron",
+            output: "Pushed",
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    rebaseBranch(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "rebaseBranch", input });
+          return {
+            outcome: "rebased",
+            output: "Successfully rebased",
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    rebaseAbort(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "rebaseAbort", input });
+          return {
+            outcome: "aborted",
+            output: "Successfully aborted rebase",
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    abortConflict(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "abortConflict", input });
+          return {
+            output: "Conflict operation aborted",
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
   };
-
+  const service = promiseService as GitService;
   return { calls, service };
 };
-
 describe("createGitCommandHandlers", () => {
   test("routes read-only git commands to the git service", async () => {
     const { calls, service } = createRecordingGitService();
     const router = createHostCommandRouter({
       handlers: createGitCommandHandlers(service),
     });
-
     await expect(router.invoke("git_get_branches", { repoPath: "/repo" })).resolves.toEqual([
       { name: "main", isCurrent: true, isRemote: false },
     ]);
@@ -300,7 +483,6 @@ describe("createGitCommandHandlers", () => {
     ).resolves.toEqual({
       output: "Conflict operation aborted",
     });
-
     expect(calls).toEqual([
       { method: "getBranches", input: { repoPath: "/repo" } },
       { method: "getCurrentBranch", input: { repoPath: "/repo" } },
@@ -411,13 +593,11 @@ describe("createGitCommandHandlers", () => {
       },
     ]);
   });
-
   test("rejects malformed git command inputs before calling the service", async () => {
     const { calls, service } = createRecordingGitService();
     const router = createHostCommandRouter({
       handlers: createGitCommandHandlers(service),
     });
-
     await expect(
       router.invoke("git_get_worktree_status", {
         repoPath: "/repo",

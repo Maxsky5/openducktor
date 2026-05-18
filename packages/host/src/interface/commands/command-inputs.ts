@@ -1,6 +1,14 @@
+import { HostValidationError } from "../../effect/host-errors";
+
+const invalidInput = (message: string, field?: string): HostValidationError =>
+  new HostValidationError({
+    message,
+    field,
+  });
+
 export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} must be an object.`);
+    throw invalidInput(`${label} must be an object.`, label);
   }
 
   return value as Record<string, unknown>;
@@ -8,7 +16,7 @@ export const requireRecord = (value: unknown, label: string): Record<string, unk
 
 export const requireString = (value: unknown, label: string): string => {
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${label} is required.`);
+    throw invalidInput(`${label} is required.`, label);
   }
 
   return value.trim();
@@ -19,7 +27,7 @@ export const optionalString = (value: unknown, label: string): string | undefine
     return undefined;
   }
   if (typeof value !== "string") {
-    throw new Error(`${label} must be a string when provided.`);
+    throw invalidInput(`${label} must be a string when provided.`, label);
   }
 
   const trimmed = value.trim();
@@ -31,7 +39,7 @@ export const optionalBoolean = (value: unknown, label: string): boolean | undefi
     return undefined;
   }
   if (typeof value !== "boolean") {
-    throw new Error(`${label} must be a boolean when provided.`);
+    throw invalidInput(`${label} must be a boolean when provided.`, label);
   }
 
   return value;

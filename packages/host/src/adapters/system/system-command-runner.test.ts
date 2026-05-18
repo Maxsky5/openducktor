@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect } from "effect";
 import { createSystemCommandLaunch, createSystemCommandRunner } from "./system-command-runner";
 
 const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> => {
@@ -29,8 +30,8 @@ describe("createSystemCommandRunner", () => {
         platform: "darwin",
       });
 
-      await expect(port.requiredCommandError("custom-tool")).resolves.toBeNull();
-      await expect(port.requiredCommandError("missing-tool")).resolves.toBe(
+      await expect(Effect.runPromise(port.requiredCommandError("custom-tool"))).resolves.toBeNull();
+      await expect(Effect.runPromise(port.requiredCommandError("missing-tool"))).resolves.toBe(
         "Required command `missing-tool` not found. Install missing-tool and ensure it is available on PATH.",
       );
     });
@@ -47,7 +48,7 @@ describe("createSystemCommandRunner", () => {
         platform: "linux",
       });
 
-      await expect(port.requiredCommandError("not-executable")).resolves.toBe(
+      await expect(Effect.runPromise(port.requiredCommandError("not-executable"))).resolves.toBe(
         "Required command `not-executable` not found. Install not-executable and ensure it is available on PATH.",
       );
     });
@@ -65,8 +66,8 @@ describe("createSystemCommandRunner", () => {
         platform: "win32",
       });
 
-      await expect(port.requiredCommandError("tool")).resolves.toBeNull();
-      await expect(port.requiredCommandError("tool.CMD")).resolves.toBeNull();
+      await expect(Effect.runPromise(port.requiredCommandError("tool"))).resolves.toBeNull();
+      await expect(Effect.runPromise(port.requiredCommandError("tool.CMD"))).resolves.toBeNull();
     });
   });
 
@@ -79,7 +80,7 @@ describe("createSystemCommandRunner", () => {
         platform: "win32",
       });
 
-      await expect(port.requiredCommandError("tool")).resolves.toBeNull();
+      await expect(Effect.runPromise(port.requiredCommandError("tool"))).resolves.toBeNull();
     });
   });
 
@@ -94,7 +95,7 @@ describe("createSystemCommandRunner", () => {
         platform: "win32",
       });
 
-      await expect(port.requiredCommandError("tool.exe")).resolves.toBeNull();
+      await expect(Effect.runPromise(port.requiredCommandError("tool.exe"))).resolves.toBeNull();
     });
   });
 
@@ -109,7 +110,7 @@ describe("createSystemCommandRunner", () => {
         platform: "linux",
       });
 
-      await expect(port.requiredCommandError(candidate)).resolves.toBeNull();
+      await expect(Effect.runPromise(port.requiredCommandError(candidate))).resolves.toBeNull();
     });
   });
 
@@ -122,10 +123,9 @@ describe("createSystemCommandRunner", () => {
       platform: process.platform,
     });
 
-    const result = await port.runCommandAllowFailure("bun", [
-      "-e",
-      "console.log(process.env.OPENDUCKTOR_TEST_VALUE)",
-    ]);
+    const result = await Effect.runPromise(
+      port.runCommandAllowFailure("bun", ["-e", "console.log(process.env.OPENDUCKTOR_TEST_VALUE)"]),
+    );
 
     expect(result.ok).toBe(true);
     expect(result.stdout.trim()).toBe("from-host-env");
@@ -174,8 +174,12 @@ describe("createSystemCommandRunner", () => {
         platform: "win32",
       });
 
-      const cmdResult = await port.runCommandAllowFailure("echo-tool", ["one", "two words"]);
-      const batResult = await port.runCommandAllowFailure("echo-bat", ["alpha", "beta words"]);
+      const cmdResult = await Effect.runPromise(
+        port.runCommandAllowFailure("echo-tool", ["one", "two words"]),
+      );
+      const batResult = await Effect.runPromise(
+        port.runCommandAllowFailure("echo-bat", ["alpha", "beta words"]),
+      );
 
       expect(cmdResult.ok).toBe(true);
       expect(cmdResult.stdout.trim()).toBe("cmd:one:two words");

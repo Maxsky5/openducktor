@@ -1,16 +1,19 @@
 import { describe, expect, test } from "bun:test";
+import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createRuntimeHealthProbe } from "./runtime-health-probe";
 
 const missingSystemCommands: SystemCommandPort = {
-  async requiredCommandError(command) {
-    return `Required command \`${command}\` not found. Install ${command} and ensure it is available on PATH.`;
+  requiredCommandError(command) {
+    return Effect.succeed(
+      `Required command \`${command}\` not found. Install ${command} and ensure it is available on PATH.`,
+    );
   },
-  async versionCommand() {
-    return null;
+  versionCommand() {
+    return Effect.succeed(null);
   },
-  async runCommandAllowFailure() {
-    return { ok: false, stdout: "", stderr: "" };
+  runCommandAllowFailure() {
+    return Effect.succeed({ ok: false, stdout: "", stderr: "" });
   },
 };
 
@@ -18,7 +21,7 @@ describe("createRuntimeHealthProbe", () => {
   test("reports actionable missing OpenCode diagnostics", async () => {
     const probe = createRuntimeHealthProbe(missingSystemCommands, {});
 
-    const health = await probe.getRuntimeHealth("opencode");
+    const health = await Effect.runPromise(probe.getRuntimeHealth("opencode"));
 
     expect(health.ok).toBe(false);
     expect(health.error).toContain("opencode not found. Checked OPENDUCKTOR_OPENCODE_BINARY");
@@ -30,7 +33,7 @@ describe("createRuntimeHealthProbe", () => {
   test("reports actionable missing Codex diagnostics", async () => {
     const probe = createRuntimeHealthProbe(missingSystemCommands, {});
 
-    const health = await probe.getRuntimeHealth("codex");
+    const health = await Effect.runPromise(probe.getRuntimeHealth("codex"));
 
     expect(health.ok).toBe(false);
     expect(health.error).toBe(

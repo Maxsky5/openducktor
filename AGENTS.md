@@ -36,6 +36,7 @@ Package manager: **Bun** (not npm/yarn). All workspace commands use `bun run`.
 - `apps/desktop/src-tauri`: Rust host application and infra crates.
 - `packages/contracts`: Shared runtime schemas and IPC contracts (TS).
 - `packages/core`: Core domain services and ports.
+- `packages/host`: Effect-native TypeScript host for Electron/web transports, command routing, application use cases, and infrastructure adapters.
 - `packages/adapters-opencode-sdk`: `AgentEnginePort` adapter.
 - `packages/host-client`: Frontend IPC adapter.
 - `packages/openducktor-mcp`: MCP server exposing `odt_*` workflow tools.
@@ -47,6 +48,17 @@ Package manager: **Bun** (not npm/yarn). All workspace commands use `bun run`.
 - Port definitions live in core/domain layers, adapters in infra layers.
 - Do not couple UI code directly to infra when contracts exist.
 - When changing data contracts, update `packages/contracts` first, then adapt host/frontend.
+
+### Effect adoption rules
+
+- `packages/host` is Effect-native internally. Fallible or I/O-producing host ports and application services should return `Effect.Effect<Success, Failure, Requirements>`, not raw `Promise`.
+- Keep Promise interop at explicit transport boundaries only: Electron IPC, browser HTTP/SSE, shell bridge adapters, and external package APIs that must remain Promise-compatible.
+- Expected host failures should use typed errors, preferably `Data.TaggedError`, and be propagated through the Effect error channel. Do not use generic `throw new Error(...)` for expected host failures.
+- Use `Effect.gen` for readable sequencing, `Context.Tag`/`Layer` for host dependency wiring when it clarifies composition, and `Effect.try`/`Effect.tryPromise` only to wrap synchronous or Promise-based external APIs at the boundary.
+- Do not use `catchAll`, retry, fallback, or defaulting to hide broken contracts. Retrying/polling must represent explicit product behavior and should use Effect scheduling primitives.
+- Pure domain policy code may stay synchronous when it has no I/O and no useful typed failure channel. Effect is the host execution model, not a mandate to wrap every expression.
+- `packages/contracts` remains the public Zod contract source until a separate schema ADR changes that. Do not duplicate public schemas in Effect Schema as a second source of truth.
+- TanStack Query remains the frontend cache/deduplication layer for server-owned reads. Effect may run behind host clients or query functions, but it must not introduce a competing frontend cache or request store.
 
 ### Replaceable boundaries
 

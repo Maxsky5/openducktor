@@ -13,12 +13,10 @@ describe("createRuntimeDefinitionsCommandHandlers", () => {
     const router = createHostCommandRouter({
       handlers: createRuntimeDefinitionsCommandHandlers(service),
     });
-
     await expect(router.invoke("runtime_definitions_list", {})).resolves.toMatchObject([
       { kind: "opencode" },
     ]);
   });
-
   test("rejects malformed runtime definitions args", async () => {
     const service: RuntimeDefinitionsService = {
       listRuntimeDefinitions() {
@@ -28,7 +26,6 @@ describe("createRuntimeDefinitionsCommandHandlers", () => {
     const router = createHostCommandRouter({
       handlers: createRuntimeDefinitionsCommandHandlers(service),
     });
-
     await expect(router.invoke("runtime_definitions_list", { force: true })).rejects.toThrow(
       "runtime_definitions_list does not accept arguments.",
     );

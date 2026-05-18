@@ -1,4 +1,5 @@
 import type { FilesystemService } from "../../application/filesystem/filesystem-service";
+import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
 
 type FilesystemListDirectoryArgs = {
@@ -14,7 +15,11 @@ const parseFilesystemListDirectoryArgs = (
   }
 
   if (typeof path !== "string") {
-    throw new Error("filesystem_list_directory expects optional string argument 'path'.");
+    throw new HostValidationError({
+      message: "filesystem_list_directory expects optional string argument 'path'.",
+      field: "path",
+      details: { value: path },
+    });
   }
 
   return { path };

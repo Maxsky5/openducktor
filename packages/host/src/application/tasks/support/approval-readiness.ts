@@ -1,16 +1,12 @@
-import type {
-  GitProviderAvailability,
-  RepoConfig,
-  TaskApprovalContext,
-  TaskCard,
-  TaskMetadataPayload,
-} from "@openducktor/contracts";
+import type { RepoConfig, TaskCard, TaskMetadataPayload } from "@openducktor/contracts";
+import { Effect } from "effect";
 import {
   canonicalTargetBranch,
   ensureHumanApprovalStatus,
   normalizeApprovalTargetBranch,
   publishTargetFromTargetBranch,
 } from "../../../domain/task";
+import { HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
@@ -19,8 +15,7 @@ import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import { effectiveTargetBranchForTask } from "./builder-worktree-cleanup";
 import { githubProviderStatus } from "./github-pull-requests";
 import { loadDefaultMergeMethod } from "./task-workflow-helpers";
-
-export const loadOpenApprovalContext = async (
+export const loadOpenApprovalContext = (
   dependencies: {
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
@@ -32,79 +27,100 @@ export const loadOpenApprovalContext = async (
   current: TaskCard,
   metadata: TaskMetadataPayload,
   repoConfig: RepoConfig,
-): Promise<TaskApprovalContext> => {
-  ensureHumanApprovalStatus(current.status);
-
-  const effectiveRepoPath = repoConfig.repoPath;
-  const defaultMergeMethod = await loadDefaultMergeMethod(dependencies.settingsConfig);
-  const providers = await providerStatuses(dependencies, effectiveRepoPath, repoConfig);
-  const taskWorktree = await dependencies.taskWorktreeService.getTaskWorktree({
-    repoPath: effectiveRepoPath,
-    taskId,
-  });
-  if (!taskWorktree) {
-    throw new Error(
-      `Human approval requires a builder worktree for task ${taskId}. Start Builder first.`,
+) =>
+  Effect.gen(function* () {
+    yield* Effect.try({
+      try: () => ensureHumanApprovalStatus(current.status),
+      catch: (cause) =>
+        new HostValidationError({
+          message: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    });
+    const effectiveRepoPath = repoConfig.repoPath;
+    const defaultMergeMethod = yield* loadDefaultMergeMethod(dependencies.settingsConfig);
+    const providers = yield* providerStatuses(dependencies, effectiveRepoPath, repoConfig);
+    const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
+      repoPath: effectiveRepoPath,
+      taskId,
+    });
+    if (!taskWorktree) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "taskId",
+          message: `Human approval requires a builder worktree for task ${taskId}. Start Builder first.`,
+          details: { repoPath: effectiveRepoPath, taskId },
+        }),
+      );
+    }
+    const currentBranch = yield* dependencies.gitPort.getCurrentBranch(
+      taskWorktree.workingDirectory,
     );
-  }
-
-  const currentBranch = await dependencies.gitPort.getCurrentBranch(taskWorktree.workingDirectory);
-  if (currentBranch.detached) {
-    throw new Error(
-      "Human approval requires a builder branch, but the builder worktree is detached.",
+    if (currentBranch.detached) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "workingDirectory",
+          message:
+            "Human approval requires a builder branch, but the builder worktree is detached.",
+          details: { workingDirectory: taskWorktree.workingDirectory },
+        }),
+      );
+    }
+    const sourceBranch = currentBranch.name?.trim();
+    if (!sourceBranch) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "workingDirectory",
+          message: "Human approval requires a builder branch name.",
+          details: { workingDirectory: taskWorktree.workingDirectory },
+        }),
+      );
+    }
+    const targetBranch = normalizeApprovalTargetBranch(
+      yield* effectiveTargetBranchForTask(
+        dependencies.workspaceSettingsService,
+        current,
+        effectiveRepoPath,
+      ),
     );
-  }
-  const sourceBranch = currentBranch.name?.trim();
-  if (!sourceBranch) {
-    throw new Error("Human approval requires a builder branch name.");
-  }
-
-  const targetBranch = normalizeApprovalTargetBranch(
-    await effectiveTargetBranchForTask(
-      dependencies.workspaceSettingsService,
-      current,
+    const publishTarget =
+      current.targetBranch === undefined
+        ? publishTargetFromTargetBranch(repoConfig.defaultTargetBranch)
+        : publishTargetFromTargetBranch(current.targetBranch);
+    const targetRef = canonicalTargetBranch(targetBranch);
+    const worktreeStatus = yield* dependencies.gitPort.getWorktreeStatusSummaryData(
+      taskWorktree.workingDirectory,
+      targetRef,
+      "uncommitted",
+    );
+    const suggestedSquashCommitMessage = yield* dependencies.gitPort.suggestedSquashCommitMessage(
       effectiveRepoPath,
-    ),
-  );
-  const publishTarget =
-    current.targetBranch === undefined
-      ? publishTargetFromTargetBranch(repoConfig.defaultTargetBranch)
-      : publishTargetFromTargetBranch(current.targetBranch);
-  const targetRef = canonicalTargetBranch(targetBranch);
-  const worktreeStatus = await dependencies.gitPort.getWorktreeStatusSummaryData(
-    taskWorktree.workingDirectory,
-    targetRef,
-    "uncommitted",
-  );
-  const suggestedSquashCommitMessage = await dependencies.gitPort.suggestedSquashCommitMessage(
-    effectiveRepoPath,
-    sourceBranch,
-    targetRef,
-  );
-
-  return {
-    taskId,
-    taskStatus: current.status,
-    workingDirectory: taskWorktree.workingDirectory,
-    sourceBranch,
-    targetBranch,
-    publishTarget,
-    defaultMergeMethod,
-    hasUncommittedChanges: worktreeStatus.fileStatusCounts.total > 0,
-    uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
-    pullRequest: metadata.pullRequest,
-    providers,
-    suggestedSquashCommitMessage,
-  };
-};
-
-export const providerStatuses = async (
+      sourceBranch,
+      targetRef,
+    );
+    return {
+      taskId,
+      taskStatus: current.status,
+      workingDirectory: taskWorktree.workingDirectory,
+      sourceBranch,
+      targetBranch,
+      publishTarget,
+      defaultMergeMethod,
+      hasUncommittedChanges: worktreeStatus.fileStatusCounts.total > 0,
+      uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
+      pullRequest: metadata.pullRequest,
+      providers,
+      suggestedSquashCommitMessage,
+    };
+  });
+export const providerStatuses = (
   dependencies: {
     gitPort: GitPort;
     systemCommands: SystemCommandPort;
   },
   repoPath: string,
   repoConfig: RepoConfig,
-): Promise<GitProviderAvailability[]> => [
-  await githubProviderStatus(dependencies, repoPath, repoConfig),
-];
+) =>
+  Effect.gen(function* () {
+    return [yield* githubProviderStatus(dependencies, repoPath, repoConfig)];
+  });

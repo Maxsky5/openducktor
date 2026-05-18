@@ -1,30 +1,17 @@
-import { createLocalAttachmentAdapter } from "../../adapters/attachments/local-attachment-adapter";
+import { Effect } from "effect";
 import {
   type BeadsTaskRepository,
   createBeadsTaskRepository,
 } from "../../adapters/beads/beads-task-repository";
-import {
-  type CodexAppServerTransportRegistry,
-  createCodexAppServerTransportRegistry,
-} from "../../adapters/codex/codex-app-server-transport-registry";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
-import { createDevServerProcessAdapter } from "../../adapters/dev-servers/dev-server-process-adapter";
-import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-adapter";
-import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-file-adapter";
-import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import {
   createMcpHostBridgeServer,
   type McpHostBridgeServer,
   resolveMcpBridgeDiscoveryPath,
 } from "../../adapters/mcp/mcp-host-bridge-server";
-import { createOpenInToolsAdapter } from "../../adapters/open-in-tools/open-in-tools-adapter";
 import { createOpenCodeWorkspaceRuntimeStarter } from "../../adapters/opencode/opencode-workspace-runtime-starter";
-import { createProcessEnvironment } from "../../adapters/process/process-environment";
-import { createRuntimeHealthProbe } from "../../adapters/runtimes/runtime-health-probe";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
-import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
-import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
@@ -39,10 +26,14 @@ import {
 import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
-import { createTaskSyncService } from "../../application/tasks/sync/task-sync-service";
+import {
+  createTaskSyncService,
+  type TaskSyncLoopHandle,
+} from "../../application/tasks/sync/task-sync-service";
 import { createTaskService } from "../../application/tasks/task-service";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import { createCodexAppServerCommandHandlers } from "../../interface/commands/codex-app-server-command-handlers";
 import { createDevServerCommandHandlers } from "../../interface/commands/dev-server-command-handlers";
@@ -58,24 +49,16 @@ import { createTaskCommandHandlers } from "../../interface/commands/task-command
 import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
 import { createWorkspaceSettingsCommandHandlers } from "../../interface/commands/workspace-settings-command-handlers";
 import {
-  createHostCommandRouter,
+  createEffectHostCommandRouter,
+  type EffectHostCommandRouter,
   type HostCommandRouter,
+  toPromiseHostCommandRouter,
 } from "../../interface/router/host-command-router";
-import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
-import type { DevServerProcessPort } from "../../ports/dev-server-process-port";
-import type { FilesystemPort } from "../../ports/filesystem-port";
-import type { GitPort } from "../../ports/git-port";
-import type { LocalAttachmentPort } from "../../ports/local-attachment-port";
-import type { OpenInToolsPort } from "../../ports/open-in-tools-port";
-import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type {
   RuntimeRegistryPort,
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
-import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import {
   createStopDevServersStep,
   createStopMcpHostBridgeStep,
@@ -84,69 +67,45 @@ import {
   type HostLifecycleLogger,
   runShutdownSteps,
 } from "../host-lifecycle";
+import {
+  type CreateNodeHostDefaultPortsInput,
+  createNodeHostDefaultPorts,
+} from "./node-host-default-ports";
 
-export type CreateNodeHostCommandRouterInput = {
+export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput & {
   clientVersion?: string;
-  codexAppServer?: CodexAppServerPort;
-  codexAppServerTransportRegistry?: CodexAppServerTransportRegistry;
-  devServerProcesses?: DevServerProcessPort;
   eventBus?: HostEventBusPort;
-  filesystem?: FilesystemPort;
-  git?: GitPort;
-  localAttachments?: LocalAttachmentPort;
   lifecycleLogger?: HostLifecycleLogger;
-  openInTools?: OpenInToolsPort;
   mcpHostBridge?: McpHostBridgeServer;
-  processEnv?: NodeJS.ProcessEnv;
-  runtimeHealth?: RuntimeHealthPort;
   runtimeRegistry?: RuntimeRegistryPort;
-  settingsConfig?: SettingsConfigPort;
-  systemCommands?: SystemCommandPort;
   taskStore?: TaskStorePort;
-  worktreeFiles?: WorktreeFilePort;
 };
 
-const isCodexAppServerTransportRegistry = (
-  value: CodexAppServerPort,
-): value is CodexAppServerPort & CodexAppServerTransportRegistry =>
-  "registerTransport" in value &&
-  typeof value.registerTransport === "function" &&
-  "unregisterTransport" in value &&
-  typeof value.unregisterTransport === "function";
-
-export const createNodeHostCommandRouter = ({
-  clientVersion,
-  codexAppServer,
-  codexAppServerTransportRegistry,
-  devServerProcesses: configuredDevServerProcesses,
-  eventBus,
-  filesystem = createFilesystemAdapter(),
-  git: configuredGit,
-  localAttachments = createLocalAttachmentAdapter(),
-  lifecycleLogger = console,
-  openInTools = createOpenInToolsAdapter(),
-  mcpHostBridge,
-  processEnv = createProcessEnvironment(),
-  systemCommands: configuredSystemCommands,
-  runtimeHealth: configuredRuntimeHealth,
-  runtimeRegistry,
-  settingsConfig = createSettingsConfigAdapter(),
-  worktreeFiles = createWorktreeFileAdapter(),
-  taskStore: configuredTaskStore,
-}: CreateNodeHostCommandRouterInput = {}): HostCommandRouter => {
-  const systemCommands = configuredSystemCommands ?? createSystemCommandRunner({ env: processEnv });
-  const runtimeHealth =
-    configuredRuntimeHealth ?? createRuntimeHealthProbe(systemCommands, processEnv);
-  const devServerProcesses =
-    configuredDevServerProcesses ?? createDevServerProcessAdapter({ processEnv });
-  const git = configuredGit ?? createGitCliAdapter({ processEnv });
-  const defaultCodexAppServer = createCodexAppServerTransportRegistry();
-  const effectiveCodexAppServer = codexAppServer ?? defaultCodexAppServer;
-  const effectiveCodexTransportRegistry =
-    codexAppServerTransportRegistry ??
-    (isCodexAppServerTransportRegistry(effectiveCodexAppServer)
-      ? effectiveCodexAppServer
-      : defaultCodexAppServer);
+export const createNodeEffectHostCommandRouter = (
+  input: CreateNodeHostCommandRouterInput = {},
+): EffectHostCommandRouter => {
+  const {
+    clientVersion,
+    eventBus,
+    lifecycleLogger = console,
+    mcpHostBridge,
+    runtimeRegistry,
+    taskStore: configuredTaskStore,
+  } = input;
+  const {
+    codexAppServer: effectiveCodexAppServer,
+    codexTransportRegistry: effectiveCodexTransportRegistry,
+    devServerProcesses,
+    filesystem,
+    git,
+    localAttachments,
+    openInTools,
+    processEnv,
+    runtimeHealth,
+    settingsConfig,
+    systemCommands,
+    worktreeFiles,
+  } = createNodeHostDefaultPorts(input);
   const codexAppServerService: CodexAppServerService =
     createCodexAppServerService(effectiveCodexAppServer);
   const filesystemService = createFilesystemService(filesystem);
@@ -163,10 +122,10 @@ export const createNodeHostCommandRouter = ({
       ownedTaskStore = createBeadsTaskRepository({
         processEnv,
         systemCommands,
-        async resolveWorkspaceIdForRepoPath(repoPath) {
-          const repoConfig = await workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-          return repoConfig.workspaceId;
-        },
+        resolveWorkspaceIdForRepoPath: (repoPath) =>
+          workspaceSettingsService
+            .getRepoConfigByRepoPath(repoPath)
+            .pipe(Effect.map((repoConfig) => repoConfig.workspaceId)),
       });
       return ownedTaskStore;
     })();
@@ -179,7 +138,7 @@ export const createNodeHostCommandRouter = ({
   });
   let resolvedMcpHostBridge = mcpHostBridge;
   const workspaceStarter: RuntimeWorkspaceStarterPort = {
-    async startWorkspaceRuntime(input) {
+    startWorkspaceRuntime(input) {
       if (input.runtimeKind === "codex") {
         return createCodexWorkspaceRuntimeStarter({
           systemCommands,
@@ -188,37 +147,54 @@ export const createNodeHostCommandRouter = ({
           ...(clientVersion ? { clientVersion } : {}),
           ...(eventBus
             ? {
-                eventEmitter: (event) => {
-                  try {
-                    eventBus.publish("openducktor://codex-app-server-event", event);
-                  } catch (error) {
-                    lifecycleLogger.error(
-                      `Failed to publish Codex app-server event: ${
-                        error instanceof Error ? error.message : String(error)
-                      }`,
-                    );
-                  }
-                },
+                eventEmitter: (event) =>
+                  eventBus.publish("openducktor://codex-app-server-event", event),
               }
             : {}),
-          resolveMcpBridgeConnection: async () => {
-            if (!resolvedMcpHostBridge) {
-              throw new Error("Codex workspace startup requires an initialized MCP host bridge.");
-            }
-            return resolvedMcpHostBridge.ensureConnection({ repoPath: input.repoPath });
-          },
+          resolveMcpBridgeConnection: () =>
+            resolvedMcpHostBridge
+              ? resolvedMcpHostBridge.ensureConnection({ repoPath: input.repoPath }).pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new HostOperationError({
+                        operation: "codex-workspace-runtime.resolve-mcp-bridge",
+                        message: cause.message,
+                        cause,
+                      }),
+                  ),
+                )
+              : Effect.fail(
+                  new HostResourceError({
+                    message: "Codex workspace startup requires an initialized MCP host bridge.",
+                    resource: "mcp-host-bridge",
+                    operation: "codex-workspace-runtime.start",
+                  }),
+                ),
         }).startWorkspaceRuntime(input);
       }
 
       return createOpenCodeWorkspaceRuntimeStarter({
         systemCommands,
         processEnv,
-        resolveMcpBridgeConnection: async (runtimeInput) => {
-          if (!resolvedMcpHostBridge) {
-            throw new Error("OpenCode workspace startup requires an initialized MCP host bridge.");
-          }
-          return resolvedMcpHostBridge.ensureConnection({ repoPath: runtimeInput.repoPath });
-        },
+        resolveMcpBridgeConnection: (runtimeInput) =>
+          resolvedMcpHostBridge
+            ? resolvedMcpHostBridge.ensureConnection({ repoPath: runtimeInput.repoPath }).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new HostOperationError({
+                      operation: "opencode-workspace-runtime.resolve-mcp-bridge",
+                      message: cause.message,
+                      cause,
+                    }),
+                ),
+              )
+            : Effect.fail(
+                new HostResourceError({
+                  message: "OpenCode workspace startup requires an initialized MCP host bridge.",
+                  resource: "mcp-host-bridge",
+                  operation: "opencode-workspace-runtime.start",
+                }),
+              ),
       }).startWorkspaceRuntime(input);
     },
   };
@@ -280,36 +256,53 @@ export const createNodeHostCommandRouter = ({
     logger: lifecycleLogger,
   });
 
-  const pullRequestSyncLoop = taskSyncService?.startPullRequestSyncLoop();
+  let pullRequestSyncLoop: TaskSyncLoopHandle | null = null;
 
-  const stopPullRequestSyncLoop = async (): Promise<void> => {
-    if (!pullRequestSyncLoop) {
-      lifecycleLogger.info("No pull request sync loop is running");
-      return;
-    }
+  const stopPullRequestSyncLoop = () =>
+    Effect.gen(function* () {
+      if (!pullRequestSyncLoop) {
+        lifecycleLogger.info("No pull request sync loop is running");
+        return;
+      }
 
-    await pullRequestSyncLoop.stop();
-    lifecycleLogger.info("Pull request sync loop stopped");
-  };
+      yield* pullRequestSyncLoop.stop();
+      lifecycleLogger.info("Pull request sync loop stopped");
+    });
 
-  return createHostCommandRouter({
-    initialize: async () => {
-      await resolvedMcpHostBridge?.ensureExternalDiscoveryReady();
-    },
-    dispose: async () => {
-      lifecycleLogger.info("Shutting down OpenDucktor host services");
-      await runShutdownSteps(
-        [
-          { label: "pull request sync loop", run: stopPullRequestSyncLoop },
-          createStopDevServersStep(devServerService, lifecycleLogger),
-          createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
-          createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
-          createStopSharedDoltServerStep(ownedTaskStore, lifecycleLogger),
-        ],
-        lifecycleLogger,
-      );
-      lifecycleLogger.info("OpenDucktor host services stopped");
-    },
+  return createEffectHostCommandRouter({
+    initialize: () =>
+      Effect.gen(function* () {
+        if (resolvedMcpHostBridge) {
+          yield* resolvedMcpHostBridge.ensureExternalDiscoveryReady().pipe(
+            Effect.mapError(
+              (cause) =>
+                new HostOperationError({
+                  operation: "mcp-host-bridge.ensure-external-discovery",
+                  message: cause.message,
+                  cause,
+                }),
+            ),
+          );
+        }
+        if (taskSyncService && pullRequestSyncLoop === null) {
+          pullRequestSyncLoop = yield* taskSyncService.startPullRequestSyncLoop();
+        }
+      }),
+    dispose: () =>
+      Effect.gen(function* () {
+        lifecycleLogger.info("Shutting down OpenDucktor host services");
+        yield* runShutdownSteps(
+          [
+            { label: "pull request sync loop", run: stopPullRequestSyncLoop },
+            createStopDevServersStep(devServerService, lifecycleLogger),
+            createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
+            createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
+            createStopSharedDoltServerStep(ownedTaskStore, lifecycleLogger),
+          ],
+          lifecycleLogger,
+        );
+        lifecycleLogger.info("OpenDucktor host services stopped");
+      }),
     handlers: {
       ...createDevServerCommandHandlers(devServerService),
       ...createCodexAppServerCommandHandlers(codexAppServerService),
@@ -327,3 +320,7 @@ export const createNodeHostCommandRouter = ({
     },
   });
 };
+
+export const createNodeHostCommandRouter = (
+  input: CreateNodeHostCommandRouterInput = {},
+): HostCommandRouter => toPromiseHostCommandRouter(createNodeEffectHostCommandRouter(input));

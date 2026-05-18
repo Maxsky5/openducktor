@@ -1,4 +1,6 @@
+import { Effect } from "effect";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import { HostOperationError } from "../../effect/host-errors";
 import { createHostCommandRouter } from "../router/host-command-router";
 import { createWorkspaceSettingsCommandHandlers } from "./workspace-settings-command-handlers";
 
@@ -6,131 +8,250 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
   test("routes settings snapshot commands through the workspace settings service", async () => {
     const calls: string[] = [];
     const service = {
-      async listWorkspaces() {
-        calls.push("listWorkspaces");
-        return [];
+      listWorkspaces() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("listWorkspaces");
+            return [];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async addWorkspace() {
-        calls.push("addWorkspace");
-        return {
-          workspaceId: "repo",
-          workspaceName: "repo",
-          repoPath: "/repo",
-          iconDataUrl: null,
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: null,
-          defaultWorktreeBasePath: "/worktrees/repo",
-          effectiveWorktreeBasePath: "/worktrees/repo",
-        };
+      addWorkspace() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("addWorkspace");
+            return {
+              workspaceId: "repo",
+              workspaceName: "repo",
+              repoPath: "/repo",
+              iconDataUrl: null,
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: "/worktrees/repo",
+              effectiveWorktreeBasePath: "/worktrees/repo",
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async selectWorkspace() {
-        calls.push("selectWorkspace");
-        return {
-          workspaceId: "repo",
-          workspaceName: "repo",
-          repoPath: "/repo",
-          iconDataUrl: null,
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: null,
-          defaultWorktreeBasePath: "/worktrees/repo",
-          effectiveWorktreeBasePath: "/worktrees/repo",
-        };
+      selectWorkspace() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("selectWorkspace");
+            return {
+              workspaceId: "repo",
+              workspaceName: "repo",
+              repoPath: "/repo",
+              iconDataUrl: null,
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: "/worktrees/repo",
+              effectiveWorktreeBasePath: "/worktrees/repo",
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async reorderWorkspaces() {
-        calls.push("reorderWorkspaces");
-        return [];
+      reorderWorkspaces() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("reorderWorkspaces");
+            return [];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getRepoConfig() {
-        calls.push("getRepoConfig");
-        return {
-          workspaceId: "repo",
-          workspaceName: "repo",
-          repoPath: "/repo",
-          defaultRuntimeKind: "opencode",
-          branchPrefix: "odt",
-          defaultTargetBranch: { remote: "origin", branch: "main" },
-          git: { providers: {} },
-          hooks: { preStart: [], postComplete: [] },
-          devServers: [],
-          worktreeCopyPaths: [],
-          promptOverrides: {},
-          agentDefaults: {},
-        };
+      getRepoConfig() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("getRepoConfig");
+            return {
+              workspaceId: "repo",
+              workspaceName: "repo",
+              repoPath: "/repo",
+              defaultRuntimeKind: "opencode",
+              branchPrefix: "odt",
+              defaultTargetBranch: { remote: "origin", branch: "main" },
+              git: { providers: {} },
+              hooks: { preStart: [], postComplete: [] },
+              devServers: [],
+              worktreeCopyPaths: [],
+              promptOverrides: {},
+              agentDefaults: {},
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateRepoConfig() {
-        calls.push("updateRepoConfig");
-        return {
-          workspaceId: "repo",
-          workspaceName: "repo",
-          repoPath: "/repo",
-          iconDataUrl: null,
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: null,
-          defaultWorktreeBasePath: "/worktrees/repo",
-          effectiveWorktreeBasePath: "/worktrees/repo",
-        };
+      updateRepoConfig() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("updateRepoConfig");
+            return {
+              workspaceId: "repo",
+              workspaceName: "repo",
+              repoPath: "/repo",
+              iconDataUrl: null,
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: "/worktrees/repo",
+              effectiveWorktreeBasePath: "/worktrees/repo",
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async saveRepoSettings() {
-        calls.push("saveRepoSettings");
-        return {
-          workspaceId: "repo",
-          workspaceName: "repo",
-          repoPath: "/repo",
-          iconDataUrl: null,
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: null,
-          defaultWorktreeBasePath: "/worktrees/repo",
-          effectiveWorktreeBasePath: "/worktrees/repo",
-        };
+      saveRepoSettings() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("saveRepoSettings");
+            return {
+              workspaceId: "repo",
+              workspaceName: "repo",
+              repoPath: "/repo",
+              iconDataUrl: null,
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: "/worktrees/repo",
+              effectiveWorktreeBasePath: "/worktrees/repo",
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateRepoHooks() {
-        calls.push("updateRepoHooks");
-        return {
-          workspaceId: "repo",
-          workspaceName: "repo",
-          repoPath: "/repo",
-          iconDataUrl: null,
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: null,
-          defaultWorktreeBasePath: "/worktrees/repo",
-          effectiveWorktreeBasePath: "/worktrees/repo",
-        };
+      updateRepoHooks() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("updateRepoHooks");
+            return {
+              workspaceId: "repo",
+              workspaceName: "repo",
+              repoPath: "/repo",
+              iconDataUrl: null,
+              isActive: true,
+              hasConfig: true,
+              configuredWorktreeBasePath: null,
+              defaultWorktreeBasePath: "/worktrees/repo",
+              effectiveWorktreeBasePath: "/worktrees/repo",
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getSettingsSnapshot() {
-        calls.push("getSettingsSnapshot");
-        return {
-          theme: "light",
-          git: { defaultMergeMethod: "merge_commit" },
-          general: { openAgentStudioTabOnBackgroundSessionStart: true },
-          chat: { showThinkingMessages: false },
-          reusablePrompts: [],
-          kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
-          autopilot: { rules: [] },
-          agentRuntimes: { opencode: { enabled: true }, codex: { enabled: false } },
-          workspaces: {},
-          globalPromptOverrides: {},
-        };
+      getSettingsSnapshot() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("getSettingsSnapshot");
+            return {
+              theme: "light",
+              git: { defaultMergeMethod: "merge_commit" },
+              general: { openAgentStudioTabOnBackgroundSessionStart: true },
+              chat: { showThinkingMessages: false },
+              reusablePrompts: [],
+              kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
+              autopilot: { rules: [] },
+              agentRuntimes: { opencode: { enabled: true }, codex: { enabled: false } },
+              workspaces: {},
+              globalPromptOverrides: {},
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async saveSettingsSnapshot() {
-        calls.push("saveSettingsSnapshot");
-        return [];
+      saveSettingsSnapshot() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("saveSettingsSnapshot");
+            return [];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setTheme() {
-        calls.push("setTheme");
+      setTheme() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("setTheme");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateGlobalGitConfig() {
-        calls.push("updateGlobalGitConfig");
+      updateGlobalGitConfig() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("updateGlobalGitConfig");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     } as unknown as WorkspaceSettingsService;
     const router = createHostCommandRouter({
       handlers: createWorkspaceSettingsCommandHandlers(service),
     });
-
     await expect(router.invoke("workspace_list")).resolves.toEqual([]);
     await expect(
       router.invoke("workspace_add", {
@@ -193,50 +314,168 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       "updateGlobalGitConfig",
     ]);
   });
-
   test("rejects malformed settings command arguments", async () => {
     const service = {
-      async listWorkspaces() {
-        return [];
+      listWorkspaces() {
+        return Effect.tryPromise({
+          try: async () => {
+            return [];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async addWorkspace() {
-        throw new Error("should not call addWorkspace");
+      addWorkspace() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call addWorkspace");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async selectWorkspace() {
-        throw new Error("should not call selectWorkspace");
+      selectWorkspace() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call selectWorkspace");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async reorderWorkspaces() {
-        throw new Error("should not call reorderWorkspaces");
+      reorderWorkspaces() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call reorderWorkspaces");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getRepoConfig() {
-        throw new Error("should not call getRepoConfig");
+      getRepoConfig() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call getRepoConfig");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateRepoConfig() {
-        throw new Error("should not call updateRepoConfig");
+      updateRepoConfig() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call updateRepoConfig");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async saveRepoSettings() {
-        throw new Error("should not call saveRepoSettings");
+      saveRepoSettings() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call saveRepoSettings");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateRepoHooks() {
-        throw new Error("should not call updateRepoHooks");
+      updateRepoHooks() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call updateRepoHooks");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async getSettingsSnapshot() {
-        throw new Error("should not call getSettingsSnapshot");
+      getSettingsSnapshot() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call getSettingsSnapshot");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async saveSettingsSnapshot() {
-        throw new Error("should not call saveSettingsSnapshot");
+      saveSettingsSnapshot() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call saveSettingsSnapshot");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async setTheme() {
-        throw new Error("should not call setTheme");
+      setTheme() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call setTheme");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async updateGlobalGitConfig() {
-        throw new Error("should not call updateGlobalGitConfig");
+      updateGlobalGitConfig() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("should not call updateGlobalGitConfig");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     } as unknown as WorkspaceSettingsService;
     const router = createHostCommandRouter({
       handlers: createWorkspaceSettingsCommandHandlers(service),
     });
-
     await expect(router.invoke("workspace_get_settings_snapshot", { extra: true })).rejects.toThrow(
       "workspace_get_settings_snapshot does not accept arguments.",
     );

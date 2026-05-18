@@ -1,7 +1,7 @@
 # End-to-End Architecture and Data Flow
 
 ## Purpose
-This document is the maintainer-facing map of how OpenDucktor moves data across layers, from React UI through the Rust host to Beads-backed persistence and MCP clients.
+This document is the maintainer-facing map of how OpenDucktor moves data across layers, from React UI through host boundaries to Beads-backed persistence and MCP clients.
 
 Use it to answer:
 - which layer owns a rule,
@@ -21,10 +21,28 @@ Current scope note:
 | Shared contracts (TS) | `packages/contracts/src/*` | Runtime-validated schemas for tasks, sessions, workflows, IPC payloads | Runtime orchestration, host process control |
 | Core domain services + ports (TS) | `packages/core/src/ports/agent-engine.ts`, `packages/core/src/services/*`, `packages/core/src/types/agent-orchestrator.ts` | `AgentEnginePort` boundary, role/tool policy, tool normalization, prompt composition helpers | Tauri invocation details, Beads CLI calls |
 | Frontend adapters (TS) | `packages/host-client/src/*`, `packages/adapters-opencode-sdk/src/*` | Concrete shell-host client and OpenCode `AgentEnginePort` adapter | Business workflow policy ownership |
+| TypeScript host (Effect) | `packages/host/src/*` | Electron/web host command router, Effect-native application services, ports, infrastructure adapters, runtime/process/filesystem/git/MCP orchestration | Frontend cache ownership, public contract schema ownership |
 | Tauri command bridge (Rust) | `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src-tauri/src/commands/*` | Typed command surface (`tauri::command`), argument mapping, command registration | Deep business policy (kept in `AppService`) |
 | Host application/domain (Rust) | `apps/desktop/src-tauri/crates/host-application/src/app_service/*`, `apps/desktop/src-tauri/crates/host-domain/src/*` | Workflow transition rules, task enrichment (`available_actions`, `agent_workflows`), runtime orchestration, `TaskStore` trait | UI concerns, view-level behavior |
 | Infrastructure/persistence (Rust) | `apps/desktop/src-tauri/crates/host-infra-beads/*`, `apps/desktop/src-tauri/crates/host-infra-system/*` | Beads-backed `TaskStore` persistence gateway, Beads lifecycle coordination, config/worktree/process integrations | UI workflow decisions |
 | MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/host-bridge-client.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | MCP stdio transport, shared schema validation, host-bridge readiness checks, host-backed `odt_*` task/workflow calls | Frontend rendering/state, Beads/Dolt lifecycle ownership |
+
+## Effect, Zod, and TanStack Query ownership
+
+OpenDucktor is adopting Effect progressively, starting with `packages/host`. The host uses Effect for internal execution: typed failures, dependency wiring, fallible I/O orchestration, lifecycle cleanup, and explicit Promise interop at shell-facing boundaries.
+
+Effect does not replace the public schema layer. `packages/contracts` remains the Zod-backed source of truth for runtime, task, workflow, host-bridge, and MCP payload shapes. If a host operation uses Effect internally, it still accepts and returns the same contract-defined payloads at public boundaries.
+
+Effect also does not replace frontend read caching. TanStack Query owns frontend cache keys, stale-time policy, in-flight deduplication, and invalidation for server-owned reads. Effect may run behind a host client or query function, but it must not create a competing frontend cache for the same data.
+
+The intended boundary is:
+
+- Zod owns public data contracts.
+- Effect owns host-side execution and failure modeling.
+- TanStack Query owns frontend server-read caching.
+- React/Zustand/local state own transient UI state and live interaction state.
+
+See [ADR 0002](adr/0002-use-effect-in-the-typescript-host.md) and [TanStack Query Cache Strategy](tanstack-query-cache-strategy.md).
 
 ## Platform-specific native lifecycle seams
 
@@ -119,6 +137,8 @@ Key boundary:
 | Persisted task lifecycle state | Beads `status` field | Beads store accessed through `TaskStore` implementations |
 | Repo attachment identity and shared Dolt runtime | Managed attachment root under the config dir plus shared Dolt server state under `beads/shared-server/` | `host-infra-system` + `host-infra-beads/src/lifecycle/*` |
 | Agent-authored docs (spec/plan/qa) and session snapshots | Task metadata under configurable namespace (`openducktor` default) | `host-infra-beads` via host application |
+| TypeScript host execution and expected host failures | Effect programs and tagged host errors under `packages/host/src` | `@openducktor/host`; Promise interop only at explicit transport/package boundaries |
+| Frontend server-read cache | TanStack Query keys/options under frontend query modules | `@openducktor/frontend`; host/runtime Effect code must not duplicate this cache |
 
 ## Replaceable Boundaries
 - TS port: `AgentEnginePort` (`packages/core/src/ports/agent-engine.ts`)
@@ -139,8 +159,10 @@ Concrete adapters today:
 8. Keep Beads attachment paths, Dolt coordinates, and metadata namespace ownership in the Rust host; do not reintroduce them into MCP startup or runtime-session contracts.
 
 ## Related Docs
+- `docs/adr/0002-use-effect-in-the-typescript-host.md`
 - `docs/agent-orchestrator-module-map.md`
 - `docs/beads-shared-dolt-lifecycle.md`
+- `docs/tanstack-query-cache-strategy.md`
 - `docs/runtime-integration-guide.md`
 - `docs/task-workflow-status-model.md`
 - `docs/task-workflow-actions.md`

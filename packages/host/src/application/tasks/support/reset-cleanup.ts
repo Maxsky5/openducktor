@@ -4,18 +4,17 @@ import {
   type TaskCard,
   type TaskStatus,
 } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import { normalizePathForComparison } from "./builder-worktree-cleanup";
-
 export const implementationSessionRoleNames = ["build", "qa"] as const;
 export const taskResetSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
 export const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
 export const taskResetSessionRoles = new Set<string>(taskResetSessionRoleNames);
-
 export const taskHasImplementationSessions = (task: TaskCard): boolean =>
   (task.agentSessions ?? []).some((session) => implementationSessionRoles.has(session.role.trim()));
-
 export const managedWorktreeBaseForRepoConfig = (
   settingsConfig: SettingsConfigPort,
   repoConfig: RepoConfig,
@@ -23,7 +22,6 @@ export const managedWorktreeBaseForRepoConfig = (
   repoConfig.worktreeBasePath !== undefined
     ? settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
     : settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
-
 export const collectTaskDeleteTargets = (
   tasks: TaskCard[],
   taskId: string,
@@ -42,10 +40,8 @@ export const collectTaskDeleteTargets = (
       }
     }
   }
-
   return tasks.filter((task) => targetIds.has(task.id));
 };
-
 export const relatedTaskBranch = (
   branchName: string,
   branchPrefix: string,
@@ -55,28 +51,26 @@ export const relatedTaskBranch = (
   const taskPrefix = `${cleanPrefix}/${taskId}`;
   return branchName === taskPrefix || branchName.startsWith(`${taskPrefix}-`);
 };
-
-export const collectRelatedTaskBranches = async (
+export const collectRelatedTaskBranches = (
   gitPort: GitPort,
   repoPath: string,
   branchPrefix: string,
   taskIds: string[],
-): Promise<string[]> => {
-  const branches = await gitPort.listBranches(repoPath);
-  const names = new Set<string>();
-  for (const branch of branches) {
-    if (branch.isRemote) {
-      continue;
+) =>
+  Effect.gen(function* () {
+    const branches = yield* gitPort.listBranches(repoPath);
+    const names = new Set<string>();
+    for (const branch of branches) {
+      if (branch.isRemote) {
+        continue;
+      }
+      if (taskIds.some((taskId) => relatedTaskBranch(branch.name, branchPrefix, taskId))) {
+        names.add(branch.name);
+      }
     }
-    if (taskIds.some((taskId) => relatedTaskBranch(branch.name, branchPrefix, taskId))) {
-      names.add(branch.name);
-    }
-  }
-
-  return [...names].sort();
-};
-
-export const collectDeleteWorktreePaths = async (
+    return [...names].sort();
+  });
+export const collectDeleteWorktreePaths = (
   dependencies: {
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
@@ -84,14 +78,56 @@ export const collectDeleteWorktreePaths = async (
   repoPath: string,
   branchPrefix: string,
   targetTasks: TaskCard[],
-): Promise<string[]> => {
-  const normalizedRepo = normalizePathForComparison(repoPath);
-  const seen = new Set<string>();
-  const paths: string[] = [];
-
-  for (const task of targetTasks) {
+) =>
+  Effect.gen(function* () {
+    const normalizedRepo = normalizePathForComparison(repoPath);
+    const seen = new Set<string>();
+    const paths: string[] = [];
+    for (const task of targetTasks) {
+      for (const session of task.agentSessions ?? []) {
+        if (!implementationSessionRoles.has(session.role.trim())) {
+          continue;
+        }
+        const workingDirectory = session.workingDirectory.trim();
+        if (!workingDirectory) {
+          continue;
+        }
+        const normalizedWorktree = normalizePathForComparison(workingDirectory);
+        if (normalizedWorktree === normalizedRepo) {
+          continue;
+        }
+        if (yield* dependencies.settingsConfig.pathExists(workingDirectory)) {
+          const currentBranch = yield* dependencies.gitPort.getCurrentBranch(workingDirectory);
+          const branchName = currentBranch.name?.trim();
+          if (!branchName || !relatedTaskBranch(branchName, branchPrefix, task.id)) {
+            continue;
+          }
+        }
+        if (!seen.has(normalizedWorktree)) {
+          seen.add(normalizedWorktree);
+          paths.push(workingDirectory);
+        }
+      }
+    }
+    return paths;
+  });
+export const collectResetWorktreePaths = (
+  dependencies: {
+    gitPort: GitPort;
+    settingsConfig: SettingsConfigPort;
+  },
+  repoPath: string,
+  branchPrefix: string,
+  task: TaskCard,
+  sessionRoles: Set<string>,
+  operationLabel: "reset implementation" | "reset task",
+) =>
+  Effect.gen(function* () {
+    const normalizedRepo = normalizePathForComparison(repoPath);
+    const seen = new Set<string>();
+    const paths: string[] = [];
     for (const session of task.agentSessions ?? []) {
-      if (!implementationSessionRoles.has(session.role.trim())) {
+      if (!sessionRoles.has(session.role.trim())) {
         continue;
       }
       const workingDirectory = session.workingDirectory.trim();
@@ -102,10 +138,19 @@ export const collectDeleteWorktreePaths = async (
       if (normalizedWorktree === normalizedRepo) {
         continue;
       }
-      if (await dependencies.settingsConfig.pathExists(workingDirectory)) {
-        const currentBranch = await dependencies.gitPort.getCurrentBranch(workingDirectory);
+      if (yield* dependencies.settingsConfig.pathExists(workingDirectory)) {
+        const currentBranch = yield* dependencies.gitPort.getCurrentBranch(workingDirectory);
         const branchName = currentBranch.name?.trim();
-        if (!branchName || !relatedTaskBranch(branchName, branchPrefix, task.id)) {
+        if (!branchName) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message: `Cannot ${operationLabel} task ${task.id} because worktree ${workingDirectory} is detached or has no active branch.`,
+              details: { repoPath, taskId: task.id, workingDirectory },
+            }),
+          );
+        }
+        if (!relatedTaskBranch(branchName, branchPrefix, task.id)) {
           continue;
         }
       }
@@ -114,65 +159,13 @@ export const collectDeleteWorktreePaths = async (
         paths.push(workingDirectory);
       }
     }
-  }
-
-  return paths;
-};
-
-export const collectResetWorktreePaths = async (
-  dependencies: {
-    gitPort: GitPort;
-    settingsConfig: SettingsConfigPort;
-  },
-  repoPath: string,
-  branchPrefix: string,
-  task: TaskCard,
-  sessionRoles: Set<string>,
-  operationLabel: "reset implementation" | "reset task",
-): Promise<string[]> => {
-  const normalizedRepo = normalizePathForComparison(repoPath);
-  const seen = new Set<string>();
-  const paths: string[] = [];
-
-  for (const session of task.agentSessions ?? []) {
-    if (!sessionRoles.has(session.role.trim())) {
-      continue;
-    }
-    const workingDirectory = session.workingDirectory.trim();
-    if (!workingDirectory) {
-      continue;
-    }
-    const normalizedWorktree = normalizePathForComparison(workingDirectory);
-    if (normalizedWorktree === normalizedRepo) {
-      continue;
-    }
-    if (await dependencies.settingsConfig.pathExists(workingDirectory)) {
-      const currentBranch = await dependencies.gitPort.getCurrentBranch(workingDirectory);
-      const branchName = currentBranch.name?.trim();
-      if (!branchName) {
-        throw new Error(
-          `Cannot ${operationLabel} task ${task.id} because worktree ${workingDirectory} is detached or has no active branch.`,
-        );
-      }
-      if (!relatedTaskBranch(branchName, branchPrefix, task.id)) {
-        continue;
-      }
-    }
-    if (!seen.has(normalizedWorktree)) {
-      seen.add(normalizedWorktree);
-      paths.push(workingDirectory);
-    }
-  }
-
-  return paths;
-};
-
-export const appendDeleteCleanupProgress = (
-  error: unknown,
+    return paths;
+  });
+export const appendDeleteCleanupProgress = <E>(
+  error: E,
   removedWorktrees: string[],
   deletedBranches: string[],
-): Error => {
-  const base = error instanceof Error ? error : new Error(String(error));
+): E | HostOperationError => {
   const progress: string[] = [];
   if (removedWorktrees.length > 0) {
     progress.push(`Delete cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`);
@@ -181,20 +174,21 @@ export const appendDeleteCleanupProgress = (
     progress.push(`Delete cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
   }
   if (progress.length === 0) {
-    return base;
+    return error;
   }
-
   progress.push("Retry delete to finish cleanup safely.");
-  return new Error(`${base.message}\n${progress.join("\n")}`, { cause: base });
+  return new HostOperationError({
+    operation: "task_delete.cleanup",
+    message: `${errorMessage(error)}\n${progress.join("\n")}`,
+    cause: error,
+  });
 };
-
-export const appendResetCleanupProgress = (
-  error: unknown,
+export const appendResetCleanupProgress = <E>(
+  error: E,
   removedWorktrees: string[],
   deletedBranches: string[],
   completedSteps: string[] = [],
-): Error => {
-  const base = error instanceof Error ? error : new Error(String(error));
+): E | HostOperationError => {
   const progress: string[] = [];
   if (removedWorktrees.length > 0) {
     progress.push(`Reset cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`);
@@ -206,16 +200,17 @@ export const appendResetCleanupProgress = (
     progress.push(`Reset cleanup already completed: ${completedSteps.join(", ")}.`);
   }
   if (progress.length === 0) {
-    return base;
+    return error;
   }
-
   progress.push("Retry reset to finish cleanup safely.");
-  return new Error(`${base.message}\n${progress.join("\n")}`, { cause: base });
+  return new HostOperationError({
+    operation: "task_reset.cleanup",
+    message: `${errorMessage(error)}\n${progress.join("\n")}`,
+    cause: error,
+  });
 };
-
 export const taskHasSessionsForRoles = (task: TaskCard, roles: Set<string>): boolean =>
   (task.agentSessions ?? []).some((session) => roles.has(session.role.trim()));
-
 export const resetImplementationRollbackStatus = (task: TaskCard): TaskStatus => {
   if (task.documentSummary.plan.has) {
     return "ready_for_dev";
@@ -225,6 +220,5 @@ export const resetImplementationRollbackStatus = (task: TaskCard): TaskStatus =>
   }
   return "open";
 };
-
 export const replaceTaskInList = (tasks: TaskCard[], updated: TaskCard): TaskCard[] =>
   tasks.map((task) => (task.id === updated.id ? updated : task));

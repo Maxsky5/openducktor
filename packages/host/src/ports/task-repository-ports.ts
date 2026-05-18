@@ -11,93 +11,121 @@ import type {
   TaskStatus,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
+import { Context, type Effect } from "effect";
+import type {
+  HostDependencyError,
+  HostInvariantError,
+  HostOperationError,
+  HostPathAccessError,
+  HostPathNotFoundError,
+  HostResourceError,
+  HostValidationError,
+} from "../effect/host-errors";
+
+export type TaskStoreError =
+  | HostDependencyError
+  | HostInvariantError
+  | HostOperationError
+  | HostPathAccessError
+  | HostPathNotFoundError
+  | HostResourceError
+  | HostValidationError;
 
 export type TaskStoreListTasksInput = {
   repoPath: string;
   doneVisibleDays?: number;
 };
-
 export type TaskReader = {
-  getTask(input: { repoPath: string; taskId: string }): Promise<TaskCard>;
-  getTaskMetadata(input: { repoPath: string; taskId: string }): Promise<TaskMetadataPayload>;
-  listTasks(input: TaskStoreListTasksInput): Promise<TaskCard[]>;
+  getTask(input: { repoPath: string; taskId: string }): Effect.Effect<TaskCard, TaskStoreError>;
+  getTaskMetadata(input: {
+    repoPath: string;
+    taskId: string;
+  }): Effect.Effect<TaskMetadataPayload, TaskStoreError>;
+  listTasks(input: TaskStoreListTasksInput): Effect.Effect<TaskCard[], TaskStoreError>;
 };
-
 export type TaskWriter = {
-  createTask(input: { repoPath: string; task: TaskCreateInput }): Promise<TaskCard>;
+  createTask(input: {
+    repoPath: string;
+    task: TaskCreateInput;
+  }): Effect.Effect<TaskCard, TaskStoreError>;
   deleteTask(input: {
     repoPath: string;
     taskId: string;
     deleteSubtasks: boolean;
-  }): Promise<boolean>;
+  }): Effect.Effect<boolean, TaskStoreError>;
   transitionTask(input: {
     repoPath: string;
     taskId: string;
     status: TaskStatus;
-  }): Promise<TaskCard>;
+  }): Effect.Effect<TaskCard, TaskStoreError>;
   updateTask(input: {
     repoPath: string;
     taskId: string;
     patch: TaskUpdatePatch;
-  }): Promise<TaskCard>;
+  }): Effect.Effect<TaskCard, TaskStoreError>;
 };
-
 export type WorkflowDocumentRepository = {
-  clearQaReports(input: { repoPath: string; taskId: string }): Promise<boolean>;
-  clearWorkflowDocuments(input: { repoPath: string; taskId: string }): Promise<boolean>;
+  clearQaReports(input: {
+    repoPath: string;
+    taskId: string;
+  }): Effect.Effect<boolean, TaskStoreError>;
+  clearWorkflowDocuments(input: {
+    repoPath: string;
+    taskId: string;
+  }): Effect.Effect<boolean, TaskStoreError>;
   recordQaOutcome(input: {
     repoPath: string;
     taskId: string;
     status: TaskStatus;
     markdown: string;
     verdict: QaReportVerdict;
-  }): Promise<TaskCard>;
+  }): Effect.Effect<TaskCard, TaskStoreError>;
   setPlanDocument(input: {
     repoPath: string;
     taskId: string;
     markdown: string;
-  }): Promise<TaskMetadataDocument>;
+  }): Effect.Effect<TaskMetadataDocument, TaskStoreError>;
   setSpecDocument(input: {
     repoPath: string;
     taskId: string;
     markdown: string;
-  }): Promise<TaskMetadataDocument>;
+  }): Effect.Effect<TaskMetadataDocument, TaskStoreError>;
 };
-
 export type AgentSessionRepository = {
   clearAgentSessionsByRoles(input: {
     repoPath: string;
     taskId: string;
     roles: string[];
-  }): Promise<boolean>;
+  }): Effect.Effect<boolean, TaskStoreError>;
   upsertAgentSession(input: {
     repoPath: string;
     taskId: string;
     session: AgentSessionRecord;
-  }): Promise<boolean>;
+  }): Effect.Effect<boolean, TaskStoreError>;
 };
-
 export type PullRequestRepository = {
-  listPullRequestSyncCandidates(input: { repoPath: string }): Promise<TaskCard[]>;
+  listPullRequestSyncCandidates(input: {
+    repoPath: string;
+  }): Effect.Effect<TaskCard[], TaskStoreError>;
   setPullRequest(input: {
     repoPath: string;
     taskId: string;
     pullRequest: PullRequest | null;
-  }): Promise<boolean>;
+  }): Effect.Effect<boolean, TaskStoreError>;
 };
-
 export type DirectMergeRepository = {
   setDirectMerge(input: {
     repoPath: string;
     taskId: string;
     directMerge: DirectMergeRecord | null;
-  }): Promise<boolean>;
+  }): Effect.Effect<boolean, TaskStoreError>;
 };
-
 export type RepoStoreDiagnostics = {
-  diagnoseRepoStore(input: { repoPath: string; prepare?: boolean }): Promise<RepoStoreHealth>;
+  diagnoseRepoStore(input: {
+    repoPath: string;
+    prepare?: boolean;
+  }): Effect.Effect<RepoStoreHealth, TaskStoreError>;
 };
-
 export type TaskStorePort = AgentSessionRepository &
   DirectMergeRepository &
   PullRequestRepository &
@@ -105,3 +133,8 @@ export type TaskStorePort = AgentSessionRepository &
   TaskReader &
   TaskWriter &
   WorkflowDocumentRepository;
+
+export class TaskStorePortTag extends Context.Tag("@openducktor/host/TaskStorePort")<
+  TaskStorePortTag,
+  TaskStorePort
+>() {}

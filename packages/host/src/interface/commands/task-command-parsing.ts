@@ -12,10 +12,17 @@ import {
   taskStatusSchema,
   taskUpdatePatchSchema,
 } from "@openducktor/contracts";
+import { HostValidationError } from "../../effect/host-errors";
+
+const invalidInput = (message: string, field?: string): HostValidationError =>
+  new HostValidationError({
+    message,
+    field,
+  });
 
 export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} must be an object.`);
+    throw invalidInput(`${label} must be an object.`, label);
   }
 
   return value as Record<string, unknown>;
@@ -23,7 +30,7 @@ export const requireRecord = (value: unknown, label: string): Record<string, unk
 
 export const requireString = (value: unknown, label: string): string => {
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${label} is required.`);
+    throw invalidInput(`${label} is required.`, label);
   }
 
   return value.trim();
@@ -35,7 +42,7 @@ export const optionalNonNegativeInteger = (value: unknown, label: string): numbe
   }
 
   if (!Number.isInteger(value) || typeof value !== "number" || value < 0) {
-    throw new Error(`${label} must be greater than or equal to 0.`);
+    throw invalidInput(`${label} must be greater than or equal to 0.`, label);
   }
 
   return value;
@@ -43,7 +50,7 @@ export const optionalNonNegativeInteger = (value: unknown, label: string): numbe
 
 export const requirePositiveInteger = (value: unknown, label: string): number => {
   if (!Number.isInteger(value) || typeof value !== "number" || value <= 0) {
-    throw new Error(`${label} must be a positive integer.`);
+    throw invalidInput(`${label} must be a positive integer.`, label);
   }
 
   return value;
@@ -55,7 +62,7 @@ export const parseCreateInput = (value: unknown): TaskCreateInput => {
     return parsed.data;
   }
 
-  throw new Error(`task_create input.input is invalid: ${parsed.error.message}`);
+  throw invalidInput(`task_create input.input is invalid: ${parsed.error.message}`, "input.input");
 };
 
 export const parseUpdatePatch = (value: unknown): TaskUpdatePatch => {
@@ -64,7 +71,7 @@ export const parseUpdatePatch = (value: unknown): TaskUpdatePatch => {
     return parsed.data;
   }
 
-  throw new Error(`task_update input.patch is invalid: ${parsed.error.message}`);
+  throw invalidInput(`task_update input.patch is invalid: ${parsed.error.message}`, "input.patch");
 };
 
 export const parseTransitionStatus = (value: unknown) => {
@@ -73,7 +80,10 @@ export const parseTransitionStatus = (value: unknown) => {
     return parsed.data;
   }
 
-  throw new Error(`task_transition input.status is invalid: ${parsed.error.message}`);
+  throw invalidInput(
+    `task_transition input.status is invalid: ${parsed.error.message}`,
+    "input.status",
+  );
 };
 
 export const optionalBoolean = (value: unknown, label: string): boolean | undefined => {
@@ -81,7 +91,7 @@ export const optionalBoolean = (value: unknown, label: string): boolean | undefi
     return undefined;
   }
   if (typeof value !== "boolean") {
-    throw new Error(`${label} must be a boolean when provided.`);
+    throw invalidInput(`${label} must be a boolean when provided.`, label);
   }
 
   return value;
@@ -89,12 +99,12 @@ export const optionalBoolean = (value: unknown, label: string): boolean | undefi
 
 export const parseRequiredMarkdown = (value: unknown, label: string): string => {
   if (typeof value !== "string") {
-    throw new Error(`${label} markdown cannot be empty.`);
+    throw invalidInput(`${label} markdown cannot be empty.`, label);
   }
 
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new Error(`${label} markdown cannot be empty.`);
+    throw invalidInput(`${label} markdown cannot be empty.`, label);
   }
 
   return trimmed;
@@ -105,7 +115,7 @@ export const parseOptionalNote = (value: unknown, label: string): string | undef
     return undefined;
   }
   if (typeof value !== "string") {
-    throw new Error(`${label} must be a string when present.`);
+    throw invalidInput(`${label} must be a string when present.`, label);
   }
 
   const trimmed = value.trim();
@@ -122,12 +132,15 @@ export const parsePlanSubtasks = (value: unknown): PlanSubtaskInput[] => {
     return parsed.data;
   }
 
-  throw new Error(`set_plan input.input.subtasks is invalid: ${parsed.error.message}`);
+  throw invalidInput(
+    `set_plan input.input.subtasks is invalid: ${parsed.error.message}`,
+    "input.input.subtasks",
+  );
 };
 
 export const parseTaskIdList = (value: unknown, label: string): string[] => {
   if (!Array.isArray(value)) {
-    throw new Error(`${label} must be an array.`);
+    throw invalidInput(`${label} must be an array.`, label);
   }
 
   return value.map((entry, index) => requireString(entry, `${label}[${index}]`));
@@ -162,7 +175,10 @@ export const parseAgentSessionRecord = (value: unknown): AgentSessionRecord => {
     return parsed.data;
   }
 
-  throw new Error(`agent_session_upsert input.session is invalid: ${parsed.error.message}`);
+  throw invalidInput(
+    `agent_session_upsert input.session is invalid: ${parsed.error.message}`,
+    "input.session",
+  );
 };
 
 export const parsePullRequest = (value: unknown): PullRequest => {
@@ -171,8 +187,9 @@ export const parsePullRequest = (value: unknown): PullRequest => {
     return parsed.data;
   }
 
-  throw new Error(
+  throw invalidInput(
     `task_pull_request_link_merged input.pullRequest is invalid: ${parsed.error.message}`,
+    "input.pullRequest",
   );
 };
 
@@ -180,7 +197,7 @@ export const parsePullRequestContent = (value: unknown): { title: string; body: 
   const record = requireRecord(value, "task_pull_request_upsert input.input");
   const title = requireString(record.title, "input.title");
   if (typeof record.body !== "string") {
-    throw new Error("input.body is required.");
+    throw invalidInput("input.body is required.", "input.body");
   }
 
   return { title, body: record.body };
@@ -192,37 +209,43 @@ export const parseTaskDirectMergeInput = (value: unknown) => {
     return parsed.data;
   }
 
-  throw new Error(`task_direct_merge input.input is invalid: ${parsed.error.message}`);
+  throw invalidInput(
+    `task_direct_merge input.input is invalid: ${parsed.error.message}`,
+    "input.input",
+  );
 };
 
 export const compactAgentSessionForStorage = (session: AgentSessionRecord): AgentSessionRecord => {
   const role = session.role.trim();
   if (!role) {
-    throw new Error("Agent session role is required");
+    throw invalidInput("Agent session role is required", "role");
   }
 
   const externalSessionId = session.externalSessionId.trim();
   if (!externalSessionId) {
-    throw new Error("Agent session externalSessionId is required");
+    throw invalidInput("Agent session externalSessionId is required", "externalSessionId");
   }
 
   const startedAt = session.startedAt.trim();
   if (!startedAt) {
-    throw new Error("Agent session startedAt is required");
+    throw invalidInput("Agent session startedAt is required", "startedAt");
   }
 
   const runtimeKind = session.runtimeKind.trim();
   if (!runtimeKind) {
-    throw new Error("Agent session runtimeKind is required");
+    throw invalidInput("Agent session runtimeKind is required", "runtimeKind");
   }
 
   const workingDirectory = session.workingDirectory.trim();
   if (!workingDirectory) {
-    throw new Error("Agent session workingDirectory is required");
+    throw invalidInput("Agent session workingDirectory is required", "workingDirectory");
   }
 
   if (session.selectedModel !== null && !session.selectedModel.runtimeKind.trim()) {
-    throw new Error("Agent session selectedModel.runtimeKind is required");
+    throw invalidInput(
+      "Agent session selectedModel.runtimeKind is required",
+      "selectedModel.runtimeKind",
+    );
   }
 
   return agentSessionRecordSchema.parse({

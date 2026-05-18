@@ -99,6 +99,12 @@ Desktop-managed sessions use that MCP internally, and the same task surface is a
 
 That keeps the workflow task-centric and auditable: agents act through a controlled task interface, while OpenDucktor keeps task state, documents, approvals, and delivery history connected in one place.
 
+## Architecture Notes
+
+OpenDucktor uses shared Zod contracts in `packages/contracts` for public runtime, task, workflow, IPC, and MCP payloads. The frontend uses TanStack Query as the cache and deduplication layer for server-owned reads.
+
+The TypeScript host in `packages/host` is being adopted as the first Effect-native package. Effect owns internal host execution concerns such as typed failures, dependency wiring, I/O orchestration, resource lifecycle, and boundary wrapping, while Promise APIs remain at shell-facing transport edges.
+
 ## Current Scope
 
 - Platform support today: macOS only
@@ -113,6 +119,8 @@ That keeps the workflow task-centric and auditable: agents act through a control
 
 - [docs/README.md](docs/README.md)
 - [docs/architecture-overview.md](docs/architecture-overview.md)
+- [docs/adr/0002-use-effect-in-the-typescript-host.md](docs/adr/0002-use-effect-in-the-typescript-host.md)
+- [docs/tanstack-query-cache-strategy.md](docs/tanstack-query-cache-strategy.md)
 - [docs/runtime-integration-guide.md](docs/runtime-integration-guide.md)
 - [docs/web-runner.md](docs/web-runner.md)
 - [docs/task-workflow-status-model.md](docs/task-workflow-status-model.md)

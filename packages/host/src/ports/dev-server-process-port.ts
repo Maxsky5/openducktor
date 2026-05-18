@@ -1,14 +1,15 @@
+import { Context, Data, type Effect } from "effect";
+import type { HostOperationError, HostValidationError } from "../effect/host-errors";
+
 export type DevServerProcessExit = {
   pid: number;
   exitCode: number | null;
   signal: string | null;
   error: string | null;
 };
-
 export type DevServerProcessOutput = {
   data: string;
 };
-
 export type DevServerProcessStartInput = {
   command: string;
   cwd: string;
@@ -16,36 +17,45 @@ export type DevServerProcessStartInput = {
   onExit: (exit: DevServerProcessExit) => void;
   onOutput: (output: DevServerProcessOutput) => void;
 };
-
 export type DevServerProcessHandle = {
   pid: number;
-  stop(): Promise<void>;
+  stop(): Effect.Effect<void, HostOperationError>;
 };
-
 export type DevServerProcessPort = {
-  start(input: DevServerProcessStartInput): Promise<DevServerProcessHandle>;
+  start(
+    input: DevServerProcessStartInput,
+  ): Effect.Effect<
+    DevServerProcessHandle,
+    DevServerProcessStartExitError | HostOperationError | HostValidationError
+  >;
 };
 
-export class DevServerProcessStartExitError extends Error {
-  readonly exitCode: number | null;
-  readonly signal: string | null;
-
-  constructor(exitCode: number | null, signal: string | null) {
-    super(devServerExitMessage(exitCode, signal));
-    this.name = "DevServerProcessStartExitError";
-    this.exitCode = exitCode;
-    this.signal = signal;
-  }
-}
+export class DevServerProcessPortTag extends Context.Tag("@openducktor/host/DevServerProcessPort")<
+  DevServerProcessPortTag,
+  DevServerProcessPort
+>() {}
 
 export const devServerExitMessage = (exitCode: number | null, signal: string | null): string => {
   if (exitCode !== null) {
     return `Dev server exited with code ${exitCode}.`;
   }
-
   if (signal !== null) {
     return `Dev server exited after receiving signal ${signal}.`;
   }
-
   return "Dev server exited after receiving a signal.";
 };
+export class DevServerProcessStartExitError extends Data.TaggedError(
+  "DevServerProcessStartExitError",
+)<{
+  readonly message: string;
+  readonly exitCode: number | null;
+  readonly signal: string | null;
+}> {
+  constructor(exitCode: number | null, signal: string | null) {
+    super({
+      message: devServerExitMessage(exitCode, signal),
+      exitCode,
+      signal,
+    });
+  }
+}

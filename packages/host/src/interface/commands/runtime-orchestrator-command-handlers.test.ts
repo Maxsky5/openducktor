@@ -1,107 +1,182 @@
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { Effect } from "effect";
 import type { RuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
+import { HostOperationError } from "../../effect/host-errors";
 import { createHostCommandRouter } from "../router/host-command-router";
 import { createRuntimeOrchestratorCommandHandlers } from "./runtime-orchestrator-command-handlers";
 
+const createRuntimeOrchestratorServiceFake = (
+  service: RuntimeOrchestratorService,
+): RuntimeOrchestratorService => service as RuntimeOrchestratorService;
 const createRecordingService = () => {
-  const calls: Array<{ method: keyof RuntimeOrchestratorService; input: unknown }> = [];
-  const service: RuntimeOrchestratorService = {
-    async agentSessionStop(input) {
-      calls.push({ method: "agentSessionStop", input });
-      return { ok: true };
-    },
-    async runtimeEnsure(input) {
-      calls.push({ method: "runtimeEnsure", input });
-      return {
-        kind: "opencode",
-        runtimeId: "runtime-1",
-        repoPath: "/repo",
-        taskId: null,
-        role: "workspace",
-        workingDirectory: "/repo",
-        runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
-        startedAt: "2026-05-10T10:00:00.000Z",
-        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
-      };
-    },
-    async runtimeList(input) {
-      calls.push({ method: "runtimeList", input });
-      return [];
-    },
-    async runtimeStop(input) {
-      calls.push({ method: "runtimeStop", input });
-      return { ok: true };
-    },
-    async runtimeStartupStatus(input) {
-      calls.push({ method: "runtimeStartupStatus", input });
-      return {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-        stage: "idle",
-        runtime: null,
-        startedAt: null,
-        updatedAt: "2026-05-10T10:00:00.000Z",
-        elapsedMs: null,
-        attempts: null,
-        failureKind: null,
-        failureReason: null,
-        detail: null,
-      };
-    },
-    async repoRuntimeHealth(input) {
-      calls.push({ method: "repoRuntimeHealth", input });
-      return {
-        status: "not_started",
-        checkedAt: "2026-05-10T10:00:00.000Z",
-        runtime: {
-          status: "not_started",
-          stage: "idle",
-          observation: null,
-          instance: null,
-          startedAt: null,
-          updatedAt: "2026-05-10T10:00:00.000Z",
-          elapsedMs: null,
-          attempts: null,
-          detail: "Runtime has not been started yet.",
-          failureKind: null,
-          failureReason: null,
+  const calls: Array<{
+    method: keyof RuntimeOrchestratorService;
+    input: unknown;
+  }> = [];
+  const service = createRuntimeOrchestratorServiceFake({
+    agentSessionStop(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "agentSessionStop", input });
+          return { ok: true };
         },
-        mcp: null,
-      };
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async repoRuntimeHealthStatus(input) {
-      calls.push({ method: "repoRuntimeHealthStatus", input });
-      return {
-        status: "not_started",
-        checkedAt: "2026-05-10T10:00:00.000Z",
-        runtime: {
-          status: "not_started",
-          stage: "idle",
-          observation: null,
-          instance: null,
-          startedAt: null,
-          updatedAt: "2026-05-10T10:00:00.000Z",
-          elapsedMs: null,
-          attempts: null,
-          detail: "Runtime has not been started yet.",
-          failureKind: null,
-          failureReason: null,
+    runtimeEnsure(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "runtimeEnsure", input });
+          return {
+            kind: "opencode",
+            runtimeId: "runtime-1",
+            repoPath: "/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/repo",
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+            startedAt: "2026-05-10T10:00:00.000Z",
+            descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+          };
         },
-        mcp: null,
-      };
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-  };
-
+    runtimeList(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "runtimeList", input });
+          return [];
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    runtimeStop(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "runtimeStop", input });
+          return { ok: true };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    runtimeStartupStatus(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "runtimeStartupStatus", input });
+          return {
+            runtimeKind: "opencode",
+            repoPath: "/repo",
+            stage: "idle",
+            runtime: null,
+            startedAt: null,
+            updatedAt: "2026-05-10T10:00:00.000Z",
+            elapsedMs: null,
+            attempts: null,
+            failureKind: null,
+            failureReason: null,
+            detail: null,
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    repoRuntimeHealth(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "repoRuntimeHealth", input });
+          return {
+            status: "not_started",
+            checkedAt: "2026-05-10T10:00:00.000Z",
+            runtime: {
+              status: "not_started",
+              stage: "idle",
+              observation: null,
+              instance: null,
+              startedAt: null,
+              updatedAt: "2026-05-10T10:00:00.000Z",
+              elapsedMs: null,
+              attempts: null,
+              detail: "Runtime has not been started yet.",
+              failureKind: null,
+              failureReason: null,
+            },
+            mcp: null,
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    repoRuntimeHealthStatus(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "repoRuntimeHealthStatus", input });
+          return {
+            status: "not_started",
+            checkedAt: "2026-05-10T10:00:00.000Z",
+            runtime: {
+              status: "not_started",
+              stage: "idle",
+              observation: null,
+              instance: null,
+              startedAt: null,
+              updatedAt: "2026-05-10T10:00:00.000Z",
+              elapsedMs: null,
+              attempts: null,
+              detail: "Runtime has not been started yet.",
+              failureKind: null,
+              failureReason: null,
+            },
+            mcp: null,
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+  });
   return { calls, service };
 };
-
 describe("createRuntimeOrchestratorCommandHandlers", () => {
   test("routes runtime registry commands to the service", async () => {
     const { calls, service } = createRecordingService();
     const router = createHostCommandRouter({
       handlers: createRuntimeOrchestratorCommandHandlers(service),
     });
-
     await expect(
       router.invoke("agent_session_stop", {
         request: {
@@ -140,7 +215,6 @@ describe("createRuntimeOrchestratorCommandHandlers", () => {
         repoPath: "/repo",
       }),
     ).resolves.toMatchObject({ status: "not_started" });
-
     expect(calls).toEqual([
       {
         method: "agentSessionStop",

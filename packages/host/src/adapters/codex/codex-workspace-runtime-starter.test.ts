@@ -3,28 +3,38 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createSystemCommandRunner } from "../system/system-command-runner";
-import { createCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
+import { createCodexAppServerTransportRegistry as createEffectCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 import {
   buildCodexMcpConfigArgs,
-  createCodexWorkspaceRuntimeStarter,
+  createCodexWorkspaceRuntimeStarter as createEffectCodexWorkspaceRuntimeStarter,
 } from "./codex-workspace-runtime-starter";
 
+const createCodexWorkspaceRuntimeStarter = (
+  ...args: Parameters<typeof createEffectCodexWorkspaceRuntimeStarter>
+) => createEffectCodexWorkspaceRuntimeStarter(...args);
+const createCodexAppServerTransportRegistry = (
+  ...args: Parameters<typeof createEffectCodexAppServerTransportRegistry>
+) => createEffectCodexAppServerTransportRegistry(...args);
 const createSystemCommands = (): SystemCommandPort => ({
-  async requiredCommandError() {
-    return null;
+  resolveCommandPath(command) {
+    return Effect.succeed(command);
   },
-  async versionCommand() {
-    return "codex 1.0.0";
+  requiredCommandError() {
+    return Effect.succeed(null);
   },
-  async runCommandAllowFailure() {
-    return { ok: true, stdout: "", stderr: "" };
+  versionCommand() {
+    return Effect.succeed("codex 1.0.0");
+  },
+  runCommandAllowFailure() {
+    return Effect.succeed({ ok: true, stdout: "", stderr: "" });
   },
 });
-
 const createFakeCodex = async (
   root: string,
   {
@@ -76,18 +86,52 @@ lines.on("line", (line) => {
     if (capturePath) {
       writeFileSync(capturePath, JSON.stringify(capture));
     }
-    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { ok: true } }) + "\\n");
+    process.stdout.write(JSON.stringify({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: {
+        userAgent: "codex-test",
+        codexHome: "/tmp/codex",
+        platformFamily: "unix",
+        platformOs: "darwin",
+      },
+    }) + "\\n");
     return;
   }
   if (message.method === "initialized") {
     if (emitStreamEvents) {
-      process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "codex/app-server/ready", params: { threadId: "thread-1" } }) + "\\n");
-      process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: 99, method: "item/tool/call", params: { threadId: "thread-1" } }) + "\\n");
+      process.stdout.write(JSON.stringify({
+        jsonrpc: "2.0",
+        method: "thread/status/changed",
+        params: { threadId: "thread-1", status: { type: "idle" } },
+      }) + "\\n");
+      process.stdout.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 99,
+        method: "execCommandApproval",
+        params: {
+          conversationId: "thread-1",
+          callId: "call-1",
+          approvalId: null,
+          command: ["true"],
+          cwd: "/repo",
+          reason: null,
+          parsedCmd: [],
+        },
+      }) + "\\n");
     }
     return;
   }
   if (message.id !== undefined) {
-    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { method: message.method, params: message.params ?? null } }) + "\\n");
+    if (message.method === "thread/loaded/list") {
+      process.stdout.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: { data: [], nextCursor: null },
+      }) + "\\n");
+      return;
+    }
+    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { data: [], nextCursor: null } }) + "\\n");
   }
 });
 const stop = () => process.exit(0);
@@ -97,9 +141,8 @@ process.on("SIGINT", stop);
   );
   return writeFakeRuntimeCommand(root, "codex", "codex.mjs");
 };
-
 const waitForEvents = async (events: unknown[], count: number): Promise<void> => {
-  const deadline = Date.now() + 1_000;
+  const deadline = Date.now() + 1000;
   while (Date.now() < deadline) {
     if (events.length >= count) {
       return;
@@ -142,24 +185,23 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       "mcp_servers.openducktor.enabled=true",
     ]);
   });
-
   test("fails fast when the MCP bridge connection is not configured", async () => {
     const starter = createCodexWorkspaceRuntimeStarter({
       systemCommands: createSystemCommands(),
       codexAppServer: createCodexAppServerTransportRegistry(),
       mcpCommand: ["mcp-bin"],
     });
-
     await expect(
-      starter.startWorkspaceRuntime({
-        runtimeKind: "codex",
-        repoPath: "/repo",
-        workingDirectory: "/repo",
-        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
-      }),
+      Effect.runPromise(
+        starter.startWorkspaceRuntime({
+          runtimeKind: "codex",
+          repoPath: "/repo",
+          workingDirectory: "/repo",
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+        }),
+      ),
     ).rejects.toThrow("Codex workspace startup requires an MCP host bridge connection.");
   });
-
   test("starts a Codex app-server runtime, registers transport, and stops it", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-codex-starter-"));
     const originalCapturePath = process.env.CODEX_CAPTURE_PATH;
@@ -170,29 +212,41 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       process.env.CODEX_CAPTURE_PATH = capturePath;
       const codexBinary = await createFakeCodex(root);
       const codexAppServer = createCodexAppServerTransportRegistry();
+      const promiseCodexAppServer = codexAppServer;
       const starter = createCodexWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
         codexAppServer,
         codexBinary,
         mcpCommand: ["mcp-bin", "--stdio"],
         clientVersion: "0.3.1-test",
-        resolveMcpBridgeConnection: async () => ({
-          workspaceId: "repo",
-          hostUrl: "http://127.0.0.1:14327",
-          hostToken: "token-1",
-        }),
-        requestTimeoutMs: 4_000,
+        resolveMcpBridgeConnection: () =>
+          Effect.tryPromise({
+            try: async () => {
+              return {
+                workspaceId: "repo",
+                hostUrl: "http://127.0.0.1:14327",
+                hostToken: "token-1",
+              };
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          }),
+        requestTimeoutMs: 4000,
         now: () => new Date("2026-05-10T10:00:00.000Z"),
         runtimeId: () => "runtime-1",
       });
-
-      const handle = await starter.startWorkspaceRuntime({
-        runtimeKind: "codex",
-        repoPath: repo,
-        workingDirectory: repo,
-        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
-      });
-
+      const handle = await Effect.runPromise(
+        starter.startWorkspaceRuntime({
+          runtimeKind: "codex",
+          repoPath: repo,
+          workingDirectory: repo,
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+        }),
+      );
       expect(handle.runtime).toMatchObject({
         kind: "codex",
         runtimeId: "runtime-1",
@@ -206,12 +260,14 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         startedAt: "2026-05-10T10:00:00.000Z",
       });
       await expect(
-        codexAppServer.request({
-          runtimeId: "runtime-1",
-          method: "thread/loaded/list",
-          params: { cursor: null },
-        }),
-      ).resolves.toEqual({ method: "thread/loaded/list", params: { cursor: null } });
+        Effect.runPromise(
+          promiseCodexAppServer.request({
+            runtimeId: "runtime-1",
+            method: "thread/loaded/list",
+            params: { cursor: null },
+          }),
+        ),
+      ).resolves.toEqual({ data: [], nextCursor: null });
       const capture = JSON.parse(await readFile(capturePath, "utf8"));
       expect(capture.env).toMatchObject({
         ODT_WORKSPACE_ID: "repo",
@@ -222,10 +278,11 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       expect(capture.env.ODT_ALLOWED_TOOLS).toContain("odt_read_task");
       expect(capture.initializeVersion).toBe("0.3.1-test");
       expect(capture.args).toContain("app-server");
-
-      await expect(handle.stop()).resolves.toBeUndefined();
+      await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
       await expect(
-        codexAppServer.request({ runtimeId: "runtime-1", method: "thread/loaded/list" }),
+        Effect.runPromise(
+          promiseCodexAppServer.request({ runtimeId: "runtime-1", method: "thread/loaded/list" }),
+        ),
       ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
     } finally {
       if (originalCapturePath === undefined) {
@@ -236,7 +293,6 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       await removeTestDirectory(root);
     }
   });
-
   test("stops the Codex app-server process tree including descendants", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-codex-starter-tree-"));
     let childPid: number | null = null;
@@ -251,26 +307,29 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         codexAppServer,
         codexBinary,
         mcpCommand: ["mcp-bin", "--stdio"],
-        resolveMcpBridgeConnection: async () => ({
-          workspaceId: "repo",
-          hostUrl: "http://127.0.0.1:14327",
-          hostToken: "token-1",
-        }),
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "repo",
+            hostUrl: "http://127.0.0.1:14327",
+            hostToken: "token-1",
+          }),
         requestTimeoutMs: 4_000,
         runtimeId: () => "runtime-tree",
       });
 
-      const handle = await starter.startWorkspaceRuntime({
-        runtimeKind: "codex",
-        repoPath: repo,
-        workingDirectory: repo,
-        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
-      });
+      const handle = await Effect.runPromise(
+        starter.startWorkspaceRuntime({
+          runtimeKind: "codex",
+          repoPath: repo,
+          workingDirectory: repo,
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+        }),
+      );
       await waitFor(() => existsSync(childPidPath));
       childPid = Number(await readFile(childPidPath, "utf8"));
       expect(processIsAlive(childPid)).toBe(true);
 
-      await handle.stop();
+      await Effect.runPromise(handle.stop());
       await waitFor(() => !processIsAlive(childPid as number));
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
@@ -292,31 +351,42 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         codexAppServer,
         codexBinary,
         mcpCommand: ["mcp-bin", "--stdio"],
-        resolveMcpBridgeConnection: async () => ({
-          workspaceId: "repo",
-          hostUrl: "http://127.0.0.1:14327",
-          hostToken: "token-1",
-        }),
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "repo",
+            hostUrl: "http://127.0.0.1:14327",
+            hostToken: "token-1",
+          }),
         requestTimeoutMs: 4_000,
         runtimeId: () => "runtime-cleanup-failure",
-        processTreeTerminator: async () => {
-          throw new Error("process tree stayed alive");
-        },
+        processTreeTerminator: () =>
+          Effect.fail(
+            new HostOperationError({
+              operation: "test.processTreeTerminator",
+              message: "process tree stayed alive",
+            }),
+          ),
       });
 
-      const handle = await starter.startWorkspaceRuntime({
-        runtimeKind: "codex",
-        repoPath: repo,
-        workingDirectory: repo,
-        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
-      });
-
-      await expect(handle.stop()).rejects.toThrow("process tree: process tree stayed alive");
-      await expect(
-        codexAppServer.request({
-          runtimeId: "runtime-cleanup-failure",
-          method: "thread/loaded/list",
+      const handle = await Effect.runPromise(
+        starter.startWorkspaceRuntime({
+          runtimeKind: "codex",
+          repoPath: repo,
+          workingDirectory: repo,
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
         }),
+      );
+
+      await expect(Effect.runPromise(handle.stop())).rejects.toThrow(
+        "process tree: process tree stayed alive",
+      );
+      await expect(
+        Effect.runPromise(
+          codexAppServer.request({
+            runtimeId: "runtime-cleanup-failure",
+            method: "thread/loaded/list",
+          }),
+        ),
       ).rejects.toThrow("Codex app-server transport not found");
     } finally {
       await removeTestDirectory(root);
@@ -347,27 +417,30 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         codexAppServer,
         mcpCommand: ["mcp-bin", "--stdio"],
         clientVersion: "0.3.1-test",
-        resolveMcpBridgeConnection: async () => ({
-          workspaceId: "repo",
-          hostUrl: "http://127.0.0.1:14327",
-          hostToken: "token-1",
-        }),
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "repo",
+            hostUrl: "http://127.0.0.1:14327",
+            hostToken: "token-1",
+          }),
         requestTimeoutMs: 4_000,
         runtimeId: () => "runtime-path",
       });
 
       expect(codexBinary.endsWith(".cmd")).toBe(true);
-      const handle = await starter.startWorkspaceRuntime({
-        runtimeKind: "codex",
-        repoPath: repo,
-        workingDirectory: repo,
-        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
-      });
+      const handle = await Effect.runPromise(
+        starter.startWorkspaceRuntime({
+          runtimeKind: "codex",
+          repoPath: repo,
+          workingDirectory: repo,
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+        }),
+      );
 
       expect(handle.runtime.runtimeId).toBe("runtime-path");
       const capture = JSON.parse(await readFile(capturePath, "utf8"));
       expect(capture.args).toContain("app-server");
-      await expect(handle.stop()).resolves.toBeUndefined();
+      await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
     } finally {
       if (originalCapturePath === undefined) {
         delete process.env.CODEX_CAPTURE_PATH;
@@ -385,6 +458,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       await mkdir(repo);
       const codexBinary = await createFakeCodex(root, { emitStreamEvents: true });
       const codexAppServer = createCodexAppServerTransportRegistry();
+      const promiseCodexAppServer = codexAppServer;
       const events: unknown[] = [];
       const starter = createCodexWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
@@ -392,54 +466,73 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         codexBinary,
         mcpCommand: ["mcp-bin", "--stdio"],
         eventEmitter: (event) => events.push(event),
-        resolveMcpBridgeConnection: async () => ({
-          workspaceId: "repo",
-          hostUrl: "http://127.0.0.1:14327",
-          hostToken: "token-1",
-        }),
-        requestTimeoutMs: 4_000,
+        resolveMcpBridgeConnection: () =>
+          Effect.tryPromise({
+            try: async () => {
+              return {
+                workspaceId: "repo",
+                hostUrl: "http://127.0.0.1:14327",
+                hostToken: "token-1",
+              };
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          }),
+        requestTimeoutMs: 4000,
         runtimeId: () => "runtime-events",
       });
-
-      const handle = await starter.startWorkspaceRuntime({
-        runtimeKind: "codex",
-        repoPath: repo,
-        workingDirectory: repo,
-        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
-      });
-
+      const handle = await Effect.runPromise(
+        starter.startWorkspaceRuntime({
+          runtimeKind: "codex",
+          repoPath: repo,
+          workingDirectory: repo,
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+        }),
+      );
       await waitForEvents(events, 2);
       expect(events).toEqual([
         {
           runtimeId: "runtime-events",
           kind: "notification",
           message: {
-            jsonrpc: "2.0",
-            method: "codex/app-server/ready",
-            params: { threadId: "thread-1" },
+            method: "thread/status/changed",
+            params: { threadId: "thread-1", status: { type: "idle" } },
           },
         },
         {
           runtimeId: "runtime-events",
           kind: "server_request",
           message: {
-            jsonrpc: "2.0",
             id: 99,
-            method: "item/tool/call",
-            params: { threadId: "thread-1" },
+            method: "execCommandApproval",
+            params: {
+              conversationId: "thread-1",
+              callId: "call-1",
+              approvalId: null,
+              command: ["true"],
+              cwd: "/repo",
+              reason: null,
+              parsedCmd: [],
+            },
           },
         },
       ]);
-      await expect(codexAppServer.drainNotifications("runtime-events")).resolves.toEqual([
+      await expect(
+        Effect.runPromise(promiseCodexAppServer.drainNotifications("runtime-events")),
+      ).resolves.toEqual([
         {
-          jsonrpc: "2.0",
-          method: "codex/app-server/ready",
-          params: { threadId: "thread-1" },
+          method: "thread/status/changed",
+          params: { threadId: "thread-1", status: { type: "idle" } },
         },
       ]);
-      await expect(codexAppServer.drainServerRequests("runtime-events")).resolves.toEqual([]);
-
-      await handle.stop();
+      await expect(
+        Effect.runPromise(promiseCodexAppServer.drainServerRequests("runtime-events")),
+      ).resolves.toEqual([]);
+      await Effect.runPromise(handle.stop());
     } finally {
       await removeTestDirectory(root);
     }

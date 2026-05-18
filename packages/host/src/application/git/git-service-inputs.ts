@@ -1,141 +1,144 @@
-import {
-  type GitConflictOperation,
-  type GitDiffScope,
-  type GlobalConfig,
-  globalConfigSchema,
-  type RepoConfig,
-} from "@openducktor/contracts";
+import type { GitConflictOperation, GitDiffScope, GlobalConfig } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
-
 export type CreateGitServiceInput = {
   gitPort: GitPort;
   settingsConfig?: SettingsConfigPort;
   worktreeFiles?: WorktreeFilePort;
 };
-
 export type GitScopeInput = {
   repoPath: string;
   workingDir?: string;
 };
-
 export type GitAheadBehindInput = GitScopeInput & {
   targetBranch: string;
 };
-
 export type GitSwitchBranchInput = {
   branch: string;
   create: boolean;
   repoPath: string;
 };
-
 export type GitCreateWorktreeInput = {
   branch: string;
   createBranch: boolean;
   repoPath: string;
   worktreePath: string;
 };
-
 export type GitRemoveWorktreeInput = {
   force: boolean;
   repoPath: string;
   worktreePath: string;
 };
-
 export type GitCommitAllInput = GitScopeInput & {
   message: string;
 };
-
 export type GitPushBranchInput = GitScopeInput & {
   branch: string;
   forceWithLease?: boolean;
   remote: string;
   setUpstream?: boolean;
 };
-
 export type GitRebaseBranchInput = GitScopeInput & {
   targetBranch: string;
 };
-
 export type GitAbortConflictInput = GitScopeInput & {
   operation: GitConflictOperation;
 };
-
 export type GitDiffInput = GitScopeInput & {
   targetBranch?: string;
 };
-
 export type GitWorktreeStatusInput = GitScopeInput & {
   diffScope: GitDiffScope;
   targetBranch: string;
 };
-
-export const resolveGitWorkingDirectory = async (
+export const resolveGitWorkingDirectory = (
   gitPort: GitPort,
   repoPath: string,
   workingDir: string | undefined,
-): Promise<string> => {
-  const canonicalRepoPath = await gitPort.canonicalizePath(repoPath).catch((error: unknown) => {
-    throw new Error(`repo_path does not exist or is not accessible: ${repoPath}`, {
-      cause: error,
-    });
-  });
-
-  if (!(await gitPort.isGitRepository(canonicalRepoPath))) {
-    throw new Error(`Not a git repository: ${canonicalRepoPath}`);
-  }
-
-  if (!workingDir || workingDir === repoPath) {
-    return canonicalRepoPath;
-  }
-
-  const canonicalWorkingDir = await gitPort.canonicalizePath(workingDir).catch((error: unknown) => {
-    throw new Error(`working_dir does not exist or is not accessible: ${workingDir}`, {
-      cause: error,
-    });
-  });
-
-  if (canonicalWorkingDir === canonicalRepoPath) {
-    return canonicalWorkingDir;
-  }
-
-  if (!(await gitPort.isGitRepository(canonicalWorkingDir))) {
-    throw new Error(`Not a git repository: ${canonicalWorkingDir}`);
-  }
-
-  if (!(await gitPort.shareGitCommonDirectory(canonicalRepoPath, canonicalWorkingDir))) {
-    throw new Error(
-      `working_dir is not within authorized repository or linked worktrees: ${workingDir}`,
+) =>
+  Effect.gen(function* () {
+    const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath).pipe(
+      Effect.mapError(
+        (error) =>
+          new HostValidationError({
+            message: `repo_path does not exist or is not accessible: ${repoPath}`,
+            field: "repoPath",
+            cause: error,
+          }),
+      ),
     );
-  }
-
-  return canonicalWorkingDir;
-};
-
-export const parseGlobalConfig = (payload: unknown): GlobalConfig => {
+    if (!(yield* gitPort.isGitRepository(canonicalRepoPath))) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          message: `Not a git repository: ${canonicalRepoPath}`,
+          field: "repoPath",
+        }),
+      );
+    }
+    if (!workingDir || workingDir === repoPath) {
+      return canonicalRepoPath;
+    }
+    const canonicalWorkingDir = yield* gitPort.canonicalizePath(workingDir).pipe(
+      Effect.mapError(
+        (error) =>
+          new HostValidationError({
+            message: `working_dir does not exist or is not accessible: ${workingDir}`,
+            field: "workingDir",
+            cause: error,
+          }),
+      ),
+    );
+    if (canonicalWorkingDir === canonicalRepoPath) {
+      return canonicalWorkingDir;
+    }
+    if (!(yield* gitPort.isGitRepository(canonicalWorkingDir))) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          message: `Not a git repository: ${canonicalWorkingDir}`,
+          field: "workingDir",
+        }),
+      );
+    }
+    if (!(yield* gitPort.shareGitCommonDirectory(canonicalRepoPath, canonicalWorkingDir))) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          message: `working_dir is not within authorized repository or linked worktrees: ${workingDir}`,
+          field: "workingDir",
+        }),
+      );
+    }
+    return canonicalWorkingDir;
+  });
+export const requireGlobalConfig = (payload: GlobalConfig | null): GlobalConfig => {
   if (payload === null) {
-    throw new Error("No OpenDucktor workspace config is available for git worktree mutation.");
+    throw new HostValidationError({
+      message: "No OpenDucktor workspace config is available for git worktree mutation.",
+    });
   }
-
-  return globalConfigSchema.parse(payload);
+  return payload;
 };
-
-export const findRepoConfigByPath = async (
+export const findRepoConfigByPath = (
   settingsConfig: SettingsConfigPort,
   canonicalRepoPath: string,
-): Promise<RepoConfig> => {
-  const config = parseGlobalConfig(await settingsConfig.readConfig());
-  for (const repoConfig of Object.values(config.workspaces)) {
-    const configuredRepoPath = await settingsConfig.canonicalizePath(repoConfig.repoPath);
-    if (configuredRepoPath === canonicalRepoPath) {
-      return repoConfig;
+) =>
+  Effect.gen(function* () {
+    const config = requireGlobalConfig(yield* settingsConfig.readConfig());
+    for (const repoConfig of Object.values(config.workspaces)) {
+      const configuredRepoPath = yield* settingsConfig.canonicalizePath(repoConfig.repoPath);
+      if (configuredRepoPath === canonicalRepoPath) {
+        return repoConfig;
+      }
     }
-  }
-
-  throw new Error(`Repository is not registered in OpenDucktor settings: ${canonicalRepoPath}`);
-};
-
+    return yield* Effect.fail(
+      new HostValidationError({
+        message: `Repository is not registered in OpenDucktor settings: ${canonicalRepoPath}`,
+        field: "repoPath",
+      }),
+    );
+  });
 export const isDefinitiveNonWorktreeGitError = (error: unknown): boolean => {
   const errorText = String(error instanceof Error ? error.message : error).toLowerCase();
   return [
@@ -145,48 +148,57 @@ export const isDefinitiveNonWorktreeGitError = (error: unknown): boolean => {
     "is not a working tree",
   ].some((needle) => errorText.includes(needle));
 };
-
 export const requireSettingsConfig = (
   settingsConfig: SettingsConfigPort | undefined,
 ): SettingsConfigPort => {
   if (!settingsConfig) {
-    throw new Error("Settings config port is required for git worktree mutation commands.");
+    throw new HostDependencyError({
+      dependency: "settingsConfig",
+      operation: "git.worktree_mutation",
+      message: "Settings config port is required for git worktree mutation commands.",
+    });
   }
-
   return settingsConfig;
 };
-
 export const requireWorktreeFiles = (
   worktreeFiles: WorktreeFilePort | undefined,
 ): WorktreeFilePort => {
   if (!worktreeFiles) {
-    throw new Error("Worktree file port is required for git worktree mutation commands.");
+    throw new HostDependencyError({
+      dependency: "worktreeFiles",
+      operation: "git.worktree_mutation",
+      message: "Worktree file port is required for git worktree mutation commands.",
+    });
   }
-
   return worktreeFiles;
 };
-
-export const cleanupFailedCreatedWorktree = async (
+export const cleanupFailedCreatedWorktree = (
   gitPort: GitPort,
   repoPath: string,
   worktreePath: string,
   branch: string,
   deleteBranch: boolean,
-): Promise<string> => {
-  const cleanupErrors: string[] = [];
-
-  await gitPort.removeWorktree(repoPath, worktreePath, true).catch((error: unknown) => {
-    cleanupErrors.push(`Also failed to remove worktree: ${String(error)}`);
+) =>
+  Effect.gen(function* () {
+    const cleanupErrors: string[] = [];
+    yield* gitPort.removeWorktree(repoPath, worktreePath, true).pipe(
+      Effect.catchAll((error) =>
+        Effect.sync(() => {
+          cleanupErrors.push(`Also failed to remove worktree: ${String(error)}`);
+        }),
+      ),
+    );
+    if (deleteBranch) {
+      yield* gitPort.deleteLocalBranch(repoPath, branch, true).pipe(
+        Effect.catchAll((error) =>
+          Effect.sync(() => {
+            cleanupErrors.push(`Also failed to delete created branch ${branch}: ${String(error)}`);
+          }),
+        ),
+      );
+    }
+    return cleanupErrors.length > 0 ? `\n${cleanupErrors.join("\n")}` : "";
   });
-  if (deleteBranch) {
-    await gitPort.deleteLocalBranch(repoPath, branch, true).catch((error: unknown) => {
-      cleanupErrors.push(`Also failed to delete created branch ${branch}: ${String(error)}`);
-    });
-  }
-
-  return cleanupErrors.length > 0 ? `\n${cleanupErrors.join("\n")}` : "";
-};
-
 export const normalizeCreateGitServiceInput = (
   input: GitPort | CreateGitServiceInput,
 ): CreateGitServiceInput =>

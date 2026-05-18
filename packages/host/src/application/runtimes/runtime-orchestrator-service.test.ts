@@ -3,50 +3,79 @@ import {
   type RuntimeDescriptor,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
-import { createRuntimeOrchestratorService } from "./runtime-orchestrator-service";
+import { createRuntimeOrchestratorService as createEffectRuntimeOrchestratorService } from "./runtime-orchestrator-service";
 
+const createRuntimeOrchestratorService = (
+  input: Parameters<typeof createEffectRuntimeOrchestratorService>[0],
+) => createEffectRuntimeOrchestratorService(input);
 const createGitPort = (): GitPort =>
   ({
-    async canonicalizePath(path: string) {
-      return path === "/repo" ? "/canonical/repo" : path;
+    canonicalizePath(path: string) {
+      return Effect.tryPromise({
+        try: async () => {
+          return path === "/repo" ? "/canonical/repo" : path;
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async isGitRepository(path: string) {
-      return path === "/canonical/repo";
+    isGitRepository(path: string) {
+      return Effect.tryPromise({
+        try: async () => {
+          return path === "/canonical/repo";
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-  }) as GitPort;
-
+  }) as Pick<GitPort, "canonicalizePath" | "isGitRepository"> as unknown as GitPort;
 const createRuntimeDefinitionsService = () => ({
   listRuntimeDefinitions(): RuntimeDescriptor[] {
     return Object.values(RUNTIME_DESCRIPTORS_BY_KIND);
   },
 });
-
 const createTaskStore = (): TaskStorePort =>
   ({
-    async getTaskMetadata() {
-      return {
-        spec: undefined,
-        plan: undefined,
-        qaReport: undefined,
-        pullRequest: undefined,
-        directMerge: undefined,
-        agentSessions: [
-          {
-            externalSessionId: "external-session-1",
-            role: "build",
-            startedAt: "2026-05-10T10:00:00.000Z",
-            runtimeKind: "opencode",
-            workingDirectory: "/canonical/repo/worktree",
-            selectedModel: null,
-          },
-        ],
-      };
+    getTaskMetadata() {
+      return Effect.tryPromise({
+        try: async () => {
+          return {
+            spec: { markdown: "" },
+            plan: { markdown: "" },
+            agentSessions: [
+              {
+                externalSessionId: "external-session-1",
+                role: "build",
+                startedAt: "2026-05-10T10:00:00.000Z",
+                runtimeKind: "opencode",
+                workingDirectory: "/canonical/repo/worktree",
+                selectedModel: null,
+              },
+            ],
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-  }) as unknown as TaskStorePort;
-
+  }) as Pick<TaskStorePort, "getTaskMetadata"> as unknown as TaskStorePort;
 const createRuntime = (
   overrides: Partial<RuntimeInstanceSummary> = {},
 ): RuntimeInstanceSummary => ({
@@ -64,46 +93,95 @@ const createRuntime = (
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
   ...overrides,
 });
-
 const createRegistry = (
   runtimes: RuntimeInstanceSummary[] = [],
   overrides: Partial<RuntimeRegistryPort> = {},
 ): RuntimeRegistryPort => {
   const entries = new Map(runtimes.map((runtime) => [runtime.runtimeId, runtime]));
-  return {
-    async ensureWorkspaceRuntime(input) {
-      const existing = [...entries.values()].find(
-        (runtime) =>
-          runtime.kind === input.runtimeKind &&
-          runtime.repoPath === input.repoPath &&
-          runtime.role === "workspace",
-      );
-      if (existing) {
-        return existing;
-      }
-      const runtime = createRuntime({
-        kind: input.runtimeKind as RuntimeInstanceSummary["kind"],
-        repoPath: input.repoPath,
-        workingDirectory: input.workingDirectory,
-        descriptor: input.descriptor,
+  const registry: RuntimeRegistryPort = {
+    ensureWorkspaceRuntime(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          const existing = [...entries.values()].find(
+            (runtime) =>
+              runtime.kind === input.runtimeKind &&
+              runtime.repoPath === input.repoPath &&
+              runtime.role === "workspace",
+          );
+          if (existing) {
+            return existing;
+          }
+          const runtime = createRuntime({
+            kind: input.runtimeKind as RuntimeInstanceSummary["kind"],
+            repoPath: input.repoPath,
+            workingDirectory: input.workingDirectory,
+            descriptor: input.descriptor,
+          });
+          entries.set(runtime.runtimeId, runtime);
+          return runtime;
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
       });
-      entries.set(runtime.runtimeId, runtime);
-      return runtime;
     },
-    async listRuntimes() {
-      return [...entries.values()];
+    listRuntimes() {
+      return Effect.succeed([...entries.values()]);
     },
-    async stopRuntime(runtimeId) {
-      if (!entries.delete(runtimeId)) {
-        throw new Error(`Runtime not found: ${runtimeId}`);
-      }
-      return true;
+    stopRuntime(runtimeId) {
+      return Effect.tryPromise({
+        try: async () => {
+          if (!entries.delete(runtimeId)) {
+            throw new Error(`Runtime not found: ${runtimeId}`);
+          }
+          return true;
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async stopSession() {},
+    stopAllRuntimes() {
+      return Effect.sync(() => {
+        const stopped = [...entries.values()];
+        entries.clear();
+        return stopped;
+      });
+    },
+    stopSession() {
+      return Effect.tryPromise({
+        try: async () => {},
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    probeSessionStatus() {
+      return Effect.succeed({ supported: false, hasLiveSession: false });
+    },
+    probeMcpStatus() {
+      return Effect.succeed({
+        supported: false,
+        connected: false,
+        serverStatus: null,
+        toolIds: [],
+        detail: null,
+        failureKind: null,
+      });
+    },
     ...overrides,
   };
+  return registry as unknown as RuntimeRegistryPort;
 };
-
 describe("createRuntimeOrchestratorService", () => {
   test("ensures a workspace runtime for the canonical repository path", async () => {
     const registry = createRegistry();
@@ -113,9 +191,8 @@ describe("createRuntimeOrchestratorService", () => {
       runtimeRegistry: registry,
       taskReader: createTaskStore(),
     });
-
     await expect(
-      service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" }),
+      Effect.runPromise(service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" })),
     ).resolves.toMatchObject({
       kind: "opencode",
       repoPath: "/canonical/repo",
@@ -123,13 +200,14 @@ describe("createRuntimeOrchestratorService", () => {
       workingDirectory: "/canonical/repo",
     });
     await expect(
-      service.runtimeStartupStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      Effect.runPromise(
+        service.runtimeStartupStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      ),
     ).resolves.toMatchObject({
       stage: "runtime_ready",
       runtime: expect.objectContaining({ repoPath: "/canonical/repo" }),
     });
   });
-
   test("lists registered runtimes by kind and canonical repository", async () => {
     const runtime = createRuntime();
     const service = createRuntimeOrchestratorService({
@@ -138,12 +216,10 @@ describe("createRuntimeOrchestratorService", () => {
       runtimeRegistry: createRegistry([runtime, createRuntime({ kind: "codex", runtimeId: "2" })]),
       taskReader: createTaskStore(),
     });
-
     await expect(
-      service.runtimeList({ runtimeKind: "opencode", repoPath: "/repo" }),
+      Effect.runPromise(service.runtimeList({ runtimeKind: "opencode", repoPath: "/repo" })),
     ).resolves.toEqual([runtime]);
   });
-
   test("reports ready startup status for a registered workspace runtime", async () => {
     const runtime = createRuntime();
     const service = createRuntimeOrchestratorService({
@@ -152,9 +228,10 @@ describe("createRuntimeOrchestratorService", () => {
       runtimeRegistry: createRegistry([runtime]),
       taskReader: createTaskStore(),
     });
-
     await expect(
-      service.runtimeStartupStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      Effect.runPromise(
+        service.runtimeStartupStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      ),
     ).resolves.toMatchObject({
       runtimeKind: "opencode",
       repoPath: "/canonical/repo",
@@ -163,15 +240,24 @@ describe("createRuntimeOrchestratorService", () => {
       startedAt: runtime.startedAt,
     });
   });
-
   test("reports waiting startup status while runtime ensure is in flight", async () => {
     let resolveEnsure: (runtime: RuntimeInstanceSummary) => void = () => {};
     const ensureStarted = new Promise<RuntimeInstanceSummary>((resolve) => {
       resolveEnsure = resolve;
     });
     const registry = createRegistry([], {
-      async ensureWorkspaceRuntime() {
-        return ensureStarted;
+      ensureWorkspaceRuntime() {
+        return Effect.tryPromise({
+          try: async () => {
+            return ensureStarted;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
     });
     const service = createRuntimeOrchestratorService({
@@ -180,11 +266,13 @@ describe("createRuntimeOrchestratorService", () => {
       runtimeRegistry: registry,
       taskReader: createTaskStore(),
     });
-
-    const ensure = service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" });
-
+    const ensure = Effect.runPromise(
+      service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" }),
+    );
     await expect(
-      service.runtimeStartupStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      Effect.runPromise(
+        service.runtimeStartupStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      ),
     ).resolves.toMatchObject({
       runtimeKind: "opencode",
       repoPath: "/canonical/repo",
@@ -192,28 +280,35 @@ describe("createRuntimeOrchestratorService", () => {
       runtime: null,
       attempts: 0,
     });
-
     resolveEnsure(createRuntime());
     await expect(ensure).resolves.toMatchObject({ runtimeId: "runtime-1" });
   });
-
   test("records startup failure status when runtime ensure fails", async () => {
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createRegistry([], {
-        async ensureWorkspaceRuntime() {
-          throw new Error("Codex app-server failed to initialize");
+        ensureWorkspaceRuntime() {
+          return Effect.tryPromise({
+            try: async () => {
+              throw new Error("Codex app-server failed to initialize");
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
       }),
       taskReader: createTaskStore(),
     });
-
     await expect(
-      service.runtimeEnsure({ runtimeKind: "codex", repoPath: "/repo" }),
+      Effect.runPromise(service.runtimeEnsure({ runtimeKind: "codex", repoPath: "/repo" })),
     ).rejects.toThrow("Codex app-server failed to initialize");
     await expect(
-      service.runtimeStartupStatus({ runtimeKind: "codex", repoPath: "/repo" }),
+      Effect.runPromise(service.runtimeStartupStatus({ runtimeKind: "codex", repoPath: "/repo" })),
     ).resolves.toMatchObject({
       runtimeKind: "codex",
       repoPath: "/canonical/repo",
@@ -224,7 +319,6 @@ describe("createRuntimeOrchestratorService", () => {
       detail: "Codex app-server failed to initialize",
     });
   });
-
   test("reports not started runtime health status when no runtime is registered", async () => {
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
@@ -232,9 +326,10 @@ describe("createRuntimeOrchestratorService", () => {
       runtimeRegistry: createRegistry(),
       taskReader: createTaskStore(),
     });
-
     await expect(
-      service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      Effect.runPromise(
+        service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      ),
     ).resolves.toMatchObject({
       status: "not_started",
       runtime: {
@@ -250,21 +345,29 @@ describe("createRuntimeOrchestratorService", () => {
       },
     });
   });
-
   test("repo runtime health reports startup failure instead of dropping the status", async () => {
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createRegistry([], {
-        async ensureWorkspaceRuntime() {
-          throw new Error("Codex app-server failed to initialize");
+        ensureWorkspaceRuntime() {
+          return Effect.tryPromise({
+            try: async () => {
+              throw new Error("Codex app-server failed to initialize");
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
       }),
       taskReader: createTaskStore(),
     });
-
     await expect(
-      service.repoRuntimeHealth({ runtimeKind: "codex", repoPath: "/repo" }),
+      Effect.runPromise(service.repoRuntimeHealth({ runtimeKind: "codex", repoPath: "/repo" })),
     ).resolves.toMatchObject({
       status: "error",
       runtime: {
@@ -279,30 +382,38 @@ describe("createRuntimeOrchestratorService", () => {
       },
     });
   });
-
   test("active runtime health ensures a workspace runtime before probing MCP", async () => {
     const probeCalls: unknown[] = [];
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createRegistry([], {
-        async probeMcpStatus(input) {
-          probeCalls.push(input);
-          return {
-            supported: true,
-            connected: true,
-            serverStatus: "connected",
-            toolIds: ["odt_read_task"],
-            detail: null,
-            failureKind: null,
-          };
+        probeMcpStatus(input) {
+          return Effect.tryPromise({
+            try: async () => {
+              probeCalls.push(input);
+              return {
+                supported: true,
+                connected: true,
+                serverStatus: "connected",
+                toolIds: ["odt_read_task"],
+                detail: null,
+                failureKind: null,
+              };
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
       }),
       taskReader: createTaskStore(),
     });
-
     await expect(
-      service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" }),
+      Effect.runPromise(service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" })),
     ).resolves.toMatchObject({
       status: "ready",
       runtime: {
@@ -322,42 +433,49 @@ describe("createRuntimeOrchestratorService", () => {
     });
     expect(probeCalls).toHaveLength(1);
   });
-
   test("active runtime health waits for OpenCode MCP readiness after startup", async () => {
     const probeCalls: unknown[] = [];
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createRegistry([], {
-        async probeMcpStatus(input) {
-          probeCalls.push(input);
-          if (probeCalls.length === 1) {
-            return {
-              supported: true,
-              connected: false,
-              serverStatus: null,
-              toolIds: [],
-              detail: "Failed to load MCP status",
-              failureKind: "error",
-            };
-          }
-
-          return {
-            supported: true,
-            connected: true,
-            serverStatus: "connected",
-            toolIds: ["odt_read_task"],
-            detail: null,
-            failureKind: null,
-          };
+        probeMcpStatus(input) {
+          return Effect.tryPromise({
+            try: async () => {
+              probeCalls.push(input);
+              if (probeCalls.length === 1) {
+                return {
+                  supported: true,
+                  connected: false,
+                  serverStatus: null,
+                  toolIds: [],
+                  detail: "Failed to load MCP status",
+                  failureKind: "error",
+                };
+              }
+              return {
+                supported: true,
+                connected: true,
+                serverStatus: "connected",
+                toolIds: ["odt_read_task"],
+                detail: null,
+                failureKind: null,
+              };
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
       }),
       taskReader: createTaskStore(),
       activeMcpProbeRetryDelayMs: 1,
     });
-
     await expect(
-      service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" }),
+      Effect.runPromise(service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" })),
     ).resolves.toMatchObject({
       status: "ready",
       mcp: {
@@ -368,35 +486,45 @@ describe("createRuntimeOrchestratorService", () => {
     });
     expect(probeCalls).toHaveLength(2);
   });
-
   test("reports active MCP health for a ready workspace runtime", async () => {
     const runtime = createRuntime();
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createRegistry([runtime], {
-        async probeMcpStatus(input) {
-          expect(input).toMatchObject({
-            runtimeKind: "opencode",
-            runtimeRoute: runtime.runtimeRoute,
-            workingDirectory: "/canonical/repo",
-            serverName: "openducktor",
+        probeMcpStatus(input) {
+          return Effect.tryPromise({
+            try: async () => {
+              expect(input).toMatchObject({
+                runtimeKind: "opencode",
+                runtimeRoute: runtime.runtimeRoute,
+                workingDirectory: "/canonical/repo",
+                serverName: "openducktor",
+              });
+              return {
+                supported: true,
+                connected: true,
+                serverStatus: "connected",
+                toolIds: ["odt_read_task", "odt_set_spec"],
+                detail: null,
+                failureKind: null,
+              };
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
           });
-          return {
-            supported: true,
-            connected: true,
-            serverStatus: "connected",
-            toolIds: ["odt_read_task", "odt_set_spec"],
-            detail: null,
-            failureKind: null,
-          };
         },
       }),
       taskReader: createTaskStore(),
     });
-
     await expect(
-      service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      Effect.runPromise(
+        service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      ),
     ).resolves.toMatchObject({
       status: "ready",
       runtime: {
@@ -413,22 +541,32 @@ describe("createRuntimeOrchestratorService", () => {
       },
     });
   });
-
   test("reports MCP probe failures as runtime health errors", async () => {
     const runtime = createRuntime();
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createRegistry([runtime], {
-        async probeMcpStatus() {
-          throw new Error("OpenCode load MCP status failed");
+        probeMcpStatus() {
+          return Effect.tryPromise({
+            try: async () => {
+              throw new Error("OpenCode load MCP status failed");
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
         },
       }),
       taskReader: createTaskStore(),
     });
-
     await expect(
-      service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      Effect.runPromise(
+        service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      ),
     ).resolves.toMatchObject({
       status: "error",
       runtime: {
@@ -443,7 +581,6 @@ describe("createRuntimeOrchestratorService", () => {
       },
     });
   });
-
   test("stops registered runtimes", async () => {
     const runtime = createRuntime();
     const registry = createRegistry([runtime]);
@@ -453,47 +590,79 @@ describe("createRuntimeOrchestratorService", () => {
       runtimeRegistry: registry,
       taskReader: createTaskStore(),
     });
-
-    await expect(service.runtimeStop({ runtimeId: runtime.runtimeId })).resolves.toEqual({
+    await expect(
+      Effect.runPromise(service.runtimeStop({ runtimeId: runtime.runtimeId })),
+    ).resolves.toEqual({
       ok: true,
     });
-    await expect(service.runtimeList({ runtimeKind: "opencode" })).resolves.toEqual([]);
+    await expect(
+      Effect.runPromise(service.runtimeList({ runtimeKind: "opencode" })),
+    ).resolves.toEqual([]);
   });
-
   test("stops persisted agent sessions through the matching runtime route", async () => {
     const calls: unknown[] = [];
     const runtime = createRuntime({ workingDirectory: "/canonical/repo/worktree" });
-    const registry: RuntimeRegistryPort = {
-      async ensureWorkspaceRuntime() {
-        throw new Error("unexpected runtime ensure");
+    const registry = createRegistry([], {
+      ensureWorkspaceRuntime() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected runtime ensure");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async listRuntimes() {
-        return [runtime];
+      listRuntimes() {
+        return Effect.succeed([runtime]);
       },
-      async stopRuntime() {
-        throw new Error("unexpected runtime stop");
+      stopRuntime() {
+        return Effect.tryPromise({
+          try: async () => {
+            throw new Error("unexpected runtime stop");
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-      async stopSession(input) {
-        calls.push(input);
+      stopSession(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push(input);
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
       },
-    };
+    });
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: registry,
       taskReader: createTaskStore(),
     });
-
     await expect(
-      service.agentSessionStop({
-        repoPath: "/repo",
-        taskId: "task-1",
-        externalSessionId: "external-session-1",
-        runtimeKind: "opencode",
-        workingDirectory: "/canonical/repo/worktree",
-      }),
+      Effect.runPromise(
+        service.agentSessionStop({
+          repoPath: "/repo",
+          taskId: "task-1",
+          externalSessionId: "external-session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/canonical/repo/worktree",
+        }),
+      ),
     ).resolves.toEqual({ ok: true });
-
     expect(calls).toEqual([
       {
         runtimeKind: "opencode",
@@ -503,7 +672,6 @@ describe("createRuntimeOrchestratorService", () => {
       },
     ]);
   });
-
   test("rejects agent session stop when persisted session identity mismatches the request", async () => {
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
@@ -511,15 +679,16 @@ describe("createRuntimeOrchestratorService", () => {
       runtimeRegistry: createRegistry([createRuntime()]),
       taskReader: createTaskStore(),
     });
-
     await expect(
-      service.agentSessionStop({
-        repoPath: "/repo",
-        taskId: "task-1",
-        externalSessionId: "external-session-1",
-        runtimeKind: "codex",
-        workingDirectory: "/canonical/repo/worktree",
-      }),
+      Effect.runPromise(
+        service.agentSessionStop({
+          repoPath: "/repo",
+          taskId: "task-1",
+          externalSessionId: "external-session-1",
+          runtimeKind: "codex",
+          workingDirectory: "/canonical/repo/worktree",
+        }),
+      ),
     ).rejects.toThrow(
       "Agent session with externalSessionId external-session-1 runtime kind mismatch",
     );

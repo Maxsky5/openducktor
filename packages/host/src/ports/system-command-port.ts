@@ -1,3 +1,6 @@
+import { Context, type Effect } from "effect";
+import type { HostOperationError, HostPathAccessError } from "../effect/host-errors";
+
 export type SystemCommandRunOptions = {
   cwd?: string;
   env?: Record<string, string>;
@@ -11,16 +14,24 @@ export type SystemCommandRunResult = {
 };
 
 export type SystemCommandPort = {
-  resolveCommandPath?(command: string, env?: NodeJS.ProcessEnv): Promise<string | null>;
-  requiredCommandError(command: string): Promise<string | null>;
+  resolveCommandPath?(
+    command: string,
+    env?: NodeJS.ProcessEnv,
+  ): Effect.Effect<string | null, HostPathAccessError>;
+  requiredCommandError(command: string): Effect.Effect<string | null, HostPathAccessError>;
   versionCommand(
     command: string,
     args: string[],
     options?: SystemCommandRunOptions,
-  ): Promise<string | null>;
+  ): Effect.Effect<string | null, HostPathAccessError>;
   runCommandAllowFailure(
     command: string,
     args: string[],
     options?: SystemCommandRunOptions,
-  ): Promise<SystemCommandRunResult>;
+  ): Effect.Effect<SystemCommandRunResult, HostOperationError>;
 };
+
+export class SystemCommandPortTag extends Context.Tag("@openducktor/host/SystemCommandPort")<
+  SystemCommandPortTag,
+  SystemCommandPort
+>() {}

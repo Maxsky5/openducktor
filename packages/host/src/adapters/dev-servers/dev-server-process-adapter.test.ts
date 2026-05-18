@@ -2,7 +2,23 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDevServerProcessAdapter } from "./dev-server-process-adapter";
+import { Effect } from "effect";
+import { createDevServerProcessAdapter as createEffectDevServerProcessAdapter } from "./dev-server-process-adapter";
+
+const createDevServerProcessAdapter = (
+  ...args: Parameters<typeof createEffectDevServerProcessAdapter>
+) => {
+  const port = createEffectDevServerProcessAdapter(...args);
+  return {
+    start: async (...startArgs: Parameters<typeof port.start>) => {
+      const handle = await Effect.runPromise(port.start(...startArgs));
+      return {
+        ...handle,
+        stop: () => Effect.runPromise(handle.stop()),
+      };
+    },
+  };
+};
 
 const waitFor = async (predicate: () => boolean, timeoutMs = 500): Promise<void> => {
   const startedAt = Date.now();

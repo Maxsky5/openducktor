@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Effect } from "effect";
 import type { BeadsSharedServerPaths, BeadsSharedServerState } from "./beads-context-model";
 import {
   readSharedServerState,
@@ -62,15 +63,19 @@ describe("readSharedServerState", () => {
   test("preserves path-edge strings from valid server state", async () => {
     const paths = await createPaths();
     const state = createState(paths);
-    await writeSharedServerState(paths, state);
+    await Effect.runPromise(writeSharedServerState(paths, state));
 
-    await expect(readSharedServerState(paths.serverStatePath)).resolves.toEqual(state);
+    await expect(Effect.runPromise(readSharedServerState(paths.serverStatePath))).resolves.toEqual(
+      state,
+    );
   });
 
   test("returns null when server state is absent", async () => {
     const paths = await createPaths();
 
-    await expect(readSharedServerState(paths.serverStatePath)).resolves.toBeNull();
+    await expect(
+      Effect.runPromise(readSharedServerState(paths.serverStatePath)),
+    ).resolves.toBeNull();
   });
 
   test("rejects malformed and non-object server state", async () => {
@@ -78,12 +83,12 @@ describe("readSharedServerState", () => {
     await mkdir(path.dirname(paths.serverStatePath), { recursive: true });
     await writeFile(paths.serverStatePath, "{broken");
 
-    await expect(readSharedServerState(paths.serverStatePath)).rejects.toThrow(
+    await expect(Effect.runPromise(readSharedServerState(paths.serverStatePath))).rejects.toThrow(
       `Failed parsing shared Dolt server state ${paths.serverStatePath}`,
     );
 
     await writeFile(paths.serverStatePath, "[]");
-    await expect(readSharedServerState(paths.serverStatePath)).rejects.toThrow(
+    await expect(Effect.runPromise(readSharedServerState(paths.serverStatePath))).rejects.toThrow(
       `Shared Dolt server state ${paths.serverStatePath} must contain a JSON object`,
     );
   });
@@ -104,7 +109,7 @@ describe("readSharedServerState", () => {
     delete state[field];
     await writeFile(paths.serverStatePath, JSON.stringify(state));
 
-    await expect(readSharedServerState(paths.serverStatePath)).rejects.toThrow(
+    await expect(Effect.runPromise(readSharedServerState(paths.serverStatePath))).rejects.toThrow(
       `Shared Dolt server state ${paths.serverStatePath} is missing pid, host, user, port, ownerPid, sharedServerRoot, doltDataDir, or startedAt`,
     );
   });
@@ -115,16 +120,24 @@ describe("serverStateIsHealthy", () => {
     const paths = await createPaths();
     const state = createState(paths);
 
-    await expect(serverStateIsHealthy({ ...state, host: "127.0.0.2" }, paths)).resolves.toBe(false);
-    await expect(serverStateIsHealthy({ ...state, user: "other" }, paths)).resolves.toBe(false);
     await expect(
-      serverStateIsHealthy(
-        { ...state, sharedServerRoot: `${paths.sharedServerRoot}-other` },
-        paths,
+      Effect.runPromise(serverStateIsHealthy({ ...state, host: "127.0.0.2" }, paths)),
+    ).resolves.toBe(false);
+    await expect(
+      Effect.runPromise(serverStateIsHealthy({ ...state, user: "other" }, paths)),
+    ).resolves.toBe(false);
+    await expect(
+      Effect.runPromise(
+        serverStateIsHealthy(
+          { ...state, sharedServerRoot: `${paths.sharedServerRoot}-other` },
+          paths,
+        ),
       ),
     ).resolves.toBe(false);
     await expect(
-      serverStateIsHealthy({ ...state, doltDataDir: `${paths.doltRoot}-other` }, paths),
+      Effect.runPromise(
+        serverStateIsHealthy({ ...state, doltDataDir: `${paths.doltRoot}-other` }, paths),
+      ),
     ).resolves.toBe(false);
   });
 });
@@ -136,7 +149,9 @@ describe("stopOwnedSharedDoltServer", () => {
     await writeFile(statePath, "state");
 
     await expect(
-      stopOwnedSharedDoltServer(createStopState({ ownerPid: process.pid + 1 }), statePath),
+      Effect.runPromise(
+        stopOwnedSharedDoltServer(createStopState({ ownerPid: process.pid + 1 }), statePath),
+      ),
     ).rejects.toThrow("Refusing to stop shared Dolt server");
 
     await expect(readFile(statePath, "utf8")).resolves.toBe("state");
@@ -147,7 +162,9 @@ describe("stopOwnedSharedDoltServer", () => {
     const statePath = path.join(root, "server.json");
     await writeFile(statePath, "state");
 
-    await expect(stopOwnedSharedDoltServer(createStopState(), statePath)).resolves.toBeUndefined();
+    await expect(
+      Effect.runPromise(stopOwnedSharedDoltServer(createStopState(), statePath)),
+    ).resolves.toBeUndefined();
     await expect(readFile(statePath, "utf8")).rejects.toThrow();
   });
 
@@ -156,9 +173,9 @@ describe("stopOwnedSharedDoltServer", () => {
     const statePath = path.join(root, "server.json");
     await writeFile(statePath, "state");
 
-    await expect(stopOwnedSharedDoltServer(createStopState({ pid: 0 }), statePath)).rejects.toThrow(
-      "invalid process pid 0",
-    );
+    await expect(
+      Effect.runPromise(stopOwnedSharedDoltServer(createStopState({ pid: 0 }), statePath)),
+    ).rejects.toThrow("invalid process pid 0");
     await expect(readFile(statePath, "utf8")).resolves.toBe("state");
   });
 });
@@ -178,7 +195,7 @@ describe("Dolt config YAML rendering", () => {
       branchControlFile: yamlQuotePath(path.join(paths.cfgDir, "branch_control.db")),
     };
 
-    await writeDoltConfigFile(paths, 36112);
+    await Effect.runPromise(writeDoltConfigFile(paths, 36112));
 
     await expect(readFile(paths.doltConfigFile, "utf8")).resolves.toBe(
       `log_level: info\n` +

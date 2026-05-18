@@ -5,12 +5,17 @@ import {
   themeSchema,
 } from "@openducktor/contracts";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
 
 const requireNoArgs = (command: string, args: Record<string, unknown> | undefined): void => {
   if (args !== undefined && Object.keys(args).length > 0) {
-    throw new Error(`${command} does not accept arguments.`);
+    throw new HostValidationError({
+      message: `${command} does not accept arguments.`,
+      field: "args",
+      details: { command },
+    });
   }
 };
 
@@ -20,7 +25,11 @@ const requireObjectArg = (
   key: string,
 ): unknown => {
   if (!args || !(key in args)) {
-    throw new Error(`${command} expects argument '${key}'.`);
+    throw new HostValidationError({
+      message: `${command} expects argument '${key}'.`,
+      field: key,
+      details: { command },
+    });
   }
 
   return args[key];
@@ -28,7 +37,11 @@ const requireObjectArg = (
 
 const requireStringArray = (value: unknown, label: string): string[] => {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
-    throw new Error(`${label} must be an array of strings.`);
+    throw new HostValidationError({
+      message: `${label} must be an array of strings.`,
+      field: label,
+      details: { value },
+    });
   }
 
   return value;

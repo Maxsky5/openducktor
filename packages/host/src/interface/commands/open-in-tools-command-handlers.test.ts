@@ -1,33 +1,65 @@
-import type { SystemOpenInToolInfo } from "@openducktor/contracts";
+import { Effect } from "effect";
 import type { OpenInToolsService } from "../../application/system/open-in-tools-service";
+import { HostOperationError } from "../../effect/host-errors";
 import { createHostCommandRouter } from "../router/host-command-router";
 import { createOpenInToolsCommandHandlers } from "./open-in-tools-command-handlers";
 
 const createRecordingService = () => {
-  const calls: Array<{ method: keyof OpenInToolsService; input: unknown }> = [];
-  const service: OpenInToolsService = {
-    async listOpenInTools(input): Promise<SystemOpenInToolInfo[]> {
-      calls.push({ method: "listOpenInTools", input });
-      return [{ toolId: "finder", iconDataUrl: null }];
+  const calls: Array<{
+    method: keyof OpenInToolsService;
+    input: unknown;
+  }> = [];
+  const promiseService: OpenInToolsService = {
+    listOpenInTools(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "listOpenInTools", input });
+          return [{ toolId: "finder", iconDataUrl: null }];
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async openDirectoryInTool(input) {
-      calls.push({ method: "openDirectoryInTool", input });
+    openDirectoryInTool(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "openDirectoryInTool", input });
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
-    async openExternalUrl(input) {
-      calls.push({ method: "openExternalUrl", input });
+    openExternalUrl(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "openExternalUrl", input });
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
     },
   };
-
+  const service = promiseService as OpenInToolsService;
   return { calls, service };
 };
-
 describe("createOpenInToolsCommandHandlers", () => {
   test("routes open-in system commands to the service", async () => {
     const { calls, service } = createRecordingService();
     const router = createHostCommandRouter({
       handlers: createOpenInToolsCommandHandlers(service),
     });
-
     await expect(
       router.invoke("system_list_open_in_tools", { forceRefresh: true }),
     ).resolves.toEqual([{ toolId: "finder", iconDataUrl: null }]);
@@ -42,7 +74,6 @@ describe("createOpenInToolsCommandHandlers", () => {
         url: "https://example.com",
       }),
     ).resolves.toEqual({ ok: true });
-
     expect(calls).toEqual([
       { method: "listOpenInTools", input: { forceRefresh: true } },
       {

@@ -26,6 +26,7 @@ apps/electron/release/
 scorecard.png
 packages/openducktor-mcp/tsconfig.tsbuildinfo
 .cache/cef/
+.effect/
 .cargo-tools/
 .husky/_/
 # Added by code-review-graph
