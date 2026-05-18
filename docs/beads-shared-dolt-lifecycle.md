@@ -10,7 +10,7 @@ That means OpenDucktor needs two things to work well:
 - a Beads attachment for each repository
 - a Dolt database that Beads can read and write
 
-In the desktop architecture, the Rust host is the only owner of that storage lifecycle. MCP clients and agent runtimes never receive Beads attachment paths, Dolt connection details, or metadata-namespace control as part of their startup contract.
+In the current architecture, the OpenDucktor host is the only owner of that storage lifecycle. The TypeScript host owns this path for Electron and browser mode; the Rust host keeps the equivalent legacy path for Tauri. MCP clients and agent runtimes never receive Beads attachment paths, Dolt connection details, or metadata-namespace control as part of their startup contract.
 
 The important design choice is that OpenDucktor does **not** run one Dolt process per repository.
 Instead, it runs **one shared local Dolt server per OpenDucktor config directory** and gives each repository its own database inside that server.
@@ -218,15 +218,18 @@ That is the normal lifecycle.
 
 ## Current Host Ownership Boundaries
 
-The Rust host now keeps this lifecycle split explicit instead of embedding it across task CRUD code.
+The host keeps this lifecycle split explicit instead of embedding it across task CRUD code.
 
-- `host-infra-system` owns the repo attachment locator and identity resolver: repo id, attachment root, attachment dir, and shared Dolt database name/path derivation.
-- `host-infra-system` also owns the shared Dolt server manager: state locking, health checks, startup, reuse, adoption, shutdown, and restore-time restart coordination.
-- `host-infra-beads/src/lifecycle/context.rs` owns Beads CLI working-directory and `BEADS_*` environment resolution from the managed attachment root.
-- `host-infra-beads/src/lifecycle/verifier.rs` owns attachment metadata verification and `bd where --json` readiness parsing.
-- `host-infra-beads/src/lifecycle/provisioner.rs` owns `bd init`, `bd doctor --fix`, backup restore, and custom-status provisioning.
-- `host-infra-beads/src/lifecycle/coordinator.rs` owns the repo-init lock, readiness cache, and the verify -> restore/repair/init -> reverify -> configure-statuses algorithm.
-- `host-infra-beads/src/store/*` is the persistence gateway for task CRUD, documents, sessions, and delivery metadata.
+- `packages/host/src/infrastructure/beads/*` and `packages/host/src/adapters/beads/*` own the TypeScript host Beads/Dolt path used by Electron and browser mode.
+- `packages/host/src/ports/task-repository-ports.ts` is the TypeScript task-store port boundary consumed by application services.
+- `packages/host/src/application/tasks/*` owns TypeScript task workflow use cases, document/session persistence orchestration, and task action enrichment.
+- `host-infra-system` owns the legacy Rust repo attachment locator and identity resolver: repo id, attachment root, attachment dir, and shared Dolt database name/path derivation.
+- `host-infra-system` also owns the legacy Rust shared Dolt server manager: state locking, health checks, startup, reuse, adoption, shutdown, and restore-time restart coordination.
+- `host-infra-beads/src/lifecycle/context.rs` owns legacy Rust Beads CLI working-directory and `BEADS_*` environment resolution from the managed attachment root.
+- `host-infra-beads/src/lifecycle/verifier.rs` owns legacy Rust attachment metadata verification and `bd where --json` readiness parsing.
+- `host-infra-beads/src/lifecycle/provisioner.rs` owns legacy Rust `bd init`, `bd doctor --fix`, backup restore, and custom-status provisioning.
+- `host-infra-beads/src/lifecycle/coordinator.rs` owns the legacy Rust repo-init lock, readiness cache, and the verify -> restore/repair/init -> reverify -> configure-statuses algorithm.
+- `host-infra-beads/src/store/*` is the legacy Rust persistence gateway for task CRUD, documents, sessions, and delivery metadata.
 
 ## Verification For An Existing Attachment
 
@@ -303,13 +306,7 @@ The attachment is the durable representation of the repo's task store. The share
 
 ## What Happens If Verification Fails For Other Reasons
 
-If the attachment exists but fails verification for reasons other than a missing shared database, OpenDucktor currently uses:
-
-```sh
-bd doctor --fix --yes
-```
-
-That is the generic attachment-repair path.
+If an attachment exists but fails verification for reasons other than a missing shared database, the host reports a blocking readiness error from the lifecycle layer. Do not hide that failure by switching to another attachment path or silently creating a second store.
 
 ## Everyday Beads Commands OpenDucktor Uses
 
@@ -330,12 +327,12 @@ The custom status command is needed because OpenDucktor adds workflow states on 
 
 ## How MCP Fits In
 
-When OpenDucktor launches its MCP sidecar for OpenCode, it passes only the host bridge context the MCP actually uses:
+When OpenDucktor launches its MCP sidecar for OpenCode or Codex, it passes only the host bridge context the MCP actually uses:
 
 - repo path
 - host bridge URL
 
-The Rust host owns the Beads attachment directory, shared Dolt connection details, attachment verification, repair, and all task reads and writes.
+The host owns the Beads attachment directory, shared Dolt connection details, attachment verification, repair, and all task reads and writes.
 
 The MCP sidecar no longer connects to Dolt or runs Beads directly. In desktop-managed mode the host injects a loopback `ODT_HOST_URL`, and the MCP forwards task, document, and workflow calls back to the running host. Standalone MCP use auto-discovers the current host bridge from the local discovery file and can still use `ODT_HOST_URL` as an explicit override.
 
@@ -345,7 +342,7 @@ That keeps Beads and Dolt modeled as storage infrastructure, not as an agent run
 
 When OpenDucktor shuts down, it cleans up runtime processes in order:
 
-1. pending OpenCode startup processes
+1. pending runtime startup processes
 2. dev servers
 3. active run children
 4. active runtime children

@@ -31,24 +31,26 @@ It uses [Beads](https://github.com/steveyegge/beads) as the task source of truth
 
 ## Install OpenDucktor
 
-### Homebrew
+### Homebrew (macOS only)
 
 ```sh
 brew tap Maxsky5/openducktor
 brew install --cask openducktor
 ```
 
-### Direct Download
+### Direct Download (macOS, Linux & Windows)
 
 1. Open the [GitHub Releases page](https://github.com/Maxsky5/openducktor/releases).
-2. Download the latest macOS asset that matches your machine.
+2. Download the latest desktop asset that matches your machine.
 3. Launch OpenDucktor and open the local repository you want to work on.
 
 If macOS blocks the first launch, use Finder's standard `Open` action once to confirm you want to run the app.
 
 Homebrew installs the same signed and notarized desktop app that is published on GitHub Releases.
 
-### Local Web Runner
+Windows and Linux desktop builds are published from the Electron release pipeline, but they are experimental. They are useful for feedback and compatibility testing, not yet as stable as the macOS build. Please open issues with platform details, logs, and the action you were trying to perform.
+
+### Local Web Runner (macOS, Linux & Windows)
 
 If you prefer to use OpenDucktor in a browser instead of a desktop window:
 
@@ -60,13 +62,13 @@ The web runner opens OpenDucktor in your browser. Choose the desktop app or the 
 
 ## User Prerequisites
 
-OpenDucktor is currently intended for local macOS use.
+OpenDucktor is macOS-first. Windows and Linux support is experimental.
 
 - `git`
-- `opencode`
+- `opencode` or `codex`
 - `gh` plus `gh auth login` if you use GitHub and want OpenDucktor to open pull requests for you
 
-OpenDucktor currently supports the OpenCode runtime only. It checks common local install locations for `opencode`, including `PATH` and `~/.opencode/bin/opencode`.
+OpenDucktor supports local OpenCode and Codex runtimes. OpenCode remains the default runtime. Runtime discovery checks configured overrides, common local install locations, and `PATH`.
 
 [Beads](https://github.com/steveyegge/beads) is bundled with the desktop app, so installing `bd` separately is not required.
 
@@ -77,9 +79,10 @@ OpenDucktor currently supports the OpenCode runtime only. It checks common local
 - Autopilot rules that can automatically start the next workflow action when task transitions are observed.
 - Task-linked documents for specifications, implementation plans, and QA reports.
 - A dedicated Git worktree for each Builder task, with in-app tools to inspect diffs, track Git state, and run dev servers while implementation is in progress.
+- Runtime-aware Agent Studio support for OpenCode and Codex, including model selection, history hydration, permissions/questions, and workflow-tool routing through the runtime descriptor model.
 - Global and repository-level prompt customization for adapting agent behavior to your workflow.
-- A built-in OpenDucktor MCP server used internally by the desktop app and available externally through `@openducktor/mcp`.
-- A local web runner available through `@openducktor/web` for running the shared frontend without Tauri.
+- A built-in OpenDucktor MCP server used internally by managed agent sessions and available externally through `@openducktor/mcp`.
+- A local web runner available through `@openducktor/web` for running the shared frontend with the TypeScript host in a browser.
 
 ## How It Works
 
@@ -101,25 +104,24 @@ That keeps the workflow task-centric and auditable: agents act through a control
 
 ## Architecture Notes
 
-OpenDucktor uses shared Zod contracts in `packages/contracts` for public runtime, task, workflow, IPC, and MCP payloads. The frontend uses TanStack Query as the cache and deduplication layer for server-owned reads.
+OpenDucktor uses shared Zod contracts in `packages/contracts` for public runtime, task, workflow, host-bridge, and MCP payloads. The shared React app lives in `packages/frontend` and uses TanStack Query as the cache and deduplication layer for server-owned reads.
 
-The TypeScript host in `packages/host` is being adopted as the first Effect-native package. Effect owns internal host execution concerns such as typed failures, dependency wiring, I/O orchestration, resource lifecycle, and boundary wrapping, while Promise APIs remain at shell-facing transport edges.
+The TypeScript host in `packages/host` is the Effect-native host boundary used by the Electron shell and the local web runner. Effect owns internal host execution concerns such as typed failures, dependency wiring, I/O orchestration, resource lifecycle, and boundary wrapping, while Promise APIs remain at shell-facing transport edges.
 
 ## Current Scope
 
-- Platform support today: macOS only
-- Planned next: Windows and Linux, once OpenDucktor reaches a first stable version
+- Platform support today: macOS is the primary supported desktop target.
+- Windows and Linux: experimental Electron desktop builds. Feedback is welcome, but these builds are not stable yet.
 - [Beads](https://github.com/steveyegge/beads) is the V1 task source of truth
-- Supported runtime today: OpenCode (`opencode`)
-  - Planned next: more agent runtimes, with Codex next in line
-  - Despite being the most popular coding agent, Claude Code is currently not planned due to Anthropic lack of clarity on Claude Claude terms of use. See [Matt Pocock's tweet](https://x.com/i/status/2040536403289764275). As soon as it's clear Claude Code can be used within tools like OpenDucktor, we will support it.
+- Supported runtimes today: OpenCode (`opencode`) and Codex (`codex`)
+  - OpenCode remains the default runtime.
+  - More runtimes may be added through the runtime descriptor and adapter model.
 - The project is still early and should be treated as an active prototype
 
 ## Documentation
 
 - [docs/README.md](docs/README.md)
 - [docs/architecture-overview.md](docs/architecture-overview.md)
-- [docs/adr/0002-use-effect-in-the-typescript-host.md](docs/adr/0002-use-effect-in-the-typescript-host.md)
 - [docs/tanstack-query-cache-strategy.md](docs/tanstack-query-cache-strategy.md)
 - [docs/runtime-integration-guide.md](docs/runtime-integration-guide.md)
 - [docs/web-runner.md](docs/web-runner.md)

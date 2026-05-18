@@ -2,22 +2,23 @@
 
 ## Purpose
 
-This document explains how to add a new agent runtime to OpenDucktor.
+This document explains how OpenDucktor runtimes fit together and how to add another agent runtime.
 
 Use it when you need to:
 
 - add a new runtime kind,
 - understand the runtime capability contract,
 - verify whether a runtime is eligible for integration,
-- and implement the required changes across contracts, adapters, desktop orchestration, and the Rust host.
+- and implement the required changes across contracts, adapters, frontend orchestration, and host startup.
 
 ## Current Support Policy
 
-This guide describes the integration model, not the list of runtimes that are already supported in production.
+This guide describes the integration model and the runtime support policy.
 
-- The only supported runtime today is OpenCode (`opencode`).
-- Codex is the next planned runtime.
-- OpenDucktor will support open-source agent runtimes only.
+- Supported runtime kinds today are OpenCode (`opencode`) and Codex (`codex`).
+- OpenCode remains the default runtime.
+- Codex is supported through the local app-server adapter and host-managed stdio route.
+- New runtimes must fit the descriptor/capability model or extend that model in the same change set.
 
 ## Runtime Vocabulary
 
@@ -295,13 +296,13 @@ This layer must cover:
 - streaming events, history, todos, model catalog, slash-command catalog, diff, and file status,
 - explicit failure for unsupported operations instead of descriptor/adapter mismatches.
 
-Reference implementation anchors today are `packages/adapters-opencode-sdk/src/opencode-sdk-adapter.ts` and its supporting mapping and workflow-tool permission modules.
+Reference implementation anchors today are `packages/adapters-opencode-sdk/src/opencode-sdk-adapter.ts`, `packages/adapters-codex-app-server/src/index.ts`, and their supporting mapping and workflow-tool permission modules.
 
 For Builder PR generation, the runtime integration is responsible for making provider-native git or PR tools available to the agent. OpenDucktor persists the authoritative PR metadata only after the agent calls `odt_set_pull_request(taskId, providerId, number)`, then resolves the canonical provider record itself.
 
-### 3. Frontend and desktop runtime orchestration
+### 3. Frontend and shell runtime orchestration
 
-The main shared frontend anchors are `packages/frontend/src/state/agent-runtime-registry.ts`, `packages/frontend/src/lib/agent-runtime.ts`, and `packages/frontend/src/state/operations/agent-orchestrator/runtime/runtime.ts`. The desktop app under `apps/desktop/src` is a thin Tauri shell that mounts `@openducktor/frontend`.
+The main shared frontend anchors are `packages/frontend/src/state/agent-runtime-registry.ts`, `packages/frontend/src/lib/agent-runtime.ts`, and `packages/frontend/src/state/operations/agent-orchestrator/runtime/runtime.ts`. The Tauri shell under `apps/desktop/src`, the Electron shell under `apps/electron`, and the browser runner under `packages/openducktor-web` all mount `@openducktor/frontend` through shell bridge adapters.
 
 Frontend/runtime orchestration must keep these rules true:
 
@@ -323,16 +324,31 @@ This layer must ensure that:
 - missing runtimes and mismatched runtime kind or repo identity are rejected,
 - session-scoped reads continue to resolve from the stored session runtime instead of the repo default runtime.
 
-### 5. Rust host integration
+### 5. Host integration
 
-Host-visible runtime support is anchored by the Rust host-domain runtime modules under `apps/desktop/src-tauri/crates/host-domain/src/runtime/`, `apps/desktop/src-tauri/src/commands/runtime.rs`, `apps/desktop/src-tauri/src/commands/build.rs`, and the runtime/build orchestrators under `apps/desktop/src-tauri/crates/host-application/src/app_service/`.
+Host-visible runtime support is anchored by the shared TypeScript contracts, the TypeScript host runtime registry, and the legacy Rust/Tauri runtime modules that still expose equivalent shapes for the Tauri shell.
+
+Current TypeScript host anchors:
+
+- `packages/host/src/adapters/runtimes/runtime-registry.ts`
+- `packages/host/src/adapters/opencode/opencode-workspace-runtime-starter.ts`
+- `packages/host/src/adapters/codex/codex-workspace-runtime-starter.ts`
+- `packages/host/src/adapters/runtimes/runtime-binaries.ts`
+- `packages/host/src/application/runtimes/runtime-orchestrator-service.ts`
+
+Legacy Tauri/Rust anchors:
+
+- `apps/desktop/src-tauri/crates/host-domain/src/runtime/`
+- `apps/desktop/src-tauri/src/commands/runtime.rs`
+- `apps/desktop/src-tauri/src/commands/build.rs`
+- `apps/desktop/src-tauri/crates/host-application/src/app_service/`
 
 Host integration work includes:
 
 - adding the runtime kind to descriptors and registration data. Rust `AgentRuntimeKind` is a string wrapper, not an enum, so new kinds are registered through runtime definitions rather than enum variants,
-- adding the runtime definition to the host-domain built-in runtime registry so default runtime config and startup validation know about it,
-- implementing an `AppRuntime` for the runtime and registering it in `AppRuntimeRegistry` with the correct default startup config,
-- ensuring `RuntimeConfig` defaults are derived from the same runtime definition set used by the application service registry,
+- adding the runtime definition to the host-visible runtime registry so default runtime config and startup validation know about it,
+- implementing runtime startup and registering it in the host registry with the correct default startup config,
+- ensuring runtime config defaults are derived from the same runtime definition set used by the host registry,
 - making `runtime_definitions_list`, `runtime_list`, `runtime_ensure`, `runtime_startup_status`, and `build_start` understand it where applicable,
 - implementing host-managed or external provisioning correctly,
 - preserving full workflow scope coverage (`workspace`, `task`, and `build`).
@@ -406,15 +422,19 @@ bun run --filter @openducktor/core typecheck
 bun run --filter @openducktor/core test
 bun run --filter @openducktor/frontend typecheck
 bun run --filter @openducktor/frontend test
-bun run --filter @openducktor/desktop typecheck
-bun run --filter @openducktor/desktop test
+bun run --filter @openducktor/host typecheck
+bun run --filter @openducktor/host test
+bun run --filter @openducktor/electron typecheck
+bun run --filter @openducktor/electron test
+bun run --filter @openducktor/web typecheck
+bun run --filter @openducktor/web test
 bun run lint
 bun run build
 ```
 
-Also run the focused typecheck/test commands for the new runtime adapter package. For example, OpenCode-focused checks use `bun run --filter @openducktor/adapters-opencode-sdk typecheck` and `bun run --filter @openducktor/adapters-opencode-sdk test`; a new runtime package should expose equivalent scripts.
+Also run the focused typecheck/test commands for the touched runtime adapter packages. OpenCode-focused checks use `bun run --filter @openducktor/adapters-opencode-sdk typecheck` and `bun run --filter @openducktor/adapters-opencode-sdk test`; Codex-focused checks use `bun run --filter @openducktor/adapters-codex-app-server typecheck` and `bun run --filter @openducktor/adapters-codex-app-server test`; a new runtime package should expose equivalent scripts.
 
-From `apps/desktop/src-tauri`:
+When the legacy Tauri/Rust path is touched, also run focused Rust checks from `apps/desktop/src-tauri`:
 
 ```sh
 cargo test -p host-domain
@@ -436,11 +456,11 @@ These constraints describe the current integration surface. If a runtime does no
 
 ### Reference implementation
 
-The built-in runtime implementation is `opencode`. Its adapter, runtime registry wiring, and Rust host startup path are the concrete example of how the current abstraction is implemented end-to-end.
+The built-in runtime implementations are `opencode` and `codex`. OpenCode is the default and remains the broadest reference implementation. Codex is the reference for a host-managed app-server runtime that uses the stdio route and adapter-owned request/response/event mapping.
 
 ### Host-managed startup
 
-For `host_managed` runtimes, the Rust host owns orchestration, but the runtime implementation owns the startup details that produce the live route.
+For `host_managed` runtimes, the host owns orchestration, but the runtime implementation owns the startup details that produce the live route.
 
 Current contract rules:
 
@@ -469,7 +489,6 @@ Some screens inspect only a subset of capability flags, but the descriptor still
 Start with these anchor references:
 
 - `docs/architecture-overview.md`
-- `docs/agent-runtime-implementation-plan.md`
 - `packages/contracts/src/agent-runtime-schemas.ts`
 - `packages/contracts/src/run-schemas.ts`
 - `packages/contracts/src/session-schemas.ts`
@@ -477,6 +496,10 @@ Start with these anchor references:
 - `packages/frontend/src/state/agent-runtime-registry.ts`
 - `packages/frontend/src/lib/agent-runtime.ts`
 - `packages/frontend/src/state/operations/agent-orchestrator/runtime/runtime.ts`
+- `packages/host/src/adapters/runtimes/runtime-registry.ts`
+- `packages/host/src/adapters/runtimes/runtime-binaries.ts`
+- `packages/host/src/adapters/codex/codex-workspace-runtime-starter.ts`
+- `packages/host/src/adapters/opencode/opencode-workspace-runtime-starter.ts`
 - `apps/desktop/src-tauri/src/commands/runtime.rs`
 - `apps/desktop/src-tauri/src/commands/build.rs`
 

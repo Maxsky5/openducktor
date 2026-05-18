@@ -7,7 +7,8 @@ OpenDucktor releases are now owned by GitHub Actions. Maintainers do not need to
 The release flow is split into these workflows:
 
 - `.github/workflows/release-prep.yml`
-- `.github/workflows/release-desktop.yml`
+- `.github/workflows/release-desktop-tauri.yml`
+- `.github/workflows/release-desktop-electron.yml`
 - `.github/workflows/publish-mcp.yml`
 - `.github/workflows/publish-web.yml`
 - `.github/workflows/publish-homebrew-tap.yml`
@@ -28,13 +29,13 @@ It does all release preparation work:
 - creates one tag:
   - `v0.1.0` for the desktop release and MCP publish
 - creates the draft GitHub release with generated notes after the commit and tag are pushed
-- dispatches the desktop, MCP, and web publish workflows explicitly after the draft exists
+- dispatches the Tauri desktop, Electron desktop, MCP, and web publish workflows explicitly after the draft exists
 
-The same release version applies to the web runner package. A publishable `@openducktor/web` build must include macOS web-host binaries for Apple Silicon and Intel plus `.sha256` checksum files under the package's `bin/` directory before npm publication.
+The same release version applies to the desktop apps, `@openducktor/mcp`, and `@openducktor/web`.
 
-### 2. Release Desktop
+### 2. Release Desktop Tauri
 
-`Release Desktop` is dispatched by `Prepare Release` with the release tag `v0.1.0` and can also be rerun manually with the same tag if needed.
+`Release Desktop Tauri` is dispatched by `Prepare Release` with the release tag `v0.1.0` and can also be rerun manually with the same tag if needed.
 
 It:
 
@@ -50,7 +51,26 @@ It:
 
 The release remains a **draft** so maintainers can smoke-test the downloaded assets before publishing.
 
-### 3. Publish MCP Package
+### 3. Release Desktop Electron
+
+`Release Desktop Electron` is dispatched by `Prepare Release` with the release tag `v0.1.0` and can also be rerun manually with the same tag if needed.
+
+It:
+
+- validates that the checked-out repo state matches the tag version
+- verifies that the draft GitHub release already exists
+- lints, typechecks, and tests the Electron workspace
+- builds Electron assets for:
+  - Linux x64
+  - macOS Apple Silicon
+  - macOS Intel
+  - Windows x64
+- signs and notarizes macOS Electron assets
+- uploads Electron release assets to the draft GitHub release
+
+Windows and Linux Electron assets are experimental. They are included to gather feedback and platform evidence, but they are not yet considered stable release channels.
+
+### 4. Publish MCP Package
 
 `Publish MCP Package` is dispatched by `Prepare Release` with the release tag `v0.1.0` and can also be rerun manually with the same tag if needed.
 
@@ -60,25 +80,22 @@ It:
 - verifies the MCP package
 - publishes `@openducktor/mcp` to npmjs
 
-### 4. Publish Web Package
+### 5. Publish Web Package
 
-`@openducktor/web` is the npm-facing local browser runner. It is intentionally separate from the desktop bundle: the package starts a loopback-only Rust host, waits for readiness, serves the built web frontend, and shuts the host down with a control-token-protected `/shutdown` request.
+`@openducktor/web` is the npm-facing local browser runner. It is intentionally separate from the desktop bundle: the package starts a loopback-only TypeScript host backend, waits for readiness, serves the built web frontend, and shuts the host down with a control-token-protected `/shutdown` request.
 
 `Publish Web Package` is dispatched by `Prepare Release` with the release tag `v0.1.0` and can also be rerun manually with the same tag if needed.
 
 It:
 
-- builds `openducktor-web-host` for `aarch64-apple-darwin` and `x86_64-apple-darwin`
-- uploads the binaries and `.sha256` checksums as GitHub Actions artifacts
-- builds the self-contained `@openducktor/web` package, including the static web frontend
-- downloads the host artifacts into `packages/openducktor-web/bin/` for npm packaging
-- verifies package contents, executable bits, and checksums
+- builds the self-contained `@openducktor/web` package, including the static web frontend and TypeScript host backend
+- verifies package contents with `scripts/prepare-web-publish-packages.ts`
 - runs `npm publish --dry-run` for `@openducktor/web`
 - publishes `@openducktor/web`
 
-The launcher refuses unsupported platforms and refuses packaged host binaries without matching checksums. Development mode (`bun run browser:dev`) uses Cargo and Vite directly; published installs serve the built frontend from the `@openducktor/web` package and do not require publishing internal workspace packages.
+Development mode (`bun run browser:dev`) uses the same launcher in workspace mode and serves the repo-local frontend with Vite. Published installs serve the built frontend and TypeScript host backend from the `@openducktor/web` package and do not require publishing internal workspace packages.
 
-### 5. Publish Homebrew Tap
+### 6. Publish Homebrew Tap
 
 `Publish Homebrew Tap` runs when a GitHub release is published and can also be rerun manually with the same tag if needed.
 
@@ -91,18 +108,22 @@ It:
 - renders `Casks/openducktor.rb` from repo metadata plus the published asset names and checksums
 - commits and pushes the cask update to the configured Homebrew tap repository
 
-The tap workflow is intentionally separate from `Release Desktop` because the release draft remains private to maintainers until smoke testing is complete. Homebrew should only point at the final published GitHub release.
+The tap workflow is intentionally separate from desktop artifact workflows because the release draft remains private to maintainers until smoke testing is complete. Homebrew should only point at the final published GitHub release.
 
 ## Why this design
 
-OpenDucktor uses a CEF-specific Tauri flow:
+OpenDucktor currently has two desktop release paths.
+
+The legacy Tauri path uses a CEF-specific flow:
 
 - `bun run tauri:setup:cef`
 - repo-specific path resolution from `apps/desktop/scripts/cef-paths.ts`
 
 Those scripts pin `cargo-tauri` to the exact Tauri `feat/cef` revision locked in `apps/desktop/src-tauri/Cargo.lock`, export CEF into the shared OpenDucktor cache, and clear the downloaded bundle's macOS quarantine bit.
 
-The release workflow keeps those OpenDucktor-specific setup steps, then hands the actual desktop build/upload to `tauri-action`. That gives you a more standard Tauri publish layer without throwing away the CEF bootstrap the repo already depends on.
+The Tauri release workflow keeps those OpenDucktor-specific setup steps, then hands the actual desktop build/upload to `tauri-action`. That gives you a more standard Tauri publish layer without throwing away the CEF bootstrap the repo already depends on.
+
+The Electron path is the cross-platform migration path. It builds through `electron-builder`, uses `apps/electron/electron-builder.yml`, packages the MCP sidecar under app resources, and publishes macOS, Windows, and Linux artifacts to the same draft release. macOS Electron assets require signing and notarization; Windows and Linux assets are experimental.
 
 ## Release notes
 
@@ -161,6 +182,7 @@ The version sync touches:
 
 - root `package.json`
 - workspace package manifests discovered from the root `workspaces` configuration
+- `apps/electron/package.json`
 - `apps/desktop/src-tauri/tauri.conf.json`
 - `apps/desktop/src-tauri/Cargo.toml` (`[package]` and `[workspace.package]`)
 - `apps/desktop/src-tauri/Cargo.lock`
@@ -169,6 +191,7 @@ The version sync touches:
 The helper script remains useful because this repo spans three version domains:
 
 - Bun workspace package manifests
+- Electron package metadata
 - Tauri config
 - Cargo workspace/root package metadata
 
@@ -178,12 +201,13 @@ The helper script remains useful because this repo spans three version domains:
 2. Run `Prepare Release`.
 3. Enter the target version, for example `0.1.0`.
 4. Wait for `Prepare Release` to finish creating the version bump commit, release tag, draft GitHub release, and explicit downstream workflow dispatch.
-5. Wait for `Release Desktop` to finish uploading desktop assets.
-6. Wait for `Publish MCP Package` to finish publishing `@openducktor/mcp`.
-7. Wait for `Publish Web Package` to finish uploading web-host binaries and publishing `@openducktor/web` plus its runtime packages.
-8. Open the draft GitHub release and smoke-test the desktop and web-host assets.
-9. Publish the draft release when the assets and notes look correct.
-10. Wait for `Publish Homebrew Tap` to finish updating `Casks/openducktor.rb` in the tap repository.
+5. Wait for `Release Desktop Tauri` to finish uploading macOS Tauri assets.
+6. Wait for `Release Desktop Electron` to finish uploading Electron assets.
+7. Wait for `Publish MCP Package` to finish publishing `@openducktor/mcp`.
+8. Wait for `Publish Web Package` to finish publishing `@openducktor/web`.
+9. Open the draft GitHub release and smoke-test the desktop assets. Treat Windows and Linux Electron assets as experimental and collect feedback before calling them stable.
+10. Publish the draft release when the assets and notes look correct.
+11. Wait for `Publish Homebrew Tap` to finish updating `Casks/openducktor.rb` in the tap repository.
 
 ## Homebrew tap setup
 
@@ -204,7 +228,7 @@ brew install --cask openducktor
 
 ## Asset policy for the first release line
 
-OpenDucktor is currently macOS-first, so the desktop workflow publishes macOS artifacts only.
+OpenDucktor is currently macOS-first. The Tauri desktop workflow publishes macOS artifacts only. The Electron workflow also publishes Windows and Linux artifacts, but those builds are experimental and should be labeled and treated accordingly until platform support is proven stable.
 
 The workflow does **not** generate a public updater channel yet. That should wait until the in-app updater flow is explicitly wired and tested. The current release pipeline is focused on reliable GitHub Releases distribution first, plus npm publishing for `@openducktor/mcp` and the local web runner package.
 

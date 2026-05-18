@@ -1,15 +1,15 @@
 # Documentation Guide
 
-This folder contains the project documentation that explains how OpenDucktor is built today and how it is expected to evolve.
+This folder contains the project documentation for OpenDucktor's current architecture, runtime model, release process, and task workflow.
 
 ## Read This First
 
 - [../README.md](../README.md): public project overview, install guide, and contribution entry point.
-- [architecture-overview.md](architecture-overview.md): high-level map of the system and how data moves across layers.
-- [adr/0002-use-effect-in-the-typescript-host.md](adr/0002-use-effect-in-the-typescript-host.md): decision record for adopting Effect in the TypeScript host and keeping Zod/TanStack Query ownership clear.
+- [architecture-overview.md](architecture-overview.md): high-level map of the shared frontend, Electron/Tauri/browser shells, TypeScript host, legacy Rust host path, Beads persistence, and runtime data flows.
+- [effect.md](effect.md): current Effect conventions for host ports, services, adapters, lifecycle, testing, and public boundaries.
 - [tanstack-query-cache-strategy.md](tanstack-query-cache-strategy.md): frontend cache strategy and the boundary between Query-owned reads and host/runtime execution.
-- [runtime-integration-guide.md](runtime-integration-guide.md): how runtimes fit into OpenDucktor and what a new runtime integration requires.
-- [web-runner.md](web-runner.md): local browser runner architecture, command usage, and package/release expectations.
+- [runtime-integration-guide.md](runtime-integration-guide.md): how OpenCode and Codex fit into OpenDucktor and what another runtime integration requires.
+- [web-runner.md](web-runner.md): local browser runner architecture, command usage, and package/release expectations for the TypeScript host backend.
 - [adr/](adr/): architecture decision records explaining durable technical choices and rejected alternatives.
 
 ## Workflow Docs
@@ -20,18 +20,15 @@ This folder contains the project documentation that explains how OpenDucktor is 
 
 ## Runtime And Architecture Docs
 
-- [agent-orchestrator-module-map.md](agent-orchestrator-module-map.md): maintainer map for the desktop agent orchestration modules.
-- [agent-runtime-implementation-plan.md](agent-runtime-implementation-plan.md): runtime abstraction plan and guardrails.
-- [agent-ui-library-evaluation.md](agent-ui-library-evaluation.md): reasoning behind the current agent UI approach.
+- [agent-orchestrator-module-map.md](agent-orchestrator-module-map.md): maintainer map for the shared frontend agent orchestration modules.
 - [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md): detailed Beads attachment and shared Dolt lifecycle, command inventory, startup, hydration, and shutdown rules.
 - [external-mcp.md](external-mcp.md): public MCP package usage, host-bridge startup contract, and the external task tools.
 - [runtime-integration-guide.md](runtime-integration-guide.md): runtime vocabulary, capability model, integration checklist, and verification path.
 - [tanstack-query-cache-strategy.md](tanstack-query-cache-strategy.md): frontend read-cache ownership, invalidation rules, and how Effect-backed host calls should coexist with TanStack Query.
-- [web-runner.md](web-runner.md): how `@openducktor/web` starts the local host and serves the shared frontend without Tauri.
+- [web-runner.md](web-runner.md): how `@openducktor/web` starts the local TypeScript host and serves the shared frontend in browser mode.
 
 ## Security And Maintenance Docs
 
 - [mcp-runtime-security.md](mcp-runtime-security.md): current MCP transport and threat assumptions.
-- [desktop-csp-hardening.md](desktop-csp-hardening.md): current desktop CSP baseline and hardening plan.
 - [dependency-hygiene.md](dependency-hygiene.md): dependency update and audit policy.
-- [release-process.md](release-process.md): desktop release workflow, required secrets, version sync, and draft publishing steps.
+- [release-process.md](release-process.md): Tauri/Electron desktop, MCP, web package, Homebrew, version sync, and draft publishing steps.
