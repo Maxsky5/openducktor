@@ -9,6 +9,10 @@ const workspaceRoot = process.cwd();
 
 const tauriConfigPath = "apps/desktop/src-tauri/tauri.conf.json";
 const cargoTomlPath = "apps/desktop/src-tauri/Cargo.toml";
+const desktopPackageJsonPaths = new Set([
+  "apps/desktop/package.json",
+  "apps/electron/package.json",
+]);
 
 type Mode = "check" | "set";
 
@@ -26,10 +30,58 @@ function usage(): never {
   process.exit(1);
 }
 
-function validateVersion(version: string): void {
-  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+export function validateVersion(version: string): void {
+  const match = version.match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/);
+  if (!match) {
     throw new Error(`Invalid version \`${version}\`. Expected semver like 0.1.0 or 0.1.0-rc.1.`);
   }
+
+  const prerelease = match[4];
+  if (!prerelease) {
+    return;
+  }
+
+  const prereleaseIsValid = prerelease.split(".").every((identifier) => {
+    if (!/^[0-9A-Za-z-]+$/.test(identifier)) {
+      return false;
+    }
+
+    if (/^\d+$/.test(identifier)) {
+      return identifier === "0" || !identifier.startsWith("0");
+    }
+
+    return true;
+  });
+  if (!prereleaseIsValid) {
+    throw new Error(`Invalid version \`${version}\`. Expected semver like 0.1.0 or 0.1.0-rc.1.`);
+  }
+}
+
+function validateDesktopVersion(version: string): void {
+  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
+    throw new Error(`Invalid desktop version \`${version}\`. Expected numeric semver like 0.1.0.`);
+  }
+}
+
+export function deriveDesktopVersion(releaseVersion: string): string {
+  const [desktopVersion] = releaseVersion.split("-");
+  validateDesktopVersion(desktopVersion);
+  return desktopVersion;
+}
+
+export function expectedVersionForEntry(file: string, releaseVersion: string): string {
+  const desktopVersion = deriveDesktopVersion(releaseVersion);
+
+  if (
+    desktopPackageJsonPaths.has(file) ||
+    file === tauriConfigPath ||
+    file.startsWith(`${cargoTomlPath} `) ||
+    file.startsWith("apps/desktop/src-tauri/Cargo.lock ")
+  ) {
+    return desktopVersion;
+  }
+
+  return releaseVersion;
 }
 
 function readRootWorkspacePatterns(): string[] {
@@ -279,50 +331,78 @@ function collectCurrentVersions(): Array<{ file: string; version: string }> {
   return entries;
 }
 
-function checkVersions(expectedVersion: string): void {
-  const mismatches = collectCurrentVersions().filter((entry) => entry.version !== expectedVersion);
+function checkVersions(expectedReleaseVersion: string): void {
+  const mismatches = collectCurrentVersions().flatMap((entry) => {
+    const expectedVersion = expectedVersionForEntry(entry.file, expectedReleaseVersion);
+    return entry.version === expectedVersion ? [] : [{ ...entry, expectedVersion }];
+  });
 
   if (mismatches.length > 0) {
-    console.error(`Release version mismatch. Expected ${expectedVersion}.`);
+    console.error(`Release version mismatch. Expected release version ${expectedReleaseVersion}.`);
     for (const mismatch of mismatches) {
-      console.error(`- ${mismatch.file}: ${mismatch.version}`);
+      console.error(
+        `- ${mismatch.file}: ${mismatch.version} (expected ${mismatch.expectedVersion})`,
+      );
     }
     process.exit(1);
   }
 
-  console.log(`All release versions match ${expectedVersion}.`);
-}
-
-function setVersions(version: string): void {
-  for (const relativePath of collectWorkspacePackageJsonPaths()) {
-    writeJsonVersion(relativePath, version);
+  const desktopVersion = deriveDesktopVersion(expectedReleaseVersion);
+  if (desktopVersion === expectedReleaseVersion) {
+    console.log(`All release versions match ${expectedReleaseVersion}.`);
+    return;
   }
 
-  writeTauriConfigVersion(version);
-  writeCargoVersions(version);
-  syncCargoLock();
-
   console.log(
-    `Updated release version to ${version} in package manifests, Tauri config, and Cargo.lock.`,
+    `All release versions match ${expectedReleaseVersion}; desktop bundle versions match ${desktopVersion}.`,
   );
 }
 
-const [, , rawMode, rawVersion] = process.argv;
+function setVersions(version: string): void {
+  const desktopVersion = deriveDesktopVersion(version);
 
-if (!rawMode || !rawVersion) {
-  usage();
+  for (const relativePath of collectWorkspacePackageJsonPaths()) {
+    writeJsonVersion(relativePath, expectedVersionForEntry(relativePath, version));
+  }
+
+  writeTauriConfigVersion(desktopVersion);
+  writeCargoVersions(desktopVersion);
+  syncCargoLock();
+
+  if (desktopVersion === version) {
+    console.log(
+      `Updated release version to ${version} in package manifests, Tauri config, and Cargo.lock.`,
+    );
+    return;
+  }
+
+  console.log(
+    `Updated release version to ${version}; desktop package, Tauri, and Cargo versions use ${desktopVersion}.`,
+  );
 }
 
-if (rawMode !== "check" && rawMode !== "set") {
-  usage();
+function main(): void {
+  const [, , rawMode, rawVersion] = process.argv;
+
+  if (!rawMode || !rawVersion) {
+    usage();
+  }
+
+  if (rawMode !== "check" && rawMode !== "set") {
+    usage();
+  }
+
+  validateVersion(rawVersion);
+
+  const mode: Mode = rawMode;
+
+  if (mode === "check") {
+    checkVersions(rawVersion);
+  } else {
+    setVersions(rawVersion);
+  }
 }
 
-validateVersion(rawVersion);
-
-const mode: Mode = rawMode;
-
-if (mode === "check") {
-  checkVersions(rawVersion);
-} else {
-  setVersions(rawVersion);
+if (import.meta.main) {
+  main();
 }

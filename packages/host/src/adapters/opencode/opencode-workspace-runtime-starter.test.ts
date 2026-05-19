@@ -365,6 +365,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
 
   test("includes startup timeout cleanup failures", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-timeout-cleanup-failure-"));
+    let runtimePid: number | null = null;
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
@@ -384,6 +385,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         portAllocator: () => Effect.succeed(43123),
         portProbe: () => Effect.succeed(false),
         processTreeTerminator: ({ pid }) => {
+          runtimePid = pid;
           process.kill(pid, "SIGTERM");
           return Effect.fail(
             new HostOperationError({
@@ -407,6 +409,14 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         "Timed out waiting for OpenCode runtime on 127.0.0.1:43123. Cleanup failed: process tree cleanup failed",
       );
     } finally {
+      if (runtimePid !== null && processIsAlive(runtimePid)) {
+        try {
+          await waitFor(() => !processIsAlive(runtimePid as number), 2_000);
+        } catch {
+          process.kill(runtimePid, "SIGKILL");
+          await waitFor(() => !processIsAlive(runtimePid as number), 2_000);
+        }
+      }
       await removeTestDirectory(root);
     }
   });

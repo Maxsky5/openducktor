@@ -19,19 +19,24 @@ The release flow is split into these workflows:
 
 - Trigger: `workflow_dispatch`
 - Input: `version` like `0.1.0`
+- Input: `release_channel`, either `stable` or `beta`
 
 It does all release preparation work:
 
 - validates the requested version
+- validates that stable releases use normal semver and beta releases use prerelease semver, for example `0.4.0-beta.1`
 - updates repo version manifests
 - refreshes `bun.lock`
 - creates the release bump commit on the default branch
 - creates one tag:
   - `v0.1.0` for the desktop release and MCP publish
-- creates the draft GitHub release with generated notes after the commit and tag are pushed
+- creates the draft GitHub release with generated notes after the commit and tag are pushed, marking beta releases as GitHub prereleases
 - dispatches the Tauri desktop, Electron desktop, MCP, and web publish workflows explicitly after the draft exists
+- passes the npm dist-tag to the web and MCP publish workflows:
+  - `stable` publishes npm packages with `latest`
+  - `beta` publishes npm packages with `beta`
 
-The same release version applies to the desktop apps, `@openducktor/mcp`, and `@openducktor/web`.
+For beta releases, npm-facing packages keep the full prerelease version, for example `0.4.0-beta.1`. Desktop bundle metadata uses the numeric base version, for example `0.4.0`, because macOS bundle short versions must be numeric period-separated components.
 
 ### 2. Release Desktop Tauri
 
@@ -77,8 +82,9 @@ Windows and Linux Electron assets are experimental. They are included to gather 
 It:
 
 - validates that `packages/openducktor-mcp/package.json` matches the tag version
+- validates that prerelease tags are published to npm `beta` and stable tags are published to npm `latest`
 - verifies the MCP package
-- publishes `@openducktor/mcp` to npmjs
+- publishes `@openducktor/mcp` to npmjs with the requested dist-tag
 
 ### 5. Publish Web Package
 
@@ -91,7 +97,8 @@ It:
 - builds the self-contained `@openducktor/web` package, including the static web frontend and TypeScript host backend
 - verifies package contents with `scripts/prepare-web-publish-packages.ts`
 - runs `npm publish --dry-run` for `@openducktor/web`
-- publishes `@openducktor/web`
+- validates that prerelease tags are published to npm `beta` and stable tags are published to npm `latest`
+- publishes `@openducktor/web` with the requested dist-tag
 
 Development mode (`bun run browser:dev`) uses the same launcher in workspace mode and serves the repo-local frontend with Vite. Published installs serve the built frontend and TypeScript host backend from the `@openducktor/web` package and do not require publishing internal workspace packages.
 
@@ -195,19 +202,36 @@ The helper script remains useful because this repo spans three version domains:
 - Tauri config
 - Cargo workspace/root package metadata
 
+Stable releases use the same version everywhere. Beta releases split the version domains deliberately:
+
+- root, internal packages, `@openducktor/mcp`, and `@openducktor/web`: full prerelease version, for example `0.4.0-beta.1`
+- desktop package metadata, Tauri config, and Cargo metadata: numeric desktop bundle version, for example `0.4.0`
+
+The GitHub release tag remains the full release tag, for example `v0.4.0-beta.1`, and both desktop workflows still attach assets to that beta draft release.
+
 ## Recommended release sequence
 
 1. Open GitHub Actions.
 2. Run `Prepare Release`.
 3. Enter the target version, for example `0.1.0`.
-4. Wait for `Prepare Release` to finish creating the version bump commit, release tag, draft GitHub release, and explicit downstream workflow dispatch.
-5. Wait for `Release Desktop Tauri` to finish uploading macOS Tauri assets.
-6. Wait for `Release Desktop Electron` to finish uploading Electron assets.
-7. Wait for `Publish MCP Package` to finish publishing `@openducktor/mcp`.
-8. Wait for `Publish Web Package` to finish publishing `@openducktor/web`.
-9. Open the draft GitHub release and smoke-test the desktop assets. Treat Windows and Linux Electron assets as experimental and collect feedback before calling them stable.
-10. Publish the draft release when the assets and notes look correct.
-11. Wait for `Publish Homebrew Tap` to finish updating `Casks/openducktor.rb` in the tap repository.
+4. Select `stable` or `beta` for `release_channel`. Use a prerelease version such as `0.4.0-beta.1` for beta.
+5. Wait for `Prepare Release` to finish creating the version bump commit, release tag, draft GitHub release, and explicit downstream workflow dispatch.
+6. Wait for `Release Desktop Tauri` to finish uploading macOS Tauri assets.
+7. Wait for `Release Desktop Electron` to finish uploading Electron assets.
+8. Wait for `Publish MCP Package` to finish publishing `@openducktor/mcp`.
+9. Wait for `Publish Web Package` to finish publishing `@openducktor/web`.
+10. Open the draft GitHub release and smoke-test the desktop assets. Treat Windows and Linux Electron assets as experimental and collect feedback before calling them stable.
+11. Publish the draft release when the assets and notes look correct.
+12. For stable releases, wait for `Publish Homebrew Tap` to finish updating `Casks/openducktor.rb` in the tap repository. Beta releases are prereleases and are intentionally rejected by the Homebrew tap workflow.
+
+After a beta publish, verify that npm kept `latest` on the last stable version:
+
+```sh
+npm dist-tag ls @openducktor/web
+npm dist-tag ls @openducktor/mcp
+```
+
+The beta version should appear under `beta`; `latest` should still point to the latest stable version.
 
 ## Homebrew tap setup
 
