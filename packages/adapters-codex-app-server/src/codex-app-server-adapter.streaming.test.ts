@@ -714,6 +714,55 @@ describe("CodexAppServerAdapter streaming", () => {
     unsubscribe();
   });
 
+  test("routes live context compaction items", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const { adapter } = createHarness({ subscribeEvents });
+    const events: unknown[] = [];
+
+    await adapter.attachSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      externalSessionId: "thread-saved",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const unsubscribe = adapter.subscribeEvents("thread-saved", (event) => events.push(event));
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "item/completed",
+        params: {
+          threadId: "thread-saved",
+          turnId: "turn-live",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
+          },
+        },
+      },
+    });
+    await Promise.resolve();
+
+    expect(events).toContainEqual({
+      type: "session_compacted",
+      externalSessionId: "thread-saved",
+      timestamp: expect.any(String),
+      message: "Session compacted.",
+    });
+    unsubscribe();
+  });
+
   test("maps completed update_plan dynamic tool calls into live session todos", async () => {
     const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
     const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });

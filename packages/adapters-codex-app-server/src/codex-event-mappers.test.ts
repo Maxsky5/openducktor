@@ -106,6 +106,36 @@ describe("Codex compaction event mapper", () => {
     ]);
   });
 
+  test("projects live context compaction items to session events", () => {
+    const events = projectCodexCanonicalEvents(
+      compactionMapper.fromLive(
+        {
+          kind: "item_completed",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
+          },
+        },
+        {
+          source: "live",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          timestamp: "2026-05-18T21:00:00.000Z",
+        },
+        undefined,
+      ).events,
+    );
+
+    expect(events).toEqual([
+      {
+        type: "session_compacted",
+        externalSessionId: "thread-1",
+        timestamp: "2026-05-18T21:00:00.000Z",
+        message: "Session compacted.",
+      },
+    ]);
+  });
+
   test("projects thread-read context compaction items to session notice history", () => {
     const result = compactionMapper.fromThreadItem(
       {

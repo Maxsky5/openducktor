@@ -4,10 +4,30 @@ import {
   codexItemTypeMatches,
   extractCodexTokenUsageTotals,
 } from "../codex-app-server-transcript";
-import type { CodexMappingResult } from "../codex-canonical-events";
+import type {
+  CodexCanonicalSessionCompactedEvent,
+  CodexMappingContext,
+  CodexMappingResult,
+} from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper } from "../codex-event-mapper";
 import { noCodexMapperState } from "../codex-event-mapper";
+
+const toSessionCompactedEvent = (
+  ctx: CodexMappingContext,
+  raw: unknown,
+  messageId?: string,
+): CodexCanonicalSessionCompactedEvent => ({
+  kind: "session_compacted",
+  source: ctx.source,
+  mapper: "compaction",
+  threadId: ctx.threadId,
+  ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
+  ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
+  raw,
+  ...(messageId ? { messageId } : {}),
+  message: "Session compacted.",
+});
 
 export const lifecycleMapper: CodexEventMapper = {
   name: "lifecycle",
@@ -57,24 +77,30 @@ export const compactionMapper: CodexEventMapper = {
   name: "compaction",
   createState: noCodexMapperState,
   fromLive(input, ctx): CodexMappingResult {
+    if (
+      input.kind === "item_completed" &&
+      (codexItemTypeMatches(input.item, "contextCompaction") ||
+        codexItemTypeMatches(input.item, "compaction"))
+    ) {
+      return {
+        handled: true,
+        events: [
+          toSessionCompactedEvent(
+            ctx,
+            input.item,
+            codexItemId(input.item, `session-compacted:${ctx.timestamp ?? "live"}`),
+          ),
+        ],
+      };
+    }
+
     if (input.kind !== "notification" || input.notification.method !== "thread/compacted") {
       return emptyCodexMappingResult();
     }
 
     return {
       handled: true,
-      events: [
-        {
-          kind: "session_compacted",
-          source: ctx.source,
-          mapper: "compaction",
-          threadId: ctx.threadId,
-          ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
-          ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
-          raw: input.notification.params,
-          message: "Session compacted.",
-        },
-      ],
+      events: [toSessionCompactedEvent(ctx, input.notification.params)],
     };
   },
   fromThreadItem(input, ctx): CodexMappingResult {
@@ -88,16 +114,11 @@ export const compactionMapper: CodexEventMapper = {
     return {
       handled: true,
       events: [
-        {
-          kind: "session_compacted",
-          source: ctx.source,
-          mapper: "compaction",
-          threadId: ctx.threadId,
-          ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
-          raw: input.item,
-          messageId: codexItemId(input.item, `codex-history-${input.index}-session-compacted`),
-          message: "Session compacted.",
-        },
+        toSessionCompactedEvent(
+          ctx,
+          input.item,
+          codexItemId(input.item, `codex-history-${input.index}-session-compacted`),
+        ),
       ],
     };
   },
