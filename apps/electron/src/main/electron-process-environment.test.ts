@@ -58,6 +58,27 @@ describe("configureElectronProcessEnvironment", () => {
     ).toBe(join("/Applications/OpenDucktor.app/Contents/Resources", "bin", "openducktor-mcp"));
   });
 
+  test("uses Linux packaged resources for bundled bin and MCP sidecar env", () => {
+    const env: NodeJS.ProcessEnv = {};
+    configureElectronProcessEnvironment({
+      env,
+      platform: "linux",
+      isPackaged: true,
+      resourcesPath: "/opt/OpenDucktor/resources",
+    });
+
+    expect(env[OPENDUCKTOR_BUNDLED_BIN_DIR_ENV]).toBe(join("/opt/OpenDucktor/resources", "bin"));
+    expect(env[OPENDUCKTOR_MCP_SIDECAR_PATH_ENV]).toBe(
+      join("/opt/OpenDucktor/resources", "bin", "openducktor-mcp"),
+    );
+    expect(
+      resolveElectronMcpSidecarPath({
+        platform: "linux",
+        resourcesPath: "/opt/OpenDucktor/resources",
+      }),
+    ).toBe(join("/opt/OpenDucktor/resources", "bin", "openducktor-mcp"));
+  });
+
   test("preserves explicit packaged environment overrides", () => {
     const env: NodeJS.ProcessEnv = {
       [OPENDUCKTOR_BUNDLED_BIN_DIR_ENV]: "/custom/bin",

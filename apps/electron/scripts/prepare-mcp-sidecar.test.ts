@@ -47,7 +47,7 @@ describe("prepareMcpSidecar", () => {
     });
   });
 
-  test("cleans, compiles, and marks the Unix sidecar executable", async () => {
+  test("cleans, compiles, and marks the Linux sidecar executable", async () => {
     const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
     const staleOutput = join(electronPackageDirectory, "build", "sidecars", "stale");
     const chmodCalls: Array<{ mode: number; path: string }> = [];
@@ -56,7 +56,7 @@ describe("prepareMcpSidecar", () => {
 
     const plan = await prepareMcpSidecar({
       electronPackageDirectory,
-      platform: "darwin",
+      platform: "linux",
       workspaceRoot,
       compile: async ({ outputPath }) => {
         await writeFile(outputPath, "#!/bin/sh\nexit 0\n");
