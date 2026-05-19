@@ -32,6 +32,20 @@ type RuntimeEnsureFlight = {
   deferred: Deferred.Deferred<RuntimeInstanceSummary, RuntimeRegistryError>;
 };
 
+const requireCodexRuntimeId = (runtimeRoute: RuntimeInstanceSummary["runtimeRoute"]) =>
+  Effect.gen(function* () {
+    if (runtimeRoute.type === "stdio") {
+      return runtimeRoute.identity;
+    }
+    return yield* Effect.fail(
+      new HostValidationError({
+        field: "runtimeRoute",
+        message: "Codex app-server operations require a stdio runtime route.",
+        details: { runtimeRouteType: runtimeRoute.type },
+      }),
+    );
+  });
+
 export const createRuntimeRegistry = ({
   runtimes = [],
   workspaceStarter,
@@ -201,7 +215,10 @@ export const createRuntimeRegistry = ({
             }),
           );
         }
-        return stopCodexSession({ ...input, codexAppServer });
+        return Effect.gen(function* () {
+          const runtimeId = yield* requireCodexRuntimeId(input.runtimeRoute);
+          return yield* stopCodexSession({ ...input, codexAppServer, runtimeId });
+        });
       }
       return Effect.fail(
         new HostValidationError({
@@ -225,7 +242,10 @@ export const createRuntimeRegistry = ({
             }),
           );
         }
-        return probeCodexSessionStatus({ ...input, codexAppServer });
+        return Effect.gen(function* () {
+          const runtimeId = yield* requireCodexRuntimeId(input.runtimeRoute);
+          return yield* probeCodexSessionStatus({ ...input, codexAppServer, runtimeId });
+        });
       }
       return Effect.succeed({ supported: false, hasLiveSession: false });
     },

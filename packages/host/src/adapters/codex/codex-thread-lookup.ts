@@ -1,11 +1,8 @@
-import type { CodexAppServerThread, RuntimeRoute } from "@openducktor/contracts";
+import type { CodexAppServerThread } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { CodexAppServerError, CodexAppServerPort } from "../../ports/codex-app-server-port";
 
 type CodexThreadReaderPort = Pick<CodexAppServerPort, "request">;
-
-export const runtimeIdFromStdioRoute = (runtimeRoute: RuntimeRoute): string | null =>
-  runtimeRoute.type === "stdio" ? runtimeRoute.identity : null;
 
 export const readCodexThread = (
   codexAppServer: CodexThreadReaderPort,

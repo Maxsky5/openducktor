@@ -1,13 +1,12 @@
-import type { RuntimeRoute } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { HostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerError, CodexAppServerPort } from "../../ports/codex-app-server-port";
-import { readCodexThread, runtimeIdFromStdioRoute } from "./codex-thread-lookup";
+import { readCodexThread } from "./codex-thread-lookup";
 import { findActiveCodexTurnId } from "./codex-turn-lookup";
 
 export type CodexSessionStopInput = {
   codexAppServer: Pick<CodexAppServerPort, "request">;
-  runtimeRoute: RuntimeRoute;
+  runtimeId: string;
   externalSessionId: string;
   workingDirectory: string;
 };
@@ -37,17 +36,7 @@ export const stopCodexSession = (
   input: CodexSessionStopInput,
 ): Effect.Effect<void, CodexSessionStopError> =>
   Effect.gen(function* () {
-    const runtimeId = runtimeIdFromStdioRoute(input.runtimeRoute);
-    if (runtimeId === null) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "runtimeRoute",
-          message: "Codex session stop requires a stdio runtime route.",
-          details: { runtimeRouteType: input.runtimeRoute.type },
-        }),
-      );
-    }
-    const thread = yield* requireExactThread(input, runtimeId);
+    const thread = yield* requireExactThread(input, input.runtimeId);
     if (thread.status.type === "idle" || thread.status.type === "notLoaded") {
       return;
     }
@@ -57,7 +46,7 @@ export const stopCodexSession = (
           operation: "codexSessionStop",
           message: "Codex session thread is in systemError state and cannot be interrupted.",
           details: {
-            runtimeId,
+            runtimeId: input.runtimeId,
             externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,
           },
@@ -66,7 +55,7 @@ export const stopCodexSession = (
     }
     const turnId = yield* findActiveCodexTurnId(
       input.codexAppServer,
-      runtimeId,
+      input.runtimeId,
       input.externalSessionId,
     );
     if (turnId === null) {
@@ -75,7 +64,7 @@ export const stopCodexSession = (
           operation: "codexSessionStop",
           message: "Codex session is active but no interruptible active turn was found.",
           details: {
-            runtimeId,
+            runtimeId: input.runtimeId,
             externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,
           },
@@ -83,7 +72,7 @@ export const stopCodexSession = (
       );
     }
     yield* input.codexAppServer.request({
-      runtimeId,
+      runtimeId: input.runtimeId,
       method: "turn/interrupt",
       params: { threadId: input.externalSessionId, turnId },
     });

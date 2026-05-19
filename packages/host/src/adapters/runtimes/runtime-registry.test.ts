@@ -571,7 +571,7 @@ describe("createRuntimeRegistry", () => {
       ),
     ).rejects.toThrow("Codex session is active but no interruptible active turn was found.");
   });
-  test("fails Codex stop without the app-server port or a stdio route", async () => {
+  test("fails Codex stop without the app-server port or a Codex runtime route", async () => {
     const registry = createRuntimeRegistry();
     await expect(
       Effect.runPromise(
@@ -599,6 +599,6 @@ describe("createRuntimeRegistry", () => {
           workingDirectory: "/repo/worktree",
         }),
       ),
-    ).rejects.toThrow("Codex session stop requires a stdio runtime route.");
+    ).rejects.toThrow("Codex app-server operations require a stdio runtime route.");
   });
 });
