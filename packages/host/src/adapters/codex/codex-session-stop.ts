@@ -13,9 +13,13 @@ export type CodexSessionStopInput = {
 
 export type CodexSessionStopError = CodexAppServerError;
 
-const requireExactThread = (input: CodexSessionStopInput, runtimeId: string) =>
+const requireExactThread = (input: CodexSessionStopInput) =>
   Effect.gen(function* () {
-    const thread = yield* readCodexThread(input.codexAppServer, runtimeId, input.externalSessionId);
+    const thread = yield* readCodexThread(
+      input.codexAppServer,
+      input.runtimeId,
+      input.externalSessionId,
+    );
     if (thread.cwd === input.workingDirectory) {
       return thread;
     }
@@ -24,7 +28,7 @@ const requireExactThread = (input: CodexSessionStopInput, runtimeId: string) =>
         operation: "codexSessionStop.requireExactThread",
         message: "Codex session stop could not find the target thread for the session.",
         details: {
-          runtimeId,
+          runtimeId: input.runtimeId,
           externalSessionId: input.externalSessionId,
           workingDirectory: input.workingDirectory,
         },
@@ -36,7 +40,7 @@ export const stopCodexSession = (
   input: CodexSessionStopInput,
 ): Effect.Effect<void, CodexSessionStopError> =>
   Effect.gen(function* () {
-    const thread = yield* requireExactThread(input, input.runtimeId);
+    const thread = yield* requireExactThread(input);
     if (thread.status.type === "idle" || thread.status.type === "notLoaded") {
       return;
     }

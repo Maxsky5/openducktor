@@ -1,4 +1,8 @@
-import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
+import {
+  type RuntimeInstanceSummary,
+  type RuntimeRoute,
+  runtimeInstanceSummarySchema,
+} from "@openducktor/contracts";
 import { Deferred, Effect, FiberId } from "effect";
 import {
   HostOperationError,
@@ -32,7 +36,7 @@ type RuntimeEnsureFlight = {
   deferred: Deferred.Deferred<RuntimeInstanceSummary, RuntimeRegistryError>;
 };
 
-const requireCodexRuntimeId = (runtimeRoute: RuntimeInstanceSummary["runtimeRoute"]) =>
+const requireCodexRuntimeId = (runtimeRoute: RuntimeRoute) =>
   Effect.gen(function* () {
     if (runtimeRoute.type === "stdio") {
       return runtimeRoute.identity;
@@ -217,7 +221,12 @@ export const createRuntimeRegistry = ({
         }
         return Effect.gen(function* () {
           const runtimeId = yield* requireCodexRuntimeId(input.runtimeRoute);
-          return yield* stopCodexSession({ ...input, codexAppServer, runtimeId });
+          return yield* stopCodexSession({
+            codexAppServer,
+            runtimeId,
+            externalSessionId: input.externalSessionId,
+            workingDirectory: input.workingDirectory,
+          });
         });
       }
       return Effect.fail(
@@ -244,7 +253,12 @@ export const createRuntimeRegistry = ({
         }
         return Effect.gen(function* () {
           const runtimeId = yield* requireCodexRuntimeId(input.runtimeRoute);
-          return yield* probeCodexSessionStatus({ ...input, codexAppServer, runtimeId });
+          return yield* probeCodexSessionStatus({
+            codexAppServer,
+            runtimeId,
+            externalSessionId: input.externalSessionId,
+            workingDirectory: input.workingDirectory,
+          });
         });
       }
       return Effect.succeed({ supported: false, hasLiveSession: false });
