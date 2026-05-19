@@ -128,6 +128,18 @@ export type AgentSessionHistoryMessage =
       contextWindow?: number;
       model?: AgentModelSelection;
       parts: AgentStreamPart[];
+    }
+  | {
+      messageId: RuntimeHistoryAnchor;
+      role: "system";
+      timestamp: string;
+      text: string;
+      notice?: {
+        tone: "info";
+        reason: "session_compacted";
+        title: string;
+      };
+      parts: [];
     };
 
 export type LiveAgentSessionStatus =

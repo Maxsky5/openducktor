@@ -1,5 +1,9 @@
 import { extractStringField, extractText, isPlainObject } from "../codex-app-server-shared";
-import { extractCodexTokenUsageTotals } from "../codex-app-server-transcript";
+import {
+  codexItemId,
+  codexItemTypeMatches,
+  extractCodexTokenUsageTotals,
+} from "../codex-app-server-transcript";
 import type { CodexMappingResult } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper } from "../codex-event-mapper";
@@ -73,7 +77,30 @@ export const compactionMapper: CodexEventMapper = {
       ],
     };
   },
-  fromThreadItem: emptyCodexMappingResult,
+  fromThreadItem(input, ctx): CodexMappingResult {
+    if (
+      !codexItemTypeMatches(input.item, "contextCompaction") &&
+      !codexItemTypeMatches(input.item, "compaction")
+    ) {
+      return emptyCodexMappingResult();
+    }
+
+    return {
+      handled: true,
+      events: [
+        {
+          kind: "session_compacted",
+          source: ctx.source,
+          mapper: "compaction",
+          threadId: ctx.threadId,
+          ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
+          raw: input.item,
+          messageId: codexItemId(input.item, `codex-history-${input.index}-session-compacted`),
+          message: "Session compacted.",
+        },
+      ],
+    };
+  },
 };
 
 export const tokenUsageMapper: CodexEventMapper = {

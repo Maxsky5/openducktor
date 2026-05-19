@@ -63,6 +63,7 @@ export type CodexCanonicalSessionIdleEvent = CodexCanonicalEventBase & {
 
 export type CodexCanonicalSessionCompactedEvent = CodexCanonicalEventBase & {
   kind: "session_compacted";
+  messageId?: string;
   message: string;
 };
 

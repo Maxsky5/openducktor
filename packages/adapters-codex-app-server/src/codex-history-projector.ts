@@ -63,6 +63,21 @@ export const projectCodexCanonicalEventsToHistory = (
         parts: [part],
         ...(model ? { model } : {}),
       });
+      continue;
+    }
+    if (event.kind === "session_compacted") {
+      messages.push({
+        messageId: event.messageId ?? `session-compacted:${timestamp}`,
+        role: "system",
+        timestamp,
+        text: event.message,
+        notice: {
+          tone: "info",
+          reason: "session_compacted",
+          title: "Compacted",
+        },
+        parts: [],
+      });
     }
   }
   return messages;
