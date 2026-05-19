@@ -239,6 +239,11 @@ export type CodexAppServerTurnSteerParams = {
 export type CodexAppServerTurnSteerResult = {
   turnId: string;
 };
+export type CodexAppServerTurnInterruptParams = {
+  threadId: string;
+  turnId: string;
+};
+export type CodexAppServerTurnInterruptResult = Record<string, never>;
 
 export type CodexAppServerReasoningEffortOption = {
   description?: string | null;
@@ -469,6 +474,10 @@ export type CodexAppServerClientRequestMap = {
   "turn/steer": {
     params: CodexAppServerTurnSteerParams;
     result: CodexAppServerTurnSteerResult;
+  };
+  "turn/interrupt": {
+    params: CodexAppServerTurnInterruptParams;
+    result: CodexAppServerTurnInterruptResult;
   };
   gitDiffToRemote: {
     params: CodexAppServerGitDiffToRemoteParams;

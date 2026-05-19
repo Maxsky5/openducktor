@@ -47,24 +47,33 @@ const createRuntimeDefinitionsService = () => ({
     return Object.values(RUNTIME_DESCRIPTORS_BY_KIND);
   },
 });
-const createTaskStore = (): TaskStorePort =>
+const createTaskStore = (
+  sessionOverrides: Partial<{
+    externalSessionId: string;
+    role: "build";
+    startedAt: string;
+    runtimeKind: "opencode" | "codex";
+    workingDirectory: string;
+    selectedModel: null;
+  }> = {},
+): TaskStorePort =>
   ({
     getTaskMetadata() {
       return Effect.tryPromise({
         try: async () => {
+          const session = {
+            externalSessionId: "external-session-1",
+            role: "build" as const,
+            startedAt: "2026-05-10T10:00:00.000Z",
+            runtimeKind: "opencode" as const,
+            workingDirectory: "/canonical/repo/worktree",
+            selectedModel: null,
+            ...sessionOverrides,
+          };
           return {
             spec: { markdown: "" },
             plan: { markdown: "" },
-            agentSessions: [
-              {
-                externalSessionId: "external-session-1",
-                role: "build",
-                startedAt: "2026-05-10T10:00:00.000Z",
-                runtimeKind: "opencode",
-                workingDirectory: "/canonical/repo/worktree",
-                selectedModel: null,
-              },
-            ],
+            agentSessions: [session],
           };
         },
         catch: (cause) =>
@@ -667,6 +676,59 @@ describe("createRuntimeOrchestratorService", () => {
       {
         runtimeKind: "opencode",
         runtimeRoute: runtime.runtimeRoute,
+        externalSessionId: "external-session-1",
+        workingDirectory: "/canonical/repo/worktree",
+      },
+    ]);
+  });
+  test("stops persisted Codex sessions through the resolved stdio runtime route", async () => {
+    const calls: unknown[] = [];
+    const runtime = createRuntime({
+      kind: "codex",
+      runtimeId: "runtime-codex-1",
+      workingDirectory: "/canonical/repo/worktree",
+      runtimeRoute: { type: "stdio", identity: "runtime-codex-1" },
+      descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+    });
+    const registry = createRegistry([], {
+      ensureWorkspaceRuntime() {
+        return Effect.fail(
+          new HostOperationError({
+            operation: "test.effect",
+            message: "unexpected runtime ensure",
+          }),
+        );
+      },
+      listRuntimes() {
+        return Effect.succeed([runtime]);
+      },
+      stopSession(input) {
+        return Effect.sync(() => {
+          calls.push(input);
+        });
+      },
+    });
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: registry,
+      taskReader: createTaskStore({ runtimeKind: "codex" }),
+    });
+    await expect(
+      Effect.runPromise(
+        service.agentSessionStop({
+          repoPath: "/repo",
+          taskId: "task-1",
+          externalSessionId: "external-session-1",
+          runtimeKind: "codex",
+          workingDirectory: "/canonical/repo/worktree",
+        }),
+      ),
+    ).resolves.toEqual({ ok: true });
+    expect(calls).toEqual([
+      {
+        runtimeKind: "codex",
+        runtimeRoute: { type: "stdio", identity: "runtime-codex-1" },
         externalSessionId: "external-session-1",
         workingDirectory: "/canonical/repo/worktree",
       },

@@ -5,11 +5,13 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { toHostOperationError } from "../../effect/host-errors";
+import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
 import { createRuntimeRegistry as createEffectRuntimeRegistry } from "./runtime-registry";
 
 const createRuntimeRegistry = (...args: Parameters<typeof createEffectRuntimeRegistry>) =>
   createEffectRuntimeRegistry(...args);
+const codexResult = (value: unknown) => Effect.succeed(value as CodexAppServerRequestResult);
 const requireMethod = <T>(method: T | undefined, methodName: string): T => {
   if (!method) {
     throw new Error(`Expected registry to support ${methodName}`);
@@ -355,35 +357,24 @@ describe("createRuntimeRegistry", () => {
     const calls: unknown[] = [];
     const registry = createRuntimeRegistry({
       codexAppServer: {
-        listLoadedThreads(input) {
-          calls.push({
-            runtimeId: input.runtimeId,
-            method: "thread/loaded/list",
-            params: { cursor: input.cursor, limit: input.limit },
-          });
-          return Effect.succeed({
-            data: ["session-1", "session-2", "session-3"],
-            nextCursor: null,
-          });
-        },
-        listThreads(input) {
-          calls.push({
-            runtimeId: input.runtimeId,
-            method: "thread/list",
-            params: { cursor: input.cursor, limit: input.limit },
-          });
-          return Effect.succeed({
-            data: [
-              {
-                id: "session-1",
-                cwd: "/repo/worktree",
-                status: "active",
-              },
-              { id: "session-2", cwd: "/repo/worktree", status: "idle" },
-              { id: "session-3", cwd: "/repo/worktree", status: "systemError" },
-            ],
-            nextCursor: null,
-            backwardsCursor: null,
+        request(input) {
+          calls.push(input);
+          const params = input.params as {
+            threadId: "session-1" | "session-2" | "session-3" | "session-4" | "session-5";
+          };
+          const statusByThreadId = {
+            "session-1": { type: "active", activeFlags: [] },
+            "session-2": { type: "idle" },
+            "session-3": { type: "systemError" },
+            "session-4": { type: "notLoaded" },
+            "session-5": { type: "active", activeFlags: [] },
+          } as const;
+          return codexResult({
+            thread: {
+              id: params.threadId,
+              cwd: params.threadId === "session-5" ? "/repo/other-worktree" : "/repo/worktree",
+              status: statusByThreadId[params.threadId],
+            },
           });
         },
       },
@@ -408,7 +399,7 @@ describe("createRuntimeRegistry", () => {
           workingDirectory: "/repo/worktree",
         }),
       ),
-    ).resolves.toEqual({ supported: true, hasLiveSession: false });
+    ).resolves.toEqual({ supported: true, hasLiveSession: true });
     await expect(
       Effect.runPromise(
         probeSessionStatus({
@@ -418,48 +409,86 @@ describe("createRuntimeRegistry", () => {
           workingDirectory: "/repo/worktree",
         }),
       ),
+    ).resolves.toEqual({ supported: true, hasLiveSession: true });
+    await expect(
+      Effect.runPromise(
+        probeSessionStatus({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "session-4",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).resolves.toEqual({ supported: true, hasLiveSession: false });
+    await expect(
+      Effect.runPromise(
+        probeSessionStatus({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "session-5",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
     ).resolves.toEqual({ supported: true, hasLiveSession: false });
     expect(calls).toEqual([
       {
         runtimeId: "runtime-1",
-        method: "thread/loaded/list",
-        params: { cursor: null, limit: 100 },
+        method: "thread/read",
+        params: { threadId: "session-1", includeTurns: false },
       },
       {
         runtimeId: "runtime-1",
-        method: "thread/list",
-        params: { cursor: null, limit: 100 },
+        method: "thread/read",
+        params: { threadId: "session-2", includeTurns: false },
       },
       {
         runtimeId: "runtime-1",
-        method: "thread/loaded/list",
-        params: { cursor: null, limit: 100 },
+        method: "thread/read",
+        params: { threadId: "session-3", includeTurns: false },
       },
       {
         runtimeId: "runtime-1",
-        method: "thread/list",
-        params: { cursor: null, limit: 100 },
+        method: "thread/read",
+        params: { threadId: "session-4", includeTurns: false },
       },
       {
         runtimeId: "runtime-1",
-        method: "thread/loaded/list",
-        params: { cursor: null, limit: 100 },
-      },
-      {
-        runtimeId: "runtime-1",
-        method: "thread/list",
-        params: { cursor: null, limit: 100 },
+        method: "thread/read",
+        params: { threadId: "session-5", includeTurns: false },
       },
     ]);
   });
-  test("fails Codex session status probing on repeated pagination cursors", async () => {
+  test("treats missing Codex session probe threads as inactive", async () => {
     const registry = createRuntimeRegistry({
       codexAppServer: {
-        listLoadedThreads() {
-          return Effect.succeed({ data: ["session-1"], nextCursor: "cursor-1" });
+        request(input) {
+          return Effect.fail(
+            new HostOperationError({
+              operation: `codexAppServerTransport.request.${input.method}`,
+              message: `Codex app-server request ${input.method} failed for runtime ${input.runtimeId}: thread not found`,
+              details: { runtimeId: input.runtimeId, method: input.method },
+            }),
+          );
         },
-        listThreads() {
-          return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
+      },
+    });
+    const probeSessionStatus = requireMethod(registry.probeSessionStatus, "probeSessionStatus");
+    await expect(
+      Effect.runPromise(
+        probeSessionStatus({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "missing-session",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).resolves.toEqual({ supported: true, hasLiveSession: false });
+  });
+  test("fails malformed Codex session probe thread payloads with a typed error", async () => {
+    const registry = createRuntimeRegistry({
+      codexAppServer: {
+        request() {
+          return codexResult({});
         },
       },
     });
@@ -473,6 +502,211 @@ describe("createRuntimeRegistry", () => {
           workingDirectory: "/repo/worktree",
         }),
       ),
-    ).rejects.toThrow("Codex thread/loaded/list returned a repeated pagination cursor");
+    ).rejects.toThrow("Codex thread/read response thread must be an object");
+  });
+  test("interrupts an active Codex session through the app-server port", async () => {
+    const calls: unknown[] = [];
+    const registry = createRuntimeRegistry({
+      codexAppServer: {
+        request(input) {
+          calls.push(input);
+          if (input.method === "thread/read") {
+            return codexResult({
+              thread: {
+                id: "session-1",
+                cwd: "/repo/worktree",
+                status: { type: "active", activeFlags: [] },
+              },
+            });
+          }
+          if (input.method === "thread/turns/list") {
+            return codexResult({
+              data: [
+                {
+                  id: "turn-1",
+                  startedAt: 1_778_112_001,
+                  completedAt: null,
+                  durationMs: null,
+                  error: null,
+                  items: [],
+                  itemsView: "summary",
+                  status: "running",
+                },
+              ],
+              nextCursor: null,
+              backwardsCursor: null,
+            });
+          }
+          return codexResult({});
+        },
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        registry.stopSession({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    expect(calls).toEqual([
+      {
+        runtimeId: "runtime-1",
+        method: "thread/read",
+        params: { threadId: "session-1", includeTurns: false },
+      },
+      {
+        runtimeId: "runtime-1",
+        method: "thread/turns/list",
+        params: {
+          threadId: "session-1",
+          limit: 20,
+          sortDirection: "desc",
+          itemsView: "summary",
+        },
+      },
+      {
+        runtimeId: "runtime-1",
+        method: "turn/interrupt",
+        params: { threadId: "session-1", turnId: "turn-1" },
+      },
+    ]);
+  });
+  test("treats exact idle Codex sessions as already stopped", async () => {
+    const calls: unknown[] = [];
+    const registry = createRuntimeRegistry({
+      codexAppServer: {
+        request(input) {
+          calls.push(input);
+          return codexResult({
+            thread: {
+              id: "session-1",
+              cwd: "/repo/worktree",
+              status: { type: "idle" },
+            },
+          });
+        },
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        registry.stopSession({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    expect(calls).toEqual([
+      {
+        runtimeId: "runtime-1",
+        method: "thread/read",
+        params: { threadId: "session-1", includeTurns: false },
+      },
+    ]);
+  });
+  test("fails active Codex stop when no active turn can be found", async () => {
+    const registry = createRuntimeRegistry({
+      codexAppServer: {
+        request(input) {
+          if (input.method === "thread/read") {
+            return codexResult({
+              thread: {
+                id: "session-1",
+                cwd: "/repo/worktree",
+                status: { type: "active", activeFlags: [] },
+              },
+            });
+          }
+          return codexResult({
+            data: [
+              {
+                id: "turn-1",
+                startedAt: 1_778_112_001,
+                completedAt: 1_778_112_031,
+                durationMs: 30,
+                error: null,
+                items: [],
+                itemsView: "summary",
+                status: "completed",
+              },
+            ],
+            nextCursor: null,
+            backwardsCursor: null,
+          });
+        },
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        registry.stopSession({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).rejects.toThrow("Codex session is active but no interruptible active turn was found.");
+  });
+  test("fails malformed Codex turn-list payloads with a typed error", async () => {
+    const registry = createRuntimeRegistry({
+      codexAppServer: {
+        request(input) {
+          if (input.method === "thread/read") {
+            return codexResult({
+              thread: {
+                id: "session-1",
+                cwd: "/repo/worktree",
+                status: { type: "active", activeFlags: [] },
+              },
+            });
+          }
+          return codexResult({});
+        },
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        registry.stopSession({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).rejects.toThrow("Codex thread/turns/list response data must be an array");
+  });
+  test("fails Codex stop without the app-server port or a Codex runtime route", async () => {
+    const registry = createRuntimeRegistry();
+    await expect(
+      Effect.runPromise(
+        registry.stopSession({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).rejects.toThrow("Codex session stop requires the Codex app-server port.");
+    const codexRegistry = createRuntimeRegistry({
+      codexAppServer: {
+        request() {
+          return codexResult({});
+        },
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        codexRegistry.stopSession({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).rejects.toThrow("Codex app-server operations require a stdio runtime route.");
   });
 });

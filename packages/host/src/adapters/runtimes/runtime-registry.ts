@@ -1,4 +1,8 @@
-import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
+import {
+  type RuntimeInstanceSummary,
+  type RuntimeRoute,
+  runtimeInstanceSummarySchema,
+} from "@openducktor/contracts";
 import { Deferred, Effect, FiberId } from "effect";
 import {
   HostOperationError,
@@ -13,6 +17,7 @@ import type {
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
 import { probeCodexSessionStatus } from "../codex/codex-session-status-probe";
+import { stopCodexSession } from "../codex/codex-session-stop";
 import {
   findWorkspaceRuntime,
   probeCodexMcpStatus,
@@ -24,12 +29,26 @@ import {
 export type CreateRuntimeRegistryInput = {
   runtimes?: RuntimeInstanceSummary[];
   workspaceStarter?: RuntimeWorkspaceStarterPort;
-  codexAppServer?: Pick<CodexAppServerPort, "listLoadedThreads" | "listThreads">;
+  codexAppServer?: Pick<CodexAppServerPort, "request">;
 };
 
 type RuntimeEnsureFlight = {
   deferred: Deferred.Deferred<RuntimeInstanceSummary, RuntimeRegistryError>;
 };
+
+const requireCodexRuntimeId = (runtimeRoute: RuntimeRoute) =>
+  Effect.gen(function* () {
+    if (runtimeRoute.type === "stdio") {
+      return runtimeRoute.identity;
+    }
+    return yield* Effect.fail(
+      new HostValidationError({
+        field: "runtimeRoute",
+        message: "Codex app-server operations require a stdio runtime route.",
+        details: { runtimeRouteType: runtimeRoute.type },
+      }),
+    );
+  });
 
 export const createRuntimeRegistry = ({
   runtimes = [],
@@ -190,6 +209,26 @@ export const createRuntimeRegistry = ({
       if (input.runtimeKind === "opencode") {
         return stopOpenCodeSession(input);
       }
+      if (input.runtimeKind === "codex") {
+        if (!codexAppServer) {
+          return Effect.fail(
+            new HostResourceError({
+              resource: "codexAppServer",
+              operation: "runtimeRegistry.stopCodexSession",
+              message: "Codex session stop requires the Codex app-server port.",
+            }),
+          );
+        }
+        return Effect.gen(function* () {
+          const runtimeId = yield* requireCodexRuntimeId(input.runtimeRoute);
+          return yield* stopCodexSession({
+            codexAppServer,
+            runtimeId,
+            externalSessionId: input.externalSessionId,
+            workingDirectory: input.workingDirectory,
+          });
+        });
+      }
       return Effect.fail(
         new HostValidationError({
           message: `Runtime kind ${input.runtimeKind} does not support session stop in the TypeScript host.`,
@@ -212,7 +251,15 @@ export const createRuntimeRegistry = ({
             }),
           );
         }
-        return probeCodexSessionStatus({ ...input, codexAppServer });
+        return Effect.gen(function* () {
+          const runtimeId = yield* requireCodexRuntimeId(input.runtimeRoute);
+          return yield* probeCodexSessionStatus({
+            codexAppServer,
+            runtimeId,
+            externalSessionId: input.externalSessionId,
+            workingDirectory: input.workingDirectory,
+          });
+        });
       }
       return Effect.succeed({ supported: false, hasLiveSession: false });
     },

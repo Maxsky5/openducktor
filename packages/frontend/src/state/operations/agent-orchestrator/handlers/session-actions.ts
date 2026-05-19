@@ -20,12 +20,17 @@ import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import { now } from "../support/core";
 import { appendSessionMessage } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
+import {
+  buildUserStoppedNoticeMessage,
+  USER_STOPPED_NOTICE,
+} from "../support/session-notice-messages";
 import { isWorkflowAgentSession } from "../support/session-purpose";
 import {
   clearSubagentPendingApprovalFromSessions,
@@ -168,6 +173,21 @@ const applyQuestionAnswerToSession = (
     ),
   };
 };
+
+const appendUserStoppedNotice = (
+  session: AgentSessionState,
+  timestamp: string,
+): AgentSessionState["messages"] =>
+  appendSessionMessage(
+    {
+      externalSessionId: session.externalSessionId,
+      messages: settleDanglingTodoToolMessages(session, timestamp, {
+        outcome: "error",
+        errorMessage: USER_STOPPED_NOTICE,
+      }),
+    },
+    buildUserStoppedNoticeMessage(timestamp),
+  );
 
 export const createAgentSessionActions = ({
   activeWorkspace,
@@ -427,10 +447,15 @@ export const createAgentSessionActions = ({
     }
 
     let stoppedSessionSnapshot: AgentSessionState | null = null;
+    const stoppedAt = now();
     updateSession(externalSessionId, (current) => {
+      const shouldAppendUserStoppedNotice = Boolean(current.stopRequestedAt);
       const nextSession: AgentSessionState = {
         ...current,
         status: "stopped",
+        messages: shouldAppendUserStoppedNotice
+          ? appendUserStoppedNotice(current, stoppedAt)
+          : current.messages,
         draftAssistantText: "",
         draftAssistantMessageId: null,
         draftReasoningText: "",

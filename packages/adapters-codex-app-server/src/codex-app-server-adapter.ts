@@ -907,16 +907,46 @@ export class CodexAppServerAdapter
     if (!session) {
       throw new Error(`Unknown Codex session '${externalSessionId}'.`);
     }
+    this.cleanupSessionState(externalSessionId);
+    if (
+      ![...this.sessions.values()].some((candidate) => candidate.runtimeId === session.runtimeId)
+    ) {
+      this.stopRuntimeEventSubscription(session.runtimeId);
+    }
+  }
+
+  private cleanupSessionState(externalSessionId: string): void {
     this.sessions.delete(externalSessionId);
+    this.listenersBySessionId.delete(externalSessionId);
     this.bufferedNotificationsByThreadId.delete(externalSessionId);
     this.bufferedServerRequestsByThreadId.delete(externalSessionId);
     this.handledStreamRequestKeysByThreadId.delete(externalSessionId);
     this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
     this.eventBacklogBySessionId.delete(externalSessionId);
-    if (
-      ![...this.sessions.values()].some((candidate) => candidate.runtimeId === session.runtimeId)
-    ) {
-      this.stopRuntimeEventSubscription(session.runtimeId);
+    this.latestTodosBySessionId.delete(externalSessionId);
+    this.activeTurnsBySessionId.delete(externalSessionId);
+    const approvalRequestIds = this.pendingApprovalIdsBySessionId.get(externalSessionId) ?? [];
+    for (const requestId of approvalRequestIds) {
+      this.pendingApprovalsByRequestId.delete(requestId);
+      this.activeTurnsByApprovalRequestId.delete(requestId);
+    }
+    this.pendingApprovalIdsBySessionId.delete(externalSessionId);
+    const questionRequestIds = this.pendingQuestionIdsBySessionId.get(externalSessionId) ?? [];
+    for (const requestId of questionRequestIds) {
+      this.pendingQuestionsByRequestId.delete(requestId);
+      this.activeTurnsByQuestionRequestId.delete(requestId);
+    }
+    this.pendingQuestionIdsBySessionId.delete(externalSessionId);
+    const turnKeyPrefix = `${externalSessionId}:`;
+    for (const turnKey of [...this.completedAgentMessagesByTurnKey.keys()]) {
+      if (turnKey.startsWith(turnKeyPrefix)) {
+        this.completedAgentMessagesByTurnKey.delete(turnKey);
+      }
+    }
+    for (const turnKey of [...this.tokenUsageByTurnKey.keys()]) {
+      if (turnKey.startsWith(turnKeyPrefix)) {
+        this.tokenUsageByTurnKey.delete(turnKey);
+      }
     }
   }
 

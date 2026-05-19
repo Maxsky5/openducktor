@@ -27,6 +27,7 @@ export const CODEX_APP_SERVER_REQUEST_METHODS = [
   "thread/turns/list",
   "turn/start",
   "turn/steer",
+  "turn/interrupt",
   "gitDiffToRemote",
 ] as const;
 

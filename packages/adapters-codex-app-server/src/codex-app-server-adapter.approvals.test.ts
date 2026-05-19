@@ -361,6 +361,61 @@ describe("CodexAppServerAdapter approvals", () => {
     });
   });
 
+  test("clears pending Codex input state when local stop cleanup runs", async () => {
+    const { adapter, drainServerRequests } = createHarness({}, { deferTurnStart: true });
+    drainServerRequests.mockImplementationOnce(async () => [
+      {
+        id: 36,
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: "thread/start-runtime-ensure",
+          turnId: "turn-question",
+          itemId: "item-1",
+          questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
+        },
+      },
+    ]);
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    await adapter.sendUserMessage({
+      externalSessionId: "thread/start-runtime-ensure",
+      parts: [{ kind: "text", text: "Start now" }],
+    });
+
+    await expect(
+      adapter.readSessionPresence({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread/start-runtime-ensure",
+      }),
+    ).resolves.toMatchObject({
+      classification: "waiting_for_question",
+      pendingQuestions: [expect.objectContaining({ requestId: "36" })],
+    });
+
+    await adapter.stopSession("thread/start-runtime-ensure");
+
+    await expect(
+      adapter.replyQuestion({
+        externalSessionId: "thread/start-runtime-ensure",
+        requestId: "36",
+        answers: [["yes"]],
+      }),
+    ).rejects.toThrow("Unknown Codex question request '36'.");
+    expect(() => adapter.subscribeEvents("thread/start-runtime-ensure", () => {})).toThrow(
+      "Unknown Codex session 'thread/start-runtime-ensure'.",
+    );
+  });
+
   test("steers active Codex turns for queued user messages", async () => {
     const { adapter, drainServerRequests, transports } = createHarness(
       {},

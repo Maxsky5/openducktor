@@ -5,6 +5,7 @@ import type {
   CodexThreadForkParams,
   CodexThreadResumeParams,
   CodexThreadStartParams,
+  CodexTurnInterruptParams,
   CodexTurnStartParams,
   CodexTurnSteerParams,
 } from "./types";
@@ -33,6 +34,9 @@ export const createCodexAppServerClient = (
     },
     async turnSteer(params: CodexTurnSteerParams) {
       return transport.request({ method: "turn/steer", params });
+    },
+    async turnInterrupt(params: CodexTurnInterruptParams) {
+      return transport.request({ method: "turn/interrupt", params });
     },
     async threadRead(params) {
       return transport.request({ method: "thread/read", params });

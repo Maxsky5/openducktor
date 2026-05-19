@@ -163,6 +163,11 @@ export type CodexTurnSteerResult = {
   turnId?: string;
 };
 
+export type CodexTurnInterruptParams = {
+  threadId: string;
+  turnId: string;
+};
+
 export type CodexThreadStartResult = {
   thread?: {
     id?: string;
@@ -215,6 +220,7 @@ export type CodexAppServerClient = {
   threadFork(params: CodexThreadForkParams): Promise<CodexThreadForkResult>;
   turnStart(params: CodexTurnStartParams): Promise<CodexTurnStartResult>;
   turnSteer(params: CodexTurnSteerParams): Promise<CodexTurnSteerResult>;
+  turnInterrupt(params: CodexTurnInterruptParams): Promise<Record<string, never>>;
   threadRead(params: { threadId: string; includeTurns?: boolean }): Promise<unknown>;
   threadList(params?: { limit?: number; cursor?: string | null }): Promise<unknown>;
   threadLoadedList(params?: { limit?: number; cursor?: string | null }): Promise<unknown>;
