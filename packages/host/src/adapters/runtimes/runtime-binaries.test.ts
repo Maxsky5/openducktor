@@ -4,7 +4,7 @@ import { join, posix } from "node:path";
 import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createSystemCommandRunner } from "../system/system-command-runner";
-import { resolveCodexBinary, resolveOpencodeBinary } from "./runtime-binaries";
+import { isExecutableFile, resolveCodexBinary, resolveOpencodeBinary } from "./runtime-binaries";
 
 const createSystemCommands = ({
   available = [],
@@ -40,6 +40,18 @@ const writeExecutable = async (path: string): Promise<void> => {
   await writeFile(path, "");
   await chmod(path, 0o755);
 };
+
+describe("isExecutableFile", () => {
+  test("rejects executable directories on POSIX platforms", async () => {
+    await withTempDir(async (root) => {
+      const directory = join(root, "bin");
+      await mkdir(directory);
+      await chmod(directory, 0o755);
+
+      await expect(Effect.runPromise(isExecutableFile(directory, "linux"))).resolves.toBe(false);
+    });
+  });
+});
 
 describe("resolveOpencodeBinary", () => {
   test("resolves an explicit OpenCode override", async () => {

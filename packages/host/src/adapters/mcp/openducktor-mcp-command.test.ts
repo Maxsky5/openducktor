@@ -104,6 +104,22 @@ describe("resolveOpenDucktorMcpCommand", () => {
       ),
     ).rejects.toThrow("points to a missing or non-executable file");
   });
+  test("fails fast when the explicit MCP sidecar path is a directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-mcp-directory-sidecar-"));
+    const sidecar = join(root, "openducktor-mcp");
+    await mkdir(sidecar);
+    await chmod(sidecar, 0o755);
+
+    await expect(
+      Effect.runPromise(
+        resolveOpenDucktorMcpCommand({
+          systemCommands: createSystemCommands(),
+          env: { OPENDUCKTOR_OPENDUCKTOR_MCP_PATH: sidecar },
+          startPath: "/missing",
+        }),
+      ),
+    ).rejects.toThrow("points to a missing or non-executable file");
+  });
   test("resolves the workspace MCP entrypoint from an ancestor directory", async () => {
     const root = await createWorkspaceRoot();
     const nested = join(root, "apps", "electron");

@@ -56,6 +56,14 @@ export const isExecutableFile = (candidate: string, platform: NodeJS.Platform = 
       return file.isFile();
     }
 
+    const file = yield* Effect.tryPromise({
+      try: () => stat(candidate),
+      catch: (cause) => toHostPathStatError(cause, "runtimeBinaries.isExecutableFile", candidate),
+    });
+    if (!file.isFile()) {
+      return false;
+    }
+
     yield* Effect.tryPromise({
       try: () => access(candidate, constants.X_OK),
       catch: (cause) => toHostPathStatError(cause, "runtimeBinaries.isExecutableFile", candidate),
