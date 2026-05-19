@@ -674,10 +674,22 @@ describe("CodexAppServerAdapter streaming", () => {
       runtimeId: "runtime-live",
       kind: "notification",
       message: {
-        method: "thread/compacted",
+        method: "item/agentMessage/delta",
         params: {
           threadId: "thread-saved",
           turnId: "turn-live",
+          itemId: "agent-live",
+          delta: "buffered text",
+        },
+      },
+    });
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "thread/compacted",
+        params: {
+          threadId: "thread-saved",
         },
       },
     });
@@ -686,6 +698,13 @@ describe("CodexAppServerAdapter streaming", () => {
     const events: unknown[] = [];
     const unsubscribe = adapter.subscribeEvents("thread-saved", (event) => events.push(event));
 
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_delta",
+        messageId: "agent-live",
+        delta: "buffered text",
+      }),
+    );
     expect(events).toContainEqual({
       type: "session_compacted",
       externalSessionId: "thread-saved",
