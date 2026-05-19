@@ -44,6 +44,11 @@ describe("release version helpers", () => {
   test("rejects malformed release versions", () => {
     expect(() => validateVersion("0.4")).toThrow();
     expect(() => validateVersion("04.0.0")).toThrow();
+    expect(() => validateVersion("0.4.0-.")).toThrow();
+    expect(() => validateVersion("0.4.0-alpha.")).toThrow();
+    expect(() => validateVersion("0.4.0-01")).toThrow();
+    expect(() => validateVersion("0.4.0-0")).not.toThrow();
+    expect(() => validateVersion("0.4.0-alpha-01")).not.toThrow();
     expect(() => validateVersion("0.4.0-beta.1")).not.toThrow();
   });
 });

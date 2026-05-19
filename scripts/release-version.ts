@@ -31,7 +31,28 @@ function usage(): never {
 }
 
 export function validateVersion(version: string): void {
-  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+  const match = version.match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/);
+  if (!match) {
+    throw new Error(`Invalid version \`${version}\`. Expected semver like 0.1.0 or 0.1.0-rc.1.`);
+  }
+
+  const prerelease = match[4];
+  if (!prerelease) {
+    return;
+  }
+
+  const prereleaseIsValid = prerelease.split(".").every((identifier) => {
+    if (!/^[0-9A-Za-z-]+$/.test(identifier)) {
+      return false;
+    }
+
+    if (/^\d+$/.test(identifier)) {
+      return identifier === "0" || !identifier.startsWith("0");
+    }
+
+    return true;
+  });
+  if (!prereleaseIsValid) {
     throw new Error(`Invalid version \`${version}\`. Expected semver like 0.1.0 or 0.1.0-rc.1.`);
   }
 }
