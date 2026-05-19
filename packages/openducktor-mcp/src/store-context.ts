@@ -17,51 +17,11 @@ export type OdtStoreContext = {
   hostUrl?: string;
   hostToken?: string;
   forbidWorkspaceIdInput?: boolean;
-  beadsAttachmentDir?: string;
-  doltHost?: string;
-  doltPort?: string;
-  databaseName?: string;
 };
 
 type DiscoveredHostConnection = {
   hostUrl: string;
   hostToken: string;
-};
-
-const rejectLegacyContract = (context: OdtStoreContext): void => {
-  const legacyEntries = [
-    [
-      "ODT_BEADS_ATTACHMENT_DIR",
-      normalizeOptionalInput(context.beadsAttachmentDir) ??
-        normalizeOptionalInput(process.env.ODT_BEADS_ATTACHMENT_DIR),
-    ],
-    [
-      "ODT_DOLT_HOST",
-      normalizeOptionalInput(context.doltHost) ?? normalizeOptionalInput(process.env.ODT_DOLT_HOST),
-    ],
-    [
-      "ODT_DOLT_PORT",
-      normalizeOptionalInput(context.doltPort) ?? normalizeOptionalInput(process.env.ODT_DOLT_PORT),
-    ],
-    [
-      "ODT_DATABASE_NAME",
-      normalizeOptionalInput(context.databaseName) ??
-        normalizeOptionalInput(process.env.ODT_DATABASE_NAME),
-    ],
-    ["ODT_METADATA_NAMESPACE", normalizeOptionalInput(process.env.ODT_METADATA_NAMESPACE)],
-  ].filter(([, value]) => value !== undefined);
-
-  if (legacyEntries.length === 0) {
-    return;
-  }
-
-  throw new Error(
-    `Direct Beads/Dolt MCP startup is no longer supported. Remove ${legacyEntries
-      .map(([name]) => name)
-      .join(
-        ", ",
-      )} and use the host bridge discovery path or ODT_HOST_URL instead. Metadata namespace is now owned by the OpenDucktor host.`,
-  );
 };
 
 const validateExplicitHostUrl = async (hostUrl: string, hostToken?: string): Promise<string> => {
@@ -200,8 +160,6 @@ const discoverHostConnection = async (
 };
 
 export const resolveStoreContext = async (context: OdtStoreContext): Promise<OdtStoreOptions> => {
-  rejectLegacyContract(context);
-
   const workspaceId =
     normalizeOptionalInput(context.workspaceId) ??
     normalizeOptionalInput(process.env.ODT_WORKSPACE_ID);

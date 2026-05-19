@@ -561,7 +561,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain(">System<");
   });
 
-  test("renders Codex compaction notices as informational cards", () => {
+  test("renders session compaction notices as informational cards", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {

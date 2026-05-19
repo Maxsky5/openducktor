@@ -426,7 +426,7 @@ describe("agent-orchestrator session transcript events", () => {
     expect(userMessages[0].meta.state).toBe("read");
   });
 
-  test("appends Codex compaction notices without changing live session state", () => {
+  test("appends session compaction notices without changing live session state", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const updateSessionOptions: Array<{ persist?: boolean } | undefined> = [];
     const adapter: SessionEventAdapter = {
