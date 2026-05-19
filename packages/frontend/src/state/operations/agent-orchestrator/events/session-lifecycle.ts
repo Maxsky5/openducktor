@@ -677,6 +677,7 @@ export const handleSessionCompacted = (
     { persist: true },
   );
 };
+
 const settleTerminalMessages = (
   session: Pick<
     SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string],

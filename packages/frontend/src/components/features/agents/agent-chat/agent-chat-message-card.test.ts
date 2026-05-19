@@ -567,12 +567,12 @@ describe("AgentChatMessageCard tool duration", () => {
         message: {
           id: "session-notice-compacted",
           role: "system",
-          content: "Codex compacted the conversation.",
+          content: "Session compacted the conversation.",
           timestamp: "2026-05-18T21:01:00.000Z",
           meta: {
             kind: "session_notice",
             tone: "info",
-            reason: "codex_compacted",
+            reason: "session_compacted",
             title: "Compacted",
           },
         },
@@ -584,7 +584,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("border-info-border");
     expect(html).toContain("bg-info-surface");
     expect(html).toContain("text-info-surface-foreground");
-    expect(html).toContain("Codex compacted the conversation.");
+    expect(html).toContain("Session compacted the conversation.");
     expect(html).toContain("Compacted");
     expect(html).not.toContain("border-destructive-border");
     expect(html).not.toContain("border-cancelled-border");

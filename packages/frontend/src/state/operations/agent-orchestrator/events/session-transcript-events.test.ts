@@ -531,7 +531,7 @@ describe("agent-orchestrator session transcript events", () => {
       type: "session_compacted",
       externalSessionId: "session-1",
       timestamp: "2026-05-18T21:01:00.000Z",
-      message: "Codex compacted the conversation.",
+      message: "Session compacted the conversation.",
     });
 
     const session = sessionsRef.current["session-1"];
@@ -544,12 +544,12 @@ describe("agent-orchestrator session transcript events", () => {
     expect(notice).toEqual(
       expect.objectContaining({
         role: "system",
-        content: "Codex compacted the conversation.",
+        content: "Session compacted the conversation.",
         timestamp: "2026-05-18T21:01:00.000Z",
         meta: {
           kind: "session_notice",
           tone: "info",
-          reason: "codex_compacted",
+          reason: "session_compacted",
           title: "Compacted",
         },
       }),
