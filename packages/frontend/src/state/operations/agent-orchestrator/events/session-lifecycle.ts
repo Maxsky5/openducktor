@@ -13,6 +13,11 @@ import {
   findLastSessionMessageByRole,
   upsertSessionMessage,
 } from "../support/messages";
+import {
+  buildSessionErrorNoticeMessage,
+  buildUserStoppedNoticeMessage,
+  USER_STOPPED_NOTICE,
+} from "../support/session-notice-messages";
 import { clearSubagentPendingApprovalFromSessions } from "../support/subagent-approval-overlay";
 import { formatSubagentContent } from "../support/subagent-messages";
 import { mergeTodoListPreservingOrder } from "../support/todos";
@@ -655,60 +660,6 @@ export const handleSessionTodosUpdated = (
   );
 };
 
-const buildSessionNoticeMessage = ({
-  timestamp,
-  content,
-  tone,
-  title,
-}:
-  | {
-      timestamp: string;
-      content: string;
-      tone: "cancelled";
-      title: string;
-    }
-  | {
-      timestamp: string;
-      content: string;
-      tone: "error";
-      title: string;
-    }) => ({
-  id: crypto.randomUUID(),
-  role: "system" as const,
-  content,
-  timestamp,
-  meta:
-    tone === "cancelled"
-      ? {
-          kind: "session_notice" as const,
-          tone: "cancelled" as const,
-          reason: "user_stopped" as const,
-          title,
-        }
-      : {
-          kind: "session_notice" as const,
-          tone: "error" as const,
-          reason: "session_error" as const,
-          title,
-        },
-});
-
-const buildUserStoppedNoticeMessage = (timestamp: string) =>
-  buildSessionNoticeMessage({
-    timestamp,
-    content: "Session stopped at your request.",
-    tone: "cancelled",
-    title: "Stopped",
-  });
-
-const buildSessionErrorNoticeMessage = (timestamp: string, message: string) =>
-  buildSessionNoticeMessage({
-    timestamp,
-    content: message,
-    tone: "error",
-    title: "Error",
-  });
-
 const settleTerminalMessages = (
   session: Pick<
     SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string],
@@ -826,7 +777,7 @@ export const handleSessionFinished = (
           ...(appendUserStoppedNotice
             ? {
                 outcome: "error" as const,
-                errorMessage: "Session stopped at your request.",
+                errorMessage: USER_STOPPED_NOTICE,
                 appendUserStoppedNotice: true,
               }
             : {}),

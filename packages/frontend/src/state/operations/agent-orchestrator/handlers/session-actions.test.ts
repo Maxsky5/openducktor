@@ -486,6 +486,77 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
+  test("appends the user-stopped notice when authoritative stop has no local runtime event", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalStopSession = adapter.stopSession;
+    let localStopCalls = 0;
+
+    adapter.hasSession = () => false;
+    adapter.stopSession = async () => {
+      localStopCalls += 1;
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          runtimeKind: "codex",
+          role: "build",
+          messages: [
+            {
+              id: "tool-running",
+              role: "tool",
+              content: "Tool todowrite running...",
+              timestamp: "2026-02-22T08:00:08.000Z",
+              meta: {
+                kind: "tool",
+                partId: "part-tool-running",
+                callId: "call-tool-running",
+                tool: "todowrite",
+                status: "running",
+              },
+            },
+          ],
+        }),
+      },
+    };
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      taskRef: { current: [] },
+    });
+
+    try {
+      await actions.stopAgentSession("session-1");
+
+      expect(localStopCalls).toBe(0);
+      const lastMessage = lastSessionMessageForTest(getSession(sessionsRef));
+      expect(lastMessage?.content).toBe("Session stopped at your request.");
+      expect(lastMessage?.meta).toEqual({
+        kind: "session_notice",
+        tone: "cancelled",
+        reason: "user_stopped",
+        title: "Stopped",
+      });
+      const toolMessage = findSessionMessageForTest(
+        getSession(sessionsRef),
+        (message) => message.id === "tool-running",
+      );
+      expect(toolMessage?.meta?.kind).toBe("tool");
+      if (toolMessage?.meta?.kind !== "tool") {
+        throw new Error("Expected tool metadata");
+      }
+      expect(toolMessage.meta.status).toBe("error");
+      expect(toolMessage.meta.error).toBe("Session stopped at your request.");
+      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+      expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.stopSession = originalStopSession;
+    }
+  });
+
   test("continues cleanup when local adapter stop fails after authoritative stop", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;
