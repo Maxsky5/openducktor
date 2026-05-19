@@ -25,7 +25,7 @@ import {
 export type CreateRuntimeRegistryInput = {
   runtimes?: RuntimeInstanceSummary[];
   workspaceStarter?: RuntimeWorkspaceStarterPort;
-  codexAppServer?: Pick<CodexAppServerPort, "listLoadedThreads" | "listThreads" | "request">;
+  codexAppServer?: Pick<CodexAppServerPort, "request">;
 };
 
 type RuntimeEnsureFlight = {

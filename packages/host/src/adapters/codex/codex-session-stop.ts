@@ -1,19 +1,15 @@
-import type { CodexAppServerTurn, RuntimeRoute } from "@openducktor/contracts";
+import type {
+  CodexAppServerThreadTurnsListResponse,
+  CodexAppServerTurn,
+  RuntimeRoute,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
-import type {
-  CodexAppServerError,
-  CodexAppServerPort,
-  CodexAppServerThreadEntry,
-} from "../../ports/codex-app-server-port";
-import {
-  findExactCodexThread,
-  loadCodexLoadedThreadIds,
-  runtimeIdFromStdioRoute,
-} from "./codex-thread-lookup";
+import type { CodexAppServerError, CodexAppServerPort } from "../../ports/codex-app-server-port";
+import { readCodexThread, runtimeIdFromStdioRoute } from "./codex-thread-lookup";
 
 export type CodexSessionStopInput = {
-  codexAppServer: Pick<CodexAppServerPort, "listLoadedThreads" | "listThreads" | "request">;
+  codexAppServer: Pick<CodexAppServerPort, "request">;
   runtimeRoute: RuntimeRoute;
   externalSessionId: string;
   workingDirectory: string;
@@ -23,14 +19,8 @@ export type CodexSessionStopError = CodexAppServerError;
 
 const requireExactThread = (input: CodexSessionStopInput, runtimeId: string) =>
   Effect.gen(function* () {
-    const thread = yield* findExactCodexThread({
-      codexAppServer: input.codexAppServer,
-      runtimeId,
-      externalSessionId: input.externalSessionId,
-      workingDirectory: input.workingDirectory,
-      operationPrefix: "codexSessionStop",
-    });
-    if (thread) {
+    const thread = yield* readCodexThread(input.codexAppServer, runtimeId, input.externalSessionId);
+    if (thread.cwd === input.workingDirectory) {
       return thread;
     }
     return yield* Effect.fail(
@@ -54,7 +44,7 @@ const isActiveTurn = (turn: CodexAppServerTurn): boolean =>
 
 const loadActiveTurnId = (input: CodexSessionStopInput, runtimeId: string) =>
   Effect.gen(function* () {
-    const result = yield* input.codexAppServer.request({
+    const response = (yield* input.codexAppServer.request({
       runtimeId,
       method: "thread/turns/list",
       params: {
@@ -63,32 +53,8 @@ const loadActiveTurnId = (input: CodexSessionStopInput, runtimeId: string) =>
         sortDirection: "desc",
         itemsView: "summary",
       },
-    });
-    if (typeof result !== "object" || result === null || !("data" in result)) {
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "codexSessionStop.loadActiveTurnId",
-          message: "Codex thread/turns/list returned a malformed response.",
-          details: { runtimeId, externalSessionId: input.externalSessionId },
-        }),
-      );
-    }
-    const data = (result as { data: unknown }).data;
-    if (!Array.isArray(data)) {
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "codexSessionStop.loadActiveTurnId",
-          message: "Codex thread/turns/list response data must be an array.",
-          details: { runtimeId, externalSessionId: input.externalSessionId },
-        }),
-      );
-    }
-    const activeTurn = data.find((turn): turn is CodexAppServerTurn => {
-      if (typeof turn !== "object" || turn === null) {
-        return false;
-      }
-      return isActiveTurn(turn as CodexAppServerTurn);
-    });
+    })) as CodexAppServerThreadTurnsListResponse;
+    const activeTurn = response.data.find(isActiveTurn);
     if (!activeTurn) {
       return yield* Effect.fail(
         new HostOperationError({
@@ -105,45 +71,6 @@ const loadActiveTurnId = (input: CodexSessionStopInput, runtimeId: string) =>
     return activeTurn.id;
   });
 
-const assertInterruptibleThread = (
-  input: CodexSessionStopInput,
-  runtimeId: string,
-  thread: CodexAppServerThreadEntry,
-  loadedThreadIds: Set<string>,
-) =>
-  Effect.gen(function* () {
-    if (thread.status === "idle" || thread.status === "notLoaded") {
-      return null;
-    }
-    if (thread.status === "systemError") {
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "codexSessionStop.assertInterruptibleThread",
-          message: "Codex session thread is in systemError state and cannot be interrupted.",
-          details: {
-            runtimeId,
-            externalSessionId: input.externalSessionId,
-            workingDirectory: input.workingDirectory,
-          },
-        }),
-      );
-    }
-    if (!loadedThreadIds.has(thread.id)) {
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "codexSessionStop.assertInterruptibleThread",
-          message: "Codex session is active but the target thread is not loaded.",
-          details: {
-            runtimeId,
-            externalSessionId: input.externalSessionId,
-            workingDirectory: input.workingDirectory,
-          },
-        }),
-      );
-    }
-    return yield* loadActiveTurnId(input, runtimeId);
-  });
-
 export const stopCodexSession = (
   input: CodexSessionStopInput,
 ): Effect.Effect<void, CodexSessionStopError> =>
@@ -158,16 +85,24 @@ export const stopCodexSession = (
         }),
       );
     }
-    const loadedThreadIds = yield* loadCodexLoadedThreadIds(
-      input.codexAppServer,
-      runtimeId,
-      "codexSessionStop",
-    );
     const thread = yield* requireExactThread(input, runtimeId);
-    const turnId = yield* assertInterruptibleThread(input, runtimeId, thread, loadedThreadIds);
-    if (turnId === null) {
+    if (thread.status.type === "idle" || thread.status.type === "notLoaded") {
       return;
     }
+    if (thread.status.type === "systemError") {
+      return yield* Effect.fail(
+        new HostOperationError({
+          operation: "codexSessionStop",
+          message: "Codex session thread is in systemError state and cannot be interrupted.",
+          details: {
+            runtimeId,
+            externalSessionId: input.externalSessionId,
+            workingDirectory: input.workingDirectory,
+          },
+        }),
+      );
+    }
+    const turnId = yield* loadActiveTurnId(input, runtimeId);
     yield* input.codexAppServer.request({
       runtimeId,
       method: "turn/interrupt",
