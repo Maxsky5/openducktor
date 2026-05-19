@@ -1,6 +1,5 @@
 import type { RuntimeRoute } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { HostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerError, CodexAppServerPort } from "../../ports/codex-app-server-port";
 import {
   findExactCodexThread,
@@ -15,23 +14,7 @@ export type CodexSessionStatusProbeInput = {
   workingDirectory: string;
 };
 
-export type CodexSessionStatusProbeError = CodexAppServerError | HostOperationError;
-
-const hasBusyLoadedThread = (
-  input: CodexSessionStatusProbeInput,
-  runtimeId: string,
-  loadedThreadIds: Set<string>,
-) =>
-  Effect.gen(function* () {
-    const thread = yield* findExactCodexThread({
-      codexAppServer: input.codexAppServer,
-      runtimeId,
-      externalSessionId: input.externalSessionId,
-      workingDirectory: input.workingDirectory,
-      operationPrefix: "codexSessionStatusProbe",
-    });
-    return thread !== null && loadedThreadIds.has(thread.id) && thread.status === "active";
-  });
+export type CodexSessionStatusProbeError = CodexAppServerError;
 
 export const probeCodexSessionStatus = (
   input: CodexSessionStatusProbeInput,
@@ -55,8 +38,16 @@ export const probeCodexSessionStatus = (
     if (loadedThreadIds.size === 0) {
       return { supported: true, hasLiveSession: false };
     }
+    const thread = yield* findExactCodexThread({
+      codexAppServer: input.codexAppServer,
+      runtimeId,
+      externalSessionId: input.externalSessionId,
+      workingDirectory: input.workingDirectory,
+      operationPrefix: "codexSessionStatusProbe",
+    });
     return {
       supported: true,
-      hasLiveSession: yield* hasBusyLoadedThread(input, runtimeId, loadedThreadIds),
+      hasLiveSession:
+        thread !== null && loadedThreadIds.has(thread.id) && thread.status === "active",
     };
   });

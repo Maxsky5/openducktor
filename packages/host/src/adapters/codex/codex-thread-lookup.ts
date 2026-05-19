@@ -9,9 +9,9 @@ import type {
   CodexAppServerThreadListResponse,
 } from "../../ports/codex-app-server-port";
 
-export type CodexThreadLookupPort = Pick<CodexAppServerPort, "listLoadedThreads" | "listThreads">;
+type CodexThreadLookupPort = Pick<CodexAppServerPort, "listLoadedThreads" | "listThreads">;
 
-export type CodexThreadLookupInput = {
+type CodexThreadLookupInput = {
   codexAppServer: CodexThreadLookupPort;
   runtimeId: string;
   externalSessionId: string;
@@ -62,7 +62,7 @@ export const loadCodexLoadedThreadIds = (
 
 export const findExactCodexThread = (
   input: CodexThreadLookupInput,
-): Effect.Effect<CodexAppServerThreadEntry | null, CodexAppServerError | HostOperationError> =>
+): Effect.Effect<CodexAppServerThreadEntry | null, CodexAppServerError> =>
   Effect.gen(function* () {
     const seenCursors = new Set<string>();
     let cursor: string | null = null;

@@ -19,9 +19,9 @@ export type CodexSessionStopInput = {
   workingDirectory: string;
 };
 
-export type CodexSessionStopError = CodexAppServerError | HostOperationError | HostValidationError;
+export type CodexSessionStopError = CodexAppServerError;
 
-const loadExactThread = (input: CodexSessionStopInput, runtimeId: string) =>
+const requireExactThread = (input: CodexSessionStopInput, runtimeId: string) =>
   Effect.gen(function* () {
     const thread = yield* findExactCodexThread({
       codexAppServer: input.codexAppServer,
@@ -35,7 +35,7 @@ const loadExactThread = (input: CodexSessionStopInput, runtimeId: string) =>
     }
     return yield* Effect.fail(
       new HostOperationError({
-        operation: "codexSessionStop.loadExactThread",
+        operation: "codexSessionStop.requireExactThread",
         message: "Codex session stop could not find the target thread for the session.",
         details: {
           runtimeId,
@@ -163,7 +163,7 @@ export const stopCodexSession = (
       runtimeId,
       "codexSessionStop",
     );
-    const thread = yield* loadExactThread(input, runtimeId);
+    const thread = yield* requireExactThread(input, runtimeId);
     const turnId = yield* assertInterruptibleThread(input, runtimeId, thread, loadedThreadIds);
     if (turnId === null) {
       return;
