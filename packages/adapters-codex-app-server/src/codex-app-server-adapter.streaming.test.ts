@@ -186,7 +186,7 @@ describe("CodexAppServerAdapter streaming", () => {
       type: "session_compacted",
       externalSessionId: "thread/start-runtime-ensure",
       timestamp: expect.any(String),
-      message: "Session compacted the conversation.",
+      message: "Session compacted.",
     });
     expect(
       events.filter((event) => (event as { type?: string }).type === "session_compacted"),
@@ -709,7 +709,7 @@ describe("CodexAppServerAdapter streaming", () => {
       type: "session_compacted",
       externalSessionId: "thread-saved",
       timestamp: expect.any(String),
-      message: "Session compacted the conversation.",
+      message: "Session compacted.",
     });
     unsubscribe();
   });

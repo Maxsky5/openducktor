@@ -68,7 +68,7 @@ export const compactionMapper: CodexEventMapper = {
           ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
           ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
           raw: input.notification.params,
-          message: "Session compacted the conversation.",
+          message: "Session compacted.",
         },
       ],
     };

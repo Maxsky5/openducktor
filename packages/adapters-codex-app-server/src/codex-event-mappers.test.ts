@@ -100,7 +100,7 @@ describe("Codex compaction event mapper", () => {
         type: "session_compacted",
         externalSessionId: "thread-1",
         timestamp: "2026-05-18T21:00:00.000Z",
-        message: "Session compacted the conversation.",
+        message: "Session compacted.",
       },
     ]);
   });
