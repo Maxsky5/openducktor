@@ -5,7 +5,7 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { toHostOperationError } from "../../effect/host-errors";
+import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
 import { createRuntimeRegistry as createEffectRuntimeRegistry } from "./runtime-registry";
 
@@ -359,16 +359,20 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           calls.push(input);
-          const params = input.params as { threadId: "session-1" | "session-2" | "session-3" };
+          const params = input.params as {
+            threadId: "session-1" | "session-2" | "session-3" | "session-4" | "session-5";
+          };
           const statusByThreadId = {
             "session-1": { type: "active", activeFlags: [] },
             "session-2": { type: "idle" },
             "session-3": { type: "systemError" },
+            "session-4": { type: "notLoaded" },
+            "session-5": { type: "active", activeFlags: [] },
           } as const;
           return codexResult({
             thread: {
               id: params.threadId,
-              cwd: "/repo/worktree",
+              cwd: params.threadId === "session-5" ? "/repo/other-worktree" : "/repo/worktree",
               status: statusByThreadId[params.threadId],
             },
           });
@@ -395,13 +399,33 @@ describe("createRuntimeRegistry", () => {
           workingDirectory: "/repo/worktree",
         }),
       ),
-    ).resolves.toEqual({ supported: true, hasLiveSession: false });
+    ).resolves.toEqual({ supported: true, hasLiveSession: true });
     await expect(
       Effect.runPromise(
         probeSessionStatus({
           runtimeKind: "codex",
           runtimeRoute: { type: "stdio", identity: "runtime-1" },
           externalSessionId: "session-3",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).resolves.toEqual({ supported: true, hasLiveSession: true });
+    await expect(
+      Effect.runPromise(
+        probeSessionStatus({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "session-4",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).resolves.toEqual({ supported: true, hasLiveSession: false });
+    await expect(
+      Effect.runPromise(
+        probeSessionStatus({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "session-5",
           workingDirectory: "/repo/worktree",
         }),
       ),
@@ -422,7 +446,63 @@ describe("createRuntimeRegistry", () => {
         method: "thread/read",
         params: { threadId: "session-3", includeTurns: false },
       },
+      {
+        runtimeId: "runtime-1",
+        method: "thread/read",
+        params: { threadId: "session-4", includeTurns: false },
+      },
+      {
+        runtimeId: "runtime-1",
+        method: "thread/read",
+        params: { threadId: "session-5", includeTurns: false },
+      },
     ]);
+  });
+  test("treats missing Codex session probe threads as inactive", async () => {
+    const registry = createRuntimeRegistry({
+      codexAppServer: {
+        request(input) {
+          return Effect.fail(
+            new HostOperationError({
+              operation: `codexAppServerTransport.request.${input.method}`,
+              message: `Codex app-server request ${input.method} failed for runtime ${input.runtimeId}: thread not found`,
+              details: { runtimeId: input.runtimeId, method: input.method },
+            }),
+          );
+        },
+      },
+    });
+    const probeSessionStatus = requireMethod(registry.probeSessionStatus, "probeSessionStatus");
+    await expect(
+      Effect.runPromise(
+        probeSessionStatus({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "missing-session",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).resolves.toEqual({ supported: true, hasLiveSession: false });
+  });
+  test("fails malformed Codex session probe thread payloads with a typed error", async () => {
+    const registry = createRuntimeRegistry({
+      codexAppServer: {
+        request() {
+          return codexResult({});
+        },
+      },
+    });
+    const probeSessionStatus = requireMethod(registry.probeSessionStatus, "probeSessionStatus");
+    await expect(
+      Effect.runPromise(
+        probeSessionStatus({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).rejects.toThrow("Codex thread/read response thread must be an object");
   });
   test("interrupts an active Codex session through the app-server port", async () => {
     const calls: unknown[] = [];
@@ -570,6 +650,34 @@ describe("createRuntimeRegistry", () => {
         }),
       ),
     ).rejects.toThrow("Codex session is active but no interruptible active turn was found.");
+  });
+  test("fails malformed Codex turn-list payloads with a typed error", async () => {
+    const registry = createRuntimeRegistry({
+      codexAppServer: {
+        request(input) {
+          if (input.method === "thread/read") {
+            return codexResult({
+              thread: {
+                id: "session-1",
+                cwd: "/repo/worktree",
+                status: { type: "active", activeFlags: [] },
+              },
+            });
+          }
+          return codexResult({});
+        },
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        registry.stopSession({
+          runtimeKind: "codex",
+          runtimeRoute: { type: "stdio", identity: "runtime-1" },
+          externalSessionId: "session-1",
+          workingDirectory: "/repo/worktree",
+        }),
+      ),
+    ).rejects.toThrow("Codex thread/turns/list response data must be an array");
   });
   test("fails Codex stop without the app-server port or a Codex runtime route", async () => {
     const registry = createRuntimeRegistry();

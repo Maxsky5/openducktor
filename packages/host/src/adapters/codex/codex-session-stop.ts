@@ -57,11 +57,7 @@ export const stopCodexSession = (
         }),
       );
     }
-    const turnId = yield* findActiveCodexTurnId(
-      input.codexAppServer,
-      input.runtimeId,
-      input.externalSessionId,
-    );
+    const turnId = yield* findActiveCodexTurnId(input.codexAppServer, input.runtimeId, thread.id);
     if (turnId === null) {
       return yield* Effect.fail(
         new HostOperationError({
@@ -78,6 +74,6 @@ export const stopCodexSession = (
     yield* input.codexAppServer.request({
       runtimeId: input.runtimeId,
       method: "turn/interrupt",
-      params: { threadId: input.externalSessionId, turnId },
+      params: { threadId: thread.id, turnId },
     });
   });
