@@ -1,12 +1,9 @@
-import type {
-  CodexAppServerThreadTurnsListResponse,
-  CodexAppServerTurn,
-  RuntimeRoute,
-} from "@openducktor/contracts";
+import type { RuntimeRoute } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { CodexAppServerError, CodexAppServerPort } from "../../ports/codex-app-server-port";
 import { readCodexThread, runtimeIdFromStdioRoute } from "./codex-thread-lookup";
+import { findActiveCodexTurnId } from "./codex-turn-lookup";
 
 export type CodexSessionStopInput = {
   codexAppServer: Pick<CodexAppServerPort, "request">;
@@ -34,41 +31,6 @@ const requireExactThread = (input: CodexSessionStopInput, runtimeId: string) =>
         },
       }),
     );
-  });
-
-const isActiveTurn = (turn: CodexAppServerTurn): boolean =>
-  typeof turn.id === "string" &&
-  turn.id.length > 0 &&
-  turn.startedAt !== null &&
-  turn.completedAt === null;
-
-const loadActiveTurnId = (input: CodexSessionStopInput, runtimeId: string) =>
-  Effect.gen(function* () {
-    const response = (yield* input.codexAppServer.request({
-      runtimeId,
-      method: "thread/turns/list",
-      params: {
-        threadId: input.externalSessionId,
-        limit: 20,
-        sortDirection: "desc",
-        itemsView: "summary",
-      },
-    })) as CodexAppServerThreadTurnsListResponse;
-    const activeTurn = response.data.find(isActiveTurn);
-    if (!activeTurn) {
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "codexSessionStop.loadActiveTurnId",
-          message: "Codex session is active but no interruptible active turn was found.",
-          details: {
-            runtimeId,
-            externalSessionId: input.externalSessionId,
-            workingDirectory: input.workingDirectory,
-          },
-        }),
-      );
-    }
-    return activeTurn.id;
   });
 
 export const stopCodexSession = (
@@ -102,7 +64,24 @@ export const stopCodexSession = (
         }),
       );
     }
-    const turnId = yield* loadActiveTurnId(input, runtimeId);
+    const turnId = yield* findActiveCodexTurnId(
+      input.codexAppServer,
+      runtimeId,
+      input.externalSessionId,
+    );
+    if (turnId === null) {
+      return yield* Effect.fail(
+        new HostOperationError({
+          operation: "codexSessionStop",
+          message: "Codex session is active but no interruptible active turn was found.",
+          details: {
+            runtimeId,
+            externalSessionId: input.externalSessionId,
+            workingDirectory: input.workingDirectory,
+          },
+        }),
+      );
+    }
     yield* input.codexAppServer.request({
       runtimeId,
       method: "turn/interrupt",
