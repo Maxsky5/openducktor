@@ -28,7 +28,7 @@
     "start": "bun run src/index.ts",
     "build": "bun run scripts/build.ts",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit && bunx tsc -p tsconfig.scripts.json --noEmit",
-    "test": "bun test --timeout 1000",
+    "test": "bun test --timeout 1000 --max-concurrency=1",
     "lint": "biome check src scripts",
     "publish:dry-run": "bun publish --dry-run"
   },

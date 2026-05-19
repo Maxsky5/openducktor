@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -18,6 +18,14 @@ type ContentToolResult = {
 
 const activeServers = new Set<ReturnType<typeof createServer>>();
 const activeMcpServers = new Set<Awaited<ReturnType<typeof createMcpServer>>>();
+const MCP_STARTUP_ENV_KEYS = [
+  "ODT_ALLOWED_TOOLS",
+  "ODT_FORBID_WORKSPACE_ID_INPUT",
+  "ODT_HOST_TOKEN",
+  "ODT_HOST_URL",
+  "ODT_WORKSPACE_ID",
+  "OPENDUCKTOR_CONFIG_DIR",
+] as const;
 
 const closeServer = async (server: ReturnType<typeof createServer>): Promise<void> => {
   await new Promise<void>((resolve, reject) => {
@@ -222,7 +230,16 @@ const readToolInputProperties = (
   return properties;
 };
 
+beforeEach(() => {
+  for (const key of MCP_STARTUP_ENV_KEYS) {
+    delete process.env[key];
+  }
+});
+
 afterEach(async () => {
+  for (const key of MCP_STARTUP_ENV_KEYS) {
+    delete process.env[key];
+  }
   await Promise.all([
     ...Array.from(activeMcpServers, async (server) => {
       activeMcpServers.delete(server);
