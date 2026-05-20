@@ -4,16 +4,17 @@ impl AppService {
     fn failed_repo_runtime_mcp_health(
         input: FailedRepoRuntimeMcpHealthInput,
     ) -> RepoRuntimeHealthCheck {
+        let FailedRepoRuntimeMcpProgressInput { stage, source } = input.progress;
         let progress = repo_runtime_progress(RepoRuntimeProgressInput {
-            stage: input.progress_stage,
-            observation: input.progress_source.observation,
-            host: input.progress_source.host,
+            stage,
+            observation: source.observation,
+            host: source.host,
             checked_at: input.checked_at.clone(),
             failure_reason: None,
-            started_at: input.progress_source.started_at,
+            started_at: source.started_at,
             updated_at: Some(input.checked_at.clone()),
-            elapsed_ms: input.progress_source.elapsed_ms,
-            attempts: input.progress_source.attempts,
+            elapsed_ms: source.elapsed_ms,
+            attempts: source.attempts,
         });
 
         build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
@@ -295,8 +296,10 @@ impl AppService {
                         mcp_failure_kind: error.failure_kind,
                         mcp_server_status: None,
                         available_tool_ids: Vec::new(),
-                        progress_stage: checking_progress.stage,
-                        progress_source: checking_progress,
+                        progress: FailedRepoRuntimeMcpProgressInput {
+                            stage: checking_progress.stage,
+                            source: checking_progress,
+                        },
                     }),
                 );
             }
@@ -369,8 +372,10 @@ impl AppService {
                                         mcp_failure_kind: error.failure_kind,
                                         mcp_server_status: mcp_status.status.clone(),
                                         available_tool_ids: Vec::new(),
-                                        progress_stage: reconnect_progress.stage,
-                                        progress_source: reconnect_progress.clone(),
+                                        progress: FailedRepoRuntimeMcpProgressInput {
+                                            stage: reconnect_progress.stage,
+                                            source: reconnect_progress.clone(),
+                                        },
                                     },
                                 ),
                             );
@@ -398,8 +403,10 @@ impl AppService {
                             mcp_failure_kind: error.failure_kind,
                             mcp_server_status: mcp_status.status.clone(),
                             available_tool_ids: Vec::new(),
-                            progress_stage: reconnect_progress.stage,
-                            progress_source: reconnect_progress,
+                            progress: FailedRepoRuntimeMcpProgressInput {
+                                stage: reconnect_progress.stage,
+                                source: reconnect_progress,
+                            },
                         }),
                     );
                 }
@@ -449,8 +456,10 @@ impl AppService {
                             mcp_failure_kind: error.failure_kind,
                             mcp_server_status: mcp_status.status.clone(),
                             available_tool_ids: Vec::new(),
-                            progress_stage: RuntimeHealthWorkflowStage::RuntimeReady,
-                            progress_source: checking_progress.clone(),
+                            progress: FailedRepoRuntimeMcpProgressInput {
+                                stage: RuntimeHealthWorkflowStage::RuntimeReady,
+                                source: checking_progress.clone(),
+                            },
                         }),
                     );
                 }
