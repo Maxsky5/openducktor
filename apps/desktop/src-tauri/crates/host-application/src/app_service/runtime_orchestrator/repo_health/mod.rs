@@ -1,7 +1,7 @@
 use super::repo_health_snapshot::{
     build_repo_runtime_health_check, map_startup_stage_to_failed_health,
     map_startup_stage_to_health, repo_runtime_progress, RepoRuntimeHealthCheckInput,
-    RepoRuntimeProgressInput, RuntimeHealthWorkflowStage,
+    RepoRuntimeProgressInput, RuntimeHealthProgress, RuntimeHealthWorkflowStage,
 };
 use super::AppService;
 use crate::app_service::runtime_registry::{ResolvedRuntimeMcpStatus, RuntimeHealthCheckFailure};
@@ -39,6 +39,16 @@ pub(in crate::app_service::runtime_orchestrator) struct CompleteRepoRuntimeHealt
     host_status: Option<RepoRuntimeStartupStatus>,
     observation: Option<RepoRuntimeHealthObservation>,
     allow_restart: bool,
+}
+
+struct FailedRepoRuntimeMcpHealthInput {
+    checked_at: String,
+    runtime: RuntimeInstanceSummary,
+    mcp_error: String,
+    mcp_failure_kind: RepoRuntimeStartupFailureKind,
+    mcp_server_status: Option<String>,
+    available_tool_ids: Vec<String>,
+    progress: RuntimeHealthProgress,
 }
 
 fn repo_runtime_is_within_mcp_startup_grace_window(

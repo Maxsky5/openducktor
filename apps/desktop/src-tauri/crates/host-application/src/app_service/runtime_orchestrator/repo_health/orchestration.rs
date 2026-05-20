@@ -1,6 +1,25 @@
 use super::*;
 
 impl AppService {
+    fn failed_repo_runtime_mcp_health(
+        input: FailedRepoRuntimeMcpHealthInput,
+    ) -> RepoRuntimeHealthCheck {
+        build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+            checked_at: input.checked_at,
+            runtime: Some(input.runtime),
+            runtime_ok: true,
+            runtime_error: None,
+            runtime_failure_kind: None,
+            supports_mcp_status: true,
+            mcp_ok: false,
+            mcp_error: Some(input.mcp_error),
+            mcp_failure_kind: Some(input.mcp_failure_kind),
+            mcp_server_status: input.mcp_server_status,
+            available_tool_ids: input.available_tool_ids,
+            progress: Some(input.progress),
+        })
+    }
+
     pub fn repo_runtime_health(
         &self,
         runtime_kind: &str,
@@ -257,19 +276,14 @@ impl AppService {
                 return self.store_repo_runtime_health(
                     &runtime_kind,
                     repo_key.as_str(),
-                    build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                    Self::failed_repo_runtime_mcp_health(FailedRepoRuntimeMcpHealthInput {
                         checked_at: checked_at.clone(),
-                        runtime: Some(runtime.clone()),
-                        runtime_ok: true,
-                        runtime_error: None,
-                        runtime_failure_kind: None,
-                        supports_mcp_status: true,
-                        mcp_ok: false,
-                        mcp_error: Some(mcp_message.clone()),
-                        mcp_failure_kind: Some(error.failure_kind),
+                        runtime: runtime.clone(),
+                        mcp_error: mcp_message,
+                        mcp_failure_kind: error.failure_kind,
                         mcp_server_status: None,
                         available_tool_ids: Vec::new(),
-                        progress: Some(repo_runtime_progress(RepoRuntimeProgressInput {
+                        progress: repo_runtime_progress(RepoRuntimeProgressInput {
                             stage: checking_progress.stage,
                             observation,
                             host: host_status,
@@ -279,7 +293,7 @@ impl AppService {
                             updated_at: Some(checked_at.clone()),
                             elapsed_ms: checking_progress.elapsed_ms,
                             attempts: checking_progress.attempts,
-                        })),
+                        }),
                     }),
                 );
             }
@@ -344,20 +358,15 @@ impl AppService {
                             return self.store_repo_runtime_health(
                                 &runtime_kind,
                                 repo_key.as_str(),
-                                build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
-                                    checked_at: checked_at.clone(),
-                                    runtime: Some(runtime.clone()),
-                                    runtime_ok: true,
-                                    runtime_error: None,
-                                    runtime_failure_kind: None,
-                                    supports_mcp_status: true,
-                                    mcp_ok: false,
-                                    mcp_error: Some(refresh_message.clone()),
-                                    mcp_failure_kind: Some(error.failure_kind),
-                                    mcp_server_status: mcp_status.status.clone(),
-                                    available_tool_ids: Vec::new(),
-                                    progress: Some(repo_runtime_progress(
-                                        RepoRuntimeProgressInput {
+                                Self::failed_repo_runtime_mcp_health(
+                                    FailedRepoRuntimeMcpHealthInput {
+                                        checked_at: checked_at.clone(),
+                                        runtime: runtime.clone(),
+                                        mcp_error: refresh_message,
+                                        mcp_failure_kind: error.failure_kind,
+                                        mcp_server_status: mcp_status.status.clone(),
+                                        available_tool_ids: Vec::new(),
+                                        progress: repo_runtime_progress(RepoRuntimeProgressInput {
                                             stage: reconnect_progress.stage,
                                             observation: reconnect_progress.observation,
                                             host: reconnect_progress.host.clone(),
@@ -367,9 +376,9 @@ impl AppService {
                                             updated_at: Some(checked_at.clone()),
                                             elapsed_ms: reconnect_progress.elapsed_ms,
                                             attempts: reconnect_progress.attempts,
-                                        },
-                                    )),
-                                }),
+                                        }),
+                                    },
+                                ),
                             );
                         }
                     };
@@ -388,19 +397,14 @@ impl AppService {
                     return self.store_repo_runtime_health(
                         &runtime_kind,
                         repo_key.as_str(),
-                        build_repo_runtime_health_check(RepoRuntimeHealthCheckInput {
+                        Self::failed_repo_runtime_mcp_health(FailedRepoRuntimeMcpHealthInput {
                             checked_at: checked_at.clone(),
-                            runtime: Some(runtime.clone()),
-                            runtime_ok: true,
-                            runtime_error: None,
-                            runtime_failure_kind: None,
-                            supports_mcp_status: true,
-                            mcp_ok: false,
-                            mcp_error: Some(mcp_message.clone()),
-                            mcp_failure_kind: Some(error.failure_kind),
+                            runtime: runtime.clone(),
+                            mcp_error: mcp_message,
+                            mcp_failure_kind: error.failure_kind,
                             mcp_server_status: mcp_status.status.clone(),
                             available_tool_ids: Vec::new(),
-                            progress: Some(repo_runtime_progress(RepoRuntimeProgressInput {
+                            progress: repo_runtime_progress(RepoRuntimeProgressInput {
                                 stage: reconnect_progress.stage,
                                 observation: reconnect_progress.observation,
                                 host: reconnect_progress.host,
@@ -410,7 +414,7 @@ impl AppService {
                                 updated_at: Some(checked_at.clone()),
                                 elapsed_ms: reconnect_progress.elapsed_ms,
                                 attempts: reconnect_progress.attempts,
-                            })),
+                            }),
                         }),
                     );
                 }
@@ -444,40 +448,39 @@ impl AppService {
             attempts: checking_progress.attempts,
         });
 
-        let (mcp_ok, mcp_error, mcp_failure_kind, available_tool_ids, progress) = if mcp_ok {
+        let (mcp_ok, mcp_error, mcp_failure_kind, available_tool_ids) = if mcp_ok {
             match runtime_delegate.load_tool_ids(&runtime) {
-                Ok(tool_ids) => (true, None, None, tool_ids, progress),
+                Ok(tool_ids) => (true, None, None, tool_ids),
                 Err(error) => {
                     let tool_ids_message =
                         format!("Failed to load runtime MCP tool ids: {}", error.message);
-                    let failed_progress = repo_runtime_progress(RepoRuntimeProgressInput {
-                        stage: RuntimeHealthWorkflowStage::RuntimeReady,
-                        observation,
-                        host: host_status.clone(),
-                        checked_at: checked_at.clone(),
-                        failure_reason: None,
-                        started_at: Some(runtime.started_at.clone()),
-                        updated_at: Some(checked_at.clone()),
-                        elapsed_ms: checking_progress.elapsed_ms,
-                        attempts: checking_progress.attempts,
-                    });
-                    (
-                        false,
-                        Some(tool_ids_message),
-                        Some(error.failure_kind),
-                        Vec::new(),
-                        failed_progress,
-                    )
+                    return self.store_repo_runtime_health(
+                        &runtime_kind,
+                        repo_key.as_str(),
+                        Self::failed_repo_runtime_mcp_health(FailedRepoRuntimeMcpHealthInput {
+                            checked_at: checked_at.clone(),
+                            runtime: runtime.clone(),
+                            mcp_error: tool_ids_message,
+                            mcp_failure_kind: error.failure_kind,
+                            mcp_server_status: mcp_status.status.clone(),
+                            available_tool_ids: Vec::new(),
+                            progress: repo_runtime_progress(RepoRuntimeProgressInput {
+                                stage: RuntimeHealthWorkflowStage::RuntimeReady,
+                                observation,
+                                host: host_status.clone(),
+                                checked_at: checked_at.clone(),
+                                failure_reason: None,
+                                started_at: Some(runtime.started_at.clone()),
+                                updated_at: Some(checked_at.clone()),
+                                elapsed_ms: checking_progress.elapsed_ms,
+                                attempts: checking_progress.attempts,
+                            }),
+                        }),
+                    );
                 }
             }
         } else {
-            (
-                false,
-                mcp_error,
-                mcp_status.failure_kind,
-                Vec::new(),
-                progress,
-            )
+            (false, mcp_error, mcp_status.failure_kind, Vec::new())
         };
 
         self.store_repo_runtime_health(

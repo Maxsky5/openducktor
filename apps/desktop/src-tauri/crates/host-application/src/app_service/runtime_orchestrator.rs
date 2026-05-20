@@ -339,6 +339,58 @@ mod tests {
     }
 
     #[test]
+    fn repo_runtime_health_reports_mcp_query_failure() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let (port, server_handle) = spawn_runtime_http_server(vec![runtime_http_response(
+            "504 Gateway Timeout",
+            r#"{"error":{"message":"status probe timed out"}}"#,
+        )])?;
+        let runtime = host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::opencode(),
+            runtime_id: "runtime-mcp-query-failure".to_string(),
+            repo_path: "/tmp/repo-health-mcp-query-failure".to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: "/tmp/repo-health-mcp-query-failure".to_string(),
+            runtime_route: host_domain::RuntimeRoute::LocalHttp {
+                endpoint: format!("http://127.0.0.1:{port}"),
+            },
+            started_at: "2026-04-04T16:00:00Z".to_string(),
+            descriptor: builtin_opencode_runtime_descriptor(),
+        };
+        insert_workspace_runtime(&service, runtime.clone())?;
+
+        let health =
+            service.repo_runtime_health("opencode", "/tmp/repo-health-mcp-query-failure")?;
+        let requests = server_handle.join().expect("server thread should finish");
+
+        assert!(
+            requests[0].starts_with("GET /mcp?directory=%2Ftmp%2Frepo-health-mcp-query-failure ")
+        );
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(health.status, RepoRuntimeHealthState::Checking);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Checking)
+        );
+        assert!(health
+            .mcp
+            .as_ref()
+            .and_then(|value| value.detail.as_deref())
+            .is_some_and(|value| value.contains("Failed to query runtime MCP status")));
+        assert_eq!(
+            health.mcp.as_ref().and_then(|value| value.failure_kind),
+            Some(RepoRuntimeStartupFailureKind::Timeout)
+        );
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.tool_ids.clone()),
+            Some(Vec::new())
+        );
+        service.runtime_stop(runtime.runtime_id.as_str())?;
+        Ok(())
+    }
+
+    #[test]
     fn repo_runtime_health_returns_structured_failure_when_refresh_after_reconnect_fails(
     ) -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
@@ -387,6 +439,14 @@ mod tests {
             .is_some_and(
                 |value| value.contains("Failed to refresh runtime MCP status after reconnect")
             ));
+        assert_eq!(
+            health.mcp.as_ref().and_then(|value| value.failure_kind),
+            Some(RepoRuntimeStartupFailureKind::Timeout)
+        );
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.tool_ids.clone()),
+            Some(Vec::new())
+        );
         service.runtime_stop(runtime.runtime_id.as_str())?;
         Ok(())
     }
@@ -575,6 +635,10 @@ mod tests {
             .as_ref()
             .and_then(|value| value.detail.as_deref())
             .is_some_and(|value| value.contains("Failed to load runtime MCP tool ids")));
+        assert_eq!(
+            health.mcp.as_ref().and_then(|value| value.failure_kind),
+            Some(RepoRuntimeStartupFailureKind::Timeout)
+        );
         assert_eq!(
             health.mcp.as_ref().map(|value| value.tool_ids.clone()),
             Some(Vec::new())
