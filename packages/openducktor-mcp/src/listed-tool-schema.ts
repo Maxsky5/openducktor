@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
+import {
+  ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
+  ODT_TOOL_SCHEMAS,
+  ODT_WORKSPACE_SCOPED_TOOL_NAMES,
+} from "./lib";
 
 export type RegisteredToolName = keyof typeof ODT_TOOL_SCHEMAS;
 
@@ -10,7 +14,14 @@ const removeWorkspaceId = (jsonSchema: Record<string, unknown>): Record<string, 
     string,
     unknown
   >;
-  return { ...jsonSchema, properties };
+
+  return {
+    ...jsonSchema,
+    properties,
+    ...(Array.isArray(jsonSchema.required)
+      ? { required: jsonSchema.required.filter((key) => key !== "workspaceId") }
+      : {}),
+  };
 };
 
 export const getListedToolInputSchema = (
@@ -24,4 +35,10 @@ export const getListedToolInputSchema = (
   }
 
   return jsonSchema;
+};
+
+export const getListedToolOutputSchema = (
+  toolName: RegisteredToolName,
+): Record<string, unknown> => {
+  return z.toJSONSchema(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName], { io: "output" });
 };

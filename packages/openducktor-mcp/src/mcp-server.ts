@@ -1,8 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import packageJson from "../package.json" with { type: "json" };
-import { ODT_MCP_TOOL_NAMES, ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
-import { getListedToolInputSchema, type RegisteredToolName } from "./listed-tool-schema";
+import {
+  ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
+  ODT_MCP_TOOL_NAMES,
+  ODT_TOOL_SCHEMAS,
+  ODT_WORKSPACE_SCOPED_TOOL_NAMES,
+} from "./lib";
+import {
+  getListedToolInputSchema,
+  getListedToolOutputSchema,
+  type RegisteredToolName,
+} from "./listed-tool-schema";
 import { OdtTaskStore } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
 import { OdtToolError, type ToolResult, toToolError, toToolResult } from "./tool-results";
@@ -26,7 +35,7 @@ type RegisteredToolSpecs = {
 
 type RegisterContractTool = (
   name: string,
-  config: { description: string; inputSchema: unknown },
+  config: { description: string; inputSchema: unknown; outputSchema: unknown },
   callback: (input: unknown) => Promise<ToolResult>,
 ) => void;
 
@@ -114,6 +123,7 @@ const registerOdtTool = <Name extends RegisteredToolName>(
     {
       description: tool.description,
       inputSchema: schema,
+      outputSchema: ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[tool.name],
     },
     async (input: unknown) => {
       try {
@@ -142,6 +152,7 @@ const toListedToolDefinition = (
   inputSchema: getListedToolInputSchema(tool.name, {
     hideWorkspaceId: options.forbidWorkspaceIdInput,
   }),
+  outputSchema: getListedToolOutputSchema(tool.name),
 });
 
 const installVisibleToolListHandler = (

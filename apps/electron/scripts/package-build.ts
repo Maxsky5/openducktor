@@ -3,6 +3,7 @@ import { copyFile, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { prepareMcpSidecar } from "./prepare-mcp-sidecar";
+import { verifyPackagedMcpSidecar } from "./verify-mcp-sidecar-package";
 
 export type ElectronReleasePlatform = "linux" | "macos" | "windows";
 export type ElectronReleaseArch = "arm64" | "x64";
@@ -216,6 +217,15 @@ export const buildElectronPackage = async ({
     cwd: electronPackageDirectory,
     env: resolveElectronBuilderEnv(signed, process.env),
   });
+
+  const verifiedSidecarPath = await verifyPackagedMcpSidecar({
+    arch,
+    platform,
+    releaseDirectory,
+  });
+  if (verifiedSidecarPath) {
+    console.log(`Verified Electron MCP sidecar package payload: ${verifiedSidecarPath}`);
+  }
 
   if (!stageReleaseArtifacts) {
     return [];
