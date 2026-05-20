@@ -100,7 +100,7 @@ export const buildSessionStartModalDecision = ({
   requestContext: SessionStartDecisionRequestContext;
   selectedModel: AgentModelSelection | null;
 }): SessionStartModalDecision => {
-  const targetBranchFields = (): { targetBranch?: GitTargetBranch } =>
+  const buildTargetBranchFields = (): { targetBranch?: GitTargetBranch } =>
     input.targetBranch ? { targetBranch: targetBranchFromSelection(input.targetBranch) } : {};
 
   if (input.startMode === "reuse") {
@@ -112,7 +112,7 @@ export const buildSessionStartModalDecision = ({
     return {
       startMode: "reuse",
       sourceExternalSessionId,
-      ...targetBranchFields(),
+      ...buildTargetBranchFields(),
     };
   }
 
@@ -128,14 +128,14 @@ export const buildSessionStartModalDecision = ({
       startMode: "fork",
       selectedModel: resolvedSelectedModel,
       sourceExternalSessionId,
-      ...targetBranchFields(),
+      ...buildTargetBranchFields(),
     };
   }
 
   return {
     startMode: "fresh",
     selectedModel: resolvedSelectedModel,
-    ...targetBranchFields(),
+    ...buildTargetBranchFields(),
   };
 };
 
