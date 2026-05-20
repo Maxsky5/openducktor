@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { copyFile, mkdir, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { prepareMcpSidecar } from "./prepare-mcp-sidecar";
@@ -157,23 +157,20 @@ export const collectReleaseArtifacts = async ({
   platform: ElectronReleasePlatform;
   releaseDirectory: string;
 }): Promise<string[]> => {
-  const releaseGlob = new Bun.Glob("*");
   const copiedArtifacts: string[] = [];
 
   await assertDirectoryExists(releaseDirectory, "Electron release directory");
   await rm(outputDirectory, { force: true, recursive: true });
   await mkdir(outputDirectory, { recursive: true });
 
-  for await (const entry of releaseGlob.scan({
-    cwd: releaseDirectory,
-    onlyFiles: true,
-  })) {
-    if (!isReleaseArtifact(platform, entry)) {
+  const entries = await readdir(releaseDirectory, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile() || !isReleaseArtifact(platform, entry.name)) {
       continue;
     }
 
-    const sourcePath = join(releaseDirectory, entry);
-    const targetPath = join(outputDirectory, entry);
+    const sourcePath = join(releaseDirectory, entry.name);
+    const targetPath = join(outputDirectory, entry.name);
     await copyFile(sourcePath, targetPath);
     copiedArtifacts.push(targetPath);
   }
