@@ -35,6 +35,7 @@ export const createDeferred = <T>() => {
 export class RecordingTransport implements CodexJsonRpcTransport {
   readonly calls: CodexJsonRpcRequest[] = [];
   readonly turnStartDeferred = createDeferred<unknown>();
+  private turnStartCount = 0;
 
   constructor(
     private readonly runtimeId: string,
@@ -61,6 +62,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
               hidden: false,
               supportedReasoningEfforts: [
                 { reasoningEffort: "medium", description: "Balanced reasoning" },
+                { reasoningEffort: "high", description: "Deep reasoning" },
               ],
               defaultReasoningEffort: {
                 reasoningEffort: "medium",
@@ -92,7 +94,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           startedAt: "2026-05-07T00:00:00.000Z",
         } as Response;
       }
-      case "turn/start":
+      case "turn/start": {
         if (
           !Array.isArray((params as { input?: unknown })?.input) ||
           (params as { input: Array<{ type?: unknown }> }).input.some(
@@ -101,7 +103,13 @@ export class RecordingTransport implements CodexJsonRpcTransport {
         ) {
           throw new Error("Invalid request: missing field `type`");
         }
-        return (await this.turnStartDeferred.promise) as Response;
+        const deferred = await this.turnStartDeferred.promise;
+        if (typeof deferred === "object" && deferred !== null && "turn" in deferred) {
+          return deferred as Response;
+        }
+        this.turnStartCount += 1;
+        return { turn: { id: `turn-${this.turnStartCount}`, status: "completed" } } as Response;
+      }
       case "turn/steer":
         return { turnId: "turn-steered" } as Response;
       case "thread/read":

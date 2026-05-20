@@ -102,6 +102,31 @@ const CATALOG_WITHOUT_PROFILES: AgentModelCatalog = {
   profiles: [],
 };
 
+const CATALOG_WITH_TRANSPORT_MODEL_IDS: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "gpt-5",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "gpt-5",
+      modelName: "GPT-5",
+      variants: ["medium", "high"],
+    },
+    {
+      id: "claude-sonnet",
+      providerId: "anthropic",
+      providerName: "Anthropic",
+      modelId: "claude-sonnet",
+      modelName: "Claude Sonnet",
+      variants: ["default"],
+    },
+  ],
+  defaultModelsByProvider: {
+    openai: "gpt-5",
+  },
+};
+
 const EMPTY_CATALOG: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [],
@@ -764,6 +789,42 @@ describe("useAgentStudioChatComposer", () => {
         modelId: "gpt-5",
         variant: "high",
         profileId: "build-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("updates active session model when catalog ids differ from provider model option values", async () => {
+    const updateAgentSessionModel = mock(() => {});
+    const activeSession = createActiveSession({
+      modelCatalog: CATALOG_WITH_TRANSPORT_MODEL_IDS,
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "medium",
+      },
+    });
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+        loadCatalog: async () => CATALOG_WITH_TRANSPORT_MODEL_IDS,
+        updateAgentSessionModel,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.run(() => {
+        harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
+      });
+
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(activeSession.externalSessionId, {
+        runtimeKind: "opencode",
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+        variant: "default",
       });
     } finally {
       await harness.unmount();

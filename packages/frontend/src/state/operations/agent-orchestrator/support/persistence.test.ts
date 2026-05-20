@@ -239,60 +239,53 @@ describe("agent-orchestrator/support/persistence", () => {
   });
 
   test("extracts latest final assistant context usage from hydrated history", () => {
-    const contextUsage = historyToSessionContextUsage(
-      [
-        {
-          messageId: "m-assistant-1",
-          role: "assistant",
-          timestamp: "2026-02-22T08:00:02.000Z",
-          text: "Working",
-          totalTokens: 50,
-          model: {
-            providerId: "openai",
-            modelId: "gpt-5",
-            profileId: "Ares",
-            variant: "high",
-          },
-          parts: [
-            {
-              kind: "step",
-              messageId: "m-assistant-1",
-              partId: "p-step-intermediate",
-              phase: "finish",
-              reason: "length",
-            },
-          ],
-        },
-        {
-          messageId: "m-assistant-2",
-          role: "assistant",
-          timestamp: "2026-02-22T08:00:05.000Z",
-          text: "Done",
-          totalTokens: 123,
-          contextWindow: 1_000,
-          model: {
-            providerId: "anthropic",
-            modelId: "claude-3-7-sonnet",
-            profileId: "Hephaestus",
-            variant: "max",
-          },
-          parts: [
-            {
-              kind: "step",
-              messageId: "m-assistant-2",
-              partId: "p-step-finish",
-              phase: "finish",
-              reason: "stop",
-            },
-          ],
-        },
-      ],
+    const contextUsage = historyToSessionContextUsage([
       {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
+        messageId: "m-assistant-1",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        text: "Working",
+        totalTokens: 50,
+        model: {
+          providerId: "openai",
+          modelId: "gpt-5",
+          profileId: "Ares",
+          variant: "high",
+        },
+        parts: [
+          {
+            kind: "step",
+            messageId: "m-assistant-1",
+            partId: "p-step-intermediate",
+            phase: "finish",
+            reason: "length",
+          },
+        ],
       },
-    );
+      {
+        messageId: "m-assistant-2",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        text: "Done",
+        totalTokens: 123,
+        contextWindow: 1_000,
+        model: {
+          providerId: "anthropic",
+          modelId: "claude-3-7-sonnet",
+          profileId: "Hephaestus",
+          variant: "max",
+        },
+        parts: [
+          {
+            kind: "step",
+            messageId: "m-assistant-2",
+            partId: "p-step-finish",
+            phase: "finish",
+            reason: "stop",
+          },
+        ],
+      },
+    ]);
 
     expect(contextUsage).toEqual({
       totalTokens: 123,
@@ -301,6 +294,33 @@ describe("agent-orchestrator/support/persistence", () => {
       modelId: "claude-3-7-sonnet",
       profileId: "Hephaestus",
       variant: "max",
+    });
+  });
+
+  test("does not invent hydrated context usage model metadata from the selected session model", () => {
+    const contextUsage = historyToSessionContextUsage([
+      {
+        messageId: "m-assistant",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        text: "Done",
+        totalTokens: 123,
+        contextWindow: 1_000,
+        parts: [
+          {
+            kind: "step",
+            messageId: "m-assistant",
+            partId: "p-step-finish",
+            phase: "finish",
+            reason: "stop",
+          },
+        ],
+      },
+    ]);
+
+    expect(contextUsage).toEqual({
+      totalTokens: 123,
+      contextWindow: 1_000,
     });
   });
 
@@ -776,7 +796,7 @@ describe("agent-orchestrator/support/persistence", () => {
     });
   });
 
-  test("preserves session-selected agent when history model metadata is partial", () => {
+  test("preserves only explicit history model metadata when it is partial", () => {
     const messages = historyToChatMessages(
       [
         {
@@ -810,10 +830,43 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(assistant.meta.isFinal).toBe(false);
     expect(assistant.meta.providerId).toBe("anthropic");
     expect(assistant.meta.modelId).toBe("claude-3-7-sonnet");
-    expect(assistant.meta.profileId).toBe("Hephaestus");
-    expect(assistant.meta.variant).toBe("high");
+    expect(assistant.meta.profileId).toBeUndefined();
+    expect(assistant.meta.variant).toBeUndefined();
     expect(assistant.meta.totalTokens).toBeUndefined();
     expect(assistant.meta.durationMs).toBeUndefined();
+  });
+
+  test("does not invent hydrated assistant model metadata from the selected session model", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-assistant",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "Done",
+          parts: [],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: {
+          runtimeKind: "codex",
+          providerId: "codex",
+          modelId: "gpt-5.3-codex",
+          variant: "high",
+        },
+      },
+    );
+
+    const assistant = messages.find((entry) => entry.role === "assistant");
+    if (!assistant || assistant.meta?.kind !== "assistant") {
+      throw new Error("Expected assistant message with assistant meta");
+    }
+    expect(assistant.meta.isFinal).toBe(false);
+    expect(assistant.meta.providerId).toBeUndefined();
+    expect(assistant.meta.modelId).toBeUndefined();
+    expect(assistant.meta.profileId).toBeUndefined();
+    expect(assistant.meta.variant).toBeUndefined();
   });
 
   test("keeps intermediate assistant history text non-final until a step-finish exists", () => {

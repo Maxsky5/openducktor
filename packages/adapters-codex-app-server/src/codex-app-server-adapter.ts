@@ -189,9 +189,15 @@ export class CodexAppServerAdapter
   private readonly syntheticUserMessageTextsByThreadId = new Map<string, string[]>();
   private readonly completedAgentMessagesByTurnKey = new Map<
     string,
-    { session: CodexSessionState; item: Record<string, unknown>; timestamp: string }
+    {
+      session: CodexSessionState;
+      item: Record<string, unknown>;
+      timestamp: string;
+      model?: AgentModelSelection;
+    }
   >();
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
+  private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
   private readonly runtimeEventSubscriptionsByRuntimeId = new Map<string, CodexLiveEventPump>();
   private readonly eventBacklogBySessionId = new Map<string, AgentEvent[]>();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
@@ -391,6 +397,28 @@ export class CodexAppServerAdapter
     }
   }
 
+  private bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean {
+    if (activeTurn.turnId && activeTurn.turnId !== turnId) {
+      return false;
+    }
+
+    const didBind = !activeTurn.turnId;
+    activeTurn.turnId = turnId;
+    this.modelByTurnKey.set(codexTurnKey(activeTurn.session.threadId, turnId), activeTurn.model);
+    return didBind;
+  }
+
+  private flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void {
+    void this.flushQueuedUserMessages(activeTurn).catch((error) => {
+      this.emitSessionEvent(activeTurn.session.threadId, {
+        type: "session_error",
+        externalSessionId: activeTurn.session.threadId,
+        timestamp: new Date().toISOString(),
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
   private async startTurnForSession(
     externalSessionId: string,
     parts: import("@openducktor/core").AgentUserMessagePart[],
@@ -423,6 +451,7 @@ export class CodexAppServerAdapter
       this.activeTurnsBySessionId.delete(session.threadId);
     }
 
+    const model = requireModelSelection(requestedModel ?? session.model);
     let turnSettled = false;
     const handledRequestKeys = new Set<string>();
     const activeTurnState: ActiveCodexTurn = {
@@ -435,10 +464,10 @@ export class CodexAppServerAdapter
       },
       handledRequestKeys,
       queuedUserMessages: [],
+      model,
     };
     this.activeTurnsBySessionId.set(session.threadId, activeTurnState);
 
-    const model = requireModelSelection(requestedModel ?? session.model);
     const client = this.clientForRuntime(session.runtimeId);
     try {
       await this.models.validate(client, session.runtimeId, model);
@@ -458,18 +487,11 @@ export class CodexAppServerAdapter
       .then((result) => {
         const turnId = extractTurnId(result);
         if (turnId) {
-          activeTurnState.turnId = turnId;
+          this.bindActiveTurnId(activeTurnState, turnId);
         }
-        void this.flushQueuedUserMessages(activeTurnState).catch((error) => {
-          this.emitSessionEvent(session.threadId, {
-            type: "session_error",
-            externalSessionId: session.threadId,
-            timestamp: new Date().toISOString(),
-            message: error instanceof Error ? error.message : String(error),
-          });
-        });
+        this.flushQueuedUserMessagesLater(activeTurnState);
         if (!this.options.subscribeEvents && !this.options.drainNotifications) {
-          this.emitUserMessage(session, parts);
+          this.emitUserMessage(session, parts, model);
           activeTurnState.markTurnSettled();
         } else if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
           activeTurnState.markTurnSettled();
@@ -483,7 +505,7 @@ export class CodexAppServerAdapter
     activeTurnState.turnStartPromise = turnStartPromise;
 
     if (this.options.subscribeEvents) {
-      this.emitUserMessage(session, parts);
+      this.emitUserMessage(session, parts, model);
       void turnStartPromise.catch((error) => {
         this.emitSessionEvent(session.threadId, {
           type: "session_error",
@@ -548,7 +570,12 @@ export class CodexAppServerAdapter
       input.externalSessionId,
     );
     return codexTurnItemsFromThreadRead(response)
-      .flatMap(({ item, turnId, timestamp, isFinalAgentMessage, turnTiming }, index) => {
+      .flatMap(({ item, turnId, timestamp, isFinalAgentMessage, turnTiming, model }, index) => {
+        const turnModel =
+          model ??
+          (turnId
+            ? this.modelByTurnKey.get(codexTurnKey(input.externalSessionId, turnId))
+            : undefined);
         let finalTokenUsage: CodexTokenUsageTotals | null = null;
         if (isFinalAgentMessage && turnId) {
           finalTokenUsage =
@@ -570,7 +597,7 @@ export class CodexAppServerAdapter
           },
         );
         if (canonicalEvents.length > 0) {
-          const history = projectCodexCanonicalEventsToHistory(canonicalEvents, session?.model);
+          const history = projectCodexCanonicalEventsToHistory(canonicalEvents, turnModel);
           if (isFinalAgentMessage) {
             return history.map((message) =>
               applyFinalAssistantTurnMetadata(message, turnTiming, finalTokenUsage),
@@ -581,7 +608,7 @@ export class CodexAppServerAdapter
         const message = toHistoryMessage(
           item,
           `codex-history-${index}`,
-          session?.model,
+          turnModel,
           timestamp ?? undefined,
           isFinalAgentMessage,
           turnTiming,
@@ -670,8 +697,16 @@ export class CodexAppServerAdapter
     return todos;
   }
 
-  updateSessionModel(_: UpdateAgentSessionModelInput): void {
-    unsupported("updateSessionModel");
+  updateSessionModel(input: UpdateAgentSessionModelInput): void {
+    const session = this.sessions.get(input.externalSessionId);
+    if (!session) {
+      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
+    }
+    if (input.model) {
+      session.model = input.model;
+      return;
+    }
+    delete session.model;
   }
 
   async attachSession(input: AttachAgentSessionInput): Promise<AgentSessionSummary> {
@@ -948,6 +983,11 @@ export class CodexAppServerAdapter
         this.tokenUsageByTurnKey.delete(turnKey);
       }
     }
+    for (const turnKey of [...this.modelByTurnKey.keys()]) {
+      if (turnKey.startsWith(turnKeyPrefix)) {
+        this.modelByTurnKey.delete(turnKey);
+      }
+    }
   }
 
   private ensureRuntimeEventSubscription(runtimeId: string): void {
@@ -1202,16 +1242,12 @@ export class CodexAppServerAdapter
       const timestamp = timestampFromCodexParams(notification.params);
       const notificationTurnId = extractTurnId(notification.params);
       const activeTurn = this.activeTurnsBySessionId.get(session.threadId);
-      if (notificationTurnId && activeTurn && !activeTurn.turnId) {
-        activeTurn.turnId = notificationTurnId;
-        void this.flushQueuedUserMessages(activeTurn).catch((error) => {
-          this.emitSessionEvent(session.threadId, {
-            type: "session_error",
-            externalSessionId: session.threadId,
-            timestamp: new Date().toISOString(),
-            message: error instanceof Error ? error.message : String(error),
-          });
-        });
+      if (
+        notificationTurnId &&
+        activeTurn &&
+        this.bindActiveTurnId(activeTurn, notificationTurnId)
+      ) {
+        this.flushQueuedUserMessagesLater(activeTurn);
       }
 
       if (notification.method === "turn/started") {
@@ -1222,8 +1258,8 @@ export class CodexAppServerAdapter
         };
         const turn = isPlainObject(notification.params) ? notification.params.turn : null;
         const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
-        if (turnId && activeTurn && !activeTurn.turnId) {
-          activeTurn.turnId = turnId;
+        if (turnId && activeTurn && this.bindActiveTurnId(activeTurn, turnId)) {
+          this.flushQueuedUserMessagesLater(activeTurn);
         }
         continue;
       }
@@ -1279,7 +1315,9 @@ export class CodexAppServerAdapter
           },
         );
         if (canonicalEvents.length > 0) {
-          this.emitCanonicalEvents(canonicalEvents);
+          this.emitCanonicalEvents(
+            this.withTurnModel(canonicalEvents, session, notificationTurnId),
+          );
           continue;
         }
       }
@@ -1288,22 +1326,25 @@ export class CodexAppServerAdapter
         const turn = isPlainObject(notification.params) ? notification.params.turn : null;
         const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
         if (turnId && isPlainObject(turn) && turn.status === "completed") {
-          const bufferedAgentMessage = this.completedAgentMessagesByTurnKey.get(
-            codexTurnKey(session.threadId, turnId),
-          );
+          const turnKey = codexTurnKey(session.threadId, turnId);
+          const bufferedAgentMessage = this.completedAgentMessagesByTurnKey.get(turnKey);
           if (bufferedAgentMessage) {
             this.emitFinalAgentMessage(
               bufferedAgentMessage.session,
               bufferedAgentMessage.item,
               bufferedAgentMessage.timestamp,
-              this.tokenUsageByTurnKey.get(codexTurnKey(session.threadId, turnId)),
+              this.tokenUsageByTurnKey.get(turnKey),
+              bufferedAgentMessage.model ?? this.modelForTurn(session, turnId),
             );
-            this.completedAgentMessagesByTurnKey.delete(codexTurnKey(session.threadId, turnId));
+            this.completedAgentMessagesByTurnKey.delete(turnKey);
           }
-          this.tokenUsageByTurnKey.delete(codexTurnKey(session.threadId, turnId));
+          this.tokenUsageByTurnKey.delete(turnKey);
+          this.modelByTurnKey.delete(turnKey);
         } else if (turnId) {
-          this.completedAgentMessagesByTurnKey.delete(codexTurnKey(session.threadId, turnId));
-          this.tokenUsageByTurnKey.delete(codexTurnKey(session.threadId, turnId));
+          const turnKey = codexTurnKey(session.threadId, turnId);
+          this.completedAgentMessagesByTurnKey.delete(turnKey);
+          this.tokenUsageByTurnKey.delete(turnKey);
+          this.modelByTurnKey.delete(turnKey);
         }
         activeTurn?.markTurnSettled();
         session.liveStatus = {
@@ -1379,7 +1420,18 @@ export class CodexAppServerAdapter
     }
   }
 
-  private emitUserMessage(session: CodexSessionState, parts: AgentUserMessagePart[]): void {
+  private modelForTurn(
+    session: CodexSessionState,
+    turnId: string | null,
+  ): AgentModelSelection | undefined {
+    return turnId ? this.modelByTurnKey.get(codexTurnKey(session.threadId, turnId)) : undefined;
+  }
+
+  private emitUserMessage(
+    session: CodexSessionState,
+    parts: AgentUserMessagePart[],
+    model: AgentModelSelection | undefined,
+  ): void {
     const message = serializeAgentUserMessagePartsToText(parts);
     if (this.options.subscribeEvents) {
       const codexEchoText = codexUserInputListToText(toCodexUserInputList(parts));
@@ -1398,7 +1450,7 @@ export class CodexAppServerAdapter
       message,
       parts: toDisplayParts(parts),
       state: "read",
-      ...(session.model ? { model: session.model } : {}),
+      ...(model ? { model } : {}),
     });
   }
 
@@ -1452,6 +1504,9 @@ export class CodexAppServerAdapter
       if (this.consumeSyntheticUserMessage(session.threadId, message)) {
         return;
       }
+      const model =
+        this.modelForTurn(session, turnId) ??
+        this.activeTurnsBySessionId.get(session.threadId)?.model;
       this.emitSessionEvent(session.threadId, {
         type: "user_message",
         externalSessionId: session.threadId,
@@ -1460,7 +1515,7 @@ export class CodexAppServerAdapter
         message,
         parts: input.map(codexUserInputToDisplayPart),
         state: "read",
-        ...(session.model ? { model: session.model } : {}),
+        ...(model ? { model } : {}),
       });
       return;
     }
@@ -1488,10 +1543,12 @@ export class CodexAppServerAdapter
           const turnKey = codexTurnKey(session.threadId, turnId);
           const existing = this.completedAgentMessagesByTurnKey.get(turnKey);
           if (!existing || shouldReplaceCodexBufferedFinalAgentMessage(existing.item, item)) {
+            const model = this.modelForTurn(session, turnId);
             this.completedAgentMessagesByTurnKey.set(turnKey, {
               session,
               item,
               timestamp,
+              ...(model ? { model } : {}),
             });
           }
         }
@@ -1509,7 +1566,7 @@ export class CodexAppServerAdapter
       },
     );
     if (canonicalEvents.length > 0) {
-      this.emitCanonicalEvents(canonicalEvents);
+      this.emitCanonicalEvents(this.withTurnModel(canonicalEvents, session, turnId));
       return;
     }
 
@@ -1545,6 +1602,7 @@ export class CodexAppServerAdapter
     item: Record<string, unknown>,
     timestamp: string,
     tokenUsage?: CodexTokenUsageTotals,
+    model?: AgentModelSelection,
   ): void {
     const itemId = codexItemId(item, `codex-item-${Date.now()}`);
     const text = extractStringField(item, ["text"]);
@@ -1561,9 +1619,26 @@ export class CodexAppServerAdapter
         ...(typeof tokenUsage?.contextWindow === "number"
           ? { contextWindow: tokenUsage.contextWindow }
           : {}),
-        ...(session.model ? { model: session.model } : {}),
+        ...(model ? { model } : {}),
       });
     }
+  }
+
+  private withTurnModel(
+    events: CodexCanonicalEvent[],
+    session: CodexSessionState,
+    turnId: string | null,
+  ): CodexCanonicalEvent[] {
+    const model = this.modelForTurn(session, turnId);
+    if (!model) {
+      return events;
+    }
+    return events.map((event) => {
+      if ((event.kind === "user_message" || event.kind === "assistant_message") && !event.model) {
+        return { ...event, model };
+      }
+      return event;
+    });
   }
 
   private emitSessionEvent(externalSessionId: string, event: AgentEvent): void {
@@ -1736,9 +1811,8 @@ export class CodexAppServerAdapter
 
     const requestTurnId = extractTurnId(rawRequest.params);
     const activeTurn = this.activeTurnsBySessionId.get(session.threadId);
-    if (requestTurnId && activeTurn && !activeTurn.turnId) {
-      activeTurn.turnId = requestTurnId;
-      void this.flushQueuedUserMessages(activeTurn);
+    if (requestTurnId && activeTurn && this.bindActiveTurnId(activeTurn, requestTurnId)) {
+      this.flushQueuedUserMessagesLater(activeTurn);
     }
 
     if (rawRequest.method === CODEX_USER_INPUT_REQUEST_METHOD) {
@@ -1748,9 +1822,8 @@ export class CodexAppServerAdapter
           `Codex question request thread '${parsed.threadId}' does not match active session '${session.threadId}'.`,
         );
       }
-      if (activeTurn && !activeTurn.turnId) {
-        activeTurn.turnId = parsed.turnId;
-        void this.flushQueuedUserMessages(activeTurn);
+      if (activeTurn && this.bindActiveTurnId(activeTurn, parsed.turnId)) {
+        this.flushQueuedUserMessagesLater(activeTurn);
       }
       const questionInput = {
         requestId: parsed.request.requestId,

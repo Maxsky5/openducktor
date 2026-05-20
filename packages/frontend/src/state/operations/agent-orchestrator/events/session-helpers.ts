@@ -144,7 +144,14 @@ export const settleDraftToIdle = (
       timestamp,
       current.messages,
     );
-    const finalized = finalizeDraftAssistantMessage(current, timestamp, durationMs);
+    const model = context.turn.turnModelBySessionRef?.current[context.store.externalSessionId];
+    const finalized = finalizeDraftAssistantMessage(
+      current,
+      timestamp,
+      durationMs,
+      undefined,
+      model ?? undefined,
+    );
     shouldClear = shouldClearTurnFromCurrentState(current);
     return {
       ...finalized,

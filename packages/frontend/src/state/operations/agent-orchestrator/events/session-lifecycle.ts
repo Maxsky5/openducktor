@@ -382,14 +382,16 @@ const resolveFinalAssistantSnapshot = ({
   current,
   durationMs,
   event,
+  model,
   shouldPreserveContextUsage,
 }: {
   current: AgentSessionState;
   durationMs: number | undefined;
   event: AssistantMessageEvent;
+  model: AgentSessionState["selectedModel"] | null;
   shouldPreserveContextUsage: boolean;
 }) => {
-  const baseContextUsage = toSessionContextUsage(current, event.totalTokens, event.model);
+  const baseContextUsage = toSessionContextUsage(current, event.totalTokens, model ?? undefined);
   const nextContextUsage =
     baseContextUsage && typeof event.contextWindow === "number"
       ? { ...baseContextUsage, contextWindow: event.contextWindow }
@@ -403,7 +405,7 @@ const resolveFinalAssistantSnapshot = ({
       current,
       durationMs,
       event.totalTokens ?? resolvedContextUsage?.totalTokens,
-      event.model,
+      model ?? undefined,
     ),
   };
   if (typeof resolvedContextUsage?.contextWindow === "number") {
@@ -457,10 +459,15 @@ export const handleAssistantMessage = (
     const shouldPreserveContextUsage =
       nextContextUsageWasEstablishedForMessage(context, event.messageId) &&
       current.contextUsage !== null;
+    const model =
+      event.model ??
+      context.turn.turnModelBySessionRef?.current[context.store.externalSessionId] ??
+      null;
     const nextSnapshot = resolveFinalAssistantSnapshot({
       current,
       durationMs,
       event,
+      model,
       shouldPreserveContextUsage,
     });
     return {
@@ -743,6 +750,8 @@ export const handleSessionError = (
           event.timestamp,
           current.messages,
         ),
+        undefined,
+        context.turn.turnModelBySessionRef?.current[context.store.externalSessionId] ?? undefined,
       );
       const appendUserStoppedNotice =
         Boolean(current.stopRequestedAt) && isStopAbortSessionErrorMessage(sessionErrorMessage);
@@ -806,6 +815,8 @@ export const handleSessionFinished = (
           event.timestamp,
           current.messages,
         ),
+        undefined,
+        context.turn.turnModelBySessionRef?.current[context.store.externalSessionId] ?? undefined,
       );
       const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
       return {

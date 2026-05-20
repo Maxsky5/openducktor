@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
   type AgentSessionRecord,
   type AgentSessionState,
@@ -157,6 +158,194 @@ describe("agent-orchestrator requested history hydration", () => {
     ]);
     expect(attachCalls).toEqual([{ externalSessionId: "external-child-1" }]);
     expect(state["external-child-1"]?.status).toBe("running");
+  });
+
+  test("hydrates Codex history with per-turn model metadata instead of current selection", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[externalSessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [externalSessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      queryClient,
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter: createAdapter({
+        loadSessionHistory: async () => [
+          {
+            messageId: "turn-1-user",
+            role: "user",
+            state: "read",
+            timestamp: "2026-02-22T08:00:00.000Z",
+            text: "Use low reasoning",
+            displayParts: [{ kind: "text", text: "Use low reasoning" }],
+            model: {
+              providerId: "codex",
+              modelId: "gpt-5.3-codex",
+              variant: "low",
+            },
+            parts: [],
+          },
+          {
+            messageId: "turn-1-assistant",
+            role: "assistant",
+            timestamp: "2026-02-22T08:00:02.000Z",
+            text: "Low response",
+            totalTokens: 25,
+            contextWindow: 128_000,
+            model: {
+              providerId: "codex",
+              modelId: "gpt-5.3-codex",
+              variant: "low",
+            },
+            parts: [
+              {
+                kind: "step",
+                messageId: "turn-1-assistant",
+                partId: "turn-1-finish",
+                phase: "finish",
+                reason: "stop",
+              },
+            ],
+          },
+          {
+            messageId: "turn-2-user",
+            role: "user",
+            state: "read",
+            timestamp: "2026-02-22T08:01:00.000Z",
+            text: "Use high reasoning",
+            displayParts: [{ kind: "text", text: "Use high reasoning" }],
+            model: {
+              providerId: "codex",
+              modelId: "gpt-5.3-codex",
+              variant: "high",
+            },
+            parts: [],
+          },
+          {
+            messageId: "turn-2-assistant",
+            role: "assistant",
+            timestamp: "2026-02-22T08:01:03.000Z",
+            text: "High response",
+            totalTokens: 50,
+            contextWindow: 128_000,
+            model: {
+              providerId: "codex",
+              modelId: "gpt-5.3-codex",
+              variant: "high",
+            },
+            parts: [
+              {
+                kind: "step",
+                messageId: "turn-2-assistant",
+                partId: "turn-2-finish",
+                phase: "finish",
+                reason: "stop",
+              },
+            ],
+          },
+        ],
+      }),
+      repoEpochRef: { current: 2 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [createTaskFixture()] },
+      updateSession,
+      loadRepoPromptOverrides: async () => ({}),
+    });
+    const preloadedRuntimeLists = new Map<"codex", RuntimeInstanceSummary[]>([
+      [
+        "codex",
+        [
+          {
+            kind: "codex",
+            runtimeId: "runtime-codex",
+            repoPath: "/tmp/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/tmp/repo",
+            runtimeRoute: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:1430",
+            },
+            startedAt: "2026-02-22T08:00:00.000Z",
+            descriptor: CODEX_RUNTIME_DESCRIPTOR,
+          },
+        ],
+      ],
+    ]);
+
+    await loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetExternalSessionId: "external-codex-1",
+      historyPolicy: "requested_only",
+      preloadedRuntimeLists,
+      persistedRecords: [
+        persistedSessionRecord({
+          runtimeKind: "codex",
+          externalSessionId: "external-codex-1",
+          taskId: "task-1",
+          role: "build",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          workingDirectory: "/tmp/repo",
+          selectedModel: {
+            runtimeKind: "codex",
+            providerId: "codex",
+            modelId: "gpt-5.3-codex",
+            variant: "medium",
+          },
+        }),
+      ],
+    });
+
+    const session = getSession(state, "external-codex-1");
+    const assistantMessages = sessionMessagesToArray(session).filter(
+      (message) => message.role === "assistant",
+    );
+
+    expect(assistantMessages.map((message) => message.content)).toEqual([
+      "Low response",
+      "High response",
+    ]);
+    expect(assistantMessages.map((message) => message.meta?.kind)).toEqual([
+      "assistant",
+      "assistant",
+    ]);
+    expect(
+      assistantMessages.map((message) =>
+        message.meta?.kind === "assistant" ? message.meta.variant : undefined,
+      ),
+    ).toEqual(["low", "high"]);
+    expect(session.contextUsage).toMatchObject({
+      totalTokens: 50,
+      providerId: "codex",
+      modelId: "gpt-5.3-codex",
+      variant: "high",
+    });
   });
 
   test("uses the resolved working directory for requested-history live lookups and state updates", async () => {

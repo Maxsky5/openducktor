@@ -1774,10 +1774,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             kind: "assistant",
             agentRole: "build",
             isFinal: false,
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "default",
-            profileId: "build",
           },
         },
       ]);

@@ -12,6 +12,7 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
+import { createAssistantMessageMeta } from "./assistant-meta";
 import {
   mergeTurnActivityTimestamp,
   readAssistantActivityStartedAtMsFromMessages,
@@ -123,30 +124,6 @@ export const fromPersistedSessionRecord = (
     },
     repoPath,
   );
-};
-
-const assistantMessageMeta = (
-  role: AgentRole | null,
-  selectedModel: AgentModelSelection | null,
-  messageModel: AgentModelSelection | undefined,
-  isFinal: boolean,
-  durationMs: number | undefined,
-  totalTokens: number | undefined,
-  contextWindow: number | undefined,
-) => {
-  const effectiveModel = mergeModelSelection(selectedModel, messageModel);
-  return {
-    kind: "assistant",
-    ...(role ? { agentRole: role } : {}),
-    isFinal,
-    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
-    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
-    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
-    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
-    ...(isFinal && typeof durationMs === "number" && durationMs > 0 ? { durationMs } : {}),
-    ...(isFinal && typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
-    ...(isFinal && typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : {}),
-  } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>;
 };
 
 const isFinalAssistantHistoryMessage = (message: AgentSessionHistoryMessage): boolean => {
@@ -425,15 +402,14 @@ export const historyToChatMessages = (
           : undefined;
       let meta: AgentChatMessage["meta"] | undefined;
       if (message.role === "assistant") {
-        meta = assistantMessageMeta(
-          sessionContext.role,
-          sessionContext.selectedModel,
-          message.model,
-          isFinalAssistantMessage,
-          isFinalAssistantMessage ? assistantDurationMs : undefined,
-          isFinalAssistantMessage ? message.totalTokens : undefined,
-          isFinalAssistantMessage ? message.contextWindow : undefined,
-        );
+        meta = createAssistantMessageMeta({
+          role: sessionContext.role,
+          model: message.model,
+          isFinal: isFinalAssistantMessage,
+          durationMs: isFinalAssistantMessage ? assistantDurationMs : undefined,
+          totalTokens: isFinalAssistantMessage ? message.totalTokens : undefined,
+          contextWindow: isFinalAssistantMessage ? message.contextWindow : undefined,
+        });
       } else if (message.role === "user") {
         meta = userMessageMeta(message.model, message.state, userDisplayParts);
       } else if (message.role === "system" && message.notice) {
@@ -472,7 +448,6 @@ export const historyToChatMessages = (
 
 export const historyToSessionContextUsage = (
   history: AgentSessionHistoryMessage[],
-  selectedModel: AgentModelSelection | null,
 ): AgentSessionContextUsage | null => {
   for (let index = history.length - 1; index >= 0; index -= 1) {
     const message = history[index];
@@ -486,7 +461,7 @@ export const historyToSessionContextUsage = (
       continue;
     }
 
-    const effectiveModel = mergeModelSelection(selectedModel, message.model);
+    const effectiveModel = mergeModelSelection(null, message.model);
     return {
       totalTokens: message.totalTokens,
       ...(typeof message.contextWindow === "number"
