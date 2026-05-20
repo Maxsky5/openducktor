@@ -48,7 +48,8 @@ struct FailedRepoRuntimeMcpHealthInput {
     mcp_failure_kind: RepoRuntimeStartupFailureKind,
     mcp_server_status: Option<String>,
     available_tool_ids: Vec<String>,
-    progress: RuntimeHealthProgress,
+    progress_stage: RuntimeHealthWorkflowStage,
+    progress_source: RuntimeHealthProgress,
 }
 
 fn repo_runtime_is_within_mcp_startup_grace_window(
