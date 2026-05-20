@@ -48,6 +48,8 @@ type SessionStartModalConfirmPayload = Exclude<
   boolean | undefined
 >;
 
+type SessionStartDecisionInput = Omit<SessionStartModalConfirmPayload, "runInBackground">;
+
 type SessionStartDecisionRequestContext = Pick<
   SessionStartModalRunRequest,
   "role" | "launchActionId" | "taskId"
@@ -67,7 +69,7 @@ type PendingModalRun = {
 
 const requireSelectedModel = (
   selection: AgentModelSelection | null,
-  request: Pick<SessionStartModalRunRequest, "role" | "launchActionId" | "taskId">,
+  request: SessionStartDecisionRequestContext,
 ): AgentModelSelection => {
   if (selection) {
     return selection;
@@ -80,7 +82,7 @@ const requireSelectedModel = (
 
 const requireSourceSessionId = (
   sourceExternalSessionId: string | null,
-  request: Pick<SessionStartModalRunRequest, "role" | "launchActionId" | "taskId">,
+  request: SessionStartDecisionRequestContext,
 ): string => {
   if (sourceExternalSessionId) {
     return sourceExternalSessionId;
@@ -96,7 +98,7 @@ export const buildSessionStartModalDecision = ({
   requestContext,
   selectedModel,
 }: {
-  input: SessionStartModalConfirmPayload;
+  input: SessionStartDecisionInput;
   requestContext: SessionStartDecisionRequestContext;
   selectedModel: AgentModelSelection | null;
 }): SessionStartModalDecision => {

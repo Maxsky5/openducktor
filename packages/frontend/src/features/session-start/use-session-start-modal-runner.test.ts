@@ -41,7 +41,6 @@ describe("buildSessionStartModalDecision", () => {
     expect(
       buildSessionStartModalDecision({
         input: {
-          runInBackground: false,
           startMode: "fresh",
           sourceExternalSessionId: null,
         },
@@ -58,7 +57,6 @@ describe("buildSessionStartModalDecision", () => {
     expect(
       buildSessionStartModalDecision({
         input: {
-          runInBackground: false,
           startMode: "reuse",
           sourceExternalSessionId: "session-1",
           targetBranch: "refs/remotes/origin/feature/session-start",
@@ -80,7 +78,6 @@ describe("buildSessionStartModalDecision", () => {
     expect(
       buildSessionStartModalDecision({
         input: {
-          runInBackground: true,
           startMode: "fork",
           sourceExternalSessionId: "session-2",
           targetBranch: "refs/heads/local-review",
@@ -102,7 +99,6 @@ describe("buildSessionStartModalDecision", () => {
     expect(() =>
       buildSessionStartModalDecision({
         input: {
-          runInBackground: false,
           startMode: "fresh",
           sourceExternalSessionId: null,
         },
@@ -116,7 +112,6 @@ describe("buildSessionStartModalDecision", () => {
     expect(() =>
       buildSessionStartModalDecision({
         input: {
-          runInBackground: false,
           startMode: "reuse",
           sourceExternalSessionId: null,
         },
@@ -132,7 +127,6 @@ describe("buildSessionStartModalDecision", () => {
     expect(() =>
       buildSessionStartModalDecision({
         input: {
-          runInBackground: false,
           startMode: "fresh",
           sourceExternalSessionId: null,
           targetBranch: "refs/remotes/origin",
@@ -147,7 +141,6 @@ describe("buildSessionStartModalDecision", () => {
     expect(() =>
       buildSessionStartModalDecision({
         input: {
-          runInBackground: false,
           startMode: "reuse",
           sourceExternalSessionId: null,
           targetBranch: "refs/remotes/origin",
@@ -162,7 +155,6 @@ describe("buildSessionStartModalDecision", () => {
     expect(() =>
       buildSessionStartModalDecision({
         input: {
-          runInBackground: false,
           startMode: "fork",
           sourceExternalSessionId: null,
           targetBranch: "refs/remotes/origin",
