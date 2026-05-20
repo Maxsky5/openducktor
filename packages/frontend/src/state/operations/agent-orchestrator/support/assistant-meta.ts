@@ -6,6 +6,16 @@ import type {
 import { appendSessionMessage, findLastSessionMessage, updateLastSessionMessage } from "./messages";
 import { mergeModelSelection } from "./models";
 
+type AssistantMessageMetaInput = {
+  role: AgentSessionState["role"] | null;
+  model?: AgentSessionState["selectedModel"] | undefined;
+  isFinal: boolean;
+  durationMs?: number | undefined;
+  totalTokens?: number | undefined;
+  contextWindow?: number | undefined;
+  outputLimit?: number | undefined;
+};
+
 const resolveModelDescriptor = (
   session: AgentSessionState,
   model: AgentSessionState["selectedModel"] | null,
@@ -47,31 +57,51 @@ export const toSessionContextUsage = (
   };
 };
 
-export const toAssistantMessageMeta = (
-  session: AgentSessionState,
-  durationMs?: number,
-  totalTokens?: number,
-  model?: AgentSessionState["selectedModel"],
-): Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> => {
-  const effectiveModel = mergeModelSelection(session.selectedModel, model ?? undefined);
-  const selectedModelDescriptor = resolveModelDescriptor(session, effectiveModel);
+export const createAssistantMessageMeta = ({
+  role,
+  model,
+  isFinal,
+  durationMs,
+  totalTokens,
+  contextWindow,
+  outputLimit,
+}: AssistantMessageMetaInput): Extract<
+  NonNullable<AgentChatMessage["meta"]>,
+  { kind: "assistant" }
+> => {
+  const effectiveModel = mergeModelSelection(null, model ?? undefined);
   return {
     kind: "assistant",
-    isFinal: true,
-    ...(session.role ? { agentRole: session.role } : {}),
+    isFinal,
+    ...(role ? { agentRole: role } : {}),
     ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
     ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
     ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
     ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
     ...(typeof durationMs === "number" ? { durationMs } : {}),
     ...(typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
-    ...(typeof selectedModelDescriptor?.contextWindow === "number"
-      ? { contextWindow: selectedModelDescriptor.contextWindow }
-      : {}),
-    ...(typeof selectedModelDescriptor?.outputLimit === "number"
-      ? { outputLimit: selectedModelDescriptor.outputLimit }
-      : {}),
+    ...(typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : {}),
+    ...(typeof outputLimit === "number" && outputLimit > 0 ? { outputLimit } : {}),
   };
+};
+
+export const toAssistantMessageMeta = (
+  session: AgentSessionState,
+  durationMs?: number,
+  totalTokens?: number,
+  model?: AgentSessionState["selectedModel"],
+): Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> => {
+  const effectiveModel = mergeModelSelection(null, model ?? undefined);
+  const selectedModelDescriptor = resolveModelDescriptor(session, effectiveModel);
+  return createAssistantMessageMeta({
+    role: session.role,
+    isFinal: true,
+    model,
+    durationMs,
+    totalTokens,
+    contextWindow: selectedModelDescriptor?.contextWindow,
+    outputLimit: selectedModelDescriptor?.outputLimit,
+  });
 };
 
 export const finalizeDraftAssistantMessage = (

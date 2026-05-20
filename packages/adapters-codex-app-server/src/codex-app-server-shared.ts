@@ -1,3 +1,4 @@
+import type { AgentModelSelection } from "@openducktor/core";
 import type { CodexSessionState, CodexTurnStartResult, CodexUserInput } from "./types";
 
 export const unsupported = (surface: string): never => {
@@ -17,6 +18,7 @@ export type ActiveCodexTurn = {
   markTurnSettled: () => void;
   handledRequestKeys: Set<string>;
   queuedUserMessages: CodexUserInput[][];
+  model: AgentModelSelection;
   turnId?: string;
 };
 

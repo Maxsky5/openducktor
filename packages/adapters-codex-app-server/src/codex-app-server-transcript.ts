@@ -72,6 +72,7 @@ export type CodexThreadReadItem = {
   timestamp: string | null;
   isFinalAgentMessage: boolean;
   turnTiming: CodexTurnTiming | null;
+  model?: AgentModelSelection;
 };
 
 export type CodexHistoryTokenUsageFields = {
@@ -216,6 +217,7 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
   if (!Array.isArray(value.thread.turns)) {
     throw new Error("Codex thread/read response is missing thread turns.");
   }
+  const threadModelProvider = extractStringField(value.thread, ["modelProvider", "model_provider"]);
   return value.thread.turns.flatMap((turn): CodexThreadReadItem[] => {
     if (!isPlainObject(turn)) {
       return [];
@@ -231,6 +233,19 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
       (typeof startedAtSeconds === "number" && typeof completedAtSeconds === "number"
         ? Math.max(0, (completedAtSeconds - startedAtSeconds) * 1000)
         : null);
+    const modelId = extractStringField(turn, ["model", "modelId", "model_id"]);
+    const providerId =
+      extractStringField(turn, ["modelProvider", "model_provider", "providerId", "provider_id"]) ??
+      threadModelProvider ??
+      "codex";
+    const variant = extractStringField(turn, ["effort", "reasoningEffort", "reasoning_effort"]);
+    const model = modelId
+      ? {
+          providerId,
+          modelId,
+          ...(variant ? { variant } : {}),
+        }
+      : undefined;
     return items.map((item) => {
       const itemIsFinalAgentMessage = finalAgentMessageId !== null && item === finalAgentMessageId;
       let timestampSeconds: number | null;
@@ -251,6 +266,7 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
           itemIsFinalAgentMessage && typeof durationMs === "number" && durationMs > 0
             ? { durationMs }
             : null,
+        ...(model ? { model } : {}),
       };
     });
   });

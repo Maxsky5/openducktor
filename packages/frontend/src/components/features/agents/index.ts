@@ -22,6 +22,7 @@ export type {
   AgentStudioWorkspaceSidebarModel,
 } from "./agent-studio-workspace-sidebar";
 export {
+  catalogModelOptionValue,
   toModelGroupsByProvider,
   toModelOptions,
   toPrimaryAgentOptions,

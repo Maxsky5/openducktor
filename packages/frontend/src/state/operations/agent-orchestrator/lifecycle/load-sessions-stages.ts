@@ -713,7 +713,6 @@ type HydratedRecordHistoryState = {
   sessionPresence: AgentSessionPresenceSnapshot | null;
   hydratedMessages: AgentSessionState["messages"];
   hydratedSubagentPendingInputByExternalSessionId: HydratedSubagentPendingInputOverlay;
-  selectedModel: ReturnType<typeof normalizePersistedSelection>;
 };
 
 const shouldPreserveStartingStatusFromIdlePresence = (loadMode: AgentSessionLoadMode): boolean =>
@@ -860,7 +859,6 @@ const applyHydratedRecordHistory = (
     sessionPresence,
     hydratedMessages,
     hydratedSubagentPendingInputByExternalSessionId,
-    selectedModel,
     loadMode,
   }: HydratedRecordHistoryState,
 ): AgentSessionState => {
@@ -897,7 +895,7 @@ const applyHydratedRecordHistory = (
       pendingQuestionsByChildExternalSessionId:
         hydratedSubagentPendingInputByExternalSessionId.pendingQuestionsByChildExternalSessionId,
     }),
-    contextUsage: historyToSessionContextUsage(history, selectedModel),
+    contextUsage: historyToSessionContextUsage(history),
     messages: mergeHydratedMessages(current.externalSessionId, hydratedMessages, current.messages),
   };
 
@@ -999,7 +997,6 @@ const hydrateRecordHistory = async ({
         sessionPresence,
         hydratedMessages,
         hydratedSubagentPendingInputByExternalSessionId,
-        selectedModel,
         loadMode,
       }),
     { persist: false },

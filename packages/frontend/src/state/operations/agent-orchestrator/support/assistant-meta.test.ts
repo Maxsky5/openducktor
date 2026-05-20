@@ -48,15 +48,17 @@ const sessionFixture: AgentSessionState = {
 };
 
 describe("agent-orchestrator/support/assistant-meta", () => {
-  test("builds assistant meta from session context", () => {
+  test("does not invent assistant model metadata from current session selection", () => {
     const meta = toAssistantMessageMeta(sessionFixture, 1200, 42);
     expect(meta.kind).toBe("assistant");
-    expect(meta.providerId).toBe("openai");
+    expect(meta.providerId).toBeUndefined();
+    expect(meta.modelId).toBeUndefined();
+    expect(meta.variant).toBeUndefined();
     expect(meta.durationMs).toBe(1200);
     expect(meta.totalTokens).toBe(42);
   });
 
-  test("merges partial message metadata over session selection", () => {
+  test("uses explicit message model metadata without current-session fallback fields", () => {
     const meta = toAssistantMessageMeta(
       {
         ...sessionFixture,
@@ -78,8 +80,8 @@ describe("agent-orchestrator/support/assistant-meta", () => {
 
     expect(meta.providerId).toBe("anthropic");
     expect(meta.modelId).toBe("claude-3-7-sonnet");
-    expect(meta.profileId).toBe("Hephaestus");
-    expect(meta.variant).toBe("high");
+    expect(meta.profileId).toBeUndefined();
+    expect(meta.variant).toBeUndefined();
   });
 
   test("finalizes draft assistant text into a message", () => {

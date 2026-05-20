@@ -1,6 +1,7 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
+import { catalogModelOptionValue } from "@/components/features/agents";
 
 export const useModelSelectionActions = ({
   activeExternalSessionId,
@@ -64,7 +65,9 @@ export const useModelSelectionActions = ({
       if (!selectionCatalog || !selectedRuntimeKind) {
         return;
       }
-      const model = selectionCatalog.models.find((entry) => entry.id === nextValue);
+      const model = selectionCatalog.models.find(
+        (entry) => catalogModelOptionValue(entry) === nextValue,
+      );
       if (!model) {
         return;
       }

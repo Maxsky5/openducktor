@@ -680,6 +680,8 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       kind: "assistant",
       agentRole: "spec",
       isFinal: true,
+    });
+    expect(sessionMessageAt(getSession(sessionsRef), 0)?.meta).not.toMatchObject({
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
