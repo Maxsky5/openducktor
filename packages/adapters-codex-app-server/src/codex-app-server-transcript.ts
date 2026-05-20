@@ -236,16 +236,16 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
     const modelId = extractStringField(turn, ["model", "modelId", "model_id"]);
     const providerId =
       extractStringField(turn, ["modelProvider", "model_provider", "providerId", "provider_id"]) ??
-      threadModelProvider ??
-      "codex";
+      threadModelProvider;
     const variant = extractStringField(turn, ["effort", "reasoningEffort", "reasoning_effort"]);
-    const model = modelId
-      ? {
-          providerId,
-          modelId,
-          ...(variant ? { variant } : {}),
-        }
-      : undefined;
+    const model =
+      modelId && providerId
+        ? {
+            providerId,
+            modelId,
+            ...(variant ? { variant } : {}),
+          }
+        : undefined;
     return items.map((item) => {
       const itemIsFinalAgentMessage = finalAgentMessageId !== null && item === finalAgentMessageId;
       let timestampSeconds: number | null;

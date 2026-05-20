@@ -34,4 +34,30 @@ describe("Codex App Server transcript parsing", () => {
       variant: "high",
     });
   });
+
+  test("does not invent a provider when thread reads omit provider metadata", () => {
+    const items = codexTurnItemsFromThreadRead({
+      thread: {
+        turns: [
+          {
+            id: "turn-1",
+            status: "completed",
+            model: "gpt-5",
+            reasoningEffort: "high",
+            items: [
+              {
+                id: "message-1",
+                type: "agentMessage",
+                phase: "final_answer",
+                text: "Done",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.model).toBeUndefined();
+  });
 });

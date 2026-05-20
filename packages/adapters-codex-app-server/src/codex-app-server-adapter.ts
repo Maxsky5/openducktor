@@ -397,6 +397,28 @@ export class CodexAppServerAdapter
     }
   }
 
+  private bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean {
+    if (activeTurn.turnId && activeTurn.turnId !== turnId) {
+      return false;
+    }
+
+    const didBind = !activeTurn.turnId;
+    activeTurn.turnId = turnId;
+    this.modelByTurnKey.set(codexTurnKey(activeTurn.session.threadId, turnId), activeTurn.model);
+    return didBind;
+  }
+
+  private flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void {
+    void this.flushQueuedUserMessages(activeTurn).catch((error) => {
+      this.emitSessionEvent(activeTurn.session.threadId, {
+        type: "session_error",
+        externalSessionId: activeTurn.session.threadId,
+        timestamp: new Date().toISOString(),
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
   private async startTurnForSession(
     externalSessionId: string,
     parts: import("@openducktor/core").AgentUserMessagePart[],
@@ -465,17 +487,9 @@ export class CodexAppServerAdapter
       .then((result) => {
         const turnId = extractTurnId(result);
         if (turnId) {
-          activeTurnState.turnId = turnId;
-          this.modelByTurnKey.set(codexTurnKey(session.threadId, turnId), model);
+          this.bindActiveTurnId(activeTurnState, turnId);
         }
-        void this.flushQueuedUserMessages(activeTurnState).catch((error) => {
-          this.emitSessionEvent(session.threadId, {
-            type: "session_error",
-            externalSessionId: session.threadId,
-            timestamp: new Date().toISOString(),
-            message: error instanceof Error ? error.message : String(error),
-          });
-        });
+        this.flushQueuedUserMessagesLater(activeTurnState);
         if (!this.options.subscribeEvents && !this.options.drainNotifications) {
           this.emitUserMessage(session, parts, model);
           activeTurnState.markTurnSettled();
@@ -1223,16 +1237,12 @@ export class CodexAppServerAdapter
       const timestamp = timestampFromCodexParams(notification.params);
       const notificationTurnId = extractTurnId(notification.params);
       const activeTurn = this.activeTurnsBySessionId.get(session.threadId);
-      if (notificationTurnId && activeTurn && !activeTurn.turnId) {
-        activeTurn.turnId = notificationTurnId;
-        void this.flushQueuedUserMessages(activeTurn).catch((error) => {
-          this.emitSessionEvent(session.threadId, {
-            type: "session_error",
-            externalSessionId: session.threadId,
-            timestamp: new Date().toISOString(),
-            message: error instanceof Error ? error.message : String(error),
-          });
-        });
+      if (
+        notificationTurnId &&
+        activeTurn &&
+        this.bindActiveTurnId(activeTurn, notificationTurnId)
+      ) {
+        this.flushQueuedUserMessagesLater(activeTurn);
       }
 
       if (notification.method === "turn/started") {
@@ -1243,9 +1253,8 @@ export class CodexAppServerAdapter
         };
         const turn = isPlainObject(notification.params) ? notification.params.turn : null;
         const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
-        if (turnId && activeTurn && !activeTurn.turnId) {
-          activeTurn.turnId = turnId;
-          this.modelByTurnKey.set(codexTurnKey(session.threadId, turnId), activeTurn.model);
+        if (turnId && activeTurn && this.bindActiveTurnId(activeTurn, turnId)) {
+          this.flushQueuedUserMessagesLater(activeTurn);
         }
         continue;
       }
@@ -1325,9 +1334,12 @@ export class CodexAppServerAdapter
             this.completedAgentMessagesByTurnKey.delete(turnKey);
           }
           this.tokenUsageByTurnKey.delete(turnKey);
+          this.modelByTurnKey.delete(turnKey);
         } else if (turnId) {
-          this.completedAgentMessagesByTurnKey.delete(codexTurnKey(session.threadId, turnId));
-          this.tokenUsageByTurnKey.delete(codexTurnKey(session.threadId, turnId));
+          const turnKey = codexTurnKey(session.threadId, turnId);
+          this.completedAgentMessagesByTurnKey.delete(turnKey);
+          this.tokenUsageByTurnKey.delete(turnKey);
+          this.modelByTurnKey.delete(turnKey);
         }
         activeTurn?.markTurnSettled();
         session.liveStatus = {
@@ -1792,9 +1804,8 @@ export class CodexAppServerAdapter
 
     const requestTurnId = extractTurnId(rawRequest.params);
     const activeTurn = this.activeTurnsBySessionId.get(session.threadId);
-    if (requestTurnId && activeTurn && !activeTurn.turnId) {
-      activeTurn.turnId = requestTurnId;
-      void this.flushQueuedUserMessages(activeTurn);
+    if (requestTurnId && activeTurn && this.bindActiveTurnId(activeTurn, requestTurnId)) {
+      this.flushQueuedUserMessagesLater(activeTurn);
     }
 
     if (rawRequest.method === CODEX_USER_INPUT_REQUEST_METHOD) {
@@ -1804,9 +1815,8 @@ export class CodexAppServerAdapter
           `Codex question request thread '${parsed.threadId}' does not match active session '${session.threadId}'.`,
         );
       }
-      if (activeTurn && !activeTurn.turnId) {
-        activeTurn.turnId = parsed.turnId;
-        void this.flushQueuedUserMessages(activeTurn);
+      if (activeTurn && this.bindActiveTurnId(activeTurn, parsed.turnId)) {
+        this.flushQueuedUserMessagesLater(activeTurn);
       }
       const questionInput = {
         requestId: parsed.request.requestId,

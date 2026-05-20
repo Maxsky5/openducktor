@@ -458,6 +458,83 @@ describe("CodexAppServerAdapter streaming", () => {
     );
   });
 
+  test("preserves turn model when item notifications reveal the turn id before turn started", async () => {
+    const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
+    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    adapter.updateSessionModel({
+      externalSessionId: "thread/start-runtime-ensure",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
+    });
+
+    const events: unknown[] = [];
+    adapter.subscribeEvents("thread/start-runtime-ensure", (event) => events.push(event));
+    drainNotifications.mockImplementationOnce(async () => {
+      setTimeout(() => {
+        transports.get("runtime-ensure")?.turnStartDeferred.resolve({
+          turn: { id: "turn-notification-first", status: "completed" },
+        });
+      }, 0);
+      return [
+        {
+          method: "item/completed",
+          params: {
+            threadId: "thread/start-runtime-ensure",
+            turnId: "turn-notification-first",
+            item: {
+              type: "agentMessage",
+              id: "agent-notification-first",
+              phase: "final_answer",
+              text: "Done with low reasoning.",
+            },
+          },
+        },
+        {
+          method: "turn/started",
+          params: {
+            threadId: "thread/start-runtime-ensure",
+            turn: { id: "turn-notification-first" },
+          },
+        },
+        {
+          method: "turn/completed",
+          params: {
+            threadId: "thread/start-runtime-ensure",
+            turn: { id: "turn-notification-first", status: "completed" },
+          },
+        },
+      ];
+    });
+
+    await adapter.sendUserMessage({
+      externalSessionId: "thread/start-runtime-ensure",
+      parts: [{ kind: "text", text: "Use shallow reasoning" }],
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const assistantMessage = events.find(
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        "type" in event &&
+        event.type === "assistant_message",
+    );
+    expect(assistantMessage).toMatchObject({
+      type: "assistant_message",
+      message: "Done with low reasoning.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+  });
+
   test("ignores notifications for other Codex threads", async () => {
     const drainNotifications = mock(
       async (_runtimeId: string) =>
