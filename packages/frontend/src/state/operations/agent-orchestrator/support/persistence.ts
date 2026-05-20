@@ -20,6 +20,7 @@ import {
   resolveAssistantTurnDurationMs,
 } from "./assistant-turn-duration";
 import { toReasoningMessageId, toToolMessageId } from "./chat-message-ids";
+import { isFinalAssistantHistoryMessage } from "./history-finality";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import { isWorkflowAgentSession } from "./session-purpose";
 import {
@@ -123,16 +124,6 @@ export const fromPersistedSessionRecord = (
       isLoadingModelCatalog: false,
     },
     repoPath,
-  );
-};
-
-const isFinalAssistantHistoryMessage = (message: AgentSessionHistoryMessage): boolean => {
-  if (message.role !== "assistant") {
-    return false;
-  }
-
-  return message.parts.some(
-    (part) => part.kind === "step" && part.phase === "finish" && part.reason === "stop",
   );
 };
 

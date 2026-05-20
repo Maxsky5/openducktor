@@ -19,6 +19,10 @@ import {
 } from "../support/messages";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import {
+  settlePendingOutboundSendFields,
+  shouldSettlePendingOutboundSendFromHydratedHistory,
+} from "../support/pending-outbound-send";
+import {
   fromPersistedSessionRecord,
   historyToChatMessages,
   historyToSessionContextUsage,
@@ -872,14 +876,29 @@ const applyHydratedRecordHistory = (
     : current;
   const liveSessionTitle =
     sessionPresence?.presence === "runtime" ? sessionPresence.title : undefined;
+  const shouldSettlePendingOutboundSend = shouldSettlePendingOutboundSendFromHydratedHistory(
+    current,
+    history,
+    sessionPresence,
+  );
+  const nextStatus: AgentSessionState["status"] = shouldSettlePendingOutboundSend
+    ? "idle"
+    : sessionWithLivePresence.status;
+  const pendingOutboundSendFields =
+    nextStatus === "running"
+      ? {
+          pendingUserMessageStartedAt: sessionWithLivePresence.pendingUserMessageStartedAt,
+        }
+      : settlePendingOutboundSendFields();
   const nextSession: AgentSessionState = {
     ...sessionWithLivePresence,
-    status: sessionWithLivePresence.status,
+    status: nextStatus,
     runtimeKind: runtimeResolution.runtimeRef.runtimeKind,
     workingDirectory: runtimeResolution.workingDirectory,
     promptOverrides,
     historyHydrationState: "hydrated",
     runtimeRecoveryState: current.runtimeRecoveryState ?? "idle",
+    ...pendingOutboundSendFields,
     todos: todos.length > 0 ? todos : sessionWithLivePresence.todos,
     subagentPendingApprovalsByExternalSessionId: mergeSubagentPendingApprovalOverlay({
       current: current.subagentPendingApprovalsByExternalSessionId,
