@@ -160,6 +160,20 @@ describe("buildSessionStartModalDecision", () => {
           targetBranch: "refs/remotes/origin",
         },
         requestContext: REQUEST_CONTEXT,
+        selectedModel: null,
+      }),
+    ).toThrow(
+      "Starting a build build_pull_request_generation session for TASK-1 requires an explicit model selection.",
+    );
+
+    expect(() =>
+      buildSessionStartModalDecision({
+        input: {
+          startMode: "fork",
+          sourceExternalSessionId: null,
+          targetBranch: "refs/remotes/origin",
+        },
+        requestContext: REQUEST_CONTEXT,
         selectedModel: SELECTED_MODEL,
       }),
     ).toThrow(
