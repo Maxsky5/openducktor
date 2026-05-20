@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
+import {
+  ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
+  ODT_TOOL_SCHEMAS,
+  ODT_WORKSPACE_SCOPED_TOOL_NAMES,
+} from "./lib";
 
 export type RegisteredToolName = keyof typeof ODT_TOOL_SCHEMAS;
 
@@ -13,15 +17,34 @@ const removeWorkspaceId = (jsonSchema: Record<string, unknown>): Record<string, 
   return { ...jsonSchema, properties };
 };
 
+const withObjectProperties = (jsonSchema: Record<string, unknown>): Record<string, unknown> => {
+  if (jsonSchema.properties !== undefined) {
+    return jsonSchema;
+  }
+
+  return {
+    ...jsonSchema,
+    properties: {},
+  };
+};
+
 export const getListedToolInputSchema = (
   toolName: RegisteredToolName,
   options: { hideWorkspaceId: boolean },
 ): Record<string, unknown> => {
-  const jsonSchema = z.toJSONSchema(ODT_TOOL_SCHEMAS[toolName], { io: "input" });
+  const jsonSchema = withObjectProperties(
+    z.toJSONSchema(ODT_TOOL_SCHEMAS[toolName], { io: "input" }),
+  );
 
   if (options.hideWorkspaceId && WORKSPACE_SCOPED_TOOL_NAMES.has(toolName)) {
     return removeWorkspaceId(jsonSchema);
   }
 
   return jsonSchema;
+};
+
+export const getListedToolOutputSchema = (
+  toolName: RegisteredToolName,
+): Record<string, unknown> => {
+  return z.toJSONSchema(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName], { io: "output" });
 };
