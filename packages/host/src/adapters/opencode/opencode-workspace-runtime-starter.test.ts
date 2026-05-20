@@ -386,17 +386,23 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         portProbe: () => Effect.succeed(false),
         processTreeTerminator: ({ pid }) => {
           runtimePid = pid;
-          try {
-            process.kill(pid, "SIGTERM");
-          } catch {
-            // The fake terminator failure is the behavior under test; process
-            // cleanup is guaranteed by the finally block below.
-          }
-          return Effect.fail(
-            new HostOperationError({
-              operation: "test.processTreeTerminator",
-              message: "process tree cleanup failed",
-            }),
+          return Effect.promise(async () => {
+            try {
+              process.kill(pid, "SIGTERM");
+              await waitFor(() => !processIsAlive(pid), 2_000);
+            } catch {
+              // The fake terminator failure is the behavior under test; process
+              // cleanup is guaranteed by the finally block below.
+            }
+          }).pipe(
+            Effect.zipRight(
+              Effect.fail(
+                new HostOperationError({
+                  operation: "test.processTreeTerminator",
+                  message: "process tree cleanup failed",
+                }),
+              ),
+            ),
           );
         },
       });
