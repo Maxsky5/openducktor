@@ -305,9 +305,11 @@ export type AgentStreamPart =
       partId: string;
       callId: string;
       tool: string;
+      toolType: AgentToolType;
       status: "pending" | "running" | "completed" | "error";
       preview?: string;
       title?: string;
+      displayLabel?: string;
       input?: Record<string, unknown>;
       output?: string;
       error?: string;
@@ -340,6 +342,18 @@ export type AgentStreamPart =
       startedAtMs?: number;
       endedAtMs?: number;
     };
+
+export type AgentToolType =
+  | "bash"
+  | "read"
+  | "list"
+  | "search"
+  | "web"
+  | "todo"
+  | "file_edit"
+  | "workflow"
+  | "question"
+  | "generic";
 
 export type AgentSessionStatus =
   | {

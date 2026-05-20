@@ -334,9 +334,13 @@ const assertScheduledKanbanRefetchStaysBackground = async ({
     );
 
     let scheduledRefreshPromise: Promise<void> | null = null;
-    await harness.run((value) => {
+    const scheduledRefreshRun = harness.run((value) => {
       scheduledRefreshPromise = value.operations.refreshTasksWithOptions({ trigger: "scheduled" });
     });
+    if (!scheduledRefreshPromise) {
+      throw new Error("Expected scheduled refresh promise to be created");
+    }
+    await scheduledRefreshRun;
 
     await harness.run(async () => {
       repoPullRequestSyncDeferred.resolve({ ok: true });
@@ -345,10 +349,6 @@ const assertScheduledKanbanRefetchStaysBackground = async ({
       (value) => !value.isPendingKanban && value.isFetchingKanban && kanbanTaskListCallCount >= 2,
       1000,
     );
-
-    if (!scheduledRefreshPromise) {
-      throw new Error("Expected scheduled refresh promise to be created");
-    }
 
     const latest = harness.getLatest();
     const foregroundLoading = isKanbanForegroundLoading({
@@ -846,13 +846,13 @@ describe("use-task-operations", () => {
       await harness.mount();
 
       let refreshPromise: Promise<void> | null = null;
-      await harness.run((value) => {
+      const refreshRun = harness.run((value) => {
         refreshPromise = value.refreshTaskData("/repo-a");
       });
-
       if (!refreshPromise) {
         throw new Error("refreshTaskData promise was not captured");
       }
+      await refreshRun;
 
       await harness.updateArgs({
         activeRepo: "/repo-b",
@@ -1099,19 +1099,23 @@ describe("use-task-operations", () => {
       deferRefresh = true;
 
       let scheduledRefreshPromise: Promise<void> | null = null;
-      await harness.run((value) => {
+      const scheduledRefreshRun = harness.run((value) => {
         scheduledRefreshPromise = value.refreshTasksWithOptions({ trigger: "scheduled" });
       });
+      if (!scheduledRefreshPromise) {
+        throw new Error("Expected scheduled refresh promise to be created");
+      }
+      await scheduledRefreshRun;
 
       let manualRefreshPromise: Promise<void> | null = null;
-      await harness.run((value) => {
+      const manualRefreshRun = harness.run((value) => {
         manualRefreshPromise = value.refreshTasks();
       });
-      await harness.waitFor((value) => value.isLoadingTasks);
-
-      if (!scheduledRefreshPromise || !manualRefreshPromise) {
-        throw new Error("Expected both refresh promises to be created");
+      if (!manualRefreshPromise) {
+        throw new Error("Expected manual refresh promise to be created");
       }
+      await manualRefreshRun;
+      await harness.waitFor((value) => value.isLoadingTasks);
 
       await harness.run(async () => {
         taskRefreshDeferred.reject(new Error("task read failed"));
@@ -1240,9 +1244,13 @@ describe("use-task-operations", () => {
 
       deferRefresh = true;
       let repoAManualRefresh: Promise<void> | null = null;
-      await harness.run((value) => {
+      const repoAManualRefreshRun = harness.run((value) => {
         repoAManualRefresh = value.refreshTasks();
       });
+      if (!repoAManualRefresh) {
+        throw new Error("Expected repo A manual refresh promise to be created");
+      }
+      await repoAManualRefreshRun;
       await harness.waitFor((value) => value.isLoadingTasks);
 
       deferRefresh = false;
@@ -1255,14 +1263,14 @@ describe("use-task-operations", () => {
 
       deferRefresh = true;
       let repoBManualRefresh: Promise<void> | null = null;
-      await harness.run((value) => {
+      const repoBManualRefreshRun = harness.run((value) => {
         repoBManualRefresh = value.refreshTasks();
       });
-      await harness.waitFor((value) => value.isLoadingTasks);
-
-      if (!repoAManualRefresh || !repoBManualRefresh) {
-        throw new Error("Expected both manual refresh promises to be created");
+      if (!repoBManualRefresh) {
+        throw new Error("Expected repo B manual refresh promise to be created");
       }
+      await repoBManualRefreshRun;
+      await harness.waitFor((value) => value.isLoadingTasks);
 
       await harness.run(async () => {
         repoARefreshDeferred.resolve([makeTask("A2", "open")]);
@@ -1929,6 +1937,7 @@ describe("use-task-operations", () => {
             partId: "part-1",
             callId: "call-1",
             tool: "odt_build_completed",
+            toolType: "generic" as const,
             status: "completed",
             output: "done",
             error: "",

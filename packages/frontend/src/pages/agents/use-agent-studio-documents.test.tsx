@@ -145,12 +145,14 @@ const createBaseArgs = (): HookArgs => ({
 const createCompletedToolMessage = ({
   id = "message-1",
   tool = "odt_set_spec",
+  toolType = "workflow",
   input,
   output,
   content = "",
 }: {
   id?: string;
   tool?: string;
+  toolType?: import("@openducktor/core").AgentToolType;
   input?: Record<string, unknown>;
   output?: string;
   content?: string;
@@ -164,6 +166,7 @@ const createCompletedToolMessage = ({
     partId: `part-${id}`,
     callId: `call-${id}`,
     tool,
+    toolType,
     status: "completed",
     ...(input !== undefined ? { input } : {}),
     ...(output !== undefined ? { output } : {}),
@@ -312,6 +315,7 @@ describe("useAgentStudioDocuments", () => {
       messages: [
         createCompletedToolMessage({
           tool: "odt_set_spec",
+          toolType: "workflow",
           input: { markdown: "# Updated spec" },
           output: "completed 2026-02-22T09:00:00.000Z",
         }),
@@ -353,6 +357,7 @@ describe("useAgentStudioDocuments", () => {
       messages: [
         createCompletedToolMessage({
           tool: "openducktor_odt_set_spec",
+          toolType: "workflow",
           input: { markdown: "# Updated spec from alias" },
           output: "completed 2026-02-22T09:00:00.000Z",
         }),
@@ -387,6 +392,7 @@ describe("useAgentStudioDocuments", () => {
       messages: [
         createCompletedToolMessage({
           tool: "OpenDucktor_ODT_SET_SPEC",
+          toolType: "workflow",
           input: { markdown: "# Should not apply" },
           output: "completed 2026-02-22T09:00:00.000Z",
         }),
@@ -423,6 +429,7 @@ describe("useAgentStudioDocuments", () => {
       messages: [
         createCompletedToolMessage({
           tool: "openducktor_odt_set_spec",
+          toolType: "workflow",
           input: { markdown: "# Updated spec after hydration" },
           output: "completed 2026-02-22T09:00:00.000Z",
         }),
@@ -508,6 +515,7 @@ describe("useAgentStudioDocuments", () => {
       messages: [
         createCompletedToolMessage({
           tool: "odt_set_plan",
+          toolType: "workflow",
           input: { markdown: "# Saved plan" },
           output: "done",
         }),
@@ -538,6 +546,7 @@ describe("useAgentStudioDocuments", () => {
     const toolMessage = createCompletedToolMessage({
       id: "message-dedupe",
       tool: "odt_set_plan",
+      toolType: "workflow",
       input: { markdown: "# Saved plan" },
       output: "done",
     });
@@ -576,6 +585,7 @@ describe("useAgentStudioDocuments", () => {
     const toolMessage = createCompletedToolMessage({
       id: "message-repo-hydration",
       tool: "odt_set_plan",
+      toolType: "workflow",
       input: { markdown: "# Hydrated plan" },
       output: "completed 2026-02-22T09:15:00.000Z",
     });
@@ -624,6 +634,7 @@ describe("useAgentStudioDocuments", () => {
     const toolMessage = createCompletedToolMessage({
       id: "shared-message-id",
       tool: "odt_set_spec",
+      toolType: "workflow",
       input: { markdown: "# Session update" },
       output: "completed 2026-02-22T08:45:00.000Z",
     });
@@ -664,6 +675,7 @@ describe("useAgentStudioDocuments", () => {
       ...createCompletedToolMessage({
         id: "message-transition",
         tool: "odt_set_plan",
+        toolType: "workflow",
         input: { markdown: "# Saved plan" },
         output: "done",
       }),
@@ -672,6 +684,7 @@ describe("useAgentStudioDocuments", () => {
         partId: "part-message-transition",
         callId: "call-message-transition",
         tool: "odt_set_plan",
+        toolType: "workflow" as const,
         status: "running" as const,
         input: { markdown: "# Saved plan" },
       },
@@ -679,6 +692,7 @@ describe("useAgentStudioDocuments", () => {
     const completedToolMessage = createCompletedToolMessage({
       id: "message-transition",
       tool: "odt_set_plan",
+      toolType: "workflow",
       input: { markdown: "# Saved plan" },
       output: "done",
     });

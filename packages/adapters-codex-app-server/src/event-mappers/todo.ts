@@ -16,7 +16,6 @@ import type {
 } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper, CodexLiveInput, CodexThreadItemInput } from "../codex-event-mapper";
-import { noCodexMapperState } from "../codex-event-mapper";
 import { statusFromCodexStatus } from "../codex-tool-normalizer";
 
 const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
@@ -36,6 +35,9 @@ export type CodexTodoUpdate = {
 };
 
 const TODO_MAPPER_NAME = "todo";
+type CodexTodoMapperState = {
+  livePlanUpdateSequence: number;
+};
 
 const normalizePlanTextStatus = (value: string): AgentSessionTodoItem["status"] | null => {
   const normalized = value.toLowerCase().replace(/[\s-]+/g, "_");
@@ -110,10 +112,9 @@ export const codexTodoToolInputFromPayload = (
     return null;
   }
   const explanation = extractStringField(payload, ["explanation"]);
-  const todoField = arrayFromUnknown(payload.todo).length > 0 ? "todo" : "plan";
   return {
     ...(explanation ? { explanation } : {}),
-    [todoField]: todos,
+    todos,
   };
 };
 
@@ -171,6 +172,7 @@ const todoToolCanonicalEvents = (
     invocation: {
       ...ids,
       status: "completed",
+      displayLabel: "todo",
       input,
       output: "Plan updated",
       metadata: { codexTodoUpdate: true },
@@ -257,25 +259,30 @@ const planItemEvents = (
   };
 };
 
-export const todoMapper: CodexEventMapper & {
+export const todoMapper: CodexEventMapper<CodexTodoMapperState> & {
   fromLivePlanUpdated(
     payload: Record<string, unknown>,
     ctx: CodexMappingContext,
+    state?: CodexTodoMapperState,
   ): CodexMappingResult;
   fromCompletedItem(item: Record<string, unknown>, ctx: CodexMappingContext): CodexMappingResult;
   fromThreadItemObject(item: Record<string, unknown>, ctx: CodexMappingContext): CodexMappingResult;
 } = {
   name: TODO_MAPPER_NAME,
 
-  createState: noCodexMapperState,
+  createState: (): CodexTodoMapperState => ({ livePlanUpdateSequence: 0 }),
 
-  fromLive(input: CodexLiveInput, ctx: CodexMappingContext): CodexMappingResult {
+  fromLive(
+    input: CodexLiveInput,
+    ctx: CodexMappingContext,
+    state: CodexTodoMapperState,
+  ): CodexMappingResult {
     if (
       input.kind === "notification" &&
       input.notification.method === "turn/plan/updated" &&
       isPlainObject(input.notification.params)
     ) {
-      return this.fromLivePlanUpdated(input.notification.params, ctx);
+      return this.fromLivePlanUpdated(input.notification.params, ctx, state);
     }
     if (input.kind === "item_completed") {
       return this.fromCompletedItem(input.item, ctx);
@@ -286,7 +293,7 @@ export const todoMapper: CodexEventMapper & {
   fromThreadItem(
     input: CodexThreadItemInput,
     ctx: CodexMappingContext,
-    _state: undefined,
+    _state: CodexTodoMapperState,
   ): CodexMappingResult {
     return this.fromThreadItemObject(input.item, ctx);
   },
@@ -294,6 +301,7 @@ export const todoMapper: CodexEventMapper & {
   fromLivePlanUpdated(
     payload: Record<string, unknown>,
     ctx: CodexMappingContext,
+    state?: CodexTodoMapperState,
   ): CodexMappingResult {
     const input = codexTodoToolInputFromPayload(payload);
     const update = codexTodoUpdateFromPayload(payload);
@@ -301,6 +309,12 @@ export const todoMapper: CodexEventMapper & {
       return emptyCodexMappingResult();
     }
     const turnId = ctx.turnId ?? ctx.threadId;
+    let sequence = 1;
+    if (state) {
+      state.livePlanUpdateSequence += 1;
+      sequence = state.livePlanUpdateSequence;
+    }
+    const partId = `${turnId}-update-plan-${sequence}`;
     return {
       handled: true,
       events: todoToolCanonicalEvents(
@@ -309,8 +323,8 @@ export const todoMapper: CodexEventMapper & {
         ctx,
         {
           messageId: turnId,
-          partId: `${turnId}-update-plan`,
-          callId: `${turnId}-update-plan`,
+          partId,
+          callId: partId,
           rawToolName: "update_plan",
         },
         payload,

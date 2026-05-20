@@ -25,6 +25,7 @@ describe("agent-orchestrator/support/tool-messages", () => {
           partId: "old",
           callId: "call-1",
           tool: "todowrite",
+          toolType: "todo",
           status: "running",
         },
       },

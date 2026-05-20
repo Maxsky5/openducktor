@@ -255,14 +255,16 @@ describe("CodexAppServerAdapter streaming", () => {
         part: expect.objectContaining({
           kind: "tool",
           messageId: "turn-1",
-          partId: "turn-1-update-plan",
-          callId: "turn-1-update-plan",
+          partId: "turn-1-update-plan-1",
+          callId: "turn-1-update-plan-1",
           tool: "update_plan",
+          toolType: "todo",
           title: "update_plan",
+          displayLabel: "todo",
           status: "completed",
           input: {
             explanation: "Working through the implementation.",
-            plan: [
+            todos: [
               { step: "Inspect Codex todo events", status: "completed" },
               { step: "Wire session todos", status: "in_progress" },
               { step: "Verify behavior", status: "pending" },
@@ -290,6 +292,7 @@ describe("CodexAppServerAdapter streaming", () => {
           kind: "tool",
           partId: "mcp-1",
           tool: "odt_read_task",
+          toolType: "workflow",
           title: "read_task",
           status: "completed",
           input: { taskId: "task-1" },
@@ -304,6 +307,7 @@ describe("CodexAppServerAdapter streaming", () => {
           kind: "tool",
           partId: "cmd-failed-1",
           tool: "bash",
+          toolType: "bash",
           status: "error",
           error: "exit code 1",
         }),
@@ -442,12 +446,19 @@ describe("CodexAppServerAdapter streaming", () => {
     expect(toolParts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          tool: "search",
+          tool: "exec_command",
+          toolType: "search",
           input: expect.objectContaining({ command: "rg foo src", query: "foo", path: "src" }),
         }),
-        expect.objectContaining({ tool: "apply_patch", input: { patch }, output: patch }),
         expect.objectContaining({
-          tool: "websearch",
+          tool: "apply_patch",
+          toolType: "file_edit",
+          input: { patch },
+          output: patch,
+        }),
+        expect.objectContaining({
+          tool: "webSearch",
+          toolType: "web",
           input: { query: "Codex App Server" },
           output: "web result",
           preview: "Codex App Server",

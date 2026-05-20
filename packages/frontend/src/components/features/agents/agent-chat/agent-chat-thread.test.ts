@@ -996,6 +996,7 @@ describe("AgentChatThread", () => {
           partId: "part-1",
           callId: "call-1",
           tool: "read_task",
+          toolType: "generic" as const,
           status: "completed",
           input: { taskId: "openducktor-d4li" },
           output: '{"task":{"id":"openducktor-d4li","title":"Fix chat flicker"}}',

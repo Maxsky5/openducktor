@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { toStreamPart } from "./codex-app-server-transcript";
-import { canonicalCodexToolName, normalizeCodexToolInvocation } from "./codex-tool-normalizer";
+import {
+  canonicalCodexToolName,
+  codexToolType,
+  normalizeCodexToolInvocation,
+} from "./codex-tool-normalizer";
 
 describe("Codex tool normalization", () => {
   test.each([
@@ -12,14 +16,14 @@ describe("Codex tool normalization", () => {
     ["mcp__openducktor__.odt_set_spec", undefined, "odt_set_spec"],
     ["mcp__openducktor__.odt_set_plan", undefined, "odt_set_plan"],
     ["other_server.odt_read_task", undefined, "other_server.odt_read_task"],
-    ["web.run", undefined, "websearch"],
-    ["webSearch", undefined, "websearch"],
-    ["web_search_call", undefined, "websearch"],
-    ["web_search_end", undefined, "websearch"],
-    ["functions.exec_command", { command: "rg foo src" }, "search"],
-    ["functions.exec_command", { command: "cat src/app.ts" }, "read"],
-    ["functions.exec_command", { command: "sed -n '1,20p' src/app.ts" }, "read"],
-    ["functions.exec_command", { command: "bun test" }, "bash"],
+    ["web.run", undefined, "web.run"],
+    ["webSearch", undefined, "webSearch"],
+    ["web_search_call", undefined, "web_search_call"],
+    ["web_search_end", undefined, "web_search_end"],
+    ["functions.exec_command", { command: "rg foo src" }, "exec_command"],
+    ["functions.exec_command", { command: "cat src/app.ts" }, "exec_command"],
+    ["functions.exec_command", { command: "sed -n '1,20p' src/app.ts" }, "exec_command"],
+    ["functions.exec_command", { command: "bun test" }, "exec_command"],
     ["functions.apply_patch", undefined, "apply_patch"],
     ["functions.request_user_input", undefined, "request_user_input"],
     ["functions.update_plan", undefined, "update_plan"],
@@ -27,6 +31,22 @@ describe("Codex tool normalization", () => {
     ["functions.write_stdin", undefined, null],
   ])("maps %s to %s", (rawToolName, input, expected) => {
     expect(canonicalCodexToolName(rawToolName, input)).toBe(expected);
+  });
+
+  test.each([
+    ["mcp__openducktor__.odt_read_task", undefined, "workflow"],
+    ["functions.exec_command", { command: "rg foo src" }, "search"],
+    ["functions.exec_command", { command: "cat src/app.ts" }, "read"],
+    ["functions.exec_command", { command: "bun test" }, "bash"],
+    ["functions.apply_patch", undefined, "file_edit"],
+    ["functions.request_user_input", undefined, "question"],
+    ["functions.update_plan", undefined, "todo"],
+    ["functions.todo_write", undefined, "todo"],
+    ["web.run", undefined, "web"],
+    ["custom_tool", undefined, "generic"],
+    ["functions.write_stdin", undefined, null],
+  ])("maps %s to tool type %s", (rawToolName, input, expected) => {
+    expect(codexToolType(rawToolName, input)).toBe(expected);
   });
 
   test("normalizes ODT tool display identity", () => {
@@ -43,6 +63,7 @@ describe("Codex tool normalization", () => {
     ).toEqual(
       expect.objectContaining({
         tool: "odt_set_spec",
+        toolType: "workflow",
         title: "set_spec",
         input: { taskId: "task-1" },
         output: "ok",
@@ -70,6 +91,7 @@ describe("Codex tool normalization", () => {
       expect.objectContaining({
         kind: "tool",
         tool: "request_user_input",
+        toolType: "question",
         title: "Question",
         input: { requestId: "32", questions: [{ question: "Pick a mode" }] },
         output: expect.stringContaining("answered"),
@@ -138,7 +160,8 @@ describe("Codex tool normalization", () => {
     expect(part).toEqual(
       expect.objectContaining({
         kind: "tool",
-        tool: "websearch",
+        tool: "webSearch",
+        toolType: "web",
         input: { query: "actual query" },
         preview: "actual query",
       }),
@@ -155,7 +178,8 @@ describe("Codex tool normalization", () => {
     expect(part).toEqual(
       expect.objectContaining({
         kind: "tool",
-        tool: "websearch",
+        tool: "webSearch",
+        toolType: "web",
       }),
     );
     expect(part).not.toEqual(expect.objectContaining({ input: { query: "web search" } }));

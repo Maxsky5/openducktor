@@ -69,14 +69,28 @@ describe("agent-orchestrator/support/messages", () => {
         role: "tool",
         content: "running",
         timestamp: "2026-02-22T08:00:00.000Z",
-        meta: { kind: "tool", partId: "p1", callId: "c1", tool: "bash", status: "running" },
+        meta: {
+          kind: "tool",
+          partId: "p1",
+          callId: "c1",
+          tool: "bash",
+          toolType: "bash",
+          status: "running",
+        },
       },
       {
         id: "tool-2",
         role: "tool",
         content: "running",
         timestamp: "2026-02-22T08:00:01.000Z",
-        meta: { kind: "tool", partId: "p2", callId: "c2", tool: "bash", status: "running" },
+        meta: {
+          kind: "tool",
+          partId: "p2",
+          callId: "c2",
+          tool: "bash",
+          toolType: "bash",
+          status: "running",
+        },
       },
     ];
 

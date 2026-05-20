@@ -42,7 +42,12 @@ export { stripToolPrefix };
 export const toolDisplayName = (
   tool: string,
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"],
+  displayLabel?: string,
 ): string => {
+  const trimmedDisplayLabel = displayLabel?.trim();
+  if (trimmedDisplayLabel) {
+    return trimmedDisplayLabel;
+  }
   return toOdtWorkflowToolDisplayName(tool, workflowToolAliasesByCanonical);
 };
 

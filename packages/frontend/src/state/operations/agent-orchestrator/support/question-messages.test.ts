@@ -21,6 +21,7 @@ describe("agent-orchestrator-question-messages", () => {
           partId: "p1",
           callId: "c1",
           tool: "question",
+          toolType: "question",
           status: "completed",
           metadata: {
             requestId: "question-older",
@@ -37,6 +38,7 @@ describe("agent-orchestrator-question-messages", () => {
           partId: "p2",
           callId: "c2",
           tool: "ask_question",
+          toolType: "question",
           status: "completed",
           metadata: {},
         },
@@ -79,6 +81,7 @@ describe("agent-orchestrator-question-messages", () => {
           partId: "p2",
           callId: "c2",
           tool: "question",
+          toolType: "question",
           status: "completed",
           metadata: {
             requestId: "other-request",
@@ -123,6 +126,7 @@ describe("agent-orchestrator-question-messages", () => {
           partId: "p3",
           callId: "c3",
           tool: "frequently_asked_questions_lookup",
+          toolType: "generic" as const,
           status: "completed",
           metadata: {},
         },

@@ -31,17 +31,15 @@ export const annotateQuestionToolMessage = (
       return !metadataRequestId || metadataRequestId === requestId;
     },
     (message) => {
-      const metadata = message.meta?.kind === "tool" ? (message.meta.metadata ?? {}) : {};
+      if (message.meta?.kind !== "tool") {
+        return message;
+      }
+
+      const metadata = message.meta.metadata ?? {};
       return {
         ...message,
         meta: {
-          ...(message.meta ?? {
-            kind: "tool" as const,
-            partId: "",
-            callId: "",
-            tool: "",
-            status: "completed" as const,
-          }),
+          ...message.meta,
           metadata: {
             ...metadata,
             requestId,

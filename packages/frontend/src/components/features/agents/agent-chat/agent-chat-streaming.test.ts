@@ -41,6 +41,7 @@ describe("resolveActiveStreamingAssistantMessageId", () => {
             partId: "part-1",
             callId: "call-1",
             tool: "read",
+            toolType: "generic" as const,
             status: "completed",
           },
         }),

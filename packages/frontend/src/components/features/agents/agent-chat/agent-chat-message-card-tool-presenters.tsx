@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
-import { isTodoToolName } from "@/state/operations/agent-orchestrator/agent-tool-messages";
 import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import {
   buildToolSummary,
@@ -25,7 +24,6 @@ import {
   getToolLifecyclePhase,
   hasNonEmptyInput,
   hasNonEmptyText,
-  isFileEditTool,
   type QuestionToolDetail,
   questionToolDetails,
   toolDisplayName,
@@ -47,24 +45,24 @@ export const assistantRoleIcon = (role: AgentRole): ReactElement => {
   return <ShieldCheck className="size-3" />;
 };
 
-const toolIcon = (toolName: string): ReactElement => {
-  const value = toolName.toLowerCase();
-  if (value === "read" || value === "cat" || value === "view") {
+const toolIcon = (meta: Pick<ToolMeta, "tool" | "toolType">): ReactElement => {
+  const value = meta.toolType;
+  if (value === "read") {
     return <FileText className="size-3.5" />;
   }
-  if (value === "bash" || value === "shell") {
+  if (value === "bash") {
     return <Terminal className="size-3.5" />;
   }
-  if (value === "list" || value === "ls" || value === "glob") {
+  if (value === "list") {
     return <Folder className="size-3.5" />;
   }
-  if (value === "grep" || value === "find" || value === "search") {
+  if (value === "search") {
     return <Search className="size-3.5" />;
   }
-  if (value.startsWith("web")) {
+  if (value === "web") {
     return <Globe className="size-3.5" />;
   }
-  if (isTodoToolName(value)) {
+  if (value === "todo") {
     return <ListTodo className="size-3.5" />;
   }
   return <Wrench className="size-3.5" />;
@@ -205,9 +203,9 @@ export const WorkflowToolMessage = ({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <span className={foregroundClassName}>{toolIcon(meta.tool)}</span>
+        <span className={foregroundClassName}>{toolIcon(meta)}</span>
         <p className={cn("text-[11px] font-semibold", foregroundClassName)}>
-          {toolDisplayName(meta.tool, workflowToolAliasesByCanonical)}
+          {toolDisplayName(meta.tool, workflowToolAliasesByCanonical, meta.displayLabel)}
         </p>
         {statusLabel ? (
           <span
@@ -320,10 +318,10 @@ export const RegularToolMessage = ({
               : "text-muted-foreground",
         )}
       >
-        {toolIcon(meta.tool)}
+        {toolIcon(meta)}
       </span>
       <p className="shrink-0 font-medium text-current">
-        {toolDisplayName(meta.tool, workflowToolAliasesByCanonical)}
+        {toolDisplayName(meta.tool, workflowToolAliasesByCanonical, meta.displayLabel)}
       </p>
       {summaryText.length > 0 ? (
         <p className="truncate text-muted-foreground">{summaryText}</p>
@@ -401,7 +399,7 @@ export const RegularToolMessage = ({
         </details>
       ) : null}
 
-      {isFileEditTool(meta.tool) &&
+      {meta.toolType === "file_edit" &&
         (() => {
           const allFileEditData = extractAllFileEditData(meta, sessionWorkingDirectory);
           return allFileEditData.length > 0
