@@ -7,6 +7,8 @@ import {
   verifyPackagedMcpSidecar,
 } from "./verify-mcp-sidecar-package";
 
+const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : test;
+
 const makeReleaseDirectory = async (): Promise<string> =>
   mkdtemp(join(tmpdir(), "openducktor-electron-package-sidecar-"));
 
@@ -134,7 +136,7 @@ describe("verifyPackagedMcpSidecar", () => {
     ).rejects.toThrow("expected a non-empty file");
   });
 
-  test("rejects a non-executable Linux sidecar", async () => {
+  testIfUnixModeIsAvailable("rejects a non-executable Linux sidecar", async () => {
     const releaseDirectory = await makeReleaseDirectory();
     await writePackagedSidecar({
       executable: false,

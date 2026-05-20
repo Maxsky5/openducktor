@@ -63,6 +63,8 @@ const assertPackagedSidecarFile = async (
   }
 };
 
+const canValidateUnixExecutableMode = (): boolean => process.platform !== "win32";
+
 export const verifyPackagedMcpSidecar = async ({
   arch,
   platform,
@@ -75,7 +77,7 @@ export const verifyPackagedMcpSidecar = async ({
   const sidecarPath = resolvePackagedMcpSidecarPath({ arch, platform, releaseDirectory });
   const metadata = await assertPackagedSidecarFile(sidecarPath, platform);
 
-  if (platform === "linux" && (metadata.mode & 0o111) === 0) {
+  if (platform === "linux" && canValidateUnixExecutableMode() && (metadata.mode & 0o111) === 0) {
     throw new Error(
       `Invalid Electron MCP sidecar package payload for linux: expected an executable file. Expected path: ${sidecarPath}`,
     );

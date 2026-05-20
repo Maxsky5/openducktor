@@ -5,6 +5,8 @@ import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "./openducktor-mcp-command";
 
+const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : test;
+
 const createSystemCommands = (bunAvailable = true): SystemCommandPort => ({
   requiredCommandError(command) {
     if (command === "bun" && bunAvailable) {
@@ -91,14 +93,17 @@ describe("resolveOpenDucktorMcpCommand", () => {
 
     await expectExplicitSidecarRejected(sidecar);
   });
-  test("fails fast when the explicit MCP sidecar path is not executable", async () => {
-    const root = await mkdtemp(join(tmpdir(), "odt-mcp-non-executable-sidecar-"));
-    const sidecar = join(root, "openducktor-mcp");
-    await writeFile(sidecar, "#!/bin/sh\nexit 0\n");
-    await chmod(sidecar, 0o644);
+  testIfUnixModeIsAvailable(
+    "fails fast when the explicit MCP sidecar path is not executable",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "odt-mcp-non-executable-sidecar-"));
+      const sidecar = join(root, "openducktor-mcp");
+      await writeFile(sidecar, "#!/bin/sh\nexit 0\n");
+      await chmod(sidecar, 0o644);
 
-    await expectExplicitSidecarRejected(sidecar);
-  });
+      await expectExplicitSidecarRejected(sidecar);
+    },
+  );
   test("fails fast when the explicit MCP sidecar path is a directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-directory-sidecar-"));
     const sidecar = join(root, "openducktor-mcp");
