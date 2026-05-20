@@ -195,6 +195,27 @@ mod tests {
         )
     }
 
+    fn workspace_opencode_runtime(
+        runtime_id: &str,
+        repo_path: &str,
+        port: u16,
+        started_at: &str,
+    ) -> host_domain::RuntimeInstanceSummary {
+        host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::opencode(),
+            runtime_id: runtime_id.to_string(),
+            repo_path: repo_path.to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: repo_path.to_string(),
+            runtime_route: RuntimeRoute::LocalHttp {
+                endpoint: format!("http://127.0.0.1:{port}"),
+            },
+            started_at: started_at.to_string(),
+            descriptor: builtin_opencode_runtime_descriptor(),
+        }
+    }
+
     fn insert_workspace_runtime(
         service: &AppService,
         runtime: host_domain::RuntimeInstanceSummary,
@@ -253,19 +274,12 @@ mod tests {
             runtime_http_response("200 OK", r#"{"openducktor":{"status":"connected"}}"#),
             runtime_http_response("200 OK", r#"["odt_read_task"]"#),
         ])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-ready".to_string(),
-            repo_path: "/tmp/repo-health-ready".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-ready".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-ready",
+            "/tmp/repo-health-ready",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health = service.repo_runtime_health("opencode", "/tmp/repo-health-ready")?;
@@ -304,19 +318,12 @@ mod tests {
             runtime_http_response("200 OK", r#"{"openducktor":{"status":"connected"}}"#),
             runtime_http_response("200 OK", r#"["odt_read_task"]"#),
         ])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-reconnect".to_string(),
-            repo_path: "/tmp/repo-health-reconnect".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-reconnect".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-reconnect",
+            "/tmp/repo-health-reconnect",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health = service.repo_runtime_health("opencode", "/tmp/repo-health-reconnect")?;
@@ -351,19 +358,12 @@ mod tests {
                 r#"{"error":{"message":"connect timed out"}}"#,
             ),
         ])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-reconnect-failure".to_string(),
-            repo_path: "/tmp/repo-health-reconnect-failure".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-reconnect-failure".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-reconnect-failure",
+            "/tmp/repo-health-reconnect-failure",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health =
@@ -413,19 +413,12 @@ mod tests {
             "504 Gateway Timeout",
             r#"{"error":{"message":"status probe timed out"}}"#,
         )])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-mcp-query-failure".to_string(),
-            repo_path: "/tmp/repo-health-mcp-query-failure".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-mcp-query-failure".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-mcp-query-failure",
+            "/tmp/repo-health-mcp-query-failure",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health =
@@ -473,19 +466,12 @@ mod tests {
                 r#"{"error":{"message":"status probe timed out"}}"#,
             ),
         ])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-refresh-failure".to_string(),
-            repo_path: "/tmp/repo-health-refresh-failure".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-refresh-failure".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-refresh-failure",
+            "/tmp/repo-health-refresh-failure",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health = service.repo_runtime_health("opencode", "/tmp/repo-health-refresh-failure")?;
@@ -561,19 +547,12 @@ mod tests {
             ],
             Duration::from_millis(150),
         )?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-startup-failed-mcp".to_string(),
-            repo_path: "/tmp/repo-health-startup-failed-mcp".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-startup-failed-mcp".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at,
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-startup-failed-mcp",
+            "/tmp/repo-health-startup-failed-mcp",
+            port,
+            started_at.as_str(),
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health =
@@ -622,19 +601,12 @@ mod tests {
             runtime_http_response("200 OK", r#"{"openducktor":{"status":"connected"}}"#),
             runtime_http_response("200 OK", r#"["odt_read_task"]"#),
         ])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-startup-retry-success".to_string(),
-            repo_path: "/tmp/repo-health-startup-retry-success".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-startup-retry-success".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at,
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-startup-retry-success",
+            "/tmp/repo-health-startup-retry-success",
+            port,
+            started_at.as_str(),
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health =
@@ -667,19 +639,12 @@ mod tests {
                 r#"{"error":{"message":"tool ids timed out"}}"#,
             ),
         ])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-tool-ids-failure".to_string(),
-            repo_path: "/tmp/repo-health-tool-ids-failure".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-tool-ids-failure".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-tool-ids-failure",
+            "/tmp/repo-health-tool-ids-failure",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health =

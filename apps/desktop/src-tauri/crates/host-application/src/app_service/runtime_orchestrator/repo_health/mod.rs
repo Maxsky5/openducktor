@@ -47,7 +47,6 @@ struct FailedRepoRuntimeMcpHealthInput {
     mcp_error: String,
     mcp_failure_kind: RepoRuntimeStartupFailureKind,
     mcp_server_status: Option<String>,
-    available_tool_ids: Vec<String>,
     progress: FailedRepoRuntimeMcpProgressInput,
 }
 

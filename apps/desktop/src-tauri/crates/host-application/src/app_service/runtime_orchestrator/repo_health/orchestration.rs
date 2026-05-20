@@ -28,7 +28,7 @@ impl AppService {
             mcp_error: Some(input.mcp_error),
             mcp_failure_kind: Some(input.mcp_failure_kind),
             mcp_server_status: input.mcp_server_status,
-            available_tool_ids: input.available_tool_ids,
+            available_tool_ids: Vec::new(),
             progress: Some(progress),
         })
     }
@@ -295,7 +295,6 @@ impl AppService {
                         mcp_error: mcp_message,
                         mcp_failure_kind: error.failure_kind,
                         mcp_server_status: None,
-                        available_tool_ids: Vec::new(),
                         progress: FailedRepoRuntimeMcpProgressInput {
                             stage: checking_progress.stage,
                             source: checking_progress,
@@ -371,7 +370,6 @@ impl AppService {
                                         mcp_error: refresh_message,
                                         mcp_failure_kind: error.failure_kind,
                                         mcp_server_status: mcp_status.status.clone(),
-                                        available_tool_ids: Vec::new(),
                                         progress: FailedRepoRuntimeMcpProgressInput {
                                             stage: reconnect_progress.stage,
                                             source: reconnect_progress.clone(),
@@ -402,7 +400,6 @@ impl AppService {
                             mcp_error: mcp_message,
                             mcp_failure_kind: error.failure_kind,
                             mcp_server_status: mcp_status.status.clone(),
-                            available_tool_ids: Vec::new(),
                             progress: FailedRepoRuntimeMcpProgressInput {
                                 stage: reconnect_progress.stage,
                                 source: reconnect_progress,
@@ -455,7 +452,6 @@ impl AppService {
                             mcp_error: tool_ids_message,
                             mcp_failure_kind: error.failure_kind,
                             mcp_server_status: mcp_status.status.clone(),
-                            available_tool_ids: Vec::new(),
                             progress: FailedRepoRuntimeMcpProgressInput {
                                 stage: RuntimeHealthWorkflowStage::RuntimeReady,
                                 source: checking_progress.clone(),
