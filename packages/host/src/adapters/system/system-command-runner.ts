@@ -13,6 +13,7 @@ import {
   SystemCommandPortTag,
   type SystemCommandRunResult,
 } from "../../ports/system-command-port";
+import { createProcessCommandLaunch } from "../process/process-command-launch";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 10_000;
 const WINDOWS_DEFAULT_PATHEXT = [".EXE", ".CMD", ".BAT", ".COM"];
@@ -104,40 +105,12 @@ const firstNonEmptyLine = (value: string): string | null =>
     .map((line) => line.trim())
     .find(Boolean) ?? null;
 
-const quoteWindowsCommandArgument = (value: string): string => {
-  if (value.length === 0) {
-    return `""`;
-  }
-  if (!/[\s"%^]/u.test(value)) {
-    return value;
-  }
-  return `"${value.replaceAll("^", "^^").replaceAll("%", "%%").replaceAll(`"`, `^"`)}"`;
-};
-
-const isWindowsCommandScript = (command: string, platform: NodeJS.Platform): boolean =>
-  platform === "win32" && /\.(?:cmd|bat)$/iu.test(command);
-
 export const createSystemCommandLaunch = (
   command: string,
   args: string[],
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
-): { command: string; args: string[]; windowsVerbatimArguments?: boolean } => {
-  if (!isWindowsCommandScript(command, platform)) {
-    return { command, args };
-  }
-
-  const windowsCommandShell = env.ComSpec?.trim() || process.env.ComSpec || "cmd.exe";
-  const shellOptions = ["/d", "/s", "/c"];
-  const quotedScriptInvocation = [command, ...args].map(quoteWindowsCommandArgument).join(" ");
-  const shellCommandLine = `"${quotedScriptInvocation}"`;
-
-  return {
-    command: windowsCommandShell,
-    args: [...shellOptions, shellCommandLine],
-    windowsVerbatimArguments: true,
-  };
-};
+) => createProcessCommandLaunch(command, args, env, platform);
 
 export const createSystemCommandRunner = ({
   env = process.env,

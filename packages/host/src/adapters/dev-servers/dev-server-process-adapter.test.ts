@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -30,10 +30,21 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 500): Promise<void>
   }
 };
 
-const quoteShellArg = (value: string): string =>
-  process.platform === "win32"
-    ? `"${value.replaceAll('"', '""')}"`
-    : `'${value.replaceAll("'", "'\\''")}'`;
+const quoteCommandArg = (value: string): string => {
+  if (value.length === 0) {
+    return `""`;
+  }
+  if (!/[\s'"]/u.test(value)) {
+    return value;
+  }
+  if (!value.includes(`"`)) {
+    return `"${value}"`;
+  }
+  if (!value.includes("'")) {
+    return `'${value}'`;
+  }
+  throw new Error(`Test command argument cannot be represented: ${value}`);
+};
 
 const processIsAlive = (pid: number): boolean => {
   try {
@@ -45,39 +56,58 @@ const processIsAlive = (pid: number): boolean => {
 };
 
 describe("createDevServerProcessAdapter", () => {
-  test("starts a shell command, streams output, and stops the process group", async () => {
+  test("starts a command, streams stdout and stderr, propagates env, and uses cwd with spaces", async () => {
     const outputs: string[] = [];
     const exits: unknown[] = [];
+    const root = await mkdtemp(join(tmpdir(), "odt dev server cwd "));
+    const realRoot = await realpath(root);
+    const scriptPath = join(root, "server script.mjs");
+    await writeFile(
+      scriptPath,
+      `
+process.stdout.write("stdout:" + process.cwd() + ":" + process.env.ODT_PROCESS_ENV_VALUE + ":" + process.env.ODT_START_ENV_VALUE);
+process.stderr.write("stderr:ready");
+setInterval(() => {}, 1000);
+`,
+    );
     const port = createDevServerProcessAdapter({
+      processEnv: {
+        ...process.env,
+        ODT_PROCESS_ENV_VALUE: "from-process-env",
+      },
       startGracePeriodMs: 20,
       stopTimeoutMs: 750,
     });
-    const command = [
-      quoteShellArg(process.execPath),
-      "-e",
-      quoteShellArg("process.stdout.write('ready'); setInterval(() => {}, 1000);"),
-    ].join(" ");
+    const command = [quoteCommandArg(process.execPath), quoteCommandArg(scriptPath)].join(" ");
 
-    const handle = await port.start({
-      command,
-      cwd: process.cwd(),
-      onExit: (exit) => exits.push(exit),
-      onOutput: (output) => outputs.push(output.data),
-    });
-    await waitFor(() => outputs.join("").includes("ready"));
+    try {
+      const handle = await port.start({
+        command,
+        cwd: root,
+        env: {
+          ODT_START_ENV_VALUE: "from-start-env",
+        },
+        onExit: (exit) => exits.push(exit),
+        onOutput: (output) => outputs.push(output.data),
+      });
+      await waitFor(() => outputs.join("").includes("stderr:ready"));
 
-    await handle.stop();
+      await handle.stop();
 
-    expect(handle.pid).toBeGreaterThan(0);
-    expect(outputs.join("")).toContain("ready");
-    expect(exits).toEqual([
-      expect.objectContaining({
-        pid: handle.pid,
-      }),
-    ]);
+      expect(handle.pid).toBeGreaterThan(0);
+      expect(outputs.join("")).toContain(`stdout:${realRoot}:from-process-env:from-start-env`);
+      expect(outputs.join("")).toContain("stderr:ready");
+      expect(exits).toEqual([
+        expect.objectContaining({
+          pid: handle.pid,
+        }),
+      ]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 
-  test("stops a shell command and its long-lived descendant", async () => {
+  test("stops a command and its long-lived descendant", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-dev-server-tree-"));
     const childPidPath = join(root, "child.pid");
     const readyPath = join(root, "ready");
@@ -99,7 +129,7 @@ setInterval(() => {}, 1000);
       startGracePeriodMs: 20,
       stopTimeoutMs: 1_000,
     });
-    const command = [quoteShellArg(process.execPath), quoteShellArg(parentPath)].join(" ");
+    const command = [quoteCommandArg(process.execPath), quoteCommandArg(parentPath)].join(" ");
 
     try {
       const handle = await port.start({
@@ -127,9 +157,9 @@ setInterval(() => {}, 1000);
       stopTimeoutMs: 100,
     });
     const command = [
-      quoteShellArg(process.execPath),
+      quoteCommandArg(process.execPath),
       "-e",
-      quoteShellArg("process.exit(42);"),
+      quoteCommandArg("process.exit(42);"),
     ].join(" ");
 
     await expect(
@@ -140,5 +170,60 @@ setInterval(() => {}, 1000);
         onOutput: () => {},
       }),
     ).rejects.toThrow("Dev server exited with code 42.");
+  });
+
+  test("rejects unmatched command quotes as validation errors", async () => {
+    const port = createDevServerProcessAdapter({
+      startGracePeriodMs: 20,
+      stopTimeoutMs: 100,
+    });
+
+    await expect(
+      port.start({
+        command: `node -e "console.log('ready')`,
+        cwd: process.cwd(),
+        onExit: () => {},
+        onOutput: () => {},
+      }),
+    ).rejects.toThrow("Dev server command has an unmatched quote.");
+  });
+
+  test("runs Windows cmd and bat files with paths containing spaces on native Windows", async () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+
+    const root = await mkdtemp(join(tmpdir(), "odt dev server scripts "));
+    try {
+      const scriptDir = join(root, "script dir");
+      await mkdir(scriptDir);
+      const cmd = join(scriptDir, "start cmd.cmd");
+      const bat = join(scriptDir, "start bat.bat");
+      await writeFile(cmd, "@echo off\r\necho cmd:%~1:%~2\r\nping -n 60 127.0.0.1 > nul\r\n");
+      await writeFile(bat, "@echo off\r\necho bat:%~1:%~2\r\nping -n 60 127.0.0.1 > nul\r\n");
+
+      for (const [script, expected] of [
+        [cmd, "cmd:one:two words"],
+        [bat, "bat:one:two words"],
+      ] as const) {
+        const outputs: string[] = [];
+        const port = createDevServerProcessAdapter({
+          processEnv: { ...process.env, ComSpec: process.env.ComSpec },
+          startGracePeriodMs: 100,
+          stopTimeoutMs: 1_000,
+        });
+        const handle = await port.start({
+          command: `${quoteCommandArg(script)} one ${quoteCommandArg("two words")}`,
+          cwd: root,
+          onExit: () => {},
+          onOutput: (output) => outputs.push(output.data),
+        });
+        await waitFor(() => outputs.join("").includes(expected), 1_000);
+        await handle.stop();
+        expect(outputs.join("")).toContain(expected);
+      }
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });

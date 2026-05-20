@@ -12,6 +12,10 @@ import {
   DevServerProcessStartExitError,
   type DevServerProcessStartInput,
 } from "../../ports/dev-server-process-port";
+import {
+  createProcessCommandLaunch,
+  parseProcessCommandLine,
+} from "../process/process-command-launch";
 import { shouldStartDetachedProcessGroup, terminateProcessTree } from "../process/process-tree";
 
 export type CreateDevServerProcessAdapterInput = {
@@ -40,19 +44,39 @@ export const createDevServerProcessAdapter = ({
           }),
         );
       }
+      const parsedCommand = yield* Effect.try({
+        try: () => parseProcessCommandLine(command),
+        catch: (cause) =>
+          cause instanceof HostValidationError
+            ? cause
+            : toHostOperationError(cause, "devServerProcess.parseCommand", { command }),
+      });
+      const commandEnv = { ...processEnv, ...env };
+      const launch = createProcessCommandLaunch(
+        parsedCommand.command,
+        parsedCommand.args,
+        commandEnv,
+        process.platform,
+      );
 
       const runtimeScope = yield* Scope.make();
       scope = runtimeScope;
       const child = yield* Effect.try({
         try: () =>
-          spawn(command, {
+          spawn(launch.command, launch.args, {
             cwd,
-            detached: shouldStartDetachedProcessGroup(),
-            env: { ...processEnv, ...env },
-            shell: true,
+            detached: shouldStartDetachedProcessGroup(process.platform),
+            env: commandEnv,
             stdio: ["ignore", "pipe", "pipe"],
+            windowsVerbatimArguments: launch.windowsVerbatimArguments === true,
           }),
-        catch: (cause) => toHostOperationError(cause, "devServerProcess.spawn"),
+        catch: (cause) =>
+          toHostOperationError(cause, "devServerProcess.spawn", {
+            command,
+            cwd,
+            launchCommand: launch.command,
+            launchArgs: launch.args,
+          }),
       });
       const pid = child.pid;
       if (!pid || pid <= 0) {
