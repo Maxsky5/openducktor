@@ -419,6 +419,20 @@ export type AgentEvent =
       todos: AgentSessionTodoItem[];
     }
   | {
+      type: "session_compaction_started";
+      externalSessionId: ExternalSessionId;
+      timestamp: string;
+      messageId?: RuntimeHistoryAnchor;
+      message: string;
+    }
+  | {
+      type: "session_compacted";
+      externalSessionId: ExternalSessionId;
+      timestamp: string;
+      messageId?: RuntimeHistoryAnchor;
+      message: string;
+    }
+  | {
       type: "tool_call";
       externalSessionId: ExternalSessionId;
       timestamp: string;

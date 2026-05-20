@@ -106,6 +106,13 @@ export type AgentChatMessageMeta =
       tone: "error";
       reason: "session_error";
       title: string;
+    }
+  | {
+      kind: "session_notice";
+      tone: "info";
+      reason: "session_compacted";
+      title: string;
+      compactionStatus?: "running" | "completed";
     };
 
 export type AgentChatMessage = {

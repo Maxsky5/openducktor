@@ -16,7 +16,7 @@ use anyhow::{anyhow, Context, Result};
 use host_test_support::{lock_env, EnvVarGuard};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
@@ -183,15 +183,11 @@ fn shared_dolt_windows_cleanup_uses_taskkill_tree_args() {
 
 #[test]
 fn shared_dolt_spawned_child_wait_reaps_exited_child() -> Result<()> {
-    #[cfg(windows)]
-    let mut child = Command::new("cmd")
-        .args(["/C", "exit", "/B", "0"])
-        .spawn()
-        .context("spawn exited child")?;
-
-    #[cfg(not(windows))]
-    let mut child = Command::new("sh")
-        .args(["-c", "exit 0"])
+    let mut child = Command::new(std::env::current_exe().context("resolve current test binary")?)
+        .arg("--list")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .spawn()
         .context("spawn exited child")?;
 

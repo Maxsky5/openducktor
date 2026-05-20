@@ -14,6 +14,8 @@ import {
   upsertSessionMessage,
 } from "../support/messages";
 import {
+  buildSessionCompactedNoticeMessage,
+  buildSessionCompactionStartedNoticeMessage,
   buildSessionErrorNoticeMessage,
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
@@ -657,6 +659,42 @@ export const handleSessionTodosUpdated = (
       messages: settleDanglingTodoToolMessages(current, event.timestamp),
     }),
     { persist: false },
+  );
+};
+
+export const handleSessionCompacted = (
+  context: Pick<SessionLifecycleEventContext, "store">,
+  event: Extract<SessionEvent, { type: "session_compacted" }>,
+): void => {
+  const messageId = event.messageId ?? `session-compaction:${event.externalSessionId}`;
+  context.store.updateSession(
+    context.store.externalSessionId,
+    (current) => ({
+      ...current,
+      messages: upsertSessionMessage(
+        current,
+        buildSessionCompactedNoticeMessage(event.timestamp, event.message, messageId),
+      ),
+    }),
+    { persist: true },
+  );
+};
+
+export const handleSessionCompactionStarted = (
+  context: Pick<SessionLifecycleEventContext, "store">,
+  event: Extract<SessionEvent, { type: "session_compaction_started" }>,
+): void => {
+  const messageId = event.messageId ?? `session-compaction:${event.externalSessionId}`;
+  context.store.updateSession(
+    context.store.externalSessionId,
+    (current) => ({
+      ...current,
+      messages: upsertSessionMessage(
+        current,
+        buildSessionCompactionStartedNoticeMessage(event.timestamp, event.message, messageId),
+      ),
+    }),
+    { persist: true },
   );
 };
 

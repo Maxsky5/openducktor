@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
-import { todoMapper } from "./event-mappers";
+import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
+import { compactionMapper, todoMapper } from "./event-mappers";
 
 const TODO_PAYLOAD = {
   explanation: "Tracking work",
@@ -73,5 +74,119 @@ describe("Codex todo event mapper", () => {
         }),
       );
     }
+  });
+});
+
+describe("Codex compaction event mapper", () => {
+  test("projects live context compaction starts to session events", () => {
+    const events = projectCodexCanonicalEvents(
+      compactionMapper.fromLive(
+        {
+          kind: "item_started",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
+          },
+        },
+        {
+          source: "live",
+          threadId: "thread-1",
+          timestamp: "2026-05-18T21:00:00.000Z",
+        },
+      ).events,
+    );
+
+    expect(events).toEqual([
+      {
+        type: "session_compaction_started",
+        externalSessionId: "thread-1",
+        timestamp: "2026-05-18T21:00:00.000Z",
+        messageId: "compact-live",
+        message: "Session compaction started.",
+      },
+    ]);
+  });
+
+  test("projects live context compaction items to session events", () => {
+    const events = projectCodexCanonicalEvents(
+      compactionMapper.fromLive(
+        {
+          kind: "item_completed",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
+          },
+        },
+        {
+          source: "live",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          timestamp: "2026-05-18T21:00:00.000Z",
+        },
+        undefined,
+      ).events,
+    );
+
+    expect(events).toEqual([
+      {
+        type: "session_compacted",
+        externalSessionId: "thread-1",
+        timestamp: "2026-05-18T21:00:00.000Z",
+        messageId: "compact-live",
+        message: "Session compacted.",
+      },
+    ]);
+  });
+
+  test("projects thread-read context compaction items to session notice history", () => {
+    const result = compactionMapper.fromThreadItem(
+      {
+        index: 3,
+        timestamp: "2026-05-18T21:00:00.000Z",
+        item: {
+          type: "context_compaction",
+          id: "compact-1",
+        },
+      },
+      {
+        source: "thread_read",
+        threadId: "thread-1",
+        timestamp: "2026-05-18T21:00:00.000Z",
+      },
+      undefined,
+    );
+
+    expect(projectCodexCanonicalEventsToHistory(result.events)).toEqual([
+      {
+        messageId: "compact-1",
+        role: "system",
+        timestamp: "2026-05-18T21:00:00.000Z",
+        text: "Session compacted.",
+        notice: {
+          tone: "info",
+          reason: "session_compacted",
+          title: "Compacted",
+        },
+        parts: [],
+      },
+    ]);
+  });
+
+  test("does not map unknown notifications as compaction", () => {
+    const result = compactionMapper.fromLive(
+      {
+        kind: "notification",
+        notification: {
+          method: "thread/status/changed",
+          params: { status: "thinking" },
+        },
+      },
+      {
+        source: "live",
+        threadId: "thread-1",
+      },
+    );
+
+    expect(result).toEqual({ events: [], handled: false });
   });
 });

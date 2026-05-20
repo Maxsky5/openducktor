@@ -1,6 +1,6 @@
 import type { RegisteredCodexEventMapper } from "../codex-event-mapper";
 import { emptyMapper } from "./empty";
-import { deltaMapper, lifecycleMapper, tokenUsageMapper } from "./lifecycle";
+import { compactionMapper, deltaMapper, lifecycleMapper, tokenUsageMapper } from "./lifecycle";
 import { assistantMessageMapper, userMessageMapper } from "./messages";
 import {
   collabToolMapper,
@@ -16,7 +16,7 @@ import {
 import { todoMapper } from "./todo";
 
 export { emptyMapper } from "./empty";
-export { deltaMapper, lifecycleMapper, tokenUsageMapper } from "./lifecycle";
+export { compactionMapper, deltaMapper, lifecycleMapper, tokenUsageMapper } from "./lifecycle";
 export { assistantMessageMapper, userMessageMapper } from "./messages";
 export {
   collabToolMapper,
@@ -40,6 +40,7 @@ export {
 } from "./todo";
 
 export const CODEX_EVENT_MAPPERS = [
+  compactionMapper,
   lifecycleMapper,
   tokenUsageMapper,
   deltaMapper,

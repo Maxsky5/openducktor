@@ -200,6 +200,44 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(messages).toEqual([]);
   });
 
+  test("maps compacted session history notices to chat notice messages", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "compact-1",
+          role: "system",
+          timestamp: "2026-05-18T21:00:00.000Z",
+          text: "Session compacted.",
+          notice: {
+            tone: "info",
+            reason: "session_compacted",
+            title: "Compacted",
+          },
+          parts: [],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    expect(messages).toEqual([
+      {
+        id: "compact-1",
+        role: "system",
+        content: "Session compacted.",
+        timestamp: "2026-05-18T21:00:00.000Z",
+        meta: {
+          kind: "session_notice",
+          tone: "info",
+          reason: "session_compacted",
+          title: "Compacted",
+        },
+      },
+    ]);
+  });
+
   test("extracts latest final assistant context usage from hydrated history", () => {
     const contextUsage = historyToSessionContextUsage(
       [

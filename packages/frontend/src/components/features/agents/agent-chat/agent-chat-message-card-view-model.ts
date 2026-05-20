@@ -20,6 +20,7 @@ const SESSION_NOTICE_TONE_CLASS_NAMES = {
     "text-sm my-2 rounded-md border border-cancelled-border bg-cancelled-surface px-3 py-2 text-cancelled-surface-foreground",
   error:
     "text-sm my-2 rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-destructive-surface-foreground",
+  info: "text-sm my-2 rounded-md border border-info-border bg-info-surface px-3 py-2 text-info-surface-foreground",
 } as const;
 
 type AgentChatMessageCardViewModelInput = {

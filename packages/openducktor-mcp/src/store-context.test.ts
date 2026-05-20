@@ -47,12 +47,7 @@ const clearStoreContextEnv = (): void => {
   delete process.env.ODT_HOST_URL;
   delete process.env.ODT_HOST_TOKEN;
   delete process.env.ODT_FORBID_WORKSPACE_ID_INPUT;
-  delete process.env.ODT_METADATA_NAMESPACE;
   delete process.env.OPENDUCKTOR_CONFIG_DIR;
-  delete process.env.ODT_BEADS_ATTACHMENT_DIR;
-  delete process.env.ODT_DOLT_HOST;
-  delete process.env.ODT_DOLT_PORT;
-  delete process.env.ODT_DATABASE_NAME;
 };
 
 beforeEach(() => {
@@ -203,16 +198,6 @@ describe("resolveStoreContext", () => {
     );
   });
 
-  test("rejects legacy direct Beads/Dolt startup contract", async () => {
-    process.env.ODT_WORKSPACE_ID = "repo";
-    process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
-    process.env.ODT_DOLT_HOST = "127.0.0.1";
-
-    await expect(resolveStoreContext({})).rejects.toThrow(
-      "Direct Beads/Dolt MCP startup is no longer supported",
-    );
-  });
-
   test("fails fast when the host health check fails", async () => {
     globalThis.fetch = (async (input) => {
       const url = String(input);
@@ -282,16 +267,6 @@ describe("resolveStoreContext", () => {
       hostToken: "discovery-token",
     });
     expect(observedHostTokens).toEqual(["discovery-token", "discovery-token"]);
-  });
-
-  test("rejects legacy metadata namespace configuration", async () => {
-    process.env.ODT_WORKSPACE_ID = "repo";
-    process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
-    process.env.ODT_METADATA_NAMESPACE = "legacy-namespace";
-
-    await expect(resolveStoreContext({})).rejects.toThrow(
-      "Metadata namespace is now owned by the OpenDucktor host",
-    );
   });
 
   test("fails clearly when discovery cannot find any running host", async () => {

@@ -82,6 +82,28 @@ describe("CodexAppServerAdapter streaming", () => {
           },
         },
         {
+          method: "item/started",
+          params: {
+            threadId: "thread/start-runtime-ensure",
+            turnId: "turn-1",
+            item: {
+              type: "contextCompaction",
+              id: "compact-live",
+            },
+          },
+        },
+        {
+          method: "item/completed",
+          params: {
+            threadId: "thread/start-runtime-ensure",
+            turnId: "turn-1",
+            item: {
+              type: "contextCompaction",
+              id: "compact-live",
+            },
+          },
+        },
+        {
           method: "turn/plan/updated",
           params: {
             threadId: "thread/start-runtime-ensure",
@@ -176,6 +198,23 @@ describe("CodexAppServerAdapter streaming", () => {
         contextWindow: 200_000,
       }),
     );
+    expect(events).toContainEqual({
+      type: "session_compaction_started",
+      externalSessionId: "thread/start-runtime-ensure",
+      timestamp: expect.any(String),
+      messageId: "compact-live",
+      message: "Session compaction started.",
+    });
+    expect(events).toContainEqual({
+      type: "session_compacted",
+      externalSessionId: "thread/start-runtime-ensure",
+      timestamp: expect.any(String),
+      messageId: "compact-live",
+      message: "Session compacted.",
+    });
+    expect(
+      events.filter((event) => (event as { type?: string }).type === "session_compacted"),
+    ).toHaveLength(1);
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "assistant_part",
@@ -668,6 +707,36 @@ describe("CodexAppServerAdapter streaming", () => {
         },
       },
     });
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "item/started",
+        params: {
+          threadId: "thread-saved",
+          turnId: "turn-live",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
+          },
+        },
+      },
+    });
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "item/completed",
+        params: {
+          threadId: "thread-saved",
+          turnId: "turn-live",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
+          },
+        },
+      },
+    });
     await Promise.resolve();
 
     const events: unknown[] = [];
@@ -680,6 +749,92 @@ describe("CodexAppServerAdapter streaming", () => {
         delta: "buffered text",
       }),
     );
+    expect(events).toContainEqual({
+      type: "session_compaction_started",
+      externalSessionId: "thread-saved",
+      timestamp: expect.any(String),
+      messageId: "compact-live",
+      message: "Session compaction started.",
+    });
+    expect(events).toContainEqual({
+      type: "session_compacted",
+      externalSessionId: "thread-saved",
+      timestamp: expect.any(String),
+      messageId: "compact-live",
+      message: "Session compacted.",
+    });
+    unsubscribe();
+  });
+
+  test("routes live context compaction lifecycle items", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const { adapter } = createHarness({ subscribeEvents });
+    const events: unknown[] = [];
+
+    await adapter.attachSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      externalSessionId: "thread-saved",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const unsubscribe = adapter.subscribeEvents("thread-saved", (event) => events.push(event));
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "item/started",
+        params: {
+          threadId: "thread-saved",
+          turnId: "turn-live",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
+          },
+        },
+      },
+    });
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "item/completed",
+        params: {
+          threadId: "thread-saved",
+          turnId: "turn-live",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
+          },
+        },
+      },
+    });
+    await Promise.resolve();
+
+    expect(events).toContainEqual({
+      type: "session_compaction_started",
+      externalSessionId: "thread-saved",
+      timestamp: expect.any(String),
+      messageId: "compact-live",
+      message: "Session compaction started.",
+    });
+    expect(events).toContainEqual({
+      type: "session_compacted",
+      externalSessionId: "thread-saved",
+      timestamp: expect.any(String),
+      messageId: "compact-live",
+      message: "Session compacted.",
+    });
     unsubscribe();
   });
 

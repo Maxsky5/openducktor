@@ -61,6 +61,18 @@ export type CodexCanonicalSessionIdleEvent = CodexCanonicalEventBase & {
   kind: "session_idle";
 };
 
+export type CodexCanonicalSessionCompactionStartedEvent = CodexCanonicalEventBase & {
+  kind: "session_compaction_started";
+  messageId?: string;
+  message: string;
+};
+
+export type CodexCanonicalSessionCompactedEvent = CodexCanonicalEventBase & {
+  kind: "session_compacted";
+  messageId?: string;
+  message: string;
+};
+
 export type CodexCanonicalTodoUpdateEvent = CodexCanonicalEventBase & {
   kind: "todo_update";
   todos: AgentSessionTodoItem[];
@@ -74,6 +86,8 @@ export type CodexCanonicalEvent =
   | CodexCanonicalAssistantDeltaEvent
   | CodexCanonicalSessionErrorEvent
   | CodexCanonicalSessionIdleEvent
+  | CodexCanonicalSessionCompactionStartedEvent
+  | CodexCanonicalSessionCompactedEvent
   | CodexCanonicalTodoUpdateEvent;
 
 export type CodexMappingContext = {
