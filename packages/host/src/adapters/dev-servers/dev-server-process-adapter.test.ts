@@ -56,6 +56,15 @@ const processIsAlive = (pid: number): boolean => {
   }
 };
 
+const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E | null> => {
+  const exit = await Effect.runPromiseExit(effect);
+  if (!Exit.isFailure(exit)) {
+    return null;
+  }
+  const failureOption = Chunk.head(Cause.failures(exit.cause));
+  return failureOption._tag === "Some" ? failureOption.value : null;
+};
+
 describe("createDevServerProcessAdapter", () => {
   test("starts a command, streams stdout and stderr, propagates env, and uses cwd with spaces", async () => {
     const outputs: string[] = [];
@@ -196,7 +205,7 @@ setInterval(() => {}, 1000);
       stopTimeoutMs: 100,
     });
     const command = "definitely-missing-dev-server-command-odt-wr4e --flag";
-    const exit = await Effect.runPromiseExit(
+    const failure = await firstFailure(
       port.start({
         command,
         cwd: process.cwd(),
@@ -206,12 +215,6 @@ setInterval(() => {}, 1000);
     );
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    expect(Exit.isFailure(exit)).toBe(true);
-    if (!Exit.isFailure(exit)) {
-      throw new Error("Expected dev-server start to fail.");
-    }
-    const failureOption = Chunk.head(Cause.failures(exit.cause));
-    const failure = failureOption._tag === "Some" ? failureOption.value : null;
     expect(failure).toBeInstanceOf(HostOperationError);
     expect(failure).toMatchObject({
       operation: "devServerProcess.spawn",

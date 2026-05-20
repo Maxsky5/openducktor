@@ -36,36 +36,6 @@ type DevServerLaunchFailureDetails = {
 
 type DevServerChildProcess = ReturnType<typeof spawn>;
 
-type DevServerProcessTracker = {
-  getCloseResult: () => DevServerProcessExit | null;
-  getSpawnError: () => Error | null;
-  isClosed: () => boolean;
-  waitForClose: (timeoutMs: number) => Effect.Effect<boolean>;
-};
-
-const createLaunchFailureDetails = (
-  command: string,
-  cwd: string,
-  launch: { command: string; args: string[] },
-): DevServerLaunchFailureDetails => ({
-  command,
-  cwd,
-  launchCommand: launch.command,
-  launchArgs: launch.args,
-});
-
-const toDevServerSpawnError = (
-  cause: unknown,
-  details: DevServerLaunchFailureDetails,
-): HostOperationError => toHostOperationError(cause, "devServerProcess.spawn", details);
-
-const createInvalidPidError = (details: DevServerLaunchFailureDetails): HostOperationError =>
-  new HostOperationError({
-    message: "Failed to start dev server: child process did not expose a valid pid.",
-    operation: "dev-server.start",
-    details,
-  });
-
 const trackDevServerProcess = ({
   child,
   isStarted,
@@ -78,7 +48,7 @@ const trackDevServerProcess = ({
   onExit: (exit: DevServerProcessExit) => void;
   onOutput: (output: { data: string }) => void;
   pid: number | undefined;
-}): DevServerProcessTracker => {
+}) => {
   let closeResult: DevServerProcessExit | null = null;
   let spawnError: Error | null = null;
   const closeListeners = new Set<() => void>();
@@ -163,14 +133,6 @@ export const createDevServerProcessAdapter = ({
     let scope: Parameters<typeof Scope.close>[0] | null = null;
     return Effect.gen(function* () {
       const { command, cwd, env, onExit, onOutput } = input;
-      if (command.trim().length === 0) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: "Dev server command is empty. Provide a command to run.",
-            field: "command",
-          }),
-        );
-      }
       const parsedCommand = yield* Effect.try({
         try: () => parseProcessCommandLine(command),
         catch: (cause) =>
@@ -185,7 +147,12 @@ export const createDevServerProcessAdapter = ({
         commandEnv,
         process.platform,
       );
-      const launchFailureDetails = createLaunchFailureDetails(command, cwd, launch);
+      const launchFailureDetails: DevServerLaunchFailureDetails = {
+        command,
+        cwd,
+        launchCommand: launch.command,
+        launchArgs: launch.args,
+      };
 
       const runtimeScope = yield* Scope.make();
       scope = runtimeScope;
@@ -198,7 +165,8 @@ export const createDevServerProcessAdapter = ({
             stdio: ["ignore", "pipe", "pipe"],
             windowsVerbatimArguments: launch.windowsVerbatimArguments === true,
           }),
-        catch: (cause) => toDevServerSpawnError(cause, launchFailureDetails),
+        catch: (cause) =>
+          toHostOperationError(cause, "devServerProcess.spawn", launchFailureDetails),
       });
       const pid = child.pid;
       let started = false;
@@ -214,9 +182,17 @@ export const createDevServerProcessAdapter = ({
         yield* processTracker.waitForClose(0);
         const spawnError = processTracker.getSpawnError();
         if (spawnError) {
-          return yield* Effect.fail(toDevServerSpawnError(spawnError, launchFailureDetails));
+          return yield* Effect.fail(
+            toHostOperationError(spawnError, "devServerProcess.spawn", launchFailureDetails),
+          );
         }
-        return yield* Effect.fail(createInvalidPidError(launchFailureDetails));
+        return yield* Effect.fail(
+          new HostOperationError({
+            message: "Failed to start dev server: child process did not expose a valid pid.",
+            operation: "dev-server.start",
+            details: launchFailureDetails,
+          }),
+        );
       }
 
       let released = false;
@@ -238,7 +214,9 @@ export const createDevServerProcessAdapter = ({
       const exitedDuringGracePeriod = yield* processTracker.waitForClose(startGracePeriodMs);
       const spawnError = processTracker.getSpawnError();
       if (spawnError) {
-        return yield* Effect.fail(toDevServerSpawnError(spawnError, launchFailureDetails));
+        return yield* Effect.fail(
+          toHostOperationError(spawnError, "devServerProcess.spawn", launchFailureDetails),
+        );
       }
       const immediateClose = processTracker.getCloseResult();
       if (exitedDuringGracePeriod && immediateClose) {

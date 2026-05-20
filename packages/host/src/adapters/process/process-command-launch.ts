@@ -1,12 +1,12 @@
 import { HostValidationError } from "../../effect/host-errors";
 
-export type ProcessCommandLaunchPlan = {
+type ProcessCommandLaunchPlan = {
   command: string;
   args: string[];
   windowsVerbatimArguments?: boolean;
 };
 
-export type ParsedProcessCommand = {
+type ParsedProcessCommand = {
   command: string;
   args: string[];
 };
