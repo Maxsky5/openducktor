@@ -5,66 +5,15 @@ import {
   forEachSessionMessage,
   forEachSessionMessageFrom,
 } from "@/state/operations/agent-orchestrator/support/messages";
-import { isReadOnlyShellCommand, isSafeReadToolName } from "@/state/operations/permission-policy";
 
-import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { shouldRefreshGitPanelAfterToolCompletion } from "./git-panel-refresh-policy";
 
 type UseAgentStudioBuildWorktreeRefreshArgs = {
   viewRole: string | null;
   activeSession: AgentSessionState | null;
   isSessionHistoryHydrating: boolean;
   refreshWorktree: GitDiffRefresh;
-};
-
-const EXPLICIT_NON_WORKTREE_TOOL_NAMES = new Set([
-  "ast_grep_search",
-  "background_output",
-  "context7_query-docs",
-  "context7_resolve-library-id",
-  "distill",
-  "grep_app_searchGitHub",
-  "lsp_diagnostics",
-  "lsp_find_references",
-  "lsp_goto_definition",
-  "lsp_prepare_rename",
-  "lsp_symbols",
-  "look_at",
-  "odt_read_task",
-  "prune",
-  "question",
-  "session_info",
-  "session_list",
-  "session_read",
-  "session_search",
-  "skill",
-  "task",
-  "todowrite",
-  "webfetch",
-  "websearch_web_search_exa",
-]);
-
-const SHELL_TOOL_NAMES = new Set(["bash", "shell", "exec", "command"]);
-
-type ToolMessageMeta = Extract<NonNullable<AgentChatMessageMeta>, { kind: "tool" }>;
-
-const isReadOnlyNonWorktreeTool = (toolName: string): boolean =>
-  EXPLICIT_NON_WORKTREE_TOOL_NAMES.has(toolName) || isSafeReadToolName(toolName);
-
-const canToolAffectWorktree = (meta: ToolMessageMeta): boolean => {
-  const toolName = meta.tool.trim().toLowerCase();
-  if (toolName.length === 0) {
-    return false;
-  }
-  if (isReadOnlyNonWorktreeTool(toolName)) {
-    return false;
-  }
-
-  const command = typeof meta.input?.command === "string" ? meta.input.command : "";
-  if (SHELL_TOOL_NAMES.has(toolName) && command.length > 0 && isReadOnlyShellCommand(command)) {
-    return false;
-  }
-
-  return true;
 };
 
 const seedProcessedToolMessageKeys = (session: AgentSessionState): Set<string> => {
@@ -80,7 +29,7 @@ const seedProcessedToolMessageKeys = (session: AgentSessionState): Set<string> =
   return keys;
 };
 
-const collectCompletedWorktreeAffectingToolKeys = (session: AgentSessionState): Set<string> => {
+const collectCompletedGitPanelRefreshToolKeys = (session: AgentSessionState): Set<string> => {
   const keys = new Set<string>();
   forEachSessionMessage(session, (message) => {
     const meta = message.meta;
@@ -88,7 +37,7 @@ const collectCompletedWorktreeAffectingToolKeys = (session: AgentSessionState): 
       return;
     }
 
-    if (canToolAffectWorktree(meta)) {
+    if (shouldRefreshGitPanelAfterToolCompletion(meta)) {
       keys.add(`${session.externalSessionId}:${message.id}`);
     }
   });
@@ -115,7 +64,7 @@ export function useAgentStudioBuildWorktreeRefresh({
     if (isSessionHistoryHydrating) {
       if (!wasSessionHistoryHydratingRef.current) {
         completedToolKeysBeforeHydrationRef.current =
-          collectCompletedWorktreeAffectingToolKeys(activeSession);
+          collectCompletedGitPanelRefreshToolKeys(activeSession);
       }
       wasSessionHistoryHydratingRef.current = true;
       return;
@@ -161,7 +110,7 @@ export function useAgentStudioBuildWorktreeRefresh({
       }
 
       processedToolMessageKeysRef.current.add(messageKey);
-      if (canToolAffectWorktree(meta)) {
+      if (shouldRefreshGitPanelAfterToolCompletion(meta)) {
         shouldRefresh = true;
       }
     });

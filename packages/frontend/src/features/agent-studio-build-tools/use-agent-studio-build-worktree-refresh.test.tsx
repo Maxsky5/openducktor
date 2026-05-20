@@ -80,7 +80,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
     }
   });
 
-  test("refreshes worktree for newly completed mutating build tools", async () => {
+  test("refreshes worktree for newly completed refresh-worthy build tools", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createAgentSessionFixture({
@@ -108,7 +108,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
           role: "build",
           messages: [
             ...sessionMessagesToArray(createCompletedToolSession("apply_patch", "tool-1")),
-            ...sessionMessagesToArray(createCompletedToolSession("bash", "tool-2")),
+            ...sessionMessagesToArray(createCompletedToolSession("write", "tool-2")),
           ],
         }),
       });
@@ -178,7 +178,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
     }
   });
 
-  test("ignores read-only tools and non-build sessions", async () => {
+  test("ignores non-edit tools and non-build sessions", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: createCompletedToolSession("read", "tool-1"),
@@ -202,15 +202,19 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
 
       await harness.update({
         ...createBaseArgs(),
-        activeSession: createCompletedToolSession("bash", "tool-1c", {
-          command: "git status",
-        }),
+        activeSession: createCompletedToolSession("look_at", "tool-1d"),
       });
       expect(refreshWorktreeMock).not.toHaveBeenCalled();
 
       await harness.update({
         ...createBaseArgs(),
-        activeSession: createCompletedToolSession("look_at", "tool-1d"),
+        activeSession: createCompletedToolSession("unknown_runtime_tool", "tool-1e"),
+      });
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...createBaseArgs(),
+        activeSession: createCompletedToolSession("bash", "tool-1f"),
       });
       expect(refreshWorktreeMock).not.toHaveBeenCalled();
 
@@ -230,6 +234,46 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
         }),
       });
       expect(refreshWorktreeMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("refreshes once when newly completed tools include refresh-worthy shell commands", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createAgentSessionFixture({
+        externalSessionId: "build-session-1",
+        role: "build",
+        messages: [],
+      }),
+    });
+
+    try {
+      await harness.mount();
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...createBaseArgs(),
+        activeSession: createAgentSessionFixture({
+          externalSessionId: "build-session-1",
+          role: "build",
+          messages: [
+            ...sessionMessagesToArray(
+              createCompletedToolSession("bash", "tool-1", {
+                command: "pwd",
+              }),
+            ),
+            ...sessionMessagesToArray(
+              createCompletedToolSession("bash", "tool-2", {
+                command: "git status",
+              }),
+            ),
+          ],
+        }),
+      });
+      expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
+      expect(refreshWorktreeMock).toHaveBeenLastCalledWith("soft");
     } finally {
       await harness.unmount();
     }
