@@ -372,7 +372,7 @@ impl AppService {
                                         mcp_server_status: mcp_status.status.clone(),
                                         progress: FailedRepoRuntimeMcpProgressInput {
                                             stage: reconnect_progress.stage,
-                                            source: reconnect_progress.clone(),
+                                            source: reconnect_progress,
                                         },
                                     },
                                 ),
