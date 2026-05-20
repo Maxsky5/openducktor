@@ -44,3 +44,18 @@ export const shouldSettlePendingOutboundSendFromHydratedHistory = (
     return !Number.isNaN(completedAtMs) && completedAtMs >= pendingUserMessageStartedAt;
   });
 };
+
+export const settlePendingOutboundSendFields = (): Pick<
+  AgentSessionState,
+  | "pendingUserMessageStartedAt"
+  | "draftAssistantText"
+  | "draftAssistantMessageId"
+  | "draftReasoningText"
+  | "draftReasoningMessageId"
+> => ({
+  pendingUserMessageStartedAt: undefined,
+  draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
+});
