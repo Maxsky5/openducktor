@@ -166,6 +166,75 @@ describe("load-sessions-stages", () => {
     expect(stateHarness.getState()["external-1"]?.status).toBe("running");
   });
 
+  test("settles pending outbound sends when requested history confirms an idle completed turn", async () => {
+    const pendingUserMessageStartedAt = Date.parse("2026-03-01T09:00:00.000Z");
+    const stateHarness = createStateHarness({
+      "external-1": createSession({
+        status: "running",
+        pendingUserMessageStartedAt,
+      }),
+    });
+
+    await hydrateSessionRecordsStage({
+      loadMode: "requested_history",
+      repoPath: "/tmp/repo",
+      adapter: createLifecycleAdapter({
+        loadSessionHistory: async () => [
+          {
+            messageId: "assistant-final",
+            role: "assistant",
+            timestamp: "2026-03-01T09:00:02.000Z",
+            text: "Done",
+            parts: [
+              {
+                kind: "text",
+                messageId: "assistant-final",
+                partId: "assistant-final-text",
+                text: "Done",
+                completed: true,
+              },
+              {
+                kind: "step",
+                messageId: "assistant-final",
+                partId: "assistant-final-finish",
+                phase: "finish",
+                reason: "stop",
+              },
+            ],
+          },
+        ],
+      }),
+      setSessionsById: stateHarness.setSessionsById,
+      updateSession: stateHarness.updateSession,
+      isStaleRepoOperation: () => false,
+      recordsToHydrate: [createRecord()],
+      historyHydrationSessionIds: new Set(["external-1"]),
+      runtimePlanner: {
+        repoPath: "/tmp/repo",
+        resolveHydrationRuntime: async () => ({
+          ok: true,
+          runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
+          workingDirectory: "/tmp/repo/worktree",
+        }),
+        readSessionPresence: async () =>
+          createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
+            status: { type: "idle" },
+          }),
+      },
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+      livePresenceMode: "apply",
+    });
+
+    const session = stateHarness.getState()["external-1"];
+    expect(session?.status).toBe("idle");
+    expect(session?.pendingUserMessageStartedAt).toBeUndefined();
+    expect(session?.historyHydrationState).toBe("hydrated");
+  });
+
   test("loads requested-history hydration through the adapter for stdio OpenCode runtimes", async () => {
     const stateHarness = createStateHarness({ "external-1": createSession() });
     let historyLoads = 0;
