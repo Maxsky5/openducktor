@@ -43,6 +43,18 @@ type SessionStartModalRunRequest = SessionStartModalOpenRequest & {
   selectedModel?: AgentModelSelection | null;
 };
 
+type SessionStartModalConfirmPayload = Exclude<
+  Parameters<SessionStartModalModel["onConfirm"]>[0],
+  boolean | undefined
+>;
+
+type SessionStartDecisionInput = Omit<SessionStartModalConfirmPayload, "runInBackground">;
+
+type SessionStartDecisionRequestContext = Pick<
+  SessionStartModalRunRequest,
+  "role" | "launchActionId" | "taskId"
+>;
+
 type SessionStartModalRunResult = {
   decision: SessionStartModalDecision;
   runInBackground: boolean;
@@ -57,7 +69,7 @@ type PendingModalRun = {
 
 const requireSelectedModel = (
   selection: AgentModelSelection | null,
-  request: Pick<SessionStartModalRunRequest, "role" | "launchActionId" | "taskId">,
+  request: SessionStartDecisionRequestContext,
 ): AgentModelSelection => {
   if (selection) {
     return selection;
@@ -70,7 +82,7 @@ const requireSelectedModel = (
 
 const requireSourceSessionId = (
   sourceExternalSessionId: string | null,
-  request: Pick<SessionStartModalRunRequest, "role" | "launchActionId" | "taskId">,
+  request: SessionStartDecisionRequestContext,
 ): string => {
   if (sourceExternalSessionId) {
     return sourceExternalSessionId;
@@ -79,6 +91,54 @@ const requireSourceSessionId = (
   throw new Error(
     `Starting a ${request.role} ${request.launchActionId} session for ${request.taskId} requires a source session.`,
   );
+};
+
+export const buildSessionStartModalDecision = ({
+  input,
+  requestContext,
+  selectedModel,
+}: {
+  input: SessionStartDecisionInput;
+  requestContext: SessionStartDecisionRequestContext;
+  selectedModel: AgentModelSelection | null;
+}): SessionStartModalDecision => {
+  const buildTargetBranchFields = (): { targetBranch?: GitTargetBranch } =>
+    input.targetBranch ? { targetBranch: targetBranchFromSelection(input.targetBranch) } : {};
+
+  if (input.startMode === "reuse") {
+    const sourceExternalSessionId = requireSourceSessionId(
+      input.sourceExternalSessionId,
+      requestContext,
+    );
+
+    return {
+      startMode: "reuse",
+      sourceExternalSessionId,
+      ...buildTargetBranchFields(),
+    };
+  }
+
+  const resolvedSelectedModel = requireSelectedModel(selectedModel, requestContext);
+
+  if (input.startMode === "fork") {
+    const sourceExternalSessionId = requireSourceSessionId(
+      input.sourceExternalSessionId,
+      requestContext,
+    );
+
+    return {
+      startMode: "fork",
+      selectedModel: resolvedSelectedModel,
+      sourceExternalSessionId,
+      ...buildTargetBranchFields(),
+    };
+  }
+
+  return {
+    startMode: "fresh",
+    selectedModel: resolvedSelectedModel,
+    ...buildTargetBranchFields(),
+  };
 };
 
 export const requireSourceSessionRuntimeKind = (
@@ -245,37 +305,11 @@ export function useSessionStartModalRunner({
 
       setIsStarting(true);
       try {
-        const decision: SessionStartModalDecision =
-          input.startMode === "reuse"
-            ? {
-                startMode: "reuse",
-                sourceExternalSessionId: requireSourceSessionId(
-                  input.sourceExternalSessionId,
-                  requestContext,
-                ),
-                ...(input.targetBranch
-                  ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
-                  : {}),
-              }
-            : input.startMode === "fork"
-              ? {
-                  startMode: "fork",
-                  selectedModel: requireSelectedModel(selectionRef.current, requestContext),
-                  sourceExternalSessionId: requireSourceSessionId(
-                    input.sourceExternalSessionId,
-                    requestContext,
-                  ),
-                  ...(input.targetBranch
-                    ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
-                    : {}),
-                }
-              : {
-                  startMode: "fresh",
-                  selectedModel: requireSelectedModel(selectionRef.current, requestContext),
-                  ...(input.targetBranch
-                    ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
-                    : {}),
-                };
+        const decision = buildSessionStartModalDecision({
+          input,
+          requestContext,
+          selectedModel: selectionRef.current,
+        });
 
         if (decision.startMode === "reuse") {
           const sourceOption = existingSessionOptions.find(

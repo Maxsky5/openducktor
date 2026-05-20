@@ -1,10 +1,26 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type { AgentModelSelection } from "@openducktor/core";
 import {
   assertRuntimeSupportsSelectedStartMode,
+  buildSessionStartModalDecision,
   requireSourceSessionRuntimeKind,
 } from "./use-session-start-modal-runner";
+
+const REQUEST_CONTEXT = {
+  launchActionId: "build_pull_request_generation",
+  role: "build",
+  taskId: "TASK-1",
+} as const;
+
+const SELECTED_MODEL: AgentModelSelection = {
+  runtimeKind: "opencode",
+  providerId: "anthropic",
+  modelId: "claude-sonnet",
+  variant: "high",
+  profileId: "build-agent",
+};
 
 const FORKLESS_RUNTIME = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
@@ -19,6 +35,152 @@ const FORKLESS_RUNTIME = {
     },
   },
 } as RuntimeDescriptor;
+
+describe("buildSessionStartModalDecision", () => {
+  test("builds a fresh decision with the selected model and no source session", () => {
+    expect(
+      buildSessionStartModalDecision({
+        input: {
+          startMode: "fresh",
+          sourceExternalSessionId: null,
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: SELECTED_MODEL,
+      }),
+    ).toEqual({
+      startMode: "fresh",
+      selectedModel: SELECTED_MODEL,
+    });
+  });
+
+  test("builds a reuse decision with the source session and optional target branch", () => {
+    expect(
+      buildSessionStartModalDecision({
+        input: {
+          startMode: "reuse",
+          sourceExternalSessionId: "session-1",
+          targetBranch: "refs/remotes/origin/feature/session-start",
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: null,
+      }),
+    ).toEqual({
+      startMode: "reuse",
+      sourceExternalSessionId: "session-1",
+      targetBranch: {
+        remote: "origin",
+        branch: "feature/session-start",
+      },
+    });
+  });
+
+  test("builds a fork decision with selected model, source session, and target branch", () => {
+    expect(
+      buildSessionStartModalDecision({
+        input: {
+          startMode: "fork",
+          sourceExternalSessionId: "session-2",
+          targetBranch: "refs/heads/local-review",
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: SELECTED_MODEL,
+      }),
+    ).toEqual({
+      startMode: "fork",
+      selectedModel: SELECTED_MODEL,
+      sourceExternalSessionId: "session-2",
+      targetBranch: {
+        branch: "local-review",
+      },
+    });
+  });
+
+  test("keeps existing guard behavior for missing selected model and source session", () => {
+    expect(() =>
+      buildSessionStartModalDecision({
+        input: {
+          startMode: "fresh",
+          sourceExternalSessionId: null,
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: null,
+      }),
+    ).toThrow(
+      "Starting a build build_pull_request_generation session for TASK-1 requires an explicit model selection.",
+    );
+
+    expect(() =>
+      buildSessionStartModalDecision({
+        input: {
+          startMode: "reuse",
+          sourceExternalSessionId: null,
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: SELECTED_MODEL,
+      }),
+    ).toThrow(
+      "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
+    );
+  });
+
+  test("keeps required guard errors ahead of invalid target branch parsing", () => {
+    expect(() =>
+      buildSessionStartModalDecision({
+        input: {
+          startMode: "fresh",
+          sourceExternalSessionId: null,
+          targetBranch: "refs/remotes/origin",
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: null,
+      }),
+    ).toThrow(
+      "Starting a build build_pull_request_generation session for TASK-1 requires an explicit model selection.",
+    );
+
+    expect(() =>
+      buildSessionStartModalDecision({
+        input: {
+          startMode: "reuse",
+          sourceExternalSessionId: null,
+          targetBranch: "refs/remotes/origin",
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: null,
+      }),
+    ).toThrow(
+      "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
+    );
+
+    expect(() =>
+      buildSessionStartModalDecision({
+        input: {
+          startMode: "fork",
+          sourceExternalSessionId: null,
+          targetBranch: "refs/remotes/origin",
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: null,
+      }),
+    ).toThrow(
+      "Starting a build build_pull_request_generation session for TASK-1 requires an explicit model selection.",
+    );
+
+    expect(() =>
+      buildSessionStartModalDecision({
+        input: {
+          startMode: "fork",
+          sourceExternalSessionId: null,
+          targetBranch: "refs/remotes/origin",
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: SELECTED_MODEL,
+      }),
+    ).toThrow(
+      "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
+    );
+  });
+});
 
 describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("accepts a runtime that supports the concrete selected start mode", () => {
