@@ -8,8 +8,6 @@ type VerifyPackagedMcpSidecarInput = {
   releaseDirectory: string;
 };
 
-const supportedPackagePlatforms = new Set<ElectronReleasePlatform>(["linux", "windows"]);
-
 export const resolvePackagedMcpSidecarPath = ({
   platform,
   releaseDirectory,
@@ -52,7 +50,7 @@ export const verifyPackagedMcpSidecar = async ({
   platform,
   releaseDirectory,
 }: VerifyPackagedMcpSidecarInput): Promise<string | undefined> => {
-  if (!supportedPackagePlatforms.has(platform)) {
+  if (platform === "macos") {
     return undefined;
   }
 

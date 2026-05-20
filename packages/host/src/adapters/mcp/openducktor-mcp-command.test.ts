@@ -28,6 +28,17 @@ const createWorkspaceRoot = async (): Promise<string> => {
   await writeFile(join(root, "packages", "openducktor-mcp", "src", "index.ts"), "");
   return root;
 };
+const expectExplicitSidecarRejected = async (sidecar: string): Promise<void> => {
+  await expect(
+    Effect.runPromise(
+      resolveOpenDucktorMcpCommand({
+        systemCommands: createSystemCommands(),
+        env: { OPENDUCKTOR_OPENDUCKTOR_MCP_PATH: sidecar },
+        startPath: "/missing",
+      }),
+    ),
+  ).rejects.toThrow("points to a missing or non-executable file");
+};
 describe("resolveOpenDucktorMcpCommand", () => {
   test("parses explicit command JSON", () => {
     expect(parseMcpCommandJson('["  mcp-bin  "," --stdio "]')).toEqual(["mcp-bin", "--stdio"]);
@@ -78,15 +89,7 @@ describe("resolveOpenDucktorMcpCommand", () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-missing-sidecar-"));
     const sidecar = join(root, "openducktor-mcp");
 
-    await expect(
-      Effect.runPromise(
-        resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(),
-          env: { OPENDUCKTOR_OPENDUCKTOR_MCP_PATH: sidecar },
-          startPath: "/missing",
-        }),
-      ),
-    ).rejects.toThrow("points to a missing or non-executable file");
+    await expectExplicitSidecarRejected(sidecar);
   });
   test("fails fast when the explicit MCP sidecar path is not executable", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-non-executable-sidecar-"));
@@ -94,15 +97,7 @@ describe("resolveOpenDucktorMcpCommand", () => {
     await writeFile(sidecar, "#!/bin/sh\nexit 0\n");
     await chmod(sidecar, 0o644);
 
-    await expect(
-      Effect.runPromise(
-        resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(),
-          env: { OPENDUCKTOR_OPENDUCKTOR_MCP_PATH: sidecar },
-          startPath: "/missing",
-        }),
-      ),
-    ).rejects.toThrow("points to a missing or non-executable file");
+    await expectExplicitSidecarRejected(sidecar);
   });
   test("fails fast when the explicit MCP sidecar path is a directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-directory-sidecar-"));
@@ -110,15 +105,7 @@ describe("resolveOpenDucktorMcpCommand", () => {
     await mkdir(sidecar);
     await chmod(sidecar, 0o755);
 
-    await expect(
-      Effect.runPromise(
-        resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(),
-          env: { OPENDUCKTOR_OPENDUCKTOR_MCP_PATH: sidecar },
-          startPath: "/missing",
-        }),
-      ),
-    ).rejects.toThrow("points to a missing or non-executable file");
+    await expectExplicitSidecarRejected(sidecar);
   });
   test("resolves the workspace MCP entrypoint from an ancestor directory", async () => {
     const root = await createWorkspaceRoot();

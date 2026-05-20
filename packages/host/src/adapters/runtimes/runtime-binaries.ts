@@ -48,20 +48,15 @@ export const resolveUserPath = (rawPath: string, homeDir = homedir()): string =>
 
 export const isExecutableFile = (candidate: string, platform: NodeJS.Platform = process.platform) =>
   Effect.gen(function* () {
-    if (platform === "win32") {
-      const file = yield* Effect.tryPromise({
-        try: () => stat(candidate),
-        catch: (cause) => toHostPathStatError(cause, "runtimeBinaries.isExecutableFile", candidate),
-      });
-      return file.isFile();
-    }
-
     const file = yield* Effect.tryPromise({
       try: () => stat(candidate),
       catch: (cause) => toHostPathStatError(cause, "runtimeBinaries.isExecutableFile", candidate),
     });
     if (!file.isFile()) {
       return false;
+    }
+    if (platform === "win32") {
+      return true;
     }
 
     yield* Effect.tryPromise({
