@@ -82,7 +82,13 @@ const forceStopProcessTree = (pid: number) =>
       })
     : Effect.tryPromise({
         try: async () => {
-          process.kill(pid, "SIGKILL");
+          try {
+            process.kill(pid, "SIGKILL");
+          } catch (cause) {
+            if ((cause as NodeJS.ErrnoException).code !== "ESRCH") {
+              throw cause;
+            }
+          }
           await waitFor(() => !processIsAlive(pid), 2_000);
         },
         catch: (cause) =>
