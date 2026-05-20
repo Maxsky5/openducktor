@@ -27,6 +27,133 @@ export type CreateDevServerProcessAdapterInput = {
 const DEFAULT_START_GRACE_PERIOD_MS = 150;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 
+type DevServerLaunchFailureDetails = {
+  command: string;
+  cwd: string;
+  launchCommand: string;
+  launchArgs: string[];
+};
+
+type DevServerChildProcess = ReturnType<typeof spawn>;
+
+type DevServerProcessTracker = {
+  getCloseResult: () => DevServerProcessExit | null;
+  getSpawnError: () => Error | null;
+  isClosed: () => boolean;
+  waitForClose: (timeoutMs: number) => Effect.Effect<boolean>;
+};
+
+const createLaunchFailureDetails = (
+  command: string,
+  cwd: string,
+  launch: { command: string; args: string[] },
+): DevServerLaunchFailureDetails => ({
+  command,
+  cwd,
+  launchCommand: launch.command,
+  launchArgs: launch.args,
+});
+
+const toDevServerSpawnError = (
+  cause: unknown,
+  details: DevServerLaunchFailureDetails,
+): HostOperationError => toHostOperationError(cause, "devServerProcess.spawn", details);
+
+const createInvalidPidError = (details: DevServerLaunchFailureDetails): HostOperationError =>
+  new HostOperationError({
+    message: "Failed to start dev server: child process did not expose a valid pid.",
+    operation: "dev-server.start",
+    details,
+  });
+
+const trackDevServerProcess = ({
+  child,
+  isStarted,
+  onExit,
+  onOutput,
+  pid,
+}: {
+  child: DevServerChildProcess;
+  isStarted: () => boolean;
+  onExit: (exit: DevServerProcessExit) => void;
+  onOutput: (output: { data: string }) => void;
+  pid: number | undefined;
+}): DevServerProcessTracker => {
+  let closeResult: DevServerProcessExit | null = null;
+  let spawnError: Error | null = null;
+  const closeListeners = new Set<() => void>();
+
+  const notifyCloseListeners = (): void => {
+    for (const listener of closeListeners) {
+      listener();
+    }
+  };
+  const waitForClose = (timeoutMs: number): Effect.Effect<boolean> => {
+    if (closeResult !== null || spawnError !== null) {
+      return Effect.succeed(true);
+    }
+
+    return Effect.async<boolean>((resume, signal) => {
+      let settled = false;
+      const finish = (closed: boolean) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        closeListeners.delete(resolveTrue);
+        clearTimeout(timeout);
+        signal.removeEventListener("abort", abort);
+        resume(Effect.succeed(closed));
+      };
+      const resolveTrue = () => finish(true);
+      const abort = () => finish(false);
+      const timeout = setTimeout(() => {
+        finish(false);
+      }, timeoutMs);
+      signal.addEventListener("abort", abort, { once: true });
+      closeListeners.add(resolveTrue);
+    });
+  };
+
+  child.stdout?.on("data", (chunk: Buffer) => {
+    onOutput({ data: chunk.toString("utf8") });
+  });
+  child.stderr?.on("data", (chunk: Buffer) => {
+    onOutput({ data: chunk.toString("utf8") });
+  });
+  child.once("error", (error) => {
+    spawnError = error;
+    notifyCloseListeners();
+    if (isStarted()) {
+      onExit({
+        pid: pid ?? -1,
+        exitCode: null,
+        signal: null,
+        error: error.message,
+      });
+    }
+  });
+  child.once("close", (exitCode, signal) => {
+    closeResult = {
+      pid: pid ?? -1,
+      exitCode,
+      signal,
+      error: null,
+    };
+    notifyCloseListeners();
+    if (isStarted()) {
+      onExit(closeResult);
+    }
+  });
+
+  return {
+    getCloseResult: () => closeResult,
+    getSpawnError: () => spawnError,
+    isClosed: () => closeResult !== null || spawnError !== null,
+    waitForClose,
+  };
+};
+
 export const createDevServerProcessAdapter = ({
   processEnv = process.env,
   startGracePeriodMs = DEFAULT_START_GRACE_PERIOD_MS,
@@ -58,12 +185,7 @@ export const createDevServerProcessAdapter = ({
         commandEnv,
         process.platform,
       );
-      const launchFailureDetails = {
-        command,
-        cwd,
-        launchCommand: launch.command,
-        launchArgs: launch.args,
-      };
+      const launchFailureDetails = createLaunchFailureDetails(command, cwd, launch);
 
       const runtimeScope = yield* Scope.make();
       scope = runtimeScope;
@@ -76,92 +198,25 @@ export const createDevServerProcessAdapter = ({
             stdio: ["ignore", "pipe", "pipe"],
             windowsVerbatimArguments: launch.windowsVerbatimArguments === true,
           }),
-        catch: (cause) =>
-          toHostOperationError(cause, "devServerProcess.spawn", launchFailureDetails),
+        catch: (cause) => toDevServerSpawnError(cause, launchFailureDetails),
       });
       const pid = child.pid;
       let started = false;
-      let closeResult: DevServerProcessExit | null = null;
-      let spawnError: Error | null = null;
-      const closeListeners = new Set<() => void>();
-
-      const notifyCloseListeners = (): void => {
-        for (const listener of closeListeners) {
-          listener();
-        }
-      };
-      const waitForClose = (timeoutMs: number): Effect.Effect<boolean> => {
-        if (closeResult !== null || spawnError !== null) {
-          return Effect.succeed(true);
-        }
-
-        return Effect.async<boolean>((resume, signal) => {
-          let settled = false;
-          const finish = (closed: boolean) => {
-            if (settled) {
-              return;
-            }
-            settled = true;
-            closeListeners.delete(resolveTrue);
-            clearTimeout(timeout);
-            signal.removeEventListener("abort", abort);
-            resume(Effect.succeed(closed));
-          };
-          const resolveTrue = () => finish(true);
-          const abort = () => finish(false);
-          const timeout = setTimeout(() => {
-            finish(false);
-          }, timeoutMs);
-          signal.addEventListener("abort", abort, { once: true });
-          closeListeners.add(resolveTrue);
-        });
-      };
-
-      child.stdout?.on("data", (chunk: Buffer) => {
-        onOutput({ data: chunk.toString("utf8") });
-      });
-      child.stderr?.on("data", (chunk: Buffer) => {
-        onOutput({ data: chunk.toString("utf8") });
-      });
-      child.once("error", (error) => {
-        spawnError = error;
-        notifyCloseListeners();
-        if (started) {
-          onExit({
-            pid: pid ?? -1,
-            exitCode: null,
-            signal: null,
-            error: error.message,
-          });
-        }
-      });
-      child.once("close", (exitCode, signal) => {
-        closeResult = {
-          pid: pid ?? -1,
-          exitCode,
-          signal,
-          error: null,
-        };
-        notifyCloseListeners();
-        if (started) {
-          onExit(closeResult);
-        }
+      const processTracker = trackDevServerProcess({
+        child,
+        isStarted: () => started,
+        onExit,
+        onOutput,
+        pid,
       });
 
       if (!pid || pid <= 0) {
-        yield* waitForClose(0);
+        yield* processTracker.waitForClose(0);
+        const spawnError = processTracker.getSpawnError();
         if (spawnError) {
-          return yield* Effect.fail(
-            toHostOperationError(spawnError, "devServerProcess.spawn", launchFailureDetails),
-          );
+          return yield* Effect.fail(toDevServerSpawnError(spawnError, launchFailureDetails));
         }
-        return yield* Effect.fail(
-          new HostOperationError({
-            message: "Failed to start dev server: child process did not expose a valid pid.",
-            operation: "dev-server.start",
-            details: launchFailureDetails,
-          }),
-        );
+        return yield* Effect.fail(createInvalidPidError(launchFailureDetails));
       }
 
       let released = false;
@@ -173,20 +228,19 @@ export const createDevServerProcessAdapter = ({
         yield* terminateProcessTree({
           pid,
           label: `dev server command "${command}"`,
-          isClosed: () => closeResult !== null || spawnError !== null,
-          waitForExit: waitForClose,
+          isClosed: processTracker.isClosed,
+          waitForExit: processTracker.waitForClose,
           stopTimeoutMs,
         }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "devServerProcess.stop")));
       });
       yield* Scope.addFinalizer(runtimeScope, stopProcess.pipe(Effect.ignore));
 
-      const exitedDuringGracePeriod = yield* waitForClose(startGracePeriodMs);
+      const exitedDuringGracePeriod = yield* processTracker.waitForClose(startGracePeriodMs);
+      const spawnError = processTracker.getSpawnError();
       if (spawnError) {
-        return yield* Effect.fail(
-          toHostOperationError(spawnError, "devServerProcess.spawn", launchFailureDetails),
-        );
+        return yield* Effect.fail(toDevServerSpawnError(spawnError, launchFailureDetails));
       }
-      const immediateClose = closeResult as DevServerProcessExit | null;
+      const immediateClose = processTracker.getCloseResult();
       if (exitedDuringGracePeriod && immediateClose) {
         return yield* Effect.fail(
           new DevServerProcessStartExitError(immediateClose.exitCode, immediateClose.signal),
