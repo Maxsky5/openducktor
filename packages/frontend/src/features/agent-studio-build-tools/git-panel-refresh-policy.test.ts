@@ -57,12 +57,27 @@ describe("shouldRefreshGitPanelAfterToolCompletion", () => {
   test("refreshes for shell commands that can change git panel state", () => {
     const refreshCommands = [
       "git status",
+      "git;",
+      "git && echo done",
+      "GIT_DIR=.git git status",
+      "GIT_AUTHOR_NAME=bot git commit -m test",
+      "env FOO=1 git status",
       "rtk git diff --stat",
       "cd repo && git reset --soft HEAD~1",
       "pwd; git commit -m test",
+      "(git status)",
+      "{ git status; }",
       "touch src/generated.ts",
+      "ln -s source target",
+      "rsync -a src/ dist/",
+      "tar -xf archive.tar",
+      "unzip archive.zip",
       "sed -i '' 's/a/b/' src/app.ts",
+      "sed -ni 's/a/b/' src/app.ts",
+      "sed -in 's/a/b/' src/app.ts",
+      "perl -pi -e 's/a/b/' src/app.ts",
       "printf test > README.md",
+      "printf test >> README.md",
       "cat source.ts | tee target.ts",
     ];
 
@@ -74,7 +89,16 @@ describe("shouldRefreshGitPanelAfterToolCompletion", () => {
   });
 
   test("does not refresh for shell commands outside the git-panel refresh policy", () => {
-    const ignoredCommands = ["", "pwd", "ls", "rg TODO", "cat README.md", "echo ready"];
+    const ignoredCommands = [
+      "",
+      "pwd",
+      "ls",
+      "rg TODO",
+      "cat README.md",
+      "echo ready",
+      "cmd 2>&1",
+      "exec 3>&2",
+    ];
 
     for (const command of ignoredCommands) {
       expect(shouldRefreshGitPanelAfterToolCompletion(buildToolMeta("bash", { command }))).toBe(

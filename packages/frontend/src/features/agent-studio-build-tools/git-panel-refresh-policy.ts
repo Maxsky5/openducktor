@@ -4,7 +4,32 @@ export type ToolMessageMeta = Extract<NonNullable<AgentChatMessageMeta>, { kind:
 
 const SHELL_TOOL_NAMES = new Set(["bash", "shell", "exec", "command"]);
 
-const GIT_COMMAND_PATTERN = /(?:^|[;&|\n]\s*)(?:rtk\s+)?git(?:\s|$)/;
+const SHELL_COMMAND_PREFIX_PATTERN = String.raw`(?:^|[;&|\n({!]\s*)`;
+const SHELL_ENV_PREFIX_PATTERN = String.raw`(?:(?:[a-z_][a-z0-9_]*=\S+\s+)|(?:env\s+(?:[a-z_][a-z0-9_]*=\S+\s+)+))*`;
+
+const shellCommandPattern = (commandNames: readonly string[]): RegExp =>
+  new RegExp(String.raw`\b(?:${commandNames.join("|")})\b`);
+
+const GIT_COMMAND_PATTERN = new RegExp(
+  `${SHELL_COMMAND_PREFIX_PATTERN}${SHELL_ENV_PREFIX_PATTERN}(?:rtk\\s+)?git\\b`,
+  "i",
+);
+
+const FILE_MUTATION_COMMAND_NAMES = [
+  "rm",
+  "mv",
+  "cp",
+  "mkdir",
+  "rmdir",
+  "touch",
+  "chmod",
+  "chown",
+  "truncate",
+  "ln",
+  "tar",
+  "unzip",
+  "rsync",
+] as const;
 
 const GIT_PANEL_REFRESH_TOOL_NAMES_BY_REASON = {
   fileEdit: [
@@ -28,9 +53,9 @@ const GIT_PANEL_REFRESH_TOOL_NAMES: ReadonlySet<string> = new Set(
 
 const GIT_PANEL_REFRESH_SHELL_PATTERNS_BY_REASON = {
   gitState: [GIT_COMMAND_PATTERN],
-  fileMutation: [/\b(rm|mv|cp|mkdir|rmdir|touch|chmod|chown|truncate)\b/],
-  inPlaceEdit: [/\b(sed\s+-i|perl\s+-i)\b/],
-  redirectWrite: [/>+\s*[^=]/, /\btee\b/],
+  fileMutation: [shellCommandPattern(FILE_MUTATION_COMMAND_NAMES)],
+  inPlaceEdit: [/\b(?:sed|perl)\s+(?:-[a-z]*\s+)*-[a-z]*i[a-z]*(?:\s|$)/],
+  redirectWrite: [/>+\s*[^&=]/, /\btee\b/],
 } as const satisfies Record<string, readonly RegExp[]>;
 
 const GIT_PANEL_REFRESH_SHELL_PATTERNS = Object.values(
