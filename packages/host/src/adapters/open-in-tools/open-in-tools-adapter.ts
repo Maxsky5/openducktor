@@ -14,18 +14,19 @@ import {
   toHostPathStatError,
 } from "../../effect/host-errors";
 import { type OpenInToolsPort, OpenInToolsPortTag } from "../../ports/open-in-tools-port";
+import type { SystemCommandPort } from "../../ports/system-command-port";
+import { createSystemCommandRunner } from "../system/system-command-runner";
 import { resolveMacOsAppIconDataUrl } from "./macos-open-in-icons";
+import {
+  COMMAND_OPEN_IN_TOOL_CATALOG,
+  type CommandOpenInToolMetadata,
+  commandMetadataForTool,
+  MAC_OPEN_IN_TOOL_CATALOG,
+  type MacOpenInToolMetadata,
+  macMetadataForTool,
+} from "./open-in-tool-catalog";
 
 const execFileAsync = promisify(execFile);
-
-type OpenInLaunchStrategy = "open-directory" | "editor" | "jetbrains";
-
-type OpenInToolMetadata = {
-  id: SystemOpenInToolId;
-  label: string;
-  appNames: string[];
-  launchStrategy: OpenInLaunchStrategy;
-};
 
 type CommandResult = {
   stdout: string;
@@ -47,44 +48,9 @@ export type CreateOpenInToolsAdapterInput = {
   realpathFn?: (
     inputPath: string,
   ) => Effect.Effect<string, HostPathAccessError | HostPathNotFoundError>;
+  systemCommands?: Pick<SystemCommandPort, "resolveCommandPath" | "runCommandAllowFailure">;
+  processEnv?: NodeJS.ProcessEnv;
 };
-
-const OPEN_IN_TOOL_CATALOG: OpenInToolMetadata[] = [
-  { id: "finder", label: "Finder", appNames: ["Finder"], launchStrategy: "open-directory" },
-  { id: "terminal", label: "Terminal", appNames: ["Terminal"], launchStrategy: "open-directory" },
-  {
-    id: "iterm2",
-    label: "iTerm2",
-    appNames: ["iTerm2", "iTerm"],
-    launchStrategy: "open-directory",
-  },
-  { id: "ghostty", label: "Ghostty", appNames: ["Ghostty"], launchStrategy: "open-directory" },
-  { id: "vscode", label: "VS Code", appNames: ["Visual Studio Code"], launchStrategy: "editor" },
-  { id: "cursor", label: "Cursor", appNames: ["Cursor"], launchStrategy: "editor" },
-  { id: "zed", label: "Zed", appNames: ["Zed"], launchStrategy: "editor" },
-  {
-    id: "intellij-idea",
-    label: "IntelliJ IDEA",
-    appNames: ["IntelliJ IDEA", "IntelliJ IDEA CE"],
-    launchStrategy: "jetbrains",
-  },
-  { id: "webstorm", label: "WebStorm", appNames: ["WebStorm"], launchStrategy: "jetbrains" },
-  {
-    id: "pycharm",
-    label: "PyCharm",
-    appNames: ["PyCharm", "PyCharm CE"],
-    launchStrategy: "jetbrains",
-  },
-  { id: "phpstorm", label: "PhpStorm", appNames: ["PhpStorm"], launchStrategy: "jetbrains" },
-  { id: "rider", label: "Rider", appNames: ["Rider"], launchStrategy: "jetbrains" },
-  { id: "rustrover", label: "RustRover", appNames: ["RustRover"], launchStrategy: "jetbrains" },
-  {
-    id: "android-studio",
-    label: "Android Studio",
-    appNames: ["Android Studio"],
-    launchStrategy: "jetbrains",
-  },
-];
 
 const defaultRunner: OpenInCommandRunner = (program, args, options) =>
   Effect.tryPromise({
@@ -129,29 +95,8 @@ const candidateApplicationPaths = (appName: string, homeDirectory: () => string)
   ];
 };
 
-const metadataForTool = (toolId: SystemOpenInToolId): OpenInToolMetadata => {
-  const metadata = OPEN_IN_TOOL_CATALOG.find((candidate) => candidate.id === toolId);
-  if (!metadata) {
-    throw new HostValidationError({
-      field: "toolId",
-      message: `Unsupported Open In tool: ${toolId}`,
-      details: { toolId },
-    });
-  }
-  return metadata;
-};
-
-const ensureMacOs = (platform: NodeJS.Platform, operation: string) => {
-  if (platform !== "darwin") {
-    throw new HostValidationError({
-      message: `${operation} is only supported on macOS.`,
-      details: { platform, operation },
-    });
-  }
-};
-
 const buildLaunchArgs = (
-  metadata: OpenInToolMetadata,
+  metadata: MacOpenInToolMetadata,
   appPath: string,
   directoryPath: string,
 ): string[] => {
@@ -187,6 +132,8 @@ export const createOpenInToolsAdapter = ({
   pathExists = defaultPathExists,
   pathIsDirectory = defaultPathIsDirectory,
   homeDirectory = homedir,
+  processEnv = process.env,
+  systemCommands = createSystemCommandRunner({ env: processEnv, platform }),
   realpathFn = (inputPath) =>
     Effect.tryPromise({
       try: () => realpath(inputPath),
@@ -199,6 +146,104 @@ export const createOpenInToolsAdapter = ({
         toHostOperationError(cause, "openInTools.runCommand", { program, args, cwd: options?.cwd }),
       ),
     );
+  const supportedCommandMetadata = () =>
+    COMMAND_OPEN_IN_TOOL_CATALOG.filter((metadata) => metadata.platforms.includes(platform));
+  const resolveCommandPath = (command: string) => {
+    if (!systemCommands.resolveCommandPath) {
+      return Effect.fail(
+        new HostOperationError({
+          operation: "openInTools.resolveCommandPath",
+          message: "Open In command discovery requires system command resolution.",
+          details: { command, platform },
+        }),
+      );
+    }
+
+    return systemCommands.resolveCommandPath(command);
+  };
+  const resolveCommandTool = (metadata: CommandOpenInToolMetadata) =>
+    Effect.gen(function* () {
+      for (const command of metadata.commands) {
+        const resolvedCommand = yield* resolveCommandPath(command);
+        if (resolvedCommand) {
+          return {
+            metadata,
+            command,
+            resolvedCommand,
+          };
+        }
+      }
+      return null;
+    });
+  const resolveCommandToolOrFail = (toolId: SystemOpenInToolId) =>
+    Effect.gen(function* () {
+      const metadata = yield* Effect.try({
+        try: () => commandMetadataForTool(toolId, platform),
+        catch: (cause) =>
+          cause instanceof HostValidationError
+            ? cause
+            : toHostOperationError(cause, "openInTools.commandMetadataForTool"),
+      });
+      const resolved = yield* resolveCommandTool(metadata);
+      if (!resolved) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "toolId",
+            message: `${metadata.label} is not installed or is no longer discoverable on ${platform}.`,
+            details: { toolId, platform, commands: metadata.commands },
+          }),
+        );
+      }
+      return resolved;
+    });
+  const openDirectoryWithCommandTool = (
+    metadata: CommandOpenInToolMetadata,
+    command: string,
+    resolvedCommand: string,
+    directoryPath: string,
+  ) =>
+    Effect.gen(function* () {
+      const args = metadata.args?.(directoryPath, command) ?? [directoryPath];
+      const result = yield* systemCommands
+        .runCommandAllowFailure(command, args, {
+          cwd: directoryPath,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new HostOperationError({
+                operation: "openInTools.openDirectoryInTool",
+                message: `Failed to open ${directoryPath} in ${metadata.label}: ${error.message}`,
+                details: {
+                  platform,
+                  toolId: metadata.id,
+                  directoryPath,
+                  command,
+                  resolvedCommand,
+                  args,
+                },
+                cause: error,
+              }),
+          ),
+        );
+      if (!result.ok) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "openInTools.openDirectoryInTool",
+            message: `Failed to open ${directoryPath} in ${metadata.label}. Command ${command} exited unsuccessfully.`,
+            details: {
+              platform,
+              toolId: metadata.id,
+              directoryPath,
+              command,
+              resolvedCommand,
+              args,
+              stderr: result.stderr,
+            },
+          }),
+        );
+      }
+    });
   const resolveApplicationPathByName = (
     appName: string,
   ): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
@@ -232,7 +277,7 @@ export const createOpenInToolsAdapter = ({
     });
 
   const resolveApplicationPath = (
-    metadata: OpenInToolMetadata,
+    metadata: MacOpenInToolMetadata,
   ): Effect.Effect<string | null, HostOperationError | HostPathAccessError> =>
     Effect.gen(function* () {
       for (const appName of metadata.appNames) {
@@ -246,7 +291,7 @@ export const createOpenInToolsAdapter = ({
     });
 
   const buildToolInfo = (
-    metadata: OpenInToolMetadata,
+    metadata: MacOpenInToolMetadata,
     appPath: string,
   ): Effect.Effect<SystemOpenInToolInfo, HostOperationError | HostPathAccessError> =>
     Effect.gen(function* () {
@@ -263,7 +308,7 @@ export const createOpenInToolsAdapter = ({
     });
 
   const resolveDiscoveredTool = (
-    metadata: OpenInToolMetadata,
+    metadata: MacOpenInToolMetadata,
   ): Effect.Effect<SystemOpenInToolInfo | null, HostOperationError | HostPathAccessError> =>
     Effect.gen(function* () {
       const appPath = yield* resolveApplicationPath(metadata);
@@ -282,27 +327,57 @@ export const createOpenInToolsAdapter = ({
     },
     discoverOpenInTools() {
       return Effect.gen(function* () {
-        yield* Effect.try({
-          try: () => ensureMacOs(platform, "Open In tool discovery"),
-          catch: (cause) => toHostOperationError(cause, "openInTools.ensureMacOs"),
-        });
+        if (platform === "darwin") {
+          const discoveredTools = yield* Effect.forEach(
+            MAC_OPEN_IN_TOOL_CATALOG,
+            resolveDiscoveredTool,
+            {
+              concurrency: "unbounded",
+            },
+          );
+          return discoveredTools.filter((tool): tool is SystemOpenInToolInfo => tool !== null);
+        }
 
-        const discoveredTools = yield* Effect.forEach(OPEN_IN_TOOL_CATALOG, resolveDiscoveredTool, {
+        const commandMetadata = supportedCommandMetadata();
+        if (commandMetadata.length === 0) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              message: `Open In tool discovery is not supported on ${platform}.`,
+              details: { platform },
+            }),
+          );
+        }
+
+        const discoveredTools = yield* Effect.forEach(commandMetadata, resolveCommandTool, {
           concurrency: "unbounded",
         });
-        return discoveredTools.filter((tool): tool is SystemOpenInToolInfo => tool !== null);
+        return discoveredTools
+          .filter(
+            (
+              tool,
+            ): tool is {
+              metadata: CommandOpenInToolMetadata;
+              command: string;
+              resolvedCommand: string;
+            } => tool !== null,
+          )
+          .map(({ metadata }) => ({ toolId: metadata.id, iconDataUrl: null }));
       });
     },
     openDirectoryInTool(directoryPath, toolId) {
       return Effect.gen(function* () {
-        yield* Effect.try({
-          try: () => ensureMacOs(platform, "Opening directories in external tools"),
-          catch: (cause) => toHostOperationError(cause, "openInTools.ensureMacOs"),
-        });
+        if (platform !== "darwin") {
+          const { metadata, command, resolvedCommand } = yield* resolveCommandToolOrFail(toolId);
+          yield* openDirectoryWithCommandTool(metadata, command, resolvedCommand, directoryPath);
+          return;
+        }
 
         const metadata = yield* Effect.try({
-          try: () => metadataForTool(toolId),
-          catch: (cause) => toHostOperationError(cause, "openInTools.metadataForTool"),
+          try: () => macMetadataForTool(toolId),
+          catch: (cause) =>
+            cause instanceof HostValidationError
+              ? cause
+              : toHostOperationError(cause, "openInTools.macMetadataForTool"),
         });
         const appPath = yield* resolveApplicationPath(metadata);
         if (!appPath) {

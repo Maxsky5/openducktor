@@ -147,6 +147,34 @@ function OpenInActionGroup({ children }: { children: ReactNode }): ReactElement 
   );
 }
 
+function OpenInRefreshButton({
+  isRefreshingTools,
+  onRefresh,
+  label,
+}: {
+  isRefreshingTools: boolean;
+  onRefresh: () => void;
+  label: string;
+}): ReactElement {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-7 text-[11px]"
+      onClick={onRefresh}
+      disabled={isRefreshingTools}
+    >
+      {isRefreshingTools ? (
+        <LoaderCircle className="size-3.5 animate-spin" />
+      ) : (
+        <RefreshCw className="size-3.5" />
+      )}
+      {label}
+    </Button>
+  );
+}
+
 export function OpenInMenu({
   contextMode,
   targetPath,
@@ -199,6 +227,8 @@ export function OpenInMenu({
     onOpenInTool,
   });
   const isTriggerDisabled = resolvedDisabledReason != null;
+  const isDefaultActionDisabled =
+    isTriggerDisabled || toolsQuery.isPending || toolsQuery.isError || defaultTool == null;
   const hasMenuTrigger =
     alternativeTools.length > 0 ||
     toolsQuery.isPending ||
@@ -254,7 +284,7 @@ export function OpenInMenu({
     defaultToolLabel,
     defaultToolIcon,
     onClick: defaultTool ? () => void handleOpenInTool(defaultTool.toolId) : null,
-    disabled: isTriggerDisabled,
+    disabled: isDefaultActionDisabled,
     isPending: defaultToolIsPending,
     hasMenuTrigger,
   });
@@ -301,23 +331,13 @@ export function OpenInMenu({
             <div className="space-y-3 p-3" data-testid="agent-studio-git-open-in-error">
               <p className="text-sm text-foreground">Supported app discovery failed.</p>
               <p className="text-[11px] text-muted-foreground">{errorMessage(toolsQuery.error)}</p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 text-[11px]"
-                onClick={() => {
+              <OpenInRefreshButton
+                isRefreshingTools={isRefreshingTools}
+                label="Retry"
+                onRefresh={() => {
                   void handleRefreshTools();
                 }}
-                disabled={isRefreshingTools}
-              >
-                {isRefreshingTools ? (
-                  <LoaderCircle className="size-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-3.5" />
-                )}
-                Retry
-              </Button>
+              />
             </div>
           ) : (
             <ScrollArea className="max-h-80">
@@ -346,8 +366,18 @@ export function OpenInMenu({
                   );
                 })}
                 {toolsQuery.data?.length === 0 ? (
-                  <div className="p-3 text-sm text-muted-foreground">
-                    No supported apps are currently available on this Mac.
+                  <div
+                    className="space-y-3 p-3 text-sm text-muted-foreground"
+                    data-testid="agent-studio-git-open-in-empty"
+                  >
+                    <p>No supported Open In tools were found on this platform.</p>
+                    <OpenInRefreshButton
+                      isRefreshingTools={isRefreshingTools}
+                      label="Refresh"
+                      onRefresh={() => {
+                        void handleRefreshTools();
+                      }}
+                    />
                   </div>
                 ) : null}
               </div>

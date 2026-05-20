@@ -266,6 +266,82 @@ describe("OpenInMenu", () => {
     }
   });
 
+  test("falls back from an absent persisted tool to the first discovered tool without launching", async () => {
+    const originalSystemListOpenInTools = host.systemListOpenInTools;
+    const storageKey = toRightPanelStorageKey();
+    globalThis.localStorage.setItem(storageKey, JSON.stringify({ openInToolId: "zed" }));
+    host.systemListOpenInTools = mock(
+      async () =>
+        [
+          { toolId: "explorer", iconDataUrl: null },
+          { toolId: "vscode", iconDataUrl: null },
+        ] satisfies SystemOpenInToolInfo[],
+    );
+    const onOpenInTool = mock(async () => {});
+
+    try {
+      rendered = render(
+        <QueryProvider useIsolatedClient>
+          <TooltipProvider>
+            <OpenInMenu
+              contextMode="repository"
+              targetPath="/tmp/repo"
+              disabledReason={null}
+              onOpenInTool={onOpenInTool}
+            />
+          </TooltipProvider>
+        </QueryProvider>,
+      );
+
+      await screen.findByTestId("agent-studio-git-open-in-icon-explorer");
+
+      expect(screen.getByTestId("agent-studio-git-open-in-default-button").textContent).toContain(
+        "File Explorer",
+      );
+      expect(onOpenInTool).not.toHaveBeenCalled();
+    } finally {
+      host.systemListOpenInTools = originalSystemListOpenInTools;
+    }
+  });
+
+  test("shows platform-neutral empty discovery copy and disables the default action", async () => {
+    const originalSystemListOpenInTools = host.systemListOpenInTools;
+    const systemListOpenInTools = mock(async () => [] satisfies SystemOpenInToolInfo[]);
+    host.systemListOpenInTools = systemListOpenInTools;
+
+    try {
+      rendered = render(
+        <QueryProvider useIsolatedClient>
+          <TooltipProvider>
+            <OpenInMenu
+              contextMode="worktree"
+              targetPath="/tmp/worktrees/task-24"
+              disabledReason={null}
+              onOpenInTool={async () => {}}
+            />
+          </TooltipProvider>
+        </QueryProvider>,
+      );
+
+      const defaultButton = screen.getByTestId(
+        "agent-studio-git-open-in-default-button",
+      ) as HTMLButtonElement;
+      expect(defaultButton.disabled).toBe(true);
+
+      await runWithReactAct(async () => {
+        fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
+      });
+
+      await screen.findByTestId("agent-studio-git-open-in-empty");
+      expect(
+        screen.getByText("No supported Open In tools were found on this platform."),
+      ).toBeTruthy();
+      expect(screen.queryByText(/on this Mac/i)).toBeNull();
+    } finally {
+      host.systemListOpenInTools = originalSystemListOpenInTools;
+    }
+  });
+
   test("retry forces a fresh discovery request after a discovery error", async () => {
     const originalSystemListOpenInTools = host.systemListOpenInTools;
     const systemListOpenInTools = mock(async (forceRefresh = false) => {
@@ -298,6 +374,10 @@ describe("OpenInMenu", () => {
       });
 
       expect(await screen.findByTestId("agent-studio-git-open-in-error")).toBeTruthy();
+      expect(
+        (screen.getByTestId("agent-studio-git-open-in-default-button") as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
 
       await runWithReactAct(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));

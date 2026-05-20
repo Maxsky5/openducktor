@@ -1,10 +1,12 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Effect } from "effect";
-import type { OpenInCommandRunner } from "./open-in-tools-adapter";
-import { createOpenInToolsAdapter as createEffectOpenInToolsAdapter } from "./open-in-tools-adapter";
+import { HostValidationError } from "../../effect/host-errors";
+import type { SystemCommandPort } from "../../ports/system-command-port";
+import { createSystemCommandRunner } from "../system/system-command-runner";
+import { createOpenInToolsAdapter, type OpenInCommandRunner } from "./open-in-tools-adapter";
 
-const createOpenInToolsAdapter = (...args: Parameters<typeof createEffectOpenInToolsAdapter>) =>
-  createEffectOpenInToolsAdapter(...args);
 const createRunner = () => {
   const calls: Array<{
     program: string;
@@ -19,6 +21,39 @@ const createRunner = () => {
   };
   return { calls, runner };
 };
+
+const createSystemCommands = ({
+  resolvedCommands,
+  runOk = true,
+  runStderr = "",
+}: {
+  resolvedCommands: Record<string, string | null>;
+  runOk?: boolean;
+  runStderr?: string;
+}) => {
+  const launches: Array<{ command: string; args: string[] }> = [];
+  const systemCommands: Pick<SystemCommandPort, "resolveCommandPath" | "runCommandAllowFailure"> = {
+    resolveCommandPath(command) {
+      return Effect.succeed(resolvedCommands[command] ?? null);
+    },
+    runCommandAllowFailure(command, args) {
+      launches.push({ command, args });
+      return Effect.succeed({ ok: runOk, stdout: "", stderr: runStderr });
+    },
+  };
+
+  return { launches, systemCommands };
+};
+
+const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> => {
+  const root = await mkdtemp(join(tmpdir(), "odt-open-in-"));
+  try {
+    await run(root);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+};
+
 describe("createOpenInToolsAdapter", () => {
   test("discovers installed macOS applications with bounded application icons", async () => {
     const calls: Array<{
@@ -111,6 +146,24 @@ describe("createOpenInToolsAdapter", () => {
       args: ["-a", "/Applications/Visual Studio Code.app", "/repo"],
     });
   });
+  test("rejects macOS contract-valid but unsupported selected tools as validation errors", async () => {
+    const port = createOpenInToolsAdapter({
+      platform: "darwin",
+      pathExists: () => Effect.succeed(false),
+      pathIsDirectory: () => Effect.succeed(false),
+    });
+
+    const result = await Effect.runPromise(
+      Effect.either(port.openDirectoryInTool("/repo", "explorer")),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+    expect(result.left).toBeInstanceOf(HostValidationError);
+    expect(result.left).toHaveProperty("message", "Unsupported Open In tool: explorer");
+  });
   test("opens external URLs with the platform browser command", async () => {
     const { calls, runner } = createRunner();
     const port = createOpenInToolsAdapter({
@@ -126,10 +179,145 @@ describe("createOpenInToolsAdapter", () => {
       "Opening external URLs is not supported on aix.",
     );
   });
-  test("rejects open-in discovery on non-macOS platforms", async () => {
-    const port = createOpenInToolsAdapter({ platform: "linux" });
+  test("discovers Linux tools from command resolution", async () => {
+    const { systemCommands } = createSystemCommands({
+      resolvedCommands: {
+        "xdg-open": "/usr/bin/xdg-open",
+        "x-terminal-emulator": "/usr/bin/x-terminal-emulator",
+        code: "/usr/bin/code",
+        cursor: null,
+      },
+    });
+    const port = createOpenInToolsAdapter({ platform: "linux", systemCommands });
+
+    await expect(Effect.runPromise(port.discoverOpenInTools())).resolves.toEqual([
+      { toolId: "xdg-open", iconDataUrl: null },
+      { toolId: "terminal", iconDataUrl: null },
+      { toolId: "vscode", iconDataUrl: null },
+    ]);
+  });
+
+  test("returns an empty Linux discovery result when supported commands are missing", async () => {
+    const { systemCommands } = createSystemCommands({ resolvedCommands: {} });
+    const port = createOpenInToolsAdapter({ platform: "linux", systemCommands });
+
+    await expect(Effect.runPromise(port.discoverOpenInTools())).resolves.toEqual([]);
+  });
+
+  test("launches Linux selected tools with paths containing spaces", async () => {
+    const { launches, systemCommands } = createSystemCommands({
+      resolvedCommands: { "xdg-open": "/usr/bin/xdg-open" },
+    });
+    const port = createOpenInToolsAdapter({ platform: "linux", systemCommands });
+
+    await Effect.runPromise(port.openDirectoryInTool("/tmp/repo with spaces", "xdg-open"));
+
+    expect(launches).toEqual([{ command: "xdg-open", args: ["/tmp/repo with spaces"] }]);
+  });
+
+  test("launches Linux terminals with command-specific directory arguments", async () => {
+    const { launches, systemCommands } = createSystemCommands({
+      resolvedCommands: {
+        "x-terminal-emulator": null,
+        "gnome-terminal": null,
+        konsole: "/usr/bin/konsole",
+      },
+    });
+    const port = createOpenInToolsAdapter({ platform: "linux", systemCommands });
+
+    await Effect.runPromise(port.openDirectoryInTool("/tmp/repo with spaces", "terminal"));
+
+    expect(launches).toEqual([
+      { command: "konsole", args: ["--workdir", "/tmp/repo with spaces"] },
+    ]);
+  });
+
+  test("discovers and launches Windows tools through command resolution", async () => {
+    const { launches, systemCommands } = createSystemCommands({
+      resolvedCommands: {
+        "explorer.exe": String.raw`C:\Windows\explorer.exe`,
+        "wt.exe": String.raw`C:\Users\dev\AppData\Local\Microsoft\WindowsApps\wt.exe`,
+        code: String.raw`C:\Users\dev\AppData\Local\Programs\Microsoft VS Code\bin\code.cmd`,
+      },
+    });
+    const port = createOpenInToolsAdapter({ platform: "win32", systemCommands });
+
+    await expect(Effect.runPromise(port.discoverOpenInTools())).resolves.toEqual([
+      { toolId: "explorer", iconDataUrl: null },
+      { toolId: "terminal", iconDataUrl: null },
+      { toolId: "vscode", iconDataUrl: null },
+    ]);
+    await Effect.runPromise(port.openDirectoryInTool(String.raw`C:\repo with spaces`, "terminal"));
+
+    expect(launches).toEqual([
+      { command: "wt.exe", args: ["-d", String.raw`C:\repo with spaces`] },
+    ]);
+  });
+
+  test("discovers and launches Windows command-script tools through the real command runner", async () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+
+    await withTempDir(async (root) => {
+      const toolDirectory = join(root, "tool dir");
+      const targetDirectory = join(root, "repo with spaces");
+      const markerPath = join(root, "opened.txt");
+      await mkdir(toolDirectory);
+      await mkdir(targetDirectory);
+      await writeFile(
+        join(toolDirectory, "code.CMD"),
+        "@echo off\r\necho %~1>%ODT_OPEN_IN_MARKER%\r\n",
+      );
+      const systemCommands = createSystemCommandRunner({
+        platform: "win32",
+        env: {
+          PATH: toolDirectory,
+          PATHEXT: ".CMD",
+          ODT_OPEN_IN_MARKER: markerPath,
+          ComSpec: process.env.ComSpec,
+        },
+      });
+      const port = createOpenInToolsAdapter({ platform: "win32", systemCommands });
+
+      await expect(Effect.runPromise(port.discoverOpenInTools())).resolves.toContainEqual({
+        toolId: "vscode",
+        iconDataUrl: null,
+      });
+      await Effect.runPromise(port.openDirectoryInTool(targetDirectory, "vscode"));
+
+      await expect(readFile(markerPath, "utf8")).resolves.toBe(`${targetDirectory}\r\n`);
+    });
+  });
+
+  test("rejects selected command tools that disappear before launch", async () => {
+    const { systemCommands } = createSystemCommands({
+      resolvedCommands: { code: null },
+    });
+    const port = createOpenInToolsAdapter({ platform: "linux", systemCommands });
+
+    await expect(Effect.runPromise(port.openDirectoryInTool("/repo", "vscode"))).rejects.toThrow(
+      "VS Code is not installed or is no longer discoverable on linux.",
+    );
+  });
+
+  test("rejects failed command tool launches with selected command details", async () => {
+    const { systemCommands } = createSystemCommands({
+      resolvedCommands: { code: "/usr/bin/code" },
+      runOk: false,
+      runStderr: "permission denied",
+    });
+    const port = createOpenInToolsAdapter({ platform: "linux", systemCommands });
+
+    await expect(Effect.runPromise(port.openDirectoryInTool("/repo", "vscode"))).rejects.toThrow(
+      "Command code exited unsuccessfully",
+    );
+  });
+
+  test("rejects open-in discovery on unsupported platforms", async () => {
+    const port = createOpenInToolsAdapter({ platform: "aix" });
     await expect(Effect.runPromise(port.discoverOpenInTools())).rejects.toThrow(
-      "Open In tool discovery is only supported on macOS.",
+      "Open In tool discovery is not supported on aix.",
     );
   });
 });
