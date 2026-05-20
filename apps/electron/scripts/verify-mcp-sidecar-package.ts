@@ -1,25 +1,42 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { ElectronReleasePlatform } from "./package-build";
+import type { ElectronReleaseArch, ElectronReleasePlatform } from "./package-build";
+
+type PackagedMcpSidecarPlatform = Exclude<ElectronReleasePlatform, "macos">;
 
 type VerifyPackagedMcpSidecarInput = {
+  arch: ElectronReleaseArch;
   platform: ElectronReleasePlatform;
   releaseDirectory: string;
 };
 
+type PackagedMcpSidecarInput = {
+  arch: ElectronReleaseArch;
+  platform: PackagedMcpSidecarPlatform;
+  releaseDirectory: string;
+};
+
+const unpackedDirectoryName = ({
+  arch,
+  platform,
+}: Pick<PackagedMcpSidecarInput, "arch" | "platform">): string => {
+  const prefix = platform === "windows" ? "win" : "linux";
+  return arch === "x64" ? `${prefix}-unpacked` : `${prefix}-${arch}-unpacked`;
+};
+
 export const resolvePackagedMcpSidecarPath = ({
+  arch,
   platform,
   releaseDirectory,
-}: VerifyPackagedMcpSidecarInput): string => {
+}: PackagedMcpSidecarInput): string => {
+  const unpackedDirectory = unpackedDirectoryName({ arch, platform });
+
   if (platform === "windows") {
-    return join(releaseDirectory, "win-unpacked", "resources", "bin", "openducktor-mcp.exe");
-  }
-  if (platform === "linux") {
-    return join(releaseDirectory, "linux-unpacked", "resources", "bin", "openducktor-mcp");
+    return join(releaseDirectory, unpackedDirectory, "resources", "bin", "openducktor-mcp.exe");
   }
 
-  throw new Error(`Electron MCP sidecar package validation is not defined for ${platform}.`);
+  return join(releaseDirectory, unpackedDirectory, "resources", "bin", "openducktor-mcp");
 };
 
 const assertPackagedSidecarFile = async (
@@ -47,6 +64,7 @@ const assertPackagedSidecarFile = async (
 };
 
 export const verifyPackagedMcpSidecar = async ({
+  arch,
   platform,
   releaseDirectory,
 }: VerifyPackagedMcpSidecarInput): Promise<string | undefined> => {
@@ -54,7 +72,7 @@ export const verifyPackagedMcpSidecar = async ({
     return undefined;
   }
 
-  const sidecarPath = resolvePackagedMcpSidecarPath({ platform, releaseDirectory });
+  const sidecarPath = resolvePackagedMcpSidecarPath({ arch, platform, releaseDirectory });
   const metadata = await assertPackagedSidecarFile(sidecarPath, platform);
 
   if (platform === "linux" && (metadata.mode & 0o111) === 0) {

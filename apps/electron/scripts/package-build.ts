@@ -218,7 +218,11 @@ export const buildElectronPackage = async ({
     env: resolveElectronBuilderEnv(signed, process.env),
   });
 
-  const verifiedSidecarPath = await verifyPackagedMcpSidecar({ platform, releaseDirectory });
+  const verifiedSidecarPath = await verifyPackagedMcpSidecar({
+    arch,
+    platform,
+    releaseDirectory,
+  });
   if (verifiedSidecarPath) {
     console.log(`Verified Electron MCP sidecar package payload: ${verifiedSidecarPath}`);
   }
