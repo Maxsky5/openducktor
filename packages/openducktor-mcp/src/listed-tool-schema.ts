@@ -24,24 +24,11 @@ const removeWorkspaceId = (jsonSchema: Record<string, unknown>): Record<string, 
   };
 };
 
-const withObjectProperties = (jsonSchema: Record<string, unknown>): Record<string, unknown> => {
-  if (jsonSchema.properties !== undefined) {
-    return jsonSchema;
-  }
-
-  return {
-    ...jsonSchema,
-    properties: {},
-  };
-};
-
 export const getListedToolInputSchema = (
   toolName: RegisteredToolName,
   options: { hideWorkspaceId: boolean },
 ): Record<string, unknown> => {
-  const jsonSchema = withObjectProperties(
-    z.toJSONSchema(ODT_TOOL_SCHEMAS[toolName], { io: "input" }),
-  );
+  const jsonSchema = z.toJSONSchema(ODT_TOOL_SCHEMAS[toolName], { io: "input" });
 
   if (options.hideWorkspaceId && WORKSPACE_SCOPED_TOOL_NAMES.has(toolName)) {
     return removeWorkspaceId(jsonSchema);

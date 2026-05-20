@@ -53,6 +53,15 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 1_000): Promise<voi
   throw new Error("Timed out waiting for condition.");
 };
 
+const waitForProcessExit = async (pid: number, timeoutMs: number): Promise<boolean> => {
+  try {
+    await waitFor(() => !processIsAlive(pid), timeoutMs);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const forceStopProcessTree = (pid: number) =>
   process.platform === "win32"
     ? terminateProcessTree({
@@ -61,14 +70,7 @@ const forceStopProcessTree = (pid: number) =>
         isClosed: () => !processIsAlive(pid),
         waitForExit: (timeoutMs) =>
           Effect.tryPromise({
-            try: async () => {
-              try {
-                await waitFor(() => !processIsAlive(pid), timeoutMs);
-                return true;
-              } catch {
-                return false;
-              }
-            },
+            try: () => waitForProcessExit(pid, timeoutMs),
             catch: (cause) =>
               new HostOperationError({
                 operation: "test.forceStopProcessTree",
