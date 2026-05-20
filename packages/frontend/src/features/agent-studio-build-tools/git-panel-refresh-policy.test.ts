@@ -68,6 +68,8 @@ describe("shouldRefreshGitPanelAfterToolCompletion", () => {
       "(git status)",
       "{ git status; }",
       "touch src/generated.ts",
+      "FOO=1 rm generated.ts",
+      "env FOO=1 rm generated.ts",
       "ln -s source target",
       "rsync -a src/ dist/",
       "tar -xf archive.tar",
@@ -96,6 +98,8 @@ describe("shouldRefreshGitPanelAfterToolCompletion", () => {
       "rg TODO",
       "cat README.md",
       "echo ready",
+      "echo rm",
+      'printf "rm"',
       "cmd 2>&1",
       "exec 3>&2",
     ];

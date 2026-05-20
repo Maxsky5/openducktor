@@ -8,7 +8,10 @@ const SHELL_COMMAND_PREFIX_PATTERN = String.raw`(?:^|[;&|\n({!]\s*)`;
 const SHELL_ENV_PREFIX_PATTERN = String.raw`(?:(?:[a-z_][a-z0-9_]*=\S+\s+)|(?:env\s+(?:[a-z_][a-z0-9_]*=\S+\s+)+))*`;
 
 const shellCommandPattern = (commandNames: readonly string[]): RegExp =>
-  new RegExp(String.raw`\b(?:${commandNames.join("|")})\b`);
+  new RegExp(
+    `${SHELL_COMMAND_PREFIX_PATTERN}${SHELL_ENV_PREFIX_PATTERN}(?:${commandNames.join("|")})\\b`,
+    "i",
+  );
 
 const GIT_COMMAND_PATTERN = new RegExp(
   `${SHELL_COMMAND_PREFIX_PATTERN}${SHELL_ENV_PREFIX_PATTERN}(?:rtk\\s+)?git\\b`,
