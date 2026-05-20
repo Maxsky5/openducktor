@@ -983,6 +983,11 @@ export class CodexAppServerAdapter
         this.tokenUsageByTurnKey.delete(turnKey);
       }
     }
+    for (const turnKey of [...this.modelByTurnKey.keys()]) {
+      if (turnKey.startsWith(turnKeyPrefix)) {
+        this.modelByTurnKey.delete(turnKey);
+      }
+    }
   }
 
   private ensureRuntimeEventSubscription(runtimeId: string): void {
@@ -1499,7 +1504,9 @@ export class CodexAppServerAdapter
       if (this.consumeSyntheticUserMessage(session.threadId, message)) {
         return;
       }
-      const model = this.modelForTurn(session, turnId) ?? session.model;
+      const model =
+        this.modelForTurn(session, turnId) ??
+        this.activeTurnsBySessionId.get(session.threadId)?.model;
       this.emitSessionEvent(session.threadId, {
         type: "user_message",
         externalSessionId: session.threadId,

@@ -4,6 +4,7 @@ import {
   makeRuntimeSummary,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
+import { codexTurnKey } from "./codex-app-server-requests";
 import { CodexAppServerAdapter } from "./index";
 
 describe("CodexAppServerAdapter lifecycle", () => {
@@ -66,6 +67,33 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
     const transport = transports.get("runtime-task-1");
     expect(transport?.calls.filter((call) => call.method === "model/list")).toHaveLength(1);
+  });
+
+  test("clears per-turn model metadata when local stop cleanup runs", async () => {
+    const { adapter } = createHarness();
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const modelByTurnKey = (
+      adapter as unknown as { modelByTurnKey: Map<string, { providerId: string }> }
+    ).modelByTurnKey;
+    const stoppedSessionTurnKey = codexTurnKey("thread/start-runtime-ensure", "turn-stopped");
+    const otherSessionTurnKey = codexTurnKey("thread/other", "turn-active");
+    modelByTurnKey.set(stoppedSessionTurnKey, { providerId: "openai" });
+    modelByTurnKey.set(otherSessionTurnKey, { providerId: "openai" });
+
+    await adapter.stopSession("thread/start-runtime-ensure");
+
+    expect(modelByTurnKey.has(stoppedSessionTurnKey)).toBe(false);
+    expect(modelByTurnKey.has(otherSessionTurnKey)).toBe(true);
   });
 
   test("lists models through the required live runtime id", async () => {
