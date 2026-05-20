@@ -44,10 +44,20 @@ describe("createProcessCommandLaunch", () => {
   });
 
   test("uses cmd.exe when ComSpec is absent or blank", () => {
-    expect(createProcessCommandLaunch("tool.cmd", [], {}, "win32").command).toBe("cmd.exe");
-    expect(createProcessCommandLaunch("tool.cmd", [], { ComSpec: "  " }, "win32").command).toBe(
-      "cmd.exe",
-    );
+    const originalComSpec = process.env.ComSpec;
+    process.env.ComSpec = String.raw`C:\Global\cmd.exe`;
+    try {
+      expect(createProcessCommandLaunch("tool.cmd", [], {}, "win32").command).toBe("cmd.exe");
+      expect(createProcessCommandLaunch("tool.cmd", [], { ComSpec: "  " }, "win32").command).toBe(
+        "cmd.exe",
+      );
+    } finally {
+      if (originalComSpec === undefined) {
+        delete process.env.ComSpec;
+      } else {
+        process.env.ComSpec = originalComSpec;
+      }
+    }
   });
 
   test("does not wrap non-Windows or non-script launches", () => {

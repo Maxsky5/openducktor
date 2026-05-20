@@ -34,7 +34,7 @@ export const createProcessCommandLaunch = (
     return { command, args };
   }
 
-  const windowsCommandShell = env.ComSpec?.trim() || process.env.ComSpec || "cmd.exe";
+  const windowsCommandShell = env.ComSpec?.trim() || "cmd.exe";
   const shellOptions = ["/d", "/s", "/c"];
   const quotedScriptInvocation = [command, ...args].map(quoteWindowsCommandArgument).join(" ");
   const shellCommandLine = `"${quotedScriptInvocation}"`;

@@ -2,7 +2,8 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
+import { Cause, Chunk, Effect, Exit } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import { createDevServerProcessAdapter as createEffectDevServerProcessAdapter } from "./dev-server-process-adapter";
 
 const createDevServerProcessAdapter = (
@@ -186,6 +187,41 @@ setInterval(() => {}, 1000);
         onOutput: () => {},
       }),
     ).rejects.toThrow("Dev server command has an unmatched quote.");
+  });
+
+  test("rejects missing executables with actionable spawn details", async () => {
+    const port = createEffectDevServerProcessAdapter({
+      processEnv: { PATH: process.env.PATH },
+      startGracePeriodMs: 20,
+      stopTimeoutMs: 100,
+    });
+    const command = "definitely-missing-dev-server-command-odt-wr4e --flag";
+    const exit = await Effect.runPromiseExit(
+      port.start({
+        command,
+        cwd: process.cwd(),
+        onExit: () => {},
+        onOutput: () => {},
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (!Exit.isFailure(exit)) {
+      throw new Error("Expected dev-server start to fail.");
+    }
+    const failureOption = Chunk.head(Cause.failures(exit.cause));
+    const failure = failureOption._tag === "Some" ? failureOption.value : null;
+    expect(failure).toBeInstanceOf(HostOperationError);
+    expect(failure).toMatchObject({
+      operation: "devServerProcess.spawn",
+      details: {
+        command,
+        cwd: process.cwd(),
+        launchCommand: "definitely-missing-dev-server-command-odt-wr4e",
+        launchArgs: ["--flag"],
+      },
+    });
   });
 
   test("runs Windows cmd and bat files with paths containing spaces on native Windows", async () => {

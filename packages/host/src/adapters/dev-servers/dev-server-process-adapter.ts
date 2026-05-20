@@ -58,6 +58,12 @@ export const createDevServerProcessAdapter = ({
         commandEnv,
         process.platform,
       );
+      const launchFailureDetails = {
+        command,
+        cwd,
+        launchCommand: launch.command,
+        launchArgs: launch.args,
+      };
 
       const runtimeScope = yield* Scope.make();
       scope = runtimeScope;
@@ -71,23 +77,9 @@ export const createDevServerProcessAdapter = ({
             windowsVerbatimArguments: launch.windowsVerbatimArguments === true,
           }),
         catch: (cause) =>
-          toHostOperationError(cause, "devServerProcess.spawn", {
-            command,
-            cwd,
-            launchCommand: launch.command,
-            launchArgs: launch.args,
-          }),
+          toHostOperationError(cause, "devServerProcess.spawn", launchFailureDetails),
       });
       const pid = child.pid;
-      if (!pid || pid <= 0) {
-        return yield* Effect.fail(
-          new HostOperationError({
-            message: "Failed to start dev server: child process did not expose a valid pid.",
-            operation: "dev-server.start",
-          }),
-        );
-      }
-
       let started = false;
       let closeResult: DevServerProcessExit | null = null;
       let spawnError: Error | null = null;
@@ -136,7 +128,7 @@ export const createDevServerProcessAdapter = ({
         notifyCloseListeners();
         if (started) {
           onExit({
-            pid,
+            pid: pid ?? -1,
             exitCode: null,
             signal: null,
             error: error.message,
@@ -145,7 +137,7 @@ export const createDevServerProcessAdapter = ({
       });
       child.once("close", (exitCode, signal) => {
         closeResult = {
-          pid,
+          pid: pid ?? -1,
           exitCode,
           signal,
           error: null,
@@ -155,6 +147,22 @@ export const createDevServerProcessAdapter = ({
           onExit(closeResult);
         }
       });
+
+      if (!pid || pid <= 0) {
+        yield* waitForClose(0);
+        if (spawnError) {
+          return yield* Effect.fail(
+            toHostOperationError(spawnError, "devServerProcess.spawn", launchFailureDetails),
+          );
+        }
+        return yield* Effect.fail(
+          new HostOperationError({
+            message: "Failed to start dev server: child process did not expose a valid pid.",
+            operation: "dev-server.start",
+            details: launchFailureDetails,
+          }),
+        );
+      }
 
       let released = false;
       const stopProcess = Effect.gen(function* () {
@@ -174,7 +182,9 @@ export const createDevServerProcessAdapter = ({
 
       const exitedDuringGracePeriod = yield* waitForClose(startGracePeriodMs);
       if (spawnError) {
-        return yield* Effect.fail(toHostOperationError(spawnError, "devServerProcess.start"));
+        return yield* Effect.fail(
+          toHostOperationError(spawnError, "devServerProcess.spawn", launchFailureDetails),
+        );
       }
       const immediateClose = closeResult as DevServerProcessExit | null;
       if (exitedDuringGracePeriod && immediateClose) {
