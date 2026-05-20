@@ -100,39 +100,42 @@ export const buildSessionStartModalDecision = ({
   requestContext: SessionStartDecisionRequestContext;
   selectedModel: AgentModelSelection | null;
 }): SessionStartModalDecision => {
-  const targetBranchFields = input.targetBranch
-    ? { targetBranch: targetBranchFromSelection(input.targetBranch) }
-    : {};
+  const targetBranchFields = (): { targetBranch?: GitTargetBranch } =>
+    input.targetBranch ? { targetBranch: targetBranchFromSelection(input.targetBranch) } : {};
 
   if (input.startMode === "reuse") {
+    const sourceExternalSessionId = requireSourceSessionId(
+      input.sourceExternalSessionId,
+      requestContext,
+    );
+
     return {
       startMode: "reuse",
-      sourceExternalSessionId: requireSourceSessionId(
-        input.sourceExternalSessionId,
-        requestContext,
-      ),
-      ...targetBranchFields,
+      sourceExternalSessionId,
+      ...targetBranchFields(),
     };
   }
 
   const resolvedSelectedModel = requireSelectedModel(selectedModel, requestContext);
 
   if (input.startMode === "fork") {
+    const sourceExternalSessionId = requireSourceSessionId(
+      input.sourceExternalSessionId,
+      requestContext,
+    );
+
     return {
       startMode: "fork",
       selectedModel: resolvedSelectedModel,
-      sourceExternalSessionId: requireSourceSessionId(
-        input.sourceExternalSessionId,
-        requestContext,
-      ),
-      ...targetBranchFields,
+      sourceExternalSessionId,
+      ...targetBranchFields(),
     };
   }
 
   return {
     startMode: "fresh",
     selectedModel: resolvedSelectedModel,
-    ...targetBranchFields,
+    ...targetBranchFields(),
   };
 };
 

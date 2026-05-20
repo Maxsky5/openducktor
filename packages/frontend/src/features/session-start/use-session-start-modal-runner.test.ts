@@ -127,6 +127,53 @@ describe("buildSessionStartModalDecision", () => {
       "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
     );
   });
+
+  test("keeps required guard errors ahead of invalid target branch parsing", () => {
+    expect(() =>
+      buildSessionStartModalDecision({
+        input: {
+          runInBackground: false,
+          startMode: "fresh",
+          sourceExternalSessionId: null,
+          targetBranch: "refs/remotes/origin",
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: null,
+      }),
+    ).toThrow(
+      "Starting a build build_pull_request_generation session for TASK-1 requires an explicit model selection.",
+    );
+
+    expect(() =>
+      buildSessionStartModalDecision({
+        input: {
+          runInBackground: false,
+          startMode: "reuse",
+          sourceExternalSessionId: null,
+          targetBranch: "refs/remotes/origin",
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: null,
+      }),
+    ).toThrow(
+      "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
+    );
+
+    expect(() =>
+      buildSessionStartModalDecision({
+        input: {
+          runInBackground: false,
+          startMode: "fork",
+          sourceExternalSessionId: null,
+          targetBranch: "refs/remotes/origin",
+        },
+        requestContext: REQUEST_CONTEXT,
+        selectedModel: SELECTED_MODEL,
+      }),
+    ).toThrow(
+      "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
+    );
+  });
 });
 
 describe("assertRuntimeSupportsSelectedStartMode", () => {
