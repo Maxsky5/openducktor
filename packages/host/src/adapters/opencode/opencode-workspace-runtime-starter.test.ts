@@ -8,6 +8,7 @@ import { HostOperationError } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { removeTestDirectory } from "../../test-support/temp-directory";
+import { terminateProcessTree } from "../process/process-tree";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import {
   buildOpenCodeConfigContent,
@@ -51,6 +52,44 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 1_000): Promise<voi
   }
   throw new Error("Timed out waiting for condition.");
 };
+
+const forceStopProcessTree = (pid: number) =>
+  process.platform === "win32"
+    ? terminateProcessTree({
+        pid,
+        label: `test process tree ${pid}`,
+        isClosed: () => !processIsAlive(pid),
+        waitForExit: (timeoutMs) =>
+          Effect.tryPromise({
+            try: async () => {
+              try {
+                await waitFor(() => !processIsAlive(pid), timeoutMs);
+                return true;
+              } catch {
+                return false;
+              }
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.forceStopProcessTree",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause,
+              }),
+          }),
+        stopTimeoutMs: 2_000,
+      })
+    : Effect.tryPromise({
+        try: async () => {
+          process.kill(pid, "SIGKILL");
+          await waitFor(() => !processIsAlive(pid), 2_000);
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.forceStopProcessTree",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
 
 const createFakeOpenCode = async (
   root: string,
@@ -357,7 +396,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       await expect(Effect.runPromise(handle.stop())).rejects.toThrow("process tree stayed alive");
     } finally {
       if (runtimePid !== null && processIsAlive(runtimePid)) {
-        process.kill(runtimePid, "SIGKILL");
+        await Effect.runPromise(forceStopProcessTree(runtimePid));
       }
       await removeTestDirectory(root);
     }
@@ -421,12 +460,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       );
     } finally {
       if (runtimePid !== null && processIsAlive(runtimePid)) {
-        try {
-          await waitFor(() => !processIsAlive(runtimePid as number), 2_000);
-        } catch {
-          process.kill(runtimePid, "SIGKILL");
-          await waitFor(() => !processIsAlive(runtimePid as number), 2_000);
-        }
+        await Effect.runPromise(forceStopProcessTree(runtimePid));
       }
       await removeTestDirectory(root);
     }
