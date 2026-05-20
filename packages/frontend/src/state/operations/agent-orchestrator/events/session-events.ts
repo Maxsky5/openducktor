@@ -11,6 +11,7 @@ import {
   handlePermissionRequired,
   handleQuestionRequired,
   handleSessionCompacted,
+  handleSessionCompactionStarted,
   handleSessionError,
   handleSessionFinished,
   handleSessionIdle,
@@ -73,6 +74,9 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
       return;
     case "session_todos_updated":
       handleSessionTodosUpdated(context.lifecycle, event);
+      return;
+    case "session_compaction_started":
+      handleSessionCompactionStarted(context.lifecycle, event);
       return;
     case "session_compacted":
       handleSessionCompacted(context.lifecycle, event);

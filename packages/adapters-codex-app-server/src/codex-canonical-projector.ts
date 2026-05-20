@@ -76,11 +76,22 @@ export const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEve
     };
   }
 
+  if (event.kind === "session_compaction_started") {
+    return {
+      type: "session_compaction_started",
+      externalSessionId: event.threadId,
+      timestamp,
+      ...(event.messageId ? { messageId: event.messageId } : {}),
+      message: event.message,
+    };
+  }
+
   if (event.kind === "session_compacted") {
     return {
       type: "session_compacted",
       externalSessionId: event.threadId,
       timestamp,
+      ...(event.messageId ? { messageId: event.messageId } : {}),
       message: event.message,
     };
   }

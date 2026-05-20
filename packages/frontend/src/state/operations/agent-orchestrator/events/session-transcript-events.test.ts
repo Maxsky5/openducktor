@@ -528,9 +528,33 @@ describe("agent-orchestrator session transcript events", () => {
     }
 
     handleEvent({
+      type: "session_compaction_started",
+      externalSessionId: "session-1",
+      timestamp: "2026-05-18T21:00:30.000Z",
+      messageId: "compact-live",
+      message: "Session compaction started.",
+    });
+    expect(getSessionMessages(sessionsRef).at(-1)).toEqual(
+      expect.objectContaining({
+        id: "compact-live",
+        role: "system",
+        content: "Session compaction started.",
+        timestamp: "2026-05-18T21:00:30.000Z",
+        meta: {
+          kind: "session_notice",
+          tone: "info",
+          reason: "session_compacted",
+          title: "Compacting",
+          compactionStatus: "running",
+        },
+      }),
+    );
+
+    handleEvent({
       type: "session_compacted",
       externalSessionId: "session-1",
       timestamp: "2026-05-18T21:01:00.000Z",
+      messageId: "compact-live",
       message: "Session compacted.",
     });
 
@@ -539,10 +563,12 @@ describe("agent-orchestrator session transcript events", () => {
       throw new Error("Expected session to exist");
     }
     const messages = getSessionMessages(sessionsRef);
-    const notice = messages.at(-1);
+    const compactedNotice = messages.at(-1);
+    expect(messages).toHaveLength(2);
     expect(messages[0]).toEqual(previousMessage);
-    expect(notice).toEqual(
+    expect(compactedNotice).toEqual(
       expect.objectContaining({
+        id: "compact-live",
         role: "system",
         content: "Session compacted.",
         timestamp: "2026-05-18T21:01:00.000Z",
@@ -551,10 +577,11 @@ describe("agent-orchestrator session transcript events", () => {
           tone: "info",
           reason: "session_compacted",
           title: "Compacted",
+          compactionStatus: "completed",
         },
       }),
     );
-    expect(updateSessionOptions).toContainEqual({ persist: true });
+    expect(updateSessionOptions).toEqual([{ persist: true }, { persist: true }]);
     expect(session).toEqual(
       expect.objectContaining({
         ...protectedSessionState,

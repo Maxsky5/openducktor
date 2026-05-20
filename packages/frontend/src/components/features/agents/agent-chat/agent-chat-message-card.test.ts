@@ -586,9 +586,37 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("text-info-surface-foreground");
     expect(html).toContain("Session compacted.");
     expect(html).toContain("Compacted");
+    expect(html).not.toContain("animate-spin");
     expect(html).not.toContain("border-destructive-border");
     expect(html).not.toContain("border-cancelled-border");
     expect(html).not.toContain(">System<");
+  });
+
+  test("renders running session compaction notices with a loader", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "session-notice-compacting",
+          role: "system",
+          content: "Session compaction started.",
+          timestamp: "2026-05-18T21:00:30.000Z",
+          meta: {
+            kind: "session_notice",
+            tone: "info",
+            reason: "session_compacted",
+            title: "Compacting",
+            compactionStatus: "running",
+          },
+        },
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("border-info-border");
+    expect(html).toContain("Session compaction started.");
+    expect(html).toContain("Compacting");
+    expect(html).toContain("animate-spin");
   });
 
   test("renders system prompt as expandable card", () => {

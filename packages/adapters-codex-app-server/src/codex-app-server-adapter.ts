@@ -1420,7 +1420,11 @@ export class CodexAppServerAdapter
       { source: "live", threadId: session.threadId, timestamp },
     );
     for (const event of projectCodexCanonicalEvents(canonicalEvents)) {
-      if (event.type !== "assistant_part" || event.part.kind !== "tool") {
+      if (event.type !== "assistant_part") {
+        this.emitSessionEvent(session.threadId, event);
+        continue;
+      }
+      if (event.part.kind !== "tool") {
         continue;
       }
       this.emitSessionEvent(session.threadId, {

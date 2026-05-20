@@ -3,15 +3,17 @@ import type { AgentChatMessage } from "@/types/agent-orchestrator";
 type SessionNoticeMeta = Extract<AgentChatMessage["meta"], { kind: "session_notice" }>;
 
 const buildSessionNoticeMessage = ({
+  id,
   timestamp,
   content,
   meta,
 }: {
+  id?: string;
   timestamp: string;
   content: string;
   meta: SessionNoticeMeta;
 }): AgentChatMessage => ({
-  id: crypto.randomUUID(),
+  id: id ?? crypto.randomUUID(),
   role: "system",
   content,
   timestamp,
@@ -47,17 +49,36 @@ export const buildSessionErrorNoticeMessage = (
     },
   });
 
-export const buildSessionCompactedNoticeMessage = (
+const buildSessionCompactionNoticeMessage = (
   timestamp: string,
   message: string,
+  title: string,
+  status: "running" | "completed",
+  id?: string,
 ): AgentChatMessage =>
   buildSessionNoticeMessage({
+    ...(id ? { id } : {}),
     timestamp,
     content: message,
     meta: {
       kind: "session_notice",
       tone: "info",
       reason: "session_compacted",
-      title: "Compacted",
+      title,
+      compactionStatus: status,
     },
   });
+
+export const buildSessionCompactedNoticeMessage = (
+  timestamp: string,
+  message: string,
+  id?: string,
+): AgentChatMessage =>
+  buildSessionCompactionNoticeMessage(timestamp, message, "Compacted", "completed", id);
+
+export const buildSessionCompactionStartedNoticeMessage = (
+  timestamp: string,
+  message: string,
+  id?: string,
+): AgentChatMessage =>
+  buildSessionCompactionNoticeMessage(timestamp, message, "Compacting", "running", id);

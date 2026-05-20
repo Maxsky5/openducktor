@@ -82,9 +82,25 @@ describe("CodexAppServerAdapter streaming", () => {
           },
         },
         {
-          method: "thread/compacted",
+          method: "item/started",
           params: {
             threadId: "thread/start-runtime-ensure",
+            turnId: "turn-1",
+            item: {
+              type: "contextCompaction",
+              id: "compact-live",
+            },
+          },
+        },
+        {
+          method: "item/completed",
+          params: {
+            threadId: "thread/start-runtime-ensure",
+            turnId: "turn-1",
+            item: {
+              type: "contextCompaction",
+              id: "compact-live",
+            },
           },
         },
         {
@@ -183,9 +199,17 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
     expect(events).toContainEqual({
+      type: "session_compaction_started",
+      externalSessionId: "thread/start-runtime-ensure",
+      timestamp: expect.any(String),
+      messageId: "compact-live",
+      message: "Session compaction started.",
+    });
+    expect(events).toContainEqual({
       type: "session_compacted",
       externalSessionId: "thread/start-runtime-ensure",
       timestamp: expect.any(String),
+      messageId: "compact-live",
       message: "Session compacted.",
     });
     expect(
@@ -687,9 +711,29 @@ describe("CodexAppServerAdapter streaming", () => {
       runtimeId: "runtime-live",
       kind: "notification",
       message: {
-        method: "thread/compacted",
+        method: "item/started",
         params: {
           threadId: "thread-saved",
+          turnId: "turn-live",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
+          },
+        },
+      },
+    });
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "item/completed",
+        params: {
+          threadId: "thread-saved",
+          turnId: "turn-live",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
+          },
         },
       },
     });
@@ -706,15 +750,23 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
     expect(events).toContainEqual({
+      type: "session_compaction_started",
+      externalSessionId: "thread-saved",
+      timestamp: expect.any(String),
+      messageId: "compact-live",
+      message: "Session compaction started.",
+    });
+    expect(events).toContainEqual({
       type: "session_compacted",
       externalSessionId: "thread-saved",
       timestamp: expect.any(String),
+      messageId: "compact-live",
       message: "Session compacted.",
     });
     unsubscribe();
   });
 
-  test("routes live context compaction items", async () => {
+  test("routes live context compaction lifecycle items", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
     > = [];
@@ -741,6 +793,21 @@ describe("CodexAppServerAdapter streaming", () => {
       runtimeId: "runtime-live",
       kind: "notification",
       message: {
+        method: "item/started",
+        params: {
+          threadId: "thread-saved",
+          turnId: "turn-live",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
+          },
+        },
+      },
+    });
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
         method: "item/completed",
         params: {
           threadId: "thread-saved",
@@ -755,9 +822,17 @@ describe("CodexAppServerAdapter streaming", () => {
     await Promise.resolve();
 
     expect(events).toContainEqual({
+      type: "session_compaction_started",
+      externalSessionId: "thread-saved",
+      timestamp: expect.any(String),
+      messageId: "compact-live",
+      message: "Session compaction started.",
+    });
+    expect(events).toContainEqual({
       type: "session_compacted",
       externalSessionId: "thread-saved",
       timestamp: expect.any(String),
+      messageId: "compact-live",
       message: "Session compacted.",
     });
     unsubscribe();

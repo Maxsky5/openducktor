@@ -112,6 +112,7 @@ export type AgentChatMessageMeta =
       tone: "info";
       reason: "session_compacted";
       title: string;
+      compactionStatus?: "running" | "completed";
     };
 
 export type AgentChatMessage = {

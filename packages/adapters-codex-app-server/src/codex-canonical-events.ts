@@ -61,6 +61,12 @@ export type CodexCanonicalSessionIdleEvent = CodexCanonicalEventBase & {
   kind: "session_idle";
 };
 
+export type CodexCanonicalSessionCompactionStartedEvent = CodexCanonicalEventBase & {
+  kind: "session_compaction_started";
+  messageId?: string;
+  message: string;
+};
+
 export type CodexCanonicalSessionCompactedEvent = CodexCanonicalEventBase & {
   kind: "session_compacted";
   messageId?: string;
@@ -80,6 +86,7 @@ export type CodexCanonicalEvent =
   | CodexCanonicalAssistantDeltaEvent
   | CodexCanonicalSessionErrorEvent
   | CodexCanonicalSessionIdleEvent
+  | CodexCanonicalSessionCompactionStartedEvent
   | CodexCanonicalSessionCompactedEvent
   | CodexCanonicalTodoUpdateEvent;
 

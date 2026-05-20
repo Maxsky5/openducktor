@@ -78,14 +78,14 @@ describe("Codex todo event mapper", () => {
 });
 
 describe("Codex compaction event mapper", () => {
-  test("projects live thread compaction notifications to session events", () => {
+  test("projects live context compaction starts to session events", () => {
     const events = projectCodexCanonicalEvents(
       compactionMapper.fromLive(
         {
-          kind: "notification",
-          notification: {
-            method: "thread/compacted",
-            params: {},
+          kind: "item_started",
+          item: {
+            type: "contextCompaction",
+            id: "compact-live",
           },
         },
         {
@@ -98,10 +98,11 @@ describe("Codex compaction event mapper", () => {
 
     expect(events).toEqual([
       {
-        type: "session_compacted",
+        type: "session_compaction_started",
         externalSessionId: "thread-1",
         timestamp: "2026-05-18T21:00:00.000Z",
-        message: "Session compacted.",
+        messageId: "compact-live",
+        message: "Session compaction started.",
       },
     ]);
   });
@@ -131,6 +132,7 @@ describe("Codex compaction event mapper", () => {
         type: "session_compacted",
         externalSessionId: "thread-1",
         timestamp: "2026-05-18T21:00:00.000Z",
+        messageId: "compact-live",
         message: "Session compacted.",
       },
     ]);

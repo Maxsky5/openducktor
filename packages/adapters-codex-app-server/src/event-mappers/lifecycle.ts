@@ -6,6 +6,7 @@ import {
 } from "../codex-app-server-transcript";
 import type {
   CodexCanonicalSessionCompactedEvent,
+  CodexCanonicalSessionCompactionStartedEvent,
   CodexMappingContext,
   CodexMappingResult,
 } from "../codex-canonical-events";
@@ -27,6 +28,22 @@ const toSessionCompactedEvent = (
   raw,
   ...(messageId ? { messageId } : {}),
   message: "Session compacted.",
+});
+
+const toSessionCompactionStartedEvent = (
+  ctx: CodexMappingContext,
+  raw: unknown,
+  messageId?: string,
+): CodexCanonicalSessionCompactionStartedEvent => ({
+  kind: "session_compaction_started",
+  source: ctx.source,
+  mapper: "compaction",
+  threadId: ctx.threadId,
+  ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
+  ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
+  raw,
+  ...(messageId ? { messageId } : {}),
+  message: "Session compaction started.",
 });
 
 export const lifecycleMapper: CodexEventMapper = {
@@ -77,31 +94,36 @@ export const compactionMapper: CodexEventMapper = {
   name: "compaction",
   createState: noCodexMapperState,
   fromLive(input, ctx): CodexMappingResult {
-    if (
-      input.kind === "item_completed" &&
-      (codexItemTypeMatches(input.item, "contextCompaction") ||
-        codexItemTypeMatches(input.item, "compaction"))
-    ) {
+    if (input.kind === "item_started" && codexItemTypeMatches(input.item, "contextCompaction")) {
       return {
         handled: true,
-        events: [toSessionCompactedEvent(ctx, input.item)],
+        events: [
+          toSessionCompactionStartedEvent(
+            ctx,
+            input.item,
+            codexItemId(input.item, `${ctx.threadId}-session-compaction`),
+          ),
+        ],
       };
     }
 
-    if (input.kind !== "notification" || input.notification.method !== "thread/compacted") {
-      return emptyCodexMappingResult();
+    if (input.kind === "item_completed" && codexItemTypeMatches(input.item, "contextCompaction")) {
+      return {
+        handled: true,
+        events: [
+          toSessionCompactedEvent(
+            ctx,
+            input.item,
+            codexItemId(input.item, `${ctx.threadId}-session-compaction`),
+          ),
+        ],
+      };
     }
 
-    return {
-      handled: true,
-      events: [toSessionCompactedEvent(ctx, input.notification.params)],
-    };
+    return emptyCodexMappingResult();
   },
   fromThreadItem(input, ctx): CodexMappingResult {
-    if (
-      !codexItemTypeMatches(input.item, "contextCompaction") &&
-      !codexItemTypeMatches(input.item, "compaction")
-    ) {
+    if (!codexItemTypeMatches(input.item, "contextCompaction")) {
       return emptyCodexMappingResult();
     }
 
