@@ -1,54 +1,21 @@
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 
+type SessionNoticeMeta = Extract<AgentChatMessage["meta"], { kind: "session_notice" }>;
+
 const buildSessionNoticeMessage = ({
   timestamp,
   content,
-  tone,
-  title,
-}:
-  | {
-      timestamp: string;
-      content: string;
-      tone: "cancelled";
-      title: string;
-    }
-  | {
-      timestamp: string;
-      content: string;
-      tone: "error";
-      title: string;
-    }
-  | {
-      timestamp: string;
-      content: string;
-      tone: "info";
-      title: string;
-    }): AgentChatMessage => ({
+  meta,
+}: {
+  timestamp: string;
+  content: string;
+  meta: SessionNoticeMeta;
+}): AgentChatMessage => ({
   id: crypto.randomUUID(),
   role: "system",
   content,
   timestamp,
-  meta:
-    tone === "cancelled"
-      ? {
-          kind: "session_notice",
-          tone: "cancelled",
-          reason: "user_stopped",
-          title,
-        }
-      : tone === "info"
-        ? {
-            kind: "session_notice",
-            tone: "info",
-            reason: "session_compacted",
-            title,
-          }
-        : {
-            kind: "session_notice",
-            tone: "error",
-            reason: "session_error",
-            title,
-          },
+  meta,
 });
 
 export const USER_STOPPED_NOTICE = "Session stopped at your request.";
@@ -57,8 +24,12 @@ export const buildUserStoppedNoticeMessage = (timestamp: string): AgentChatMessa
   buildSessionNoticeMessage({
     timestamp,
     content: USER_STOPPED_NOTICE,
-    tone: "cancelled",
-    title: "Stopped",
+    meta: {
+      kind: "session_notice",
+      tone: "cancelled",
+      reason: "user_stopped",
+      title: "Stopped",
+    },
   });
 
 export const buildSessionErrorNoticeMessage = (
@@ -68,8 +39,12 @@ export const buildSessionErrorNoticeMessage = (
   buildSessionNoticeMessage({
     timestamp,
     content: message,
-    tone: "error",
-    title: "Error",
+    meta: {
+      kind: "session_notice",
+      tone: "error",
+      reason: "session_error",
+      title: "Error",
+    },
   });
 
 export const buildSessionCompactedNoticeMessage = (
@@ -79,6 +54,10 @@ export const buildSessionCompactedNoticeMessage = (
   buildSessionNoticeMessage({
     timestamp,
     content: message,
-    tone: "info",
-    title: "Compacted",
+    meta: {
+      kind: "session_notice",
+      tone: "info",
+      reason: "session_compacted",
+      title: "Compacted",
+    },
   });

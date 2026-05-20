@@ -84,13 +84,7 @@ export const compactionMapper: CodexEventMapper = {
     ) {
       return {
         handled: true,
-        events: [
-          toSessionCompactedEvent(
-            ctx,
-            input.item,
-            codexItemId(input.item, `session-compacted:${ctx.timestamp ?? "live"}`),
-          ),
-        ],
+        events: [toSessionCompactedEvent(ctx, input.item)],
       };
     }
 
