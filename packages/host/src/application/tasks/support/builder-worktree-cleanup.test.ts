@@ -7,11 +7,14 @@ import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
   createBuildStartGitPort,
+  createBuildStartRuntimeRegistry,
   createBuildStartWorktreeFiles,
+  createBuildSystemCommands,
   createBuildWorkspaceSettingsService,
   createDirectMergeDevServerService,
   createDirectMergeGitPort,
   createDirectMergeTaskWorktreeService,
+  createRuntimeDefinitionsService,
   extendGitPort,
   task,
 } from "../test-support/task-workflow-harness";
@@ -21,6 +24,7 @@ import {
   loadBuilderBranchCleanup,
   rollbackFailedBuildWorktree,
 } from "./builder-worktree-cleanup";
+import { requireBuildStartDependencies } from "./required-task-dependencies";
 
 const taskStoreWithTasks = (tasks: ReturnType<typeof task>[]): RealTaskStorePort =>
   ({
@@ -122,6 +126,57 @@ describe("builder worktree cleanup", () => {
 
     expect(cleanupTarget).toBe("/worktrees/repo/session-new");
     expect(calls).toEqual([]);
+  });
+
+  test("returns undefined when every cleanup candidate is unusable", async () => {
+    const calls: unknown[] = [];
+    const cleanupTarget = await Effect.runPromise(
+      findLatestCleanupTarget(
+        {
+          gitPort: createDirectMergeGitPort({
+            calls,
+            currentBranches: {
+              "/worktrees/repo/detached": { detached: true },
+              "/worktrees/repo/wrong-branch": { name: "odt/other-task", detached: false },
+            },
+          }),
+          settingsConfig: createBuildSettingsConfig(
+            new Set(["/worktrees/repo/detached", "/worktrees/repo/wrong-branch"]),
+          ),
+          taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+        },
+        taskStoreWithTasks([
+          task({
+            agentSessions: [
+              createAgentSessionRecord({
+                externalSessionId: "session-empty",
+                startedAt: "2026-05-10T12:00:00.000Z",
+                workingDirectory: " ",
+              }),
+              createAgentSessionRecord({
+                externalSessionId: "session-detached",
+                startedAt: "2026-05-10T11:00:00.000Z",
+                workingDirectory: "/worktrees/repo/detached",
+              }),
+              createAgentSessionRecord({
+                externalSessionId: "session-wrong-branch",
+                startedAt: "2026-05-10T10:00:00.000Z",
+                workingDirectory: "/worktrees/repo/wrong-branch",
+              }),
+            ],
+          }),
+        ]),
+        "/repo",
+        "task-1",
+        "odt/task-1",
+      ),
+    );
+
+    expect(cleanupTarget).toBeUndefined();
+    expect(calls).toEqual([
+      { type: "currentBranch", workingDir: "/worktrees/repo/detached" },
+      { type: "currentBranch", workingDir: "/worktrees/repo/wrong-branch" },
+    ]);
   });
 
   test("removes the selected worktree and force-deletes an unmerged source branch", async () => {
@@ -259,8 +314,8 @@ describe("builder worktree cleanup", () => {
     };
     const rollbackMessage = await Effect.runPromise(
       rollbackFailedBuildWorktree(
-        {
-          gitPort: extendGitPort(createBuildStartGitPort({ calls }), {
+        requireBuildStartDependencies(
+          extendGitPort(createBuildStartGitPort({ calls }), {
             deleteReference(repoPath, reference) {
               calls.push({ type: "deleteReference", repoPath, reference });
               return Effect.fail(
@@ -280,9 +335,17 @@ describe("builder worktree cleanup", () => {
               );
             },
           }),
-          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-          worktreeFiles: failingWorktreeFiles,
-        } as Parameters<typeof rollbackFailedBuildWorktree>[0],
+          createRuntimeDefinitionsService(),
+          createBuildStartRuntimeRegistry(calls),
+          createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+          createBuildSystemCommands(calls),
+          failingWorktreeFiles,
+          createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: emptyHooks,
+          }),
+        ),
         "/repo",
         "/worktrees/repo/task-1",
         "odt/task-1",
