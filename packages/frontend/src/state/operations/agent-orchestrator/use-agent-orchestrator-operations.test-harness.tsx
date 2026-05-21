@@ -147,12 +147,7 @@ export const createHookHarness = (args: {
     predicate: (state: ReturnType<typeof useAgentOrchestratorOperations>) => boolean,
   ) => {
     await sharedHarness.waitFor(() => latest !== null && predicate(latest));
-
-    if (!latest) {
-      throw new Error("Hook state unavailable");
-    }
-
-    return latest;
+    return getLatest();
   };
 
   const getLatest = () => {

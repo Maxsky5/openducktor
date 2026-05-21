@@ -92,7 +92,9 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   opencodeSdkAdapterPrototype.listSessionPresence = async () => [
     createAgentSessionPresenceSnapshotFixture(),
   ];
-  opencodeSdkAdapterPrototype.readSessionPresence = async (input: ReadSessionPresenceInput) => {
+  opencodeSdkAdapterPrototype.readSessionPresence = async (
+    input: ReadSessionPresenceInput,
+  ): ReturnType<NonNullable<OpencodeSdkAdapterPrototype["readSessionPresence"]>> => {
     const snapshots = await opencodeSdkAdapterPrototype.listSessionPresence({
       repoPath: input.repoPath ?? "/tmp/repo",
       runtimeKind: input.runtimeKind ?? "opencode",

@@ -18,6 +18,8 @@ import {
 } from "./use-agent-orchestrator-operations.test-helpers";
 
 describe("use-agent-orchestrator-operations session state", () => {
+  type SessionEventHandler = (event: { type: string; [key: string]: unknown }) => void;
+
   let restoreEnvironment: (() => void) | null = null;
 
   beforeEach(async () => {
@@ -35,7 +37,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     let stopCalls = 0;
     let resumeCalls = 0;
     let sendCalls = 0;
-    let eventHandler: ((event: { type: string; [key: string]: unknown }) => void) | null = null;
+    const eventHandlerRef: { current: SessionEventHandler | null } = { current: null };
 
     const originalAgentSessionsList = host.agentSessionsList;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
@@ -62,10 +64,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     OpencodeSdkAdapter.prototype.hasSession = () => true;
     OpencodeSdkAdapter.prototype.subscribeEvents = (_externalSessionId, listener) => {
       subscribeCalls += 1;
-      eventHandler = listener as unknown as (event: {
-        type: string;
-        [key: string]: unknown;
-      }) => void;
+      eventHandlerRef.current = listener as SessionEventHandler;
       return () => {
         unsubscribeCalls += 1;
       };
@@ -160,18 +159,17 @@ describe("use-agent-orchestrator-operations session state", () => {
         }),
       ).rejects.toThrow("Session is waiting for pending runtime input.");
 
-      if (!eventHandler) {
-        throw new Error("Expected session event handler to be registered");
-      }
+      expect(eventHandlerRef.current).not.toBeNull();
+      const registeredEventHandler = eventHandlerRef.current as SessionEventHandler;
 
       await harness.run(async () => {
-        eventHandler?.({
+        registeredEventHandler({
           type: "session_error",
           externalSessionId: "external-1",
           message: "boom",
           timestamp: "2026-02-22T08:00:04.000Z",
         });
-        eventHandler?.({
+        registeredEventHandler({
           type: "approval_required",
           externalSessionId: "external-1",
           requestId: "perm-1",
@@ -189,7 +187,7 @@ describe("use-agent-orchestrator-operations session state", () => {
           metadata: { tool: "read" },
           timestamp: "2026-02-22T08:00:05.000Z",
         });
-        eventHandler?.({
+        registeredEventHandler({
           type: "question_required",
           externalSessionId: "external-1",
           requestId: "question-1",

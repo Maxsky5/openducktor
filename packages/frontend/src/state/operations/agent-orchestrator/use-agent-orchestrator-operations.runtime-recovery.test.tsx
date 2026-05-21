@@ -522,6 +522,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
       });
       expect(agentSessionUpsert).not.toHaveBeenCalled();
     } finally {
+      attachSessionDeferred.reject(new Error("test aborted"));
       await harness.unmount();
       OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
