@@ -195,6 +195,27 @@ mod tests {
         )
     }
 
+    fn workspace_opencode_runtime(
+        runtime_id: &str,
+        repo_path: &str,
+        port: u16,
+        started_at: &str,
+    ) -> host_domain::RuntimeInstanceSummary {
+        host_domain::RuntimeInstanceSummary {
+            kind: AgentRuntimeKind::opencode(),
+            runtime_id: runtime_id.to_string(),
+            repo_path: repo_path.to_string(),
+            task_id: None,
+            role: host_domain::RuntimeRole::Workspace,
+            working_directory: repo_path.to_string(),
+            runtime_route: RuntimeRoute::LocalHttp {
+                endpoint: format!("http://127.0.0.1:{port}"),
+            },
+            started_at: started_at.to_string(),
+            descriptor: builtin_opencode_runtime_descriptor(),
+        }
+    }
+
     fn insert_workspace_runtime(
         service: &AppService,
         runtime: host_domain::RuntimeInstanceSummary,
@@ -253,19 +274,12 @@ mod tests {
             runtime_http_response("200 OK", r#"{"openducktor":{"status":"connected"}}"#),
             runtime_http_response("200 OK", r#"["odt_read_task"]"#),
         ])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-ready".to_string(),
-            repo_path: "/tmp/repo-health-ready".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-ready".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-ready",
+            "/tmp/repo-health-ready",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health = service.repo_runtime_health("opencode", "/tmp/repo-health-ready")?;
@@ -304,19 +318,12 @@ mod tests {
             runtime_http_response("200 OK", r#"{"openducktor":{"status":"connected"}}"#),
             runtime_http_response("200 OK", r#"["odt_read_task"]"#),
         ])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-reconnect".to_string(),
-            repo_path: "/tmp/repo-health-reconnect".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-reconnect".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-reconnect",
+            "/tmp/repo-health-reconnect",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health = service.repo_runtime_health("opencode", "/tmp/repo-health-reconnect")?;
@@ -339,6 +346,112 @@ mod tests {
     }
 
     #[test]
+    fn repo_runtime_health_reports_reconnect_failure() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let (port, server_handle) = spawn_runtime_http_server(vec![
+            runtime_http_response(
+                "200 OK",
+                r#"{"openducktor":{"status":"disconnected","error":"not connected"}}"#,
+            ),
+            runtime_http_response(
+                "504 Gateway Timeout",
+                r#"{"error":{"message":"connect timed out"}}"#,
+            ),
+        ])?;
+        let runtime = workspace_opencode_runtime(
+            "runtime-reconnect-failure",
+            "/tmp/repo-health-reconnect-failure",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
+        insert_workspace_runtime(&service, runtime.clone())?;
+
+        let health =
+            service.repo_runtime_health("opencode", "/tmp/repo-health-reconnect-failure")?;
+        let requests = server_handle.join().expect("server thread should finish");
+
+        assert!(
+            requests[0].starts_with("GET /mcp?directory=%2Ftmp%2Frepo-health-reconnect-failure ")
+        );
+        assert!(requests[1].starts_with(
+            "POST /mcp/openducktor/connect?directory=%2Ftmp%2Frepo-health-reconnect-failure "
+        ));
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(health.status, RepoRuntimeHealthState::Checking);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Reconnecting)
+        );
+        assert_eq!(
+            health
+                .mcp
+                .as_ref()
+                .and_then(|value| value.server_status.as_deref()),
+            Some("disconnected")
+        );
+        assert!(health
+            .mcp
+            .as_ref()
+            .and_then(|value| value.detail.as_deref())
+            .is_some_and(|value| value.contains("Failed to reconnect MCP server 'openducktor'")));
+        assert_eq!(
+            health.mcp.as_ref().and_then(|value| value.failure_kind),
+            Some(RepoRuntimeStartupFailureKind::Timeout)
+        );
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.tool_ids.clone()),
+            Some(Vec::new())
+        );
+        service.runtime_stop(runtime.runtime_id.as_str())?;
+        Ok(())
+    }
+
+    #[test]
+    fn repo_runtime_health_reports_mcp_query_failure() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let (port, server_handle) = spawn_runtime_http_server(vec![runtime_http_response(
+            "504 Gateway Timeout",
+            r#"{"error":{"message":"status probe timed out"}}"#,
+        )])?;
+        let runtime = workspace_opencode_runtime(
+            "runtime-mcp-query-failure",
+            "/tmp/repo-health-mcp-query-failure",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
+        insert_workspace_runtime(&service, runtime.clone())?;
+
+        let health =
+            service.repo_runtime_health("opencode", "/tmp/repo-health-mcp-query-failure")?;
+        let requests = server_handle.join().expect("server thread should finish");
+
+        assert!(
+            requests[0].starts_with("GET /mcp?directory=%2Ftmp%2Frepo-health-mcp-query-failure ")
+        );
+        assert_eq!(health.runtime.status, RepoRuntimeHealthState::Ready);
+        assert_eq!(health.status, RepoRuntimeHealthState::Checking);
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.status),
+            Some(RepoRuntimeMcpStatus::Checking)
+        );
+        assert!(health
+            .mcp
+            .as_ref()
+            .and_then(|value| value.detail.as_deref())
+            .is_some_and(|value| value.contains("Failed to query runtime MCP status")));
+        assert_eq!(
+            health.mcp.as_ref().and_then(|value| value.failure_kind),
+            Some(RepoRuntimeStartupFailureKind::Timeout)
+        );
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.tool_ids.clone()),
+            Some(Vec::new())
+        );
+        service.runtime_stop(runtime.runtime_id.as_str())?;
+        Ok(())
+    }
+
+    #[test]
     fn repo_runtime_health_returns_structured_failure_when_refresh_after_reconnect_fails(
     ) -> Result<()> {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
@@ -353,19 +466,12 @@ mod tests {
                 r#"{"error":{"message":"status probe timed out"}}"#,
             ),
         ])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-refresh-failure".to_string(),
-            repo_path: "/tmp/repo-health-refresh-failure".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-refresh-failure".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-refresh-failure",
+            "/tmp/repo-health-refresh-failure",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health = service.repo_runtime_health("opencode", "/tmp/repo-health-refresh-failure")?;
@@ -387,6 +493,14 @@ mod tests {
             .is_some_and(
                 |value| value.contains("Failed to refresh runtime MCP status after reconnect")
             ));
+        assert_eq!(
+            health.mcp.as_ref().and_then(|value| value.failure_kind),
+            Some(RepoRuntimeStartupFailureKind::Timeout)
+        );
+        assert_eq!(
+            health.mcp.as_ref().map(|value| value.tool_ids.clone()),
+            Some(Vec::new())
+        );
         service.runtime_stop(runtime.runtime_id.as_str())?;
         Ok(())
     }
@@ -433,19 +547,12 @@ mod tests {
             ],
             Duration::from_millis(150),
         )?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-startup-failed-mcp".to_string(),
-            repo_path: "/tmp/repo-health-startup-failed-mcp".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-startup-failed-mcp".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at,
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-startup-failed-mcp",
+            "/tmp/repo-health-startup-failed-mcp",
+            port,
+            started_at.as_str(),
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health =
@@ -494,19 +601,12 @@ mod tests {
             runtime_http_response("200 OK", r#"{"openducktor":{"status":"connected"}}"#),
             runtime_http_response("200 OK", r#"["odt_read_task"]"#),
         ])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-startup-retry-success".to_string(),
-            repo_path: "/tmp/repo-health-startup-retry-success".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-startup-retry-success".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at,
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-startup-retry-success",
+            "/tmp/repo-health-startup-retry-success",
+            port,
+            started_at.as_str(),
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health =
@@ -539,19 +639,12 @@ mod tests {
                 r#"{"error":{"message":"tool ids timed out"}}"#,
             ),
         ])?;
-        let runtime = host_domain::RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::opencode(),
-            runtime_id: "runtime-tool-ids-failure".to_string(),
-            repo_path: "/tmp/repo-health-tool-ids-failure".to_string(),
-            task_id: None,
-            role: host_domain::RuntimeRole::Workspace,
-            working_directory: "/tmp/repo-health-tool-ids-failure".to_string(),
-            runtime_route: host_domain::RuntimeRoute::LocalHttp {
-                endpoint: format!("http://127.0.0.1:{port}"),
-            },
-            started_at: "2026-04-04T16:00:00Z".to_string(),
-            descriptor: builtin_opencode_runtime_descriptor(),
-        };
+        let runtime = workspace_opencode_runtime(
+            "runtime-tool-ids-failure",
+            "/tmp/repo-health-tool-ids-failure",
+            port,
+            "2026-04-04T16:00:00Z",
+        );
         insert_workspace_runtime(&service, runtime.clone())?;
 
         let health =
@@ -575,6 +668,10 @@ mod tests {
             .as_ref()
             .and_then(|value| value.detail.as_deref())
             .is_some_and(|value| value.contains("Failed to load runtime MCP tool ids")));
+        assert_eq!(
+            health.mcp.as_ref().and_then(|value| value.failure_kind),
+            Some(RepoRuntimeStartupFailureKind::Timeout)
+        );
         assert_eq!(
             health.mcp.as_ref().map(|value| value.tool_ids.clone()),
             Some(Vec::new())
