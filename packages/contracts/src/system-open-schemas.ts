@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const systemOpenInToolIdValues = [
   "finder",
+  "explorer",
+  "xdg-open",
   "terminal",
   "iterm2",
   "ghostty",

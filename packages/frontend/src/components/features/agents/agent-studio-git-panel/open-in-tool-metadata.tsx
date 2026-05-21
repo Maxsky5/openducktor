@@ -1,7 +1,6 @@
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
 import { AppWindowMac, FolderOpen, Terminal } from "lucide-react";
 import type { ReactElement } from "react";
-import { cn } from "@/lib/utils";
 
 type OpenInToolUiMetadata = {
   label: string;
@@ -10,6 +9,8 @@ type OpenInToolUiMetadata = {
 
 const OPEN_IN_TOOL_METADATA: Record<SystemOpenInToolId, OpenInToolUiMetadata> = {
   finder: { label: "Finder", fallbackKind: "finder" },
+  explorer: { label: "File Explorer", fallbackKind: "finder" },
+  "xdg-open": { label: "Files", fallbackKind: "finder" },
   terminal: { label: "Terminal", fallbackKind: "terminal" },
   iterm2: { label: "iTerm2", fallbackKind: "terminal" },
   ghostty: { label: "Ghostty", fallbackKind: "terminal" },
@@ -48,9 +49,7 @@ function OpenInFallbackIcon({ toolId }: { toolId: SystemOpenInToolId }): ReactEl
 
   return (
     <span
-      className={cn(
-        "flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground",
-      )}
+      className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground"
       data-testid={`agent-studio-git-open-in-icon-${toolId}`}
       aria-hidden="true"
     >

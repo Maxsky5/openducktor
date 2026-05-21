@@ -107,7 +107,7 @@ const makeNodeHostDefaultPorts = (
       filesystem: input.filesystem ?? createFilesystemAdapter(),
       git: input.git ?? createGitCliAdapter({ processEnv }),
       localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
-      openInTools: input.openInTools ?? createOpenInToolsAdapter(),
+      openInTools: input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
       processEnv,
       runtimeHealth,
       settingsConfig: input.settingsConfig ?? createSettingsConfigAdapter(),
