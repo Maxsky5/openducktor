@@ -57,6 +57,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           expect.objectContaining({
             kind: "tool",
             tool: "read",
+            toolType: "read",
             title: "Read",
             preview: "/repo/src/app.ts",
             input: expect.objectContaining({ path: "/repo/src/app.ts" }),
@@ -71,6 +72,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           expect.objectContaining({
             kind: "tool",
             tool: "bash",
+            toolType: "bash",
             title: "Bash",
             preview: "bun test",
             input: expect.objectContaining({ command: "bun test" }),
@@ -85,6 +87,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           expect.objectContaining({
             kind: "tool",
             tool: "apply_patch",
+            toolType: "file_edit",
             input: expect.objectContaining({ patch: expect.stringContaining("@@") }),
             output: expect.stringContaining("@@"),
             metadata: expect.objectContaining({
@@ -102,6 +105,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           expect.objectContaining({
             kind: "tool",
             tool: "apply_patch",
+            toolType: "file_edit",
             status: "error",
             error: "patch failed",
             output: expect.stringContaining("broken"),
@@ -127,7 +131,8 @@ describe("CodexAppServerAdapter history hydration", () => {
         parts: [
           expect.objectContaining({
             kind: "tool",
-            tool: "websearch",
+            tool: "webSearch",
+            toolType: "web",
             input: { query: "OpenDucktor Codex runtime" },
             output: expect.stringContaining("search results"),
           }),
@@ -140,6 +145,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           expect.objectContaining({
             kind: "tool",
             tool: "odt_read_task",
+            toolType: "workflow",
             title: "read_task",
             input: { taskId: "task-1" },
             output: expect.stringContaining("ok"),
@@ -153,6 +159,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           expect.objectContaining({
             kind: "tool",
             tool: "odt_read_task",
+            toolType: "workflow",
             status: "error",
             error: "task missing",
             output: expect.stringContaining("task missing"),
@@ -277,6 +284,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           expect.objectContaining({
             kind: "tool",
             tool: "search",
+            toolType: "search",
             preview: "foo in src",
             input: expect.objectContaining({ query: "foo", path: "src" }),
             output: "src/app.ts:foo",
@@ -444,6 +452,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           expect.objectContaining({
             kind: "tool",
             tool: "bash",
+            toolType: "bash",
             input: { command: "bun test", cwd: "/repo" },
             output: "70 pass",
           }),
@@ -457,6 +466,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           expect.objectContaining({
             kind: "tool",
             tool: "odt_read_task",
+            toolType: "workflow",
             input: { taskId: "task-1" },
             output: "task ok",
           }),
@@ -585,6 +595,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           expect.objectContaining({
             kind: "tool",
             tool: "read",
+            toolType: "read",
             preview: "src/app.ts",
             input: expect.objectContaining({ path: "src/app.ts" }),
             output: "const app = true;",
@@ -612,6 +623,7 @@ describe("CodexAppServerAdapter history hydration", () => {
           expect.objectContaining({
             kind: "tool",
             tool: "bash",
+            toolType: "bash",
             preview: "bun test",
             input: expect.objectContaining({ command: "bun test" }),
             output: "1 pass",

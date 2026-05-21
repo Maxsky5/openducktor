@@ -4,16 +4,6 @@ import { type SessionMessageOwner, updateSessionMessagesByRole } from "./support
 type ToolStatus = "pending" | "running" | "completed" | "error";
 type ToolCompletionOutcome = "completed" | "error";
 
-export const isTodoToolName = (tool: string): boolean => {
-  const normalized = tool.trim().toLowerCase();
-  return (
-    normalized === "todoread" ||
-    normalized === "todowrite" ||
-    normalized.endsWith("_todoread") ||
-    normalized.endsWith("_todowrite")
-  );
-};
-
 export const isRunningToolStatus = (status: ToolStatus): boolean =>
   status === "pending" || status === "running";
 
@@ -55,7 +45,7 @@ export const settleDanglingTodoToolMessages = (
     }
 
     const meta = message.meta;
-    if (!isTodoToolName(meta.tool) || !isRunningToolStatus(meta.status)) {
+    if (meta.toolType !== "todo" || !isRunningToolStatus(meta.status)) {
       return message;
     }
 

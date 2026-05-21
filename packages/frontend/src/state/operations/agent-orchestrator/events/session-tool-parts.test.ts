@@ -10,6 +10,7 @@ const buildToolPart = (tool: string): Extract<SessionPart, { kind: "tool" }> => 
     partId: "part-1",
     callId: "call-1",
     tool,
+    toolType: "generic",
     status: "pending",
     output: "",
     error: "",

@@ -1,4 +1,3 @@
-import { isQuestionToolName } from "@/lib/question-tools";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 
 export type QuestionToolDetail = {
@@ -129,7 +128,7 @@ const firstNonEmptyAnswerGroups = (candidates: unknown[]): string[][] => {
 };
 
 export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
-  if (!isQuestionToolName(meta.tool)) {
+  if (meta.toolType !== "question") {
     return [];
   }
 

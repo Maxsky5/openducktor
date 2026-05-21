@@ -1,3 +1,4 @@
+import type { AgentToolType } from "@openducktor/core";
 import { asUnknownRecord } from "./guards";
 
 const SHELL_TOOL_NAMES = new Set(["bash", "shell", "exec", "command"]);
@@ -20,6 +21,19 @@ const LSP_TOOL_NAMES = new Set([
   "lsp_prepare_rename",
   "lsp_symbols",
 ]);
+const FILE_EDIT_TOOL_NAMES = new Set([
+  "edit",
+  "multiedit",
+  "write",
+  "create",
+  "file_write",
+  "apply_patch",
+  "str_replace",
+  "str_replace_based_edit_tool",
+  "patch",
+  "insert",
+  "replace",
+]);
 
 const normalizeToolName = (value: string): string => {
   const trimmed = value.trim().toLowerCase();
@@ -29,6 +43,22 @@ const normalizeToolName = (value: string): string => {
   return withoutFunctionsNamespace.startsWith("openducktor_odt_")
     ? withoutFunctionsNamespace.slice("openducktor_".length)
     : withoutFunctionsNamespace;
+};
+
+export const deriveToolType = (toolName: string): AgentToolType => {
+  const tool = normalizeToolName(toolName);
+  if (SHELL_TOOL_NAMES.has(tool)) return "bash";
+  if (READ_TOOL_NAMES.has(tool)) return "read";
+  if (LIST_TOOL_NAMES.has(tool)) return "list";
+  if (SEARCH_TOOL_NAMES.has(tool)) return "search";
+  if (TODO_TOOL_NAMES.has(tool) || tool.endsWith("_todowrite") || tool.endsWith("_todoread")) {
+    return "todo";
+  }
+  if (FILE_EDIT_TOOL_NAMES.has(tool)) return "file_edit";
+  if (tool === "question" || tool.endsWith("_question")) return "question";
+  if (tool.startsWith("odt_")) return "workflow";
+  if (tool.startsWith("webfetch") || tool.startsWith("websearch")) return "web";
+  return "generic";
 };
 
 const compactText = (value: string, maxLength = 160): string => {

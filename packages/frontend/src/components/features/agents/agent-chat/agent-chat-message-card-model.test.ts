@@ -31,6 +31,7 @@ const createToolMeta = (overrides: Partial<ToolMeta> = {}): ToolMeta => ({
   partId: "part-1",
   callId: "call-1",
   tool: "bash",
+  toolType: "bash",
   status: "completed",
   ...overrides,
 });
@@ -159,6 +160,7 @@ describe("agent-chat-message-card-model", () => {
         isToolMessageFailure(
           createToolMeta({
             tool: "read",
+            toolType: "generic" as const,
             status: "completed",
             output: "MCP error -32602: ignored for non-mutation",
           }),
@@ -169,6 +171,7 @@ describe("agent-chat-message-card-model", () => {
         isToolMessageFailure(
           createToolMeta({
             tool: "odt_set_plan",
+            toolType: "generic" as const,
             status: "completed",
             output: "Success",
           }),
@@ -251,23 +254,33 @@ describe("agent-chat-message-card-model", () => {
         questionToolDetails(
           createToolMeta({
             tool: "question_parser",
+            toolType: "generic" as const,
             metadata: { questions: [{ question: "Should be ignored" }] },
           }),
         ),
       ).toEqual([]);
-      expect(questionToolDetails(createToolMeta({ tool: "question", output: "{broken" }))).toEqual(
-        [],
-      );
       expect(
-        questionToolDetails(createToolMeta({ tool: "question", output: "plain text" })),
+        questionToolDetails(
+          createToolMeta({ tool: "question", toolType: "question", output: "{broken" }),
+        ),
       ).toEqual([]);
-      expect(questionToolDetails(createToolMeta({ tool: "question", metadata: {} }))).toEqual([]);
+      expect(
+        questionToolDetails(
+          createToolMeta({ tool: "question", toolType: "question", output: "plain text" }),
+        ),
+      ).toEqual([]);
+      expect(
+        questionToolDetails(
+          createToolMeta({ tool: "question", toolType: "question", metadata: {} }),
+        ),
+      ).toEqual([]);
     });
 
     test("prefers input questions over metadata and output questions", () => {
       const details = questionToolDetails(
         createToolMeta({
           tool: "QUESTION",
+          toolType: "question",
           input: {
             questions: [{ question: "Choose role", answers: ["planner"] }],
           },
@@ -287,6 +300,7 @@ describe("agent-chat-message-card-model", () => {
       const details = questionToolDetails(
         createToolMeta({
           tool: "my_question",
+          toolType: "question",
           metadata: {
             questions: [{ title: "Environment?" }],
             answers: {
@@ -304,6 +318,7 @@ describe("agent-chat-message-card-model", () => {
       const details = questionToolDetails(
         createToolMeta({
           tool: "question",
+          toolType: "question",
           output: JSON.stringify({
             questions: [{ header: "Pick first" }, { label: "Pick second" }],
             response: [{ value: "alpha" }, { value: ["beta", "  "] }],
@@ -321,6 +336,7 @@ describe("agent-chat-message-card-model", () => {
       const details = questionToolDetails(
         createToolMeta({
           tool: "question",
+          toolType: "question",
           metadata: {
             questions: [{ question: "Approve?" }],
             answers: [["yes"]],
@@ -335,6 +351,7 @@ describe("agent-chat-message-card-model", () => {
       const details = questionToolDetails(
         createToolMeta({
           tool: "question",
+          toolType: "question",
           input: {
             questions: [{ question: "Anything else?" }],
           },
@@ -347,6 +364,7 @@ describe("agent-chat-message-card-model", () => {
       const details = questionToolDetails(
         createToolMeta({
           tool: "question",
+          toolType: "question",
           metadata: {
             questions: [null, { foo: "bar" }, { question: "Final prompt" }],
           },
@@ -363,6 +381,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "todowrite",
+            toolType: "todo",
             output: JSON.stringify({ todos: [{ id: "1" }, { id: "2" }] }),
           }),
           "",
@@ -373,6 +392,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "custom_todoread",
+            toolType: "todo",
             output: "{broken",
             input: { items: [{ id: "a" }] },
           }),
@@ -384,6 +404,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "todowrite",
+            toolType: "todo",
             output: JSON.stringify({ items: [{ id: "1" }, { id: "2" }] }),
           }),
           "",
@@ -394,6 +415,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "  todoread  ",
+            toolType: "todo",
             output: JSON.stringify({ todos: [{ id: "1" }] }),
           }),
           "",
@@ -403,18 +425,28 @@ describe("agent-chat-message-card-model", () => {
 
     test("builds todo status summaries when counts are unavailable", () => {
       expect(
-        buildToolSummary(createToolMeta({ tool: "todowrite", status: "pending", input: {} }), ""),
+        buildToolSummary(
+          createToolMeta({ tool: "todowrite", toolType: "todo", status: "pending", input: {} }),
+          "",
+        ),
       ).toBe("updating todos");
-      expect(buildToolSummary(createToolMeta({ tool: "todowrite", status: "running" }), "")).toBe(
-        "updating todos",
-      );
-      expect(buildToolSummary(createToolMeta({ tool: "todowrite", status: "completed" }), "")).toBe(
-        "todos updated",
-      );
+      expect(
+        buildToolSummary(
+          createToolMeta({ tool: "todowrite", toolType: "todo", status: "running" }),
+          "",
+        ),
+      ).toBe("updating todos");
+      expect(
+        buildToolSummary(
+          createToolMeta({ tool: "todowrite", toolType: "todo", status: "completed" }),
+          "",
+        ),
+      ).toBe("todos updated");
       expect(
         buildToolSummary(
           createToolMeta({
             tool: "todowrite",
+            toolType: "todo",
             status: "error",
             error: "cancelled by user",
           }),
@@ -425,6 +457,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "todowrite",
+            toolType: "todo",
             status: "error",
             error: "boom",
           }),
@@ -438,6 +471,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "task",
+            toolType: "generic" as const,
             metadata: { summary: [{ id: 1 }, { id: 2 }] },
           }),
           "",
@@ -448,6 +482,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "task",
+            toolType: "generic" as const,
             metadata: { externalSessionId: "1234567890abcdef" },
           }),
           "",
@@ -480,6 +515,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "bash",
+            toolType: "bash",
             preview: "bun run test --filter @openducktor/desktop",
             title: "Run desktop tests",
             output: "completed shell execution",
@@ -492,6 +528,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "skill",
+            toolType: "generic" as const,
             status: "error",
             preview: "clean-ddd-hexagonal",
             error: "Skill not found",
@@ -506,6 +543,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "glob",
+            toolType: "generic" as const,
             input: { pattern: "**/*.ts", path: "apps/desktop/src" },
           }),
           "",
@@ -516,6 +554,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "grep",
+            toolType: "generic" as const,
             input: { pattern: "agent", path: "." },
           }),
           "",
@@ -526,6 +565,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "search",
+            toolType: "generic" as const,
             input: { path: "apps/desktop/src" },
           }),
           "",
@@ -536,6 +576,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "find",
+            toolType: "generic" as const,
             input: { path: "." },
           }),
           "",
@@ -546,6 +587,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "read",
+            toolType: "generic" as const,
             input: { filePath: "docs/task-workflow.md" },
           }),
           "",
@@ -558,6 +600,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "bash",
+            toolType: "bash",
             input: { command: "bun run test --filter @openducktor/desktop" },
           }),
           "",
@@ -570,6 +613,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "bash",
+            toolType: "bash",
             title: "/bin/zsh -lc 'cd /repo && bun test'",
             preview: "/bin/zsh -lc 'cd /repo && bun test'",
             input: { command: "cd /repo && bun test" },
@@ -584,6 +628,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "delegate",
+            toolType: "generic" as const,
             output: JSON.stringify([{ id: "a" }, { id: "b" }]),
           }),
           "",
@@ -594,6 +639,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "delegate",
+            toolType: "generic" as const,
             output: JSON.stringify({ summary: [{ id: "x" }, { id: "y" }] }),
           }),
           "",
@@ -604,6 +650,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "delegate",
+            toolType: "generic" as const,
             output: JSON.stringify({ result: "delegated result" }),
           }),
           "",
@@ -614,6 +661,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "delegate",
+            toolType: "generic" as const,
             output: "{}",
           }),
           "",
@@ -624,6 +672,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "delegate",
+            toolType: "generic" as const,
             output: "plain text summary",
           }),
           "",
@@ -634,6 +683,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "delegate",
+            toolType: "generic" as const,
             output: "{broken",
           }),
           "",
@@ -644,6 +694,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "delegate",
+            toolType: "generic" as const,
             output: "[]",
           }),
           "",
@@ -653,6 +704,7 @@ describe("agent-chat-message-card-model", () => {
       const structuredMessageSummary = buildToolSummary(
         createToolMeta({
           tool: "subtask",
+          toolType: "generic" as const,
           output: JSON.stringify({ message: "done ".repeat(80) }),
         }),
         "",
@@ -665,6 +717,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "read",
+            toolType: "generic" as const,
             output: "large content that should be ignored",
           }),
           "Tool read completed: fetched README",
@@ -993,6 +1046,7 @@ describe("agent-chat-message-card-model", () => {
       const data = extractAllFileEditData(
         createToolMeta({
           tool: "apply_patch",
+          toolType: "file_edit",
           input: {
             patch:
               "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
@@ -1028,6 +1082,7 @@ describe("agent-chat-message-card-model", () => {
       const data = extractAllFileEditData(
         createToolMeta({
           tool: "apply_patch",
+          toolType: "file_edit",
           metadata: {
             diff:
               "Index: src/first.ts\n==================================================\n--- src/first.ts\n+++ src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
@@ -1056,6 +1111,7 @@ describe("agent-chat-message-card-model", () => {
       const data = extractAllFileEditData(
         createToolMeta({
           tool: "apply_patch",
+          toolType: "file_edit",
           input: {
             patch:
               "--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
@@ -1084,6 +1140,7 @@ describe("agent-chat-message-card-model", () => {
       const data = extractAllFileEditData(
         createToolMeta({
           tool: "apply_patch",
+          toolType: "file_edit",
           metadata: {
             changes: [
               { path: "/repo/src/first.ts", diff: "@@ -1 +1 @@\n-old\n+new\n" },
@@ -1114,6 +1171,7 @@ describe("agent-chat-message-card-model", () => {
       const data = extractAllFileEditData(
         createToolMeta({
           tool: "apply_patch",
+          toolType: "file_edit",
           metadata: {
             diffs: [{ path: "/repo/src/app.ts", diff: "@@ -1 +1 @@\n-old\n+new\n" }],
           },
@@ -1135,6 +1193,7 @@ describe("agent-chat-message-card-model", () => {
       const data = extractAllFileEditData(
         createToolMeta({
           tool: "apply_patch",
+          toolType: "file_edit",
           input: {
             patch:
               "*** Begin Patch\n" +
@@ -1162,6 +1221,7 @@ describe("agent-chat-message-card-model", () => {
       const data = extractAllFileEditData(
         createToolMeta({
           tool: "apply_patch",
+          toolType: "file_edit",
           input: {
             patch:
               "*** Begin Patch\n" +
@@ -1201,6 +1261,7 @@ describe("agent-chat-message-card-model", () => {
       const data = extractAllFileEditData(
         createToolMeta({
           tool: "apply_patch",
+          toolType: "file_edit",
           metadata: {
             diff:
               'diff --git "a/src/file with spaces.ts" "b/src/file with spaces.ts"\n' +
@@ -1246,6 +1307,7 @@ describe("agent-chat-message-card-model", () => {
     test("extractAllFileEditData preserves single-file behavior", () => {
       const meta = createToolMeta({
         tool: "apply_patch",
+        toolType: "file_edit",
         input: {
           patch: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
         },
@@ -1261,6 +1323,7 @@ describe("agent-chat-message-card-model", () => {
         extractAllFileEditData(
           createToolMeta({
             tool: "apply_patch",
+            toolType: "file_edit",
             input: { patch: "@@ -1 +1 @@\n-old\n+new" },
           }),
         ),
@@ -1285,6 +1348,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "apply_patch",
+            toolType: "file_edit",
             input: {
               patch:
                 "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
@@ -1302,6 +1366,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "apply_patch",
+            toolType: "file_edit",
             input: {
               patch: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
             },
@@ -1317,6 +1382,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "apply_patch",
+            toolType: "file_edit",
             status: "running",
             input: {
               patch:
@@ -1335,6 +1401,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "apply_patch",
+            toolType: "file_edit",
             status: "running",
             input: {
               patch: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
@@ -1351,6 +1418,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "apply_patch",
+            toolType: "file_edit",
             status: "completed",
             output: "Success. Updated 3 files",
           }),
@@ -1364,6 +1432,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "odt_read_task",
+            toolType: "generic" as const,
             input: { taskId: "task-77" },
             output: '{"task":{"id":"task-77","title":"Improve chat tool previews"}}',
           }),
@@ -1377,6 +1446,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "odt_read_task",
+            toolType: "generic" as const,
             status: "error",
             input: { taskId: "task-77" },
             error: "Task not found",
@@ -1391,6 +1461,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "read",
+            toolType: "generic" as const,
             preview: "/repo/apps/web/src/contexts/AuthContext.tsx",
             input: { path: "/repo/apps/web/src/contexts/AuthContext.tsx" },
           }),
@@ -1405,6 +1476,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "lsp_diagnostics",
+            toolType: "generic" as const,
             preview: "/repo/apps/web/src/contexts/AuthContext.tsx",
             input: { path: "/repo/apps/web/src/contexts/AuthContext.tsx" },
           }),
@@ -1419,6 +1491,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "ast_grep_search",
+            toolType: "generic" as const,
             preview: "useState in /repo/apps/web/src",
             input: { query: "useState", path: "/repo/apps/web/src" },
           }),
@@ -1433,6 +1506,7 @@ describe("agent-chat-message-card-model", () => {
         buildToolSummary(
           createToolMeta({
             tool: "look_at",
+            toolType: "generic" as const,
             preview: "/repo/apps/web/src/contexts/AuthContext.tsx",
             input: { path: "/repo/apps/web/src/contexts/AuthContext.tsx" },
           }),

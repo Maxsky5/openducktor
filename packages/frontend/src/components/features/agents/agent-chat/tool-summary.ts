@@ -1,6 +1,5 @@
-import { isTodoToolName } from "@/state/operations/agent-orchestrator/agent-tool-messages";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import { extractAllFileEditData, isFileEditTool } from "./file-edit-tool";
+import { extractAllFileEditData } from "./file-edit-tool";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
 import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
 import { relativizeDisplayPath, relativizeSearchSummary } from "./tool-path-utils";
@@ -175,11 +174,11 @@ export const buildToolSummary = (
   workingDirectory?: string | null,
 ): string => {
   const lowerTool = meta.tool.toLowerCase();
-  const isTodoTool = isTodoToolName(lowerTool);
+  const toolType = meta.toolType;
+  const isTodoTool = toolType === "todo";
   const lifecyclePhase = getToolLifecyclePhase(meta);
-  const fileEditData = isFileEditTool(lowerTool)
-    ? extractAllFileEditData(meta, workingDirectory)
-    : [];
+  const fileEditData =
+    toolType === "file_edit" ? extractAllFileEditData(meta, workingDirectory) : [];
 
   if (
     lowerTool === "read_task" ||
@@ -216,7 +215,7 @@ export const buildToolSummary = (
   }
 
   const command = meta.input?.command;
-  if (lowerTool === "bash" && typeof command === "string" && command.trim().length > 0) {
+  if (toolType === "bash" && typeof command === "string" && command.trim().length > 0) {
     return compactText(command, 120);
   }
 

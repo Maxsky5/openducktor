@@ -39,9 +39,11 @@ export type AgentChatMessageMeta =
       partId: string;
       callId: string;
       tool: string;
+      toolType: import("@openducktor/core").AgentToolType;
       status: "pending" | "running" | "completed" | "error";
       preview?: string;
       title?: string;
+      displayLabel?: string;
       input?: Record<string, unknown>;
       output?: string;
       error?: string;

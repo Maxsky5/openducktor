@@ -1,5 +1,5 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { isTodoToolName, settleDanglingTodoToolMessages } from "../agent-tool-messages";
+import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { finalizeDraftAssistantMessage } from "../support/assistant-meta";
 import { sanitizeStreamingText } from "../support/core";
 import { shouldKeepPendingOutboundSendActiveOnIdle } from "../support/pending-outbound-send";
@@ -166,7 +166,7 @@ export const createPrePartTodoSettlement = (
   part: SessionPart,
   timestamp: string,
 ): ((current: AgentSessionState) => AgentSessionState) => {
-  const shouldSettleTodoToolRows = part.kind !== "tool" || !isTodoToolName(part.tool);
+  const shouldSettleTodoToolRows = part.kind !== "tool" || part.toolType !== "todo";
   return (current: AgentSessionState): AgentSessionState => {
     if (!shouldSettleTodoToolRows) {
       return current;

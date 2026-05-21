@@ -1,6 +1,6 @@
 import { isOdtWorkflowMutationToolName } from "@openducktor/core";
 import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
-import { formatToolContent, isTodoToolName } from "../agent-tool-messages";
+import { formatToolContent } from "../agent-tool-messages";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { toToolMessageId } from "../support/chat-message-ids";
 import { findSessionMessageById, upsertSessionMessage } from "../support/messages";
@@ -46,7 +46,7 @@ const resolveTodoUpdateFromTool = (
   input: Record<string, unknown> | undefined,
   output: string | undefined,
 ) => {
-  if (!isTodoToolName(part.tool)) {
+  if (part.toolType !== "todo") {
     return null;
   }
   return parseTodosFromToolOutput(output) ?? parseTodosFromToolInput(input);
@@ -105,9 +105,11 @@ const composeToolMessageMeta = (
     partId: part.partId,
     callId: part.callId,
     tool: part.tool,
+    toolType: part.toolType,
     status,
     ...(part.preview ? { preview: part.preview } : {}),
     ...(part.title ? { title: part.title } : {}),
+    ...(part.displayLabel ? { displayLabel: part.displayLabel } : {}),
     ...(input ? { input } : {}),
     ...(output ? { output } : {}),
     ...(error ? { error } : {}),

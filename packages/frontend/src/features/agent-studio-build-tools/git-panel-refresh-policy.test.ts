@@ -2,11 +2,16 @@ import { describe, expect, test } from "bun:test";
 import type { ToolMessageMeta } from "./git-panel-refresh-policy";
 import { shouldRefreshGitPanelAfterToolCompletion } from "./git-panel-refresh-policy";
 
-const buildToolMeta = (tool: string, input?: Record<string, unknown>): ToolMessageMeta => ({
+const buildToolMeta = (
+  tool: string,
+  toolType: ToolMessageMeta["toolType"],
+  input?: Record<string, unknown>,
+): ToolMessageMeta => ({
   kind: "tool",
   partId: `part-${tool}`,
   callId: `call-${tool}`,
   tool,
+  toolType,
   status: "completed",
   ...(input ? { input } : {}),
 });
@@ -31,7 +36,7 @@ describe("shouldRefreshGitPanelAfterToolCompletion", () => {
     ];
 
     for (const tool of editTools) {
-      expect(shouldRefreshGitPanelAfterToolCompletion(buildToolMeta(tool))).toBe(true);
+      expect(shouldRefreshGitPanelAfterToolCompletion(buildToolMeta(tool, "file_edit"))).toBe(true);
     }
   });
 
@@ -50,7 +55,7 @@ describe("shouldRefreshGitPanelAfterToolCompletion", () => {
     ];
 
     for (const tool of ignoredTools) {
-      expect(shouldRefreshGitPanelAfterToolCompletion(buildToolMeta(tool))).toBe(false);
+      expect(shouldRefreshGitPanelAfterToolCompletion(buildToolMeta(tool, "generic"))).toBe(false);
     }
   });
 
@@ -84,9 +89,9 @@ describe("shouldRefreshGitPanelAfterToolCompletion", () => {
     ];
 
     for (const command of refreshCommands) {
-      expect(shouldRefreshGitPanelAfterToolCompletion(buildToolMeta("bash", { command }))).toBe(
-        true,
-      );
+      expect(
+        shouldRefreshGitPanelAfterToolCompletion(buildToolMeta("bash", "bash", { command })),
+      ).toBe(true);
     }
   });
 
@@ -105,16 +110,16 @@ describe("shouldRefreshGitPanelAfterToolCompletion", () => {
     ];
 
     for (const command of ignoredCommands) {
-      expect(shouldRefreshGitPanelAfterToolCompletion(buildToolMeta("bash", { command }))).toBe(
-        false,
-      );
+      expect(
+        shouldRefreshGitPanelAfterToolCompletion(buildToolMeta("bash", "bash", { command })),
+      ).toBe(false);
     }
   });
 
   test("does not treat non-shell tool command inputs as shell commands", () => {
     expect(
       shouldRefreshGitPanelAfterToolCompletion(
-        buildToolMeta("unknown_runtime_tool", { command: "git status" }),
+        buildToolMeta("unknown_runtime_tool", "generic", { command: "git status" }),
       ),
     ).toBe(false);
   });

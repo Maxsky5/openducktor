@@ -1,3 +1,4 @@
+import type { AgentToolType } from "@openducktor/core";
 import {
   arrayFromUnknown,
   codexNamespacedToolName,
@@ -15,8 +16,8 @@ import {
  * Canonical boundary for raw Codex tool invocations.
  *
  * Every raw Codex tool name that reaches OpenDucktor transcripts must pass through this module
- * before becoming `AgentStreamPart.tool`. The frontend receives OpenDucktor semantic tool names
- * (`odt_set_spec`, `websearch`, `read`, `bash`, ...), while raw Codex names remain metadata.
+ * before becoming `AgentStreamPart.tool`. The emitted `tool` keeps the runtime tool identity, and
+ * `toolType` carries the OpenDucktor semantic display category.
  *
  * Synthetic display-only parts (for example plan summaries) may be built outside this module
  * because they do not originate from a runtime tool name.
@@ -35,6 +36,7 @@ export type NormalizedCodexToolInvocation = {
   namespace?: string;
   status?: unknown;
   title?: string;
+  displayLabel?: string;
   preview?: string;
   input?: Record<string, unknown>;
   output?: string | null;
@@ -110,17 +112,17 @@ const canonicalOdtToolName = (rawToolName: string): string | null => {
   return null;
 };
 
-export const canonicalCodexToolName = (
+export const codexToolType = (
   rawToolName: string,
   input?: Record<string, unknown>,
-): string | null => {
+): AgentToolType | null => {
   if (isCodexWriteStdinTool(rawToolName)) {
     return null;
   }
 
   const odtToolName = canonicalOdtToolName(rawToolName);
   if (odtToolName) {
-    return odtToolName;
+    return "workflow";
   }
 
   if (isCodexExecCommandTool(rawToolName)) {
@@ -133,11 +135,23 @@ export const canonicalCodexToolName = (
     }
     return "bash";
   }
+  if (rawToolName === "bash") {
+    return "bash";
+  }
+  if (rawToolName === "read") {
+    return "read";
+  }
+  if (rawToolName === "search" || rawToolName === "find") {
+    return "search";
+  }
+  if (rawToolName === "list") {
+    return "list";
+  }
   if (isCodexApplyPatchTool(rawToolName)) {
-    return "apply_patch";
+    return "file_edit";
   }
   if (isCodexRequestUserInputTool(rawToolName)) {
-    return "request_user_input";
+    return "question";
   }
   if (
     rawToolName === "web.run" ||
@@ -146,13 +160,27 @@ export const canonicalCodexToolName = (
     rawToolName === "web_search_call" ||
     rawToolName === "web_search_end"
   ) {
-    return "websearch";
+    return "web";
   }
   const leafToolName = rawToolName.split(/[./]/).filter(Boolean).at(-1) ?? rawToolName;
   if (leafToolName === "update_plan" || leafToolName === "todo_write") {
-    return leafToolName;
+    return "todo";
   }
-  return rawToolName;
+  return "generic";
+};
+
+export const canonicalCodexToolName = (rawToolName: string): string | null => {
+  if (isCodexWriteStdinTool(rawToolName)) {
+    return null;
+  }
+  const odtToolName = canonicalOdtToolName(rawToolName);
+  if (odtToolName) {
+    return odtToolName;
+  }
+  const functionsPrefix = "functions.";
+  return rawToolName.startsWith(functionsPrefix)
+    ? rawToolName.slice(functionsPrefix.length)
+    : rawToolName;
 };
 
 export const questionPromptFromInput = (input: Record<string, unknown>): string | undefined => {
@@ -167,7 +195,7 @@ export const questionPromptFromInput = (input: Record<string, unknown>): string 
 };
 
 export const toolPreviewFromInput = (
-  tool: string,
+  toolType: AgentToolType,
   input?: Record<string, unknown>,
 ): string | undefined => {
   if (!input) {
@@ -176,22 +204,22 @@ export const toolPreviewFromInput = (
   const path = extractStringField(input, ["path", "file"]);
   const query = extractStringField(input, ["query", "pattern"]);
   const command = extractStringField(input, ["command"]);
-  if (tool === "read" && path) {
+  if (toolType === "read" && path) {
     return path;
   }
-  if (tool === "search" || tool === "find") {
+  if (toolType === "search") {
     if (query && path) {
       return `${query} in ${path}`;
     }
     return query ?? path ?? command ?? undefined;
   }
-  if (tool === "list") {
+  if (toolType === "list") {
     return path ?? command ?? undefined;
   }
-  if (tool === "bash") {
+  if (toolType === "bash") {
     return command ?? undefined;
   }
-  if (tool === "request_user_input") {
+  if (toolType === "question") {
     return questionPromptFromInput(input);
   }
   return path ?? query ?? command ?? undefined;
@@ -226,12 +254,12 @@ export const codexExecCommandInput = (
 };
 
 const normalizerInput = (
-  tool: string,
+  toolType: AgentToolType,
   rawToolName: string,
   input?: Record<string, unknown>,
 ): Record<string, unknown> | undefined => {
   if (isCodexExecCommandTool(rawToolName)) {
-    return codexExecCommandInput(input ?? {}, tool);
+    return codexExecCommandInput(input ?? {}, toolType);
   }
   return input;
 };
@@ -246,26 +274,30 @@ export const normalizeCodexToolInvocation = ({
   output,
   error,
   title,
+  displayLabel,
   preview,
   status,
   metadata,
   namespace,
   ...ids
 }: NormalizedCodexToolInvocation): import("@openducktor/core").AgentStreamPart | null => {
-  const tool = canonicalCodexToolName(rawToolName, input);
-  if (!tool) {
+  const tool = canonicalCodexToolName(rawToolName);
+  const toolType = codexToolType(rawToolName, input);
+  if (!tool || !toolType) {
     return null;
   }
 
-  const resolvedInput = normalizerInput(tool, rawToolName, input);
+  const resolvedInput = normalizerInput(toolType, rawToolName, input);
   const resolvedError = error && error.trim().length > 0 ? error : null;
   const resolvedOutput = output && output.trim().length > 0 ? output : null;
-  const resolvedPreview = preview ?? toolPreviewFromInput(tool, resolvedInput);
+  const resolvedPreview = preview ?? toolPreviewFromInput(toolType, resolvedInput);
   return {
     kind: "tool",
     ...ids,
     tool,
+    toolType,
     title: title ?? defaultTitle(tool),
+    ...(displayLabel ? { displayLabel } : {}),
     status: resolvedError ? "error" : statusFromCodexStatus(status),
     ...(resolvedInput ? { input: resolvedInput } : {}),
     ...(resolvedPreview ? { preview: resolvedPreview } : {}),

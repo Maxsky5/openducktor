@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
+import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import { compactionMapper, todoMapper } from "./event-mappers";
 
@@ -13,7 +14,7 @@ const TODO_PAYLOAD = {
 
 const TODO_DISPLAY_INPUT = {
   explanation: "Tracking work",
-  plan: [
+  todos: [
     { step: "Inspect", status: "completed" },
     { step: "Refactor", status: "in_progress" },
   ],
@@ -57,7 +58,8 @@ describe("Codex todo event mapper", () => {
           part: expect.objectContaining({
             kind: "tool",
             tool: "update_plan",
-            title: "update_plan",
+            toolType: "todo",
+            displayLabel: "todo",
             status: "completed",
             input: TODO_DISPLAY_INPUT,
             output: "Plan updated",
@@ -74,6 +76,64 @@ describe("Codex todo event mapper", () => {
         }),
       );
     }
+  });
+
+  test("gives each live todo update a distinct tool call identity", () => {
+    const pipeline = createCodexEventMapperPipeline();
+    const first = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        {
+          kind: "notification",
+          notification: {
+            method: "turn/plan/updated",
+            params: TODO_PAYLOAD,
+          },
+        },
+        {
+          source: "live",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          timestamp: "2026-05-09T00:00:00.000Z",
+        },
+      ),
+    );
+    const second = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        {
+          kind: "notification",
+          notification: {
+            method: "turn/plan/updated",
+            params: {
+              explanation: "Tracking work",
+              plan: [
+                { id: "1", step: "Inspect", status: "completed" },
+                { id: "2", step: "Refactor", status: "completed" },
+              ],
+            },
+          },
+        },
+        {
+          source: "live",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          timestamp: "2026-05-09T00:00:00.000Z",
+        },
+      ),
+    );
+
+    const firstTool = projectedTool(first);
+    const secondTool = projectedTool(second);
+    if (firstTool?.type !== "assistant_part" || firstTool.part.kind !== "tool") {
+      throw new Error("Expected first todo tool event");
+    }
+    if (secondTool?.type !== "assistant_part" || secondTool.part.kind !== "tool") {
+      throw new Error("Expected second todo tool event");
+    }
+
+    expect(firstTool.part.partId).toBe("turn-1-update-plan-1");
+    expect(firstTool.part.callId).toBe("turn-1-update-plan-1");
+    expect(secondTool.part.partId).toBe("turn-1-update-plan-2");
+    expect(secondTool.part.callId).toBe("turn-1-update-plan-2");
   });
 });
 

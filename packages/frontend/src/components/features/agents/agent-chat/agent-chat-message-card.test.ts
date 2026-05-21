@@ -54,6 +54,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-1",
             callId: "call-1",
             tool: "openducktor_odt_set_spec",
+            toolType: "workflow",
             status: "completed",
             input: { taskId: "fairnest-abc", markdown: "# Spec" },
             output: "ok",
@@ -86,6 +87,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-2",
             callId: "call-2",
             tool: "openducktor_odt_set_spec",
+            toolType: "workflow",
             status: "completed",
             input: { taskId: "fairnest-def", markdown: "# Spec" },
             output: "ok",
@@ -114,6 +116,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-failed",
             callId: "call-failed",
             tool: "openducktor_odt_set_pull_request",
+            toolType: "workflow",
             status: "error",
             input: { taskId: "fairnest-def" },
             error: "Branch conflict",
@@ -147,6 +150,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-wf-failed",
             callId: "call-wf-failed",
             tool: "openducktor_odt_set_spec",
+            toolType: "workflow",
             status: "error",
             input: { taskId: "task-x" },
             error: "Task already has a spec",
@@ -174,6 +178,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-regular-failed",
             callId: "call-regular-failed",
             tool: "bash",
+            toolType: "bash",
             status: "error",
             input: { command: "invalid-cmd" },
             error: "command not found",
@@ -201,6 +206,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-3",
             callId: "call-3",
             tool: "read_task",
+            toolType: "generic" as const,
             status: "completed",
             input: { taskId: "fairnest-97f" },
             output: '{"task":{"id":"fairnest-97f","title":"Add Facebook login"}}',
@@ -221,6 +227,7 @@ describe("AgentChatMessageCard tool duration", () => {
     {
       id: "tool-todowrite",
       tool: "todowrite",
+      toolType: "generic" as const,
       content: "Tool todowrite completed",
       timestamp: "2026-02-22T10:20:31.000Z",
       input: { todos: [] },
@@ -229,6 +236,7 @@ describe("AgentChatMessageCard tool duration", () => {
     {
       id: "tool-namespaced-todowrite",
       tool: "openducktor_odt_todowrite",
+      toolType: "generic" as const,
       content: "Tool openducktor_odt_todowrite completed",
       timestamp: "2026-02-22T10:20:32.000Z",
       input: { todos: [] },
@@ -237,6 +245,7 @@ describe("AgentChatMessageCard tool duration", () => {
     {
       id: "tool-todoread",
       tool: "todoread",
+      toolType: "generic" as const,
       content: "Tool todoread completed",
       timestamp: "2026-02-22T10:20:33.000Z",
       input: {},
@@ -245,6 +254,7 @@ describe("AgentChatMessageCard tool duration", () => {
     {
       id: "tool-namespaced-todoread",
       tool: "openducktor_odt_todoread",
+      toolType: "generic" as const,
       content: "Tool openducktor_odt_todoread completed",
       timestamp: "2026-02-22T10:20:34.000Z",
       input: {},
@@ -270,6 +280,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: `part-${id}`,
             callId: `call-${id}`,
             tool,
+            toolType: "todo",
             status: "completed",
             input,
             output,
@@ -281,6 +292,66 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain("lucide-list-todo");
+  });
+
+  test("uses the adapter-provided display label as the visible tool label", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-codex-todo",
+          role: "tool",
+          content: "Tool update_plan completed",
+          timestamp: "2026-02-22T10:20:35.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-codex-todo",
+            callId: "call-codex-todo",
+            tool: "update_plan",
+            toolType: "todo",
+            title: "update_plan",
+            displayLabel: "todo",
+            status: "completed",
+            input: { todos: [] },
+            output: "Plan updated",
+          },
+        },
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain(">todo<");
+    expect(html).not.toContain(">update_plan<");
+  });
+
+  test("does not use tool title as the visible tool label", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-read-path-title",
+          role: "tool",
+          content: "Tool read completed",
+          timestamp: "2026-02-22T10:20:35.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-read-path-title",
+            callId: "call-read-path-title",
+            tool: "read",
+            toolType: "read",
+            title: "/repo/src/app.ts",
+            status: "completed",
+            input: { path: "/repo/src/app.ts" },
+            output: "contents",
+          },
+        },
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain('<p class="shrink-0 font-medium text-current">read</p>');
+    expect(html).not.toContain('<p class="shrink-0 font-medium text-current">/repo/src/app.ts</p>');
+    expect(html).toContain('<p class="truncate text-muted-foreground">/repo/src/app.ts</p>');
   });
 
   test("renders file tool summaries relative to the session working directory", () => {
@@ -296,6 +367,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-relative-path",
             callId: "call-relative-path",
             tool: "read",
+            toolType: "read",
             status: "completed",
             preview: "/repo/apps/web/src/contexts/AuthContext.tsx",
             input: { path: "/repo/apps/web/src/contexts/AuthContext.tsx" },
@@ -325,6 +397,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-multi-file-apply-patch",
             callId: "call-multi-file-apply-patch",
             tool: "apply_patch",
+            toolType: "file_edit",
             status: "completed",
             input: {
               patch:
@@ -363,6 +436,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-4",
             callId: "call-4",
             tool: "openducktor_odt_build_completed",
+            toolType: "workflow",
             status: "pending",
             input: { taskId: "fairnest-98a" },
             output: "",
@@ -393,6 +467,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-queued",
             callId: "call-queued",
             tool: "openducktor_odt_set_plan",
+            toolType: "workflow",
             status: "pending",
             input: {},
             output: "",
@@ -425,6 +500,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-5",
             callId: "call-5",
             tool: "odt_set_pull_request",
+            toolType: "workflow",
             status: "error",
             input: {
               taskId: "fairnest-99z",
@@ -462,6 +538,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-guard",
             callId: "call-guard",
             tool: "odt_set_spec",
+            toolType: "workflow",
             status: "error",
             input: { taskId: "fairnest-99z" },
             error:
@@ -490,6 +567,7 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-cancelled",
             callId: "call-cancelled",
             tool: "odt_set_plan",
+            toolType: "workflow",
             status: "error",
             input: { taskId: "fairnest-cancelled" },
             error: "Request cancelled by user",

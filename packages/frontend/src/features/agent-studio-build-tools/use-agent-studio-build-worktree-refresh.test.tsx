@@ -23,6 +23,22 @@ type HookArgs = Parameters<UseAgentStudioBuildWorktreeRefreshHook>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioBuildWorktreeRefresh, initialProps);
 
+const toolTypeForFixture = (tool: string): import("@openducktor/core").AgentToolType => {
+  if (tool === "bash") {
+    return "bash";
+  }
+  if (tool === "read" || tool === "look_at") {
+    return "read";
+  }
+  if (tool === "grep" || tool === "ast_grep_search") {
+    return "search";
+  }
+  if (tool === "apply_patch" || tool === "write") {
+    return "file_edit";
+  }
+  return "generic";
+};
+
 const createCompletedToolSession = (tool: string, id = tool, input?: Record<string, unknown>) =>
   createAgentSessionFixture({
     externalSessionId: "build-session-1",
@@ -38,6 +54,7 @@ const createCompletedToolSession = (tool: string, id = tool, input?: Record<stri
           partId: `part-${id}`,
           callId: `call-${id}`,
           tool,
+          toolType: toolTypeForFixture(tool),
           status: "completed",
           ...(input ? { input } : {}),
         },

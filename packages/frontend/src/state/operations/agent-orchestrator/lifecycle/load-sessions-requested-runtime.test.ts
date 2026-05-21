@@ -145,6 +145,7 @@ describe("agent-orchestrator requested session runtime hydration", () => {
                 partId: "p-1",
                 callId: "call-1",
                 tool: "permission",
+                toolType: "generic" as const,
                 status: "running",
                 metadata: {
                   requestId: "perm-from-history",
