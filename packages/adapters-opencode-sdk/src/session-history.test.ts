@@ -296,7 +296,7 @@ describe("OpencodeSdkAdapter session history", () => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "build");
+    await startDefaultSession(adapter, "build");
     const history = await adapter.loadSessionHistory({
       ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",
@@ -428,7 +428,7 @@ describe("OpencodeSdkAdapter session history", () => {
       events.push(event);
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "build");
+    await startDefaultSession(adapter, "build");
     const history = await adapter.loadSessionHistory({
       ...defaultRepoRuntimeInput,
       externalSessionId: "session-opencode-1",

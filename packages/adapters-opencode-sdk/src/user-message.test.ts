@@ -15,7 +15,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "spec");
+    await startDefaultSession(adapter, "spec");
 
     const events: Array<{ type: string }> = [];
     adapter.subscribeEvents("session-opencode-1", (event) =>
@@ -80,7 +80,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "spec");
+    await startDefaultSession(adapter, "spec");
 
     const events: AgentEvent[] = [];
     adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
@@ -102,7 +102,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "build");
+    await startDefaultSession(adapter, "build");
 
     await adapter.sendUserMessage({
       externalSessionId: "session-opencode-1",
@@ -147,7 +147,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "build");
+    await startDefaultSession(adapter, "build");
 
     const events: AgentEvent[] = [];
     adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
@@ -182,7 +182,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "build");
+    await startDefaultSession(adapter, "build");
 
     await expect(
       adapter.sendUserMessage({
@@ -218,7 +218,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "build");
+    await startDefaultSession(adapter, "build");
 
     const events: AgentEvent[] = [];
     adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
@@ -260,7 +260,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "spec");
+    await startDefaultSession(adapter, "spec");
 
     const sessions = (
       adapter as unknown as {
@@ -289,7 +289,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "spec");
+    await startDefaultSession(adapter, "spec");
 
     const sessions = (
       adapter as unknown as {
@@ -324,7 +324,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "spec");
+    await startDefaultSession(adapter, "spec");
 
     const sessions = (
       adapter as unknown as {
@@ -372,7 +372,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "build");
+    await startDefaultSession(adapter, "build");
 
     const sessions = (
       adapter as unknown as {
@@ -424,7 +424,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "spec");
+    await startDefaultSession(adapter, "spec");
     adapter.updateSessionModel({
       externalSessionId: "session-opencode-1",
       model: {
@@ -459,7 +459,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "spec");
+    await startDefaultSession(adapter, "spec");
 
     const selectedModel = {
       providerId: "openai",
@@ -493,7 +493,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "spec", {
+    await startDefaultSession(adapter, "spec", {
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
@@ -538,7 +538,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "spec");
+    await startDefaultSession(adapter, "spec");
 
     await expect(
       adapter.sendUserMessage({
@@ -562,7 +562,7 @@ describe("OpencodeSdkAdapter user message", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "session-opencode-1", "spec");
+    await startDefaultSession(adapter, "spec");
 
     await expect(
       adapter.sendUserMessage({

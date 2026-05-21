@@ -445,7 +445,6 @@ export const makeMockClient = ({
 
 export const startDefaultSession = async (
   adapter: BaseOpencodeSdkAdapter,
-  _sessionId = "session-opencode-1",
   role: "spec" | "planner" | "build" | "qa" = "spec",
   model?: {
     providerId: string;
