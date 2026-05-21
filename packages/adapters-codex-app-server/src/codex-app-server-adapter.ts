@@ -5,10 +5,8 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
-  AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionPresenceSnapshot,
-  AgentSessionRef,
   AgentSessionSummary,
   AgentSessionTodoItem,
   AgentUserMessagePart,
@@ -28,26 +26,28 @@ import type {
   ReadSessionPresenceInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
-  RepoRuntimeRef,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
 import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
-import { createCodexAppServerClient } from "./app-server-client";
+import { requireCodexServerRequestId } from "./codex-app-server-approvals";
+import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
+import {
+  toPresenceSnapshot as buildPresenceSnapshot,
+  stalePresence,
+  toPresenceSnapshotFromThread,
+} from "./codex-app-server-presence";
 import {
   codexTurnKey,
   extractThreadIdFromParams,
   extractTurnId,
-  isMutatingCodexRequest,
   isTerminalTurnStatus,
   parseNotificationRecord,
-  parseQuestionRequest,
   parseServerRequestRecord,
-  READ_ONLY_ROLES,
-  toApprovalRequest,
 } from "./codex-app-server-requests";
+import { handleCodexServerRequest } from "./codex-app-server-server-requests";
 import {
   type ActiveCodexTurn,
   CODEX_USER_INPUT_REQUEST_METHOD,
@@ -60,7 +60,6 @@ import {
   unsupported,
 } from "./codex-app-server-shared";
 import {
-  type CodexThreadSnapshot,
   codexThreadStatusSnapshot,
   extractThreadId,
   requireThreadSnapshotFromReadResponse,
@@ -68,11 +67,9 @@ import {
 } from "./codex-app-server-threads";
 import {
   type CodexTokenUsageTotals,
-  type CodexTurnTiming,
   codexItemId,
   codexItemTypeMatches,
   codexTodosFromThreadRead,
-  codexTokenUsageHistoryFields,
   codexTurnItemsFromThreadRead,
   codexUserInputListToText,
   codexUserInputsFromItem,
@@ -93,6 +90,7 @@ import {
 } from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
+import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import {
@@ -101,7 +99,6 @@ import {
   toCatalog,
   toTransportModelSelection,
 } from "./model-catalog";
-import { resolveCodexRuntimeClientInput } from "./runtime-connection";
 import type {
   CodexAppServerAdapterOptions,
   CodexAppServerClient,
@@ -112,54 +109,11 @@ import type {
 
 export { createCodexAppServerClient } from "./app-server-client";
 
-const isStopFinishPart = (part: import("@openducktor/core").AgentStreamPart): boolean =>
-  part.kind === "step" && part.phase === "finish" && part.reason === "stop";
-
-const applyFinalAssistantTurnMetadata = (
-  message: AgentSessionHistoryMessage,
-  turnTiming: CodexTurnTiming | null,
-  tokenUsage: CodexTokenUsageTotals | null,
-): AgentSessionHistoryMessage => {
-  if (message.role !== "assistant" || !message.parts.some(isStopFinishPart)) {
-    return message;
-  }
-
-  const tokenUsageFields = tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : null;
-  return {
-    ...message,
-    ...(turnTiming ? { durationMs: turnTiming.durationMs } : {}),
-    ...(tokenUsageFields ?? {}),
-    ...(tokenUsageFields
-      ? {
-          parts: message.parts.map((part) =>
-            isStopFinishPart(part) ? { ...part, ...tokenUsageFields } : part,
-          ),
-        }
-      : {}),
-  };
-};
-
-const requireCodexServerRequestId = (requestId: string, requestType: string): number => {
-  const trimmed = requestId.trim();
-  if (!/^\d+$/.test(trimmed)) {
-    throw new Error(`Codex ${requestType} request id '${requestId}' must be numeric.`);
-  }
-
-  const parsed = Number(trimmed);
-  if (!Number.isSafeInteger(parsed)) {
-    throw new Error(
-      `Codex ${requestType} request id '${requestId}' exceeds the safe integer range.`,
-    );
-  }
-
-  return parsed;
-};
-
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
   private readonly sessions = new Map<string, CodexSessionState>();
-  private readonly clientsByRuntimeId = new Map<string, CodexAppServerClient>();
+  private readonly runtimeClients: CodexRuntimeClientResolver;
   private readonly listenersBySessionId = new Map<
     string,
     Set<(event: import("@openducktor/core").AgentEvent) => void>
@@ -205,7 +159,9 @@ export class CodexAppServerAdapter
   private readonly models = new CodexModels();
   private readonly threadInventory = new CodexThreadInventoryReader();
 
-  constructor(private readonly options: CodexAppServerAdapterOptions) {}
+  constructor(private readonly options: CodexAppServerAdapterOptions) {
+    this.runtimeClients = new CodexRuntimeClientResolver(options);
+  }
 
   getRuntimeDefinition(): RuntimeDescriptor {
     return CODEX_RUNTIME_DESCRIPTOR;
@@ -798,7 +754,7 @@ export class CodexAppServerAdapter
       .filter((thread) => inventory.loadedIds.has(thread.id))
       .filter((thread) => !this.sessions.has(thread.id))
       .filter((thread) => directories.size === 0 || directories.has(thread.cwd))
-      .map((thread) => this.toPresenceSnapshotFromThread(thread, input, runtimeId));
+      .map((thread) => toPresenceSnapshotFromThread(thread, input, runtimeId));
     return [...localSnapshots, ...remoteSnapshots];
   }
 
@@ -1706,71 +1662,11 @@ export class CodexAppServerAdapter
   }
 
   private toPresenceSnapshot(session: CodexSessionState): AgentSessionPresenceSnapshot {
-    const pendingApprovals = this.pendingApprovalsForSession(session.threadId);
-    const pendingQuestions = this.pendingQuestionsForSession(session.threadId);
-    const hasPendingInput = pendingApprovals.length > 0 || pendingQuestions.length > 0;
-    const liveStatus = session.liveStatus;
-    const classification =
-      pendingQuestions.length > 0
-        ? "waiting_for_question"
-        : pendingApprovals.length > 0
-          ? "waiting_for_permission"
-          : (liveStatus?.classification ?? "idle");
-    return {
-      presence: "runtime",
-      classification,
-      ref: {
-        externalSessionId: session.threadId,
-        repoPath: session.repoPath,
-        runtimeKind: "codex",
-        workingDirectory: session.workingDirectory,
-      },
-      runtimeId: session.runtimeId,
-      title: `Codex ${session.role}`,
-      startedAt: session.summary.startedAt,
-      status: hasPendingInput ? { type: "busy" } : (liveStatus?.status ?? { type: "idle" }),
-      agentSessionStatus: hasPendingInput ? "running" : (liveStatus?.agentSessionStatus ?? "idle"),
-      pendingApprovals,
-      pendingQuestions,
-    };
-  }
-
-  private toPresenceSnapshotFromThread(
-    thread: CodexThreadSnapshot,
-    ref: RepoRuntimeRef & { workingDirectory?: string; externalSessionId?: string },
-    runtimeId: string,
-  ): AgentSessionPresenceSnapshot {
-    return {
-      presence: "runtime",
-      classification: thread.status.classification,
-      ref: {
-        externalSessionId: ref.externalSessionId ?? thread.id,
-        repoPath: ref.repoPath,
-        runtimeKind: "codex",
-        workingDirectory: thread.cwd,
-      },
-      runtimeId,
-      title: thread.title,
-      startedAt: thread.startedAt,
-      status: thread.status.status,
-      agentSessionStatus: thread.status.agentSessionStatus,
-      pendingApprovals: [],
-      pendingQuestions: [],
-    };
-  }
-
-  private stalePresence(
-    input: AgentSessionRef,
-    runtimeId: string | null = null,
-  ): AgentSessionPresenceSnapshot {
-    return {
-      presence: "stale",
-      classification: "stale",
-      ref: input,
-      runtimeId,
-      pendingApprovals: [],
-      pendingQuestions: [],
-    };
+    return buildPresenceSnapshot(
+      session,
+      this.pendingApprovalsForSession(session.threadId),
+      this.pendingQuestionsForSession(session.threadId),
+    );
   }
 
   private async readRemoteSessionPresence(
@@ -1781,13 +1677,13 @@ export class CodexAppServerAdapter
     });
     const inventory = await this.threadInventory.read(client, runtimeId);
     if (!inventory.loadedIds.has(input.externalSessionId)) {
-      return this.stalePresence(input, runtimeId);
+      return stalePresence(input, runtimeId);
     }
     const snapshot = inventory.threadsById.get(input.externalSessionId) ?? null;
     if (!snapshot || snapshot.cwd !== input.workingDirectory) {
-      return this.stalePresence(input, runtimeId);
+      return stalePresence(input, runtimeId);
     }
-    return this.toPresenceSnapshotFromThread(snapshot, input, runtimeId);
+    return toPresenceSnapshotFromThread(snapshot, input, runtimeId);
   }
 
   private async handleServerRequest(
@@ -1795,147 +1691,23 @@ export class CodexAppServerAdapter
     rawRequest: CodexServerRequestRecord,
     handledRequestKeys: Set<string>,
   ): Promise<boolean> {
-    const requestId = rawRequest.id;
-    const requestKey = requestId !== undefined ? `request:${requestId}` : undefined;
-    if (requestKey && handledRequestKeys.has(requestKey)) {
-      return false;
-    }
-
-    if (requestKey) {
-      handledRequestKeys.add(requestKey);
-    }
-
-    if (typeof rawRequest.method !== "string" || rawRequest.method.trim().length === 0) {
-      throw new Error("Codex app-server server request is missing method.");
-    }
-
-    const requestTurnId = extractTurnId(rawRequest.params);
-    const activeTurn = this.activeTurnsBySessionId.get(session.threadId);
-    if (requestTurnId && activeTurn && this.bindActiveTurnId(activeTurn, requestTurnId)) {
-      this.flushQueuedUserMessagesLater(activeTurn);
-    }
-
-    if (rawRequest.method === CODEX_USER_INPUT_REQUEST_METHOD) {
-      const parsed = parseQuestionRequest(rawRequest);
-      if (parsed.threadId !== session.threadId) {
-        throw new Error(
-          `Codex question request thread '${parsed.threadId}' does not match active session '${session.threadId}'.`,
-        );
-      }
-      if (activeTurn && this.bindActiveTurnId(activeTurn, parsed.turnId)) {
-        this.flushQueuedUserMessagesLater(activeTurn);
-      }
-      const questionInput = {
-        requestId: parsed.request.requestId,
-        questions: parsed.request.questions,
-      };
-      this.pendingQuestionsByRequestId.set(parsed.request.requestId, {
-        runtimeId: session.runtimeId,
-        threadId: session.threadId,
-        request: parsed.request,
-        questionIds: parsed.questionIds,
-        input: questionInput,
-      });
-      const requestIds = this.pendingQuestionIdsBySessionId.get(session.threadId) ?? new Set();
-      requestIds.add(parsed.request.requestId);
-      this.pendingQuestionIdsBySessionId.set(session.threadId, requestIds);
-      this.emitSessionEvent(session.threadId, {
-        ...parsed.request,
-        type: "question_required",
-        externalSessionId: session.threadId,
-        timestamp: new Date().toISOString(),
-      });
-      this.emitSessionEvent(session.threadId, {
-        type: "assistant_part",
-        externalSessionId: session.threadId,
-        timestamp: new Date().toISOString(),
-        part: requireNormalizedCodexToolInvocation({
-          messageId: `codex-question-${parsed.request.requestId}`,
-          partId: `codex-question-${parsed.request.requestId}`,
-          callId: parsed.request.requestId,
-          rawToolName: "request_user_input",
-          status: "running",
-          input: questionInput,
-          metadata: {
-            codexServerRequest: true,
-            method: rawRequest.method,
-            requestId: parsed.request.requestId,
-            questions: parsed.request.questions,
-            questionIds: parsed.questionIds,
-            turnId: parsed.turnId,
-          },
-        }),
-      });
-      return true;
-    }
-
-    if (rawRequest.method !== "item/tool/call") {
-      if (requestId === undefined) {
-        throw new Error(`Codex app-server server request '${rawRequest.method}' is missing an id.`);
-      }
-      if (session.role && READ_ONLY_ROLES.has(session.role) && isMutatingCodexRequest(rawRequest)) {
-        await this.options.respondServerRequest(
-          session.runtimeId,
-          requestId,
-          {
-            approved: false,
-            outcome: "reject",
-            message: `Codex request '${rawRequest.method}' was rejected because role '${session.role}' is read-only.`,
-          },
-          undefined,
-        );
-        this.emitSessionEvent(session.threadId, {
-          type: "session_error",
-          externalSessionId: session.threadId,
-          timestamp: new Date().toISOString(),
-          message: `Rejected mutating Codex request '${rawRequest.method}' for read-only role '${session.role}'.`,
-        });
-        return false;
-      }
-
-      const approval = toApprovalRequest(rawRequest, session.role ?? "build");
-      this.pendingApprovalsByRequestId.set(approval.requestId, {
-        runtimeId: session.runtimeId,
-        request: approval,
-      });
-      const requestIds = this.pendingApprovalIdsBySessionId.get(session.threadId) ?? new Set();
-      requestIds.add(approval.requestId);
-      this.pendingApprovalIdsBySessionId.set(session.threadId, requestIds);
-      this.emitSessionEvent(session.threadId, {
-        ...approval,
-        type: "approval_required",
-        externalSessionId: session.threadId,
-        timestamp: new Date().toISOString(),
-      });
-      return true;
-    }
-
-    if (requestId === undefined) {
-      throw new Error("Codex app-server tool request is missing a numeric id.");
-    }
-
-    await this.options.respondServerRequest(
-      session.runtimeId,
-      requestId,
+    return handleCodexServerRequest(
       {
-        contentItems: [
-          {
-            type: "inputText",
-            text: "OpenDucktor workflow tools are provided through the openducktor MCP server, not Codex dynamic tools.",
-          },
-        ],
-        success: false,
+        options: this.options,
+        pendingApprovalsByRequestId: this.pendingApprovalsByRequestId,
+        pendingApprovalIdsBySessionId: this.pendingApprovalIdsBySessionId,
+        pendingQuestionsByRequestId: this.pendingQuestionsByRequestId,
+        pendingQuestionIdsBySessionId: this.pendingQuestionIdsBySessionId,
+        activeTurnsBySessionId: this.activeTurnsBySessionId,
+        bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
+        flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
+        emitSessionEvent: (externalSessionId, event) =>
+          this.emitSessionEvent(externalSessionId, event),
       },
-      undefined,
+      session,
+      rawRequest,
+      handledRequestKeys,
     );
-    this.emitSessionEvent(session.threadId, {
-      type: "session_error",
-      externalSessionId: session.threadId,
-      timestamp: new Date().toISOString(),
-      message:
-        "Rejected Codex dynamic tool request because OpenDucktor workflow tools must use MCP.",
-    });
-    return false;
   }
 
   async loadSessionDiff(
@@ -1959,14 +1731,7 @@ export class CodexAppServerAdapter
   }
 
   private clientForRuntime(runtimeId: string): CodexAppServerClient {
-    const existing = this.clientsByRuntimeId.get(runtimeId);
-    if (existing) {
-      return existing;
-    }
-
-    const client = createCodexAppServerClient(this.options.transportFactory(runtimeId));
-    this.clientsByRuntimeId.set(runtimeId, client);
-    return client;
+    return this.runtimeClients.clientForRuntime(runtimeId);
   }
 
   private async resolveRuntimeClient(
@@ -1987,51 +1752,6 @@ export class CodexAppServerAdapter
     runtimeId: string;
     client: CodexAppServerClient;
   }> {
-    const resolver = this.options.repoRuntimeResolver;
-    if (!resolver) {
-      throw new Error(
-        `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime 'codex'.`,
-      );
-    }
-
-    const runtimeRef = { repoPath: input.repoPath, runtimeKind: "codex" as const };
-    const requestedRuntimeId = "runtimeId" in input ? input.runtimeId : undefined;
-    const runtime = requestedRuntimeId
-      ? await this.requireRuntimeById(runtimeRef, requestedRuntimeId)
-      : options.requireLive
-        ? await resolver.requireRepoRuntime(runtimeRef)
-        : await resolver.ensureRepoRuntime(runtimeRef);
-
-    const { runtimeId } = resolveCodexRuntimeClientInput(
-      runtime,
-      {
-        repoPath: input.repoPath,
-        runtimeKind: "codex",
-        ...("workingDirectory" in input ? { workingDirectory: input.workingDirectory } : {}),
-      },
-      action,
-    );
-
-    return {
-      runtimeId,
-      client: this.clientForRuntime(runtimeId),
-    };
-  }
-
-  private async requireRuntimeById(
-    runtimeRef: { repoPath: string; runtimeKind: "codex" },
-    runtimeId: string,
-  ) {
-    const resolver = this.options.repoRuntimeResolver;
-    if (resolver.requireRuntimeById) {
-      return resolver.requireRuntimeById(runtimeRef, runtimeId);
-    }
-    const runtime = await resolver.requireRepoRuntime(runtimeRef);
-    if (runtime.runtimeId !== runtimeId) {
-      throw new Error(
-        `No live Codex runtime found for repo '${runtimeRef.repoPath}' with runtime id '${runtimeId}'.`,
-      );
-    }
-    return runtime;
+    return this.runtimeClients.resolve(input, action, options);
   }
 }
