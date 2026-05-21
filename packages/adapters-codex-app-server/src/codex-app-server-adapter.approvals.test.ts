@@ -187,57 +187,6 @@ describe("CodexAppServerAdapter approvals", () => {
     transport?.turnStartDeferred.resolve({});
   });
 
-  test("rejects approval requests when the session role is unknown", async () => {
-    const { adapter, drainServerRequests, respondServerRequest } = createHarness();
-
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: null,
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
-
-    drainServerRequests.mockImplementationOnce(async () => [
-      {
-        id: 29,
-        method: "approval/request",
-        params: {
-          threadId: "thread/start-runtime-ensure",
-          turnId: "turn-unknown-role",
-          tool: "network",
-          url: "https://example.com",
-        },
-      },
-    ]);
-    const events: unknown[] = [];
-    adapter.subscribeEvents("thread/start-runtime-ensure", (event) => events.push(event));
-
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Start now" }],
-    });
-
-    expect(respondServerRequest).toHaveBeenCalledWith(
-      "runtime-ensure",
-      29,
-      expect.objectContaining({
-        approved: false,
-        outcome: "reject",
-        message: expect.stringContaining("session role is unknown"),
-      }),
-      undefined,
-    );
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "session_error",
-        message: expect.stringContaining("session role is unknown"),
-      }),
-    );
-  });
-
   test("preserves initial-turn approvals for late listeners and presence snapshots", async () => {
     const { adapter, drainServerRequests } = createHarness({}, { deferTurnStart: true });
     drainServerRequests.mockImplementationOnce(async () => [

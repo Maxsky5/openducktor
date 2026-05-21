@@ -684,6 +684,59 @@ describe("CodexAppServerAdapter streaming", () => {
     ).resolves.toMatchObject({ classification: "idle" });
   });
 
+  test("keeps the active turn open when a different turn completes", async () => {
+    const drainNotifications = mock(async (_runtimeId: string) => [
+      {
+        method: "turn/started",
+        params: {
+          threadId: "thread/start-runtime-ensure",
+          turn: { id: "turn-active" },
+        },
+      },
+      {
+        method: "turn/completed",
+        params: {
+          threadId: "thread/start-runtime-ensure",
+          turn: { id: "turn-other", status: "completed" },
+        },
+      },
+    ]);
+    const { adapter, transports } = createHarness({ drainNotifications }, { deferTurnStart: true });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    transports.get("runtime-ensure")?.turnStartDeferred.resolve({
+      turn: { id: "turn-active", status: "running" },
+    });
+
+    await adapter.sendUserMessage({
+      externalSessionId: "thread/start-runtime-ensure",
+      parts: [{ kind: "text", text: "Start now" }],
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    await adapter.sendUserMessage({
+      externalSessionId: "thread/start-runtime-ensure",
+      parts: [{ kind: "text", text: "Also inspect failing tests" }],
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    expect(transports.get("runtime-ensure")?.calls).toContainEqual({
+      method: "turn/steer",
+      params: {
+        threadId: "thread/start-runtime-ensure",
+        input: [{ type: "text", text: "Also inspect failing tests" }],
+        expectedTurnId: "turn-active",
+      },
+    });
+  });
+
   test("does not duplicate streamed user message completions after synthetic echo", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "notification"; message: unknown }) => void

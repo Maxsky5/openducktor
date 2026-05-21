@@ -475,12 +475,17 @@ export const handleCodexPendingNotifications = async (
         context.tokenUsageByTurnKey.delete(turnKey);
         context.modelByTurnKey.delete(turnKey);
       }
-      activeTurn?.markTurnSettled();
-      session.liveStatus = {
-        classification: "idle",
-        status: { type: "idle" },
-        agentSessionStatus: "idle",
-      };
+      const shouldSettleActiveTurn = activeTurn && (!turnId || activeTurn.turnId === turnId);
+      if (shouldSettleActiveTurn) {
+        activeTurn.markTurnSettled();
+      }
+      if (!activeTurn || shouldSettleActiveTurn) {
+        session.liveStatus = {
+          classification: "idle",
+          status: { type: "idle" },
+          agentSessionStatus: "idle",
+        };
+      }
       emitCanonicalEvents(
         context,
         context.eventMapperPipeline.runLive(
