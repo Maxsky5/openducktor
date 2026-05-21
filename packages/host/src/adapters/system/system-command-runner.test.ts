@@ -150,10 +150,29 @@ describe("createSystemCommandRunner", () => {
         "/d",
         "/s",
         "/c",
-        String.raw`""C:\Program Files\Codex\codex.cmd" --config "mcp_servers.openducktor.command=^"mcp-bin^"" "path=%%APPDATA%%\foo" "caret=foo^^bar""`,
+        String.raw`""C:\Program Files\Codex\codex.cmd" --config "mcp_servers.openducktor.command=""mcp-bin""" path=%APPDATA%\foo caret=foo^bar"`,
       ],
       windowsVerbatimArguments: true,
     });
+  });
+
+  test("uses process ComSpec fallback for Windows shell launches when the explicit env omits it", () => {
+    const originalComSpec = process.env.ComSpec;
+    process.env.ComSpec = String.raw`C:\Global\cmd.exe`;
+    try {
+      expect(createSystemCommandLaunch("tool.cmd", [], {}, "win32").command).toBe(
+        String.raw`C:\Global\cmd.exe`,
+      );
+      expect(createSystemCommandLaunch("tool.cmd", [], { ComSpec: "  " }, "win32").command).toBe(
+        String.raw`C:\Global\cmd.exe`,
+      );
+    } finally {
+      if (originalComSpec === undefined) {
+        delete process.env.ComSpec;
+      } else {
+        process.env.ComSpec = originalComSpec;
+      }
+    }
   });
 
   test("runs Windows cmd and bat launchers with arguments on native Windows", async () => {

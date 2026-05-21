@@ -22,7 +22,27 @@ describe("createProcessCommandLaunch", () => {
         "/d",
         "/s",
         "/c",
-        String.raw`""C:\Program Files\Codex\codex.cmd" --config "mcp_servers.openducktor.command=^"mcp-bin^"" "path=%%APPDATA%%\foo" "caret=foo^^bar""`,
+        String.raw`""C:\Program Files\Codex\codex.cmd" --config "mcp_servers.openducktor.command=""mcp-bin""" path=%APPDATA%\foo caret=foo^bar"`,
+      ],
+      windowsVerbatimArguments: true,
+    });
+  });
+
+  test("quotes Windows shell arguments without rewriting percent or caret characters", () => {
+    const launch = createProcessCommandLaunch(
+      "tool.cmd",
+      ["plain", "two words", 'quote="value"', "percent=%APPDATA%", "caret=foo^bar"],
+      {},
+      "win32",
+    );
+
+    expect(launch).toEqual({
+      command: "cmd.exe",
+      args: [
+        "/d",
+        "/s",
+        "/c",
+        '"tool.cmd plain "two words" "quote=""value""" percent=%APPDATA% caret=foo^bar"',
       ],
       windowsVerbatimArguments: true,
     });
@@ -97,6 +117,17 @@ describe("parseProcessCommandLine", () => {
     expect(parseProcessCommandLine(`node -e 'console.log("ready")'`)).toEqual({
       command: "node",
       args: ["-e", 'console.log("ready")'],
+    });
+  });
+
+  test("preserves escaped quotes inside double-quoted arguments", () => {
+    expect(parseProcessCommandLine(String.raw`node -e "console.log(\"ready\")"`)).toEqual({
+      command: "node",
+      args: ["-e", 'console.log("ready")'],
+    });
+    expect(parseProcessCommandLine(String.raw`tool --config "key=\"value\""`)).toEqual({
+      command: "tool",
+      args: ["--config", 'key="value"'],
     });
   });
 

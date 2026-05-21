@@ -15,10 +15,10 @@ const quoteWindowsCommandArgument = (value: string): string => {
   if (value.length === 0) {
     return `""`;
   }
-  if (!/[\s"%^]/u.test(value)) {
+  if (!/[\s"]/u.test(value)) {
     return value;
   }
-  return `"${value.replaceAll("^", "^^").replaceAll("%", "%%").replaceAll(`"`, `^"`)}"`;
+  return `"${value.replaceAll(`"`, `""`)}"`;
 };
 
 const isWindowsCommandScript = (command: string, platform: NodeJS.Platform): boolean =>
@@ -59,9 +59,15 @@ export const parseProcessCommandLine = (commandLine: string): ParsedProcessComma
   let quote: "'" | `"` | null = null;
   let currentTokenStarted = false;
 
-  for (const character of commandLine) {
+  for (let index = 0; index < commandLine.length; index += 1) {
+    const character = commandLine.charAt(index);
+
     if (quote !== null) {
-      if (character === quote) {
+      const nextCharacter = commandLine.charAt(index + 1);
+      if (character === "\\" && (nextCharacter === quote || nextCharacter === "\\")) {
+        current += nextCharacter;
+        index += 1;
+      } else if (character === quote) {
         quote = null;
       } else {
         current += character;
