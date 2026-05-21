@@ -203,19 +203,6 @@ type HydratedSubagentPendingInputOverlay = {
   hydrationError: SubagentPendingInputHydrationError | null;
 };
 
-type HydratedSubagentPendingInputResult =
-  | {
-      status: "success";
-      childExternalSessionId: string;
-      pendingApprovals: AgentSessionPresenceSnapshot["pendingApprovals"];
-      pendingQuestions: AgentSessionPresenceSnapshot["pendingQuestions"];
-    }
-  | {
-      status: "failure";
-      childExternalSessionId: string;
-      reason: string;
-    };
-
 class SubagentPendingInputHydrationError extends Error {
   constructor(message: string) {
     super(message);
@@ -268,25 +255,18 @@ const loadHydratedSubagentPendingInputOverlay = async ({
     return EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY;
   }
 
-  const results: HydratedSubagentPendingInputResult[] = await Promise.all(
+  const results = await Promise.allSettled(
     childExternalSessionIds.map(async (childExternalSessionId) => {
       try {
-        const snapshot = await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, {
-          ...record,
-          externalSessionId: childExternalSessionId,
-        });
         return {
-          status: "success",
           childExternalSessionId,
-          pendingApprovals: snapshot.presence === "runtime" ? snapshot.pendingApprovals : [],
-          pendingQuestions: snapshot.presence === "runtime" ? snapshot.pendingQuestions : [],
+          snapshot: await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, {
+            ...record,
+            externalSessionId: childExternalSessionId,
+          }),
         };
       } catch (error) {
-        return {
-          status: "failure",
-          childExternalSessionId,
-          reason: errorMessage(error),
-        };
+        throw new Error(`subagent session '${childExternalSessionId}': ${errorMessage(error)}`);
       }
     }),
   );
@@ -295,18 +275,17 @@ const loadHydratedSubagentPendingInputOverlay = async ({
   const scannedChildExternalSessionIds: string[] = [];
   const failures: string[] = [];
   for (const result of results) {
-    if (result.status === "failure") {
-      failures.push(`subagent session '${result.childExternalSessionId}': ${result.reason}`);
+    if (result.status === "rejected") {
+      failures.push(errorMessage(result.reason));
       continue;
     }
-    scannedChildExternalSessionIds.push(result.childExternalSessionId);
-    if (result.pendingApprovals.length > 0) {
-      pendingApprovalsByChildExternalSessionId[result.childExternalSessionId] =
-        result.pendingApprovals;
+    const { childExternalSessionId, snapshot } = result.value;
+    scannedChildExternalSessionIds.push(childExternalSessionId);
+    if (snapshot.presence === "runtime" && snapshot.pendingApprovals.length > 0) {
+      pendingApprovalsByChildExternalSessionId[childExternalSessionId] = snapshot.pendingApprovals;
     }
-    if (result.pendingQuestions.length > 0) {
-      pendingQuestionsByChildExternalSessionId[result.childExternalSessionId] =
-        result.pendingQuestions;
+    if (snapshot.presence === "runtime" && snapshot.pendingQuestions.length > 0) {
+      pendingQuestionsByChildExternalSessionId[childExternalSessionId] = snapshot.pendingQuestions;
     }
   }
   const hydrationError =

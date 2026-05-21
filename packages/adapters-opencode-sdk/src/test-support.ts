@@ -1,4 +1,5 @@
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
+import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
@@ -18,38 +19,29 @@ export const defaultRepoRuntimeInput = {
   workingDirectory: "/repo",
 };
 
+const createDefaultRuntimeSummary = (repoPath: string, runtimeKind: RuntimeKind) => ({
+  kind: runtimeKind,
+  runtimeId: "runtime-opencode-1",
+  repoPath,
+  taskId: null,
+  role: "workspace" as const,
+  workingDirectory: defaultRuntimeConnection.workingDirectory,
+  runtimeRoute: {
+    type: "local_http" as const,
+    endpoint: defaultRuntimeConnection.endpoint,
+  },
+  startedAt: "2026-02-17T12:00:00Z",
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+});
+
 export class OpencodeSdkAdapter extends BaseOpencodeSdkAdapter {
   constructor(options: ConstructorParameters<typeof BaseOpencodeSdkAdapter>[0] = {}) {
     super({
       repoRuntimeResolver: {
-        ensureRepoRuntime: async ({ repoPath, runtimeKind }) => ({
-          kind: runtimeKind,
-          runtimeId: "runtime-opencode-1",
-          repoPath,
-          taskId: null,
-          role: "workspace",
-          workingDirectory: defaultRuntimeConnection.workingDirectory,
-          runtimeRoute: {
-            type: "local_http",
-            endpoint: defaultRuntimeConnection.endpoint,
-          },
-          startedAt: "2026-02-17T12:00:00Z",
-          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        }),
-        requireRepoRuntime: async ({ repoPath, runtimeKind }) => ({
-          kind: runtimeKind,
-          runtimeId: "runtime-opencode-1",
-          repoPath,
-          taskId: null,
-          role: "workspace",
-          workingDirectory: defaultRuntimeConnection.workingDirectory,
-          runtimeRoute: {
-            type: "local_http",
-            endpoint: defaultRuntimeConnection.endpoint,
-          },
-          startedAt: "2026-02-17T12:00:00Z",
-          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        }),
+        ensureRepoRuntime: async ({ repoPath, runtimeKind }) =>
+          createDefaultRuntimeSummary(repoPath, runtimeKind),
+        requireRepoRuntime: async ({ repoPath, runtimeKind }) =>
+          createDefaultRuntimeSummary(repoPath, runtimeKind),
       },
       ...options,
     });
