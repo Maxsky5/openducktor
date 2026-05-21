@@ -16,6 +16,7 @@ export type CommandOpenInToolMetadata = {
   platforms: NodeJS.Platform[];
   commands: string[];
   args?: (directoryPath: string, command: string) => string[];
+  allowNonZeroExit?: boolean;
 };
 
 export const MAC_OPEN_IN_TOOL_CATALOG: MacOpenInToolMetadata[] = [
@@ -61,6 +62,7 @@ export const COMMAND_OPEN_IN_TOOL_CATALOG: CommandOpenInToolMetadata[] = [
     label: "File Explorer",
     platforms: ["win32"],
     commands: ["explorer.exe"],
+    allowNonZeroExit: true,
   },
   {
     id: "xdg-open",
@@ -81,7 +83,7 @@ export const COMMAND_OPEN_IN_TOOL_CATALOG: CommandOpenInToolMetadata[] = [
     platforms: ["linux"],
     commands: ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal"],
     args: (directoryPath, command) => {
-      if (command === "gnome-terminal") {
+      if (command === "x-terminal-emulator" || command === "gnome-terminal") {
         return [`--working-directory=${directoryPath}`];
       }
       if (command === "konsole") {

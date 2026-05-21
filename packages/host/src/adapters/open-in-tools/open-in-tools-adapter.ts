@@ -150,6 +150,7 @@ export const createOpenInToolsAdapter = ({
     COMMAND_OPEN_IN_TOOL_CATALOG.filter((metadata) => metadata.platforms.includes(platform));
   const resolveCommandPath = (command: string) => {
     if (!systemCommands.resolveCommandPath) {
+      // The port keeps command resolution optional for callers that only run known commands.
       return Effect.fail(
         new HostOperationError({
           operation: "openInTools.resolveCommandPath",
@@ -205,7 +206,7 @@ export const createOpenInToolsAdapter = ({
     Effect.gen(function* () {
       const args = metadata.args?.(directoryPath, command) ?? [directoryPath];
       const result = yield* systemCommands
-        .runCommandAllowFailure(command, args, {
+        .runCommandAllowFailure(resolvedCommand, args, {
           cwd: directoryPath,
         })
         .pipe(
@@ -226,7 +227,7 @@ export const createOpenInToolsAdapter = ({
               }),
           ),
         );
-      if (!result.ok) {
+      if (!result.ok && metadata.allowNonZeroExit !== true) {
         return yield* Effect.fail(
           new HostOperationError({
             operation: "openInTools.openDirectoryInTool",

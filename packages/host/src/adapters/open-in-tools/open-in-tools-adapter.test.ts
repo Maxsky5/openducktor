@@ -212,7 +212,25 @@ describe("createOpenInToolsAdapter", () => {
 
     await Effect.runPromise(port.openDirectoryInTool("/tmp/repo with spaces", "xdg-open"));
 
-    expect(launches).toEqual([{ command: "xdg-open", args: ["/tmp/repo with spaces"] }]);
+    expect(launches).toEqual([{ command: "/usr/bin/xdg-open", args: ["/tmp/repo with spaces"] }]);
+  });
+
+  test("launches x-terminal-emulator with working-directory arguments", async () => {
+    const { launches, systemCommands } = createSystemCommands({
+      resolvedCommands: {
+        "x-terminal-emulator": "/usr/bin/x-terminal-emulator",
+      },
+    });
+    const port = createOpenInToolsAdapter({ platform: "linux", systemCommands });
+
+    await Effect.runPromise(port.openDirectoryInTool("/tmp/repo with spaces", "terminal"));
+
+    expect(launches).toEqual([
+      {
+        command: "/usr/bin/x-terminal-emulator",
+        args: ["--working-directory=/tmp/repo with spaces"],
+      },
+    ]);
   });
 
   test("launches Linux terminals with command-specific directory arguments", async () => {
@@ -228,7 +246,7 @@ describe("createOpenInToolsAdapter", () => {
     await Effect.runPromise(port.openDirectoryInTool("/tmp/repo with spaces", "terminal"));
 
     expect(launches).toEqual([
-      { command: "konsole", args: ["--workdir", "/tmp/repo with spaces"] },
+      { command: "/usr/bin/konsole", args: ["--workdir", "/tmp/repo with spaces"] },
     ]);
   });
 
@@ -250,7 +268,30 @@ describe("createOpenInToolsAdapter", () => {
     await Effect.runPromise(port.openDirectoryInTool(String.raw`C:\repo with spaces`, "terminal"));
 
     expect(launches).toEqual([
-      { command: "wt.exe", args: ["-d", String.raw`C:\repo with spaces`] },
+      {
+        command: String.raw`C:\Users\dev\AppData\Local\Microsoft\WindowsApps\wt.exe`,
+        args: ["-d", String.raw`C:\repo with spaces`],
+      },
+    ]);
+  });
+
+  test("treats File Explorer non-zero exit as a successful delegated launch", async () => {
+    const { launches, systemCommands } = createSystemCommands({
+      resolvedCommands: {
+        "explorer.exe": String.raw`C:\Windows\explorer.exe`,
+      },
+      runOk: false,
+      runStderr: "",
+    });
+    const port = createOpenInToolsAdapter({ platform: "win32", systemCommands });
+
+    await Effect.runPromise(port.openDirectoryInTool(String.raw`C:\repo with spaces`, "explorer"));
+
+    expect(launches).toEqual([
+      {
+        command: String.raw`C:\Windows\explorer.exe`,
+        args: [String.raw`C:\repo with spaces`],
+      },
     ]);
   });
 
