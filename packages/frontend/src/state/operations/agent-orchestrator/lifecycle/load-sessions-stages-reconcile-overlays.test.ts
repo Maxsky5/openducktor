@@ -823,7 +823,7 @@ describe("load-sessions-stages", () => {
     });
   });
 
-  test("keeps successful child pending input when another child hydration fails", async () => {
+  test("preserves failed child pending input when another child hydration succeeds", async () => {
     const stalePermission = {
       requestId: "stale-perm",
       requestType: "permission_grant" as const,
@@ -956,6 +956,7 @@ describe("load-sessions-stages", () => {
     expect(
       stateHarness.getState()["external-1"]?.subagentPendingApprovalsByExternalSessionId,
     ).toEqual({
+      "external-child-session": [stalePermission],
       "external-success-child-session": [livePermission],
     });
     expect(

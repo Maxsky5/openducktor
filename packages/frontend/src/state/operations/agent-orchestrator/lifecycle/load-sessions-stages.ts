@@ -203,6 +203,19 @@ type HydratedSubagentPendingInputOverlay = {
   hydrationError: SubagentPendingInputHydrationError | null;
 };
 
+type HydratedSubagentPendingInputResult =
+  | {
+      status: "success";
+      childExternalSessionId: string;
+      pendingApprovals: AgentSessionPresenceSnapshot["pendingApprovals"];
+      pendingQuestions: AgentSessionPresenceSnapshot["pendingQuestions"];
+    }
+  | {
+      status: "failure";
+      childExternalSessionId: string;
+      reason: string;
+    };
+
 class SubagentPendingInputHydrationError extends Error {
   constructor(message: string) {
     super(message);
@@ -255,34 +268,47 @@ const loadHydratedSubagentPendingInputOverlay = async ({
     return EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY;
   }
 
-  const pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId = {};
-  const pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId = {};
-  const scannedChildExternalSessionIds: string[] = [];
-  const failures: string[] = [];
-  await Promise.all(
+  const results: HydratedSubagentPendingInputResult[] = await Promise.all(
     childExternalSessionIds.map(async (childExternalSessionId) => {
       try {
         const snapshot = await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, {
           ...record,
           externalSessionId: childExternalSessionId,
         });
-        scannedChildExternalSessionIds.push(childExternalSessionId);
-        if (snapshot.presence === "runtime" && snapshot.pendingApprovals.length > 0) {
-          pendingApprovalsByChildExternalSessionId[childExternalSessionId] =
-            snapshot.pendingApprovals;
-        }
-        if (snapshot.presence === "runtime" && snapshot.pendingQuestions.length > 0) {
-          pendingQuestionsByChildExternalSessionId[childExternalSessionId] =
-            snapshot.pendingQuestions;
-        }
+        return {
+          status: "success",
+          childExternalSessionId,
+          pendingApprovals: snapshot.presence === "runtime" ? snapshot.pendingApprovals : [],
+          pendingQuestions: snapshot.presence === "runtime" ? snapshot.pendingQuestions : [],
+        };
       } catch (error) {
-        scannedChildExternalSessionIds.push(childExternalSessionId);
-        pendingApprovalsByChildExternalSessionId[childExternalSessionId] = [];
-        pendingQuestionsByChildExternalSessionId[childExternalSessionId] = [];
-        failures.push(`subagent session '${childExternalSessionId}': ${errorMessage(error)}`);
+        return {
+          status: "failure",
+          childExternalSessionId,
+          reason: errorMessage(error),
+        };
       }
     }),
   );
+  const pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId = {};
+  const pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId = {};
+  const scannedChildExternalSessionIds: string[] = [];
+  const failures: string[] = [];
+  for (const result of results) {
+    if (result.status === "failure") {
+      failures.push(`subagent session '${result.childExternalSessionId}': ${result.reason}`);
+      continue;
+    }
+    scannedChildExternalSessionIds.push(result.childExternalSessionId);
+    if (result.pendingApprovals.length > 0) {
+      pendingApprovalsByChildExternalSessionId[result.childExternalSessionId] =
+        result.pendingApprovals;
+    }
+    if (result.pendingQuestions.length > 0) {
+      pendingQuestionsByChildExternalSessionId[result.childExternalSessionId] =
+        result.pendingQuestions;
+    }
+  }
   const hydrationError =
     failures.length > 0
       ? new SubagentPendingInputHydrationError(
