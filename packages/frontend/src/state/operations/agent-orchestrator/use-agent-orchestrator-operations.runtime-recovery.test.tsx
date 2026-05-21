@@ -13,12 +13,12 @@ import {
   OpencodeSdkAdapter,
   opencodeSdkAdapterPrototype,
   persistedBuildSessionFixture,
+  runOrchestratorOperationTest,
   sessionMessagesToArray,
   setupOrchestratorOperationsTestEnvironment,
   taskFixture,
   taskFixture2WithPersistedBuildSession,
   taskFixtureWithPersistedBuildSession,
-  withSuppressedRendererWarning,
 } from "./use-agent-orchestrator-operations.test-helpers";
 
 describe("use-agent-orchestrator-operations runtime recovery", () => {
@@ -1069,7 +1069,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
   });
 
   test("retries background session bootstrap after a transient repo config load failure", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       const originalAgentSessionUpsert = host.agentSessionUpsert;
       const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
       const originalRuntimeList = host.runtimeList;
@@ -1127,7 +1127,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
   });
 
   test("bootstraps task sessions from task metadata with one batched startup presence scan", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
       const originalRuntimeList = host.runtimeList;
       const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;

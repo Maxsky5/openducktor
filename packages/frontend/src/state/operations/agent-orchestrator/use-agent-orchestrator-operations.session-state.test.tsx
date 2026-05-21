@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import {
   BUILD_SELECTION,
   buildBootstrapFixture,
   createAgentSessionPresenceSnapshotFixture,
   createHookHarness,
   createSessionMessagesState,
+  createUnavailableBuildTaskFixture,
   createWorktreeRuntimeFixture,
   host,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -13,10 +13,10 @@ import {
   opencodeSdkAdapterPrototype,
   persistedBuildSessionFixture,
   persistedSessionFixture,
+  runOrchestratorOperationTest,
   setupOrchestratorOperationsTestEnvironment,
   taskFixture,
   taskFixtureWithPersistedBuildSession,
-  withSuppressedRendererWarning,
 } from "./use-agent-orchestrator-operations.test-helpers";
 
 describe("use-agent-orchestrator-operations session state", () => {
@@ -32,7 +32,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("blocks free-form sends while an attached error session is waiting for input", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       let subscribeCalls = 0;
       let unsubscribeCalls = 0;
       let stopCalls = 0;
@@ -254,7 +254,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("uses latest runs after args update when starting build sessions", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       let buildStartCalls = 0;
       let startWorkingDirectory = "";
 
@@ -358,7 +358,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("uses latest tasks after args update when validating send permissions", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       let sendCalls = 0;
 
       const originalAgentSessionsList = host.agentSessionsList;
@@ -399,16 +399,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         refreshTaskData: async () => {},
       });
 
-      const unavailableTask: TaskCard = {
-        ...taskFixture,
-        status: "open",
-        agentWorkflows: {
-          spec: { required: true, canSkip: false, available: true, completed: false },
-          planner: { required: true, canSkip: false, available: false, completed: false },
-          builder: { required: true, canSkip: false, available: false, completed: false },
-          qa: { required: true, canSkip: false, available: false, completed: false },
-        },
-      };
+      const unavailableTask = createUnavailableBuildTaskFixture();
 
       try {
         await harness.mount();
@@ -445,7 +436,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("reuses freshly loaded sessions without starting a new session", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       let startCalls = 0;
 
       const originalAgentSessionsList = host.agentSessionsList;
@@ -552,7 +543,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("removeAgentSessions prunes only matching task roles from local state", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
         tasks: [taskFixture],
@@ -596,7 +587,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("removeAgentSession detaches transcript-purpose attached sessions before local cleanup", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
       const originalDetachSession = OpencodeSdkAdapter.prototype.detachSession;
       const detachCalls: string[] = [];
@@ -664,7 +655,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("removeAgentSessions detaches transcript-purpose attached sessions before task cleanup", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
       const originalDetachSession = OpencodeSdkAdapter.prototype.detachSession;
       const detachCalls: string[] = [];
@@ -757,7 +748,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("revisit to the same repo bootstraps task sessions again", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
       const originalRuntimeList = host.runtimeList;
       let persistedListCalls = 0;
@@ -795,7 +786,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("explicitly reconciles live agent sessions even when persisted records omit status", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
       const originalAgentSessionUpsert = host.agentSessionUpsert;
       const originalSpecGet = host.specGet;
@@ -889,7 +880,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("scans but does not resume idle live agent sessions on repo bootstrap", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
       const originalAgentSessionUpsert = host.agentSessionUpsert;
       const originalSpecGet = host.specGet;

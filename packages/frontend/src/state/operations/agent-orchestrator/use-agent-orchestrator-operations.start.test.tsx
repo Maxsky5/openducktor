@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
 import {
   BUILD_SELECTION,
   buildBootstrapFixture,
@@ -7,16 +6,17 @@ import {
   createDeferred,
   createHookHarness,
   createTestDependencies,
+  createUnavailableBuildTaskFixture,
   host,
   OPENCODE_RUNTIME_DESCRIPTOR,
   OpencodeSdkAdapter,
   opencodeSdkAdapterPrototype,
   persistedBuildSessionFixture,
   persistedSessionFixture,
+  runOrchestratorOperationTest,
+  runWithPatchScope,
   setupOrchestratorOperationsTestEnvironment,
   taskFixture,
-  toast,
-  withSuppressedRendererWarning,
 } from "./use-agent-orchestrator-operations.test-helpers";
 
 describe("use-agent-orchestrator-operations start and send", () => {
@@ -55,7 +55,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let subscribeCalls = 0;
     let sendCalls = 0;
 
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
       const originalAgentSessionUpsert = host.agentSessionUpsert;
       const originalSpecGet = host.specGet;
@@ -147,7 +147,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let subscribeCalls = 0;
     const hasAttachedSession = true;
 
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       const originalAgentSessionsList = host.agentSessionsList;
       const originalAgentSessionUpsert = host.agentSessionUpsert;
       const originalRuntimeList = host.runtimeList;
@@ -246,60 +246,34 @@ describe("use-agent-orchestrator-operations start and send", () => {
   });
 
   test("shows error toast when send is rejected for an unavailable role", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runWithPatchScope(async (scope) => {
       let sendCalls = 0;
 
-      const originalToastError = toast.error;
       const toastError = mock(() => "");
-      toast.error = toastError;
-
-      const originalAgentSessionsList = host.agentSessionsList;
-      const originalAgentSessionUpsert = host.agentSessionUpsert;
-      const originalSpecGet = host.specGet;
-      const originalPlanGet = host.planGet;
-      const originalQaGetReport = host.qaGetReport;
-      const originalBuildContinuationTargetGet = host.taskWorktreeGet;
-
-      const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
-      const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
-      const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
-      const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
-      const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-      const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
-
-      host.agentSessionsList = async () => [persistedSessionFixture];
-      host.agentSessionUpsert = async () => {};
-      host.specGet = async () => ({ markdown: "", updatedAt: null });
-      host.planGet = async () => ({ markdown: "", updatedAt: null });
-      host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-      host.taskWorktreeGet = async () => ({
+      scope.patchToastError(toastError);
+      scope.patchHost("agentSessionsList", async () => [persistedSessionFixture]);
+      scope.patchHost("agentSessionUpsert", async () => {});
+      scope.patchHost("specGet", async () => ({ markdown: "", updatedAt: null }));
+      scope.patchHost("planGet", async () => ({ markdown: "", updatedAt: null }));
+      scope.patchHost("qaGetReport", async () => ({ markdown: "", updatedAt: null }));
+      scope.patchHost("taskWorktreeGet", async () => ({
         workingDirectory: "/tmp/repo/worktree",
         source: "active_build_run",
-      });
-
-      OpencodeSdkAdapter.prototype.hasSession = () => true;
-      OpencodeSdkAdapter.prototype.subscribeEvents = () => () => {};
-      OpencodeSdkAdapter.prototype.sendUserMessage = async () => {
+      }));
+      scope.patchAdapterPrototype("hasSession", () => true);
+      scope.patchAdapterPrototype("subscribeEvents", () => () => {});
+      scope.patchAdapterPrototype("sendUserMessage", async () => {
         sendCalls += 1;
-      };
-      OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
+      });
+      scope.patchAdapterPrototype("listAvailableModels", async () => ({
         models: [],
         defaultModelsByProvider: {},
         profiles: [],
-      });
-      OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
-      OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+      }));
+      scope.patchAdapterPrototype("loadSessionTodos", async () => []);
+      scope.patchAdapterPrototype("loadSessionHistory", async () => []);
 
-      const unavailableTask: TaskCard = {
-        ...taskFixture,
-        status: "open",
-        agentWorkflows: {
-          spec: { required: true, canSkip: false, available: true, completed: false },
-          planner: { required: true, canSkip: false, available: false, completed: false },
-          builder: { required: true, canSkip: false, available: false, completed: false },
-          qa: { required: true, canSkip: false, available: false, completed: false },
-        },
-      };
+      const unavailableTask = createUnavailableBuildTaskFixture();
 
       const harness = createHookHarness({
         activeRepo: "/tmp/repo",
@@ -325,27 +299,12 @@ describe("use-agent-orchestrator-operations start and send", () => {
         });
       } finally {
         await harness.unmount();
-
-        toast.error = originalToastError;
-        host.agentSessionsList = originalAgentSessionsList;
-        host.agentSessionUpsert = originalAgentSessionUpsert;
-        host.specGet = originalSpecGet;
-        host.planGet = originalPlanGet;
-        host.qaGetReport = originalQaGetReport;
-        host.taskWorktreeGet = originalBuildContinuationTargetGet;
-
-        OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
-        OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
-        OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
-        OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
-        OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-        OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       }
     });
   });
 
   test("reuses an in-memory session after it has been started", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       let startCalls = 0;
       let persistedListCalls = 0;
 
@@ -467,7 +426,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
   });
 
   test("dedupes concurrent starts for the same repo and task", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       let startCalls = 0;
       let persistedListCalls = 0;
       const startDeferred = createDeferred<{
@@ -596,7 +555,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
   });
 
   test("returns persisted session for task without starting a new one", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       let startCalls = 0;
 
       const originalAgentSessionsList = host.agentSessionsList;
@@ -732,7 +691,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
   });
 
   test("rejects stale start when active repo changes mid-flight", async () => {
-    await withSuppressedRendererWarning(async () => {
+    await runOrchestratorOperationTest(async () => {
       let startCalls = 0;
       const repoConfigDeferred =
         createDeferred<Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>>();
