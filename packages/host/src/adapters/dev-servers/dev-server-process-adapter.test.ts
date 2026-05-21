@@ -35,7 +35,7 @@ const quoteCommandArg = (value: string): string => {
   if (value.length === 0) {
     return `""`;
   }
-  if (!/[\s'"]/u.test(value)) {
+  if (!/[\s'"();&|<>$`\\]/u.test(value)) {
     return value;
   }
   if (!value.includes(`"`)) {
@@ -117,6 +117,50 @@ setInterval(() => {}, 1000);
     }
   });
 
+  test("runs POSIX shell command strings on non-Windows platforms", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const outputs: string[] = [];
+    const root = await mkdtemp(join(tmpdir(), "odt dev server shell "));
+    const nestedDir = join(root, "nested dir");
+    const scriptPath = join(nestedDir, "server.mjs");
+    await mkdir(nestedDir);
+    const realNestedDir = await realpath(nestedDir);
+    await writeFile(
+      scriptPath,
+      `
+process.stdout.write("shell:" + process.cwd() + ":" + process.env.ODT_INLINE_ENV);
+setInterval(() => {}, 1000);
+`,
+    );
+    const port = createDevServerProcessAdapter({
+      startGracePeriodMs: 20,
+      stopTimeoutMs: 750,
+    });
+    const command = [
+      `cd ${quoteCommandArg(nestedDir)}`,
+      `ODT_INLINE_ENV=from-shell ${quoteCommandArg(process.execPath)} server.mjs`,
+    ].join(" && ");
+
+    try {
+      const handle = await port.start({
+        command,
+        cwd: root,
+        onExit: () => {},
+        onOutput: (output) => outputs.push(output.data),
+      });
+      await waitFor(() => outputs.join("").includes("shell:"));
+
+      await handle.stop();
+
+      expect(outputs.join("")).toContain(`shell:${realNestedDir}:from-shell`);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   test("stops a command and its long-lived descendant", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-dev-server-tree-"));
     const childPidPath = join(root, "child.pid");
@@ -182,7 +226,7 @@ setInterval(() => {}, 1000);
     ).rejects.toThrow("Dev server exited with code 42.");
   });
 
-  test("rejects unmatched command quotes as validation errors", async () => {
+  test("rejects unmatched POSIX shell command quotes as shell exits", async () => {
     const port = createDevServerProcessAdapter({
       startGracePeriodMs: 20,
       stopTimeoutMs: 100,
@@ -195,10 +239,42 @@ setInterval(() => {}, 1000);
         onExit: () => {},
         onOutput: () => {},
       }),
-    ).rejects.toThrow("Dev server command has an unmatched quote.");
+    ).rejects.toThrow("Dev server exited with code 2.");
   });
 
-  test("rejects missing executables with actionable spawn details", async () => {
+  test("rejects missing POSIX shell commands as startup exits", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const port = createEffectDevServerProcessAdapter({
+      processEnv: { PATH: process.env.PATH },
+      startGracePeriodMs: 20,
+      stopTimeoutMs: 100,
+    });
+    const command = "definitely-missing-dev-server-command-odt-wr4e --flag";
+    const failure = await firstFailure(
+      port.start({
+        command,
+        cwd: process.cwd(),
+        onExit: () => {},
+        onOutput: () => {},
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(failure).toMatchObject({
+      _tag: "DevServerProcessStartExitError",
+      exitCode: 127,
+      signal: null,
+    });
+  });
+
+  test("rejects missing Windows direct executables with actionable spawn details", async () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+
     const port = createEffectDevServerProcessAdapter({
       processEnv: { PATH: process.env.PATH },
       startGracePeriodMs: 20,

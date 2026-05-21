@@ -35,6 +35,24 @@ type DevServerLaunchFailureDetails = {
 };
 
 type DevServerChildProcess = ReturnType<typeof spawn>;
+type DevServerCommandLaunch = {
+  command: string;
+  args: string[];
+  windowsVerbatimArguments?: boolean;
+};
+
+const createDevServerCommandLaunch = (
+  command: string,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): DevServerCommandLaunch => {
+  if (platform !== "win32") {
+    return { command: "/bin/sh", args: ["-lc", command] };
+  }
+
+  const parsedCommand = parseProcessCommandLine(command);
+  return createProcessCommandLaunch(parsedCommand.command, parsedCommand.args, env, platform);
+};
 
 const trackDevServerProcess = ({
   child,
@@ -133,20 +151,14 @@ export const createDevServerProcessAdapter = ({
     let scope: Parameters<typeof Scope.close>[0] | null = null;
     return Effect.gen(function* () {
       const { command, cwd, env, onExit, onOutput } = input;
-      const parsedCommand = yield* Effect.try({
-        try: () => parseProcessCommandLine(command),
+      const commandEnv = { ...processEnv, ...env };
+      const launch = yield* Effect.try({
+        try: () => createDevServerCommandLaunch(command, commandEnv, process.platform),
         catch: (cause) =>
           cause instanceof HostValidationError
             ? cause
             : toHostOperationError(cause, "devServerProcess.parseCommand", { command }),
       });
-      const commandEnv = { ...processEnv, ...env };
-      const launch = createProcessCommandLaunch(
-        parsedCommand.command,
-        parsedCommand.args,
-        commandEnv,
-        process.platform,
-      );
       const launchFailureDetails: DevServerLaunchFailureDetails = {
         command,
         cwd,
