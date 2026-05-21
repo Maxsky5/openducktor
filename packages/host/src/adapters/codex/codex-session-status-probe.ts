@@ -1,6 +1,10 @@
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import type { CodexAppServerError, CodexAppServerPort } from "../../ports/codex-app-server-port";
+import type {
+  CodexAppServerError,
+  CodexAppServerPort,
+  CodexSessionStatus,
+} from "../../ports/codex-app-server-port";
 import { readCodexThread } from "./codex-thread-lookup";
 
 export type CodexSessionStatusProbeInput = {
@@ -16,6 +20,21 @@ const isCodexThreadNotFoundError = (cause: CodexAppServerError): boolean =>
   cause instanceof HostOperationError &&
   cause.details?.method === "thread/read" &&
   cause.message.toLowerCase().includes("not found");
+
+const isActiveCodexThreadStatus = (status: CodexSessionStatus): boolean => {
+  switch (status) {
+    case "active":
+    case "systemError":
+      return true;
+    case "idle":
+    case "notLoaded":
+      return false;
+    default: {
+      const unhandledStatus: never = status;
+      return unhandledStatus;
+    }
+  }
+};
 
 export const probeCodexSessionStatus = (
   input: CodexSessionStatusProbeInput,
@@ -39,6 +58,7 @@ export const probeCodexSessionStatus = (
     const thread = threadResult.right;
     return {
       supported: true,
-      hasLiveSession: thread.cwd === input.workingDirectory && thread.status.type !== "notLoaded",
+      hasLiveSession:
+        thread.cwd === input.workingDirectory && isActiveCodexThreadStatus(thread.status.type),
     };
   });

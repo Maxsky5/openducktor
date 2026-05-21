@@ -399,7 +399,7 @@ describe("createRuntimeRegistry", () => {
           workingDirectory: "/repo/worktree",
         }),
       ),
-    ).resolves.toEqual({ supported: true, hasLiveSession: true });
+    ).resolves.toEqual({ supported: true, hasLiveSession: false });
     await expect(
       Effect.runPromise(
         probeSessionStatus({
