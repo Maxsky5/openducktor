@@ -3,14 +3,11 @@ import { extractTurnId, isTerminalTurnStatus } from "./codex-app-server-requests
 import { type ActiveCodexTurn, isPlainObject } from "./codex-app-server-shared";
 import { toCodexUserInputList } from "./codex-app-server-transcript";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
-import type {
-  CodexAppServerAdapterOptions,
-  CodexAppServerClient,
-  CodexSessionState,
-} from "./types";
+import type { CodexAppServerClient, CodexSessionState } from "./types";
 
 export type CodexTurnLifecycleContext = {
-  options: CodexAppServerAdapterOptions;
+  subscribeEvents: boolean;
+  drainNotifications: boolean;
   sessions: Map<string, CodexSessionState>;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   clientForRuntime(runtimeId: string): CodexAppServerClient;
@@ -74,7 +71,7 @@ const steerActiveTurn = async (
   parts: AgentUserMessagePart[],
 ): Promise<boolean> => {
   const input = toCodexUserInputList(parts);
-  if (!activeTurn.turnId && !context.options.subscribeEvents) {
+  if (!activeTurn.turnId && !context.subscribeEvents) {
     await context.handlePendingServerRequests(activeTurn.session, activeTurn.handledRequestKeys);
   }
   if (activeTurn.isTurnSettled()) {
@@ -179,7 +176,7 @@ export const startCodexTurnForSession = async (
         context.bindActiveTurnId(activeTurnState, turnId);
       }
       flushQueuedUserMessagesLater(context, activeTurnState);
-      if (!context.options.subscribeEvents && !context.options.drainNotifications) {
+      if (!context.subscribeEvents && !context.drainNotifications) {
         context.emitUserMessage(session, parts, model);
         activeTurnState.markTurnSettled();
       } else if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
@@ -193,7 +190,7 @@ export const startCodexTurnForSession = async (
     });
   activeTurnState.turnStartPromise = turnStartPromise;
 
-  if (context.options.subscribeEvents) {
+  if (context.subscribeEvents) {
     context.emitUserMessage(session, parts, model);
     emitTurnStartErrorLater(context, session, turnStartPromise);
     return;

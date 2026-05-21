@@ -9,13 +9,13 @@ import {
 import { type ActiveCodexTurn, CODEX_USER_INPUT_REQUEST_METHOD } from "./codex-app-server-shared";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import type {
-  CodexAppServerAdapterOptions,
   CodexServerRequestRecord,
+  CodexServerRequestResponder,
   CodexSessionState,
 } from "./types";
 
 export type CodexServerRequestHandlerContext = {
-  options: CodexAppServerAdapterOptions;
+  respondServerRequest: CodexServerRequestResponder;
   pendingApprovalsByRequestId: Map<
     string,
     { runtimeId: string; request: import("@openducktor/core").AgentPendingApprovalRequest }
@@ -123,7 +123,7 @@ export const handleCodexServerRequest = async (
       throw new Error(`Codex app-server server request '${rawRequest.method}' is missing an id.`);
     }
     if (session.role && READ_ONLY_ROLES.has(session.role) && isMutatingCodexRequest(rawRequest)) {
-      await context.options.respondServerRequest(
+      await context.respondServerRequest(
         session.runtimeId,
         requestId,
         {
@@ -163,7 +163,7 @@ export const handleCodexServerRequest = async (
     throw new Error("Codex app-server tool request is missing a numeric id.");
   }
 
-  await context.options.respondServerRequest(
+  await context.respondServerRequest(
     session.runtimeId,
     requestId,
     {

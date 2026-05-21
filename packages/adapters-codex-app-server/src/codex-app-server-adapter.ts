@@ -94,7 +94,6 @@ import {
 } from "./model-catalog";
 import type {
   CodexAppServerAdapterOptions,
-  CodexAppServerClient,
   CodexNotificationRecord,
   CodexServerRequestRecord,
   CodexSessionState,
@@ -165,9 +164,13 @@ export class CodexAppServerAdapter
   }
 
   async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {
-    const { client, runtimeId } = await this.resolveRuntimeClient(input, "list available models", {
-      requireLive: true,
-    });
+    const { client, runtimeId } = await this.runtimeClients.resolve(
+      input,
+      "list available models",
+      {
+        requireLive: true,
+      },
+    );
     return toCatalog(await this.models.list(client, runtimeId));
   }
 
@@ -177,7 +180,7 @@ export class CodexAppServerAdapter
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     const model = requireModelSelection(input.model);
-    const { client, runtimeId } = await this.resolveRuntimeClient(input, "start session");
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "start session");
     this.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
 
@@ -198,7 +201,7 @@ export class CodexAppServerAdapter
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
     const model = requireModelSelection(input.model);
-    const { client, runtimeId } = await this.resolveRuntimeClient(input, "resume session", {
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session", {
       requireLive: true,
     });
     this.ensureRuntimeEventSubscription(runtimeId);
@@ -222,7 +225,7 @@ export class CodexAppServerAdapter
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
     const model = requireModelSelection(input.model);
-    const { client, runtimeId } = await this.resolveRuntimeClient(input, "fork session", {
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "fork session", {
       requireLive: true,
     });
     this.ensureRuntimeEventSubscription(runtimeId);
@@ -287,8 +290,11 @@ export class CodexAppServerAdapter
   ): Promise<import("@openducktor/core").AgentSessionHistoryMessage[]> {
     const session = this.sessions.get(input.externalSessionId);
     const { client, runtimeId } = session
-      ? { client: this.clientForRuntime(session.runtimeId), runtimeId: session.runtimeId }
-      : await this.resolveRuntimeClient(input, "load Codex session history");
+      ? {
+          client: this.runtimeClients.clientForRuntime(session.runtimeId),
+          runtimeId: session.runtimeId,
+        }
+      : await this.runtimeClients.resolve(input, "load Codex session history");
     const threadResponse = session
       ? await this.threadInventory.readLoadedThread(client, runtimeId, input)
       : await this.threadInventory.attachThreadForHistory(client, runtimeId, input);
@@ -410,8 +416,11 @@ export class CodexAppServerAdapter
     }
     const session = this.sessions.get(input.externalSessionId);
     const { client, runtimeId } = session
-      ? { client: this.clientForRuntime(session.runtimeId), runtimeId: session.runtimeId }
-      : await this.resolveRuntimeClient(input, "load Codex session todos");
+      ? {
+          client: this.runtimeClients.clientForRuntime(session.runtimeId),
+          runtimeId: session.runtimeId,
+        }
+      : await this.runtimeClients.resolve(input, "load Codex session todos");
     const responseWithoutTurns = await this.threadInventory.readLoadedThread(
       client,
       runtimeId,
@@ -444,7 +453,7 @@ export class CodexAppServerAdapter
   }
 
   async attachSession(input: AttachAgentSessionInput): Promise<AgentSessionSummary> {
-    const { client, runtimeId } = await this.resolveRuntimeClient(input, "attach session", {
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "attach session", {
       requireLive: true,
     });
     this.ensureRuntimeEventSubscription(runtimeId);
@@ -474,7 +483,7 @@ export class CodexAppServerAdapter
   async listLiveAgentSessions(
     input: ListLiveAgentSessionsInput,
   ): Promise<LiveAgentSessionSummary[]> {
-    const { client, runtimeId } = await this.resolveRuntimeClient(input, "list live sessions", {
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "list live sessions", {
       requireLive: true,
     });
     const inventory = await this.threadInventory.read(client, runtimeId);
@@ -500,9 +509,13 @@ export class CodexAppServerAdapter
     const localSnapshots = [...this.sessions.values()]
       .filter((session) => session.repoPath === input.repoPath)
       .map((session) => this.toPresenceSnapshot(session));
-    const { client, runtimeId } = await this.resolveRuntimeClient(input, "list session presence", {
-      requireLive: true,
-    });
+    const { client, runtimeId } = await this.runtimeClients.resolve(
+      input,
+      "list session presence",
+      {
+        requireLive: true,
+      },
+    );
     const inventory = await this.threadInventory.read(client, runtimeId);
     const directories = new Set(input.directories ?? []);
     const remoteSnapshots = [...inventory.threadsById.values()]
@@ -953,7 +966,10 @@ export class CodexAppServerAdapter
 
   private streamingContext(): CodexStreamingContext {
     return {
-      options: this.options,
+      subscribeEvents: Boolean(this.options.subscribeEvents),
+      ...(this.options.drainNotifications
+        ? { drainNotifications: this.options.drainNotifications }
+        : {}),
       bufferedNotificationsByThreadId: this.bufferedNotificationsByThreadId,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
@@ -972,10 +988,11 @@ export class CodexAppServerAdapter
 
   private turnLifecycleContext(): CodexTurnLifecycleContext {
     return {
-      options: this.options,
+      subscribeEvents: Boolean(this.options.subscribeEvents),
+      drainNotifications: Boolean(this.options.drainNotifications),
       sessions: this.sessions,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
-      clientForRuntime: (runtimeId) => this.clientForRuntime(runtimeId),
+      clientForRuntime: (runtimeId) => this.runtimeClients.clientForRuntime(runtimeId),
       validateModel: (client, runtimeId, model) => this.models.validate(client, runtimeId, model),
       ensureRuntimeEventSubscription: (runtimeId) => this.ensureRuntimeEventSubscription(runtimeId),
       bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
@@ -1028,9 +1045,13 @@ export class CodexAppServerAdapter
   private async readRemoteSessionPresence(
     input: ReadSessionPresenceInput,
   ): Promise<AgentSessionPresenceSnapshot> {
-    const { client, runtimeId } = await this.resolveRuntimeClient(input, "read session presence", {
-      requireLive: true,
-    });
+    const { client, runtimeId } = await this.runtimeClients.resolve(
+      input,
+      "read session presence",
+      {
+        requireLive: true,
+      },
+    );
     const inventory = await this.threadInventory.read(client, runtimeId);
     if (!inventory.loadedIds.has(input.externalSessionId)) {
       return stalePresence(input, runtimeId);
@@ -1049,7 +1070,7 @@ export class CodexAppServerAdapter
   ): Promise<boolean> {
     return handleCodexServerRequest(
       {
-        options: this.options,
+        respondServerRequest: this.options.respondServerRequest,
         pendingApprovalsByRequestId: this.pendingApprovalsByRequestId,
         pendingApprovalIdsBySessionId: this.pendingApprovalIdsBySessionId,
         pendingQuestionsByRequestId: this.pendingQuestionsByRequestId,
@@ -1071,8 +1092,8 @@ export class CodexAppServerAdapter
   ): Promise<import("@openducktor/contracts").FileDiff[]> {
     const session = this.sessions.get(input.externalSessionId);
     const { client } = session
-      ? { client: this.clientForRuntime(session.runtimeId) }
-      : await this.resolveRuntimeClient(input, "load Codex session diff");
+      ? { client: this.runtimeClients.clientForRuntime(session.runtimeId) }
+      : await this.runtimeClients.resolve(input, "load Codex session diff");
     const diff = await client.turnDiff({
       threadId: input.externalSessionId,
       ...(input.runtimeHistoryAnchor ? { turnId: input.runtimeHistoryAnchor } : {}),
@@ -1084,30 +1105,5 @@ export class CodexAppServerAdapter
     _: LoadAgentFileStatusInput,
   ): Promise<import("@openducktor/contracts").FileStatus[]> {
     return unsupported("loadFileStatus");
-  }
-
-  private clientForRuntime(runtimeId: string): CodexAppServerClient {
-    return this.runtimeClients.clientForRuntime(runtimeId);
-  }
-
-  private async resolveRuntimeClient(
-    input:
-      | ListAgentModelsInput
-      | StartAgentSessionInput
-      | ResumeAgentSessionInput
-      | AttachAgentSessionInput
-      | ForkAgentSessionInput
-      | ListLiveAgentSessionsInput
-      | ListSessionPresenceInput
-      | ReadSessionPresenceInput
-      | LoadAgentSessionHistoryInput
-      | LoadAgentSessionDiffInput,
-    action: string,
-    options: { requireLive?: boolean } = {},
-  ): Promise<{
-    runtimeId: string;
-    client: CodexAppServerClient;
-  }> {
-    return this.runtimeClients.resolve(input, action, options);
   }
 }

@@ -71,21 +71,7 @@ export const sessionStateFromThreadResume = (
   runtimeId: string,
   model: AgentModelSelection,
   response: CodexThreadResumeResult,
-): CodexSessionState => {
-  const { externalSessionId, startedAt } = extractThreadId(response, "thread/resume");
-  const threadSnapshot = requireThreadSnapshotFromReadResponse(
-    response,
-    "thread/resume",
-    externalSessionId,
-  );
-  const summary = toSessionSummary({
-    externalSessionId,
-    startedAt: startedAt ?? threadSnapshot.startedAt,
-    role: input.role,
-    status: threadSnapshot.status.agentSessionStatus,
-  });
-  return buildSessionState(input, summary, runtimeId, model, threadSnapshot.status);
-};
+): CodexSessionState => sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
 
 export const sessionStateFromThreadFork = (
   input: ForkAgentSessionInput,
@@ -105,6 +91,13 @@ export const sessionStateFromThreadFork = (
 
 export const sessionStateFromThreadAttach = (
   input: AttachAgentSessionInput,
+  runtimeId: string,
+  model: AgentModelSelection | undefined,
+  response: CodexThreadResumeResult,
+): CodexSessionState => sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
+
+const sessionStateFromThreadResumeResponse = (
+  input: ResumeAgentSessionInput | AttachAgentSessionInput,
   runtimeId: string,
   model: AgentModelSelection | undefined,
   response: CodexThreadResumeResult,

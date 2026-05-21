@@ -33,11 +33,7 @@ import {
   projectCodexCanonicalEvents,
 } from "./codex-canonical-projector";
 import type { CodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
-import type {
-  CodexAppServerAdapterOptions,
-  CodexNotificationRecord,
-  CodexSessionState,
-} from "./types";
+import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
 type CompletedAgentMessage = {
   session: CodexSessionState;
@@ -47,7 +43,8 @@ type CompletedAgentMessage = {
 };
 
 export type CodexStreamingContext = {
-  options: CodexAppServerAdapterOptions;
+  subscribeEvents: boolean;
+  drainNotifications?: (runtimeId: string) => Promise<unknown[]>;
   bufferedNotificationsByThreadId: Map<string, CodexNotificationRecord[]>;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   syntheticUserMessageTextsByThreadId: Map<string, string[]>;
@@ -190,7 +187,7 @@ export const emitCodexUserMessage = (
   model: AgentModelSelection | undefined,
 ): void => {
   const message = serializeAgentUserMessagePartsToText(parts);
-  if (context.options.subscribeEvents) {
+  if (context.subscribeEvents) {
     const codexEchoText = codexUserInputListToText(toCodexUserInputList(parts));
     const pendingTexts = context.syntheticUserMessageTextsByThreadId.get(session.threadId) ?? [];
     pendingTexts.push(codexEchoText);
@@ -349,8 +346,8 @@ export const handleCodexPendingNotifications = async (
   context.bufferedNotificationsByThreadId.delete(session.threadId);
   const drainedNotifications = notificationsFromBatch
     ? notificationsFromBatch.map(parseNotificationRecord)
-    : context.options.drainNotifications
-      ? (await context.options.drainNotifications(session.runtimeId)).map(parseNotificationRecord)
+    : context.drainNotifications
+      ? (await context.drainNotifications(session.runtimeId)).map(parseNotificationRecord)
       : [];
   const notifications = [...bufferedNotifications, ...drainedNotifications];
   for (const notification of notifications) {
