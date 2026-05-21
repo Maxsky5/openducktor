@@ -6,6 +6,7 @@ import type {
   ListSessionPresenceInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
+  LoadAgentSessionTodosInput,
   ReadSessionPresenceInput,
   ResumeAgentSessionInput,
   StartAgentSessionInput,
@@ -28,7 +29,8 @@ type RuntimeClientInput =
   | ListSessionPresenceInput
   | ReadSessionPresenceInput
   | LoadAgentSessionHistoryInput
-  | LoadAgentSessionDiffInput;
+  | LoadAgentSessionDiffInput
+  | LoadAgentSessionTodosInput;
 
 type RuntimeRef = { repoPath: string; runtimeKind: "codex" };
 

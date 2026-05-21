@@ -7,7 +7,7 @@ import type { CodexAppServerClient, CodexSessionState } from "./types";
 
 export type CodexTurnLifecycleContext = {
   subscribeEvents: boolean;
-  drainNotifications: boolean;
+  shouldDrainNotifications: boolean;
   sessions: Map<string, CodexSessionState>;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   clientForRuntime(runtimeId: string): CodexAppServerClient;
@@ -176,7 +176,7 @@ export const startCodexTurnForSession = async (
         context.bindActiveTurnId(activeTurnState, turnId);
       }
       flushQueuedUserMessagesLater(context, activeTurnState);
-      if (!context.subscribeEvents && !context.drainNotifications) {
+      if (!context.subscribeEvents && !context.shouldDrainNotifications) {
         context.emitUserMessage(session, parts, model);
         activeTurnState.markTurnSettled();
       } else if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {

@@ -726,7 +726,7 @@ describe("CodexAppServerAdapter streaming", () => {
           item: {
             id: "codex-user-confirmed",
             type: "userMessage",
-            content: [{ type: "text", text: "Hello streamed Codex" }],
+            content: [{ type: "text", text: "Hello   streamed\nCodex" }],
           },
         },
       },

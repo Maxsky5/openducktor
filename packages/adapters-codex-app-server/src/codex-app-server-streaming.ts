@@ -1,4 +1,9 @@
-import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
+import type {
+  AgentEvent,
+  AgentModelSelection,
+  AgentSessionTodoItem,
+  AgentUserMessagePart,
+} from "@openducktor/core";
 import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
 import {
   codexTurnKey,
@@ -35,7 +40,7 @@ import {
 import type { CodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
-type CompletedAgentMessage = {
+export type CompletedAgentMessage = {
   session: CodexSessionState;
   item: Record<string, unknown>;
   timestamp: string;
@@ -52,7 +57,7 @@ export type CodexStreamingContext = {
   tokenUsageByTurnKey: Map<string, CodexTokenUsageTotals>;
   modelByTurnKey: Map<string, AgentModelSelection>;
   eventBacklogBySessionId: Map<string, AgentEvent[]>;
-  latestTodosBySessionId: Map<string, import("@openducktor/core").AgentSessionTodoItem[]>;
+  latestTodosBySessionId: Map<string, AgentSessionTodoItem[]>;
   eventMapperPipeline: CodexEventMapperPipeline;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
@@ -72,6 +77,8 @@ const bufferSessionEvent = (
   externalSessionId: string,
   event: AgentEvent,
 ): void => {
+  // Pending input is stateful and exposed through presence snapshots; buffering it here would
+  // duplicate events for late listeners after the request has already been resolved.
   if (event.type === "approval_required" || event.type === "question_required") {
     return;
   }
@@ -141,7 +148,10 @@ const consumeSyntheticUserMessage = (
   if (!pendingTexts || pendingTexts.length === 0) {
     return false;
   }
-  const index = pendingTexts.indexOf(message);
+  const normalizedMessage = normalizeSyntheticUserMessageText(message);
+  const index = pendingTexts.findIndex(
+    (pendingText) => normalizeSyntheticUserMessageText(pendingText) === normalizedMessage,
+  );
   if (index === -1) {
     return false;
   }
@@ -151,6 +161,9 @@ const consumeSyntheticUserMessage = (
   }
   return true;
 };
+
+const normalizeSyntheticUserMessageText = (text: string): string =>
+  text.replace(/\s+/g, " ").trim();
 
 const emitFinalAgentMessage = (
   context: CodexStreamingContext,

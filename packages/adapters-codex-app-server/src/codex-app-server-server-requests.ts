@@ -1,4 +1,8 @@
-import type { AgentEvent } from "@openducktor/core";
+import type {
+  AgentEvent,
+  AgentPendingApprovalRequest,
+  AgentPendingQuestionRequest,
+} from "@openducktor/core";
 import {
   extractTurnId,
   isMutatingCodexRequest,
@@ -14,23 +18,24 @@ import type {
   CodexSessionState,
 } from "./types";
 
+export type PendingApprovalEntry = {
+  runtimeId: string;
+  request: AgentPendingApprovalRequest;
+};
+
+export type PendingQuestionEntry = {
+  runtimeId: string;
+  threadId: string;
+  request: AgentPendingQuestionRequest;
+  questionIds: string[];
+  input: Record<string, unknown>;
+};
+
 export type CodexServerRequestHandlerContext = {
   respondServerRequest: CodexServerRequestResponder;
-  pendingApprovalsByRequestId: Map<
-    string,
-    { runtimeId: string; request: import("@openducktor/core").AgentPendingApprovalRequest }
-  >;
+  pendingApprovalsByRequestId: Map<string, PendingApprovalEntry>;
   pendingApprovalIdsBySessionId: Map<string, Set<string>>;
-  pendingQuestionsByRequestId: Map<
-    string,
-    {
-      runtimeId: string;
-      threadId: string;
-      request: import("@openducktor/core").AgentPendingQuestionRequest;
-      questionIds: string[];
-      input: Record<string, unknown>;
-    }
-  >;
+  pendingQuestionsByRequestId: Map<string, PendingQuestionEntry>;
   pendingQuestionIdsBySessionId: Map<string, Set<string>>;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
@@ -122,14 +127,20 @@ export const handleCodexServerRequest = async (
     if (requestId === undefined) {
       throw new Error(`Codex app-server server request '${rawRequest.method}' is missing an id.`);
     }
-    if (session.role && READ_ONLY_ROLES.has(session.role) && isMutatingCodexRequest(rawRequest)) {
+    const isMutatingRequest = isMutatingCodexRequest(rawRequest);
+    const shouldRejectForRole =
+      !session.role || (isMutatingRequest && READ_ONLY_ROLES.has(session.role));
+    if (shouldRejectForRole) {
+      const roleReason = session.role
+        ? `role '${session.role}' is read-only`
+        : "the session role is unknown";
       await context.respondServerRequest(
         session.runtimeId,
         requestId,
         {
           approved: false,
           outcome: "reject",
-          message: `Codex request '${rawRequest.method}' was rejected because role '${session.role}' is read-only.`,
+          message: `Codex request '${rawRequest.method}' was rejected because ${roleReason}.`,
         },
         undefined,
       );
@@ -137,12 +148,16 @@ export const handleCodexServerRequest = async (
         type: "session_error",
         externalSessionId: session.threadId,
         timestamp: new Date().toISOString(),
-        message: `Rejected mutating Codex request '${rawRequest.method}' for read-only role '${session.role}'.`,
+        message: `Rejected mutating Codex request '${rawRequest.method}' because ${roleReason}.`,
       });
       return false;
     }
 
-    const approval = toApprovalRequest(rawRequest, session.role ?? "build");
+    const role = session.role;
+    if (!role) {
+      throw new Error("Codex approval request cannot be created without a session role.");
+    }
+    const approval = toApprovalRequest(rawRequest, role);
     context.pendingApprovalsByRequestId.set(approval.requestId, {
       runtimeId: session.runtimeId,
       request: approval,
@@ -163,6 +178,8 @@ export const handleCodexServerRequest = async (
     throw new Error("Codex app-server tool request is missing a numeric id.");
   }
 
+  // Dynamic Codex tool calls are never approved here; OpenDucktor workflow tools are exposed
+  // through MCP so role-specific approval handling is intentionally bypassed for this method.
   await context.respondServerRequest(
     session.runtimeId,
     requestId,

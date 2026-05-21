@@ -45,7 +45,12 @@ import {
   parseNotificationRecord,
   parseServerRequestRecord,
 } from "./codex-app-server-requests";
-import { handleCodexServerRequest } from "./codex-app-server-server-requests";
+import {
+  type CodexServerRequestHandlerContext,
+  handleCodexServerRequest,
+  type PendingApprovalEntry,
+  type PendingQuestionEntry,
+} from "./codex-app-server-server-requests";
 import {
   type ActiveCodexTurn,
   CODEX_USER_INPUT_REQUEST_METHOD,
@@ -58,6 +63,7 @@ import {
 } from "./codex-app-server-shared";
 import {
   type CodexStreamingContext,
+  type CompletedAgentMessage,
   emitCodexSessionEvent,
   emitCodexUserMessage,
   handleCodexPendingNotifications,
@@ -83,7 +89,7 @@ import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import {
   type CodexTurnLifecycleContext,
-  flushQueuedUserMessagesLater,
+  flushQueuedUserMessagesLater as flushQueuedUserMessagesLaterImpl,
   startCodexTurnForSession,
 } from "./codex-turn-lifecycle";
 import {
@@ -106,25 +112,10 @@ export class CodexAppServerAdapter
 {
   private readonly sessions = new Map<string, CodexSessionState>();
   private readonly runtimeClients: CodexRuntimeClientResolver;
-  private readonly listenersBySessionId = new Map<
-    string,
-    Set<(event: import("@openducktor/core").AgentEvent) => void>
-  >();
-  private readonly pendingApprovalsByRequestId = new Map<
-    string,
-    { runtimeId: string; request: import("@openducktor/core").AgentPendingApprovalRequest }
-  >();
+  private readonly listenersBySessionId = new Map<string, Set<(event: AgentEvent) => void>>();
+  private readonly pendingApprovalsByRequestId = new Map<string, PendingApprovalEntry>();
   private readonly pendingApprovalIdsBySessionId = new Map<string, Set<string>>();
-  private readonly pendingQuestionsByRequestId = new Map<
-    string,
-    {
-      runtimeId: string;
-      threadId: string;
-      request: import("@openducktor/core").AgentPendingQuestionRequest;
-      questionIds: string[];
-      input: Record<string, unknown>;
-    }
-  >();
+  private readonly pendingQuestionsByRequestId = new Map<string, PendingQuestionEntry>();
   private readonly pendingQuestionIdsBySessionId = new Map<string, Set<string>>();
   private readonly activeTurnsByApprovalRequestId = new Map<string, ActiveCodexTurn>();
   private readonly activeTurnsByQuestionRequestId = new Map<string, ActiveCodexTurn>();
@@ -133,15 +124,7 @@ export class CodexAppServerAdapter
   private readonly bufferedServerRequestsByThreadId = new Map<string, CodexServerRequestRecord[]>();
   private readonly handledStreamRequestKeysByThreadId = new Map<string, Set<string>>();
   private readonly syntheticUserMessageTextsByThreadId = new Map<string, string[]>();
-  private readonly completedAgentMessagesByTurnKey = new Map<
-    string,
-    {
-      session: CodexSessionState;
-      item: Record<string, unknown>;
-      timestamp: string;
-      model?: AgentModelSelection;
-    }
-  >();
+  private readonly completedAgentMessagesByTurnKey = new Map<string, CompletedAgentMessage>();
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
   private readonly runtimeEventSubscriptionsByRuntimeId = new Map<string, CodexLiveEventPump>();
@@ -268,7 +251,7 @@ export class CodexAppServerAdapter
   }
 
   private flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void {
-    flushQueuedUserMessagesLater(this.turnLifecycleContext(), activeTurn);
+    flushQueuedUserMessagesLaterImpl(this.turnLifecycleContext(), activeTurn);
   }
 
   hasSession(externalSessionId: string): boolean {
@@ -989,7 +972,7 @@ export class CodexAppServerAdapter
   private turnLifecycleContext(): CodexTurnLifecycleContext {
     return {
       subscribeEvents: Boolean(this.options.subscribeEvents),
-      drainNotifications: Boolean(this.options.drainNotifications),
+      shouldDrainNotifications: Boolean(this.options.drainNotifications),
       sessions: this.sessions,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       clientForRuntime: (runtimeId) => this.runtimeClients.clientForRuntime(runtimeId),
@@ -1069,22 +1052,26 @@ export class CodexAppServerAdapter
     handledRequestKeys: Set<string>,
   ): Promise<boolean> {
     return handleCodexServerRequest(
-      {
-        respondServerRequest: this.options.respondServerRequest,
-        pendingApprovalsByRequestId: this.pendingApprovalsByRequestId,
-        pendingApprovalIdsBySessionId: this.pendingApprovalIdsBySessionId,
-        pendingQuestionsByRequestId: this.pendingQuestionsByRequestId,
-        pendingQuestionIdsBySessionId: this.pendingQuestionIdsBySessionId,
-        activeTurnsBySessionId: this.activeTurnsBySessionId,
-        bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
-        flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
-        emitSessionEvent: (externalSessionId, event) =>
-          this.emitSessionEvent(externalSessionId, event),
-      },
+      this.serverRequestContext(),
       session,
       rawRequest,
       handledRequestKeys,
     );
+  }
+
+  private serverRequestContext(): CodexServerRequestHandlerContext {
+    return {
+      respondServerRequest: this.options.respondServerRequest,
+      pendingApprovalsByRequestId: this.pendingApprovalsByRequestId,
+      pendingApprovalIdsBySessionId: this.pendingApprovalIdsBySessionId,
+      pendingQuestionsByRequestId: this.pendingQuestionsByRequestId,
+      pendingQuestionIdsBySessionId: this.pendingQuestionIdsBySessionId,
+      activeTurnsBySessionId: this.activeTurnsBySessionId,
+      bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
+      flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
+      emitSessionEvent: (externalSessionId, event) =>
+        this.emitSessionEvent(externalSessionId, event),
+    };
   }
 
   async loadSessionDiff(
