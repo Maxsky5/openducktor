@@ -359,6 +359,7 @@ export const CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS = [
   "thread/realtime/started",
   "thread/realtime/transcript/delta",
   "thread/realtime/transcript/done",
+  "thread/settings/updated",
   "thread/started",
   "thread/status/changed",
   "thread/tokenUsage/updated",
