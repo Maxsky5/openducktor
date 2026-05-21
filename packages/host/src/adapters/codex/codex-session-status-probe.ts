@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
   CodexAppServerError,
   CodexAppServerPort,
@@ -21,17 +21,24 @@ const isCodexThreadNotFoundError = (cause: CodexAppServerError): boolean =>
   cause.details?.method === "thread/read" &&
   cause.message.toLowerCase().includes("not found");
 
-const isActiveCodexThreadStatus = (status: CodexSessionStatus): boolean => {
-  switch (status) {
+const isLiveCodexThreadStatus = (
+  statusType: CodexSessionStatus,
+): Effect.Effect<boolean, HostValidationError> => {
+  switch (statusType) {
     case "active":
     case "systemError":
-      return true;
+      return Effect.succeed(true);
     case "idle":
     case "notLoaded":
-      return false;
+      return Effect.succeed(false);
     default: {
-      const unhandledStatus: never = status;
-      return unhandledStatus;
+      const unhandledStatus: never = statusType;
+      return Effect.fail(
+        new HostValidationError({
+          message: `Unsupported Codex thread status: ${String(unhandledStatus)}`,
+          details: { statusType: unhandledStatus },
+        }),
+      );
     }
   }
 };
@@ -56,9 +63,12 @@ export const probeCodexSessionStatus = (
       return yield* Effect.fail(threadResult.left);
     }
     const thread = threadResult.right;
+    const hasLiveSession =
+      thread.cwd === input.workingDirectory
+        ? yield* isLiveCodexThreadStatus(thread.status.type)
+        : false;
     return {
       supported: true,
-      hasLiveSession:
-        thread.cwd === input.workingDirectory && isActiveCodexThreadStatus(thread.status.type),
+      hasLiveSession,
     };
   });

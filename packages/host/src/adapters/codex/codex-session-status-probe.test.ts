@@ -88,4 +88,10 @@ describe("probeCodexSessionStatus", () => {
       hasLiveSession: false,
     });
   });
+
+  test("fails fast when Codex returns an unsupported thread status", async () => {
+    await expect(probeThreadStatus({ status: { type: "paused" } as never })).rejects.toThrow(
+      "Codex thread/read response thread has unsupported Codex thread status: paused",
+    );
+  });
 });
