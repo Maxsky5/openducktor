@@ -122,13 +122,17 @@ export const createHookHarness = (args: {
       dependencies: OrchestratorDependencies;
     }>,
   ) => {
+    let activeWorkspace = currentArgs.activeWorkspace;
+    if (nextArgs.activeWorkspace !== undefined) {
+      activeWorkspace = nextArgs.activeWorkspace;
+    } else if (nextArgs.activeRepo !== undefined) {
+      activeWorkspace = createDefaultActiveWorkspace(nextArgs.activeRepo);
+    }
+
     currentArgs = {
       ...currentArgs,
       ...nextArgs,
-      activeWorkspace:
-        nextArgs.activeRepo !== undefined && nextArgs.activeWorkspace === undefined
-          ? createDefaultActiveWorkspace(nextArgs.activeRepo)
-          : currentArgs.activeWorkspace,
+      activeWorkspace,
     };
     await sharedHarness.update(undefined);
   };

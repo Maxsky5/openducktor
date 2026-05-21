@@ -17,7 +17,6 @@ export {
   buildBootstrapFixture,
   createUnavailableBuildTaskFixture,
   createWorktreeRuntimeFixture,
-  persistedBuildSessionFixture,
   persistedSessionFixture,
   taskFixture,
   taskFixture2,
@@ -29,9 +28,4 @@ export {
   createTestDependencies,
   type OrchestratorDependencies,
 } from "./use-agent-orchestrator-operations.test-harness";
-export {
-  createDeferred,
-  createPatchScope,
-  runOrchestratorOperationTest,
-  runWithPatchScope,
-} from "./use-agent-orchestrator-operations.test-support";
+export { createDeferred } from "./use-agent-orchestrator-operations.test-support";

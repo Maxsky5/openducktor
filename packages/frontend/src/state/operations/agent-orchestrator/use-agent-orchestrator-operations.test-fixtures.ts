@@ -59,21 +59,16 @@ export const persistedSessionFixture: AgentSessionRecord = {
   selectedModel: null,
 };
 
-export const persistedBuildSessionFixture: AgentSessionRecord = {
-  ...persistedSessionFixture,
-  workingDirectory: "/tmp/repo/worktree",
-};
-
 export const taskFixtureWithPersistedBuildSession: TaskCard = {
   ...taskFixture,
-  agentSessions: [persistedBuildSessionFixture],
+  agentSessions: [persistedSessionFixture],
 };
 
 export const taskFixture2WithPersistedBuildSession: TaskCard = {
   ...taskFixture2,
   agentSessions: [
     {
-      ...persistedBuildSessionFixture,
+      ...persistedSessionFixture,
       externalSessionId: "external-2",
     },
   ],

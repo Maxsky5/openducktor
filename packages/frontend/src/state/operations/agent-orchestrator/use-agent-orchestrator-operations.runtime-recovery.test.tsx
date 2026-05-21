@@ -12,8 +12,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   OpencodeSdkAdapter,
   opencodeSdkAdapterPrototype,
-  persistedBuildSessionFixture,
-  runOrchestratorOperationTest,
+  persistedSessionFixture,
   sessionMessagesToArray,
   setupOrchestratorOperationsTestEnvironment,
   taskFixture,
@@ -90,7 +89,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
       await harness.mount();
       await harness.run(async () => {
         await harness.getLatest().loadAgentSessions("task-1", {
-          persistedRecords: [persistedBuildSessionFixture],
+          persistedRecords: [persistedSessionFixture],
         });
       });
 
@@ -105,7 +104,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
           externalSessionId: "external-1",
-          persistedRecords: [persistedBuildSessionFixture],
+          persistedRecords: [persistedSessionFixture],
         });
       });
 
@@ -142,7 +141,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
           externalSessionId: "external-1",
-          persistedRecords: [persistedBuildSessionFixture],
+          persistedRecords: [persistedSessionFixture],
         });
       });
 
@@ -236,7 +235,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
       await harness.mount();
       await harness.run(async () => {
         await harness.getLatest().loadAgentSessions("task-1", {
-          persistedRecords: [persistedBuildSessionFixture],
+          persistedRecords: [persistedSessionFixture],
         });
       });
       await clearAppQueryClient();
@@ -245,7 +244,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
           externalSessionId: "external-1",
-          persistedRecords: [persistedBuildSessionFixture],
+          persistedRecords: [persistedSessionFixture],
         });
       });
 
@@ -817,7 +816,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
       await harness.mount();
       await harness.run(async () => {
         await harness.getLatest().loadAgentSessions("task-1", {
-          persistedRecords: [persistedBuildSessionFixture],
+          persistedRecords: [persistedSessionFixture],
         });
       });
       const sessionsById = harness.getLatest().sessionStore.getSessionsByIdSnapshot();
@@ -838,7 +837,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
           externalSessionId: "external-1",
-          persistedRecords: [persistedBuildSessionFixture],
+          persistedRecords: [persistedSessionFixture],
         });
       });
 
@@ -913,7 +912,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
       await harness.mount();
       await harness.run(async () => {
         await harness.getLatest().loadAgentSessions("task-1", {
-          persistedRecords: [persistedBuildSessionFixture],
+          persistedRecords: [persistedSessionFixture],
         });
       });
       await clearAppQueryClient();
@@ -922,7 +921,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
           externalSessionId: "external-1",
-          persistedRecords: [persistedBuildSessionFixture],
+          persistedRecords: [persistedSessionFixture],
         });
       });
 
@@ -1013,7 +1012,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
       await harness.mount();
       await harness.run(async () => {
         await harness.getLatest().loadAgentSessions("task-1", {
-          persistedRecords: [persistedBuildSessionFixture],
+          persistedRecords: [persistedSessionFixture],
         });
       });
 
@@ -1045,7 +1044,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
         await harness.getLatest().retrySessionRuntimeAttachment({
           taskId: "task-1",
           externalSessionId: "external-1",
-          persistedRecords: [persistedBuildSessionFixture],
+          persistedRecords: [persistedSessionFixture],
         });
       });
 
@@ -1069,228 +1068,229 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
   });
 
   test("retries background session bootstrap after a transient repo config load failure", async () => {
-    await runOrchestratorOperationTest(async () => {
-      const originalAgentSessionUpsert = host.agentSessionUpsert;
-      const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
-      const originalRuntimeList = host.runtimeList;
-      let repoConfigCalls = 0;
-      host.agentSessionUpsert = async () => {};
-      host.runtimeList = async () => [createWorktreeRuntimeFixture()];
-      host.workspaceGetRepoConfig = async () => {
-        repoConfigCalls += 1;
-        if (repoConfigCalls === 1) {
-          throw new Error("temporary repo config failure");
-        }
-        return {
-          workspaceId: "repo",
-          workspaceName: "Repo",
-          repoPath: "/tmp/repo",
-          defaultRuntimeKind: "opencode" as const,
-          branchPrefix: "obp",
-          defaultTargetBranch: { remote: "origin", branch: "main" },
-          git: {
-            providers: {},
-          },
-          hooks: {
-            preStart: [],
-            postComplete: [],
-          },
-          devServers: [],
-          worktreeCopyPaths: [],
-          promptOverrides: {},
-          agentDefaults: {},
-        };
-      };
-
-      const harness = createHookHarness({
-        activeRepo: "/tmp/repo",
-        tasks: [taskFixtureWithPersistedBuildSession],
-        refreshTaskData: async () => {},
-      });
-
-      try {
-        await harness.mount();
-        const resolved = await harness.waitFor((state) =>
-          state.sessions.some((session) => session.externalSessionId === "external-1"),
-        );
-        expect(repoConfigCalls).toBe(0);
-        expect(
-          resolved.sessions.find((session) => session.externalSessionId === "external-1"),
-        ).toBeDefined();
-      } finally {
-        await harness.unmount();
-        host.agentSessionUpsert = originalAgentSessionUpsert;
-        host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-        host.runtimeList = originalRuntimeList;
+    const originalAgentSessionUpsert = host.agentSessionUpsert;
+    const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+    const originalRuntimeList = host.runtimeList;
+    let repoConfigCalls = 0;
+    host.agentSessionUpsert = async () => {};
+    host.runtimeList = async () => [createWorktreeRuntimeFixture()];
+    host.workspaceGetRepoConfig = async () => {
+      repoConfigCalls += 1;
+      if (repoConfigCalls === 1) {
+        throw new Error("temporary repo config failure");
       }
+      return {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/tmp/repo",
+        defaultRuntimeKind: "opencode" as const,
+        branchPrefix: "obp",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
+        hooks: {
+          preStart: [],
+          postComplete: [],
+        },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {},
+      };
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixtureWithPersistedBuildSession],
+      refreshTaskData: async () => {},
     });
+
+    try {
+      await harness.mount();
+      const resolved = await harness.waitFor((state) =>
+        state.sessions.some((session) => session.externalSessionId === "external-1"),
+      );
+      expect(repoConfigCalls).toBe(0);
+      expect(
+        resolved.sessions.find((session) => session.externalSessionId === "external-1"),
+      ).toBeDefined();
+    } finally {
+      await harness.unmount();
+      host.agentSessionUpsert = originalAgentSessionUpsert;
+      host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+      host.runtimeList = originalRuntimeList;
+    }
   });
 
   test("bootstraps task sessions from task metadata with one batched startup presence scan", async () => {
-    await runOrchestratorOperationTest(async () => {
-      const originalAgentSessionsList = host.agentSessionsList;
-      const originalRuntimeList = host.runtimeList;
-      const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
-      const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
-      const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
-      const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
-      const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-      const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
-      let persistedListCalls = 0;
-      let runtimeListCalls = 0;
-      let listPresenceCalls = 0;
-      let readPresenceCalls = 0;
-      let resumeCalls = 0;
-      let attachCalls = 0;
-      let subscribeCalls = 0;
-      let modelCatalogCalls = 0;
-      let todoCalls = 0;
-      let historyCalls = 0;
-      const listPresenceInputs: Array<{
-        repoPath: string;
-        runtimeKind: "opencode" | "codex";
-        directories?: string[];
-      }> = [];
-      host.agentSessionsList = async () => {
-        persistedListCalls += 1;
-        return [];
-      };
-      host.runtimeList = async () => {
-        runtimeListCalls += 1;
-        return [createWorktreeRuntimeFixture()];
-      };
-      opencodeSdkAdapterPrototype.listSessionPresence = async (input) => {
-        listPresenceCalls += 1;
-        listPresenceInputs.push(input);
-        return [
-          createAgentSessionPresenceSnapshotFixture({
-            ref: {
-              repoPath: "/tmp/repo",
-              runtimeKind: "opencode",
-              workingDirectory: "/tmp/repo/worktree",
-              externalSessionId: "external-2",
-            },
-            snapshot: {
-              status: { type: "busy" },
-              pendingApprovals: [
-                {
-                  requestId: "perm-2",
-                  requestType: "permission_grant" as const,
-                  title: "Approve permission: edit",
-                  summary: "Approval request for edit.",
-                  affectedPaths: ["src/file.ts"],
-                  action: { name: "edit" },
-                  mutation: "mutating" as const,
-                  supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
-                },
-              ],
-              pendingQuestions: [
-                {
-                  requestId: "question-2",
-                  questions: [
-                    {
-                      header: "Confirm",
-                      question: "Continue?",
-                      options: [],
-                      multiple: false,
-                      custom: false,
-                    },
-                  ],
-                },
-              ],
-            },
-          }),
-        ];
-      };
-      opencodeSdkAdapterPrototype.readSessionPresence = async (input: ReadSessionPresenceInput) => {
-        readPresenceCalls += 1;
-        return createAgentSessionPresenceSnapshotFixture({ ref: input });
-      };
-      OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
-        resumeCalls += 1;
-        return {
-          runtimeKind: "opencode",
-          externalSessionId: input.externalSessionId,
-          startedAt: "2026-02-22T08:00:00.000Z",
-          role: input.role,
-          status: "running",
-        };
-      };
-      OpencodeSdkAdapter.prototype.attachSession = async (input) => {
-        attachCalls += 1;
-        return {
-          runtimeKind: "opencode",
-          externalSessionId: input.externalSessionId,
-          startedAt: "2026-02-22T08:00:00.000Z",
-          role: input.role,
-          status: "running",
-        };
-      };
-      OpencodeSdkAdapter.prototype.subscribeEvents = () => {
-        subscribeCalls += 1;
-        return () => {};
-      };
-      OpencodeSdkAdapter.prototype.listAvailableModels = async () => {
-        modelCatalogCalls += 1;
-        return { models: [], defaultModelsByProvider: {}, profiles: [] };
-      };
-      OpencodeSdkAdapter.prototype.loadSessionTodos = async () => {
-        todoCalls += 1;
-        return [];
-      };
-      OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
-        historyCalls += 1;
-        return [];
-      };
-
-      const harness = createHookHarness({
-        activeRepo: "/tmp/repo",
-        tasks: [taskFixtureWithPersistedBuildSession, taskFixture2WithPersistedBuildSession],
-        refreshTaskData: async () => {},
-      });
-
-      try {
-        await harness.mount();
-        const resolved = await harness.waitFor((state) =>
-          state.sessions.some((session) => session.externalSessionId === "external-2"),
-        );
-        expect(resolved.sessions.map((session) => session.externalSessionId).sort()).toEqual([
-          "external-1",
-          "external-2",
-        ]);
-        const recoveredSession = resolved.sessions.find(
-          (session) => session.externalSessionId === "external-2",
-        );
-        expect(recoveredSession?.pendingApprovals).toHaveLength(1);
-        expect(recoveredSession?.pendingQuestions).toHaveLength(1);
-        expect(persistedListCalls).toBe(0);
-        expect(runtimeListCalls).toBe(0);
-        expect(listPresenceCalls).toBe(1);
-        expect(listPresenceInputs).toEqual([
-          {
+    const originalAgentSessionsList = host.agentSessionsList;
+    const originalRuntimeList = host.runtimeList;
+    const originalListLiveAgentSessionSnapshots = opencodeSdkAdapterPrototype.listSessionPresence;
+    const originalReadAgentSessionPresenceSnapshot =
+      opencodeSdkAdapterPrototype.readSessionPresence;
+    const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
+    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
+    const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
+    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
+    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    let persistedListCalls = 0;
+    let runtimeListCalls = 0;
+    let listPresenceCalls = 0;
+    let readPresenceCalls = 0;
+    let resumeCalls = 0;
+    let attachCalls = 0;
+    let subscribeCalls = 0;
+    let modelCatalogCalls = 0;
+    let todoCalls = 0;
+    let historyCalls = 0;
+    const listPresenceInputs: Array<{
+      repoPath: string;
+      runtimeKind: "opencode" | "codex";
+      directories?: string[];
+    }> = [];
+    host.agentSessionsList = async () => {
+      persistedListCalls += 1;
+      return [];
+    };
+    host.runtimeList = async () => {
+      runtimeListCalls += 1;
+      return [createWorktreeRuntimeFixture()];
+    };
+    opencodeSdkAdapterPrototype.listSessionPresence = async (input) => {
+      listPresenceCalls += 1;
+      listPresenceInputs.push(input);
+      return [
+        createAgentSessionPresenceSnapshotFixture({
+          ref: {
             repoPath: "/tmp/repo",
             runtimeKind: "opencode",
-            directories: ["/tmp/repo/worktree"],
+            workingDirectory: "/tmp/repo/worktree",
+            externalSessionId: "external-2",
           },
-        ]);
-        expect(readPresenceCalls).toBe(0);
-        expect(resumeCalls).toBe(1);
-        expect(attachCalls).toBe(0);
-        expect(subscribeCalls).toBe(1);
-        expect(modelCatalogCalls).toBe(0);
-        expect(todoCalls).toBe(0);
-        expect(historyCalls).toBe(0);
-      } finally {
-        await harness.unmount();
-        host.agentSessionsList = originalAgentSessionsList;
-        host.runtimeList = originalRuntimeList;
-        OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
-        OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
-        OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
-        OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
-        OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-        OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
-      }
+          snapshot: {
+            status: { type: "busy" },
+            pendingApprovals: [
+              {
+                requestId: "perm-2",
+                requestType: "permission_grant" as const,
+                title: "Approve permission: edit",
+                summary: "Approval request for edit.",
+                affectedPaths: ["src/file.ts"],
+                action: { name: "edit" },
+                mutation: "mutating" as const,
+                supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+              },
+            ],
+            pendingQuestions: [
+              {
+                requestId: "question-2",
+                questions: [
+                  {
+                    header: "Confirm",
+                    question: "Continue?",
+                    options: [],
+                    multiple: false,
+                    custom: false,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      ];
+    };
+    opencodeSdkAdapterPrototype.readSessionPresence = async (input: ReadSessionPresenceInput) => {
+      readPresenceCalls += 1;
+      return createAgentSessionPresenceSnapshotFixture({ ref: input });
+    };
+    OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
+      resumeCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: input.role,
+        status: "running",
+      };
+    };
+    OpencodeSdkAdapter.prototype.attachSession = async (input) => {
+      attachCalls += 1;
+      return {
+        runtimeKind: "opencode",
+        externalSessionId: input.externalSessionId,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: input.role,
+        status: "running",
+      };
+    };
+    OpencodeSdkAdapter.prototype.subscribeEvents = () => {
+      subscribeCalls += 1;
+      return () => {};
+    };
+    OpencodeSdkAdapter.prototype.listAvailableModels = async () => {
+      modelCatalogCalls += 1;
+      return { models: [], defaultModelsByProvider: {}, profiles: [] };
+    };
+    OpencodeSdkAdapter.prototype.loadSessionTodos = async () => {
+      todoCalls += 1;
+      return [];
+    };
+    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
+      historyCalls += 1;
+      return [];
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixtureWithPersistedBuildSession, taskFixture2WithPersistedBuildSession],
+      refreshTaskData: async () => {},
     });
+
+    try {
+      await harness.mount();
+      const resolved = await harness.waitFor((state) =>
+        state.sessions.some((session) => session.externalSessionId === "external-2"),
+      );
+      expect(resolved.sessions.map((session) => session.externalSessionId).sort()).toEqual([
+        "external-1",
+        "external-2",
+      ]);
+      const recoveredSession = resolved.sessions.find(
+        (session) => session.externalSessionId === "external-2",
+      );
+      expect(recoveredSession?.pendingApprovals).toHaveLength(1);
+      expect(recoveredSession?.pendingQuestions).toHaveLength(1);
+      expect(persistedListCalls).toBe(0);
+      expect(runtimeListCalls).toBe(0);
+      expect(listPresenceCalls).toBe(1);
+      expect(listPresenceInputs).toEqual([
+        {
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          directories: ["/tmp/repo/worktree"],
+        },
+      ]);
+      expect(readPresenceCalls).toBe(0);
+      expect(resumeCalls).toBe(1);
+      expect(attachCalls).toBe(0);
+      expect(subscribeCalls).toBe(1);
+      expect(modelCatalogCalls).toBe(0);
+      expect(todoCalls).toBe(0);
+      expect(historyCalls).toBe(0);
+    } finally {
+      await harness.unmount();
+      host.agentSessionsList = originalAgentSessionsList;
+      host.runtimeList = originalRuntimeList;
+      opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
+      opencodeSdkAdapterPrototype.readSessionPresence = originalReadAgentSessionPresenceSnapshot;
+      OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
+      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
+      OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
+      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+    }
   });
 });
