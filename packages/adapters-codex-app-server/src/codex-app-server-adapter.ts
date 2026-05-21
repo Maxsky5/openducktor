@@ -31,7 +31,6 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
-import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
 import { requireCodexServerRequestId } from "./codex-app-server-approvals";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
 import {
@@ -43,7 +42,6 @@ import {
   codexTurnKey,
   extractThreadIdFromParams,
   extractTurnId,
-  isTerminalTurnStatus,
   parseNotificationRecord,
   parseServerRequestRecord,
 } from "./codex-app-server-requests";
@@ -52,7 +50,6 @@ import {
   type ActiveCodexTurn,
   CODEX_USER_INPUT_REQUEST_METHOD,
   type CodexLiveEventPump,
-  extractStringField,
   isPlainObject,
   MAX_CODEX_BUFFERED_THREAD_COUNT,
   MAX_CODEX_EVENT_BACKLOG_PER_SESSION,
@@ -60,39 +57,35 @@ import {
   unsupported,
 } from "./codex-app-server-shared";
 import {
-  codexThreadStatusSnapshot,
-  extractThreadId,
-  requireThreadSnapshotFromReadResponse,
-  toSessionSummary,
-} from "./codex-app-server-threads";
+  type CodexStreamingContext,
+  emitCodexSessionEvent,
+  emitCodexUserMessage,
+  handleCodexPendingNotifications,
+} from "./codex-app-server-streaming";
 import {
   type CodexTokenUsageTotals,
-  codexItemId,
-  codexItemTypeMatches,
   codexTodosFromThreadRead,
   codexTurnItemsFromThreadRead,
-  codexUserInputListToText,
-  codexUserInputsFromItem,
-  codexUserInputToDisplayPart,
   extractCodexTokenUsageTotals,
-  shouldReplaceCodexBufferedFinalAgentMessage,
-  timestampFromCodexParams,
-  toCodexUserInputList,
-  toDisplayParts,
   toFileDiffs,
   toHistoryMessage,
-  toStreamPart,
 } from "./codex-app-server-transcript";
-import type { CodexCanonicalEvent } from "./codex-canonical-events";
-import {
-  latestTodosFromCanonicalEvents,
-  projectCodexCanonicalEvents,
-} from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
+import {
+  sessionStateFromThreadAttach,
+  sessionStateFromThreadFork,
+  sessionStateFromThreadResume,
+  sessionStateFromThreadStart,
+} from "./codex-session-lifecycle";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
+import {
+  type CodexTurnLifecycleContext,
+  flushQueuedUserMessagesLater,
+  startCodexTurnForSession,
+} from "./codex-turn-lifecycle";
 import {
   CodexModels,
   requireModelSelection,
@@ -195,26 +188,9 @@ export class CodexAppServerAdapter
       effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
-    const { externalSessionId, startedAt } = extractThreadId(response, "thread/start");
-
-    const summary = toSessionSummary({
-      externalSessionId,
-      startedAt: startedAt ?? new Date().toISOString(),
-      role: input.role,
-      status: "running",
-    });
-
-    this.sessions.set(summary.externalSessionId, {
-      summary,
-      model,
-      systemPrompt: input.systemPrompt,
-      role: input.role,
-      runtimeId,
-      repoPath: input.repoPath,
-      threadId: externalSessionId,
-      workingDirectory: input.workingDirectory,
-      taskId: input.taskId,
-    });
+    const session = sessionStateFromThreadStart(input, runtimeId, model, response);
+    const { summary } = session;
+    this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
 
     return summary;
@@ -236,33 +212,9 @@ export class CodexAppServerAdapter
       effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
-    const { externalSessionId, startedAt } = extractThreadId(response, "thread/resume");
-    const threadSnapshot = requireThreadSnapshotFromReadResponse(
-      response,
-      "thread/resume",
-      externalSessionId,
-    );
-
-    const summary = toSessionSummary({
-      externalSessionId,
-      startedAt: startedAt ?? threadSnapshot.startedAt,
-      role: input.role,
-      status: threadSnapshot.status.agentSessionStatus,
-    });
-    const liveStatus = threadSnapshot.status;
-
-    this.sessions.set(summary.externalSessionId, {
-      summary,
-      model,
-      systemPrompt: input.systemPrompt,
-      role: input.role,
-      runtimeId,
-      repoPath: input.repoPath,
-      threadId: externalSessionId,
-      workingDirectory: input.workingDirectory,
-      taskId: input.taskId,
-      ...(liveStatus ? { liveStatus } : {}),
-    });
+    const session = sessionStateFromThreadResume(input, runtimeId, model, response);
+    const { summary } = session;
+    this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
 
     return summary;
@@ -284,73 +236,21 @@ export class CodexAppServerAdapter
       effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
-    const { externalSessionId, startedAt } = extractThreadId(response, "thread/fork");
-
-    const summary = toSessionSummary({
-      externalSessionId,
-      startedAt: startedAt ?? new Date().toISOString(),
-      role: input.role,
-      status: "running",
-    });
-
-    this.sessions.set(summary.externalSessionId, {
-      summary,
-      model,
-      systemPrompt: input.systemPrompt,
-      role: input.role,
-      runtimeId,
-      repoPath: input.repoPath,
-      threadId: externalSessionId,
-      workingDirectory: input.workingDirectory,
-      taskId: input.taskId,
-    });
+    const session = sessionStateFromThreadFork(input, runtimeId, model, response);
+    const { summary } = session;
+    this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
 
     return summary;
   }
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
-    await this.startTurnForSession(input.externalSessionId, input.parts, input.model);
-  }
-
-  private async steerActiveTurn(
-    activeTurn: ActiveCodexTurn,
-    parts: import("@openducktor/core").AgentUserMessagePart[],
-  ): Promise<boolean> {
-    const input = toCodexUserInputList(parts);
-    if (!activeTurn.turnId && !this.options.subscribeEvents) {
-      await this.handlePendingServerRequests(activeTurn.session, activeTurn.handledRequestKeys);
-    }
-    if (activeTurn.isTurnSettled()) {
-      return false;
-    }
-    if (!activeTurn.turnId) {
-      activeTurn.queuedUserMessages.push(input);
-      return true;
-    }
-    await this.clientForRuntime(activeTurn.session.runtimeId).turnSteer({
-      threadId: activeTurn.session.threadId,
-      input,
-      expectedTurnId: activeTurn.turnId,
-    });
-    return true;
-  }
-
-  private async flushQueuedUserMessages(activeTurn: ActiveCodexTurn): Promise<void> {
-    if (!activeTurn.turnId) {
-      return;
-    }
-    while (activeTurn.queuedUserMessages.length > 0) {
-      const queued = activeTurn.queuedUserMessages.shift();
-      if (!queued) {
-        continue;
-      }
-      await this.clientForRuntime(activeTurn.session.runtimeId).turnSteer({
-        threadId: activeTurn.session.threadId,
-        input: queued,
-        expectedTurnId: activeTurn.turnId,
-      });
-    }
+    await startCodexTurnForSession(
+      this.turnLifecycleContext(),
+      input.externalSessionId,
+      input.parts,
+      input.model,
+    );
   }
 
   private bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean {
@@ -365,129 +265,7 @@ export class CodexAppServerAdapter
   }
 
   private flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void {
-    void this.flushQueuedUserMessages(activeTurn).catch((error) => {
-      this.emitSessionEvent(activeTurn.session.threadId, {
-        type: "session_error",
-        externalSessionId: activeTurn.session.threadId,
-        timestamp: new Date().toISOString(),
-        message: error instanceof Error ? error.message : String(error),
-      });
-    });
-  }
-
-  private async startTurnForSession(
-    externalSessionId: string,
-    parts: import("@openducktor/core").AgentUserMessagePart[],
-    requestedModel?: AgentModelSelection,
-  ): Promise<void> {
-    const session = this.sessions.get(externalSessionId);
-    if (!session) {
-      throw new Error(`Unknown Codex session '${externalSessionId}'.`);
-    }
-    this.ensureRuntimeEventSubscription(session.runtimeId);
-    const input = toCodexUserInputList(parts);
-
-    const existingActiveTurn = this.activeTurnsBySessionId.get(session.threadId);
-    if (existingActiveTurn && !existingActiveTurn.isTurnSettled()) {
-      const didSteer = await this.steerActiveTurn(existingActiveTurn, parts);
-      if (didSteer) {
-        return;
-      }
-
-      const latestActiveTurn = this.activeTurnsBySessionId.get(session.threadId);
-      if (latestActiveTurn && !latestActiveTurn.isTurnSettled()) {
-        throw new Error(
-          `Codex session '${externalSessionId}' still has an active turn after steering failed.`,
-        );
-      }
-    }
-
-    const staleActiveTurn = this.activeTurnsBySessionId.get(session.threadId);
-    if (staleActiveTurn?.isTurnSettled()) {
-      this.activeTurnsBySessionId.delete(session.threadId);
-    }
-
-    const model = requireModelSelection(requestedModel ?? session.model);
-    let turnSettled = false;
-    const handledRequestKeys = new Set<string>();
-    const activeTurnState: ActiveCodexTurn = {
-      session,
-      turnStartPromise: Promise.resolve({}),
-      isTurnSettled: () => turnSettled,
-      markTurnSettled: () => {
-        turnSettled = true;
-        this.activeTurnsBySessionId.delete(session.threadId);
-      },
-      handledRequestKeys,
-      queuedUserMessages: [],
-      model,
-    };
-    this.activeTurnsBySessionId.set(session.threadId, activeTurnState);
-
-    const client = this.clientForRuntime(session.runtimeId);
-    try {
-      await this.models.validate(client, session.runtimeId, model);
-    } catch (error) {
-      turnSettled = true;
-      this.activeTurnsBySessionId.delete(session.threadId);
-      throw error;
-    }
-
-    const turnStartPromise = client
-      .turnStart({
-        threadId: session.threadId,
-        input,
-        model: toTransportModelSelection(model).model,
-        effort: toTransportModelSelection(model).effort,
-      })
-      .then((result) => {
-        const turnId = extractTurnId(result);
-        if (turnId) {
-          this.bindActiveTurnId(activeTurnState, turnId);
-        }
-        this.flushQueuedUserMessagesLater(activeTurnState);
-        if (!this.options.subscribeEvents && !this.options.drainNotifications) {
-          this.emitUserMessage(session, parts, model);
-          activeTurnState.markTurnSettled();
-        } else if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
-          activeTurnState.markTurnSettled();
-        }
-        return result;
-      })
-      .catch((error) => {
-        activeTurnState.markTurnSettled();
-        throw error;
-      });
-    activeTurnState.turnStartPromise = turnStartPromise;
-
-    if (this.options.subscribeEvents) {
-      this.emitUserMessage(session, parts, model);
-      void turnStartPromise.catch((error) => {
-        this.emitSessionEvent(session.threadId, {
-          type: "session_error",
-          externalSessionId: session.threadId,
-          timestamp: new Date().toISOString(),
-          message: error instanceof Error ? error.message : String(error),
-        });
-      });
-      return;
-    }
-
-    const hasPendingInput = await this.handlePendingServerRequests(session, handledRequestKeys);
-    if (hasPendingInput && !turnSettled) {
-      this.bindPendingInputToActiveTurn(session.threadId, activeTurnState);
-      void turnStartPromise.catch((error) => {
-        this.emitSessionEvent(session.threadId, {
-          type: "session_error",
-          externalSessionId: session.threadId,
-          timestamp: new Date().toISOString(),
-          message: error instanceof Error ? error.message : String(error),
-        });
-      });
-      return;
-    }
-
-    await turnStartPromise;
+    flushQueuedUserMessagesLater(this.turnLifecycleContext(), activeTurn);
   }
 
   hasSession(externalSessionId: string): boolean {
@@ -682,32 +460,9 @@ export class CodexAppServerAdapter
       ...(model ? { model: toTransportModelSelection(model).model } : {}),
       ...(model ? { effort: toTransportModelSelection(model).effort } : {}),
     });
-    const { externalSessionId, startedAt } = extractThreadId(response, "thread/resume");
-    const threadSnapshot = requireThreadSnapshotFromReadResponse(
-      response,
-      "thread/resume",
-      externalSessionId,
-    );
-    const summary = toSessionSummary({
-      externalSessionId,
-      startedAt: startedAt ?? threadSnapshot.startedAt,
-      role: input.role,
-      status: threadSnapshot.status.agentSessionStatus,
-    });
-    const liveStatus = threadSnapshot.status;
-    const sessionState: CodexSessionState = {
-      summary,
-      ...(model ? { model } : {}),
-      systemPrompt: input.systemPrompt,
-      role: input.role,
-      runtimeId,
-      repoPath: input.repoPath,
-      threadId: externalSessionId,
-      workingDirectory: input.workingDirectory,
-      taskId: input.taskId,
-      ...(liveStatus ? { liveStatus } : {}),
-    };
-    this.sessions.set(summary.externalSessionId, sessionState);
+    const session = sessionStateFromThreadAttach(input, runtimeId, model, response);
+    const { summary } = session;
+    this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
     return summary;
   }
@@ -1181,206 +936,7 @@ export class CodexAppServerAdapter
     session: CodexSessionState,
     notificationsFromBatch?: unknown[],
   ): Promise<void> {
-    const bufferedNotifications = this.bufferedNotificationsByThreadId.get(session.threadId) ?? [];
-    this.bufferedNotificationsByThreadId.delete(session.threadId);
-    const drainedNotifications = notificationsFromBatch
-      ? notificationsFromBatch.map(parseNotificationRecord)
-      : this.options.drainNotifications
-        ? (await this.options.drainNotifications(session.runtimeId)).map(parseNotificationRecord)
-        : [];
-    const notifications = [...bufferedNotifications, ...drainedNotifications];
-    for (const notification of notifications) {
-      const notificationThreadId = extractThreadIdFromParams(notification.params);
-      if (notificationThreadId && notificationThreadId !== session.threadId) {
-        this.bufferNotification(notification);
-        continue;
-      }
-      const timestamp = timestampFromCodexParams(notification.params);
-      const notificationTurnId = extractTurnId(notification.params);
-      const activeTurn = this.activeTurnsBySessionId.get(session.threadId);
-      if (
-        notificationTurnId &&
-        activeTurn &&
-        this.bindActiveTurnId(activeTurn, notificationTurnId)
-      ) {
-        this.flushQueuedUserMessagesLater(activeTurn);
-      }
-
-      if (notification.method === "turn/started") {
-        session.liveStatus = {
-          classification: "running",
-          status: { type: "busy" },
-          agentSessionStatus: "running",
-        };
-        const turn = isPlainObject(notification.params) ? notification.params.turn : null;
-        const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
-        if (turnId && activeTurn && this.bindActiveTurnId(activeTurn, turnId)) {
-          this.flushQueuedUserMessagesLater(activeTurn);
-        }
-        continue;
-      }
-
-      if (notification.method === "thread/status/changed") {
-        if (isPlainObject(notification.params)) {
-          session.liveStatus = codexThreadStatusSnapshot(notification.params.status);
-        }
-        continue;
-      }
-
-      if (notification.method === "thread/tokenUsage/updated") {
-        const tokenUsage = extractCodexTokenUsageTotals(notification.params);
-        const usageTurnId = notificationTurnId ?? activeTurn?.turnId ?? session.threadId;
-        if (tokenUsage) {
-          this.tokenUsageByTurnKey.set(codexTurnKey(session.threadId, usageTurnId), tokenUsage);
-          this.emitCanonicalEvents(
-            this.eventMapperPipeline.runLive(
-              { kind: "notification", notification },
-              { source: "live", threadId: session.threadId, turnId: usageTurnId, timestamp },
-            ),
-          );
-        }
-        continue;
-      }
-
-      if (notification.method === "turn/plan/updated") {
-        if (isPlainObject(notification.params)) {
-          const todoTurnId = notificationTurnId ?? activeTurn?.turnId ?? session.threadId;
-          this.emitCanonicalEvents(
-            this.eventMapperPipeline.runLive(
-              { kind: "notification", notification },
-              {
-                source: "live",
-                threadId: session.threadId,
-                turnId: todoTurnId,
-                timestamp,
-              },
-            ),
-          );
-        }
-        continue;
-      }
-
-      if (notification.method !== "turn/completed") {
-        const canonicalEvents = this.eventMapperPipeline.runLive(
-          { kind: "notification", notification },
-          {
-            source: "live",
-            threadId: session.threadId,
-            ...(notificationTurnId ? { turnId: notificationTurnId } : {}),
-            timestamp,
-          },
-        );
-        if (canonicalEvents.length > 0) {
-          this.emitCanonicalEvents(
-            this.withTurnModel(canonicalEvents, session, notificationTurnId),
-          );
-          continue;
-        }
-      }
-
-      if (notification.method === "turn/completed") {
-        const turn = isPlainObject(notification.params) ? notification.params.turn : null;
-        const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
-        if (turnId && isPlainObject(turn) && turn.status === "completed") {
-          const turnKey = codexTurnKey(session.threadId, turnId);
-          const bufferedAgentMessage = this.completedAgentMessagesByTurnKey.get(turnKey);
-          if (bufferedAgentMessage) {
-            this.emitFinalAgentMessage(
-              bufferedAgentMessage.session,
-              bufferedAgentMessage.item,
-              bufferedAgentMessage.timestamp,
-              this.tokenUsageByTurnKey.get(turnKey),
-              bufferedAgentMessage.model ?? this.modelForTurn(session, turnId),
-            );
-            this.completedAgentMessagesByTurnKey.delete(turnKey);
-          }
-          this.tokenUsageByTurnKey.delete(turnKey);
-          this.modelByTurnKey.delete(turnKey);
-        } else if (turnId) {
-          const turnKey = codexTurnKey(session.threadId, turnId);
-          this.completedAgentMessagesByTurnKey.delete(turnKey);
-          this.tokenUsageByTurnKey.delete(turnKey);
-          this.modelByTurnKey.delete(turnKey);
-        }
-        activeTurn?.markTurnSettled();
-        session.liveStatus = {
-          classification: "idle",
-          status: { type: "idle" },
-          agentSessionStatus: "idle",
-        };
-        this.emitCanonicalEvents(
-          this.eventMapperPipeline.runLive(
-            { kind: "notification", notification },
-            {
-              source: "live",
-              threadId: session.threadId,
-              ...(turnId ? { turnId } : {}),
-              timestamp,
-            },
-          ),
-        );
-        continue;
-      }
-
-      if (notification.method === "item/agentMessage/delta") {
-        const delta = extractStringField(notification.params, ["delta"]);
-        if (delta) {
-          const messageId = extractStringField(notification.params, ["itemId", "item_id"]);
-          this.emitSessionEvent(session.threadId, {
-            type: "assistant_delta",
-            externalSessionId: session.threadId,
-            timestamp,
-            channel: "text",
-            ...(messageId ? { messageId } : {}),
-            delta,
-          });
-        }
-        continue;
-      }
-
-      if (
-        notification.method === "item/reasoningText/delta" ||
-        notification.method === "item/reasoningSummaryText/delta" ||
-        notification.method === "item/reasoning/textDelta" ||
-        notification.method === "item/reasoning/summaryTextDelta"
-      ) {
-        const delta = extractStringField(notification.params, ["delta"]);
-        if (delta) {
-          const messageId = extractStringField(notification.params, ["itemId", "item_id"]);
-          this.emitSessionEvent(session.threadId, {
-            type: "assistant_delta",
-            externalSessionId: session.threadId,
-            timestamp,
-            channel: "reasoning",
-            ...(messageId ? { messageId } : {}),
-            delta,
-          });
-        }
-        continue;
-      }
-
-      if (notification.method === "item/started") {
-        const item = isPlainObject(notification.params) ? notification.params.item : null;
-        if (isPlainObject(item)) {
-          this.emitStartedItem(session, item, timestamp);
-        }
-        continue;
-      }
-
-      if (notification.method === "item/completed") {
-        const item = isPlainObject(notification.params) ? notification.params.item : null;
-        if (isPlainObject(item)) {
-          this.emitCompletedItem(session, item, timestamp, notificationTurnId);
-        }
-      }
-    }
-  }
-
-  private modelForTurn(
-    session: CodexSessionState,
-    turnId: string | null,
-  ): AgentModelSelection | undefined {
-    return turnId ? this.modelByTurnKey.get(codexTurnKey(session.threadId, turnId)) : undefined;
+    await handleCodexPendingNotifications(this.streamingContext(), session, notificationsFromBatch);
   }
 
   private emitUserMessage(
@@ -1388,249 +944,49 @@ export class CodexAppServerAdapter
     parts: AgentUserMessagePart[],
     model: AgentModelSelection | undefined,
   ): void {
-    const message = serializeAgentUserMessagePartsToText(parts);
-    if (this.options.subscribeEvents) {
-      const codexEchoText = codexUserInputListToText(toCodexUserInputList(parts));
-      const pendingTexts = this.syntheticUserMessageTextsByThreadId.get(session.threadId) ?? [];
-      pendingTexts.push(codexEchoText);
-      if (pendingTexts.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
-        pendingTexts.splice(0, pendingTexts.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
-      }
-      this.syntheticUserMessageTextsByThreadId.set(session.threadId, pendingTexts);
-    }
-    this.emitSessionEvent(session.threadId, {
-      type: "user_message",
-      externalSessionId: session.threadId,
-      timestamp: new Date().toISOString(),
-      messageId: `codex-user-${Date.now()}`,
-      message,
-      parts: toDisplayParts(parts),
-      state: "read",
-      ...(model ? { model } : {}),
-    });
-  }
-
-  private emitStartedItem(
-    session: CodexSessionState,
-    item: Record<string, unknown>,
-    timestamp: string,
-  ): void {
-    if (
-      codexItemTypeMatches(item, "userMessage") ||
-      codexItemTypeMatches(item, "agentMessage") ||
-      codexItemTypeMatches(item, "reasoning") ||
-      codexItemTypeMatches(item, "hookPrompt")
-    ) {
-      return;
-    }
-    const canonicalEvents = this.eventMapperPipeline.runLive(
-      { kind: "item_started", item },
-      { source: "live", threadId: session.threadId, timestamp },
-    );
-    for (const event of projectCodexCanonicalEvents(canonicalEvents)) {
-      if (event.type !== "assistant_part") {
-        this.emitSessionEvent(session.threadId, event);
-        continue;
-      }
-      if (event.part.kind !== "tool") {
-        continue;
-      }
-      this.emitSessionEvent(session.threadId, {
-        type: "assistant_part",
-        externalSessionId: session.threadId,
-        timestamp,
-        part: {
-          ...event.part,
-          status: event.part.status === "completed" ? "running" : event.part.status,
-        },
-      });
-    }
-  }
-
-  private emitCompletedItem(
-    session: CodexSessionState,
-    item: Record<string, unknown>,
-    timestamp: string,
-    turnId: string | null,
-  ): void {
-    const itemId = extractStringField(item, ["id"]) ?? `codex-item-${Date.now()}`;
-    if (codexItemTypeMatches(item, "userMessage")) {
-      const input = codexUserInputsFromItem(item);
-      const message = codexUserInputListToText(input);
-      if (this.consumeSyntheticUserMessage(session.threadId, message)) {
-        return;
-      }
-      const model =
-        this.modelForTurn(session, turnId) ??
-        this.activeTurnsBySessionId.get(session.threadId)?.model;
-      this.emitSessionEvent(session.threadId, {
-        type: "user_message",
-        externalSessionId: session.threadId,
-        timestamp,
-        messageId: itemId,
-        message,
-        parts: input.map(codexUserInputToDisplayPart),
-        state: "read",
-        ...(model ? { model } : {}),
-      });
-      return;
-    }
-
-    if (codexItemTypeMatches(item, "hookPrompt")) {
-      return;
-    }
-
-    if (codexItemTypeMatches(item, "agentMessage")) {
-      const text = extractStringField(item, ["text"]);
-      if (text) {
-        this.emitSessionEvent(session.threadId, {
-          type: "assistant_part",
-          externalSessionId: session.threadId,
-          timestamp,
-          part: {
-            kind: "text",
-            messageId: itemId,
-            partId: `${itemId}-text`,
-            text,
-            completed: true,
-          },
-        });
-        if (turnId) {
-          const turnKey = codexTurnKey(session.threadId, turnId);
-          const existing = this.completedAgentMessagesByTurnKey.get(turnKey);
-          if (!existing || shouldReplaceCodexBufferedFinalAgentMessage(existing.item, item)) {
-            const model = this.modelForTurn(session, turnId);
-            this.completedAgentMessagesByTurnKey.set(turnKey, {
-              session,
-              item,
-              timestamp,
-              ...(model ? { model } : {}),
-            });
-          }
-        }
-      }
-      return;
-    }
-
-    const canonicalEvents = this.eventMapperPipeline.runLive(
-      { kind: "item_completed", item },
-      {
-        source: "live",
-        threadId: session.threadId,
-        ...(turnId ? { turnId } : {}),
-        timestamp,
-      },
-    );
-    if (canonicalEvents.length > 0) {
-      this.emitCanonicalEvents(this.withTurnModel(canonicalEvents, session, turnId));
-      return;
-    }
-
-    const parts = toStreamPart(item, itemId, itemId);
-    for (const part of parts) {
-      this.emitSessionEvent(session.threadId, {
-        type: "assistant_part",
-        externalSessionId: session.threadId,
-        timestamp,
-        part,
-      });
-    }
-  }
-
-  private consumeSyntheticUserMessage(externalSessionId: string, message: string): boolean {
-    const pendingTexts = this.syntheticUserMessageTextsByThreadId.get(externalSessionId);
-    if (!pendingTexts || pendingTexts.length === 0) {
-      return false;
-    }
-    const index = pendingTexts.indexOf(message);
-    if (index === -1) {
-      return false;
-    }
-    pendingTexts.splice(index, 1);
-    if (pendingTexts.length === 0) {
-      this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
-    }
-    return true;
-  }
-
-  private emitFinalAgentMessage(
-    session: CodexSessionState,
-    item: Record<string, unknown>,
-    timestamp: string,
-    tokenUsage?: CodexTokenUsageTotals,
-    model?: AgentModelSelection,
-  ): void {
-    const itemId = codexItemId(item, `codex-item-${Date.now()}`);
-    const text = extractStringField(item, ["text"]);
-    if (text) {
-      this.emitSessionEvent(session.threadId, {
-        type: "assistant_message",
-        externalSessionId: session.threadId,
-        timestamp,
-        messageId: itemId,
-        message: text,
-        ...(typeof tokenUsage?.totalTokens === "number"
-          ? { totalTokens: tokenUsage.totalTokens }
-          : {}),
-        ...(typeof tokenUsage?.contextWindow === "number"
-          ? { contextWindow: tokenUsage.contextWindow }
-          : {}),
-        ...(model ? { model } : {}),
-      });
-    }
-  }
-
-  private withTurnModel(
-    events: CodexCanonicalEvent[],
-    session: CodexSessionState,
-    turnId: string | null,
-  ): CodexCanonicalEvent[] {
-    const model = this.modelForTurn(session, turnId);
-    if (!model) {
-      return events;
-    }
-    return events.map((event) => {
-      if ((event.kind === "user_message" || event.kind === "assistant_message") && !event.model) {
-        return { ...event, model };
-      }
-      return event;
-    });
+    emitCodexUserMessage(this.streamingContext(), session, parts, model);
   }
 
   private emitSessionEvent(externalSessionId: string, event: AgentEvent): void {
-    const listeners = this.listenersBySessionId.get(externalSessionId);
-    if (!listeners) {
-      this.bufferSessionEvent(externalSessionId, event);
-      return;
-    }
-    for (const listener of listeners) {
-      listener(event);
-    }
+    emitCodexSessionEvent(this.streamingContext(), externalSessionId, event);
   }
 
-  private emitCanonicalEvents(events: CodexCanonicalEvent[]): void {
-    const todos = latestTodosFromCanonicalEvents(events);
-    if (todos) {
-      const threadId = events.find((event) => event.kind === "todo_update")?.threadId;
-      if (threadId) {
-        this.latestTodosBySessionId.set(threadId, todos);
-      }
-    }
-    for (const event of projectCodexCanonicalEvents(events)) {
-      this.emitSessionEvent(event.externalSessionId, event);
-    }
+  private streamingContext(): CodexStreamingContext {
+    return {
+      options: this.options,
+      bufferedNotificationsByThreadId: this.bufferedNotificationsByThreadId,
+      activeTurnsBySessionId: this.activeTurnsBySessionId,
+      syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
+      completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,
+      tokenUsageByTurnKey: this.tokenUsageByTurnKey,
+      modelByTurnKey: this.modelByTurnKey,
+      eventBacklogBySessionId: this.eventBacklogBySessionId,
+      latestTodosBySessionId: this.latestTodosBySessionId,
+      eventMapperPipeline: this.eventMapperPipeline,
+      bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
+      flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
+      bufferNotification: (notification) => this.bufferNotification(notification),
+      listenersForSession: (externalSessionId) => this.listenersBySessionId.get(externalSessionId),
+    };
   }
 
-  private bufferSessionEvent(externalSessionId: string, event: AgentEvent): void {
-    if (event.type === "approval_required" || event.type === "question_required") {
-      return;
-    }
-    const backlog = this.eventBacklogBySessionId.get(externalSessionId) ?? [];
-    backlog.push(event);
-    if (backlog.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
-      backlog.splice(0, backlog.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
-    }
-    this.eventBacklogBySessionId.set(externalSessionId, backlog);
+  private turnLifecycleContext(): CodexTurnLifecycleContext {
+    return {
+      options: this.options,
+      sessions: this.sessions,
+      activeTurnsBySessionId: this.activeTurnsBySessionId,
+      clientForRuntime: (runtimeId) => this.clientForRuntime(runtimeId),
+      validateModel: (client, runtimeId, model) => this.models.validate(client, runtimeId, model),
+      ensureRuntimeEventSubscription: (runtimeId) => this.ensureRuntimeEventSubscription(runtimeId),
+      bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
+      bindPendingInputToActiveTurn: (externalSessionId, activeTurn) =>
+        this.bindPendingInputToActiveTurn(externalSessionId, activeTurn),
+      handlePendingServerRequests: (session, handledRequestKeys) =>
+        this.handlePendingServerRequests(session, handledRequestKeys),
+      emitUserMessage: (session, parts, model) => this.emitUserMessage(session, parts, model),
+      emitSessionEvent: (externalSessionId, event) =>
+        this.emitSessionEvent(externalSessionId, event),
+    };
   }
 
   private pendingApprovalsForSession(
