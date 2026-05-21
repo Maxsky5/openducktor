@@ -24,8 +24,26 @@ import {
 
 const taskStoreWithTasks = (tasks: ReturnType<typeof task>[]): RealTaskStorePort =>
   ({
+    clearAgentSessionsByRoles: () => Effect.dieMessage("unexpected clearAgentSessionsByRoles"),
+    clearQaReports: () => Effect.dieMessage("unexpected clearQaReports"),
+    clearWorkflowDocuments: () => Effect.dieMessage("unexpected clearWorkflowDocuments"),
+    createTask: () => Effect.dieMessage("unexpected createTask"),
+    deleteTask: () => Effect.dieMessage("unexpected deleteTask"),
+    diagnoseRepoStore: () => Effect.dieMessage("unexpected diagnoseRepoStore"),
+    getTask: () => Effect.dieMessage("unexpected getTask"),
+    getTaskMetadata: () => Effect.dieMessage("unexpected getTaskMetadata"),
+    listPullRequestSyncCandidates: () =>
+      Effect.dieMessage("unexpected listPullRequestSyncCandidates"),
     listTasks: () => Effect.succeed(tasks),
-  }) as unknown as RealTaskStorePort;
+    recordQaOutcome: () => Effect.dieMessage("unexpected recordQaOutcome"),
+    setDirectMerge: () => Effect.dieMessage("unexpected setDirectMerge"),
+    setPlanDocument: () => Effect.dieMessage("unexpected setPlanDocument"),
+    setPullRequest: () => Effect.dieMessage("unexpected setPullRequest"),
+    setSpecDocument: () => Effect.dieMessage("unexpected setSpecDocument"),
+    transitionTask: () => Effect.dieMessage("unexpected transitionTask"),
+    updateTask: () => Effect.dieMessage("unexpected updateTask"),
+    upsertAgentSession: () => Effect.dieMessage("unexpected upsertAgentSession"),
+  }) satisfies RealTaskStorePort;
 
 const emptyHooks = {
   preStart: [],
