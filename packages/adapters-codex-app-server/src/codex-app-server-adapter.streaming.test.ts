@@ -875,6 +875,61 @@ describe("CodexAppServerAdapter streaming", () => {
     unsubscribe();
   });
 
+  test("emits sent image attachments with staged paths", async () => {
+    const subscribeEvents = mock(() => () => {});
+    const { adapter } = createHarness({ subscribeEvents });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const events: unknown[] = [];
+    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", (event) =>
+      events.push(event),
+    );
+
+    await adapter.sendUserMessage({
+      externalSessionId: "thread/start-runtime-ensure",
+      parts: [
+        { kind: "text", text: "Inspect this screenshot" },
+        {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-1",
+            kind: "image",
+            name: "Screenshot 2026-05-20 at 21.01.45.png",
+            path: "/tmp/openducktor-local-attachments/staged-screenshot.png",
+            mime: "image/png",
+          },
+        },
+      ],
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "user_message",
+        parts: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "attachment",
+            attachment: expect.objectContaining({
+              kind: "image",
+              name: "Screenshot 2026-05-20 at 21.01.45.png",
+              path: "/tmp/openducktor-local-attachments/staged-screenshot.png",
+            }),
+          }),
+        ]),
+      }),
+    );
+    unsubscribe();
+  });
+
   test("replays streamed events that arrive before UI subscription", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
