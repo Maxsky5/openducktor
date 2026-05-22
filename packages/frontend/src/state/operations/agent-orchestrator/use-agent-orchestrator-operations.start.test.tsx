@@ -151,6 +151,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalListSessionPresence = opencodeSdkAdapterPrototype.listSessionPresence;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
     host.agentSessionUpsert = async () => {};
@@ -236,6 +237,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      opencodeSdkAdapterPrototype.listSessionPresence = originalListSessionPresence;
     }
   });
 
