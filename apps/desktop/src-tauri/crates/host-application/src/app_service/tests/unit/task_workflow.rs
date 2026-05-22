@@ -1,5 +1,20 @@
 use super::support::*;
 
+fn build_service_with_main_branch(
+    tasks: Vec<TaskCard>,
+) -> (AppService, Arc<Mutex<TaskStoreState>>) {
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        tasks,
+        vec![],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+    (service, task_state)
+}
+
 #[test]
 fn task_reset_implementation_discards_builder_state_and_rolls_back_to_ready_for_dev_from_ai_review(
 ) -> Result<()> {
@@ -261,15 +276,8 @@ fn assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_rea
 
 #[test]
 fn qa_approved_from_blocked_transitions_to_human_review() -> Result<()> {
-    let (service, task_state, _git_state) = build_service_with_git_state(
-        vec![make_task("task-1", "task", TaskStatus::Blocked)],
-        vec![],
-        host_domain::GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-    );
+    let (service, task_state) =
+        build_service_with_main_branch(vec![make_task("task-1", "task", TaskStatus::Blocked)]);
 
     let task = service.qa_approved("/tmp/odt-repo-qa-approved-blocked", "task-1", "Looks good")?;
     assert_eq!(task.status, TaskStatus::HumanReview);
@@ -289,15 +297,8 @@ fn qa_approved_from_blocked_transitions_to_human_review() -> Result<()> {
 
 #[test]
 fn qa_rejected_from_blocked_transitions_to_in_progress() -> Result<()> {
-    let (service, task_state, _git_state) = build_service_with_git_state(
-        vec![make_task("task-1", "task", TaskStatus::Blocked)],
-        vec![],
-        host_domain::GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-    );
+    let (service, task_state) =
+        build_service_with_main_branch(vec![make_task("task-1", "task", TaskStatus::Blocked)]);
 
     let task = service.qa_rejected(
         "/tmp/odt-repo-qa-rejected-blocked",
@@ -321,15 +322,8 @@ fn qa_rejected_from_blocked_transitions_to_in_progress() -> Result<()> {
 
 #[test]
 fn qa_outcomes_reject_non_blocked_or_review_tasks() {
-    let (service, _task_state, _git_state) = build_service_with_git_state(
-        vec![make_task("task-1", "task", TaskStatus::InProgress)],
-        vec![],
-        host_domain::GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-            revision: None,
-        },
-    );
+    let (service, _task_state) =
+        build_service_with_main_branch(vec![make_task("task-1", "task", TaskStatus::InProgress)]);
 
     let error = service
         .qa_approved("/tmp/odt-repo-qa-approved-invalid", "task-1", "Looks good")

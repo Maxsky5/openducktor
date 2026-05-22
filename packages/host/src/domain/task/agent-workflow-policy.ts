@@ -1,5 +1,5 @@
 import type { AgentWorkflows, QaWorkflowVerdict, TaskCard } from "@openducktor/contracts";
-import { isReadyForDevOrLater } from "./status-transition-policy";
+import { canUseQaWorkflowFromStatus, isReadyForDevOrLater } from "./status-transition-policy";
 
 export const deriveAgentWorkflows = (task: TaskCard): AgentWorkflows => {
   const isFeatureEpic = task.issueType === "feature" || task.issueType === "epic";
@@ -32,11 +32,7 @@ export const deriveAgentWorkflows = (task: TaskCard): AgentWorkflows => {
     qa: {
       required: task.aiReviewEnabled,
       canSkip: !task.aiReviewEnabled,
-      available:
-        !isClosed &&
-        (task.status === "blocked" ||
-          task.status === "ai_review" ||
-          task.status === "human_review"),
+      available: !isClosed && canUseQaWorkflowFromStatus(task.status),
       completed: qaVerdict === "approved",
     },
   };

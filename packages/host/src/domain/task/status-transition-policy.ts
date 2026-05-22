@@ -15,6 +15,9 @@ export const isActiveOrReviewStatus = (status: TaskStatus): boolean =>
   status === "ai_review" ||
   status === "human_review";
 
+export const canUseQaWorkflowFromStatus = (status: TaskStatus): boolean =>
+  status === "blocked" || status === "ai_review" || status === "human_review";
+
 export const isReadyForDevOrLater = (status: TaskStatus): boolean =>
   status === "ready_for_dev" ||
   status === "in_progress" ||

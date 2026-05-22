@@ -13,7 +13,7 @@ import {
   task,
 } from "./test-support/task-workflow-harness";
 
-const testEffect = <Success>(run: () => Promise<Success>) =>
+const taskStoreEffect = <Success>(run: () => Promise<Success>) =>
   Effect.tryPromise({
     try: run,
     catch: (cause) =>
@@ -44,13 +44,13 @@ const createQaOutcomeTaskStore = (fixture: {
   resultTask: ReturnType<typeof task>;
 }): TaskStorePort => ({
   listTasks(input) {
-    return testEffect(async () => {
+    return taskStoreEffect(async () => {
       fixture.calls.push({ type: "list", input });
       return [task({ id: "task-1", status: fixture.currentStatus })];
     });
   },
   recordQaOutcome(input) {
-    return testEffect(async () => {
+    return taskStoreEffect(async () => {
       fixture.calls.push({ type: "qa", input });
       return fixture.resultTask;
     });

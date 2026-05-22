@@ -6,6 +6,7 @@ import {
   canSetPlan,
   canSetSpecFromStatus,
   canTransitionToClosed,
+  canUseQaWorkflowFromStatus,
   isActiveOrReviewStatus,
   isOpenState,
 } from "./status-transition-policy";
@@ -25,7 +26,7 @@ export const deriveAvailableActions = (task: TaskCard, allTasks: TaskCard[]): Ta
     actions.push("set_plan");
   }
 
-  if (task.status === "blocked" || task.status === "ai_review" || task.status === "human_review") {
+  if (canUseQaWorkflowFromStatus(task.status)) {
     actions.push("qa_start");
   } else {
     const canStartBuild =
