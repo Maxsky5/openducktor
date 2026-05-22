@@ -80,8 +80,8 @@ import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import {
-  type CodexLocalSessionStateStore,
   clearLocalSessionState,
+  type InternalCodexLocalSessionStateStore,
   sessionStateFromThreadAttach,
   sessionStateFromThreadFork,
   sessionStateFromThreadResume,
@@ -666,7 +666,7 @@ export class CodexAppServerAdapter
     }
   }
 
-  private localSessionStateStore(): CodexLocalSessionStateStore {
+  private localSessionStateStore(): InternalCodexLocalSessionStateStore {
     return {
       sessions: this.sessions,
       listenersBySessionId: this.listenersBySessionId,

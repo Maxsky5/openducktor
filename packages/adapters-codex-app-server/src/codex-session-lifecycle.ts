@@ -102,11 +102,11 @@ type SessionScopedMap = {
 };
 
 type RequestIdsBySession = {
-  get(key: string): Iterable<string> | undefined;
+  get(key: string): Set<string> | undefined;
   delete(key: string): boolean;
 };
 
-export type CodexLocalSessionStateStore = {
+export type InternalCodexLocalSessionStateStore = {
   sessions: { delete(key: string): boolean };
   listenersBySessionId: { delete(key: string): boolean };
   bufferedNotificationsByThreadId: { delete(key: string): boolean };
@@ -128,7 +128,7 @@ export type CodexLocalSessionStateStore = {
 };
 
 export const clearLocalSessionState = (
-  store: CodexLocalSessionStateStore,
+  store: InternalCodexLocalSessionStateStore,
   externalSessionId: string,
 ): void => {
   store.sessions.delete(externalSessionId);
@@ -153,19 +153,16 @@ export const clearLocalSessionState = (
   }
   store.pendingQuestionIdsBySessionId.delete(externalSessionId);
   const turnKeyPrefix = `${externalSessionId}:`;
-  for (const turnKey of [...store.completedAgentMessagesByTurnKey.keys()]) {
-    if (turnKey.startsWith(turnKeyPrefix)) {
-      store.completedAgentMessagesByTurnKey.delete(turnKey);
-    }
-  }
-  for (const turnKey of [...store.tokenUsageByTurnKey.keys()]) {
-    if (turnKey.startsWith(turnKeyPrefix)) {
-      store.tokenUsageByTurnKey.delete(turnKey);
-    }
-  }
-  for (const turnKey of [...store.modelByTurnKey.keys()]) {
-    if (turnKey.startsWith(turnKeyPrefix)) {
-      store.modelByTurnKey.delete(turnKey);
+  const turnScopedMaps = [
+    store.completedAgentMessagesByTurnKey,
+    store.tokenUsageByTurnKey,
+    store.modelByTurnKey,
+  ];
+  for (const turnScopedMap of turnScopedMaps) {
+    for (const turnKey of turnScopedMap.keys()) {
+      if (turnKey.startsWith(turnKeyPrefix)) {
+        turnScopedMap.delete(turnKey);
+      }
     }
   }
 };
