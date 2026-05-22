@@ -255,34 +255,39 @@ const loadHydratedSubagentPendingInputOverlay = async ({
     return EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY;
   }
 
+  const results = await Promise.allSettled(
+    childExternalSessionIds.map(async (childExternalSessionId) => {
+      try {
+        return {
+          childExternalSessionId,
+          snapshot: await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, {
+            ...record,
+            externalSessionId: childExternalSessionId,
+          }),
+        };
+      } catch (error) {
+        throw new Error(`subagent session '${childExternalSessionId}': ${errorMessage(error)}`);
+      }
+    }),
+  );
   const pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId = {};
   const pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId = {};
   const scannedChildExternalSessionIds: string[] = [];
   const failures: string[] = [];
-  await Promise.all(
-    childExternalSessionIds.map(async (childExternalSessionId) => {
-      try {
-        const snapshot = await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, {
-          ...record,
-          externalSessionId: childExternalSessionId,
-        });
-        scannedChildExternalSessionIds.push(childExternalSessionId);
-        if (snapshot.presence === "runtime" && snapshot.pendingApprovals.length > 0) {
-          pendingApprovalsByChildExternalSessionId[childExternalSessionId] =
-            snapshot.pendingApprovals;
-        }
-        if (snapshot.presence === "runtime" && snapshot.pendingQuestions.length > 0) {
-          pendingQuestionsByChildExternalSessionId[childExternalSessionId] =
-            snapshot.pendingQuestions;
-        }
-      } catch (error) {
-        scannedChildExternalSessionIds.push(childExternalSessionId);
-        pendingApprovalsByChildExternalSessionId[childExternalSessionId] = [];
-        pendingQuestionsByChildExternalSessionId[childExternalSessionId] = [];
-        failures.push(`subagent session '${childExternalSessionId}': ${errorMessage(error)}`);
-      }
-    }),
-  );
+  for (const result of results) {
+    if (result.status === "rejected") {
+      failures.push(errorMessage(result.reason));
+      continue;
+    }
+    const { childExternalSessionId, snapshot } = result.value;
+    scannedChildExternalSessionIds.push(childExternalSessionId);
+    if (snapshot.presence === "runtime" && snapshot.pendingApprovals.length > 0) {
+      pendingApprovalsByChildExternalSessionId[childExternalSessionId] = snapshot.pendingApprovals;
+    }
+    if (snapshot.presence === "runtime" && snapshot.pendingQuestions.length > 0) {
+      pendingQuestionsByChildExternalSessionId[childExternalSessionId] = snapshot.pendingQuestions;
+    }
+  }
   const hydrationError =
     failures.length > 0
       ? new SubagentPendingInputHydrationError(

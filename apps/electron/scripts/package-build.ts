@@ -158,23 +158,22 @@ export const collectReleaseArtifacts = async ({
   platform: ElectronReleasePlatform;
   releaseDirectory: string;
 }): Promise<string[]> => {
-  const copiedArtifacts: string[] = [];
-
   await assertDirectoryExists(releaseDirectory, "Electron release directory");
   await rm(outputDirectory, { force: true, recursive: true });
   await mkdir(outputDirectory, { recursive: true });
 
   const entries = await readdir(releaseDirectory, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isFile() || !isReleaseArtifact(platform, entry.name)) {
-      continue;
-    }
-
-    const sourcePath = join(releaseDirectory, entry.name);
-    const targetPath = join(outputDirectory, entry.name);
-    await copyFile(sourcePath, targetPath);
-    copiedArtifacts.push(targetPath);
-  }
+  const artifactEntries = entries.filter(
+    (entry) => entry.isFile() && isReleaseArtifact(platform, entry.name),
+  );
+  const copiedArtifacts = await Promise.all(
+    artifactEntries.map(async (entry) => {
+      const sourcePath = join(releaseDirectory, entry.name);
+      const targetPath = join(outputDirectory, entry.name);
+      await copyFile(sourcePath, targetPath);
+      return targetPath;
+    }),
+  );
 
   if (copiedArtifacts.length === 0) {
     throw new Error(`No Electron release artifacts were produced for ${platform}.`);

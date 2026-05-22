@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import {
@@ -131,9 +131,12 @@ describe("build Electron release artifact", () => {
         "OpenDucktor-Electron-0.3.1-mac-arm64.dmg.blockmap",
         "OpenDucktor-Electron-0.3.1-mac-arm64.zip",
       ]);
-      await expect(
-        readFile(join(outputDirectory, "OpenDucktor-Electron-0.3.1-linux-x64.AppImage")),
-      ).rejects.toThrow();
+      const outputEntries = await readdir(outputDirectory);
+      expect(outputEntries.sort()).toEqual([
+        "OpenDucktor-Electron-0.3.1-mac-arm64.dmg",
+        "OpenDucktor-Electron-0.3.1-mac-arm64.dmg.blockmap",
+        "OpenDucktor-Electron-0.3.1-mac-arm64.zip",
+      ]);
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
     }
