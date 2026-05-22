@@ -30,7 +30,7 @@ export const toPresenceSnapshot = (
       workingDirectory: session.workingDirectory,
     },
     runtimeId: session.runtimeId,
-    title: `Codex ${session.role}`,
+    title: session.role ? `Codex ${session.role}` : "Codex",
     startedAt: session.summary.startedAt,
     status: hasPendingInput ? { type: "busy" } : (liveStatus?.status ?? { type: "idle" }),
     agentSessionStatus: hasPendingInput ? "running" : (liveStatus?.agentSessionStatus ?? "idle"),

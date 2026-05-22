@@ -148,7 +148,7 @@ export const handleCodexServerRequest = async (
         type: "session_error",
         externalSessionId: session.threadId,
         timestamp: new Date().toISOString(),
-        message: `Rejected mutating Codex request '${rawRequest.method}' because ${roleReason}.`,
+        message: `Rejected ${isMutatingRequest ? "mutating " : ""}Codex request '${rawRequest.method}' because ${roleReason}.`,
       });
       return false;
     }
