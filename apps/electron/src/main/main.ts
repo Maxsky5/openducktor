@@ -1,5 +1,5 @@
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { createHostEventBus, HOST_EVENT_CHANNELS } from "@openducktor/host";
 import type { BrowserWindow as ElectronBrowserWindow } from "electron";
 import electron from "electron";
@@ -13,6 +13,12 @@ import {
 } from "../shared/electron-bridge-contract";
 import { createElectronHostCommandRouter } from "./electron-host";
 import {
+  createElectronLocalAttachmentPreviewUrl,
+  ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
+  readLocalAttachmentPreviewPath,
+  registerElectronLocalAttachmentPreviewProtocol,
+} from "./electron-local-attachment-preview";
+import {
   configureElectronLoopbackCorsPolicy,
   resolveElectronLoopbackCorsOrigin,
 } from "./electron-loopback-cors-policy";
@@ -21,7 +27,7 @@ import { configureElectronProcessEnvironment } from "./electron-process-environm
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
 
-const { app, BrowserWindow, ipcMain, session, shell } = electron;
+const { app, BrowserWindow, ipcMain, net, protocol, session, shell } = electron;
 const APPLICATION_NAME = "OpenDucktor";
 const ELECTRON_RENDERER_START_PATH = "/kanban";
 const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
@@ -46,6 +52,17 @@ let hostShutdownStarted = false;
 let hostShutdownComplete = false;
 
 app.setName(APPLICATION_NAME);
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
+    privileges: {
+      secure: true,
+      standard: true,
+      stream: true,
+      supportFetchAPI: true,
+    },
+  },
+]);
 
 const getPreloadPath = (): string => path.join(distDirectory, "preload.cjs");
 
@@ -111,6 +128,17 @@ const registerHostEventForwarding = (): void => {
   }
 };
 
+const resolveLocalAttachmentPathForPreview = async (filePath: string): Promise<string> => {
+  const resolved = await hostCommandRouter.invoke("workspace_resolve_local_attachment_path", {
+    path: filePath,
+  });
+  if (typeof resolved !== "object" || resolved === null || !("path" in resolved)) {
+    throw new Error("Local attachment preview resolver returned an invalid response.");
+  }
+
+  return readLocalAttachmentPreviewPath(resolved.path);
+};
+
 const registerIpcHandlers = (): void => {
   ipcMain.handle(ELECTRON_HOST_INVOKE_CHANNEL, async (_event, request: ElectronHostInvokeRequest) =>
     hostCommandRouter.invoke(request.command, request.args),
@@ -120,12 +148,11 @@ const registerIpcHandlers = (): void => {
     await shell.openExternal(validateExternalUrl(url));
   });
 
-  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, (_event, filePath: string) => {
-    if (typeof filePath !== "string" || filePath.trim().length === 0) {
-      throw new Error("Local attachment preview path must be a non-empty string.");
-    }
-
-    return pathToFileURL(filePath).href;
+  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, async (_event, filePath: unknown) => {
+    const resolvedPath = await resolveLocalAttachmentPathForPreview(
+      readLocalAttachmentPreviewPath(filePath),
+    );
+    return createElectronLocalAttachmentPreviewUrl(resolvedPath);
   });
 };
 
@@ -178,6 +205,11 @@ app
       session.defaultSession,
       resolveElectronLoopbackCorsOrigin(rendererDevUrl),
     );
+    registerElectronLocalAttachmentPreviewProtocol({
+      net,
+      resolveLocalAttachmentPath: resolveLocalAttachmentPathForPreview,
+      session: session.defaultSession,
+    });
     installApplicationMenu({ isDevelopment, appName: app.name || APPLICATION_NAME });
     registerIpcHandlers();
     registerHostEventForwarding();

@@ -304,7 +304,9 @@ export const toHistoryMessage = (
       timestamp: messageTimestamp,
       text,
       displayParts:
-        input.length > 0 ? input.map(codexUserInputToDisplayPart) : [{ kind: "text", text }],
+        input.length > 0
+          ? codexUserInputsToDisplayParts(input, messageId)
+          : [{ kind: "text", text }],
       state: "read",
       parts: toHistoryParts(item, messageId, text),
       ...(model ? { model } : {}),
@@ -910,12 +912,48 @@ export const userInputText = (input: CodexUserInput): string => {
   return input.path;
 };
 
-export const codexUserInputToDisplayPart = (input: CodexUserInput): AgentUserMessageDisplayPart => {
+type CodexUserInputDisplayContext = {
+  index: number;
+  messageId: string;
+};
+
+const stagedAttachmentUuidPrefixPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i;
+
+const codexLocalImageNameFromPath = (path: string): string => {
+  const fileName = path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? path;
+  if (fileName.length <= 37 || !stagedAttachmentUuidPrefixPattern.test(fileName)) {
+    return fileName;
+  }
+  return fileName.slice(37);
+};
+
+const codexUserInputToDisplayPart = (
+  input: CodexUserInput,
+  context: CodexUserInputDisplayContext,
+): AgentUserMessageDisplayPart => {
   if (input.type === "text") {
     return { kind: "text", text: input.text };
   }
+  if (input.type === "localImage") {
+    return {
+      kind: "attachment",
+      attachment: {
+        id: `codex-local-image:${context.messageId}:${context.index}`,
+        kind: "image",
+        name: codexLocalImageNameFromPath(input.path),
+        path: input.path,
+      },
+    };
+  }
   return { kind: "text", text: userInputText(input), synthetic: true };
 };
+
+export const codexUserInputsToDisplayParts = (
+  input: CodexUserInput[],
+  messageId: string,
+): AgentUserMessageDisplayPart[] =>
+  input.map((part, index) => codexUserInputToDisplayPart(part, { index, messageId }));
 
 export const codexUserInputListToText = (input: CodexUserInput[]): string => {
   return input.map(userInputText).join(" ").trim();

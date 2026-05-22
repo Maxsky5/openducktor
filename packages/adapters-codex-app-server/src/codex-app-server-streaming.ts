@@ -24,7 +24,7 @@ import {
   codexItemTypeMatches,
   codexUserInputListToText,
   codexUserInputsFromItem,
-  codexUserInputToDisplayPart,
+  codexUserInputsToDisplayParts,
   extractCodexTokenUsageTotals,
   shouldReplaceCodexBufferedFinalAgentMessage,
   timestampFromCodexParams,
@@ -282,7 +282,7 @@ const emitCompletedItem = (
       timestamp,
       messageId: itemId,
       message,
-      parts: input.map(codexUserInputToDisplayPart),
+      parts: codexUserInputsToDisplayParts(input, itemId),
       state: "read",
       ...(model ? { model } : {}),
     });

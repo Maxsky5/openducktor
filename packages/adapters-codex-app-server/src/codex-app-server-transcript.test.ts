@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { codexTurnItemsFromThreadRead } from "./codex-app-server-transcript";
+import { codexTurnItemsFromThreadRead, toHistoryMessage } from "./codex-app-server-transcript";
 
 describe("Codex App Server transcript parsing", () => {
   test("preserves turn model and reasoning effort from thread reads", () => {
@@ -59,5 +59,69 @@ describe("Codex App Server transcript parsing", () => {
 
     expect(items).toHaveLength(1);
     expect(items[0]?.model).toBeUndefined();
+  });
+
+  test("hydrates local images as attachment display parts", () => {
+    const items = codexTurnItemsFromThreadRead({
+      thread: {
+        turns: [
+          {
+            id: "turn-1",
+            status: "completed",
+            startedAt: 1_778_112_001,
+            completedAt: 1_778_112_031,
+            items: [
+              {
+                id: "user-1",
+                type: "userMessage",
+                content: [
+                  {
+                    type: "text",
+                    text: "Inspect this screenshot",
+                    text_elements: [],
+                  },
+                  {
+                    type: "localImage",
+                    path: "/tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot 2026-05-20.png",
+                  },
+                  {
+                    type: "localImage",
+                    path: "/tmp/openducktor-local-attachments/Screenshot 2026-05-20.png",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const message = toHistoryMessage(items[0]?.item, "fallback-id");
+
+    expect(message).toMatchObject({
+      role: "user",
+      text: "Inspect this screenshot /tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot 2026-05-20.png /tmp/openducktor-local-attachments/Screenshot 2026-05-20.png",
+      displayParts: [
+        { kind: "text", text: "Inspect this screenshot" },
+        {
+          kind: "attachment",
+          attachment: {
+            id: "codex-local-image:user-1:1",
+            kind: "image",
+            name: "Screenshot 2026-05-20.png",
+            path: "/tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot 2026-05-20.png",
+          },
+        },
+        {
+          kind: "attachment",
+          attachment: {
+            id: "codex-local-image:user-1:2",
+            kind: "image",
+            name: "Screenshot 2026-05-20.png",
+            path: "/tmp/openducktor-local-attachments/Screenshot 2026-05-20.png",
+          },
+        },
+      ],
+    });
   });
 });

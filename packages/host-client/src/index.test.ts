@@ -1556,10 +1556,23 @@ describe("HostClient", () => {
   });
 
   test("codex app-server commands use expected IPC routes", async () => {
+    const modelListResponse = {
+      data: [
+        {
+          id: "gpt-5",
+          model: "gpt-5",
+          displayName: "GPT-5",
+          supportedReasoningEfforts: [{ reasoningEffort: "medium" }],
+          inputModalities: ["text", "image"],
+          isDefault: true,
+        },
+      ],
+      nextCursor: null,
+    };
     const { client, calls } = createClient((command) => {
       switch (command) {
         case "codex_app_server_request":
-          return { ok: true };
+          return modelListResponse;
         case "codex_app_server_respond":
           return null;
         case "codex_app_server_notifications":
@@ -1571,7 +1584,9 @@ describe("HostClient", () => {
       }
     });
 
-    await client.codexAppServerRequest("runtime-1", "model/list", { request: "catalog" });
+    await expect(
+      client.codexAppServerRequest("runtime-1", "model/list", { request: "catalog" }),
+    ).resolves.toEqual(modelListResponse);
     await client.codexAppServerRespond("runtime-1", 7, { ok: true });
     await client.codexAppServerNotifications("runtime-1");
     await client.codexAppServerRequests("runtime-1");

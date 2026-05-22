@@ -1,5 +1,9 @@
 import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
+import type {
+  AgentModelAttachmentSupport,
+  AgentModelCatalog,
+  AgentModelSelection,
+} from "@openducktor/core";
 import { CODEX_MODEL_CATALOG_TTL_MS } from "./codex-app-server-shared";
 import type { CodexAppServerClient, CodexModelListResponse } from "./types";
 
@@ -42,6 +46,15 @@ export const toTransportModelSelection = (model: AgentModelSelection) => ({
   effort: model.variant as string,
 });
 
+const toAttachmentSupport = (inputModalities: string[]): AgentModelAttachmentSupport => {
+  return {
+    image: inputModalities.includes("image"),
+    audio: false,
+    video: false,
+    pdf: false,
+  };
+};
+
 export const toCatalog = (response: CodexModelListResponse): AgentModelCatalog => ({
   runtime: CODEX_RUNTIME_DESCRIPTOR,
   models: response.data.map((model) => ({
@@ -51,6 +64,7 @@ export const toCatalog = (response: CodexModelListResponse): AgentModelCatalog =
     modelId: model.model,
     modelName: model.displayName,
     variants: model.supportedReasoningEfforts.map((effort) => effort.reasoningEffort),
+    attachmentSupport: toAttachmentSupport(model.inputModalities),
   })),
   defaultModelsByProvider: response.data.some((model) => model.isDefault)
     ? {
