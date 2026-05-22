@@ -1149,6 +1149,32 @@ describe("createGitService", () => {
     expect(error.dependency).toBe("settingsConfig");
     expect(calls).toEqual([]);
   });
+  test("fails remove worktree through the Effect channel when worktree files are missing", async () => {
+    const calls: string[] = [];
+    const service = createGitService({
+      gitPort: createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo" },
+        gitRepositories: ["/canonical/repo"],
+        calls,
+      }),
+      settingsConfig: createFakeSettingsConfig(createConfig()),
+    });
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.removeWorktree({
+          repoPath: "/repo",
+          worktreePath: "/managed/repo/task-1",
+          force: true,
+        }),
+      ),
+    );
+    expect(error).toBeInstanceOf(HostDependencyError);
+    if (!(error instanceof HostDependencyError)) {
+      throw new Error("expected missing worktree files to fail with HostDependencyError");
+    }
+    expect(error.dependency).toBe("worktreeFiles");
+    expect(calls).toEqual([]);
+  });
   test("rejects forced stranded worktree cleanup outside managed roots", async () => {
     const calls: string[] = [];
     const service = createGitService({
